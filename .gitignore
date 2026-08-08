@@ -1,0 +1,22 @@
+.idea/
+.gradle/
+.kotlin/
+build/
+**/build/
+local.properties
+.DS_Store
+captures/
+*.iml
+*.hprof
+**/.kotlin-build-tools/
+
+# Reference player source trees. The plan tells you to clone mpv, VLC, QMPlay2 and libplacebo
+# into vendor/ for architecture study. That is ~230 MB of someone else's source under GPL and
+# LGPL terms. It must never be tracked here, and never copied into this repo's own sources.
+vendor/
+
+# Generated test clips. Regenerate them with scripts/testmedia.sh.
+testmedia/
+
+# Native binaries fetched or built for the JNI bridge and the FFmpeg link.
+native-libs/

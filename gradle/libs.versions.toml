@@ -1,0 +1,22 @@
+[versions] #######################################################################################
+# Toolchain. Kept in lock-step with KiteImage / KiteAudio / KiteCodec / KitePDF so the Kite
+# lineage builds with one shared stack. Values are pushed here by KiteVersions.
+kotlin = "2.4.10"
+agp = "9.2.1"
+vanniktechPublish = "0.36.0"
+dokka = "2.2.0"
+
+coroutines = "1.11.0"
+atomicfu = "0.31.0"
+
+[libraries] ######################################################################################
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
+
+[plugins] ########################################################################################
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
+kotlinx-atomicfu = { id = "org.jetbrains.kotlinx.atomicfu", version.ref = "atomicfu" }
+vanniktech-publish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktechPublish" }
+dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }

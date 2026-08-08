@@ -3,7 +3,6 @@ import io.github.yuroyami.kitecodec.gradle.FFmpegSource
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.kotlinx.atomicfu)
     alias(libs.plugins.vanniktech.publish)
     alias(libs.plugins.dokka)
     id("io.github.yuroyami.kitecodec") version "0.0.1"

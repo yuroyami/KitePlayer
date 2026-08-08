@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.kotlinx.atomicfu)
     alias(libs.plugins.vanniktech.publish)
     alias(libs.plugins.dokka)
 }

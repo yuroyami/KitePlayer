@@ -103,6 +103,7 @@ KITEPLAYER.md section 15.
 
 | Gap | Detail |
 |---|---|
+| Android and web are compiled but not exercised | Every target compiles, and the engine's tests run on the JVM and on macOS arm64. Nothing runs the engine on Android, js or wasmJs, because no backend exists for them yet. |
 | No ABI dump committed | `abiValidation` is configured on every module. The baseline has not been generated, so nothing catches an accidental signature change yet. |
 | No CI | No workflow file. The family's other repositories have one, and this should copy KitePDF's. |
 | No docs site | `mkdocs.yml` and the `docs/` page set are not written. |

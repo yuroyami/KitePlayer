@@ -204,3 +204,28 @@ than when the buffer empties. Verified: the same clip now reports 0.
 throws its own exception type. So a wrong path printed a Kotlin/Native backtrace, which is exactly the
 failure mode KITEPLAYER.md section 8.4 forbids. Now every open failure prints one sentence. Verified
 against a missing path and against a text file.
+
+---
+
+## 11. The atomicfu Gradle plugin was dropped, keeping the library
+
+**Decided.** Every module uses the `kotlinx.atomicfu` runtime library. None applies its Gradle plugin.
+
+**Why.** The plugin's bytecode transform registers a task that depends on `androidMainClasses`, and
+AGP 9's Kotlin Multiplatform library plugin does not create a task by that name. So applying it makes
+`assembleAndroidMain` fail with `Task with name 'androidMainClasses' not found`.
+
+This was found by checking a claim rather than by a bug report. README.md states that the engine
+compiles for every target Kotlin supports, and KITE.md rule 5 says never to write a claim the code
+cannot support. Verifying it target by target is what surfaced the failure.
+
+**Cost, stated precisely.** Without the transform, each atomic field is one wrapper object. That object
+is allocated when its owner is constructed, not per operation, so the real-time audio path still does
+no allocation. The transform is an optimisation, not a correctness requirement.
+
+**Alternative considered.** Moving to the standard library's `kotlin.concurrent.atomics`, which would
+remove the dependency altogether. Rejected for now only because it is a wider change than one late-night
+verification pass should carry. It is the better long-term answer.
+
+**Verified after the change.** 157 tests pass, every target compiles including Android, js and wasmJs,
+and the sample still plays with zero underruns.

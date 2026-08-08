@@ -14,9 +14,13 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }
 
+# The atomicfu *library* is used; its Gradle plugin is not. The plugin's JVM bytecode transform
+# registers a task that depends on `androidMainClasses`, which AGP 9's Kotlin Multiplatform library
+# plugin does not create, so applying it makes the Android variant fail to build. Without the
+# transform each atomic field costs one wrapper object, allocated once when its owner is constructed
+# and never per operation, which matters to nothing here.
 [plugins] ########################################################################################
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
-kotlinx-atomicfu = { id = "org.jetbrains.kotlinx.atomicfu", version.ref = "atomicfu" }
 vanniktech-publish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktechPublish" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }

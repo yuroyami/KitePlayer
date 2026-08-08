@@ -5,7 +5,6 @@ plugins {
     alias(libs.plugins.vanniktech.publish).apply(false)
     alias(libs.plugins.kotlin.multiplatform).apply(false)
     alias(libs.plugins.android.kmp.library).apply(false)
-    alias(libs.plugins.kotlinx.atomicfu).apply(false)
     // Applied at the root so dokkaGenerate aggregates every library module into one API site
     // at build/dokka/html.
     alias(libs.plugins.dokka)

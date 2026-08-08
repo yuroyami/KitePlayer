@@ -140,3 +140,67 @@ its Windows path contains a busy-wait workaround as the visible consequence.
 platform.
 
 **Reverse it by.** Nothing sensible. This one is settled by physics rather than taste.
+
+---
+
+## 8. Audio before video, and why that is not the easy way out
+
+**Decided.** The first working playback is audio only.
+
+**Why.** Video is blocked, not merely harder. KiteCodec exposes pixels only through
+`copyPlanesToByteArray`, a full copy of every frame: 3.11 MB for 1080p and 24.9 MB for 4K 10-bit,
+which is 187 MB/s to 1.5 GB/s at 60 fps plus an allocation per frame. A renderer needs plane
+pointers, and hardware decoding needs the surface handle. Both are specified in KITEPLAYER.md
+section 16.1 and neither exists yet.
+
+Audio, by contrast, exercises the parts of the design that were most at risk of being wrong: the
+master clock, the device contract, the real-time callback rules, and the backpressure that paces
+decoding to playback. Those now have measured evidence behind them rather than an argument.
+
+**What building video on the copy would have cost.** A renderer written against
+`copyPlanesToByteArray` would be thrown away when 16.1 lands, and it would have hidden the very
+problem the plan says to fix.
+
+**Reverse it by.** Nothing to reverse. The order is recorded in PROGRESS.md.
+
+---
+
+## 9. KiteCodec is consumed from a local Maven publication
+
+**Decided.** `kiteplayer-ffmpeg` and `kiteplayer-sample` resolve KiteCodec and its Gradle plugin from
+`mavenLocal()`, which means running this in the KiteCodec checkout first:
+
+```bash
+./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
+```
+
+**Why.** KiteCodec is not on Maven Central, and its own README documents this as the supported route
+for a consumer project, which is what its CI uses. The alternative, a Gradle composite build, would
+have to supply the KiteCodec Gradle plugin as well as the library, and that plugin is load-bearing:
+KiteCodec's cinterop declares its linker options as bare `-lavformat` and friends with no `-L`, so
+every module whose link task pulls FFmpeg in needs the plugin to supply the library directory. The
+sample needed it too, which was not obvious until the linker said `library 'avformat' not found`.
+
+**Cost.** A fresh clone cannot build `kiteplayer-ffmpeg` without that one command. It is written down
+in README.md and PROGRESS.md.
+
+**Reverse it by.** Publishing KiteCodec, or switching to `includeBuild`.
+
+---
+
+## 10. Two defects were found by running the thing, and fixed
+
+Recorded because both are the kind of mistake that survives code review and dies on contact with real
+input.
+
+**End-of-media silence was counted as an underrun.** When the decoder finishes, the ring runs dry and
+the device is handed silence until the buffer empties. That is the end of the file, not a failure to
+keep up, but the counter did not know the difference, so every clean playthrough finished by reporting
+six to eight underruns. A counter that always reads non-zero is useless for spotting the real thing.
+`AudioPlayback.endOfStream()` now marks it, and the caller invokes it when the decoder completes rather
+than when the buffer empties. Verified: the same clip now reports 0.
+
+**A missing file produced a stack trace.** The sample caught `IllegalStateException`, and KiteCodec
+throws its own exception type. So a wrong path printed a Kotlin/Native backtrace, which is exactly the
+failure mode KITEPLAYER.md section 8.4 forbids. Now every open failure prints one sentence. Verified
+against a missing path and against a text file.

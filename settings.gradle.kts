@@ -2,6 +2,10 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
     repositories {
+        // KiteCodec and its Gradle plugin are not on Maven Central yet, so the FFmpeg backend
+        // resolves them from a local publication. Run this in the KiteCodec checkout first:
+        //   ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
+        mavenLocal()
         mavenCentral()
         gradlePluginPortal()
         google()
@@ -10,6 +14,7 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
+        mavenLocal()
         google()
         mavenCentral()
     }
@@ -34,9 +39,9 @@ include(":kiteplayer-subtitles")
 
 // Modules added as their milestones land. Kept commented rather than absent so the intended
 // module graph is visible from the build file.
-// include(":kiteplayer-ffmpeg")     // KiteCodec-backed source and decoders
-// include(":kiteplayer-output")     // audio sinks and video renderers, per platform
+include(":kiteplayer-ffmpeg")
+include(":kiteplayer-output")
 // include(":kiteplayer-libass")     // optional full ASS renderer
 // include(":kiteplayer")            // umbrella artifact
 // include(":kiteplayer-compose")    // Compose Multiplatform surface and controls
-// include(":kiteplayer-sample")     // CLI and Compose demo
+include(":kiteplayer-sample")

@@ -57,7 +57,7 @@ class MediaClockTest {
     }
 
     @Test
-    fun `changing speed applies from that moment, not retroactively`() {
+    fun `changing speed applies from that moment and not retroactively`() {
         val wall = TestClock()
         val clock = MediaClock(wall)
         clock.set(pts(0), Generation.Initial)

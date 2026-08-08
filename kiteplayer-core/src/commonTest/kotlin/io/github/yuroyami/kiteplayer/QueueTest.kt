@@ -44,7 +44,7 @@ class PacketQueueTest {
     }
 
     @Test
-    fun `a packet from a superseded generation is dropped and closed, never returned`() = runTest {
+    fun `a packet from a superseded generation is dropped and closed rather than returned`() = runTest {
         val ledger = LeakLedger()
         val q = queue()
 
@@ -124,7 +124,7 @@ class PacketQueueTest {
     }
 
     @Test
-    fun `offering never blocks, because a per-stream stall deadlocks a badly interleaved file`() = runTest {
+    fun `offering never blocks because a per-stream stall deadlocks a badly interleaved file`() = runTest {
         // The video queue of a file that front-loads 5 seconds of video before any audio must be
         // allowed to grow. If offering blocked here, the demux worker would stop, the audio decoder
         // would starve, the audio clock would stop, and the video would never be consumed.

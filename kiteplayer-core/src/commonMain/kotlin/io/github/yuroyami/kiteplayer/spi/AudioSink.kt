@@ -105,11 +105,23 @@ public fun interface AudioRenderCallback {
 public interface AudioSinkBuffer {
     public val format: AudioFormat
 
-    /** Interleaved write. [source] holds [frames] times channel count floats. */
-    public fun writeInterleaved(source: FloatArray, sourceOffset: Int, frames: Int)
+    /**
+     * Interleaved write of [frames] sample frames, starting at frame [destinationFrameOffset] of
+     * this buffer.
+     *
+     * The destination offset is not optional. A ring buffer's read can wrap, so one render call
+     * becomes two writes, and the second must land after the first rather than overwriting it.
+     */
+    public fun writeInterleaved(source: FloatArray, sourceOffset: Int, destinationFrameOffset: Int, frames: Int)
 
     /** Planar write, one channel at a time, for devices that want planes. */
-    public fun writePlane(channel: Int, source: FloatArray, sourceOffset: Int, frames: Int)
+    public fun writePlane(
+        channel: Int,
+        source: FloatArray,
+        sourceOffset: Int,
+        destinationFrameOffset: Int,
+        frames: Int,
+    )
 
     /** Fills [frames] frames from [frameOffset] with silence. */
     public fun writeSilence(frameOffset: Int, frames: Int)

@@ -1,0 +1,155 @@
+package io.github.yuroyami.kiteplayer.spi
+
+import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kiteplayer.HwdecStatus
+import io.github.yuroyami.kiteplayer.Pts
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
+
+/**
+ * The send and receive shape below mirrors what libavcodec actually does, including the cases a
+ * simpler interface cannot express: one packet producing zero frames, one packet producing several,
+ * and a decoder that must be drained before it will accept more input.
+ *
+ * A decoder with a different natural shape, for example the browser's `VideoDecoder`, adapts to
+ * this one easily. The reverse is not true, which is why this shape was chosen.
+ */
+public interface VideoDecoderFactory {
+    /** Null when this factory cannot handle the stream. The engine then tries the next candidate. */
+    public suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder?
+
+    /** For logs and for the warning emitted when a candidate is skipped. */
+    public val name: String
+}
+
+public interface VideoDecoder : AutoCloseable {
+    public val hardware: HwdecStatus
+
+    /**
+     * Offers a packet. A null packet starts the drain that flushes the decoder's internal delay.
+     *
+     * @return false when the decoder is full and the caller must [receive] before offering again.
+     *         The caller must then retry the same packet, never discard it.
+     */
+    public suspend fun send(packet: PlayerPacket?, generation: Generation): Boolean
+
+    /** @return the next decoded frame, or null when more input is needed. */
+    public suspend fun receive(): VideoFrame?
+
+    /**
+     * Discards all internal state.
+     *
+     * Called after the queues have been cleared and before any packet of the new generation is
+     * offered. The order matters: flushing before the queues are cleared lets a stale packet reach
+     * a freshly flushed decoder.
+     */
+    public suspend fun flush()
+}
+
+public interface AudioDecoderFactory {
+    public suspend fun create(stream: PlayerStreamInfo): AudioDecoder?
+    public val name: String
+}
+
+public interface AudioDecoder : AutoCloseable {
+    /** What this decoder produces. May change mid-stream, which the engine handles. */
+    public val outputFormat: AudioFormat
+
+    public suspend fun send(packet: PlayerPacket?, generation: Generation): Boolean
+    public suspend fun receive(): AudioBuffer?
+    public suspend fun flush()
+}
+
+public interface SubtitleDecoderFactory {
+    public suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder?
+    public val name: String
+}
+
+public interface SubtitleDecoder : AutoCloseable {
+    public suspend fun send(packet: PlayerPacket?, generation: Generation): Boolean
+
+    /**
+     * @return cues decoded from the packets sent so far. A single packet can produce several cues,
+     *         and some formats produce none until the following packet arrives.
+     */
+    public suspend fun receive(): List<SubtitleCue>
+
+    public suspend fun flush()
+}
+
+/**
+ * Decoded PCM, ready for the engine's filter chain.
+ *
+ * Unlike a video frame, audio does cross into Kotlin memory. It has to: resampling, channel
+ * remixing, tempo change and the drift correction all happen in the engine, and audio is small.
+ * One second of 48 kHz stereo float is 384 KB, against 187 MB for a second of 1080p60 video.
+ */
+public interface AudioBuffer : AutoCloseable {
+    public val pts: Pts
+    public val format: AudioFormat
+
+    /** Sample frames in this buffer. One frame is one sample for every channel. */
+    public val frameCount: Int
+
+    public val generation: Generation
+
+    /**
+     * Copies channel [channel] into [into] as floats in the range -1 to 1.
+     *
+     * Float is the engine's internal format because every filter wants it and because it removes
+     * clipping between stages. Conversion to the device's format happens once, at the sink boundary.
+     */
+    public fun copyChannel(channel: Int, into: FloatArray, offset: Int = 0)
+}
+
+public data class AudioFormat(
+    val sampleRate: Int,
+    val channels: Int,
+    val sampleFormat: SampleFormat,
+    val channelLayout: ChannelLayout = ChannelLayout.forChannelCount(channels),
+) {
+    public val bytesPerFrame: Int get() = channels * sampleFormat.bytes
+
+    /** Duration of [frames] sample frames at this rate. */
+    public fun durationOf(frames: Int): Pts =
+        Pts(if (sampleRate == 0) 0 else frames.toLong() * 1_000_000L / sampleRate)
+
+    public fun framesIn(duration: Pts): Int =
+        (duration.micros * sampleRate / 1_000_000L).toInt()
+}
+
+public enum class SampleFormat(public val bytes: Int, public val isFloat: Boolean) {
+    S16(2, false),
+    S24(3, false),
+    S32(4, false),
+    F32(4, true),
+    ;
+}
+
+/**
+ * Which speaker each channel drives.
+ *
+ * Modelled explicitly because a wrong mapping is worse than a wrong sample rate: it puts dialogue
+ * in a surround speaker, which sounds like a broken file rather than a broken player.
+ */
+public enum class ChannelLayout {
+    Mono,
+    Stereo,
+    Quad,
+    Surround51,
+    Surround71,
+    /** Something the engine does not model. Channels pass through in source order. */
+    Unknown,
+    ;
+
+    public companion object {
+        public fun forChannelCount(channels: Int): ChannelLayout = when (channels) {
+            1 -> Mono
+            2 -> Stereo
+            4 -> Quad
+            6 -> Surround51
+            8 -> Surround71
+            else -> Unknown
+        }
+    }
+}

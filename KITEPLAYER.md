@@ -1741,7 +1741,7 @@ use cinterop. One bridge unlocks both.
 
 ### 15.1 What exists and what is missing
 
-KiteCodec's real C surface is not libav\* directly. It is a layer of 150 `static inline` helper
+KiteCodec's real C surface is not libav\* directly. It is a layer of 141 `static inline` helper
 functions in `kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`, after the separator, in a 764
 line file. They exist because macros, varargs and 128-bit rescale arithmetic do not survive cinterop.
 Kotlin/Native compiles that C inline. There is no header file and no shared library.
@@ -1759,7 +1759,7 @@ Kotlin/Native compiles that C inline. There is no header file and no shared libr
 ### 15.2 The design: one header, two generated bindings
 
 ```
-ffkmp.h                      the 150 helpers, lifted out of the .def, the single source of truth
+ffkmp.h                      the 141 helpers, lifted out of the .def, the single source of truth
    |
    +-- ffmpeg.def includes it              -> Kotlin/Native, unchanged behaviour
    |
@@ -1823,134 +1823,204 @@ consumes, and a transcoding application would want it just as much. Concretely i
 
 ## 16. What KiteCodec must change
 
-KiteCodec is built for transcoding: open a file, run it through once, write it out. A player needs
-the same libraries driven differently, and several of its current design choices are correct for
-transcoding and wrong for playback. Every item below names the file, the current behaviour, why it
-blocks playback, and a change that does not break the existing `Transcoder` and `Remuxer` API.
+KiteCodec is 3 200 lines of Kotlin over a cinterop definition carrying 141 `static inline` C helpers
+prefixed `ffkmp_`. It is built for batch transcoding: open, run through once, write out. A player
+needs the same libraries driven differently, and several of its current choices are right for
+transcoding and wrong for playback.
 
-Ranked: **BLOCKER** means no player without it. **MAJOR** means the player works but badly, or
-only on some targets. **NICE** means quality.
+Every item names the file, the current behaviour, why it blocks playback, and a change that does not
+break the existing `Transcoder` and `Remuxer` API. Ranked: **BLOCKER** means no player without it,
+**MAJOR** means the player works badly or only on some targets, **NICE** means quality.
+
+What KiteCodec already gets right, and which must survive every change below: `sendAndDrain` is
+correct about `EAGAIN` (it drains, then resends the same packet, and never drops one) and tolerates
+`AVERROR_INVALIDDATA` on both send and receive, so a mid-group-of-pictures seek into MPEG-TS does not
+abort the file. `MediaSink` forces strictly monotonic output timestamps and re-reads the stream time
+base per packet because `avformat_write_header` rewrites it. Those are hard-won and correct.
+
+### 16.0 The visibility wall (BLOCKER, and the first decision)
+
+Everything a player needs is `internal`: `Frame.nativeFrame`, `Frame.streamTimeBase`,
+`Frame.streamIndex`, `MediaSource.demuxRouted`, `seekForDecode`, `toRelativeMicros`, `codecparOf`,
+`FrameOps`, `withPacket`, `avError`, `check0`, `FFErrors`, `EncoderCore`, `StopDemux`. KiteCodec's
+`settings.gradle.kts` declares no friend or associate compilation, so a separate module reaches none
+of it.
+
+So before any technical work: **KiteCodec grows a deliberate low-level surface.**
+
+```kotlin
+@RequiresOptIn(
+    level = RequiresOptIn.Level.ERROR,
+    message = "Low-level KiteCodec API. Native pointers, manual lifetimes, no stability promise.",
+)
+public annotation class KiteCodecLowLevelApi
+```
+
+Everything the player needs becomes `public` behind that annotation. The alternative, putting
+KitePlayer's FFmpeg backend inside `kitecodec-core`, is rejected: it would tie a player's release
+cadence to a codec binding's, and it would put coroutine-heavy playback code in a module whose
+selling point is that it is a thin binding.
+
+The annotation is also the honest signal. These are raw pointers with manual lifetimes. A consumer
+should have to write down that they accept that.
 
 ### 16.1 Frames cannot be read without copying them (BLOCKER)
 
-`kitecodec-core/src/commonMain/.../Frame.kt` states plainly that the native pointer is
-intentionally not exposed in `commonMain`, and offers `copyPlanesToByteArray()` as the only way to
-reach pixels. For a thumbnail that is exactly right. For playback it is fatal:
+`Frame.kt` states that the native pointer is intentionally not exposed, and offers
+`copyPlanesToByteArray()` as the only pixel access. `Frame.native.kt` implements it as a mandatory
+double copy of the whole frame. There is not even an internal plane-pointer accessor.
 
 | Format and size | Bytes per frame | At 60 fps |
 |---|---|---|
-| 1080p `yuv420p` | 3.11 MB | 187 MB/s |
-| 1080p `nv12` | 3.11 MB | 187 MB/s |
+| 1080p `yuv420p` or `nv12` | 3.11 MB | 187 MB/s |
 | 4K `yuv420p` | 12.4 MB | 746 MB/s |
 | 4K `yuv420p10le` | 24.9 MB | 1.49 GB/s |
 
-Plus one fresh `ByteArray` allocation per frame. The copy alone exceeds the memory bandwidth
-budget of a phone, and it is entirely pointless because the destination is a GPU texture that can
-be filled from the original pointer.
+Plus one fresh `ByteArray` per frame. The copy exceeds a phone's memory bandwidth budget and is
+pointless, because the destination is a GPU texture that could be filled from the original pointer.
 
-**Change.** Add a scoped accessor that hands out plane pointers and strides without transferring
-ownership, plus a hardware surface accessor:
+**Change.** Under `@KiteCodecLowLevelApi`, a scoped plane accessor and a hardware surface accessor:
 
 ```kotlin
-// nativeMain, opt-in annotated
-@KiteCodecLowLevelApi
 public fun <R> Frame.withPlanes(block: (planes: List<CPointer<UByteVar>>, strides: List<Int>) -> R): R
-
-@KiteCodecLowLevelApi
 public val Frame.hardwareSurface: COpaquePointer?
 ```
 
-Scoped rather than a property, so the frame cannot outlive the pointer by accident. Annotated
-opt-in, so `commonMain` consumers are not tempted. The existing copy method stays, unchanged, for
-thumbnails.
+Scoped rather than a property, so a pointer cannot outlive its frame by accident. The existing copy
+method stays for thumbnails.
 
-### 16.2 Only one decode pass may run at a time (BLOCKER)
+### 16.2 FrameInfo and StreamInfo are too thin to render or to build a track menu (BLOCKER)
 
-`MediaSource.native.kt` guards decoding with a `demuxing` flag and documents that one decode pass
-may run at a time, that a second concurrent `decodedFrames` flow throws, and that seek is rejected
-while a pass runs. `decodeStreams` multiplexes several streams into one flow, which is the right
-answer for transcoding and the wrong shape for a player: a player needs video, audio and subtitle
-decoders running independently, each with its own queue and its own backpressure, so that a slow
-video decoder does not stop audio from being decoded.
+`FrameInfo` is built from nine `ffkmp_` accessor calls and carries no duration, no keyframe flag, no
+picture type, no sample aspect ratio, and **none of the colour metadata**: no range, no matrix, no
+primaries, no transfer function, no chroma location.
+
+That last group is not cosmetic. Without the matrix, a renderer guesses between BT.601, BT.709 and
+BT.2020 and shifts every hue when it guesses wrong. Without the range flag, blacks turn grey and
+whites clip. Both are already in the frame; only the accessor is missing. `ffkmp_frame_duration`
+exists in the definition file and is never called.
+
+`StreamInfo` is missing disposition (default, forced, hearing impaired, visual impaired), the
+rotation display matrix, the real frame rate, and the per-stream start time. Without disposition, a
+subtitle track menu cannot mark forced subtitles or auto-select them. Without the rotation matrix,
+every video shot on a phone plays sideways.
+
+**Change.** Extend both structures. This is the cheapest large win in the whole list: the helpers
+either exist already or are one line each.
+
+### 16.3 Only one decode pass may run, and seeking during it is rejected (BLOCKER)
+
+`MediaSource.native.kt` guards decoding with a `SynchronizedObject` over two booleans, `closed` and
+`demuxing`. `beginDemux` throws when a second decode flow starts. `seekMicros` throws when
+`demuxing` is true. `close` throws when `demuxing` is true.
+
+So a player cannot decode audio and video as independent consumers, cannot seek while playing, and
+cannot tear down under cancellation without racing the flag. Mutual exclusion is used where
+backpressure is needed. The flow's `emit` suspension point makes demux, decode and consumption one
+serialised chain, so a slow consumer stalls the demuxer.
 
 **Change.** Split demuxing from decoding, which is what libavformat and libavcodec already are:
 
 ```kotlin
+@KiteCodecLowLevelApi
 public interface PacketReader : AutoCloseable {
     public val streams: List<StreamInfo>
-    public suspend fun read(): Packet?              // null at end of file
-    public fun selectStreams(indices: Set<Int>)
+    public suspend fun read(): Packet?                 // null at end of file
+    public fun selectStreams(indices: Set<Int>)        // sets AVStream.discard for the rest
     public suspend fun seek(micros: Long, flags: SeekFlags)
 }
 
-public interface StreamDecoder : AutoCloseable {   // one per stream, independently driven
+@KiteCodecLowLevelApi
+public interface StreamDecoder : AutoCloseable {       // one per stream, driven independently
     public suspend fun send(packet: Packet?): Boolean
     public suspend fun receive(): Frame?
-    public suspend fun flush()
+    public suspend fun flush()                         // avcodec_flush_buffers
 }
 ```
 
-The fused `decodedFrames` and `decodeStreams` flows stay, implemented on top of these two. Nothing
-existing breaks, and the player gets the shape it needs.
+`decodedFrames`, `decodeStreams`, `extractFrame`, `Transcoder` and `Remuxer` are then reimplemented
+on top of these, unchanged in behaviour. `demuxRouted` stays as the internal engine of the batch
+API. Nothing existing breaks.
 
-### 16.3 Seeking is rejected during playback (BLOCKER)
+### 16.4 `avcodec_flush_buffers` does not exist anywhere (BLOCKER)
 
-The same `demuxing` flag makes `seekMicros` throw while a decode flow is collecting. A player seeks
-while playing, which is the only time it ever seeks.
+A repository-wide search finds zero occurrences. There is therefore no correct way to reset a
+decoder after a seek: the only option today is to destroy and recreate the codec context, which
+re-parses extradata and costs milliseconds on every seek.
 
-**Change.** With 16.2 in place, `PacketReader.seek` is always legal. The caller is responsible for
-flushing decoders afterwards, which is what `StreamDecoder.flush` is for, and which maps to
-`avcodec_flush_buffers`.
+**Change.** One helper, and `StreamDecoder.flush` from 16.3 calls it.
 
-### 16.4 The seek backoff is five seconds (MAJOR)
+### 16.5 The seek path is one call with one flag (MAJOR)
 
-`DECODE_SEEK_BACKOFF_MICROS` is 5 000 000, and `seekForDecode` always aims that far before the
-target so that a following decode-forward pass cannot miss it. For a thumbnail, decoding five extra
-seconds once is invisible. For a player it is five seconds of wasted decode on every seek.
+`ffkmp_fmt_seek_micros` calls `av_seek_frame(ctx, -1, target, AVSEEK_FLAG_BACKWARD)`. There is no
+`avformat_seek_file`, no minimum and maximum timestamp window, no byte seek, and no
+`AVSEEK_FLAG_ANY`. `seekForDecode` compensates for indexless containers by aiming
+`DECODE_SEEK_BACKOFF_MICROS`, which is 5 000 000 microseconds, before the target.
 
-**Change.** Expose the raw keyframe seek with flags and let the caller implement the retry ladder
-of section 12.5. Keep the current behaviour inside `extractFrame`, where it belongs.
+Five seconds of throwaway decoding is invisible for a thumbnail and unacceptable per seek in a
+player.
 
-### 16.5 There is no hardware decoding at all (BLOCKER on mobile, MAJOR on desktop)
+**Change.** Expose `avformat_seek_file` with the min and max window, and the flag set. The retry
+ladder of section 12.5 then lives in the player. Keep the current behaviour inside `extractFrame`.
 
-KiteCodec has hardware **encoding**: `h264_videotoolbox`, `hevc_videotoolbox`, `h264_mediacodec`,
-`hevc_mediacodec` are all in `MediaType.kt`, and the README documents hardware decode and zero-copy
-hardware frames as unavailable. Software-decoding 4K HEVC on a phone drops frames and drains the
-battery, so this is not optional for the platforms that matter most.
+### 16.6 There is no hardware decoding, in the binding or in the binary (BLOCKER on mobile)
 
-**Change.** Three pieces:
+Confirmed absent: `av_hwdevice_ctx_create`, `get_format`, `hw_frames_ctx`,
+`av_hwframe_transfer_data`. And the vendored build makes it impossible even if the binding existed:
+`BuildFFmpegTask.kt` configures `--disable-everything` plus a whitelist, which disables the hardware
+acceleration list as well, and `--enable-videotoolbox` there enables only the two VideoToolbox
+**encoders**. Android's binary does contain `h264_mediacodec` and `hevc_mediacodec`, but
+`ffkmp_find_decoder_by_id` can only ever return the software decoder.
 
-1. `av_hwdevice_ctx_create` and `AVCodecContext.hw_device_ctx`, both trivial through the existing
-   helper style.
-2. The `get_format` callback. This is the awkward part, because it is a C function pointer that
-   must choose a pixel format at codec-open time. Kotlin/Native's `staticCFunction` cannot capture
-   state, so the shim goes in the `.def` file: a static C function that reads the desired format
-   from `AVCodecContext.opaque` and returns it if the list offers it, plus a helper
-   `ffkmp_dec_set_hw_format(AVCodecContext*, enum AVPixelFormat)` that stores it and installs the
-   callback. About fifteen lines of C, and no Kotlin callback crosses the boundary at all.
-3. `hw_frames_ctx` handling on the output frame, so 16.1's `hardwareSurface` can return the
-   `CVPixelBuffer`, the `AVMediaCodecBuffer`, the `VASurfaceID` or the `ID3D11Texture2D`.
+**Change**, in three parts:
 
-Fallback rules belong to the player, not to KiteCodec. KiteCodec's job is to report honestly
-whether the hardware decoder opened.
+1. Build: add the `--enable-hwaccel=` entries per target, and select MediaCodec decoders by name
+   rather than by codec id on Android.
+2. Binding: `av_hwdevice_ctx_create`, `AVCodecContext.hw_device_ctx`, and the `get_format` callback.
+   That callback is the awkward part, because Kotlin/Native's `staticCFunction` cannot capture state.
+   The shim goes in the definition file: a static C function that reads the wanted pixel format from
+   `AVCodecContext.opaque` and returns it when the offered list contains it, plus
+   `ffkmp_dec_set_hw_format(AVCodecContext*, enum AVPixelFormat)` to store it and install the
+   callback. About fifteen lines of C, and no Kotlin callback crosses the boundary.
+3. Frames: surface `hw_frames_ctx` so 16.1's `hardwareSurface` can return the `CVPixelBuffer`, the
+   `AVMediaCodecBuffer`, the VA surface or the D3D11 texture.
 
-### 16.6 There is no custom I/O path (MAJOR)
+Fallback policy stays in the player. KiteCodec's job is to report honestly whether the hardware
+decoder opened.
 
-Nothing binds `avio_alloc_context`, so media can only be read through FFmpeg's own protocols. A
-player needs to read from Kotlin: an application's HTTP client with its own authentication, an
-Android `content://` URI, KiteTorrent, an encrypted store, a byte array in memory.
+### 16.7 There is no custom I/O, and no way to interrupt a blocking read (BLOCKER)
 
-**Change.** A shim in the `.def` that installs static C read, write and seek callbacks which
-trampoline through a context pointer, plus a Kotlin API that takes a `MediaIo` implementation. The
-callback runs on the demux thread only, one call at a time, so the Kotlin side needs no locking.
-This is the single change that makes the most new use cases possible per line of code.
+No `avio_alloc_context`, no `AVIOContext`, no `avformat_alloc_context`, and no
+`AVIOInterruptCB`. Two consequences. Media can only be read through FFmpeg's own protocol handlers,
+so an application cannot supply an Android `content://` URI, its own authenticated HTTP client,
+KiteTorrent, an encrypted store or an in-memory buffer. And because the format context is only ever
+created inside `avformat_open_input`, **a blocking network read cannot be cancelled**, which is a
+hang rather than an inconvenience.
 
-### 16.7 Subtitles cannot be decoded (MAJOR)
+**Change.** Static C read, write and seek callbacks that trampoline through a context pointer, plus
+an interrupt callback wired to a flag the player sets on cancellation. The Kotlin side is the
+`MediaIo` interface of section 8.5, called from the demux worker only, one call at a time, so it
+needs no locking.
 
-`Frame` wraps an `AVFrame`. Subtitles are not `AVFrame` data: they are `AVSubtitle` with
-rectangles, either paletted bitmaps or text, and there is no path for them anywhere in KiteCodec.
+### 16.8 No demuxer or decoder options can be passed (BLOCKER for network, MAJOR otherwise)
 
-**Change.** A `SubtitleDecoder` returning a typed result:
+`avformat_open_input` and `avformat_find_stream_info` are both called with a NULL `AVDictionary`.
+There is no `probesize`, no `scan_all_pmts`, no timeout, no `user_agent`, no `headers`, no
+`thread_count`, and no low-delay flag.
+
+`MediaItem.headers` in section 8.5 cannot be implemented at all until this changes, and a player
+without request headers cannot play most authenticated streams. `thread_count` matters separately: a
+player wants frame-level threading for video and low delay for audio, and the defaults give neither.
+
+**Change.** An options map on open, and on decoder creation.
+
+### 16.9 Subtitles cannot be decoded, or even demuxed (MAJOR)
+
+`demuxRouted` rejects non-audio and non-video streams outright. There is no `AVSubtitle` binding and
+no `avcodec_decode_subtitle2`. The vendored build enables zero subtitle decoders and zero subtitle
+demuxers.
+
+**Change.** A `SubtitleDecoder` returning a typed result, plus the build entries:
 
 ```kotlin
 public sealed interface DecodedSubtitle {
@@ -1959,74 +2029,77 @@ public sealed interface DecodedSubtitle {
 }
 ```
 
-libavcodec already converts every text format it supports into ASS event lines, so the text case is
-one string and the player's own parser handles the rest.
+libavcodec already converts every text subtitle format it supports into ASS event lines, so the text
+case is one string and KitePlayer's own parser handles the rest.
 
-### 16.8 The resampler is internal (MAJOR)
+### 16.10 swresample is linked and never used (MAJOR)
 
-`libswresample` is linked and used inside `Transcoder`, but no public API exposes it. A player must
-convert decoded audio to whatever the device accepted, which is a different format on every
-platform and sometimes a different one after a device change.
+`-lswresample` is on the link line and the header is in the cinterop set, but there is no `swr_*`
+call anywhere. Audio format conversion goes through a filter graph instead, which cannot report
+`swr_get_delay` and cannot do `swr_set_compensation`. Channel layouts are always defaulted, never
+preserved.
 
-**Change.** A public `Resampler` with the format conversion, channel remixing, and the sample
-compensation call that section 10.8's drift correction needs.
+Both missing calls are load-bearing for a player. `swr_get_delay` is part of the audio clock, and
+`swr_set_compensation` is how the drift correction of section 10.8 is applied.
 
-### 16.9 The vendored FFmpeg cannot open https (MAJOR for anything streaming)
+**Change.** A public `Resampler` with format conversion, channel layout preservation, the delay
+query and the compensation call.
 
-The README lists `https` as unavailable in the vendored profile because it needs a TLS backend
-cross-compiled per target. A player without network playback is half a player.
+### 16.11 The vendored FFmpeg cannot open https, hls or dash (MAJOR)
 
-**Change**, per target, choosing the option with no extra dependency where one exists:
+The profile whitelists exactly the protocols `file`, `pipe`, `data`, `http` and `tcp`. No TLS
+backend, so no https. No HLS or DASH demuxer.
+
+**Change**, choosing the option with no extra dependency wherever one exists:
 
 | Target | Flag | Extra dependency |
 |---|---|---|
 | macOS, iOS | `--enable-securetransport` | none, it is in the SDK |
-| Android | `--enable-mbedtls` or `--enable-gnutls` | one static library to cross-build |
+| Android | `--enable-mbedtls` | one small static library to cross-build |
 | Linux | `--enable-gnutls` or `--enable-openssl` | usually already present |
 | Windows | `--enable-schannel` | none, it is in the OS |
 
-Apple and Windows are free. Only Android and Linux need a library, and mbedTLS is the smallest to
-cross-build. HLS and DASH additionally need the `hls` and `dash` demuxers enabled, plus the
-`https` protocol they depend on.
+Apple and Windows are free. HLS and DASH additionally need their demuxers enabled and depend on the
+`https` protocol being present.
 
-### 16.10 Timestamp normalisation needs review (MAJOR)
+### 16.12 Timestamp normalisation needs review (MAJOR)
 
-`MediaSource.native.kt` converts between media-relative and absolute microseconds around
-`startTimeMicros`. The model must be checked against: a negative container start time, per-stream
-start offsets that differ, MPEG-TS programme clock wraparound after roughly 26.5 hours, and
-mid-stream discontinuities. The engine's rule from section 11.6 is that the timeline always starts
-at zero, and the normalisation must happen exactly once, at this boundary.
+`toRelativeMicros` and `toAbsoluteMicros` are the only two places the container origin is applied,
+which is good discipline. Both are `internal`, so a player cannot call them, which 16.0 fixes. The
+model must then be checked against a negative container start time, per-stream start offsets that
+differ from the container's, MPEG-TS programme clock wraparound after about 26.5 hours, and
+mid-stream discontinuities. The engine's rule from section 11.6 is that its timeline starts at zero
+and normalisation happens exactly once, here.
 
-### 16.11 There is no JVM target (BLOCKER for Android and JVM desktop)
+### 16.13 There is no JVM target (BLOCKER for Android and JVM desktop)
 
-Section 15 specifies the whole bridge. It belongs in KiteCodec as a `kitecodec-jvm` module plus a
-`jvm` and `android` target, not in KitePlayer.
+Section 15 specifies the bridge. It belongs in KiteCodec, as a `kitecodec-jvm` module plus `jvm` and
+`android` targets. Of the 141 helpers, the ones needing hand-written JNI rather than generated code
+are those returning pointers, the one using a thread-local error buffer, and the callback installers
+from 16.6 and 16.7. The rest are mechanical.
 
-### 16.12 Smaller items (NICE)
+### 16.14 Smaller items (NICE)
 
 | Item | Why it matters |
 |---|---|
-| Carry the packet byte position through the decoder | Byte-accurate progress on a stream with broken timestamps. libavcodec has a side channel for it and it is otherwise lost. |
-| Reuse a filter graph across frames of the same format | Live video filters in a player rebuild the graph on every reconfiguration otherwise. |
-| Bitstream filter API (`av_bsf_*`) | The README lists it as absent. Playback rarely needs it, since libavformat inserts the common ones automatically. |
-| `avcodec_flush_buffers` exposure | Required by 16.3, listed separately because it is one line. |
-| Report the decoder's threading configuration | A player wants frame-level threading on for video and off for low-latency audio. |
+| `AVStream.discard` for unselected streams | libavformat skips them instead of the player discarding them after the fact |
+| Carry the packet byte position through the decoder | byte-accurate progress when timestamps are broken |
+| Rotation display matrix on the stream | otherwise phone video plays sideways |
+| Reuse a filter graph across frames of one format | live video filters otherwise rebuild the graph on every reconfiguration |
+| Bitstream filter API | listed as absent in the README; playback rarely needs it |
 
-### 16.13 Order of work in KiteCodec
+### 16.15 Order of work in KiteCodec
 
-1. 16.2 and 16.3 together, since they are the same refactor.
-2. 16.1, which the renderer needs immediately after.
-3. 16.4, one line once 16.2 lands.
-4. 16.8, needed by the audio path.
-5. 16.5, needed for the first hardware milestone.
-6. 16.7, needed for subtitles.
-7. 16.6, then 16.9, then 16.11.
+1. **16.0**, the opt-in low-level surface. Nothing else can be used without it.
+2. **16.3 and 16.4** together, since they are one refactor.
+3. **16.2**, which the renderer and the track menu both need immediately.
+4. **16.1**, which the renderer needs to avoid the copy.
+5. **16.5**, one call once 16.3 lands.
+6. **16.10**, needed by the audio path.
+7. **16.8**, then **16.7**, then **16.6**, then **16.9**, then **16.11**, then **16.13**.
 
-Steps 1 to 4 are what M3 and M4 depend on. They are additive: the existing API keeps working, and
-KiteCodec's 53 tests must still pass after each one.
-
----
-
+Steps 1 to 6 are what milestones M3 and M4 depend on. Every one of them is additive, and KiteCodec's
+53 tests must still pass after each.
 ## 17. Constants to port verbatim
 
 These values are the empirical residue of a decade of bug reports against ffplay and mpv. A

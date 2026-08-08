@@ -96,3 +96,47 @@ specification in KITEPLAYER.md, and the engine is written in `commonMain` with n
 assumptions. It only means the order of proof starts where proof is possible.
 
 **Reverse it by.** Reordering the milestone table in KITEPLAYER.md.
+
+---
+
+## 6. KiteCodec grows an opt-in low-level API, rather than KitePlayer moving inside it
+
+**Decided.** KiteCodec will expose the pieces a player needs as public declarations behind a
+`@KiteCodecLowLevelApi` opt-in annotation. KitePlayer stays a separate repository.
+
+**Why this came up.** The gap analysis found that everything a player needs from KiteCodec is
+`internal`: the native frame pointer, the stream time base, the routed demux engine, the seek
+helper, the timestamp conversions, the packet and frame helpers, the error mapping. KiteCodec's
+`settings.gradle.kts` declares no friend or associate compilation, so a separate module can reach
+none of it. This blocks everything else, so it had to be settled first.
+
+**Alternative rejected.** Putting KitePlayer's FFmpeg backend inside `kitecodec-core`. That would
+tie a player's release cadence to a codec binding's, and would put several thousand lines of
+coroutine-heavy playback code inside a module whose whole selling point is being a thin binding.
+
+**Why the annotation is the honest form.** These declarations hand out raw pointers with manual
+lifetimes. A consumer should have to write down that they accept that, and the annotation makes the
+compiler ask.
+
+**Reverse it by.** Removing the annotation and merging the modules.
+
+---
+
+## 7. The audio sink interface is pull-shaped, not push-shaped
+
+**Decided.** The engine's `AudioSink` is pulled by the device through a non-suspending
+`AudioRenderCallback`, and platforms whose native API is push (ALSA read-write, PulseAudio, the JVM
+`SourceDataLine`, Android `AudioTrack` blocking write) are wrapped by one writer coroutine that
+turns available space into a pull.
+
+**Why.** The first draft of the plan had the engine pushing buffers into the sink with a suspending
+`write`. The audio output study showed that is the wrong shape: the real-time audio thread cannot
+suspend, cannot allocate and cannot take a contended lock, and the master clock needs the instant at
+which a specific buffer becomes audible, which only a pull callback can supply. mpv reached the same
+conclusion and standardises on pull internally for exactly this reason. ffplay does the opposite and
+its Windows path contains a busy-wait workaround as the visible consequence.
+
+**Cost.** Push platforms need a wrapper. That wrapper is written once, in the output module, not per
+platform.
+
+**Reverse it by.** Nothing sensible. This one is settled by physics rather than taste.

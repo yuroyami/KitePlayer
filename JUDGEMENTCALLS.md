@@ -229,3 +229,47 @@ verification pass should carry. It is the better long-term answer.
 
 **Verified after the change.** 157 tests pass, every target compiles including Android, js and wasmJs,
 and the sample still plays with zero underruns.
+
+---
+
+## 12. KiteCodec was changed rather than worked around
+
+**Decided.** With permission given to edit KiteCodec freely, it grew the API a player needs instead of
+KitePlayer working around its absence. Fifteen items from KITEPLAYER.md section 16 were specified; six
+landed, chosen as the ones that unblock video.
+
+**What landed.** The opt-in low-level surface (16.0), the colour metadata and frame duration on
+`FrameInfo` plus disposition and rotation on `StreamInfo` (16.2), the split of demuxing from decoding
+(16.3), the decoder flush (16.4), seeking with a real window and flag set (16.5), and zero-copy plane
+and hardware-surface access (16.1).
+
+**What did not, and why.** Hardware decode (16.6) needs a C function pointer callback and a change to
+the vendored FFmpeg configure line, which is a build-system job rather than an API one. Custom I/O
+(16.7), demuxer options (16.8), subtitle decode (16.9), the resampler (16.10), https (16.11) and the
+JNI bridge (16.13) are all specified and untouched. None of them blocks a picture on screen.
+
+**Why the opt-in annotation rather than plain public API.** These declarations hand out raw pointers
+with manual lifetimes and no stability promise. Making a consumer write that down is the honest form,
+and it keeps KiteCodec's safe-by-construction batch API as the thing a casual user finds first.
+
+**Verified.** KiteCodec's own 53 tests still pass. Two of its Gradle plugin functional tests fail, and
+they failed before any of this, confirmed by stashing the changes and re-running.
+
+---
+
+## 13. The sample wires the pipeline by hand, and that is temporary
+
+**Decided.** `kiteplayer-sample` connects the demuxer, the two decoders, the audio path and the video
+scheduler with plain coroutine channels, rather than through the `PlaybackCore` the plan specifies.
+
+**Why.** Every piece `PlaybackCore` will coordinate now exists and is tested: the clock, the
+synchronisation law, the duration estimator, the queues, the audio ring, the seek merge, and both
+playback paths. What was missing was evidence that they fit together and that the result stays in sync
+on real media. Wiring them by hand produced that evidence in one file, and the measurements it prints
+are what says the design works.
+
+**What it costs.** The sample's channels are not the engine's `PacketQueue`, so it does not exercise
+generation filtering or the byte and duration bounds. Those are unit tested separately.
+
+**What replaces it.** `PlaybackCore`, with the generation plumbing and the seek state machine attached.
+That is the next engine piece, and the sample then shrinks to opening a file and collecting state.

@@ -18,6 +18,12 @@ plugins {
  * Targets follow KiteCodec's reach, which today is Kotlin/Native only. Android and JVM desktop need
  * the JNI bridge described in KITEPLAYER.md section 15, and that work belongs in KiteCodec.
  */
+// The media fixtures live at the repo root and a native test's working directory is not something
+// to rely on, so the location is passed in explicitly.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}
+
 kotlin {
     explicitApi()
     jvmToolchain(21)

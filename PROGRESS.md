@@ -12,10 +12,10 @@ Milestones are defined in KITEPLAYER.md section 19.
 | # | Milestone | State |
 |---|---|---|
 | M0 | Repository scaffolded to family standard | done, with gaps listed below |
-| M1 | Engine core with fake everything | partly done: the timing core is complete and tested, the core loop is not written |
-| M2 | KiteCodec playback changes | not started. Specified in KITEPLAYER.md section 16 |
+| M1 | Engine core with fake everything | partly done: the timing core and both playback paths are complete and tested, the core loop is not written |
+| M2 | KiteCodec playback changes | **done** for the items M3 and M4 need: sections 16.0, 16.2, 16.3, 16.4, 16.5 and part of 16.1 |
 | M3 | Audio only playback on macOS | **done and verified** |
-| M4 | Video playback, tier 0 renderer | not started |
+| M4 | Video playback with audio in sync, tier 0 conversion | **done and verified**, without an on-screen window |
 | M5 | Metal renderer and VideoToolbox hardware decode | not started |
 | M6 | Subtitles | parsing started, no rendering |
 | M7 | Compose surface and sample application | not started |
@@ -28,31 +28,44 @@ Milestones are defined in KITEPLAYER.md section 19.
 ./kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe testmedia/sync1080p30.mp4
 ```
 
-That decodes a file's AAC track through KiteCodec, plays it through CoreAudio, and prints the
-position from the audio clock. Measured on this machine:
+That demuxes and decodes video and audio as independent stages through KiteCodec, plays the audio
+through CoreAudio, schedules the video against the audio clock, and reports what happened. Measured
+on this machine:
 
-| Measurement | Result |
+| Clip | Result |
 |---|---|
-| 10 second clip, start to finish | 469 chunks, 480 256 sample frames, 0 underruns |
-| Drift over 3 minutes of continuous playback | 0 ms, measured against the monotonic clock |
-| Buffer occupancy while playing | steady at 200 ms |
-| Missing file, and a file that is not media | one sentence each, no stack trace |
-| A file with no audio track | reported and refused cleanly |
+| 1080p30 h264 with AAC, 10 s | 300 frames decoded, 300 presented, 0 dropped, 0 repeated, 0 underruns, a/v drift steady at 20 ms |
+| 720p 59.94 fps, non-integer rate | 480 frames, 0 dropped, 0 repeated, a/v drift 18 ms |
+| 4K HEVC 10-bit, no audio, video is the master clock | 180 frames, 0 dropped |
+| Audio only, 3 minute soak | 0 ms clock drift, 0 underruns, buffer steady at 200 ms |
+| Missing file, a file that is not media, a file with no audio | one sentence each, no stack trace |
 
-The zero drift figure is the one that matters. The audio clock is not counted from samples submitted:
-it is anchored to the instant CoreAudio says a specific frame becomes audible. That is why it tracks
-real time exactly instead of accumulating error, and it is the difference between this design and one
-that estimates the device latency.
+The a/v drift sitting at a steady 20 ms and not being corrected is the right behaviour, not a
+tolerance being missed. It is inside the 40 ms floor from section 10.5, and correcting inside that
+floor is what makes a picture oscillate between early and late.
+
+The zero clock drift figure is the one that matters. The audio clock is not counted from samples
+submitted: it is anchored to the instant CoreAudio says a specific frame becomes audible. That is why
+it tracks real time exactly instead of accumulating error, and it is the difference between this design
+and one that estimates the device latency.
+
+Colour correctness is checked against FFmpeg's own output rather than by eye. Three clips, BT.709,
+BT.601 and 10-bit, are decoded through the engine, converted by the tier 0 software path, and compared
+per pixel against what the `ffmpeg` command line produces. The mean component error is under 2 units
+of 255. That test found a real defect while it was being written: the studio-range chroma scale was
+missing, which left every colour about 14 percent undersaturated, and nothing about watching playback
+would have revealed it.
 
 ## Tests
 
-157 tests, no failures.
+163 tests, no failures.
 
 | Module and target | Tests | Covers |
 |---|---|---|
 | `kiteplayer-core`, JVM | 75 | the whole timing core, in virtual time |
 | `kiteplayer-core`, macOS arm64 | 75 | the same 75, compiled natively |
 | `kiteplayer-output`, macOS arm64 | 7 | the real audio device |
+| `kiteplayer-ffmpeg`, macOS arm64 | 6 | real decode, and colour against FFmpeg's own output |
 
 The engine's 75 tests running identically on the JVM and on Kotlin/Native is the first evidence for
 the claim the library is built on: the behaviour is defined once and is the same everywhere.
@@ -72,27 +85,29 @@ the player would be trustworthy.
 |---|---|
 | `kiteplayer-core` | timing core complete and tested: typed timestamps and generations, the clock, the synchronisation law, the frame duration estimator, the packet and frame queues, the audio ring, the seek request merge, the audio playback path. The public API surface, the four service interfaces and the state types are written. The core loop that ties them together is not. |
 | `kiteplayer-output` | CoreAudio sink, complete and tested against hardware. No video renderer yet. |
-| `kiteplayer-ffmpeg` | audio only, one pass, no seeking, because that is what KiteCodec currently allows. See below. |
+| `kiteplayer-ffmpeg` | the real source and decoders: independent per-stream decoding, packet-level demuxing, zero-copy plane access, and the tier 0 software colour conversion. Seeking is implemented in the source but not yet driven by anything. |
 | `kiteplayer-subtitles` | SubRip parser with the tolerances real files need. No layout and no rendering yet. |
 | `kiteplayer-sample` | a CLI that plays a file's audio. |
 | `kiteplayer`, `kiteplayer-compose`, `kiteplayer-libass` | not created. Listed in `settings.gradle.kts` as comments so the intended module graph is visible. |
 
 ## What is deliberately not done yet
 
-**Video.** Not started, and it is blocked rather than skipped. KiteCodec's `Frame` exposes pixels only
-through `copyPlanesToByteArray`, which is a full copy of every frame: 3.11 MB for 1080p and 24.9 MB
-for 4K 10-bit, so 187 MB/s to 1.5 GB/s at 60 fps, plus an allocation per frame. A renderer needs the
-plane pointers, and for hardware decoding it needs the surface handle. KITEPLAYER.md section 16.1
-specifies the change. Building a video path on the copy would mean writing something that has to be
-thrown away.
+**An on-screen window.** The video path is complete up to the renderer: frames are decoded, scheduled
+against the audio clock, and handed over at the right time, which the sample measures. What is missing
+is a renderer that draws to a window rather than counting. That is a Metal layer and a run loop, and it
+is the next platform piece rather than an engine one.
 
-**Seeking.** Specified in full, tested at the level of request merging and generation filtering, and
-not wired, because KiteCodec rejects a seek while a decode pass is running. Section 16.3.
+**Hardware decode.** The C plumbing for it is specified in KITEPLAYER.md section 16.6 and not written.
+Software 4K HEVC works on this machine, and would not on a phone.
+
+**Seeking.** Implemented in the source and in the request merging, and not yet driven end to end,
+because that belongs to the core loop below.
 
 **The core loop.** The design is settled in KITEPLAYER.md section 12.1: level-triggered handlers, one
-per concern, called in a documented order every iteration. Every piece it coordinates exists and is
-tested. Writing it before the KiteCodec changes land would mean writing it against an API that is
-about to change shape.
+per concern, called in a documented order every iteration. Every piece it coordinates now exists and
+is tested, and the sample wires them by hand to prove they fit. Turning that wiring into
+`PlaybackCore`, with the generation plumbing and the seek state machine attached, is the next engine
+piece.
 
 **Everything except macOS.** The engine compiles for every target Kotlin supports, including js and
 wasmJs, because it has no platform dependency at all. What does not exist is a backend for those
@@ -109,7 +124,7 @@ KITEPLAYER.md section 15.
 | No docs site | `mkdocs.yml` and the `docs/` page set are not written. |
 | No README beyond the minimum | Written against what exists today, and it will need rewriting at every milestone. |
 | Audio is limited to two channels | `FFmpegAudioReader` takes the first two channels of a surround stream rather than downmixing. Proper downmixing needs the channel layout and a correct matrix, and belongs in the engine's filter chain. |
-| The FFmpeg backend cannot seek or decode video | Both are KiteCodec limits, not design choices. Sections 16.1 and 16.3. |
+| Two KiteCodec Gradle plugin tests fail | `kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks` and `missingLicenseChoiceFailsConfigurationWithInstructions`. Both failed before any change here, verified by stashing. Their assertions look stricter than the output they check. |
 | `kiteplayer-ffmpeg` resolves KiteCodec from a local publication | KiteCodec is not on Maven Central. Run `./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true` in the KiteCodec checkout first. |
 
 ## Next, in order

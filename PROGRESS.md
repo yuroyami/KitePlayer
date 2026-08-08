@@ -15,7 +15,7 @@ Milestones are defined in KITEPLAYER.md section 19.
 | M1 | Engine core with fake everything | partly done: the timing core and both playback paths are complete and tested, the core loop is not written |
 | M2 | KiteCodec playback changes | **done** for the items M3 and M4 need: sections 16.0, 16.2, 16.3, 16.4, 16.5 and part of 16.1 |
 | M3 | Audio only playback on macOS | **done and verified** |
-| M4 | Video playback with audio in sync, tier 0 conversion | **done and verified**, without an on-screen window |
+| M4 | Video playback with audio in sync, tier 0 renderer, on screen | **done and verified**, including a window |
 | M5 | Metal renderer and VideoToolbox hardware decode | not started |
 | M6 | Subtitles | parsing started, no rendering |
 | M7 | Compose surface and sample application | not started |
@@ -37,6 +37,7 @@ on this machine:
 | 1080p30 h264 with AAC, 10 s | 300 frames decoded, 300 presented, 0 dropped, 0 repeated, 0 underruns, a/v drift steady at 20 ms |
 | 720p 59.94 fps, non-integer rate | 480 frames, 0 dropped, 0 repeated, a/v drift 18 ms |
 | 4K HEVC 10-bit, no audio, video is the master clock | 180 frames, 0 dropped |
+| 640x360 in a window (`--window`) | 200 presented, 66 drawn, 134 superseded by newer frames, 0 underruns, drift 15 ms |
 | Audio only, 3 minute soak | 0 ms clock drift, 0 underruns, buffer steady at 200 ms |
 | Missing file, a file that is not media, a file with no audio | one sentence each, no stack trace |
 
@@ -92,13 +93,22 @@ the player would be trustworthy.
 
 ## What is deliberately not done yet
 
-**An on-screen window.** The video path is complete up to the renderer: frames are decoded, scheduled
-against the audio clock, and handed over at the right time, which the sample measures. What is missing
-is a renderer that draws to a window rather than counting. That is a Metal layer and a run loop, and it
-is the next platform piece rather than an engine one.
+**A renderer fast enough for 1080p on screen.** There is a window, and it draws real frames: verified
+visually against the burned-in timecode of a test pattern. But it is the tier 0 path, converting on the
+CPU and building a Core Graphics image per frame, so at 1080p it draws about 9 frames of every 300 and
+reports the rest as superseded.
+
+That is the designed behaviour rather than a failure, and the distinction matters. A slow renderer no
+longer degrades anything else: with the window open on a 1080p clip, the engine still presents 300 of
+300 frames on schedule with zero dropped and zero audio underruns. The renderer names itself as the
+bottleneck through its own counter. A Metal renderer that uploads planes as textures and converts in a
+shader is the fix, and it is the next platform piece.
 
 **Hardware decode.** The C plumbing for it is specified in KITEPLAYER.md section 16.6 and not written.
 Software 4K HEVC works on this machine, and would not on a phone.
+
+**Subtitles on screen.** SubRip parses, and the cue model and the overlay interface exist. Nothing lays
+cues out or rasterises them yet.
 
 **Seeking.** Implemented in the source and in the request merging, and not yet driven end to end,
 because that belongs to the core loop below.

@@ -8,11 +8,19 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.VideoPlayback
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSource
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSourceFactory
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
 import io.github.yuroyami.kiteplayer.ffmpeg.interleavedFloat
 import io.github.yuroyami.kiteplayer.output.AppleHostClock
+import io.github.yuroyami.kiteplayer.output.AppKitVideoRenderer
+import io.github.yuroyami.kiteplayer.output.AppKitWindow
 import io.github.yuroyami.kiteplayer.output.CoreAudioSink
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
+import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
+import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
@@ -48,41 +56,90 @@ import kotlin.time.Duration.Companion.nanoseconds
 fun main(args: Array<String>) {
     val path = args.firstOrNull { !it.startsWith("--") }
     if (path == null || args.contains("-h") || args.contains("--help")) {
-        println("usage: kiteplayer <media file> [--no-video]")
+        println("usage: kiteplayer <media file> [--window] [--no-video]")
         println()
         println("Plays the file and reports the position, the audio to video drift, and the frame")
         println("accounting, all taken from the engine's own clocks.")
+        println()
+        println("  --window    open a window and draw the video in it")
+        println("  --no-video  play the audio track only")
         exitProcess(if (path == null) 2 else 0)
     }
     val videoEnabled = !args.contains("--no-video")
+    val wantWindow = args.contains("--window")
+
+    // Anything can fail here: a missing file, a permission error, bytes that are not media, a codec
+    // this FFmpeg build does not have. All of them are the same thing to a user, so all of them get a
+    // sentence rather than a stack trace.
+    val source = try {
+        runBlocking { KiteCodecSourceFactory().open(MediaItem(path)) as KiteCodecSource }
+    } catch (failure: Throwable) {
+        println("cannot play $path")
+        println("  ${failure.message ?: failure::class.simpleName}")
+        exitProcess(1)
+    }
+
+    val videoStream = if (videoEnabled) source.firstVideo else null
+    val audioStream = source.firstAudio
+    if (videoStream == null && audioStream == null) {
+        println("cannot play $path")
+        println("  nothing playable in it")
+        source.close()
+        exitProcess(1)
+    }
+
+    if (wantWindow && videoStream != null) {
+        // AppKit owns the main thread and its run loop, so the window is built here and playback runs
+        // on another thread. Doing it the other way round means either no events or no playback.
+        val size = videoStream.videoSize
+        val window = AppKitWindow(
+            title = path.substringAfterLast('/'),
+            width = (size?.displayWidth ?: 1280).coerceAtMost(1600),
+            height = (size?.height ?: 720).coerceAtMost(1000),
+        )
+        val renderer = AppKitVideoRenderer(window) { frame ->
+            SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+        }
+        val sessionContext = newSingleThreadContext("kiteplayer-session")
+        CoroutineScope(sessionContext).launch {
+            try {
+                runSession(path, source, videoStream, audioStream, renderer)
+            } finally {
+                println("  window drew       ${renderer.presentedFrames} frames")
+                println("  superseded        ${renderer.supersededFrames} (renderer was the bottleneck)")
+                println("  conversion failed ${renderer.failedFrames}")
+                window.stop()
+            }
+        }
+        window.runEventLoop()
+        return
+    }
 
     runBlocking {
-        // Anything can fail here: a missing file, a permission error, bytes that are not media, a
-        // codec this FFmpeg build does not have. All of them are the same thing to a user, so all of
-        // them get a sentence rather than a stack trace.
-        val source = try {
-            KiteCodecSourceFactory().open(MediaItem(path)) as KiteCodecSource
-        } catch (failure: Throwable) {
-            println("cannot play $path")
-            println("  ${failure.message ?: failure::class.simpleName}")
-            exitProcess(1)
-        }
+        runSession(path, source, videoStream, audioStream, CountingRenderer(AppleHostClock))
+    }
+}
 
-        val videoStream = if (videoEnabled) source.firstVideo else null
-        val audioStream = source.firstAudio
-        if (videoStream == null && audioStream == null) {
-            println("cannot play $path")
-            println("  nothing playable in it")
-            source.close()
-            exitProcess(1)
-        }
-
+/**
+ * Plays [source] to completion, reporting as it goes.
+ *
+ * Everything here runs off the main thread, so it works the same whether the frames end up in a window
+ * or in a counter.
+ */
+@OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+private suspend fun runSession(
+    path: String,
+    source: KiteCodecSource,
+    videoStream: PlayerStreamInfo?,
+    audioStream: PlayerStreamInfo?,
+    videoRenderer: VideoRenderer,
+) {
+    coroutineScope {
         val sink = CoreAudioSink(AppleHostClock)
         val audio = AudioPlayback(sink, AppleHostClock, onWarning = { println("warning: ${it.message}") })
-        val renderer = if (videoStream != null) CountingRenderer(AppleHostClock) else null
         val video = if (videoStream != null) {
             VideoPlayback(
-                renderer = renderer,
+                renderer = videoRenderer,
                 clock = AppleHostClock,
                 containerFrameRate = videoStream.frameRate,
                 timestampsMayJump = source.timestampsMayJump,
@@ -290,7 +347,7 @@ fun main(args: Array<String>) {
                 println("  repeated         ${it.repeatedFrames}")
                 println("  final a/v drift  ${it.drift.inWholeMilliseconds} ms")
             }
-            renderer?.let {
+            (videoRenderer as? CountingRenderer)?.let {
                 println("  renderer got     ${it.count} frames")
                 println("  worst schedule   ${it.worstErrorMillis} ms from the requested time")
             }

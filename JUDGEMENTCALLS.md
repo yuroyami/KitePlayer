@@ -273,3 +273,47 @@ generation filtering or the byte and duration bounds. Those are unit tested sepa
 
 **What replaces it.** `PlaybackCore`, with the generation plumbing and the seek state machine attached.
 That is the next engine piece, and the sample then shrinks to opening a file and collecting state.
+
+---
+
+## 14. The window uses Core Graphics, not Metal, and that is deliberate for now
+
+**Decided.** The on-screen renderer converts each frame on the CPU and hands it to an `NSImageView`.
+
+**Why.** It is about a hundred lines and it works today, which means there is a picture to look at and
+a reference for a GPU renderer to be compared against. A Metal renderer needs a device, a command
+queue, a pipeline state, a shader compiled at runtime, and a `CAMetalLayer` wired into the window.
+That is the right answer and it is a bigger piece of work than the last hour of a night should start.
+
+**What it costs, measured.** At 640x360 it draws 66 of 200 frames. At 1080p it draws about 9 of 300.
+The rest are superseded by newer frames before it gets to them.
+
+**Why that is acceptable rather than broken.** A slow renderer no longer affects anything else. With
+the window open on a 1080p clip the engine still presents 300 of 300 frames on schedule, drops none,
+and records zero audio underruns. The renderer reports itself as the bottleneck through
+`supersededFrames`. That property is the thing worth having: it means the GPU renderer can be dropped
+in later without any of the timing work being revisited.
+
+**Reverse it by.** Writing `MetalVideoRenderer` against the same `VideoRenderer` interface. Nothing
+above it changes.
+
+---
+
+## 15. Two defects the window found, both about ownership
+
+**A conflated channel leaked 291 frames of 300.** The first version of the AppKit renderer handed
+frames to its worker through `Channel(CONFLATED)`. That channel silently discards the element it
+displaces, so the displaced frame was never closed and never counted: the run reported drawing 9
+frames with nothing dropped, while 291 native frame buffers leaked. Replaced with a slot the renderer
+owns itself, so the displaced frame is closed and counted. The accounting now balances exactly:
+9 drawn plus 290 superseded plus 1 in flight is 300.
+
+**Converting on the scheduler thread starved the whole player.** The same renderer originally did its
+conversion inside `present`. At 1080p that cost enough time to slip the presentation schedule and, with
+the process saturated, to starve the audio feeder too: 700 audio underruns, 11 frames shown of 300, and
+audio to video drift of over three seconds. The renderer contract in KITEPLAYER.md section 9.5 already
+allowed handing work to another thread; the fix was to do what the contract said.
+
+Both were found by running the thing on real media at a real resolution, not by reading it. Neither
+would have been caught by a unit test of the renderer, because both are about what happens to everything
+else while the renderer is busy.

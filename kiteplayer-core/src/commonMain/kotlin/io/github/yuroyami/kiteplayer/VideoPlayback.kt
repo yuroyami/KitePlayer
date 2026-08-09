@@ -29,6 +29,13 @@ import kotlin.time.Duration.Companion.microseconds
  *
  * [submit] is called from the video decoder coroutine. [tick] is called from the scheduler coroutine.
  * The queue between them is single producer, single consumer. Nothing else is shared.
+ *
+ * ### Ownership
+ *
+ * A frame has exactly one owner at every instant: the queue until it is advanced, then the renderer
+ * from the moment [VideoRenderer.present] is called, including when it fails. With no renderer
+ * attached this class closes the frame itself. Nothing here holds a frame it has handed over, so
+ * nothing here can close one twice or read one a pool has already taken back.
  */
 public class VideoPlayback(
     private val renderer: VideoRenderer?,
@@ -37,11 +44,18 @@ public class VideoPlayback(
     containerFrameRate: Double? = null,
     /** True for containers whose timestamps may jump, MPEG-TS above all. */
     timestampsMayJump: Boolean = false,
+    /**
+     * How many decoded frames are held ahead of the screen. Four by default.
+     *
+     * The frame on screen takes no slot of its own. Once it is presented the renderer owns it and the
+     * schedule keeps only its timestamps, so the total the engine holds is this capacity plus one
+     * metadata record.
+     */
     queueCapacity: Int = 4,
     private val dropPolicy: FrameDropPolicy = FrameDropPolicy.LateOnly,
 ) : AutoCloseable {
 
-    private val queue = FrameQueue(queueCapacity + 1)
+    private val queue = FrameQueue(queueCapacity)
     private val videoClock = MediaClock(clock)
     private val maxFrameDurationUs =
         if (timestampsMayJump) SyncLaw.MAX_FRAME_DURATION_DISCONTINUOUS_US else SyncLaw.MAX_FRAME_DURATION_NORMAL_US
@@ -59,18 +73,44 @@ public class VideoPlayback(
     private var frameTimerNanos: Long = 0
     private var started = false
 
-    private var presented = 0L
+    private var submitted = 0L
+    private var headless = 0L
     private var droppedLate = 0L
     private var repeated = 0L
     private var lastDriftUs = 0L
 
-    /** Frames presented since the last flush. */
-    public val presentedFrames: Long get() = presented
+    /**
+     * Frames a renderer accepted.
+     *
+     * Accepted is not drawn. A renderer may take a frame and then supersede it with a newer one, or
+     * fail to draw it at all, and it counts those outcomes itself. This number is what the schedule
+     * handed over, which is the only thing the schedule can know.
+     */
+    public val submittedFrames: Long get() = submitted
 
-    /** Frames dropped because their time had already passed. */
+    /**
+     * Frames the schedule presented with no renderer attached.
+     *
+     * A detached renderer must not stop playback: the sound keeps going and the schedule keeps its
+     * pacing, so a minimised window changes nothing but the picture. These frames were never drawn
+     * anywhere and are counted apart from the ones that were submitted.
+     */
+    public val headlessFrames: Long get() = headless
+
+    /**
+     * Frames that never reached the screen: dropped because their time had passed, or refused by the
+     * renderer, for example because its surface is gone.
+     */
     public val droppedFrames: Long get() = droppedLate
 
-    /** Frames shown for longer than their own duration, because video was ahead of the clock. */
+    /**
+     * Frames the schedule held on screen for a second period, because video was ahead of the master
+     * clock.
+     *
+     * A scheduler decision, counted once for each frame it applies to, at the moment the frame after
+     * it is presented. A renderer that shows the same frame twice because it had nothing newer for a
+     * display refresh is a different measurement and not this one.
+     */
     public val repeatedFrames: Long get() = repeated
 
     /**
@@ -123,10 +163,10 @@ public class VideoPlayback(
             // against a frame from before the seek.
             frameTimerNanos = now
             started = true
-            return present(next, now, masterClock)
+            return present(frameTimerNanos, masterClock)
         }
 
-        val shown = queue.peekShown()
+        val shown = queue.shown
         val measuredUs = if (shown != null && shown.generation == next.generation) {
             next.pts.micros - shown.pts.micros
         } else {
@@ -136,7 +176,6 @@ public class VideoPlayback(
 
         val videoNow = videoClock.nowOrNull()
         val delayUs = SyncLaw.targetDelayUs(nominalUs, videoNow, masterClock, maxFrameDurationUs)
-        if (SyncLaw.classify(nominalUs, delayUs) == SyncAction.Repeated) repeated++
 
         val targetNanos = frameTimerNanos + delayUs * 1_000
         if (now < targetNanos) return (targetNanos - now).nanosAsDuration()
@@ -153,8 +192,14 @@ public class VideoPlayback(
         if (dropPolicy != FrameDropPolicy.Never) {
             val following = queue.peekNext()
             if (following != null) {
-                val followingDueUs = nominalUs
-                if (now > frameTimerNanos + followingDueUs * 1_000) {
+                // How long the candidate would itself stay on screen, measured from the frame after
+                // it. The frame already shown has the same duration at a constant frame rate and a
+                // different one as soon as timestamps vary, which is exactly when drops happen, so
+                // using it decided the drop from the wrong frame's length.
+                val candidateUs = (following.pts.micros - next.pts.micros)
+                    .takeIf { following.generation == generation && it > 0 && it <= maxFrameDurationUs }
+                    ?: nominalUs
+                if (now > frameTimerNanos + candidateUs * 1_000) {
                     queue.dropNext()
                     droppedLate++
                     return Duration.ZERO
@@ -162,24 +207,39 @@ public class VideoPlayback(
             }
         }
 
-        return present(next, now, masterClock)
+        // The repeat is counted here, once, because this is the instant the frame it applies to
+        // leaves the screen after its second period. Classifying before the wait counted the same
+        // repeat again on every scheduler wake-up.
+        if (SyncLaw.classify(nominalUs, delayUs) == SyncAction.Repeated) repeated++
+
+        return present(frameTimerNanos, masterClock)
     }
 
-    private suspend fun present(frame: VideoFrame, nowNanos: Long, masterClock: Pts?): Duration {
-        val shown = queue.advance() ?: return IDLE_WAIT
-        videoClock.set(shown.pts, generation)
-        masterClock?.let { lastDriftUs = shown.pts.micros - it.micros }
+    /**
+     * Hands the next frame over, aimed at [targetNanos].
+     *
+     * [targetNanos] is the schedule's own instant for the frame, never the moment the scheduler woke
+     * up to hand it over. The two differ by however late the wake-up was, and a renderer that can aim
+     * at a time (a display link, a present-time extension) needs the intended one: given the current
+     * instant it draws every frame as late as the scheduler happened to be.
+     */
+    private suspend fun present(targetNanos: Long, masterClock: Pts?): Duration {
+        val frame = queue.advance() ?: return IDLE_WAIT
+        videoClock.set(frame.pts, generation)
+        masterClock?.let { lastDriftUs = frame.pts.micros - it.micros }
 
         val renderer = this.renderer
         if (renderer == null) {
-            // No renderer attached: audio keeps playing and video frames are accounted as presented
-            // so the schedule stays honest. A minimised window must not stop the sound.
-            presented++
+            // No renderer attached: audio keeps playing and the schedule keeps pacing, so a minimised
+            // window must not stop the sound. This function is the frame's only owner here, so it
+            // closes it.
+            frame.close()
+            headless++
             return Duration.ZERO
         }
-        // The renderer takes ownership from here, including on failure, so the frame must not be
-        // touched afterwards.
-        if (renderer.present(shown, nowNanos)) presented++ else droppedLate++
+        // The renderer owns the frame from here, including on failure, so it must not be touched
+        // afterwards.
+        if (renderer.present(frame, targetNanos)) submitted++ else droppedLate++
         return Duration.ZERO
     }
 

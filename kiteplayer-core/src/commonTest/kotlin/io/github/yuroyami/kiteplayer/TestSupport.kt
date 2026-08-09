@@ -1,10 +1,16 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.spi.RendererEvent
+import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -97,6 +103,54 @@ internal class FakeVideoFrame(
 
     override fun toString(): String = "Frame($pts, $generation)"
 }
+
+/**
+ * A renderer that draws nothing and records everything it was asked for.
+ *
+ * The question the video scheduler has to answer is not what the picture looks like, which the golden
+ * image tests in `kiteplayer-ffmpeg` settle against FFmpeg's own output. It is whether each frame was
+ * handed over with the time the schedule intended, so this keeps every (timestamp, target) pair for a
+ * test to compare against a schedule it drove by hand.
+ *
+ * It also honours the ownership rule a real renderer must honour: the frame belongs to it from the
+ * moment [present] is called, including when it refuses, and it closes it exactly once.
+ */
+internal class RecordingRenderer(
+    /** False makes every frame refused, the way a renderer whose surface went away refuses. */
+    private val accepts: Boolean = true,
+) : VideoRenderer {
+
+    private val received = mutableListOf<Presentation>()
+
+    val presentations: List<Presentation> get() = received
+    val count: Int get() = received.size
+    val timestamps: List<Pts> get() = received.map { it.pts }
+    val targets: List<Long> get() = received.map { it.targetNanos }
+
+    override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
+
+    override fun supports(format: PlayerPixelFormat): Boolean = true
+
+    override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
+        received += Presentation(frame.pts, frame.generation, targetNanos)
+        // The renderer owns the frame from here, including when it fails. Anything else leaks.
+        frame.close()
+        return accepts
+    }
+
+    override fun vsyncIntervalNanos(): Long? = null
+
+    override fun setViewport(width: Int, height: Int, scale: Float) = Unit
+
+    override suspend fun setOverlay(overlay: SubtitleOverlay?) = Unit
+
+    override val events: Flow<RendererEvent> = emptyFlow()
+
+    override fun close() = Unit
+}
+
+/** One call to [RecordingRenderer.present]: which frame, and the time it was aimed at. */
+internal data class Presentation(val pts: Pts, val generation: Generation, val targetNanos: Long)
 
 /** Microseconds, spelled so a test reads like the specification it checks. */
 internal val Int.us: Long get() = this.toLong()

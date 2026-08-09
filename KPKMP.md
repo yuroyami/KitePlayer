@@ -1265,3 +1265,144 @@ is no other.
     `ExperimentalCoroutinesApi` opt-in warning on every native compile, and KiteCodec's
     two Gradle plugin functional tests fail on a clean checkout, which executor contract
     item 5 says to ignore. Neither is an A0 item.
+- 2026-08-09, phase A1, gate passed. KiteCodec was not touched, so its gate steps and the
+  mavenLocal republish did not run and `../KiteCodec` is clean. What landed:
+  1. D20, the decision the rest of the phase rests on. `FrameQueue` no longer keeps the
+     frame it handed over. `peekShown()` is deleted and the queue keeps a `ShownFrame`
+     record of three numbers (`pts`, `duration`, `generation`) instead, so a frame has
+     exactly one owner at every instant: the queue until `advance`, the renderer from the
+     call to `present`, including when the renderer refuses. `flush()` and `close()` now
+     release only what the queue still holds. Intended behavioural consequence: after a
+     flush the renderer keeps showing its own last image until the first frame of the new
+     generation arrives, because the picture is the renderer's concern.
+  2. D14: `VideoPlayback` passes `FrameQueue(queueCapacity)`, not `queueCapacity + 1`.
+     Default still 4, and both KDoc sites state the total as the capacity plus one
+     metadata slot that is not a frame.
+  3. D1: the late-drop deadline is the candidate frame's own duration,
+     `following.pts - next.pts`, taken when both frames are of the current generation and
+     the value is positive and at most `maxFrameDurationUs`, and `nominalUs` otherwise.
+  4. D2: the `SyncLaw.classify` call before the not-yet-due early return is gone, and the
+     repeat is counted once, after the drop check and immediately before presentation.
+  5. D3: `present(frame, nowNanos, masterClock)` lost its unused first parameter and is
+     now `present(targetNanos, masterClock)`.
+  6. D21: the renderer receives `frameTimerNanos`, the instant the schedule chose, never
+     the moment the scheduler woke up. `presentedFrames` is split into `submittedFrames`
+     (a renderer accepted the frame) and `headlessFrames` (no renderer attached, and the
+     schedule closes the frame itself); `droppedFrames` and `repeatedFrames` stay and their
+     KDoc says they are scheduler decisions. The sample prints `submitted` where it printed
+     `presented`, and still prints the AppKit renderer's own `presentedFrames` as the
+     drawing truth.
+  7. New `VideoPlaybackTest`, 8 tests over a `TestClock`, fake frames and a
+     `RecordingRenderer`: the VFR case where the old rule dropped a frame that was still
+     current, one repeat counted once across five polls, a high-water mark of 4 queued
+     frames out of 16 pushed through, a superseded generation never reaching the renderer,
+     a 5 s stall re-anchored instead of caught up in a burst, target times of exactly
+     0/40/80/120 ms while the wake-ups were 0/43/86/129 ms, the D20 ledger (7 frames out
+     through present, drop, supersede, flush and close, with `openCount` and `closeCount`
+     both 7, no double close and nothing left live), and the headless path closing its own
+     frames. Three `FrameQueueTest` tests were rewritten for the new ownership rule and now
+     prove the queue does not close what it handed over.
+  8. D24: the published anchor is the media time one sample past the last real sample
+     handed over, at the deadline less the silence tail, computed from the containing
+     segment so it stays exact at rates that do not divide 1000000. The single
+     `(pts, frame)` mapping is replaced by a preallocated ring of up to 4 ordered
+     `(startFrame, ptsUs)` segments published under its own seqlock. The feeder is the
+     ring's only writer: it appends on discontinuity and retires a segment lazily, when a
+     new one needs the slot, and only when the following segment starts below `consumed`,
+     which always keeps the segment the in-flight callback resolves against. The render
+     path allocates nothing: `publishAnchor` takes and returns nothing, so the `Pts?` the
+     old `ptsOfFrameOrNull` boxed on every callback is gone.
+  9. D7: `epoch` deleted, with nothing left referring to it. `AudioRing.flush()` KDoc now
+     states its precondition as a requirement and not as advice: the sink is stopped and
+     both sides are quiescent, because `flush` writes `consumed`, the callback's own
+     counter, and drops the segments the callback dates its anchor from.
+  10. D4: one `SynchronizedObject` in `AudioPlayback` guarding exactly `anchorClock()`,
+      `position()` and the `speed` setter, with a shared private `anchorLocked()` so
+      correctness does not rest on lock reentrancy. The suspending members stay thread
+      confined to the session owner and say so, and the class Threading section names the
+      full owner set. The false `anchorClock` KDoc claim that `position` does not re-anchor
+      is replaced by what the code does.
+  11. D32 speed check: `require(value.isFinite() && value > 0.0)`, with KDoc explaining
+      that infinity passes a plain positivity test while a not-a-number fails it because no
+      comparison against it is true.
+  12. Tests added beyond `VideoPlaybackTest`: `AudioRingTest` 12 to 16, three of them the
+      same 8-case table (one callback taking everything, partial callbacks inside one
+      segment, a silence tail with a refill behind it, buffers with no timestamp, a
+      callback ending exactly on a segment boundary, a callback crossing a discontinuity, a
+      callback stopping one frame short of a boundary with the next stepping over it, and
+      four segments in flight) run at 44100, 48000 and 96000 Hz, plus a fifth-segment back
+      pressure and retirement test; `MediaClockTest` 12 to 13 for the finite-speed check.
+      Five existing `AudioRing` expectations that were one sample period early were
+      corrected to the boundary convention.
+
+  Gate, every step rerun for real with `--rerun-tasks`, nothing up-to-date and nothing
+  from the build cache (the only two UP-TO-DATE tasks in the whole gate are AGP's
+  `androidPreBuild` and `preAndroidMainBuild`, which have no actions). Suites:
+  `:kiteplayer-core:jvmTest` 88, `:kiteplayer-core:macosArm64Test` 88,
+  `:kiteplayer-output:macosArm64Test` 7, `:kiteplayer-ffmpeg:macosArm64Test` 6,
+  `:kiteplayer-subtitles:jvmTest` 8, so 197 test executions, 0 skipped, 0 failures, 0
+  errors, against 171 at the A0 gate. The 13 added per core target are AudioRing 12 to 16,
+  MediaClock 12 to 13 and VideoPlayback 0 to 8; the other core suites are unchanged at
+  FrameDurationEstimator 10, FrameQueue 8, PacketQueue 10, SeekRequest 11, SyncLaw 12.
+  Cross-target compiles (`compileKotlinJs`, `compileKotlinWasmJs`, `assembleAndroidMain`)
+  successful. `linkDebugExecutableMacosArm64` successful. Test media were not regenerated,
+  because `scripts/testmedia.sh` has not changed since the A0 commit that generated them.
+  Sample runs, debug binary, development evidence only: `sync1080p30.mp4` three times, 300
+  decoded and 300 submitted every time, 0 dropped, 0 repeated, 0 underruns, clock drift 0
+  ms on every progress line, final a/v drift 11, 12 and 15 ms, worst schedule 12, 11 and 10
+  ms; `truevfr720.mp4` six times, 240 decoded every time, five runs 240 submitted with 0
+  dropped and one run 239 submitted with 1 dropped late, 0 repeated and 0 underruns in all
+  six, final a/v drift 12 to 21 ms in the clean runs, worst schedule 10 to 11 ms;
+  `hevc4k10.mp4` three times, 180 decoded and 180 submitted, 0 dropped, 0 repeated, no
+  audio track so video drives the clock, clock drift between -4 and +5 ms, run completes,
+  worst schedule 11, 11 and 30 ms; `/nonexistent.mp4` prints `cannot play /nonexistent.mp4`
+  and `No such file or directory (code=-2)`, exit status 1, no stack trace. Em dash scan
+  over both repositories: 0 hits. All 11 changed code files are inside the 120 column
+  convention.
+
+  Deviations, each with its proof:
+  - `truevfr720.mp4` dropped one frame in one run out of six, where section 9 expects 0
+    dropped. It is the correct rule meeting a real late wake-up, not a regression. Proof:
+    the other five runs are 240 of 240 with 0 dropped; the clip's shortest frame lasts
+    1/60 s, which is 16.7 ms, and D1 now measures the drop deadline against that instead of
+    against the previous frame's length, which on this clip averages 33 ms, so a scheduler
+    hiccup above 16.7 ms now drops where it used to be forgiven. The run that dropped also
+    shifted the reported a/v drift from +21 ms to -19 ms and finished at -27 ms, which is
+    one frame period of phase and inside the sync law's tolerance. Recorded rather than
+    tuned away: the gate line is met on repetition, and the sensitivity is a property of
+    the correct deadline on a debug build.
+  - D2's rule is written as `SyncLaw.classify(nominalUs, delayUs) == SyncAction.Repeated`
+    rather than as the register's literal `delayUs >= nominalUs * 2`. Proof of equivalence:
+    `SyncLaw.classify` returns `Repeated` exactly when the corrected delay is at least
+    twice the nominal one and the two differ, and `FrameDurationEstimator` never returns a
+    nominal duration of zero or less, so for every value the scheduler can produce the two
+    conditions are the same. The form was chosen so the sync vocabulary stays in `SyncLaw`
+    and `classify` keeps a production call site.
+  - `VideoPlayback.presentedFrames` claimed "Frames presented since the last flush", but
+    `flush()` has never reset the counters. The rename to `submittedFrames` did not change
+    that behaviour and the new KDoc no longer makes the claim. Counter resets belong with
+    A5's stats wiring, so nothing else was touched.
+  - D21's stats naming test can only be a compile-time check in A1: all four counter names
+    are referenced from the new tests, so any rename breaks the build.
+    `PlaybackStats.presentedFrames` in `PlayerState.kt` is deliberately untouched, because
+    the register assigns the stats wiring to A5.
+  - Four `VideoPlaybackTest` names were worded without commas or apostrophes, because
+    Kotlin/Native rejects a comma inside a backtick identifier. No existing test name in
+    the repository has either character.
+  - Two implementation choices the register left open, both in `AudioRing` and both
+    documented at the code: segment retirement runs on the feeder, lazily, when a new
+    segment needs a slot, which keeps the segment ring single-writer and is what makes the
+    seqlock sound; and when all four segments still date unplayed audio, `write` returns 0
+    so the feeder retries, which is the same wait a full ring already causes.
+    `AudioPlayback.submit` needed no change for it.
+  - `CountingRenderer.worstErrorMillis` in the sample now reports 10 to 12 ms where the A0
+    gate recorded 0 ms. That is D21 working: the renderer finally receives the instant the
+    schedule intended instead of the moment it was called, so the number measures what it
+    always claimed to measure. `CountingRenderer.kt` was not changed.
+  - The A0 entry's sample numbers say "presented" where this entry says "submitted". Same
+    measurement, renamed by D21.
+  - Pre-existing and untouched, and the same two as at the A0 gate:
+    `AppKitVideoRenderer.kt:90` emits an `ExperimentalCoroutinesApi` opt-in warning on
+    every native compile, which D5 reworks in A3, and KiteCodec's two Gradle plugin
+    functional tests fail on a clean checkout, which executor contract item 5 says to
+    ignore.

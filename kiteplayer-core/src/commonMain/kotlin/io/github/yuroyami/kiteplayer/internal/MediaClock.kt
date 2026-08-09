@@ -44,9 +44,18 @@ internal class MediaClock(private val monotonic: MonotonicClock) {
     var generation: Generation = Generation.Initial
         private set
 
+    /**
+     * The rate media time runs at, as a multiplier of real time.
+     *
+     * Finite and positive. Zero is not a rate, it is a pause, and [pause] is where that lives.
+     * Infinity is not a rate either, and a plain `value > 0` check lets it through: it turns every
+     * later reading into nonsense at the first multiplication, far from the call that caused it. A
+     * not-a-number never gets that far, because no comparison against it is true, so the positivity
+     * test rejects it on its own.
+     */
     var speed: Double = 1.0
         set(value) {
-            require(value > 0.0) { "speed must be positive, was $value" }
+            require(value.isFinite() && value > 0.0) { "speed must be finite and positive, was $value" }
             // Re-anchor at the current media time first, so the new rate applies from here onward
             // and not retroactively to the whole elapsed interval.
             val now = monotonic.nanos()

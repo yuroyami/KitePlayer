@@ -322,7 +322,7 @@ private suspend fun runSession(
 
                 val videoPart = video?.let {
                     "a/v ${it.drift.inWholeMilliseconds.toString().padStart(4)} ms   " +
-                        "shown ${it.presentedFrames}   dropped ${it.droppedFrames}   " +
+                        "submitted ${it.submittedFrames}   dropped ${it.droppedFrames}   " +
                         "repeated ${it.repeatedFrames}   "
                 } ?: ""
 
@@ -342,7 +342,7 @@ private suspend fun runSession(
             println("done.")
             println("  decoded          $decodedVideo video frames, $decodedAudio audio buffers")
             video?.let {
-                println("  presented        ${it.presentedFrames} frames")
+                println("  submitted        ${it.submittedFrames} frames")
                 println("  dropped late     ${it.droppedFrames}")
                 println("  repeated         ${it.repeatedFrames}")
                 println("  final a/v drift  ${it.drift.inWholeMilliseconds} ms")

@@ -172,26 +172,36 @@ class FrameQueueTest {
     }
 
     @Test
-    fun `advance moves a frame to the shown position and keeps it there`() = runTest {
+    fun `advance hands the frame over and keeps only what it was`() = runTest {
         val ledger = LeakLedger()
         val q = FrameQueue(4)
-        val a = FakeVideoFrame(pts(0), ledger = ledger)
+        val a = FakeVideoFrame(pts(0), duration = Pts(40_000), ledger = ledger)
         val b = FakeVideoFrame(pts(40), ledger = ledger)
         q.send(a)
         q.send(b)
 
         assertSame(a, q.peek())
         assertSame(b, q.peekNext())
-        assertNull(q.peekShown())
+        assertNull(q.shown, "nothing is on screen before the first advance")
 
         assertSame(a, q.advance())
-        assertSame(a, q.peekShown())
-        assertFalse(a.closed, "the shown frame is retained, so a resize or unpause can redraw it")
+        assertEquals(pts(0), q.shown?.pts, "what stays behind is the metadata the schedule needs")
+        assertEquals(Pts(40_000), q.shown?.duration)
+        assertEquals(Generation.Initial, q.shown?.generation)
         assertSame(b, q.peek())
 
+        // The queue handed the frame over, so it is not the queue's to release any more. Retaining it
+        // here and giving the same object to a renderer that closes it is how every presented frame
+        // used to be closed twice.
         assertSame(b, q.advance())
-        assertTrue(a.closed, "the previously shown frame is released when it is replaced")
-        assertSame(b, q.peekShown())
+        assertFalse(a.closed, "an advanced frame belongs to whoever took it, and the queue leaves it alone")
+        assertFalse(b.closed)
+        assertEquals(pts(40), q.shown?.pts)
+
+        a.close()
+        b.close()
+        assertEquals(0, ledger.liveCount)
+        assertEquals(0, ledger.doubleCloseCount)
     }
 
     @Test
@@ -242,21 +252,24 @@ class FrameQueueTest {
     }
 
     @Test
-    fun `flush drops the shown frame too`() = runTest {
+    fun `flush forgets what is on screen and releases only what it still holds`() = runTest {
         val ledger = LeakLedger()
         val q = FrameQueue(4)
         q.send(FakeVideoFrame(pts(0), ledger = ledger))
         q.send(FakeVideoFrame(pts(40), ledger = ledger))
-        q.advance()
+        val handedOver = q.advance()!!
 
         q.flush()
-        assertEquals(
-            0,
-            ledger.liveCount,
-            "a seek must clear the picture too: the frame on screen is from the position the viewer left",
-        )
-        assertNull(q.peekShown())
         assertNull(q.peek())
+        assertNull(
+            q.shown,
+            "a seek must forget the picture: a duration measured across the boundary is nonsense",
+        )
+        assertEquals(1, ledger.liveCount, "the advanced frame is the caller's, and a flush must not close it")
+
+        handedOver.close()
+        assertEquals(0, ledger.liveCount)
+        assertEquals(0, ledger.doubleCloseCount)
     }
 
     @Test
@@ -269,21 +282,24 @@ class FrameQueueTest {
 
         assertTrue(q.dropNext())
         assertTrue(late.closed)
-        assertNull(q.peekShown(), "a dropped frame was never shown")
+        assertNull(q.shown, "a dropped frame was never shown")
         assertEquals(pts(40), q.peek()?.pts)
         assertFalse(FrameQueue(2).dropNext(), "dropping from an empty queue is a no-op")
     }
 
     @Test
-    fun `close releases everything`() = runTest {
+    fun `close releases what it holds and nothing it handed over`() = runTest {
         val ledger = LeakLedger()
         val q = FrameQueue(4)
         repeat(3) { q.send(FakeVideoFrame(pts(it * 40L), ledger = ledger)) }
-        q.advance()
+        val handedOver = q.advance()!!
 
         q.close()
+        assertEquals(1, ledger.liveCount, "closing the queue must not close a frame it no longer owns")
+        assertFalse(q.send(FakeVideoFrame(pts(999))), "a closed queue rejects and closes what it is given")
+
+        handedOver.close()
         assertEquals(0, ledger.liveCount)
         assertEquals(0, ledger.doubleCloseCount)
-        assertFalse(q.send(FakeVideoFrame(pts(999))), "a closed queue rejects and closes what it is given")
     }
 }

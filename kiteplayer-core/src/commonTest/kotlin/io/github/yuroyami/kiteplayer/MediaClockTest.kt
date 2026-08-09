@@ -159,6 +159,16 @@ class MediaClockTest {
     }
 
     @Test
+    fun `speed must be finite`() {
+        // Infinity passes a plain positivity check, and a clock that accepts it reports nonsense from
+        // the first reading onward, nowhere near the call that caused it.
+        val clock = MediaClock(TestClock())
+        assertFailsWith<IllegalArgumentException> { clock.speed = Double.POSITIVE_INFINITY }
+        assertFailsWith<IllegalArgumentException> { clock.speed = Double.NaN }
+        assertEquals(1.0, clock.speed, "a rejected rate must leave the clock as it was")
+    }
+
+    @Test
     fun `a snapshot is a consistent read`() {
         val wall = TestClock()
         val clock = MediaClock(wall)

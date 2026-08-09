@@ -46,6 +46,36 @@ private class CapturingSinkBuffer(override val format: AudioFormat, frames: Int)
     fun frame(index: Int): Float = samples[index * format.channels]
 }
 
+/** One step of a table case: either the feeder writing, or the device asking. */
+private sealed interface RingStep
+
+/**
+ * The feeder hands over [frames] frames.
+ *
+ * @param startsAtMediaFrame where the decoder said the first of them sits on the media timeline,
+ *        counted in frames at the rate under test, or null for a buffer that carries no timestamp.
+ *        Counting in frames rather than in microseconds is what keeps one table meaningful at three
+ *        sample rates: a gap of a hundred thousand frames is a real discontinuity at every rate.
+ */
+private class Feed(val frames: Int, val startsAtMediaFrame: Long?) : RingStep
+
+/**
+ * The device asks for [frames] frames, and the anchor the ring publishes is checked exactly.
+ *
+ * The expected timestamp is given as a segment and an offset into it, never as a number of
+ * microseconds, because that is what sample exact means here: the boundary sits [framesIntoSegment]
+ * frames after the first frame of the segment starting at media frame [segmentStartsAt], and the only
+ * arithmetic allowed between the two is the one the sample rate defines.
+ */
+private class Pull(
+    val frames: Int,
+    val expectRealFrames: Int,
+    val segmentStartsAt: Long,
+    val framesIntoSegment: Long,
+) : RingStep
+
+private class RingCase(val name: String, val steps: List<RingStep>)
+
 class AudioRingTest {
 
     private val stereo48k = AudioFormat(sampleRate = 48_000, channels = 2, sampleFormat = SampleFormat.F32)
@@ -131,7 +161,7 @@ class AudioRingTest {
     }
 
     @Test
-    fun `the anchor reports the timestamp of the last frame handed over and when it is audible`() {
+    fun `the anchor is the media time at the playhead boundary when that boundary is reached`() {
         val ring = AudioRing(stereo48k, capacityFrames = 4_800)
         // 480 frames is 10 ms at 48 kHz, starting at media time 5.000 s.
         ring.write(ramp(480), 0, 480, pts(5_000))
@@ -140,12 +170,14 @@ class AudioRingTest {
         ring.render(CapturingSinkBuffer(stereo48k, 480), 480, deadlineNanos = deadline)
 
         val anchor = assertNotNull(ring.anchor())
-        // The last of 480 frames is frame 479, which is 479/48000 s after 5.000 s.
-        assertEquals(5_000_000L + 479L * 1_000_000L / 48_000L, anchor.pts.micros)
+        // Once all 480 frames have been heard the media has played up to 5.000 s plus 480/48000 s.
+        // Publishing the last frame's own start instead, 479/48000 s, is one sample period of fixed
+        // error that nothing later corrects.
+        assertEquals(5_000_000L + 480L * 1_000_000L / 48_000L, anchor.pts.micros)
         assertEquals(
             deadline,
             anchor.audibleAtNanos,
-            "the deadline is when that frame is heard, so no device latency needs subtracting anywhere",
+            "the deadline is when that boundary is reached, so no device latency needs subtracting anywhere",
         )
     }
 
@@ -161,6 +193,7 @@ class AudioRingTest {
 
         val anchor = assertNotNull(ring.anchor())
         assertEquals(deadline - 5_000_000L, anchor.audibleAtNanos)
+        assertEquals(1_000_000L + 240L * 1_000_000L / 48_000L, anchor.pts.micros, "the silence dates nothing")
     }
 
     @Test
@@ -173,24 +206,23 @@ class AudioRingTest {
 
         ring.render(CapturingSinkBuffer(stereo48k, 4_800), 4_800, deadlineNanos = 0)
         val anchor = assertNotNull(ring.anchor())
-        // 4800 frames is 100 ms, so the last frame is at 2.000 s plus 4799/48000 s.
-        assertEquals(2_000_000L + 4_799L * 1_000_000L / 48_000L, anchor.pts.micros)
+        // 4800 frames is 100 ms, so the boundary after all of them is 2.000 s plus 4800/48000 s.
+        assertEquals(2_000_000L + 4_800L * 1_000_000L / 48_000L, anchor.pts.micros)
     }
 
     @Test
-    fun `a real discontinuity re-anchors the mapping`() {
+    fun `a real discontinuity opens a segment of its own`() {
         val ring = AudioRing(stereo48k, capacityFrames = 48_000)
         ring.write(ramp(480), 0, 480, pts(1_000))
         // The next buffer claims 9.000 s, an eight second gap. Continuity would predict 1.010 s, so
-        // the mapping must move rather than keep reporting the old timeline.
+        // this buffer needs a segment of its own rather than the previous one being moved.
         ring.write(ramp(480), 0, 480, pts(9_000))
 
         ring.render(CapturingSinkBuffer(stereo48k, 960), 960, deadlineNanos = 0)
         val anchor = assertNotNull(ring.anchor())
-        assertTrue(
-            anchor.pts.micros >= 9_000_000L,
-            "after a discontinuity the anchor must follow the new timeline, was ${anchor.pts}",
-        )
+        // The 960th frame is the 480th frame of the second segment, so the boundary is on the new
+        // timeline and nothing of the old one leaks into it.
+        assertEquals(9_000_000L + 480L * 1_000_000L / 48_000L, anchor.pts.micros)
     }
 
     @Test
@@ -207,8 +239,185 @@ class AudioRingTest {
         // And the ring is usable again immediately.
         assertEquals(500, ring.write(ramp(500), 0, 500, pts(20_000)))
         ring.render(CapturingSinkBuffer(stereo48k, 500), 500, deadlineNanos = 0)
-        assertEquals(20_000_000L + 499L * 1_000_000L / 48_000L, assertNotNull(ring.anchor()).pts.micros)
+        assertEquals(20_000_000L + 500L * 1_000_000L / 48_000L, assertNotNull(ring.anchor()).pts.micros)
     }
+
+    @Test
+    fun `a fifth segment waits for one to be consumed and then dates its own samples`() {
+        val ring = AudioRing(stereo48k, capacityFrames = 4_800)
+        // Four discontinuous buffers, none of them played, so all four segments are still needed to
+        // date what is queued.
+        for (segment in 0 until 4) {
+            assertEquals(100, ring.write(ramp(100), 0, 100, pts(segment * 10_000L)), "segment $segment")
+        }
+        assertEquals(
+            0,
+            ring.write(ramp(100), 0, 100, pts(999_000)),
+            "a fifth segment must not displace one that still dates queued audio: the feeder is told to wait",
+        )
+
+        // Playing past the first segment finishes it, which frees its slot.
+        assertEquals(150, ring.render(CapturingSinkBuffer(stereo48k, 150), 150, deadlineNanos = 0))
+        assertEquals(100, ring.write(ramp(100), 0, 100, pts(999_000)))
+
+        // Frames 150 to 499, so the last of them is the hundredth frame of the newest segment.
+        assertEquals(350, ring.render(CapturingSinkBuffer(stereo48k, 350), 350, deadlineNanos = 0))
+        assertEquals(999_000_000L + 100L * 1_000_000L / 48_000L, assertNotNull(ring.anchor()).pts.micros)
+    }
+
+    @Test
+    fun `the published anchor is sample exact at 44100 Hz`() {
+        for (case in anchorCases) checkAnchors(case, sampleRate = 44_100)
+    }
+
+    @Test
+    fun `the published anchor is sample exact at 48000 Hz`() {
+        for (case in anchorCases) checkAnchors(case, sampleRate = 48_000)
+    }
+
+    @Test
+    fun `the published anchor is sample exact at 96000 Hz`() {
+        for (case in anchorCases) checkAnchors(case, sampleRate = 96_000)
+    }
+
+    /**
+     * Every callback shape the device can produce, checked against the boundary convention.
+     *
+     * Written as a table because the shapes are what matter and they are all one paragraph each: a
+     * callback that takes everything, callbacks that take part of what is queued, a callback that
+     * runs into silence, a callback that stops exactly where a segment ends, and a callback that
+     * crosses a discontinuity in the middle.
+     */
+    private val anchorCases = listOf(
+        RingCase(
+            "one callback takes everything",
+            listOf(
+                Feed(frames = 480, startsAtMediaFrame = 0),
+                Pull(frames = 480, expectRealFrames = 480, segmentStartsAt = 0, framesIntoSegment = 480),
+            ),
+        ),
+        RingCase(
+            "partial callbacks walk through one segment",
+            listOf(
+                Feed(frames = 1_000, startsAtMediaFrame = 4_000),
+                Pull(frames = 300, expectRealFrames = 300, segmentStartsAt = 4_000, framesIntoSegment = 300),
+                Pull(frames = 300, expectRealFrames = 300, segmentStartsAt = 4_000, framesIntoSegment = 600),
+                Pull(frames = 1, expectRealFrames = 1, segmentStartsAt = 4_000, framesIntoSegment = 601),
+                Pull(frames = 399, expectRealFrames = 399, segmentStartsAt = 4_000, framesIntoSegment = 1_000),
+            ),
+        ),
+        RingCase(
+            "a callback runs into a silence tail, and the ring refills behind it",
+            listOf(
+                Feed(frames = 200, startsAtMediaFrame = 0),
+                Pull(frames = 512, expectRealFrames = 200, segmentStartsAt = 0, framesIntoSegment = 200),
+                // The frame stream carries on where it stopped, so this continues the same segment
+                // even though the device heard silence in between.
+                Feed(frames = 200, startsAtMediaFrame = 200),
+                Pull(frames = 512, expectRealFrames = 200, segmentStartsAt = 0, framesIntoSegment = 400),
+            ),
+        ),
+        RingCase(
+            "buffers with no timestamp continue the segment",
+            listOf(
+                Feed(frames = 240, startsAtMediaFrame = 1_000),
+                Feed(frames = 240, startsAtMediaFrame = null),
+                Feed(frames = 240, startsAtMediaFrame = null),
+                Pull(frames = 720, expectRealFrames = 720, segmentStartsAt = 1_000, framesIntoSegment = 720),
+            ),
+        ),
+        RingCase(
+            "a callback ends exactly on a segment boundary",
+            listOf(
+                Feed(frames = 480, startsAtMediaFrame = 0),
+                // A landing after a seek: this buffer is nowhere near where the last one ended.
+                Feed(frames = 480, startsAtMediaFrame = 96_000),
+                // The boundary after the last frame of the first segment belongs to that segment, not
+                // to the one starting at the same frame index.
+                Pull(frames = 480, expectRealFrames = 480, segmentStartsAt = 0, framesIntoSegment = 480),
+                Pull(frames = 480, expectRealFrames = 480, segmentStartsAt = 96_000, framesIntoSegment = 480),
+            ),
+        ),
+        RingCase(
+            "a callback crosses a discontinuity",
+            listOf(
+                Feed(frames = 300, startsAtMediaFrame = 0),
+                Feed(frames = 300, startsAtMediaFrame = 96_000),
+                Pull(frames = 600, expectRealFrames = 600, segmentStartsAt = 96_000, framesIntoSegment = 300),
+            ),
+        ),
+        RingCase(
+            "a callback stops one frame short of a boundary, and the next steps over it",
+            listOf(
+                Feed(frames = 256, startsAtMediaFrame = 0),
+                Feed(frames = 256, startsAtMediaFrame = 96_000),
+                Pull(frames = 255, expectRealFrames = 255, segmentStartsAt = 0, framesIntoSegment = 255),
+                Pull(frames = 2, expectRealFrames = 2, segmentStartsAt = 96_000, framesIntoSegment = 1),
+                Pull(frames = 255, expectRealFrames = 255, segmentStartsAt = 96_000, framesIntoSegment = 256),
+            ),
+        ),
+        RingCase(
+            "four segments in flight, each dating its own samples",
+            listOf(
+                Feed(frames = 100, startsAtMediaFrame = 0),
+                Feed(frames = 100, startsAtMediaFrame = 96_000),
+                Feed(frames = 100, startsAtMediaFrame = 192_000),
+                Feed(frames = 100, startsAtMediaFrame = 288_000),
+                Pull(frames = 100, expectRealFrames = 100, segmentStartsAt = 0, framesIntoSegment = 100),
+                Pull(frames = 100, expectRealFrames = 100, segmentStartsAt = 96_000, framesIntoSegment = 100),
+                Pull(frames = 100, expectRealFrames = 100, segmentStartsAt = 192_000, framesIntoSegment = 100),
+                Pull(frames = 100, expectRealFrames = 100, segmentStartsAt = 288_000, framesIntoSegment = 100),
+            ),
+        ),
+    )
+
+    private fun checkAnchors(case: RingCase, sampleRate: Int) {
+        val where = "${case.name}, at $sampleRate Hz"
+        val format = AudioFormat(sampleRate = sampleRate, channels = 2, sampleFormat = SampleFormat.F32)
+        val ring = AudioRing(format, capacityFrames = 2_048)
+        val nanosPerFrame = 1_000_000_000.0 / sampleRate
+        var writtenFrames = 0
+        var pullIndex = 0
+
+        for (step in case.steps) {
+            when (step) {
+                is Feed -> {
+                    val accepted = ring.write(
+                        source = ramp(step.frames, from = writtenFrames),
+                        sourceOffset = 0,
+                        frames = step.frames,
+                        pts = step.startsAtMediaFrame?.let { Pts(mediaUs(it, sampleRate)) },
+                    )
+                    assertEquals(step.frames, accepted, "$where: the whole write must be taken")
+                    writtenFrames += accepted
+                }
+
+                is Pull -> {
+                    val deadline = FIRST_DEADLINE_NANOS + pullIndex * PULL_SPACING_NANOS
+                    val out = CapturingSinkBuffer(format, step.frames)
+                    val real = ring.render(out, step.frames, deadlineNanos = deadline)
+                    pullIndex++
+
+                    assertEquals(step.expectRealFrames, real, "$where: frames of real audio in callback $pullIndex")
+                    val anchor = assertNotNull(ring.anchor(), "$where: callback $pullIndex published no anchor")
+                    assertEquals(
+                        mediaUs(step.segmentStartsAt, sampleRate) +
+                            step.framesIntoSegment * 1_000_000L / sampleRate,
+                        anchor.pts.micros,
+                        "$where: the boundary timestamp after callback $pullIndex",
+                    )
+                    assertEquals(
+                        deadline - ((step.frames - real) * nanosPerFrame).toLong(),
+                        anchor.audibleAtNanos,
+                        "$where: the boundary instant after callback $pullIndex, less its silence tail",
+                    )
+                }
+            }
+        }
+    }
+
+    /** A media position given in frames, as the timestamp a decoder would carry for it. */
+    private fun mediaUs(frames: Long, sampleRate: Int): Long = frames * 1_000_000L / sampleRate
 
     @Test
     fun `a long session of small writes and reads stays consistent`() {
@@ -231,5 +440,13 @@ class AudioRingTest {
         }
 
         assertTrue(readFrames > 90_000, "the session should have moved real audio, moved $readFrames frames")
+    }
+
+    private companion object {
+        /** Any instant will do, as long as it is far enough from zero to notice a sign mistake. */
+        const val FIRST_DEADLINE_NANOS = 1_000_000_000L
+
+        /** Successive callbacks are given different deadlines, so a stale anchor cannot pass. */
+        const val PULL_SPACING_NANOS = 10_000_000L
     }
 }

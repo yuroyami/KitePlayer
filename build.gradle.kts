@@ -16,8 +16,8 @@ allprojects {
 }
 
 dependencies {
-    dokka(projects.kiteplayerCore)
-    dokka(projects.kiteplayerSubtitles)
+    dokka(project(":kiteplayer-core"))
+    dokka(project(":kiteplayer-subtitles"))
 }
 
 dokka {

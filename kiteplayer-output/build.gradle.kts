@@ -28,7 +28,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(projects.kiteplayerCore)
+            api(project(":kiteplayer-core"))
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

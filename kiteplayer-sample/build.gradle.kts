@@ -25,8 +25,8 @@ kotlin {
 
     sourceSets {
         macosArm64Main.dependencies {
-            implementation(projects.kiteplayerFfmpeg)
-            implementation(projects.kiteplayerOutput)
+            implementation(project(":kiteplayer-ffmpeg"))
+            implementation(project(":kiteplayer-output"))
         }
     }
 }

@@ -2538,3 +2538,18 @@ is no other.
   The tier table is unchanged and correct: macOS arm64 is an experimental T3-Full candidate
   on one development machine, everything else is T1, and no line of this run earned a
   promotion.
+
+- 2026-08-09, build hygiene, outside any named phase. Gradle 9.6 warned that using a
+  Project object as a dependency notation fails on Gradle 10. The eight type-safe project
+  accessors in dependency blocks (two dokka lines in the root build file, the core
+  dependency in output, subtitles and ffmpeg, the output test dependency in ffmpeg, and
+  the two sample dependencies) were replaced with the project(String) form, for example
+  api(project(":kiteplayer-core")). Verified: no projects.kiteplayer accessor remains in
+  any build script, and the full gate reran green with --rerun-tasks, 123 of 123 tasks
+  executed, 414 test executions (178 core jvm, 179 core native, 20 output, 29 ffmpeg,
+  8 subtitles), 0 failures, em dash scan silent. One residual instance of the same
+  warning remains and is not this repository's: with --stacktrace its every frame sits in
+  AGP 9.2.1's own KotlinMultiplatformAndroidPlugin (VariantDependencies.kt lines 453 and
+  454, the Android unit-test component wiring during kiteplayer-core configuration), and
+  no frame touches a script in this tree. It cannot be silenced from these build files;
+  an AGP upgrade retires it. KiteCodec untouched.

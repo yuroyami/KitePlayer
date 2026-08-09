@@ -39,7 +39,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(projects.kiteplayerCore)
+            api(project(":kiteplayer-core"))
             implementation("io.github.yuroyami:kitecodec-core:0.0.1")
         }
         commonTest.dependencies {
@@ -47,7 +47,7 @@ kotlin {
             // Test only, and only for the tests that drive the whole player: it needs an output backend to
             // have a clock and an audio device, and this module is the one place where real media, the real
             // FFmpeg backend and a real device can all be reached at once.
-            implementation(projects.kiteplayerOutput)
+            implementation(project(":kiteplayer-output"))
         }
     }
 }

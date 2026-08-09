@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.LatencyQuality
+import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
@@ -8,12 +9,18 @@ import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlin.experimental.ExperimentalNativeApi
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.native.ref.WeakReference
+import kotlin.native.runtime.GC
+import kotlin.native.runtime.NativeRuntimeApi
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -275,5 +282,119 @@ class CoreAudioSinkTest {
             "the deadline must sit slightly ahead of now on the engine's clock; worst offset was $worstMs ms " +
                 "over ${samples.value} callbacks",
         )
+    }
+
+    @Test
+    fun `every callback is handed the same buffer wrapper`() = runBlocking {
+        // The real-time thread may not allocate, and one wrapper built during open is how this sink
+        // keeps that promise. A second instance showing up means something is being constructed per
+        // callback again, which is the defect this guards.
+        val sink = CoreAudioSink()
+        val ring = TestRing(format, capacityFrames = 48_000)
+        val firstSeen = atomic<AudioSinkBuffer?>(null)
+        val callbacks = atomic(0)
+        val otherInstances = atomic(0)
+
+        sink.open(format, AudioRenderCallback { destination, frames, deadlineNanos ->
+            val seen = firstSeen.value
+            if (seen == null) {
+                firstSeen.value = destination
+            } else if (seen !== destination) {
+                otherInstances.incrementAndGet()
+            }
+            callbacks.incrementAndGet()
+            ring.render(destination, frames, deadlineNanos)
+        })
+        try {
+            ring.write(FloatArray(48_000 * 2), 0, 48_000)
+            sink.start()
+            delay(250)
+        } finally {
+            sink.stop()
+            sink.close()
+        }
+
+        assertTrue(callbacks.value > 1, "one callback proves nothing; the device made ${callbacks.value}")
+        assertEquals(
+            0,
+            otherInstances.value,
+            "every one of ${callbacks.value} callbacks must be handed the same wrapper instance",
+        )
+    }
+
+    @Test
+    fun `a failed open hands back everything it created`() = runBlocking {
+        // A negative sample rate is not a format any device takes, and the device refuses it after the
+        // audio unit instance, the pinned self reference and the buffer wrapper all exist. That window
+        // between the instance and the end of open is exactly where things used to be left behind.
+        val sink = CoreAudioSink()
+        val impossible = AudioFormat(sampleRate = -1, channels = 2, sampleFormat = SampleFormat.F32)
+
+        assertFailsWith<IllegalStateException> {
+            sink.open(impossible, AudioRenderCallback { _, _, _ -> 0 })
+        }
+        assertEquals(0, sink.retainedResources(), "a failed open must leave the sink owning nothing")
+
+        // The sink still opens, which is the observable half of the same claim: nothing was left
+        // half open behind the failure.
+        sink.open(format, AudioRenderCallback { destination, frames, _ ->
+            destination.writeSilence(0, frames)
+            frames
+        })
+        assertEquals(5, sink.retainedResources(), "an open sink owns its unit, reference, format, callback and wrapper")
+        sink.close()
+        assertEquals(0, sink.retainedResources(), "close must let go of all five")
+    }
+
+    @OptIn(ExperimentalNativeApi::class, NativeRuntimeApi::class)
+    @Test
+    fun `a sink whose open failed is not pinned by a leaked reference`() {
+        // The other half of the same defect, and the half a field cannot show: the callback needs a
+        // StableRef to reach this object from C, and a StableRef that is never disposed pins the sink
+        // for the life of the process. Collecting a sink that only a leak could hold is the proof.
+        val abandoned = openFailingSinkWeakly()
+
+        GC.collect()
+
+        assertNull(
+            abandoned.value,
+            "a StableRef the failed open never disposed would keep this sink alive forever",
+        )
+    }
+
+    /** Fails an open and keeps only a weak reference, so nothing this test holds can pin the sink. */
+    @OptIn(ExperimentalNativeApi::class)
+    private fun openFailingSinkWeakly(): WeakReference<CoreAudioSink> {
+        val sink = CoreAudioSink()
+        assertFailsWith<IllegalStateException> {
+            runBlocking {
+                sink.open(
+                    AudioFormat(sampleRate = -1, channels = 2, sampleFormat = SampleFormat.F32),
+                    AudioRenderCallback { _, _, _ -> 0 },
+                )
+            }
+        }
+        return WeakReference(sink)
+    }
+
+    @Test
+    fun `a clock on another time base is refused`() {
+        // The sink converts CoreAudio host times through AppleHostClock. An engine measuring time from
+        // anywhere else would disagree with the device by a constant nothing could correct, so the
+        // sink refuses instead of half honouring the clock it was given.
+        val foreign = object : MonotonicClock {
+            override fun nanos(): Long = 0
+        }
+
+        val direct = assertFailsWith<IllegalArgumentException> { CoreAudioSink(foreign) }
+        val throughFactory = assertFailsWith<IllegalArgumentException> {
+            runBlocking { CoreAudioSinkFactory(foreign).create() }
+        }
+
+        for (failure in listOf(direct, throughFactory)) {
+            val message = failure.message ?: ""
+            assertTrue(message.contains("AppleHostClock"), "the message must name the clock to use: $message")
+            assertTrue(message.contains("host time"), "the message must explain the shared time base: $message")
+        }
     }
 }

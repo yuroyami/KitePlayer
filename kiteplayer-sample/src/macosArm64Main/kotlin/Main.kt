@@ -19,6 +19,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -100,13 +101,20 @@ fun main(args: Array<String>) {
             SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
         }
         val sessionContext = newSingleThreadContext("kiteplayer-session")
-        CoroutineScope(sessionContext).launch {
+        val session = CoroutineScope(sessionContext)
+        // Closing the window means the viewer is done. Without this the run loop keeps going with
+        // nothing on screen and the file plays to its end headless, audio and all.
+        window.onCloseRequested = { session.cancel() }
+        session.launch {
             try {
                 runSession(path, source, videoStream, audioStream, renderer)
             } finally {
+                // Closed before its counters are read, so an image still on its way to the window is
+                // accounted for one way or the other rather than being missed.
+                renderer.close()
                 println("  window drew       ${renderer.presentedFrames} frames")
-                println("  superseded        ${renderer.supersededFrames} (renderer was the bottleneck)")
-                println("  conversion failed ${renderer.failedFrames}")
+                println("  superseded        ${renderer.supersededFrames} (the renderer was the bottleneck)")
+                println("  never drawn       ${renderer.failedFrames}")
                 window.stop()
             }
         }
@@ -205,25 +213,35 @@ private suspend fun runSession(
                         .create(videoStream, HwdecPolicy.Auto)!!
                     try {
                         for (packet in videoPackets) {
-                            // False means the decoder is full and the packet was NOT consumed, so it
-                            // is offered again after draining rather than discarded.
+                            // False means the decoder is full and the packet was NOT consumed, so it is
+                            // offered again after draining rather than discarded. A decoder that accepts
+                            // nothing and produces nothing has no legal state to be in, and leaving the
+                            // loop here would close a packet it never took.
                             while (!decoder.send(packet)) {
-                                val frame = decoder.receive() ?: break
+                                val frame = decoder.receive() ?: error(
+                                    "decoder refused a packet and produced nothing; " +
+                                        "this violates the codec contract",
+                                )
                                 decodedVideo++
-                                video.submit(frame)
+                                // A refused frame means the queue is closed and playback is over. The
+                                // packet is still this loop's to release, so it is released before leaving.
+                                if (!video.submit(frame)) {
+                                    packet.close()
+                                    return@launch
+                                }
                             }
                             packet.close()
                             while (true) {
                                 val frame = decoder.receive() ?: break
                                 decodedVideo++
-                                video.submit(frame)
+                                if (!video.submit(frame)) return@launch
                             }
                         }
                         decoder.send(null)
                         while (true) {
                             val frame = decoder.receive() ?: break
                             decodedVideo++
-                            video.submit(frame)
+                            if (!video.submit(frame)) return@launch
                         }
                     } finally {
                         decoder.close()
@@ -239,8 +257,14 @@ private suspend fun runSession(
                     val decoder = source.audioDecoderFactories().first().create(audioStream)!!
                     try {
                         for (packet in audioPackets) {
+                            // The same rule as the video loop: a refused packet is offered again after
+                            // draining, and a decoder that neither takes it nor gives anything back has
+                            // broken its own contract.
                             while (!decoder.send(packet)) {
-                                val buffer = decoder.receive() ?: break
+                                val buffer = decoder.receive() ?: error(
+                                    "decoder refused a packet and produced nothing; " +
+                                        "this violates the codec contract",
+                                )
                                 audio.submit(buffer.pts, buffer.interleavedFloat(), buffer.frameCount)
                                 buffer.close()
                                 decodedAudio++

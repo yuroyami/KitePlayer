@@ -1609,3 +1609,189 @@ is no other.
     every native compile, which D5 reworks in A3, and KiteCodec's two Gradle plugin
     functional tests fail on a clean checkout, which executor contract item 5 says to
     ignore.
+- 2026-08-09, phase A3, gate passed. KiteCodec was not touched, so its test run and the
+  mavenLocal republish are not part of this gate. What landed:
+  1. D5: `AppKitVideoRenderer` reworked whole. The conversion dispatcher is held in a
+     field and closed by `close()`; `present()` re-reads `closed` after
+     `pending.getAndSet(frame)` and drains the slot if it lost the race; the worker loop
+     catches `ClosedReceiveChannelException` and exits there; main-thread delivery has
+     its own latest-only slot (`pendingImage` plus a `deliveryQueued` flag, so a newer
+     image replaces the waiting one and at most one drain block is ever queued); and
+     `close()` runs exactly the prescribed order, CAS closed, close the signal, cancel
+     the worker, join it, drain the frame slot, drain the image slot, close the
+     dispatcher.
+  2. D5 counters became exact, because the second slot can drop an image:
+     `presentedFrames` counts images that reached the image view, `supersededFrames`
+     counts replacements in either slot, `failedFrames` covers every other way a frame
+     never reached the window. The invariant is that the three sum to the frames handed
+     to `present`, and that is what the test asserts. No public member was added or
+     removed.
+  3. D5 tests, both the ones the register names, in a new `AppKitVideoRendererTest`. The
+     close race presents from one coroutine while another closes, 100 iterations of 32
+     frames, and asserts per iteration that the counters sum to 32 and overall that
+     `closeCount == openCount == 3200` with no double close and nothing left live. The
+     thread leak is measured rather than argued, with `task_threads(mach_task_self_,
+     ...)` before and after and `Dispatchers.Default` warmed up first. The
+     slow-main-thread test uses a deferred fake main queue and asserts one block ever
+     queued, none queued behind a waiting one, 11 of 12 images superseded, and that
+     running the block draws the newest.
+  4. D23: one `DeviceBuffer` wrapper built in `open` and reused for the life of the
+     sink, so the real-time path does two plain field writes and no allocation of its
+     own; writes clamped to the frame count the device asked for; the sink zero-fills
+     the remainder itself when the callback is absent or returns short, and no longer
+     ignores the returned frame count; `kAudioTimeStampHostTimeValid` checked, with
+     `clock.nanos()` plus the buffer duration as the fallback and an internal
+     `estimatedAnchors` counter recording it; and `open` transactional, every failure
+     after the instance exists disposing the instance, the `StableRef` and the sink's
+     own state before rethrowing.
+  5. D11: `init { require(clock === AppleHostClock) { ... } }`, with a message that
+     names the CoreAudio host time base, the constant offset a foreign base would cause,
+     and why the parameter stays.
+  6. D19: `AppKitWindow.onCloseRequested`, backed by a retained private
+     `WindowCloseDelegate : NSObject(), NSWindowDelegateProtocol` implementing
+     `windowWillClose` (retained because `NSWindow.delegate` is weak), and `stop()`
+     posting a dummy application-defined event with `postEvent(atStart = true)` after
+     `NSApp.stop`. The sample builds its session scope explicitly and cancels it from
+     the callback.
+  7. D6: both decode loops in the sample now have the canonical shape. The
+     refused-packet drain ends in `error("decoder refused a packet and produced nothing;
+     this violates the codec contract")` instead of `break`, so `packet.close()` can
+     only run on a packet the decoder took, and `video.submit(frame)`'s return is
+     checked at all three receive sites in the video loop.
+
+  Gate, every step rerun for real with `--rerun-tasks`. Five test suites: 213 tests, 0
+  failures, 0 errors, 0 skipped. `kiteplayer-core:jvmTest` 88 in 8 classes,
+  `kiteplayer-core:macosArm64Test` the same 88, `kiteplayer-output:macosArm64Test` 18
+  (`CoreAudioSinkTest` 11, `CoreAudioSinkRealTimeTest` 5, `AppKitVideoRendererTest` 2),
+  `kiteplayer-ffmpeg:macosArm64Test` 11, `kiteplayer-subtitles:jvmTest` 8. The output
+  suite was run four times in all, green every time, with the close-race test at 11.043,
+  11.042, 11.035 and 11.043 seconds. Cross-target compile spot checks:
+  `compileKotlinJs`, `compileKotlinWasmJs` and `assembleAndroidMain` all successful. Not
+  one compiler warning anywhere in the phase, which retires the standing
+  `ExperimentalCoroutinesApi` opt-in warning that the A0, A1 and A2 entries all
+  recorded. `testmedia.sh` did not change, so the clips were not regenerated. Sample
+  linked and run: `sync1080p30.mp4` 300 decoded and 300 submitted, 0 dropped, 0
+  repeated, 0 underruns, final drift 15 ms, worst schedule 5 ms; `truevfr720.mp4` 240
+  and 240, 0 dropped, 0 repeated, 0 underruns, drift 17 ms, worst schedule 5 ms;
+  `hevc4k10.mp4` 180 and 180, 0 dropped, 0 repeated, no audio track so video drives the
+  clock, drift 0 ms, worst schedule 6 ms, run completes; `tsoffset1400.ts` 300 and 300,
+  0 dropped, 1 repeated, 0 underruns, drift 5 to 10 ms, worst schedule 5 to 7 ms in four
+  of five runs (see deviations for the fifth); `/nonexistent.mp4` prints `cannot play
+  /nonexistent.mp4` and `No such file or directory (code=-2)`, exit status 1, no stack
+  trace. Em dash scan over both repositories: no output. Every changed file is inside
+  120 columns and pure ASCII.
+
+  Window evidence, the A3-specific part of the gate. `truevfr720.mp4 --window` was run
+  and the screen captured twice while it played: the window titled `truevfr720.mp4` was
+  on screen with the clip's burnt-in overlay reading `00:00:01.533` frame 46 at the
+  first capture and `00:00:04.067` frame 122 at the second, about two wall seconds
+  later, so the picture is live and tracks playback. The clip ended, the process exited
+  on its own with its summary printed, and the renderer accounted for every frame: 240
+  submitted, window drew 16, superseded 223, never drawn 1. The D19 close path was then
+  driven programmatically, which is stronger evidence than the register's manual check
+  because `windowWillClose` is the one notification every close route reaches. With
+  `sync1080p30.mp4 --window` playing, System Events was told to click button 1 of window
+  1 of the process with the sample's pid, about 3.5 seconds into a 10 second clip. The
+  capture taken immediately before the click shows the window at `00:00:01.100` frame
+  33. The click cancelled the session, the renderer printed 3 drawn, 100 superseded and
+  2 never drawn (105 submitted, all accounted for), and the process exited with status 0
+  one second after the click instead of playing on for another six and a half. Both
+  halves of D19 are therefore proved: the delegate ends the session, and the stop
+  wake-up ends the run loop rather than leaving a window sitting there.
+
+  Deviations, each with its proof:
+  - One implementer report said the module test task was RED, naming
+    `AppKitVideoRendererTest` failing with `12 threads before 100 renderers, 112 after`.
+    The tree was checked before anything was repaired and nothing was missing. Four
+    consecutive real runs of that suite are green, and the failure signature is exactly
+    the negative control the renderer implementer ran on purpose to prove the test bites
+    (its own control recorded 13 before and 113 after with `dispatcher.close()`
+    deleted). So the audio implementer was reading the renderer implementer's
+    in-progress tree, not a defect. Recorded because a failed report is normally a
+    reason to redo the step. The same report also hit a transient compile break from
+    `AppKitWindow.kt` referencing `WindowCloseDelegate` before it existed, which
+    resolved by itself for the same reason; contract item 11 permits the parallel edit
+    because the file sets were disjoint, and this is the cost of reading another agent's
+    files mid-edit.
+  - `tsoffset1400.ts` dropped 1 frame in one run out of five, with worst schedule 19 ms
+    and the final a/v line at -24 ms, where the other four runs are 300 of 300 with
+    worst schedule 5 to 7 ms. Same debug-build scheduler variance the A2 entry recorded
+    for `hevc4k10.mp4`, and not attributable to this phase: nothing in A3 touches the
+    sync law or the drop decision, and the renderer's own path cannot drop a frame
+    without counting it.
+  - The register's D6 snippet writes `decoder.send(packet, generation)`. A2's D22
+    removed `generation` from the decoder SPI, so both loops call `send(packet)`. The
+    register text predates D22 and nothing else about the shape changed.
+  - The submit check is applied at all three receive sites in the video loop, including
+    the end-of-stream drain, which the register's snippet does not show. In the
+    refused-packet drain the early return closes the packet first: returning with the
+    packet in hand would reintroduce the exact leak D6 exists to remove.
+  - `AppKitVideoRenderer` gained an `internal` primary constructor taking `convert`,
+    `enqueueOnMain` and `showImage`, and the existing public constructor delegates to
+    it. Reason: neither prescribed test can exist otherwise, because a real main queue
+    is never drained inside a Kotlin/Native test and the renderer's only main-thread
+    target was a live `NSWindow`. Internal, so no public API was added, and this module
+    has no committed ABI dump yet (A6 step 3 generates them).
+  - `renderer.close()` was added to the sample's window path, in the `finally`, before
+    the counters are printed. No A3 step names it, but nothing else in the repository
+    ever closes an `AppKitVideoRenderer`, so the whole D5 close path would have been
+    unexercised by the gate and the sample would have kept its conversion thread until
+    the process exited. Closing before printing is also what makes the printed
+    accounting add up.
+  - The sample's third window line is now `never drawn`, not `conversion failed`,
+    because with the image slot in place a frame can go undrawn without any conversion
+    failing.
+  - `NSEventTypeApplicationDefined` is the Kotlin/Native name for the register's
+    `NSApplicationDefined`, the same constant with value 15. The old spelling exists in
+    the AppKit klib only as a deprecated accessor.
+  - Measured cost of the prescribed D5 fix, worth recording because it is real:
+    `dispatcher.close()` takes 100 to 110 ms every time. It is the coroutines library
+    terminating a Kotlin/Native worker, not anything in the renderer. Proof from the
+    same test binary: five closes of a `newSingleThreadContext` that never ran a task
+    cost 4 to 18 us each, five closes of one that ran a single empty task cost 100497,
+    110047, 105967, 107237 and 109008 us. Inside `close()` the split is cancel 75 to 291
+    us, join 344 to 1709 us, both drains 1 to 7 us, dispatcher close about 105000 us. It
+    is paid once per renderer at teardown, it blocks the caller (in the sample the
+    session thread, where it is invisible), and the alternative is the leaked thread D5
+    exists to fix. It is also why the 100 iteration test takes 10.7 seconds: 100
+    dispatcher closes, not the frames.
+  - D23's forced mid-open failure uses `sampleRate = -1`, not 0. Probe evidence on this
+    machine: the default output unit ACCEPTS `mSampleRate` 0, 1, 2, 8 and 100, and
+    rejects -1, -48000, 3e6, 1e8 and `Int.MAX_VALUE` with status -10868.
+  - Because a refused stream format is the only failure an outside caller can force,
+    `open` now sets the sink's own state (`render`, `negotiated`, the wrapper, the
+    `StableRef`) before the first device property call, so that forced failure runs the
+    entire cleanup path instead of half of it. The callback is still installed only
+    after every field it reads exists, and the device is not running during open.
+  - A real-time guard the register does not ask for: `bufferNanos` is 0 when the sample
+    rate is not positive, because the device accepts sample rate 0 and the old
+    expression would have divided by zero on the real-time thread. Matches the guard
+    style in `AudioFormat.durationOf`.
+  - "Mark the anchor Estimated" could not be implemented as written, because
+    `latencyQuality` was already permanently `Estimated` and there was no quality left
+    to downgrade. The requirement became the internal `estimatedAnchors` counter plus
+    KDoc, since the real-time thread may not log and contract item 12 forbids new public
+    API.
+  - "Zero allocation on the callback path" holds for this file's own code. What remains
+    per callback is cinterop's own struct views (`timeStamp.pointed`, `data.pointed`,
+    `mData.reinterpret()`), which D23 itself defers to Horizon B item B1, the C-only
+    callback body. Stated plainly in the class KDoc rather than claimed away.
+  - Behaviour change worth one line: the real-time path now records `lastDeadlineNanos`
+    and `everRendered` even when only silence was handed over. It used to return before
+    recording when the callback was absent.
+  - The sink's leak test was validated with a negative control: with `ref?.dispose()`
+    removed from the failure path the sink survived two `GC.collect()` calls, and with
+    it restored the weak reference clears on the first.
+  - The renderer implementer proved the delegate path a second, independent way before
+    this gate, with a temporary uncommitted patch calling `performClose(null)` from the
+    main queue after three seconds; the patch was reverted and the linked binary checked
+    for its strings to confirm none of it shipped. The gate's own System Events run is
+    the committed evidence.
+  - A human press of the red button is left to the owner as a manual check. The gate
+    proved the same delegate and the same wake-up through a programmatic close and
+    through a clip that ends by itself, and `windowWillClose` cannot tell the three
+    apart, so nothing about D19 is unproved; only the physical click is unperformed.
+  - Pre-existing and untouched: KiteCodec's two Gradle plugin functional tests fail on a
+    clean checkout, which executor contract item 5 says to ignore. The other standing
+    item from A0, A1 and A2, the `AppKitVideoRenderer.kt` opt-in warning, is gone with
+    this phase.

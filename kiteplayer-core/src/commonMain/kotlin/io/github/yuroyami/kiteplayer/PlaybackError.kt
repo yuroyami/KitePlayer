@@ -34,7 +34,14 @@ public sealed class PlaybackError {
                 streams.joinToString { "${it.kind}/${it.codec}" }
     }
 
-    /** Every candidate decoder for a required track refused to open. */
+    /**
+     * Every candidate decoder for a required track refused to open.
+     *
+     * Never produced. A track whose every candidate refuses is deselected with a warning, and an open
+     * fails only when nothing playable is left, which reports [NoPlayableStream] and names every stream.
+     * This is the shape for a caller that asks for one specific track and must be told why it cannot have
+     * it. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public data class DecoderUnavailable(val codec: String, val kind: TrackKind) : PlaybackError() {
         override val message: String get() = "no decoder for $kind stream in $codec"
     }
@@ -48,9 +55,41 @@ public sealed class PlaybackError {
         override val message: String get() = "decoder $codec failed: $detail"
     }
 
-    /** No audio device could be opened, and the media has no video to fall back to. */
+    /**
+     * No audio device could be opened, and the media has no video to fall back to.
+     *
+     * Never produced. A device that refuses during an open fails that open, and the failure is reported
+     * as [SourceUnavailable] with the device's own message inside it, because nothing distinguishes the
+     * two at the point the open unwinds. Telling them apart, and falling back to a silent picture when
+     * there is a picture, needs the device-loss handling in the roadmap.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public data class AudioDeviceUnavailable(val detail: String) : PlaybackError() {
         override val message: String get() = "no audio device: $detail"
+    }
+
+    /**
+     * A shutdown did not complete inside its deadline, so part of the pipeline may still be running.
+     *
+     * A native call that has wedged cannot be killed from inside the process. When teardown exceeds its
+     * bound the honest answer is this, not a successful close: the caller learns that the runtime is
+     * compromised and that resources may still be held, which is information it can act on. Reporting
+     * success and leaking a thread is what leaves an application with a mystery instead.
+     */
+    public data class RuntimeCompromised(val detail: String) : PlaybackError() {
+        override val message: String get() = "shutdown did not complete: $detail"
+    }
+
+    /**
+     * The player was asked to exist without something it cannot invent.
+     *
+     * The one case today is a missing backend. Kotlin/Native has no classpath service lookup, so there is
+     * no such thing as finding the platform's decoder or its audio device at runtime: whoever creates the
+     * player passes both in. Saying so as a typed error is the alternative to reflection, and it names
+     * what to pass rather than failing later with a null.
+     */
+    public data class ConfigurationInvalid(val detail: String) : PlaybackError() {
+        override val message: String get() = "the player cannot be built as configured: $detail"
     }
 
     /** The engine hit a state it does not know how to leave. This is always a bug here. */
@@ -58,6 +97,19 @@ public sealed class PlaybackError {
         override val message: String get() = "internal error: $detail"
     }
 }
+
+/**
+ * What a suspending player command throws when playback failed.
+ *
+ * The value is the whole of the information; this class exists because a suspending function that
+ * cannot deliver a result has to throw, and because a caller writing `try` around `open` wants one
+ * type to catch. Nothing else in the engine throws it.
+ *
+ * Cancellation is never converted into one of these. A caller that cancels its own coroutine gets a
+ * [kotlin.coroutines.cancellation.CancellationException], because cancellation is not a playback
+ * failure and turning it into one breaks every structured-concurrency rule the caller relies on.
+ */
+public class PlaybackException(public val error: PlaybackError) : Exception(error.message, error.cause)
 
 /**
  * Something went wrong and playback continued.
@@ -72,19 +124,50 @@ public sealed class PlaybackWarning {
         override val message: String get() = "hardware decode unavailable for $codec: $reason"
     }
 
-    /** Frames are being dropped to keep up with the clock. */
+    /**
+     * Frames are being dropped to keep up with the clock.
+     *
+     * Never emitted: the drops are counted as `PlaybackStats.droppedFramesLate`, and a rate over the last
+     * second is something a caller works out by diffing two samples. A warning would have to be rate
+     * limited to be useful, which is a policy nothing has decided.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public data class FrameDropping(val droppedInLastSecond: Int) : PlaybackWarning() {
         override val message: String get() = "dropping frames: $droppedInLastSecond in the last second"
     }
 
-    /** The audio device restarted, changed or was replaced. Playback recovered. */
+    /**
+     * The audio device restarted, changed or was replaced. Playback recovered.
+     *
+     * Never emitted: the engine does not collect `AudioSink.events`, so a device that changes underneath
+     * playback is not noticed and nothing recovers from it.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public data class AudioDeviceChanged(val detail: String) : PlaybackWarning() {
         override val message: String get() = "audio device changed: $detail"
     }
 
-    /** The audio device ran out of data. */
+    /**
+     * The audio device ran out of data.
+     *
+     * Never emitted: an underrun is counted as `PlaybackStats.audioUnderruns`, which is a number a caller
+     * can diff, and the sink's own event feed that would carry the occurrence has no reader.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public data class AudioUnderrun(val totalSoFar: Long) : PlaybackWarning() {
         override val message: String get() = "audio underrun, $totalSoFar so far"
+    }
+
+    /**
+     * The device never reported its buffer empty at the end of the media, so the drain was bounded out.
+     *
+     * What that means in practice is a device that went away while it still held sound: unplugged,
+     * taken by another application, or a session interrupted. Playback is over either way, and the last
+     * fraction of a second may not have been heard. Polling a lost device for ever instead is how a
+     * player ends up never finishing a file.
+     */
+    public data class AudioDrainIncomplete(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "the audio drain did not complete: $detail"
     }
 
     /**
@@ -136,7 +219,13 @@ public sealed class PlaybackWarning {
             get() = "badly interleaved file: dropped $droppedPackets packets to keep $starvedTrack fed"
     }
 
-    /** The renderer lost its surface. Audio continues and video frames are discarded. */
+    /**
+     * The renderer lost its surface. Audio continues and video frames are discarded.
+     *
+     * Never emitted: the engine does not collect `VideoRenderer.events`. A renderer that refuses a frame
+     * still costs nothing more than that frame, because a refusal is counted as a drop and playback
+     * carries on. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public data class NoRenderSurface(val detail: String) : PlaybackWarning() {
         override val message: String get() = "no render surface: $detail"
     }

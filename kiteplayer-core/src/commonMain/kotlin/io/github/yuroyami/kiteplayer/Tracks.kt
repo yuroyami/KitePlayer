@@ -67,6 +67,13 @@ public data class Tracks(
     val all: List<TrackInfo> = emptyList(),
     val selectedVideo: TrackId? = null,
     val selectedAudio: TrackId? = null,
+    /**
+     * The selected subtitle track.
+     *
+     * Always null. A container's subtitle streams are listed in [all], because reporting what a file
+     * holds is honest, and selecting one is refused with a typed error: no decoder in this build produces
+     * a cue. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val selectedSubtitle: TrackId? = null,
 ) {
     public val video: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Video }

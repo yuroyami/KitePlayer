@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.FrameDurationEstimator
+import io.github.yuroyami.kiteplayer.internal.FrameOffer
 import io.github.yuroyami.kiteplayer.internal.FrameQueue
 import io.github.yuroyami.kiteplayer.internal.MediaClock
 import io.github.yuroyami.kiteplayer.internal.SyncAction
@@ -139,6 +140,29 @@ public class VideoPlayback(
     public suspend fun submit(frame: VideoFrame): Boolean = queue.send(frame)
 
     /**
+     * Hands a decoded frame over without suspending.
+     *
+     * For a caller that must stay able to answer something else while the queue is full, which is what the
+     * engine's decoder worker is: it has to be able to park for a seek, and it cannot do that from inside a
+     * wait. Retrying this is safe in a way that wrapping [submit] in a timeout is not, because a handover
+     * that has already happened cannot be reported as not having happened. A timeout around [submit] can
+     * discard the result of a completed handover, and the caller then offers the queue a frame it already
+     * holds, which is closed twice.
+     *
+     * @return false when the queue is full: the caller still owns the frame and should try again. True when
+     *         the frame is no longer the caller's, whether the queue took it or the queue is closed and the
+     *         frame was released.
+     */
+    public fun trySubmit(frame: VideoFrame): Boolean = when (queue.offer(frame)) {
+        FrameOffer.Accepted -> true
+        FrameOffer.Full -> false
+        FrameOffer.Closed -> {
+            frame.close()
+            true
+        }
+    }
+
+    /**
      * One step of the presentation schedule.
      *
      * @param masterClock what the master clock reads now, or null when it has no valid reading, which
@@ -241,6 +265,35 @@ public class VideoPlayback(
         // afterwards.
         if (renderer.present(frame, targetNanos)) submitted++ else droppedLate++
         return Duration.ZERO
+    }
+
+    /**
+     * Freezes the schedule's own sense of time, because playback stopped advancing.
+     *
+     * The video clock is frozen at its current reading, so the frame on screen keeps reporting the
+     * position it belongs to instead of one that moves on while nothing is being shown. The frame timer
+     * is left alone here and shifted by [resumeSchedule], which is the only place that can know how long
+     * the wait lasted.
+     */
+    internal fun pauseSchedule() {
+        videoClock.pause()
+    }
+
+    /**
+     * Resumes the schedule after a [pauseSchedule], charging the caller nothing for the interval.
+     *
+     * The frame timer moves forward by exactly the paused interval and the clock is re-anchored at the
+     * reading it was frozen at. Without the shift, the wait counts as time already spent on the frame on
+     * screen, so every frame behind it is late the instant playback resumes: the schedule drops one and
+     * then holds the next for a second period to get back into phase, which is a visible stutter at the
+     * start of every file and after every pause. Measured on a ten second clip: one frame dropped, one
+     * repeated and a residual offset of one frame period without this, and none of the three with it.
+     */
+    internal fun resumeSchedule() {
+        if (!videoClock.paused) return
+        val frozenAtNanos = videoClock.lastUpdatedNanos
+        videoClock.resume()
+        if (started) frameTimerNanos += clock.nanos() - frozenAtNanos
     }
 
     /** Marks the end of a generation. Everything queued is dropped and the schedule restarts. */

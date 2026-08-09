@@ -115,11 +115,14 @@ public enum class SeekMode {
     Precise,
 
     /**
-     * Show the keyframe at once, then refine to the exact frame in the background.
+     * Meant to show the keyframe at once and then refine to the exact frame in the background, which is
+     * what a seek bar drag wants: the picture responds immediately and settles a moment later.
      *
-     * This is what a seek bar drag should use. The picture responds immediately and settles on the
-     * right frame a moment later. Neither mpv nor ExoPlayer exposes this, and it is the single most
-     * visible difference in a scrubbing interface.
+     * The two stages do not exist yet. The engine treats this exactly as [Precise] does, so a request
+     * lands on the right frame and the immediate keyframe is not shown first. It is a slower answer than
+     * the name promises and never a wrong one, and it is asked for by name rather than silently mapped:
+     * the coalescing rules already keep a drag responsive by showing a frame from each seek before the
+     * next one runs. Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     KeyframeThenRefine,
 }

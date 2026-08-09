@@ -8,8 +8,8 @@ import kotlin.time.Duration.Companion.ZERO
  *
  * Position is deliberately not here. A position field would make this snapshot change sixty times
  * a second, and every consumer collecting it would recompose or redraw at that rate for a value
- * most of them wanted at 4 Hz. The player reads the position on demand, and publishes it on a timer
- * as [Progress], as two separate things.
+ * most of them wanted at 4 Hz. Read the position from [KitePlayer.position] when you need it now, or
+ * collect [KitePlayer.progress] when you want it on a timer.
  */
 public data class PlayerSnapshot(
     val status: PlaybackStatus = PlaybackStatus.Idle,
@@ -30,7 +30,15 @@ public data class PlayerSnapshot(
     val volume: Float = 1.0f,
     val muted: Boolean = false,
     val loop: LoopMode = LoopMode.Off,
-    /** Set only when [status] is [PlaybackStatus.Failed]. */
+    /**
+     * The last failure, retained until another one replaces it or the player is opened again.
+     *
+     * Set when [status] becomes [PlaybackStatus.Failed], and deliberately not cleared when the status
+     * moves on. An event stream replays nothing to a consumer that subscribes late, so if the snapshot
+     * forgot the error too, a fatal failure would have no record at all for anyone who was not already
+     * listening. State conflates and is therefore the right place for the one fact a consumer must not
+     * miss.
+     */
     val error: PlaybackError? = null,
     /** Increments on every seek and every stream reconfiguration. */
     val generation: Generation = Generation.Initial,
@@ -63,7 +71,13 @@ public data class Progress(
     val position: Duration = ZERO,
     /** How far ahead of [position] the demuxer has read, as a duration of media. */
     val bufferedAhead: Duration = ZERO,
-    /** Contiguous ranges held in the read cache. One entry for a plain linear read. */
+    /**
+     * Contiguous ranges held in the read cache. One entry for a plain linear read.
+     *
+     * Always empty. There is no read cache to describe: the demuxer reads forward into per-stream packet
+     * queues and a seek clears them, so the only range that ever exists is the one [bufferedAhead]
+     * already reports. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val bufferedRanges: List<ClosedRange<Duration>> = emptyList(),
 )
 
@@ -75,12 +89,52 @@ public data class Progress(
  * be wrong: a state feed coalesces by design, so an event stream of "a frame was dropped" is
  * exactly the kind of thing that silently loses entries. libmpv learned this the hard way and had
  * to add three logical timestamps per observer to compensate.
+ *
+ * ### Scheduler counters, not renderer counters
+ *
+ * Every frame figure here is a decision the engine's schedule made or an outcome it can see with its
+ * own eyes: [submittedFrames] means a renderer accepted the frame, [headlessFrames] means there was
+ * no renderer to accept it, and [droppedFramesLate] and [repeatedFrames] are the schedule's own
+ * choices about pacing. None of them says that a pixel reached a display.
+ *
+ * What was drawn is the renderer's own count, and it is deliberately not mirrored here. A renderer
+ * that takes a frame may still supersede it with a newer one or fail to draw it, and it counts those
+ * outcomes itself: the Core Graphics renderer in `kiteplayer-output` publishes `presentedFrames`,
+ * `supersededFrames` and `failedFrames`, whose sum is what the engine submitted to it. Read the pair
+ * of numbers side by side: submitted against drawn is the difference between the engine keeping up
+ * and the output keeping up, and copying the second group into this class would only invent a figure
+ * the engine cannot know, because no member of the renderer interface reports one. Per-submission
+ * terminal feedback is the roadmap item that would change that; see KPKMP.md section 11 (B5).
  */
 public data class PlaybackStats(
     val decodedVideoFrames: Long = 0,
-    val presentedFrames: Long = 0,
+    /**
+     * Frames a renderer accepted from the schedule.
+     *
+     * Accepted is not drawn, and the two are different numbers. A renderer may take a frame and then
+     * supersede it with a newer one, or fail to draw it at all, and it counts those outcomes itself:
+     * `presentedFrames`, `supersededFrames` and `failedFrames` on the renderer are the drawing truth.
+     * This is what the engine handed over, which is the only part the engine can know.
+     */
+    val submittedFrames: Long = 0,
+    /**
+     * Frames the schedule presented with no renderer attached.
+     *
+     * A detached renderer must not stop playback, so these frames were paced and closed exactly like
+     * the others and were simply never drawn anywhere. Counted apart so a zero picture with a healthy
+     * sound is distinguishable from a broken pipeline.
+     */
+    val headlessFrames: Long = 0,
+    /** Frames the schedule decided were too late to show. A scheduler decision, not a renderer one. */
     val droppedFramesLate: Long = 0,
+    /**
+     * Packets dropped before they were decoded.
+     *
+     * Always zero: nothing drops a packet before decoding it, which is what [FrameDropPolicy.LateAndDecode]
+     * would need. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val droppedFramesDecode: Long = 0,
+    /** Frames the schedule showed for longer than their own duration, counted once each. */
     val repeatedFrames: Long = 0,
     val audioUnderruns: Long = 0,
     val rebuffers: Long = 0,
@@ -96,10 +150,22 @@ public data class PlaybackStats(
     val videoDecodeFps: Double = 0.0,
     val videoQueueDepth: Duration = ZERO,
     val audioQueueDepth: Duration = ZERO,
-    /** What the audio sink reports as handed over but not yet audible. */
+    /**
+     * What the audio sink reports as handed over but not yet audible.
+     *
+     * Always zero. The audio clock is anchored to the instant the device says a specific frame becomes
+     * audible, so no latency figure is needed to keep time, and `AudioSink.latencyNanos` has no reader.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val audioLatency: Duration = ZERO,
     val audioLatencyQuality: LatencyQuality = LatencyQuality.Unreliable,
     val hardwareDecode: HwdecStatus = HwdecStatus.Software,
+    /**
+     * The container's overall bitrate.
+     *
+     * Always null: a source reports a bitrate per stream and none reports one for the container.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,
     val masterClock: MasterClock = MasterClock.None,
@@ -131,8 +197,9 @@ public enum class LoopMode {
     /**
      * Repeat the whole queue.
      *
-     * There is no queue and no playlist, so there is nothing for this to repeat.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Refused rather than ignored: there is no queue and no playlist, so asking for this throws instead of
+     * quietly behaving like [Off]. A caller can tell the difference between a mode it got and a mode it
+     * did not. Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     All,
 }

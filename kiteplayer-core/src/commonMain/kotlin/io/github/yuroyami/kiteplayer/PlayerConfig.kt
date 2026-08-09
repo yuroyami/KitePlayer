@@ -1,8 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
-import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
-import io.github.yuroyami.kiteplayer.spi.MediaSourceFactory
-import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
+import io.github.yuroyami.kiteplayer.spi.MediaBackend
+import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -11,18 +10,22 @@ import kotlin.time.Duration.Companion.seconds
  * Everything that is decided when the player is created.
  *
  * Config is immutable and passed once. Anything genuinely changeable while playing is a method on
- * the player itself instead. This removes a whole class of bug that libmpv has and documents: an
- * option set after initialisation that is silently ignored.
+ * [KitePlayer] instead. This removes a whole class of bug that libmpv has and documents: an option
+ * set after initialisation that is silently ignored.
  *
- * The player class this configures is not written yet, so nothing reads these values today. The
- * members that will still be unimplemented once it lands are marked one by one below.
+ * The engine's session core reads these values: the sync mode, the frame drop policy, every buffering
+ * threshold, the audio language preference, the two publication intervals, and the backends. The members
+ * nothing reads are marked one by one below, each with a pointer to where they are decided.
  */
 public data class PlayerConfig(
     val syncMode: SyncMode = SyncMode.Auto,
     /**
      * What to do about hardware decoding.
      *
-     * No decoder in this library uses a hardware device, so every value behaves the same way.
+     * Passed to every video decoder factory. No decoder in this library uses a hardware device, so
+     * [HwdecPolicy.Auto], [HwdecPolicy.Off] and [HwdecPolicy.Prefer] all decode in software and behave
+     * identically. [HwdecPolicy.Require] is the one value with an effect, and it is honoured the only way
+     * it can be: the factory supplies no decoder, so the open fails rather than quietly falling back.
      * Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     val hardwareDecode: HwdecPolicy = HwdecPolicy.Auto,
@@ -36,9 +39,9 @@ public data class PlayerConfig(
      * Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     val subtitles: SubtitleConfig = SubtitleConfig(),
-    /** How often the player's progress flow is sampled while playing. */
+    /** How often [KitePlayer.progress] is sampled while playing. */
     val progressInterval: Duration = 200.milliseconds,
-    /** How often the player's statistics flow is sampled. */
+    /** How often [KitePlayer.stats] is sampled. */
     val statsInterval: Duration = 1.seconds,
     /**
      * Where the engine's diagnostics go.
@@ -54,8 +57,9 @@ public data class PlayerConfig(
 /**
  * Whether to decode on a hardware device, and what to do when one is not available.
  *
- * Nothing here is honoured. Every decoder in this library decodes in software, and no target has a
- * hardware path at all. Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Every decoder in this library decodes in software and no target has a hardware path at all, so the
+ * only value that changes anything is [Require], which is refused. The rest name an intent nothing can
+ * act on yet. Not implemented yet; see the roadmap in KPKMP.md section 11.
  */
 public sealed class HwdecPolicy {
     /** Try hardware, fall back to software with a warning. The right default. */
@@ -67,6 +71,11 @@ public sealed class HwdecPolicy {
     /**
      * Fail to open rather than fall back to software. For an application that must not decode 4K
      * on a phone's CPU under any circumstances.
+     *
+     * Honoured, and the only value here that is: no factory can supply a hardware decoder, so every
+     * factory refuses the stream and the open fails with [PlaybackError.NoPlayableStream] after a
+     * [PlaybackWarning.HardwareDecodeUnavailable]. A caller that asks for this gets a refusal rather than
+     * silent software decoding, which is what asking for it means.
      */
     public data object Require : HwdecPolicy()
 
@@ -158,20 +167,24 @@ public data class SubtitleConfig(
 )
 
 /**
- * The implementations the engine builds its pipeline from.
+ * The two implementations the engine builds its pipeline from.
  *
- * Every backend is passed in explicitly. Nothing is discovered: Kotlin/Native has no classpath
- * service lookup, so a null here means the pipeline cannot be built, never that a platform default
- * was found. Supplying them is how a test injects fakes, and how a new platform is reached without
+ * Both are passed in explicitly. Nothing is discovered: Kotlin/Native has no classpath service
+ * lookup, so a null here means the pipeline cannot be built, never that a platform default was
+ * found. Supplying them is how a test injects fakes, and how a new platform is reached without
  * touching the engine.
  *
- * This shape cannot build a generic session yet: it has no audio decoder factory and no subtitle
- * decoder factory, and it lets a clock be paired with a sink that does not use it. The
- * session-shaped replacement is decided in KPKMP.md (defect D34) and lands with the player class.
+ * Two objects rather than a bag of factories, because both groupings are load bearing. A
+ * [MediaBackend] hands over a source and the decoder factories that belong to it as one session, so
+ * the engine never has to reach a backend's internals to find its decoders. An [OutputBackend] pairs
+ * the clock with the sink that reports on it, so a clock and a sink that measure different time bases
+ * cannot be assembled at all.
+ *
+ * [KitePlayer.create] resolves both and refuses to build a player without them, with
+ * [PlaybackError.ConfigurationInvalid] naming what to pass. On macOS that pair is
+ * `KiteCodecMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from `kiteplayer-output`.
  */
 public data class Backends(
-    val source: MediaSourceFactory? = null,
-    val videoDecoders: List<VideoDecoderFactory> = emptyList(),
-    val audioSink: AudioSinkFactory? = null,
-    val clock: MonotonicClock = MonotonicClock.System,
+    val backend: MediaBackend? = null,
+    val output: OutputBackend? = null,
 )

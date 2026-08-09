@@ -2035,3 +2035,236 @@ is no other.
     Gradle plugin functional tests fail on a clean checkout, which executor contract item 5
     says to ignore. `scripts/testmedia.sh:52` at 147 columns is A0's line and is also
     untouched.
+
+- 2026-08-09, phase A5, gate passed. KiteCodec was not touched, so its test run and the
+  mavenLocal republish are not part of this gate and `../KiteCodec` is clean at `d078c66`.
+  This is the largest phase of the run: the player got a core loop, a facade and real
+  seeking, and the sample stopped being the assembly. What landed:
+  1. D34's backend session SPI. `MediaBackend.open(media)` answers a `BackendSession` that
+     carries the source plus the video, audio and subtitle decoder factory lists, and
+     `OutputBackend` pairs one clock with one `AudioSinkFactory` and an optional renderer
+     factory, so a foreign clock can no longer be paired with the Apple sink. `Backends` is
+     now `backend` plus `output`. `KiteCodecMediaBackend` builds `KiteCodecSource` directly
+     and `AppleOutputBackend` pairs `AppleHostClock` with `CoreAudioSinkFactory`. There is
+     no downcast anywhere in the composition path, which is the whole point of the defect.
+  2. `PlaybackCore` per digest 8.1. One session actor on its own dispatcher, five workers on
+     theirs, every terminal outcome on one channel the actor selects on. The pass order is
+     data (`handlerOrder`), all thirteen entries in the digest's order including the empty
+     `handleSubtitles`, and one test asserts both the declared list and a recorded run.
+     Command legality is one table with a test per command. Six end-of-stream conditions as
+     a named `EndOfStreamState`, decoder drain read through the new SPI `isDrained`. Two
+     signal buffering with a sticky demuxer flag and one entry point. The 50 ms wake floor
+     and the 5 s still-image rule are named constants.
+  3. The seek machine, quiesce first, the eight steps of digest 8.1 in order, proved by an
+     ordering trace that reads `[sink.stop, video.flush, audio.flush, sink.stop,
+     source.seek]`. All five `SeekPhase` values used, coalescing and the precise-waits-for-
+     restart rule both bounded, the `OVERSHOOT_BACKOFF_US` ladder judged from the first
+     decoded frame. Virtual time: twenty seeks in one virtual millisecond produce exactly
+     one flush cycle and one Applied against nineteen Superseded, generations never go
+     backwards at the renderer, and a fifty-request storm settles to Idle and Ended.
+  4. The campaign of digest 8.5: one hundred seeds, seeded faults (refused sends, empty
+     decodes, refused presents, hanging drains, refusing factories, throwing session close,
+     overshooting containers, audio-only and video-only media), all seven invariants, worst
+     drift over the campaign inside `SyncLaw.SYNC_THRESHOLD_MAX_US`. Seed 44 is checked in
+     by name. Plus the real-thread step: `RealThreadStressTest` in the core's native test
+     and `BackendSeekStressTest` over real media in the FFmpeg module.
+  5. The `KitePlayer` facade, digest 8.2's surface member for member, with `AutoCloseable`
+     as its only addition. `create(config)` resolves the backends and throws a typed
+     `ConfigurationInvalid` naming what to pass; the core never names either backend. Every
+     numeric input is validated at the boundary, wrong-order calls are
+     `IllegalStateException` and out-of-range ones `IllegalArgumentException` or
+     `UnsupportedOperationException`, and suspending failures are `PlaybackException`.
+     Snapshot error retention is asserted against the same instance the exception carried.
+     D21's stats separation is documentation plus naming, since no renderer member reports
+     what it drew.
+  6. The sample rewritten onto the facade, 425 lines of hand-wired pipeline down to 361 with
+     one object in the playback path, and `RealMediaSeekTest`: twenty random precise seeks
+     each landing within one frame duration, a seek past the end reaching Ended, a seek to
+     zero mid-play carrying on.
+
+  Ten engine defects the new tests found during the phase, each fixed and each a behaviour
+  digest 8.1 or an existing KDoc already promised: a command lost when a timeout cancelled a
+  channel receive that had already taken it (every value-carrying wait is now a `select` with
+  `onTimeout`); the wedge seed 44 found, where the overshoot ladder restarts under the same
+  epoch and the demuxer kept its end-of-container memory (workers count restarts now); a
+  double close on real threads when a timeout discarded a completed handover (fixed with the
+  non-suspending `FrameQueue.offer` and `VideoPlayback.trySubmit`, and `PacketQueue.poll`
+  closes the same hole for packets); `presentFirstFrame` counting from zero instead of a
+  baseline; a stale position surviving a flush; overshoot judged from the first surviving
+  frame rather than the landing; buffering declared from two places; an interleaving deadlock
+  on a file whose video runs far ahead of its audio (`dropFromTail` truncates the hoarding
+  stream with a one-time `PathologicalInterleaving` warning); sub-millisecond delays busy
+  looping; and a snapshot invisible during a slow open. Three more came out of the sample
+  gate, which is where they had to: the paused interval charged to the video schedule, which
+  cost one dropped and one repeated frame and left a constant 31 ms offset inside the sync
+  law's tolerance (`MediaClock.lastUpdatedNanos` had described the arithmetic with no caller
+  since A0); the end of the audio declared after the video queue emptied rather than when the
+  audio decoder drained, which is exactly the late marking its own KDoc warned produces a
+  handful of underruns; and clocks that ran on past Ended, so `position()` reported 0:10.580
+  of a 10 second file and grew.
+
+  Gate, every step rerun for real with `--rerun-tasks`, in one invocation of the five test
+  tasks plus the three cross-target compiles plus `linkDebugExecutableMacosArm64`: 63
+  actionable tasks, 63 executed, and the only two UP-TO-DATE tasks are AGP's
+  `androidPreBuild` and `preAndroidMainBuild`, which have no actions. Not one compiler
+  warning anywhere. Suites: `:kiteplayer-core:jvmTest` 178 (PlaybackCoreTest 25,
+  SeekMachineTest 13, KitePlayerTest 10, SimulationCampaignTest 2, plus the 128 from A4),
+  `:kiteplayer-core:macosArm64Test` 179 (the same plus RealThreadStressTest 1),
+  `:kiteplayer-output:macosArm64Test` 18, `:kiteplayer-ffmpeg:macosArm64Test` 26
+  (DecodeAndConvertTest 9, RelativeTimelineTest 5, ColorPolicyTest 4, ReferencePcmTest 4,
+  RealMediaSeekTest 3, BackendSeekStressTest 1), `:kiteplayer-subtitles:jvmTest` 8, so 409
+  test executions, 0 skipped, 0 failures, 0 errors, against 304 at the A4 gate. The A5
+  specific checks were confirmed by name rather than by total: the campaign's `SEEDS` is 100
+  and `one hundred seeded sessions hold every invariant` and `seed 44 keeps every invariant`
+  both pass, `the pass runs its handlers in the one order the design fixes` passes, all
+  eleven command-legality tests pass, and all three real-media seek tests pass. Cross-target
+  compiles successful, and `compileKotlinWatchosArm32`, `compileKotlinIosArm64`,
+  `compileKotlinLinuxX64` and `compileKotlinMingwX64` were compiled as well, because the
+  phase introduced the module's first `expect` declaration and every target family has to
+  answer it. `scripts/testmedia.sh` was not changed, so the clips were not regenerated.
+
+  Sample runs, debug binary, development evidence only. `sync1080p30.mp4` 300 decoded and
+  300 submitted, 0 headless, 0 dropped, 0 repeated, 0 underruns, final a/v drift 0 ms,
+  clock drift 0 to 3 ms per line, played to 0:10.005 of 0:10.000. `truevfr720.mp4` 240 and
+  240, 0 dropped, 0 repeated, 0 underruns, drift 2 ms. `hevc4k10.mp4` 180 and 180, 0
+  dropped, 0 repeated, master clock Video, played to 0:05.966, which is frame 180 of 180 at
+  30 fps and therefore the end. `tsoffset1400.ts` 300 and 300, 0 dropped and 0 repeated
+  where every gate since A2 recorded 1, 0 underruns, position running to 0:10.026 against a
+  duration of 0:10.021. `surround51.mp4` prints `pipeline  6 channel(s) at 48000 Hz into 2
+  at 48000 Hz`, 0 underruns, played to 0:03.008 of 0:03.000. `/nonexistent.mp4` prints
+  `cannot play /nonexistent.mp4` and `No such file or directory (code=-2)`, exit status 1,
+  no stack trace. The four colour clips still behave: `colors-pq.mp4` and
+  `colors-bt2020cl.mp4` each print their warning exactly once and report `warnings 1`,
+  `colors-smpte240m.mp4` and `colors-nv12.mkv` print none and report 0, which is the
+  negative control. The phase's own manual-style check ran through the sample rather than a
+  test: `sync1080p30.mp4 --seek=5` seeks out of running playback at 2 seconds, prints
+  `landed at 0:05.000`, reports `status Playing` one statistics interval later, and plays on
+  to 0:10.005 with 0 dropped, 0 repeated and 0 underruns. Em dash scan over both
+  repositories: no output. Every changed Kotlin file is pure ASCII and inside 120 columns;
+  the only lines over 120 anywhere in the changed set are Markdown table rows in `README.md`
+  that were already over 120 at `HEAD` and cannot be wrapped.
+
+  Truth ledger walk, the one the A5 gate is required to do. All 46 markers the phase left
+  were re-checked against the code one at a time, and the walk found three things wrong,
+  all now fixed:
+  - `PlayerConfig.hardwareDecode` claimed every policy value behaves the same way.
+    `KiteCodecVideoDecoderFactory.create` has refused `HwdecPolicy.Require` since before
+    this run, so `Require` is honoured, and honoured the only way it can be: no factory
+    supplies a decoder and the open fails rather than falling back silently. The member's
+    KDoc, `HwdecPolicy`'s own KDoc and `Require`'s KDoc now say that, and the marker stays
+    on the values that really are inert. This was inaccurate from the A0 seed onward and the
+    ledger walk is exactly what caught it.
+  - `PlaybackWarning.HardwareDecodeUnavailable` was emitted whenever ANY video decoder
+    factory refused a stream, so playing a file with a codec this build lacks reported a
+    hardware decoding problem that had not happened. It is now emitted only when the policy
+    actually asked for hardware, `Require` or `Prefer`; the refusal itself was already
+    reported by `TrackDeselected` and the failed open, each carrying the real reason. No test
+    asserted the old behaviour.
+  - Five public members were neither implemented, typed-rejected, nor marked:
+    `BackendSession.subtitleDecoders`, `SubtitleDecoderFactory`, `SubtitleDecoder`,
+    `OutputBackend.videoRenderer` and `VideoRendererFactory`. The last two carried a full
+    explanation but not the fixed marker sentence, which is the sentence the next gate greps
+    for. All five carry it now, so the count is 51.
+  Everything else on the list held. The six error and warning variants marked "never
+  produced" have zero production sites, checked mechanically; the one event variant marked
+  unemitted, `ChapterChanged`, is the only one of nine with no emit site; `AudioSink.events`
+  and `VideoRenderer.events` are collected nowhere, which is what their markers say;
+  `latencyNanos` has no engine reader while `latencyQuality` does and is unmarked, which is
+  correct both ways; `MediaItem.io` is typed-rejected in two places; and `config.frameDrop`,
+  `config.audio.preferredLanguages`, `progressInterval` and `statsInterval` are all read, so
+  their lack of a marker is right. Derived getters on public value types
+  (`VideoFrame.planeCount`, `AudioFormat.isFloat`, `SubtitleCue.layer` and the like) are
+  unused by engine code and deliberately unmarked: they compute a correct answer from data
+  the caller already holds, so they are implemented rather than promised.
+
+  Deviations, each with its proof. The two implementing agents recorded theirs in their
+  reports and they are restated here because this log is the only record. Engine and facade
+  deviations, kept: `isDrained` added to the SPI decoders, because step 2 requires the six
+  end-of-stream conditions to read `StreamDecoder.isDrained` through the backend and the SPI
+  had no route for it. New public types `PlaybackException`, `PlaybackError.RuntimeCompromised`
+  (digest 8.1's close row), `PlaybackError.ConfigurationInvalid` (digest 8.2 requires a typed
+  configuration error and no existing variant means one) and
+  `PlaybackWarning.AudioDrainIncomplete` (the bounded drain had no honest warning). `AudioPlayback.volume`
+  and `muted`, because digest 8.2 requires real volume through the `GainStage` and the stage
+  is private inside the pipeline. `VideoPlayback.trySubmit` and `FrameQueue.offer`, the only
+  airtight fix for the double close. `PlaybackStats.presentedFrames` renamed to
+  `submittedFrames` with `headlessFrames` added, per D21, because the renderer's drawing
+  counters cannot be read through any SPI. `play` and `pause` non-suspending and legal in
+  every live state, because digest 8.1 queues them during Opening and Seeking and refusing
+  them deadlocked a caller that asked during a slow open. Audio trimmed to the seek target as
+  well, whole buffers only, because starting the sound at the keyframe plays up to a group of
+  pictures of audio from before the requested position. One internal `expect` in
+  `kiteplayer-core`, `platformPlaybackDispatchers()`, with five actuals, because `create(config)`
+  takes no dispatchers by contract and `newSingleThreadContext` does not exist on js or
+  wasmJs; `Dispatchers.Default.limitedParallelism(1)` serialises without confining and would
+  have weakened a stated contract. One internal `PlaybackCore.post(command)`, because digest
+  8.2 makes six calls non-suspending while the core's versions suspend, and the facade
+  validates every one before posting. `detachRenderer` does not fence before returning,
+  because digest 8.2 makes it non-suspending and a non-suspending call cannot wait; the fence
+  still happens in the core and the KDoc states exactly what the caller does and does not
+  get. D13 enforced synchronously in the facade from the selected audio track, because a
+  non-suspending `setSpeed` has nowhere to deliver the actor's refusal; the core's check
+  stays as defence in depth. The native stress test is two tests, not one, because
+  `PlaybackCore` is internal to `kiteplayer-core` and Kotlin/Native's `-friend-modules` takes
+  exactly one path which the Kotlin Gradle plugin already spends on the module's own main
+  compilation (measured: a comma list is rejected, and overriding it broke
+  `DecodeAndConvertTest`); applying the KiteCodec plugin to `kiteplayer-core` was rejected
+  because it would make the platform-free engine depend on FFmpeg. `SeekMode.KeyframeThenRefine`
+  KDoc rewritten, because it promised a keyframe at once and a refinement afterwards while
+  the engine treats it exactly as `Precise`. `kiteplayer-ffmpeg` gained a test-only
+  dependency on `kiteplayer-output`, because the real-media seek test drives the whole player
+  and a fake sink would have proved less. Two section 5 members are still unconsumed and now
+  say why in their own KDoc: `FrameQueue.awaitFrame` suspends without a bound, so a worker
+  inside it could not reach its quiescence checkpoint and every seek would wait out its
+  deadline, and `MediaClock.snapshot` reads three fields in a row, so it is not the
+  cross-thread guarantee its KDoc claimed. `OutputBackend.videoRenderer` stays unconsumed,
+  because the one output backend answers null (an `NSWindow` belongs to the application) and
+  wiring a factory now would add a code path no gate can run, which is what the A4 gate
+  refused for the mono mix matrix.
+
+  Deviations taken by this gate itself, four, all small and all proved above:
+  - `open` is legal from Failed as well as Idle and Ended, one state wider than digest 8.1's
+    table. This was already the code's behaviour and only the rejection message disagreed
+    with it, naming a narrower legal set than the check allowed. The widening is kept and the
+    message corrected: a failed open or a dead worker leaves no session and no running worker
+    to replace, so the `stop()` the table asks for between a failure and its retry is pure
+    ceremony, and the status machine has permitted Failed to Opening since it was written.
+    Every state the table means by "any playing state" is still refused. Recorded rather than
+    silently accepted because it is a contract in this document.
+  - `--seek=<seconds>` added to the sample, so the phase's manual-style seek check runs
+    through the facade on real media rather than only inside a test. The sample had no key
+    input and adding a flag to the existing binary was smaller than a second binary. It seeks
+    once playback is under way, prints the landing, and reads the status one statistics
+    interval later, because the actor completes the call and publishes its next snapshot on
+    the pass after that, so an immediate read reports the status the seek itself put up.
+  - `KiteCodecSource.chapters` returns an empty list with no explanation next to it.
+    KiteCodec exposes no chapter API at all, checked, so empty is the only honest answer and
+    the override now says where the limit lives. `PlayerSnapshot.chapters` already carried the
+    marker.
+  - `README.md` was falsified by this phase and is not in either implementing agent's file
+    list, so this gate corrected it, on the A0 and A4 precedent of a gate fixing that file's
+    own numbers. Corrected: "No player class" and "Seeking is not connected" deleted, since
+    both are now false; 304 executions across the five suites replaced with 409 and the
+    per-suite split; "contains no `expect` declaration" replaced with what is true, one
+    internal declaration and why it exists; the 75 engine tests replaced with 178; the sample
+    described as creating a player rather than wiring a pipeline by hand, with the seven line
+    example that is now the whole playback path; the per-suite comments in the test block
+    corrected; the module table's core and sample rows corrected; and the evidence list given
+    the seek measurements, the campaign, the transport-stream clip and the A1 rename from
+    "presented" to "submitted", which had been stale since A1. A new "no queue and no
+    playlist" bullet replaces the two deleted ones. The rest of that file is A6 step 2's
+    work.
+
+  One measurement worth recording rather than fixing: a mid-playback precise seek leaves a
+  constant audio to video offset of 12 to 13 ms for the rest of the file, where the same file
+  played from the start holds 0 to 2 ms. It is constant, not growing, well inside
+  `SyncLaw`'s own 40 ms correction threshold, and costs no dropped or repeated frame. Its
+  cause is the deviation above: audio is trimmed to the seek target on whole buffer
+  boundaries only, and one AAC frame at 48 kHz is 21 ms, so a residual of up to that much is
+  the granularity of the trim rather than an error in the clock. Sample-exact audio trimming
+  is where that goes away, and it belongs with the resampler work in Horizon B B4.
+
+  Pre-existing and untouched, the same single item as at the A3 and A4 gates: KiteCodec's two
+  Gradle plugin functional tests fail on a clean checkout, which executor contract item 5
+  says to ignore. `scripts/testmedia.sh:52` at 147 columns is A0's line and is also
+  untouched.

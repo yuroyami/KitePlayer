@@ -97,6 +97,16 @@ internal enum class SeekPhase {
 
     /** Decoding forward, discarding frames before the target. Precise modes only. */
     Discarding,
+    ;
+
+    /**
+     * True while the pipeline is actually being moved.
+     *
+     * [Pending] is deliberately not one of these. A request that is being held by one of the two waiting
+     * rules must not stop playback: the picture and the sound carry on at the old position until the seek
+     * runs. Only the phases that have already flushed something are the ones that stop it.
+     */
+    val isRunning: Boolean get() = this == Flushing || this == Filling || this == Discarding
 }
 
 internal object SeekTiming {

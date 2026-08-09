@@ -47,6 +47,17 @@ public interface VideoDecoder : AutoCloseable {
     public suspend fun receive(): VideoFrame?
 
     /**
+     * True once [receive] has reported the end of the stream, and until the next [flush].
+     *
+     * Null from [receive] means two different things, "give me more input" and "there is nothing left",
+     * and the engine has to tell them apart: one of the six conditions end of stream is made of is that
+     * this decoder has nothing left to give. Without the flag the engine would have to infer it from
+     * having sent a null packet and then guess how many null receives are enough, which is how a player
+     * ends up either cutting the last frames off or never finishing at all.
+     */
+    public val isDrained: Boolean
+
+    /**
      * Discards all internal state and enters [newGeneration].
      *
      * This is the only epoch boundary a decoder has. Every frame received after it carries
@@ -71,15 +82,32 @@ public interface AudioDecoder : AutoCloseable {
     public suspend fun send(packet: PlayerPacket?): Boolean
     public suspend fun receive(): AudioBuffer?
 
+    /** True once [receive] has reported the end of the stream. See [VideoDecoder.isDrained]. */
+    public val isDrained: Boolean
+
     /** The only epoch boundary. See [VideoDecoder.flush]. */
     public suspend fun flush(newGeneration: Generation)
 }
 
+/**
+ * Creates subtitle decoders.
+ *
+ * No backend supplies one: both return an empty list from `BackendSession.subtitleDecoders`, and the
+ * engine's own subtitle handler has an empty body, so no cue is decoded, timed or drawn. The SubRip
+ * parser in `kiteplayer-subtitles` reads a file but is not connected to playback.
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public interface SubtitleDecoderFactory {
     public suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder?
     public val name: String
 }
 
+/**
+ * Turns subtitle packets into cues.
+ *
+ * Nothing implements this and nothing calls it. See [SubtitleDecoderFactory].
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public interface SubtitleDecoder : AutoCloseable {
     public suspend fun send(packet: PlayerPacket?): Boolean
 

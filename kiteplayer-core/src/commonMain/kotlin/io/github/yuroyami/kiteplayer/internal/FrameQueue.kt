@@ -60,29 +60,44 @@ internal class FrameQueue(private val capacity: Int) {
             (last.pts.micros - first.pts.micros).coerceAtLeast(0L)
         }
 
+    /**
+     * Adds without suspending.
+     *
+     * The non-suspending form exists because a caller that has to stay interruptible cannot afford the
+     * suspending one. Wrapping a suspending handover in a timeout looks equivalent and is not: a handover
+     * that completed can still have its result thrown away by a cancellation that arrives at the same
+     * instant, and the caller then offers a frame the queue already holds. That frame is closed twice,
+     * which on a real thread with a real hardware pool returns a buffer that is still in use.
+     *
+     * @return [FrameOffer.Accepted] when the queue took it and owns it from here, [FrameOffer.Full] when
+     *         the caller still owns it and should try again, [FrameOffer.Closed] when the queue is gone and
+     *         the caller must dispose of it.
+     */
+    fun offer(frame: VideoFrame): FrameOffer {
+        val outcome = synchronized(lock) {
+            when {
+                closed -> FrameOffer.Closed
+                pending.size < capacity -> {
+                    pending.addLast(frame)
+                    FrameOffer.Accepted
+                }
+                else -> FrameOffer.Full
+            }
+        }
+        if (outcome == FrameOffer.Accepted) notEmpty.trySend(Unit)
+        return outcome
+    }
+
     /** Suspends until there is room, then adds. Returns false when the queue was closed. */
     suspend fun send(frame: VideoFrame): Boolean {
         while (true) {
-            val outcome = synchronized(lock) {
-                when {
-                    closed -> SendOutcome.Closed
-                    pending.size < capacity -> {
-                        pending.addLast(frame)
-                        SendOutcome.Accepted
-                    }
-                    else -> SendOutcome.Full
-                }
-            }
-            when (outcome) {
-                SendOutcome.Accepted -> {
-                    notEmpty.trySend(Unit)
-                    return true
-                }
-                SendOutcome.Closed -> {
+            when (offer(frame)) {
+                FrameOffer.Accepted -> return true
+                FrameOffer.Closed -> {
                     frame.close()
                     return false
                 }
-                SendOutcome.Full -> hasSpace.receive()
+                FrameOffer.Full -> hasSpace.receive()
             }
         }
     }
@@ -158,7 +173,15 @@ internal class FrameQueue(private val capacity: Int) {
         notEmpty.trySend(Unit)
     }
 
-    /** Suspends until a frame is queued or the queue is closed. */
+    /**
+     * Suspends until a frame is queued or the queue is closed.
+     *
+     * Nothing in the engine calls this, and the reason is the quiescence handshake: a worker suspended
+     * here cannot reach its own checkpoint, so a seek would wait out its acknowledgement deadline on an
+     * empty queue. The video scheduler therefore waits in bounded steps and re-reads, which costs one
+     * short wake-up per empty pass and keeps the worker interruptible. This stays because a consumer that
+     * is not a parkable worker is the natural user of it.
+     */
     suspend fun awaitFrame() {
         if (synchronized(lock) { pending.isNotEmpty() || closed }) return
         notEmpty.receive()
@@ -178,8 +201,10 @@ internal class FrameQueue(private val capacity: Int) {
         notEmpty.trySend(Unit)
     }
 
-    private enum class SendOutcome { Accepted, Full, Closed }
 }
+
+/** What [FrameQueue.offer] did with a frame, which is also who owns it afterwards. */
+internal enum class FrameOffer { Accepted, Full, Closed }
 
 /**
  * What the frame on screen is, once the frame itself has moved on to the renderer.

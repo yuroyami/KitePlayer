@@ -95,6 +95,12 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
 
     override val metadata: Map<String, String> = source.metadata
 
+    /**
+     * Always empty, because the container reader has no chapter list to offer.
+     *
+     * Not a decision taken here: KiteCodec exposes no chapter API, so there is nothing to map. Reading
+     * the container's own chapter table is a roadmap item; see KPKMP.md section 11.
+     */
     override val chapters: List<Chapter> = emptyList()
 
     /**
@@ -269,7 +275,12 @@ private class KiteCodecPacket(val native: Packet, private val mapper: TimestampM
     override fun close() = native.close()
 }
 
-/** Creates video decoders. Hardware decoding is not wired yet. */
+/**
+ * Creates video decoders, all of them software.
+ *
+ * There is no hardware path, so [HwdecPolicy.Require] gets no decoder at all rather than a software one
+ * behind its back. Every other policy value decodes in software.
+ */
 public class KiteCodecVideoDecoderFactory internal constructor(
     private val source: KiteCodecSource,
 ) : VideoDecoderFactory {
@@ -309,6 +320,9 @@ private class KiteCodecVideoDecoder(
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteCodecPacket?)?.native)
+
+    /** KiteCodec's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
+    override val isDrained: Boolean get() = decoder.isDrained
 
     override suspend fun receive(): VideoFrame? {
         val frame = decoder.receive() ?: return null
@@ -453,6 +467,9 @@ private class KiteCodecAudioDecoder(
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteCodecPacket?)?.native)
+
+    /** KiteCodec's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
+    override val isDrained: Boolean get() = decoder.isDrained
 
     override suspend fun receive(): AudioBuffer? {
         val frame = decoder.receive() ?: return null

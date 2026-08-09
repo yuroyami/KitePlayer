@@ -13,9 +13,11 @@ plugins {
  * synchronisation, packet and frame queues, buffering policy, the seek state machine, track
  * selection and subtitle timing.
  *
- * It depends on kotlinx-coroutines and atomicfu, and nothing else. It contains no expect
- * declaration and no platform API call, which is why it compiles for every target Kotlin
- * supports, including js and wasm, before any backend for those targets exists.
+ * It depends on kotlinx-coroutines and atomicfu, and nothing else. Every playback decision in it is
+ * platform free, which is why it compiles for every target Kotlin supports, including js and wasm,
+ * before any backend for those targets exists. There is exactly one platform-dependent declaration,
+ * `platformPlaybackDispatchers`, because a thread per worker cannot be asked for in common code:
+ * `newSingleThreadContext` does not exist on every target. Its actual is one expression per platform.
  *
  * Time enters through the MonotonicClock interface, so every timing rule in the engine is
  * testable in virtual time. That property is the reason the engine is shaped this way.

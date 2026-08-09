@@ -95,50 +95,61 @@ internal class PacketQueue(
     }
 
     /**
-     * Takes the next packet of the current generation.
+     * Takes the next packet of the current generation without suspending.
+     *
+     * The non-suspending form is what a worker that must stay interruptible uses. Wrapping the suspending
+     * [receive] in a timeout is not the same thing: a receive that has already taken a packet can still be
+     * cancelled before it delivers it, and that packet is then owned by nobody and never closed.
+     *
+     * @return the packet, or null when nothing of the current generation is queued, whether because the
+     *         queue is empty, has ended, or was closed. Packets from a superseded generation are closed and
+     *         skipped rather than returned.
+     */
+    fun poll(): PlayerPacket? {
+        val taken = synchronized(lock) {
+            var found: PlayerPacket? = null
+            while (items.isNotEmpty()) {
+                val entry = items.removeFirst()
+                bytes -= entry.bytes
+                durationUs -= entry.durationUs
+                if (entry.generation != generation) {
+                    entry.packet.close()
+                    continue
+                }
+                found = entry.packet
+                break
+            }
+            found
+        }
+        if (taken != null) drained.trySend(Unit)
+        return taken
+    }
+
+    /**
+     * Suspends until there may be something to [poll], or until the queue ends or closes.
+     *
+     * The wake-up is advisory: the signal is conflated and a cancellation can consume one, so a caller
+     * bounds this wait and polls again afterwards. No packet can be lost that way, because nothing is taken
+     * out of the queue here.
+     */
+    suspend fun awaitData() {
+        if (synchronized(lock) { items.isNotEmpty() || closed || endOfStream }) return
+        notEmpty.receive()
+    }
+
+    /**
+     * Takes the next packet of the current generation, suspending until there is one.
      *
      * @return the packet, or null when the stream has ended or the queue was closed. Packets from a
      *         superseded generation are closed and skipped without being returned.
      */
     suspend fun receive(): PlayerPacket? {
         while (true) {
-            val result: TakeResult = synchronized(lock) {
-                var taken: PlayerPacket? = null
-                while (items.isNotEmpty()) {
-                    val entry = items.removeFirst()
-                    bytes -= entry.bytes
-                    durationUs -= entry.durationUs
-                    if (entry.generation != generation) {
-                        entry.packet.close()
-                        continue
-                    }
-                    taken = entry.packet
-                    break
-                }
-                val packet = taken
-                when {
-                    packet != null -> TakeResult.Taken(packet)
-                    closed -> TakeResult.Closed
-                    endOfStream -> TakeResult.Ended
-                    else -> TakeResult.Empty
-                }
-            }
-            when (result) {
-                is TakeResult.Taken -> {
-                    drained.trySend(Unit)
-                    return result.packet
-                }
-                TakeResult.Closed, TakeResult.Ended -> return null
-                TakeResult.Empty -> notEmpty.receive()
-            }
+            poll()?.let { return it }
+            val done = synchronized(lock) { closed || endOfStream }
+            if (done) return null
+            notEmpty.receive()
         }
-    }
-
-    private sealed interface TakeResult {
-        class Taken(val packet: PlayerPacket) : TakeResult
-        data object Empty : TakeResult
-        data object Closed : TakeResult
-        data object Ended : TakeResult
     }
 
     /** Suspends until the queue has been read from, or until it is closed. */

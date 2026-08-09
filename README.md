@@ -1,8 +1,8 @@
 # KitePlayer
 
-A media player engine for Kotlin Multiplatform. The clock, audio and video synchronisation, the packet
-and frame queues, the buffering policy and the seek state machine are pure Kotlin in `commonMain`.
-Only the audio device, the video surface and the decoder are per platform.
+A media player engine for Kotlin Multiplatform. The player, its session loop, the clock, audio and video
+synchronisation, the packet and frame queues, the buffering policy and the seek machine are pure Kotlin
+in `commonMain`. Only the audio device, the video surface and the decoder are per platform.
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
@@ -28,7 +28,7 @@ Today, honestly:
 
 | Platform | Tier | What that means here |
 |---|---|---|
-| macOS arm64 | Experimental T3-Full candidate | Audio and video decode and play in sync, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
+| macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
 | JVM, Android, iOS, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no audio device, no renderer and no decoder for it, so there is no playback. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
 
@@ -38,10 +38,16 @@ Measured on one Apple silicon development machine, with a debug binary, on clips
 `scripts/testmedia.sh` generates. This is development evidence: enough to say the engine works, not
 enough to call any platform supported.
 
-- 1080p30 for 10 seconds: 300 frames decoded, 300 presented, 0 dropped, 0 repeated, 0 audio underruns.
+- 1080p30 for 10 seconds: 300 frames decoded, 300 submitted to the renderer, 0 dropped, 0 repeated,
+  0 audio underruns, and a final audio to video drift of 1 ms.
 - Real variable frame rate 720p for 8 seconds, frame durations cycling through 16.7, 33.3, 50, 25 and
-  41.7 ms: 240 frames decoded, 240 presented, 0 dropped, 0 repeated, 0 audio underruns.
+  41.7 ms: 240 frames decoded, 240 submitted, 0 dropped, 0 repeated, 0 audio underruns.
 - 4K HEVC 10-bit with no audio track: 180 frames, with video driving the clock.
+- MPEG-TS with a 1400 second start offset: 300 frames decoded, 300 submitted, 0 dropped, 0 repeated.
+- Seeking in real media: 20 random precise seeks in a 1080p30 file each land within one frame duration
+  of the position asked for, a seek past the end finishes the file, and a seek to 0 mid-playback carries
+  on from the start. A mid-playback seek to 5 seconds lands on 5.000 and plays through to the end with
+  nothing dropped.
 - 3 minutes of audio: 0 ms of clock drift.
 - Colour: BT.709, BT.601, yuv420p10le, SMPTE 240M, centre-sited NV12 and P010 clips decoded,
   converted, and compared pixel by pixel against what the `ffmpeg` command line produces. Mean
@@ -49,17 +55,18 @@ enough to call any platform supported.
 - Audio: a 5.1 file downmixed to stereo and compared sample by sample against `ffmpeg -ac 2` on the
   same file. Mean sample error under 0.0001, so the mix matrix and the channel order are the same
   ones FFmpeg applies.
-- 304 test executions pass across 5 suites, with nothing skipped: 128 engine tests on the JVM in
-  under a second, the same 128 compiled for macOS arm64, 18 against the real audio device and the
-  renderer, 22 that decode real media, and 8 for the SubRip parser.
+- One hundred seeded simulated sessions, each with faults injected on purpose, hold every invariant:
+  nothing from a superseded seek is ever shown or heard, timestamps never go backwards, every frame and
+  packet is closed exactly once, every command completes exactly once, and every session reaches a
+  terminal state. Twenty seeks in one virtual millisecond cost exactly one flush cycle.
+- 409 test executions pass across 5 suites, with nothing skipped: 178 engine tests on the JVM in
+  under a second, 179 compiled for macOS arm64, 18 against the real audio device and the renderer,
+  26 that decode and seek in real media, and 8 for the SubRip parser.
 
 ## What does not exist yet
 
-- **No player class.** There is no facade and no core playback loop. `kiteplayer-sample` wires the
-  demuxer, the decoders, the clock, the sink and the renderer together by hand, and that file is the
-  only assembly there is.
-- **Seeking is not connected.** The seek state machine, its coalescing rules and its timing constants
-  are written and unit tested. Nothing calls them.
+- **No queue and no playlist.** One media item at a time. Asking to loop a queue is refused rather than
+  quietly treated as looping the item.
 - **No tempo stage.** A playback speed other than 1.0 is refused while audio is open, because the
   samples would still reach the device at the device's rate. Video-only speed is legal.
 - **The rate conversion is interim quality.** Channel downmixing and rate conversion exist and are
@@ -96,11 +103,27 @@ BIN=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
 $BIN testmedia/sync1080p30.mp4 --window
 ```
 
-The sample demuxes and decodes both streams as independent stages, plays the audio through CoreAudio,
-and schedules each video frame against the audio clock. It prints the position, the video drift against
-the master clock and the frame accounting as it goes, all read from the engine's own clocks. Without
+The sample creates a player, hands it the two backends this platform has, opens a file and plays it.
+That is the whole playback path: the demux pump, both decoders, the audio feeder, the presentation
+schedule and the seek machine are the player's own. It prints the position, the video drift against the
+master clock and the frame accounting as it goes, all read from the player's own flows. Without
 `--window` the frames go to a counting renderer that records how far each one landed from its requested
-time, and `--no-video` plays the audio track only.
+time, `--no-video` plays the audio track only, and `--seek=<seconds>` seeks once playback is under way
+and reports where it landed.
+
+```kotlin
+val player = KitePlayer.create(
+    PlayerConfig(
+        backends = Backends(
+            backend = KiteCodecMediaBackend(),
+            output = AppleOutputBackend,
+        ),
+    ),
+)
+player.open(MediaItem(path))
+player.play()
+player.seek(5.seconds)
+```
 
 ## Why the position is exact
 
@@ -150,12 +173,14 @@ Both now say so, once per stream, through a typed playback warning rather than s
 
 ## Why the engine has no platform code
 
-`kiteplayer-core` depends on kotlinx-coroutines and atomicfu, and nothing else. It contains no `expect`
-declaration and no platform API call. Three things follow:
+`kiteplayer-core` depends on kotlinx-coroutines and atomicfu, and nothing else. It calls no platform
+API, and it holds exactly one `expect` declaration: an internal one that asks each target for the
+threads the player confines its workers to, because a single-thread dispatcher is not something a
+target-free source set can build. Three things follow:
 
 1. It compiles for all 21 targets its build file declares, including `js` and `wasmJs`. That is a
    compile claim only, which is tier T1 above.
-2. Its whole behaviour is testable with a clock the test controls. The 75 engine tests run in
+2. Its whole behaviour is testable with a clock the test controls. The 178 engine tests run in
    milliseconds, and they run identically on the JVM and on Kotlin/Native.
 3. A new platform is reached by implementing four interfaces, not by adding an `actual` to the engine.
 
@@ -172,11 +197,11 @@ public interface MonotonicClock {
 
 | Module | Holds | Targets |
 |---|---|---|
-| `kiteplayer-core` | the engine: clock, synchronisation, queues, buffering, the seek state machine, the public API and the four service interfaces | every target it declares |
+| `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-output` | the CoreAudio sink, the AppKit window and the Core Graphics renderer | macOS arm64 |
 | `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64 |
 | `kiteplayer-subtitles` | SubRip parsing, with rasterisation left to the platform. Not connected to playback | every target it declares |
-| `kiteplayer-sample` | a CLI that wires the pipeline by hand, plays a file and reports what happened | macOS arm64 |
+| `kiteplayer-sample` | a CLI that creates a player, plays a file and reports what the player says happened | macOS arm64 |
 
 The dependency arrow never points into `kiteplayer-core`. The core declares interfaces and the backends
 implement them, which is what allows a completely different backend, for example WebCodecs in a
@@ -185,10 +210,10 @@ browser, without the engine noticing.
 ## Build and test it here
 
 ```bash
-./gradlew :kiteplayer-core:jvmTest            # 75 tests, the engine in virtual time
-./gradlew :kiteplayer-core:macosArm64Test     # the same 75, compiled natively
-./gradlew :kiteplayer-output:macosArm64Test   # 7 tests against the real audio device
-./gradlew :kiteplayer-ffmpeg:macosArm64Test   # 6 tests: real decode, colour against a reference
+./gradlew :kiteplayer-core:jvmTest            # 178 tests, the engine in virtual time
+./gradlew :kiteplayer-core:macosArm64Test     # 179: the same, plus a real-thread stress test
+./gradlew :kiteplayer-output:macosArm64Test   # 18 tests against the real audio device
+./gradlew :kiteplayer-ffmpeg:macosArm64Test   # 26: real decode, real seeking, colour against a reference
 ./gradlew :kiteplayer-subtitles:jvmTest       # 8 tests, the SubRip parser
 ```
 

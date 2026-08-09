@@ -5,9 +5,9 @@ import kotlin.time.Duration
 /**
  * Something that happened, as opposed to something that is.
  *
- * Nothing emits these yet: the event stream arrives with the player class, and this file is the
- * contract it will be built against. The division of labour between this and [PlayerSnapshot] is
- * strict, and it is the fix for the single most common mistake made against player APIs.
+ * The engine's session core emits these and [KitePlayer.events] carries them. The division of labour
+ * between this and [PlayerSnapshot] is strict, and it is the fix for the single most common mistake
+ * made against player APIs.
  *
  * - **State** goes in the snapshot. A snapshot conflates: a consumer that misses an intermediate
  *   value still ends up correct, because the latest value is the truth.
@@ -37,7 +37,16 @@ public sealed interface PlayerEvent {
     /** The audio output format changed, at the start or after a device change. */
     public data class AudioFormatChanged(val sampleRate: Int, val channels: Int) : PlayerEvent
 
-    /** The first frame of this media item reached the screen. [latency] is from open to visible. */
+    /**
+     * The first frame of this media item left the schedule. [latency] is measured from the open.
+     *
+     * What "left the schedule" means is the strongest signal this build has: a renderer accepted the
+     * frame, or, with nothing attached, the schedule presented and released it. It is not a report that
+     * a pixel reached a display. A renderer that accepts a frame may still supersede it with a newer one
+     * or fail to draw it, and it counts those outcomes itself. Per-submission terminal feedback, which
+     * is what would make this event mean scanout, needs the renderer protocol in KPKMP.md section 11
+     * (B5).
+     */
     public data class FirstFrameRendered(val latency: Duration) : PlayerEvent
 
     /** Playback reached the end. Emitted once, before the status becomes Ended. */
@@ -62,7 +71,8 @@ public sealed interface PlayerEvent {
  * Where the engine will send its diagnostics.
  *
  * Nothing calls it. No engine code writes a log line, so one supplied through [PlayerConfig] stays
- * silent. Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * silent, and the diagnostics that do exist are [KitePlayer.stats] and [KitePlayer.events].
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
  */
 public fun interface PlayerLogger {
     public fun log(level: LogLevel, tag: String, message: String, throwable: Throwable?)

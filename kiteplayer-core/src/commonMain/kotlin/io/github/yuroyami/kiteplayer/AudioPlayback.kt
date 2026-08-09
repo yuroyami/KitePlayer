@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.internal.MediaClock
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
 import io.github.yuroyami.kiteplayer.spi.AudioSink
+import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.delay
@@ -69,6 +70,12 @@ public class AudioPlayback(
 
     /** Guards the media clock against the members that may be called from more than one thread. */
     private val lock = SynchronizedObject()
+
+    // The wanted volume and mute, held here rather than written straight into the gain stage. The stage
+    // belongs to the feeder and is not thread safe, so a change arriving from another thread is a value
+    // the feeder picks up on its next buffer, which is one sample frame of delay and no race.
+    private val wantedVolume = atomic(1f)
+    private val wantedMute = atomic(false)
 
     private var generation: Generation = Generation.Initial
     private var format: AudioFormat? = null
@@ -183,6 +190,10 @@ public class AudioPlayback(
             else -> existing.rebuiltFor(sourceFormat)
         }
         pipeline = stage
+        // Picked up here, on the feeder, because the gain stage has exactly one owner. The ramp inside it
+        // is what makes a change arriving mid-buffer inaudible rather than a click.
+        stage.volume = wantedVolume.value
+        stage.muted = wantedMute.value
 
         val produced = stage.process(interleaved, frames)
         if (produced > 0) submit(pts, stage.output, produced)
@@ -277,6 +288,32 @@ public class AudioPlayback(
         while (ring.bufferedFrames > 0) delay(FULL_RING_WAIT)
         sink.drain()
     }
+
+    /**
+     * Playback volume, from silence at 0 to unity at 1. Above unity is amplification and is refused.
+     *
+     * Real, and applied by the pipeline's gain stage as one multiply per sample with a short ramp, so a
+     * change never clicks. It takes effect on the next buffer the feeder converts, which is why setting
+     * it is safe from any thread: this stores a value and the feeder reads it, rather than writing into
+     * a stage that has one owner.
+     *
+     * With no audio path open the value is stored and applied when one opens.
+     */
+    public var volume: Float
+        get() = wantedVolume.value
+        set(value) {
+            require(value.isFinite() && value >= 0f && value <= 1f) {
+                "volume must be between 0 and 1, was $value"
+            }
+            wantedVolume.value = value
+        }
+
+    /** Silence without losing the volume setting. Ramped like [volume], and safe from any thread. */
+    public var muted: Boolean
+        get() = wantedMute.value
+        set(value) {
+            wantedMute.value = value
+        }
 
     /**
      * The playback rate as a multiplier of real time. Finite and positive.

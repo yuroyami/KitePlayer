@@ -21,7 +21,9 @@ import io.github.yuroyami.kiteplayer.Pts
  * error.
  *
  * Not thread safe. Each clock has one owner: the audio clock is written by the audio feeder, the
- * video clock by the video scheduler. Cross-thread reads go through [snapshot].
+ * video clock by the video scheduler. A reader on another thread does not call in at all: the owner
+ * publishes what it read through an atomic, because [snapshot] reads three fields in a row and is
+ * therefore an owner-thread convenience rather than a cross-thread guarantee.
  */
 internal class MediaClock(private val monotonic: MonotonicClock) {
 
@@ -38,6 +40,8 @@ internal class MediaClock(private val monotonic: MonotonicClock) {
      * timer is shifted forward by exactly that interval, and the clock is re-anchored at the reading
      * it was frozen at. Without the shift the paused interval counts as time already waited, and
      * every frame buffered at the moment of the pause is late the instant playback resumes.
+     *
+     * `VideoPlayback.resumeSchedule` is that caller.
      */
     val lastUpdatedNanos: Long get() = lastSetNanos
 
@@ -125,7 +129,13 @@ internal class MediaClock(private val monotonic: MonotonicClock) {
         return Pts(mediaNanos / 1_000L)
     }
 
-    /** An immutable read, safe to hand to another thread. */
+    /**
+     * An immutable read of all four values at once, for the thread that owns this clock.
+     *
+     * Nothing calls it today: the engine's cross-thread readings are published as atomics by the owner,
+     * one number at a time, which is what actually makes them safe. This is the shape a reader wants once
+     * it needs the rate and the paused flag together with the reading, and it costs nothing to keep.
+     */
     fun snapshot(): ClockSnapshot =
         ClockSnapshot(nowOrNull(), generation, speed, paused)
 }

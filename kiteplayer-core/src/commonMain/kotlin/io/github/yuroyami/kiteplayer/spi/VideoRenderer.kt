@@ -50,6 +50,14 @@ public interface VideoRenderer : AutoCloseable {
     /** Composited above the video. Replaced wholesale rather than diffed. */
     public suspend fun setOverlay(overlay: SubtitleOverlay?)
 
+    /**
+     * Surface loss, surface return, refresh changes, hard failure.
+     *
+     * The engine collects nothing from this feed yet. A renderer that cannot draw refuses the frame
+     * instead, which the schedule counts as a drop and carries on from, so nothing is lost by the
+     * silence except the chance to report why.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public val events: Flow<RendererEvent>
 }
 

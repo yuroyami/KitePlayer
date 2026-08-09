@@ -1,103 +1,104 @@
 package io.github.yuroyami.kiteplayer.sample
 
-import io.github.yuroyami.kiteplayer.AudioPlayback
-import io.github.yuroyami.kiteplayer.FrameDropPolicy
-import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kiteplayer.Backends
+import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
-import io.github.yuroyami.kiteplayer.VideoPlayback
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSource
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSourceFactory
+import io.github.yuroyami.kiteplayer.PlaybackException
+import io.github.yuroyami.kiteplayer.PlaybackStats
+import io.github.yuroyami.kiteplayer.PlaybackStatus
+import io.github.yuroyami.kiteplayer.PlayerConfig
+import io.github.yuroyami.kiteplayer.PlayerEvent
+import io.github.yuroyami.kiteplayer.PlayerSnapshot
+import io.github.yuroyami.kiteplayer.TrackKind
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecMediaBackend
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
-import io.github.yuroyami.kiteplayer.ffmpeg.interleavedFloat
-import io.github.yuroyami.kiteplayer.output.AppleHostClock
 import io.github.yuroyami.kiteplayer.output.AppKitVideoRenderer
 import io.github.yuroyami.kiteplayer.output.AppKitWindow
-import io.github.yuroyami.kiteplayer.output.CoreAudioSink
-import io.github.yuroyami.kiteplayer.spi.AudioBuffer
-import io.github.yuroyami.kiteplayer.spi.PlayerPacket
-import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
-import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import io.github.yuroyami.kiteplayer.output.AppleHostClock
+import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.exitProcess
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.nanoseconds
+import kotlin.time.Duration.Companion.seconds
 
 /**
- * Plays a file, with video and audio in sync.
+ * Plays a file through the player.
  *
- * The parts are the player's parts:
+ * There is one object in this file's playback path: [KitePlayer]. It is handed the two backends this
+ * platform has, the FFmpeg one for reading and decoding and the Apple one for the clock and the device,
+ * and everything else is its own: the demux pump, both decoders, the audio feeder, the presentation
+ * schedule, the seek machine and the state it publishes. This file parses arguments, creates the player,
+ * opens, plays, prints what the player reports, and wires a window when asked for one.
  *
- * - `KiteCodecSource` demuxes, and one decoder per stream decodes, both through KiteCodec.
- * - `AudioPlayback` holds the audio, paces its decoder, and maintains the master clock.
- * - `VideoPlayback` decides when each frame should be shown, and whether to drop or repeat it.
- * - `CoreAudioSink` is the device, and it reports when what it is handed will be heard.
+ * That is the whole point of the file. Before the player existed this was 425 lines of hand-wired
+ * pipeline, and every one of those lines was a decision an application should never have to make.
  *
- * The wiring below, meaning the channels between demuxing and decoding, is what `PlaybackCore` will
- * own once it is written. Everything it wires together already exists and is tested, so this file is
- * the proof that the pieces fit and the place the measured numbers are read off.
- *
- * Nothing here estimates a device latency or counts samples to work out the position. The position and
- * the drift both come from the clock, and the clock is anchored to the instant CoreAudio says a
- * specific frame becomes audible.
+ * The numbers it prints are development evidence from a debug binary and nothing more. What they are
+ * good for is noticing a regression: frames submitted against frames drawn, drops, repeats, underruns
+ * and the drift between the audio clock and real time.
  */
 @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 fun main(args: Array<String>) {
     val path = args.firstOrNull { !it.startsWith("--") }
     if (path == null || args.contains("-h") || args.contains("--help")) {
-        println("usage: kiteplayer <media file> [--window] [--no-video]")
+        println("usage: kiteplayer <media file> [--window] [--no-video] [--seek=<seconds>]")
         println()
         println("Plays the file and reports the position, the audio to video drift, and the frame")
-        println("accounting, all taken from the engine's own clocks.")
+        println("accounting, all taken from the player's own flows.")
         println()
-        println("  --window    open a window and draw the video in it")
-        println("  --no-video  play the audio track only")
+        println("  --window        open a window and draw the video in it")
+        println("  --no-video      play the audio track only")
+        println("  --seek=<sec>    once playing, seek to that position and carry on from there")
         exitProcess(if (path == null) 2 else 0)
     }
     val videoEnabled = !args.contains("--no-video")
     val wantWindow = args.contains("--window")
-
-    // Anything can fail here: a missing file, a permission error, bytes that are not media, a codec
-    // this FFmpeg build does not have. All of them are the same thing to a user, so all of them get a
-    // sentence rather than a stack trace.
-    val source = try {
-        runBlocking { KiteCodecSourceFactory().open(MediaItem(path)) as KiteCodecSource }
-    } catch (failure: Throwable) {
-        println("cannot play $path")
-        println("  ${failure.message ?: failure::class.simpleName}")
-        exitProcess(1)
+    val seekArgument = args.firstOrNull { it.startsWith("--seek=") }
+    val seekTo = seekArgument?.removePrefix("--seek=")?.toDoubleOrNull()?.seconds
+    if (seekArgument != null && seekTo == null) {
+        println("--seek takes a number of seconds, as in --seek=5")
+        exitProcess(2)
     }
 
-    // What the backend had to approximate: an HDR clip converted without tone mapping, a colour space
-    // this build does not handle exactly. A warning never stops playback, so it is printed and
-    // playback carries on.
-    source.onWarning = { println("warning: ${it.message}") }
+    // Everything either half of the pipeline degrades on, printed as it happens and counted in one
+    // place, so a run's own summary says how many there were.
+    val report = SessionReport()
 
-    val videoStream = if (videoEnabled) source.firstVideo else null
-    val audioStream = source.firstAudio
-    if (videoStream == null && audioStream == null) {
-        println("cannot play $path")
-        println("  nothing playable in it")
-        source.close()
-        exitProcess(1)
-    }
+    // Explicit composition, because nothing is discovered: Kotlin/Native has no classpath service
+    // lookup, so naming the backends here is the honest alternative to a reflective search that would
+    // fail differently on every platform. The warning callback is the backend's own: it reports colour
+    // it could only convert approximately, which is a degradation and never a failure.
+    val player = KitePlayer.create(
+        PlayerConfig(
+            backends = Backends(
+                backend = KiteCodecMediaBackend(onWarning = { report.warn(it.message) }),
+                output = AppleOutputBackend,
+            ),
+            statsInterval = STATS_INTERVAL,
+        ),
+    )
 
-    if (wantWindow && videoStream != null) {
-        // AppKit owns the main thread and its run loop, so the window is built here and playback runs
-        // on another thread. Doing it the other way round means either no events or no playback.
-        val size = videoStream.videoSize
+    if (wantWindow && videoEnabled) {
+        // AppKit owns the main thread and its run loop. The media is opened first, on this thread,
+        // because the window is sized from the picture; then the renderer is attached, which is legal
+        // at any time, and playback runs on another thread while the run loop has this one.
+        val snapshot = runBlocking { openOrExit(player, path, report, videoEnabled) }
+        val size = snapshot.videoSize
         val window = AppKitWindow(
             title = path.substringAfterLast('/'),
             width = (size?.displayWidth ?: 1280).coerceAtMost(1600),
@@ -106,14 +107,15 @@ fun main(args: Array<String>) {
         val renderer = AppKitVideoRenderer(window) { frame ->
             SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
         }
-        val sessionContext = newSingleThreadContext("kiteplayer-session")
+        player.attachRenderer(renderer)
+        val sessionContext = newSingleThreadContext("kiteplayer-sample")
         val session = CoroutineScope(sessionContext)
         // Closing the window means the viewer is done. Without this the run loop keeps going with
         // nothing on screen and the file plays to its end headless, audio and all.
         window.onCloseRequested = { session.cancel() }
         session.launch {
             try {
-                runSession(path, source, videoStream, audioStream, renderer)
+                playToEnd(player, path, report, renderer = null, seekTo = seekTo)
             } finally {
                 // Closed before its counters are read, so an image still on its way to the window is
                 // accounted for one way or the other rather than being missed.
@@ -125,296 +127,267 @@ fun main(args: Array<String>) {
             }
         }
         window.runEventLoop()
+        closeAndWait(player)
         return
     }
 
+    val counting = CountingRenderer(AppleHostClock)
     runBlocking {
-        runSession(path, source, videoStream, audioStream, CountingRenderer(AppleHostClock))
+        // Attached before the open, so the frame the open ends on is drawn by it rather than counted as
+        // a frame nothing drew.
+        player.attachRenderer(counting)
+        openOrExit(player, path, report, videoEnabled)
+        playToEnd(player, path, report, counting, seekTo)
+    }
+    closeAndWait(player)
+}
+
+/**
+ * Opens [path], prints what the container turned out to be, and exits with one sentence if it cannot.
+ *
+ * A missing file, a permission error, bytes that are not media, a codec this FFmpeg build does not have:
+ * all of them are the same thing to a user, so all of them get a sentence rather than a stack trace. The
+ * player throws one type for all of them and carries the typed error inside it.
+ */
+private suspend fun openOrExit(
+    player: KitePlayer,
+    path: String,
+    report: SessionReport,
+    videoEnabled: Boolean,
+): PlayerSnapshot {
+    report.start(player)
+    try {
+        player.open(MediaItem(path))
+    } catch (failure: PlaybackException) {
+        println("cannot play $path")
+        println("  ${failure.error.cause?.message ?: failure.error.message}")
+        player.close()
+        exitProcess(1)
+    }
+
+    var snapshot = player.state.value
+    val video = snapshot.tracks.selectedVideo?.let { snapshot.tracks.find(it) }
+    val audio = snapshot.tracks.selectedAudio?.let { snapshot.tracks.find(it) }
+
+    println("file      $path")
+    video?.let {
+        val fps = it.frameRate?.let { rate -> ((rate * 1000).toInt() / 1000.0).toString() } ?: "?"
+        println("video     ${it.codec}, ${it.videoSize?.width}x${it.videoSize?.height}, $fps fps")
+    }
+    audio?.let { println("audio     ${it.codec}, ${it.sampleRate} Hz, ${it.channels} channel(s)") }
+    println("duration  ${snapshot.duration?.let { format(it) } ?: "unknown"}")
+
+    val negotiated = report.negotiatedAudio
+    if (audio != null && negotiated != null) {
+        println("device    ${negotiated.sampleRate} Hz, ${negotiated.channels} channel(s)")
+        // The conversion stage is keyed on what the decoder produces against what the device accepted.
+        // The same channel count at the same rate makes every stage a copy; anything else is a downmix, a
+        // rate conversion, or both, and a 5.1 file on a stereo device is the case that used to reach the
+        // ring as garbage.
+        val converts = audio.channels != negotiated.channels || audio.sampleRate != negotiated.sampleRate
+        println(
+            if (converts) {
+                "pipeline  ${audio.channels} channel(s) at ${audio.sampleRate} Hz " +
+                    "into ${negotiated.channels} at ${negotiated.sampleRate} Hz"
+            } else {
+                "pipeline  pass through, the device took what the decoder produces"
+            },
+        )
+    }
+
+    // A track change reopens the container and seeks back, which is why it is a call and not a config
+    // flag: the player has to be open before it can be told to play something else out of the file.
+    if (!videoEnabled && snapshot.tracks.selectedVideo != null) {
+        player.selectTrack(TrackKind.Video, null)
+        println("video     deselected, audio only")
+        snapshot = player.state.value
+    }
+    println()
+    return snapshot
+}
+
+/**
+ * Plays until the media ends or the player fails, printing one line of state as it goes.
+ *
+ * Every figure comes from the player: the position from its own published reading, everything else from
+ * the statistics it samples on a timer. Nothing here measures playback, which is the difference between
+ * a sample and a test harness.
+ *
+ * [seekTo] is the one thing this loop does rather than reports. Given it, the loop lets playback settle,
+ * asks for that position once, prints where the player says it landed, and carries on printing, so a
+ * reader can see both the landing and that the file kept playing from it.
+ */
+private suspend fun playToEnd(
+    player: KitePlayer,
+    path: String,
+    report: SessionReport,
+    renderer: CountingRenderer?,
+    seekTo: Duration? = null,
+) {
+    println("playing. press ctrl-c to stop.")
+    player.play()
+
+    val startedAt = AppleHostClock.nanos()
+    var basePosition: Duration? = null
+    var seekPending = seekTo
+    val total = player.state.value.duration?.let { format(it) } ?: "  --:--.---"
+
+    while (true) {
+        val snapshot = player.state.value
+        if (snapshot.status == PlaybackStatus.Ended || snapshot.status == PlaybackStatus.Failed) break
+        val stats = player.stats.value
+        val position = player.position()
+
+        // Asked for after playback is under way rather than straight after play(), because a seek out of
+        // the middle of a file is the case worth watching: the device is running and every worker has to
+        // be brought to a stop before the cursor moves.
+        if (seekPending != null && position >= SEEK_AFTER) {
+            val target = seekPending
+            seekPending = null
+            println()
+            println("seeking to ${format(target)}")
+            player.seek(target)
+            println("  landed at  ${format(player.position())}")
+            // Read one interval later rather than at once. The player completes the call and publishes
+            // its next snapshot on the pass after that, so an immediate read reports the status the seek
+            // itself put up rather than the one it resumed into.
+            delay(STATS_INTERVAL)
+            println("  status     ${player.state.value.status}")
+            // Read after the seek returned, so what follows is playback from the landing and not the
+            // tail of what was already in flight before it.
+            basePosition = null
+            continue
+        }
+
+        // Clock drift against real time. A constant offset at startup is priming latency and harmless. A
+        // figure that grows means the clock is wrong, and over a long file that is the number to watch.
+        var clockDrift = "     --"
+        val elapsed = (AppleHostClock.nanos() - startedAt).nanoseconds
+        if (basePosition == null && elapsed > 500.milliseconds) basePosition = position - elapsed
+        basePosition?.let { base ->
+            val drift = (position - base) - elapsed
+            clockDrift = "${drift.inWholeMilliseconds.toString().padStart(5)} ms"
+        }
+
+        print(
+            "\r  ${format(position)} / $total   clock $clockDrift   " +
+                "a/v ${stats.avDrift.inWholeMilliseconds.toString().padStart(4)} ms   " +
+                "submitted ${stats.submittedFrames}   dropped ${stats.droppedFramesLate}   " +
+                "repeated ${stats.repeatedFrames}   " +
+                "audio ${stats.audioQueueDepth.inWholeMilliseconds.toString().padStart(4)} ms   " +
+                "underruns ${stats.audioUnderruns}   ",
+        )
+        delay(200)
+    }
+
+    // Statistics are published on a timer, so the last sample taken while playing is up to one interval
+    // old and would report the file minus its final fraction of a second. One more interval, and the
+    // summary is the whole file.
+    delay(STATS_INTERVAL * 2)
+    val snapshot = player.state.value
+    val stats = player.stats.value
+    println()
+    println()
+    if (snapshot.status == PlaybackStatus.Failed) {
+        println("stopped playing $path")
+        println("  ${snapshot.error?.message ?: "no error was retained, which is a bug"}")
+    } else {
+        println("done.")
+    }
+    printSummary(player, snapshot, stats, renderer, report)
+}
+
+/** The accounting, in the order a regression is usually spotted in. */
+private fun printSummary(
+    player: KitePlayer,
+    snapshot: PlayerSnapshot,
+    stats: PlaybackStats,
+    renderer: CountingRenderer?,
+    report: SessionReport,
+) {
+    println("  decoded          ${stats.decodedVideoFrames} video frames")
+    if (snapshot.tracks.selectedVideo != null || stats.decodedVideoFrames > 0) {
+        println("  submitted        ${stats.submittedFrames} frames")
+        println("  headless         ${stats.headlessFrames} (no renderer was attached for these)")
+        println("  dropped late     ${stats.droppedFramesLate}")
+        println("  repeated         ${stats.repeatedFrames}")
+        println("  final a/v drift  ${stats.avDrift.inWholeMilliseconds} ms")
+    }
+    renderer?.let {
+        println("  renderer got     ${it.count} frames")
+        println("  worst schedule   ${it.worstErrorMillis} ms from the requested time")
+    }
+    println("  audio underruns  ${stats.audioUnderruns}")
+    println("  latency quality  ${stats.audioLatencyQuality}")
+    println("  master clock     ${stats.masterClock}")
+    println("  rebuffers        ${stats.rebuffers}")
+    val total = snapshot.duration?.let { format(it) } ?: "  --:--.---"
+    println("  played to        ${format(player.position())} of $total")
+    println("  warnings         ${report.warnings}, printed above as they happened")
+}
+
+/**
+ * Closes the player and waits for it to say it is idle.
+ *
+ * Close returns at once and the teardown is the player's own, bounded, on its own threads. A command
+ * line tool that returned from `main` without waiting would take those threads down mid-teardown, which
+ * is how a device is left running for the fraction of a second it takes the process to die.
+ */
+private fun closeAndWait(player: KitePlayer) {
+    player.close()
+    runBlocking {
+        withTimeoutOrNull(5.seconds) {
+            player.state.first { it.status == PlaybackStatus.Idle }
+        } ?: println("the player did not finish closing within 5 s: ${player.state.value.error?.message}")
     }
 }
 
 /**
- * Plays [source] to completion, reporting as it goes.
+ * The player's event stream, printed and remembered.
  *
- * Everything here runs off the main thread, so it works the same whether the frames end up in a window
- * or in a counter.
+ * The negotiated audio format is announced during the open, before any caller could collect it if it
+ * subscribed afterwards, which is why this subscribes undispatched: the collector is registered inside
+ * the [start] call rather than whenever a dispatcher gets round to it.
  */
-@OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
-private suspend fun runSession(
-    path: String,
-    source: KiteCodecSource,
-    videoStream: PlayerStreamInfo?,
-    audioStream: PlayerStreamInfo?,
-    videoRenderer: VideoRenderer,
-) {
-    coroutineScope {
-        val sink = CoreAudioSink(AppleHostClock)
-        val audio = AudioPlayback(sink, AppleHostClock, onWarning = { println("warning: ${it.message}") })
-        val video = if (videoStream != null) {
-            VideoPlayback(
-                renderer = videoRenderer,
-                clock = AppleHostClock,
-                containerFrameRate = videoStream.frameRate,
-                timestampsMayJump = source.timestampsMayJump,
-                dropPolicy = FrameDropPolicy.LateOnly,
-            )
-        } else {
-            null
-        }
+private class SessionReport {
 
-        // One dispatcher per worker. A decoder context must be touched by one thread only, which is
-        // what libavcodec expects, and the demuxer cursor is single threaded for the same reason.
-        val demuxContext = newSingleThreadContext("kiteplayer-demux")
-        val videoContext = newSingleThreadContext("kiteplayer-video")
-        val audioContext = newSingleThreadContext("kiteplayer-audio")
+    var negotiatedAudio: PlayerEvent.AudioFormatChanged? = null
+        private set
 
-        try {
-            println("file      $path")
-            videoStream?.let {
-                val fps = it.frameRate?.let { r -> ((r * 1000).toInt() / 1000.0).toString() } ?: "?"
-                println("video     ${it.codec}, ${it.videoSize?.width}x${it.videoSize?.height}, $fps fps")
-            }
-            audioStream?.let { println("audio     ${it.codec}, ${it.sampleRate} Hz, ${it.channels} channel(s)") }
-            println("duration  ${source.duration?.let { format(it.asDuration) } ?: "unknown"}")
+    var warnings: Int = 0
+        private set
 
-            if (audioStream != null) {
-                val decoderFormat = source.audioDecoderFactories().first().create(audioStream)!!
-                    .let { probe -> probe.outputFormat.also { probe.close() } }
-                val negotiated = audio.open(decoderFormat)
-                println(
-                    "device    ${negotiated.sampleRate} Hz, ${negotiated.channels} channel(s), " +
-                        "latency ${audio.latencyQuality}",
-                )
+    private var job: Job? = null
 
-                // The conversion stage is keyed on what the decoder produces against what the device
-                // accepted. The same channel count at the same rate makes every stage a copy; anything
-                // else is a downmix, a rate conversion, or both, and a 5.1 file on a stereo device is
-                // the case that used to reach the ring as garbage.
-                val converts = decoderFormat.channels != negotiated.channels ||
-                    decoderFormat.sampleRate != negotiated.sampleRate
-                println(
-                    if (converts) {
-                        "pipeline  ${decoderFormat.channels} channel(s) at ${decoderFormat.sampleRate} Hz " +
-                            "into ${negotiated.channels} at ${negotiated.sampleRate} Hz"
-                    } else {
-                        "pipeline  pass through, the device took what the decoder produces"
-                    },
-                )
-            }
-            println()
+    /** Prints a degradation once, from whichever half of the pipeline noticed it, and counts it. */
+    fun warn(message: String) {
+        warnings++
+        println("warning: $message")
+    }
 
-            source.selectStreams(setOfNotNull(videoStream?.index, audioStream?.index))
-
-            // Bounded, so the demuxer cannot read the whole file into memory, and separate per stream,
-            // so a full video queue never stops audio from being read. That is the interleaving
-            // deadlock every player hits once.
-            val videoPackets = Channel<PlayerPacket>(capacity = 64)
-            val audioPackets = Channel<PlayerPacket>(capacity = 64)
-
-            val demux = launch(demuxContext) {
-                try {
-                    while (true) {
-                        val packet = source.readPacket() ?: break
-                        when (packet.streamIndex) {
-                            videoStream?.index -> videoPackets.send(packet)
-                            audioStream?.index -> audioPackets.send(packet)
-                            else -> packet.close()
-                        }
-                    }
-                } finally {
-                    videoPackets.close()
-                    audioPackets.close()
+    fun start(player: KitePlayer) {
+        if (job != null) return
+        val scope = CoroutineScope(Dispatchers.Default)
+        job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            player.events.collect { event ->
+                when (event) {
+                    is PlayerEvent.AudioFormatChanged -> negotiatedAudio = event
+                    is PlayerEvent.Warning -> warn(event.warning.message)
+                    // A failure is deliberately not printed from here. It is retained on the snapshot,
+                    // and whoever made the call that failed reports it once, with the context of what it
+                    // was doing. Printing it twice is how a one sentence error becomes three.
+                    else -> Unit
                 }
             }
-
-            var decodedVideo = 0L
-            val videoDecode = if (videoStream != null && video != null) {
-                launch(videoContext) {
-                    val decoder = source.videoDecoderFactories().first()
-                        .create(videoStream, HwdecPolicy.Auto)!!
-                    try {
-                        for (packet in videoPackets) {
-                            // False means the decoder is full and the packet was NOT consumed, so it is
-                            // offered again after draining rather than discarded. A decoder that accepts
-                            // nothing and produces nothing has no legal state to be in, and leaving the
-                            // loop here would close a packet it never took.
-                            while (!decoder.send(packet)) {
-                                val frame = decoder.receive() ?: error(
-                                    "decoder refused a packet and produced nothing; " +
-                                        "this violates the codec contract",
-                                )
-                                decodedVideo++
-                                // A refused frame means the queue is closed and playback is over. The
-                                // packet is still this loop's to release, so it is released before leaving.
-                                if (!video.submit(frame)) {
-                                    packet.close()
-                                    return@launch
-                                }
-                            }
-                            packet.close()
-                            while (true) {
-                                val frame = decoder.receive() ?: break
-                                decodedVideo++
-                                if (!video.submit(frame)) return@launch
-                            }
-                        }
-                        decoder.send(null)
-                        while (true) {
-                            val frame = decoder.receive() ?: break
-                            decodedVideo++
-                            if (!video.submit(frame)) return@launch
-                        }
-                    } finally {
-                        decoder.close()
-                    }
-                }
-            } else {
-                null
-            }
-
-            var decodedAudio = 0L
-            val audioDecode = if (audioStream != null) {
-                launch(audioContext) {
-                    val decoder = source.audioDecoderFactories().first().create(audioStream)!!
-
-                    // Every buffer goes through the audio path's conversion stage: the downmix, the
-                    // rate conversion, then volume. The format comes from the buffer rather than from
-                    // the decoder, so a stream that changes format mid-file is followed on the buffer
-                    // that changed rather than one buffer later.
-                    suspend fun hand(buffer: AudioBuffer) {
-                        audio.submitDecoded(
-                            pts = buffer.pts,
-                            interleaved = buffer.interleavedFloat(),
-                            frames = buffer.frameCount,
-                            sourceFormat = buffer.format,
-                        )
-                        buffer.close()
-                        decodedAudio++
-                    }
-
-                    try {
-                        for (packet in audioPackets) {
-                            // The same rule as the video loop: a refused packet is offered again after
-                            // draining, and a decoder that neither takes it nor gives anything back has
-                            // broken its own contract.
-                            while (!decoder.send(packet)) {
-                                hand(
-                                    decoder.receive() ?: error(
-                                        "decoder refused a packet and produced nothing; " +
-                                            "this violates the codec contract",
-                                    ),
-                                )
-                            }
-                            packet.close()
-                            while (true) {
-                                hand(decoder.receive() ?: break)
-                            }
-                        }
-                        decoder.send(null)
-                        while (true) {
-                            hand(decoder.receive() ?: break)
-                        }
-                    } finally {
-                        decoder.close()
-                        // The decoder is done, so trailing silence is the end of the file and not an
-                        // underrun. Saying so here rather than after the buffer empties is the
-                        // difference between a clean report and a misleading one.
-                        audio.endOfStream()
-                    }
-                }
-            } else {
-                null
-            }
-
-            // Fill before starting. A device started with nothing to play underruns immediately and
-            // clicks, which is why the engine primes first too.
-            if (audioStream != null) {
-                while (audio.buffered < 150.milliseconds && audioDecode?.isActive == true) delay(5)
-                audio.play()
-            }
-
-            // The presentation loop: ask the master clock what time it is, and let VideoPlayback decide
-            // what to do with the next frame.
-            val present = if (video != null) {
-                launch(Dispatchers.Default) {
-                    while (isActive) {
-                        val wait = video.tick(audio.position())
-                        if (wait > Duration.ZERO) delay(wait)
-                    }
-                }
-            } else {
-                null
-            }
-
-            println("playing. press ctrl-c to stop.")
-            val startedAt = AppleHostClock.nanos()
-            var basePosition: Duration? = null
-
-            while (
-                demux.isActive || audioDecode?.isActive == true || videoDecode?.isActive == true ||
-                audio.buffered > Duration.ZERO || (video?.queuedFrames ?: 0) > 0
-            ) {
-                val position = audio.position() ?: video?.position()
-                val positionText = position?.let { format(it.asDuration) } ?: "  --:--.---"
-                val total = source.duration?.let { format(it.asDuration) } ?: "  --:--.---"
-
-                // Clock drift against real time. A constant offset at startup is priming latency and
-                // harmless. A figure that grows means the clock is wrong, and over a long file that is
-                // the number to watch.
-                var clockDrift = "     --"
-                if (position != null) {
-                    val elapsed = (AppleHostClock.nanos() - startedAt).nanoseconds
-                    if (basePosition == null && elapsed > 500.milliseconds) {
-                        basePosition = position.asDuration - elapsed
-                    }
-                    basePosition?.let { base ->
-                        val d = (position.asDuration - base) - elapsed
-                        clockDrift = "${d.inWholeMilliseconds.toString().padStart(5)} ms"
-                    }
-                }
-
-                val videoPart = video?.let {
-                    "a/v ${it.drift.inWholeMilliseconds.toString().padStart(4)} ms   " +
-                        "submitted ${it.submittedFrames}   dropped ${it.droppedFrames}   " +
-                        "repeated ${it.repeatedFrames}   "
-                } ?: ""
-
-                print(
-                    "\r  $positionText / $total   clock $clockDrift   $videoPart" +
-                        "audio ${audio.buffered.inWholeMilliseconds.toString().padStart(4)} ms   " +
-                        "underruns ${audio.underruns}   ",
-                )
-                delay(200)
-            }
-
-            present?.cancel()
-            audio.drain()
-
-            println()
-            println()
-            println("done.")
-            println("  decoded          $decodedVideo video frames, $decodedAudio audio buffers")
-            video?.let {
-                println("  submitted        ${it.submittedFrames} frames")
-                println("  dropped late     ${it.droppedFrames}")
-                println("  repeated         ${it.repeatedFrames}")
-                println("  final a/v drift  ${it.drift.inWholeMilliseconds} ms")
-            }
-            (videoRenderer as? CountingRenderer)?.let {
-                println("  renderer got     ${it.count} frames")
-                println("  worst schedule   ${it.worstErrorMillis} ms from the requested time")
-            }
-            println("  audio underruns  ${audio.underruns}")
-        } finally {
-            audio.close()
-            video?.close()
-            source.close()
-            demuxContext.close()
-            videoContext.close()
-            audioContext.close()
         }
     }
 }
+
+/** How often the player samples its statistics for this run, and how long the summary waits for them. */
+private val STATS_INTERVAL: Duration = 200.milliseconds
+
+/** How far into the file `--seek` waits before it asks, so the seek comes out of running playback. */
+private val SEEK_AFTER: Duration = 2.seconds
 
 private fun format(duration: Duration): String {
     val totalMillis = duration.inWholeMilliseconds

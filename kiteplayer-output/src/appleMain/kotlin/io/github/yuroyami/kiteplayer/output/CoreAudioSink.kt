@@ -486,8 +486,10 @@ public class CoreAudioSink(
 /**
  * Creates [CoreAudioSink] instances.
  *
- * Hand it to whatever assembles the pipeline, with the same clock the engine reads. Today that is
- * the sample. The clock has to be [AppleHostClock]; see the check in [CoreAudioSink].
+ * Reached through [AppleOutputBackend], which is what goes into `PlayerConfig.backends.output`: that
+ * object pairs this factory with the clock the engine reads, so the two cannot disagree. Constructing
+ * one directly is for a test or a custom assembly, and the clock still has to be [AppleHostClock]; see
+ * the check in [CoreAudioSink].
  */
 public class CoreAudioSinkFactory(
     private val clock: MonotonicClock = AppleHostClock,

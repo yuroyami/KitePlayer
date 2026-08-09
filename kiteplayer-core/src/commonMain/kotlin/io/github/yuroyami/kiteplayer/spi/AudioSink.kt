@@ -69,7 +69,13 @@ public interface AudioSink : AutoCloseable {
 
     public val latencyQuality: LatencyQuality
 
-    /** Device loss, underrun, format change. The sink reports; the engine decides what to do. */
+    /**
+     * Device loss, underrun, format change. The sink reports; the engine decides what to do.
+     *
+     * The engine collects nothing from this feed yet, so a sink is free to publish honestly and no
+     * decision follows. Device-change and device-loss recovery is what will read it.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public val events: Flow<AudioSinkEvent>
 }
 

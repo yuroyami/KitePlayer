@@ -9,7 +9,7 @@ import io.github.yuroyami.kiteplayer.Pts
  * every case in it is covered by a table-driven test rather than by watching a video and squinting.
  *
  * The thresholds are the ones ffplay and mpv converged on over a decade of bug reports against real
- * files. They are not arbitrary and they are not tuned here. See KITEPLAYER.md section 17.
+ * files. They are not arbitrary and they are not tuned here.
  */
 internal object SyncLaw {
 

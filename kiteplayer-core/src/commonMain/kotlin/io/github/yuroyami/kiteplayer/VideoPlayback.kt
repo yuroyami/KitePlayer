@@ -33,7 +33,7 @@ import kotlin.time.Duration.Companion.microseconds
 public class VideoPlayback(
     private val renderer: VideoRenderer?,
     private val clock: MonotonicClock = MonotonicClock.System,
-    /** The container's declared frame rate, used to snap measured durations. See section 10.4. */
+    /** The container's declared frame rate, used to snap measured durations. */
     containerFrameRate: Double? = null,
     /** True for containers whose timestamps may jump, MPEG-TS above all. */
     timestampsMayJump: Boolean = false,
@@ -77,7 +77,7 @@ public class VideoPlayback(
      * Video clock minus master clock at the last presented frame. Positive means video is ahead.
      *
      * This is the number that says whether synchronisation is working. Over a long file it should stay
-     * inside the tolerances in section 10.5 and show no trend.
+     * inside the designed tolerances and show no trend.
      */
     public val drift: Duration get() = lastDriftUs.microseconds
 

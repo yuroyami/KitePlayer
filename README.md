@@ -7,12 +7,8 @@ the hardware decoder are per platform.
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-**[The build plan](KITEPLAYER.md)** · the full design, and **[Progress](PROGRESS.md)** · what is built
-today.
-
 > **KitePlayer is early and cannot be consumed as a dependency.** Nothing is published, and macOS arm64
-> is the only target with backends. [Progress](PROGRESS.md) is the honest list, and it is the first thing
-> to read.
+> is the only target with backends. The limits below are the honest list.
 
 ## What works today
 
@@ -36,7 +32,6 @@ schedules each video frame against the audio clock. On a 10 second 1080p30 clip:
 What is missing is a window. Frames are scheduled and handed over at the right time, which the sample
 measures, but the renderer supplied counts frames instead of drawing them. A Metal renderer is the next
 platform piece. There is also no hardware decode and no target other than macOS arm64 yet.
-[Progress](PROGRESS.md) says why for each.
 
 ## Why the position is exact
 

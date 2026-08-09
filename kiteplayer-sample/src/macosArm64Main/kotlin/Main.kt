@@ -179,7 +179,7 @@ private suspend fun runSession(
 
             // Bounded, so the demuxer cannot read the whole file into memory, and separate per stream,
             // so a full video queue never stops audio from being read. That is the interleaving
-            // deadlock every player hits once. See KITEPLAYER.md section 11.4.
+            // deadlock every player hits once.
             val videoPackets = Channel<PlayerPacket>(capacity = 64)
             val audioPackets = Channel<PlayerPacket>(capacity = 64)
 

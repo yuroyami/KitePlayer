@@ -25,7 +25,7 @@ import kotlinx.coroutines.channels.Channel
  */
 internal class PacketQueue(
     val streamIndex: Int,
-    /** Marks the stream well buffered. Does not stall the producer. See KITEPLAYER.md section 11.4. */
+    /** Marks the stream well buffered. Does not stall the producer. */
     private val softLimitUs: Long,
 ) {
     private val lock = SynchronizedObject()
@@ -62,7 +62,7 @@ internal class PacketQueue(
      * Backpressure is deliberately not here. A per-stream limit that stalls the producer deadlocks
      * on badly interleaved files: the video queue fills, the demuxer stops, the audio decoder
      * starves, the audio clock stops, and the video is never consumed. The stall decision belongs to
-     * the core, which can see every stream at once. See KITEPLAYER.md section 11.4.
+     * the core, which can see every stream at once.
      */
     fun offer(packet: PlayerPacket, generation: Generation) {
         val accepted = synchronized(lock) {
@@ -174,7 +174,7 @@ internal class PacketQueue(
     /**
      * Drops packets from the newest end.
      *
-     * Used only for the pathological interleaving case of KITEPLAYER.md section 11.4, where one
+     * Used only for the pathological interleaving case, where one
      * stream must be truncated so another can keep playing. A gap in one stream beats a frozen
      * player.
      *

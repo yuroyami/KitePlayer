@@ -14,7 +14,7 @@ import kotlinx.cinterop.get
 /**
  * Turns a decoded frame into RGBA, on the CPU.
  *
- * This is the tier 0 renderer path from KITEPLAYER.md section 13.2, and it ships rather than being a
+ * This is the tier 0 renderer path, and it ships rather than being a
  * placeholder. It is the reference every GPU renderer is checked against, and it is the fallback when
  * a GPU path fails. At 1080p it costs a few milliseconds of CPU per frame, which is too much for
  * comfortable playback and fine for a screenshot, a thumbnail strip or a correctness test.

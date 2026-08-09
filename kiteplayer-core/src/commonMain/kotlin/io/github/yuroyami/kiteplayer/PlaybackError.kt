@@ -107,7 +107,7 @@ public sealed class PlaybackWarning {
 
     /**
      * The file is interleaved so badly that one stream had to be truncated to keep the other
-     * playing. See KITEPLAYER.md section 11.4.
+     * playing.
      */
     public data class PathologicalInterleaving(val starvedTrack: TrackId, val droppedPackets: Int) : PlaybackWarning() {
         override val message: String

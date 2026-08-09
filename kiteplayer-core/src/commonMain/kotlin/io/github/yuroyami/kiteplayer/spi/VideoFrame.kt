@@ -24,7 +24,7 @@ import io.github.yuroyami.kiteplayer.VideoSize
 public interface VideoFrame : AutoCloseable {
     public val pts: Pts
 
-    /** The decoder's own duration for this frame, when it has one. See section 10.4. */
+    /** The decoder's own duration for this frame, when it has one. */
     public val duration: Pts?
 
     public val size: VideoSize

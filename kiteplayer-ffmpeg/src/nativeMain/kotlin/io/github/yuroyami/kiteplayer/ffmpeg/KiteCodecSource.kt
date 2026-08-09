@@ -47,8 +47,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 public class KiteCodecSourceFactory : MediaSourceFactory {
     override suspend fun open(media: MediaItem): PlayerMediaSource {
         require(media.io == null) {
-            "Custom I/O is not wired yet. KiteCodec has no AVIOContext path, specified in " +
-                "KITEPLAYER.md section 16.7."
+            "Custom I/O is not wired yet. KiteCodec has no AVIOContext path."
         }
         return KiteCodecSource(MediaSource.open(media.uri))
     }
@@ -173,7 +172,7 @@ private class KiteCodecPacket(val native: Packet) : PlayerPacket {
     override fun close() = native.close()
 }
 
-/** Creates video decoders. Hardware decoding is not wired yet: see KITEPLAYER.md section 16.6. */
+/** Creates video decoders. Hardware decoding is not wired yet. */
 public class KiteCodecVideoDecoderFactory internal constructor(
     private val source: KiteCodecSource,
 ) : VideoDecoderFactory {

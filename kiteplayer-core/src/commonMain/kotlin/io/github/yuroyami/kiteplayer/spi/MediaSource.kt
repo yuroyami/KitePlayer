@@ -56,8 +56,8 @@ public interface PlayerMediaSource : AutoCloseable {
      *
      * This call moves the cursor and nothing else. It does not flush queues and it does not flush
      * decoders, because only the engine knows the generation those flushes belong to. A source that
-     * flushes on the caller's behalf makes the ordering rules of KITEPLAYER.md section 12.4
-     * impossible to honour.
+     * flushes on the caller's behalf makes the engine's seek
+     * ordering rules impossible to honour.
      *
      * @return where the cursor actually landed, when the source can tell. Null means unknown, and
      *         the engine then discovers it from the first decoded frame.
@@ -78,7 +78,7 @@ public data class PlayerStreamInfo(
     val startTime: Pts? = null,
     // Video.
     val videoSize: VideoSize? = null,
-    /** The container's declared frame rate. Used to snap measured durations. See section 10.4. */
+    /** The container's declared frame rate. Used to snap measured durations. */
     val frameRate: Double? = null,
     val colorSpace: ColorSpaceInfo? = null,
     /** A single still image, for example album art. Never the sync master. */

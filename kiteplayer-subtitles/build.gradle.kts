@@ -13,7 +13,7 @@ plugins {
  *
  * It does not rasterise glyphs. Font matching, complex script shaping and bidirectional text are
  * decades of work that every platform already ships, so this module measures and positions text
- * through the TextRasterizer interface and lets the platform draw it. See KITEPLAYER.md section 14.
+ * through the TextRasterizer interface and lets the platform draw it.
  */
 kotlin {
     explicitApi()

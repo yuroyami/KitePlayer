@@ -69,7 +69,7 @@ public value class Pts(public val micros: Long) : Comparable<Pts> {
  *
  * This single integer replaces a flush handshake across four threads. It is the reason seeking in
  * this engine is a state machine that can be reasoned about instead of a race that is tested by
- * hope. See KITEPLAYER.md section 7.3.
+ * hope.
  *
  * Generation 0 is the initial one and is valid. "Not started" is expressed as a null
  * `Generation?`, never as a reserved value.

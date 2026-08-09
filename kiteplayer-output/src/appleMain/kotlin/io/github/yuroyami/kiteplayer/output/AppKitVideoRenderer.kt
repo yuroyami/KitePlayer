@@ -49,8 +49,8 @@ import platform.darwin.dispatch_get_main_queue
  * the process saturated the audio feeder cannot keep the device fed either. Measured that way, a 1080p
  * clip produced 700 audio underruns and showed 11 frames out of 300.
  *
- * So [present] hands the frame to a worker and returns at once, which is what the renderer contract in
- * KITEPLAYER.md section 9.5 allows for exactly this reason. Only the newest frame is kept: when the
+ * So [present] hands the frame to a worker and returns at once, which is what the renderer
+ * contract allows for exactly this reason. Only the newest frame is kept: when the
  * renderer cannot keep up, a new frame replaces the one still waiting rather than a queue building. That
  * is the right trade for a slow renderer. The engine's schedule stays intact and the picture updates as
  * often as the renderer manages, instead of the whole player being dragged down to its speed.

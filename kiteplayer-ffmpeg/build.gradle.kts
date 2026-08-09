@@ -16,7 +16,7 @@ plugins {
  * the web, a platform decoder, a test fake) take its place without the engine noticing.
  *
  * Targets follow KiteCodec's reach, which today is Kotlin/Native only. Android and JVM desktop need
- * the JNI bridge described in KITEPLAYER.md section 15, and that work belongs in KiteCodec.
+ * a JNI bridge over the same C helper layer, and that work belongs in KiteCodec.
  */
 // The media fixtures live at the repo root and a native test's working directory is not something
 // to rely on, so the location is passed in explicitly.
@@ -45,7 +45,7 @@ kitecodec {
     ffmpeg {
         // The development machine has FFmpeg 8.0 from Homebrew, which is the route KiteCodec's own
         // CI uses for a consumer project. Prebuilt is the plugin's default and cannot work yet: the
-        // release assets it downloads do not exist. See KITEPLAYER.md section 5.1.
+        // release assets it downloads do not exist.
         source.set(FFmpegSource.System)
         license.set(FFmpegLicense.LGPL)
     }

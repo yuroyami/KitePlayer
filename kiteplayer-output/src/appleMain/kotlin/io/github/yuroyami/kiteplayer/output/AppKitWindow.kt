@@ -22,7 +22,7 @@ import platform.Foundation.NSMakeRect
  * blocks there, and playback happens on other threads and hands frames over through
  * [AppKitVideoRenderer].
  *
- * This is the tier 0 presentation path from KITEPLAYER.md section 13.2, and it ships rather than being
+ * This is the tier 0 presentation path, and it ships rather than being
  * scaffolding: it is the fallback when a GPU path fails, and the reference a GPU renderer is compared
  * against. It is also slow. Converting a frame on the CPU and building an image from it costs several
  * milliseconds at 1080p, which is fine for a small clip and not enough for 4K. A Metal renderer that

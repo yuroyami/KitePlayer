@@ -51,7 +51,7 @@ public sealed class HwdecPolicy {
  * How much to read ahead, and when to declare that playback can start.
  *
  * The defaults come from the values ffplay and mpv converged on after a decade of bug reports.
- * See KITEPLAYER.md section 17 before changing any of them.
+ * Do not retune them without evidence from real content.
  */
 public data class BufferPolicy(
     /** A stream is ready when it has this much buffered, or this many packets, or has ended. */

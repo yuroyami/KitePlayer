@@ -2580,6 +2580,252 @@ is no other.
   therefore replaces the promise with a deterministic instruction audit as its primary
   instrument and three graded supporting ones, and says so where it reports.
 
+- 2026-08-09, B1.1 and B1.2 done and gated, two KiteCodec commits plus this entry. Both
+  sub-phases are pure addition and neither changes any behaviour, which is the claim the gate
+  had to prove rather than assert.
+
+  **B1.1, baseline and ratchets.** KiteCodec's first committed ABI dump exists:
+  `kitecodec-core/api/kitecodec-core.klib.api`, 988 lines, header line
+  `// Targets: [macosArm64]`. `apiCheck` is in the gate and in the macOS CI job. The coupling
+  ratchet landed as `native/kitecodec-c/coupling-baseline.txt` plus
+  `buildSrc/src/main/kotlin/CheckCinteropCouplingTask.kt` and its two-case unit test, wired
+  into the root build as `checkCinteropCoupling` and into CI beside `apiCheck`. All four
+  counts were re-measured at `cdb8ad2` with a clean tree and all four reproduce section 15.1
+  exactly: cinterop import lines 253, `ffkmp_` call sites 273, direct libav call sites 21,
+  FFmpeg struct types named in Kotlin 11. The task excludes any directory named `build` or
+  `.claude`, which is load bearing in principle rather than today: the same import grep over
+  the whole repository returns 792 instead of 253, because `.claude/worktrees/` holds three
+  scratch checkouts of these same files. Configuration cache proved rather than claimed:
+  first run stored an entry, the second reused it, and `--warning-mode all` reported no
+  problems. The em dash scan is widened to `*.c`, `*.h`, `*.sh`, `*.yml`, `*.py` and `*.txt`
+  for both repositories and prints nothing. Closes B1-05 and B1-07; lands B1-06's artifacts.
+
+  **B1.2, real C sources and a host test harness, referenced by nothing.** The 949 line def
+  body is now a committed generator plus two generated files under
+  `../KiteCodec/native/kitecodec-c/`, with three build variants, a five suite test harness, an
+  allocation interposer and a README. Measured shape, all of it reproducing section 15.2 step
+  1 exactly: body def lines 13 to 961, 20 include lines moved to the header, 176 declarations
+  by paren balancing, 9 multi-line signatures at def lines 251, 262, 470, 489, 531, 616, 644,
+  684 and 816, 4 internal trailing-underscore helpers keeping `static` and absent from the
+  header, 11 banner sections. Locality of the four was verified before it was relied on:
+  `ffkmp_graph_finish_` (def 470) is used at 524 and 604 inside section 466 to 782,
+  `ffkmp_graph_finish_multi_` (616) at 678 and 757 in the same section,
+  `ffkmp_codec_pix_fmts_` (289) at 301 and 306 inside 245 to 345, and
+  `ffkmp_ch_layout_mask_` (908) at 913 and 916 inside 783 to 961. So B1.4's split keeps every
+  call intra-unit. `verify-lift.sh HEAD` prints both digests and proves byte equality:
+  header `ee4e8ce230f1dd95588d08e1333355130b928c71ccf3f7279dc8ffded7923c3f`, source
+  `08413845f7f97b46820c912ea4976504b5afff7cfae01d82b63239104d1ec7de`. Closes B1-10, B1-15 and
+  B1-09; lands B1-01's, B1-14's and B1-23's artifacts.
+
+  **Numbers the gate produced, every one rerun for real.** B1.2's C gate, three clean builds
+  from an empty `build/`: `plain`, `asan` and `tsan` each compiled 5 binaries with zero
+  warnings under `-std=c11 -Wall -Wextra -Werror -Werror=vla` against libavcodec 62.11.100
+  and Apple clang 17.0.0, and each ran 240 cases with 0 failures and 0 missing suites:
+  `test_ownership` 43, `test_buffers` 32, `test_rescale` 116, `test_strerror_thread` 24,
+  `test_convert` 25. 720 case runs in total. Sanitizer diagnostic lines, counted by grep over
+  the run logs: 0 in every variant, so TSan found no data race over 4 workers doing 256
+  rendezvous-synchronised rounds and UBSan found nothing. Under `asan` and `tsan`
+  `test_ownership` reports all 43 cases and `test_convert` 11 of 25 as carrying a property
+  the variant cannot observe, which is the interposer being dead there and is documented, not
+  a gap. B1.1's gate: `apiDump --rerun-tasks` then `git diff --exit-code kitecodec-core/api`
+  exits 0 against a 988 line dump, `apiCheck`, `checkCinteropCoupling` (253/273/21/11 against
+  baselines 253/273/21/11) and `:buildSrc:test` (2 tests, 0 failures) all pass under
+  `--rerun-tasks`. Section 9 in full: KiteCodec `macosArm64Test` 72 tests 0 failures,
+  `publishToMavenLocal` successful; KitePlayer 414 tests 0 failures (357 core, 20 output, 29
+  ffmpeg, 8 subtitles) and the js, wasmJs and androidMain compiles green; the sample linked
+  and ran `sync1080p30.mp4` 300 submitted 0 dropped 0 underruns, `truevfr720.mp4` 240 and 0,
+  `hevc4k10.mp4` 180 submitted on the video master, `tsoffset1400.ts` 300 and 0 with 0
+  repeated, `surround51.mp4` audio only with 0 underruns, `rotated90ccw.mp4` 25 and 0, and
+  `/nonexistent.mp4` printed two short lines with no stack trace and exited 1. The widened em
+  dash scan over both repositories printed nothing.
+
+  **The compile proof, stated at its real strength.** Because the generated source includes
+  the generated header, compiling it under `-Werror` is the mechanism that proves declarations
+  match definitions. The header declares 172, not 176: the other 4 are the internal `static`
+  helpers the plan's own rule keeps out of the header, and for those the compile proves only
+  internal consistency and that their call sites type-check. Measured corroboration:
+  `grep -c ');$'` on the header is 172 and `nm` finds exactly 172 external `T` symbols named
+  `ffkmp_`, none ending in an underscore, with `ffkmp_graph_finish_` and
+  `ffkmp_graph_finish_multi_` present as locals. The proof was itself proved load bearing:
+  changing one parameter type in a scratch copy of the header gave
+  `error: conflicting types for 'ffkmp_frame_copy_to_buffer'` and exit 1.
+
+  **B1.2's central claim, that nothing observable changed, proved mechanically.** Three
+  independent ways. First, `git diff HEAD --exit-code -- kitecodec-core/src
+  kitecodec-core/build.gradle.kts` exits 0, so the def and the module build file are
+  byte-unchanged and the klib cannot have moved for that reason. Second, a grep for `native/`
+  and `kitecodec-c` across every `.kts`, `.kt`, `.properties` and `.def` outside the
+  gitignored worktrees finds exactly two references, both B1.1's own `coupling-baseline.txt`,
+  and none at all to the C sources, scripts, tools or tests. Third, and this is the direct
+  differential rather than an argument: the whole B1.2 tree was moved out of the repository,
+  `:kitecodec-core:macosArm64MainKlibrary` was rebuilt with `--rerun-tasks`, and the unpacked
+  klib and the unpacked `ffmpeg` cinterop klib were compared file by file by sha256 against
+  the same build with the tree present. 40 entries in the module klib and 28 in the cinterop
+  klib, all identical in both states. The tree was then restored and `verify-lift.sh` re-run
+  to confirm the restore was byte-exact. That is how the klib metadata was compared; it is
+  stronger than a test count, which is why it is the sentence the log carries.
+
+  Deviations, each with the evidence that forced it.
+  1. `apiDump` and `apiCheck` need `-Pkitecodec.hostTargetsOnly=true`, and the committed dump
+     covers `macosArm64` alone. `./gradlew :kitecodec-core:apiDump` as section 15.2 writes it
+     fails: BUILD FAILED in 17 s with 8 task failures including `compileKotlinLinuxX64`,
+     `compileKotlinLinuxArm64` and `compileKotlinIosArm64`. Cause, from the same log: 10 of
+     the 11 registered targets have no FFmpeg tree on this host, the build prints `SKIPPING
+     FFmpeg cinterop/link setup for target ...`, the `ffmpeg` cinterop is never created, and
+     compilation dies with `Unresolved reference 'ffmpeg'`. Only `macosArm64` resolves,
+     through Homebrew. Consequences, recorded rather than glossed: every later gate must pass
+     the same flag, the CI step passes it and says why in a comment, and under section 2 "the
+     public Kotlin API did not move" is a level 2 claim for macOS arm64 and no claim at all
+     for the other ten targets. Widening the dump needs an FFmpeg tree per target, which is
+     B1-12 and Deferral 7 territory, not B1.1's.
+  2. `buildSrc/build.gradle.kts` had to be edited although B1.1's file list does not name it.
+     Before the change buildSrc was `plugins { kotlin-dsl }` plus `repositories`, with no test
+     source set, no test dependency and no framework, so `CheckCinteropCouplingTaskTest` could
+     not compile and the gate's own `:buildSrc:test` had nothing to run. Exactly three
+     additions: `testImplementation(kotlin("test"))`, `useJUnitPlatform()`, and a
+     `kitecodec.repo.root` system property so the test can find the repository from buildSrc's
+     working directory. No existing buildSrc class changed, and the gate command needed no
+     rewording.
+  3. The widened scan found 37 pre-existing em dashes in files outside B1.1's list, and
+     contract item 4 left no option but to fix them. Section 9's scan only ever covered
+     `*.kt`, `*.kts`, `*.md` and `*.def`, so `.sh` and `.yml` had never been looked at. First
+     run: 37 lines in `scripts/e2e.sh` (3), `.github/workflows/publish.yml` (6),
+     `.github/workflows/ci.yml` (13), `.github/scripts/package-ffmpeg.sh` (10) and
+     `.github/workflows/release-binaries.yml` (5), all in KiteCodec and none in KitePlayer.
+     Every fix is a comment, an `::error::` diagnostic string or one heredoc line of
+     BUILD-INFO.txt; no logic, flag or command moved. Verified after: `bash -n` clean on both
+     scripts and all three workflows parse as YAML.
+  4. `git diff --exit-code kitecodec-core/api` proves nothing while the dump is untracked,
+     because `git diff` ignores untracked files and would exit 0 whatever the build produced.
+     The gate line was therefore run with the dump staged, which makes it a real byte
+     comparison of a freshly regenerated dump against the recorded one. From the B1.1 commit
+     onward it works exactly as written.
+  5. The ownership helper set measures 43, or 44 on the wider rule, not the 29 of section 15.2.
+     The criterion the plan itself states, a helper whose body reaches a libav call that
+     allocates, frees or moves a reference, was applied mechanically to all 176 bodies twice by
+     two agents: 43 exported plus 2 internal on the narrower reading, 44 exported when
+     `ffkmp_codecctx_flush` is counted for `avcodec_flush_buffers`. The plan never enumerates
+     its 29. All 43 are covered by `test_ownership.c`, verified by script rather than by
+     reading: the set of exported ownership helpers minus the set of `ffkmp_` names appearing
+     in the suite is empty. An earlier hand written allocator list produced 22 and was wrong,
+     because it omitted `avformat_open_input`, `avio_open`, `av_read_frame`, `av_opt_set`,
+     `av_dict_set` and the reference family; that 22 is superseded and recorded only so nobody
+     reads it as a finding.
+  6. The gate had to produce Deferral 2's documented ownership contracts itself, because no
+     agent had. The header carried one contract, `ffkmp_strerror`, and the generator's own
+     comment said the ownership contracts would land "in the same change that lands the
+     suite", which is this commit. So 43 contracts were added to the `CONTRACTS` table in
+     `tools/extract_from_def.py`, one per ownership helper, each written from the measured
+     body rather than from habit, and the header regenerated: 269 lines to 475, source digest
+     unchanged at `08413845...`. The awkward ones say what makes them awkward: the AVStream
+     that the parent owns and has no per stream free, the `pb` that has no separate close
+     because `ffkmp_fmt_free_output` closes exactly what `ffkmp_fmt_io_open` opened, the
+     `SwsContext` allocated and freed inside every path of `ffkmp_frame_convert_pixfmt`, the
+     `AV_BUFFERSRC_FLAG_KEEP_REF` that makes `ffkmp_graph_send` leave the caller's frame
+     alive, and the two multi builders whose `out_srcs` is not cleared on failure and whose
+     filled entries then point into the freed graph. `ffkmp_codecctx_flush` deliberately has
+     no contract and no case, so nothing is documented that is not also asserted. All three
+     variants were rebuilt and rerun after the regeneration, with the same 240 cases green in
+     each. The README's stale "the five suites currently hold one placeholder case each" was
+     replaced by the measured suite table in the same pass.
+  7. B1-10's own numbers are off in two places and the register keeps them. It says "nine
+     fixed stack buffers" while its line list names twelve declaration sites: measured, 10
+     declaration lines hold 12 buffers, because two lines declare `char args[512], name[16];`
+     together, and nine is what you get by counting the four `args[512]` sites once. All 12
+     are covered. It says "18 snprintf sites" while `grep -c "snprintf("` on the generated
+     source returns 17. Neither is load bearing for a suite organised by buffer, but both
+     appear in the register and so are recorded.
+  8. Ten of the twelve buffers cannot be driven to their limit through the public signature,
+     so ten of the rows are a bound plus a widest-input call rather than an overflow attempt.
+     Measured widest reachable renders against limits: `buf[256]` 60 bytes of 255 across 31
+     error codes and 33 for the numeric fallback at `INT_MIN`; `args[512]` 162 of 511 with
+     every int at `INT_MIN` or `INT_MAX` and the longest pixel format name;
+     `layout_str[128]` and `lay_str[128]` 11 of 127, the string `64 channels`; `name[16]` 13
+     of 15. Only the two `full_desc[2048]` sites, which carry the public `description`
+     parameter and are D27's, get true limit and limit-plus-one rows, including the D27 case
+     itself where a 2045 byte description makes the first pin append compute 2054 into a 2048
+     byte array. Stated so nobody reads 32 green cases as 12 overflow attempts.
+  9. The rescale helper set measures 15, not the ten of section 15.2 and 15.3: 4 macro
+     crossings, 4 with 128 bit intermediates at generated source lines 28, 192, 337 and 426,
+     6 returning an AVRational through an int out-param pair, and 1 using `AV_CEIL_RSHIFT`.
+     All 15 are covered. A trap for whoever re-derives that set is recorded in the suite: the
+     obvious grep spelling `int *n, int *d` misses `ffkmp_codecpar_sample_aspect_ratio`,
+     which spells its parameters `int *num, int *den`, and returns 5 out-param helpers
+     instead of 6.
+  10. The allocation interposer is live only in the `plain` variant, which section 15.3 does
+      not state. `kc_alloc_active()` returns 1 under `plain` and 0 under `asan` and `tsan`,
+      because each sanitizer runtime replaces the allocator before dyld reaches the
+      `__DATA,__interpose` section. `KC_ALLOC_BALANCED` and `KC_ALLOC_LIVE` therefore degrade
+      to `kc_partial()` rather than asserting, so every allocation claim in this phase is
+      earned in the plain run and the sanitizer runs contribute their own findings. This is
+      consistent with 15.3 assigning pairing evidence to the interposer and buffer evidence
+      to ASan, but the test author had to be told.
+  11. The commit first line follows section 15.2 and not the orchestrator's instruction, which
+      differed by one word. 15.2 B1.1 specifies `Record KiteCodec's public ABI and its FFmpeg
+      coupling so both can only shrink`; the instruction said `Record KiteCodec public ABI`
+      and then the same words. The plan is the durable record a later reader will check
+      against, so the plan's wording was used. B1.2's first line is identical in both.
+  12. Two measured facts for later sub-phases, recorded now while they are cheap. The
+      archive's undefined symbols outside `libav*` and `libsw*` number six, not the five of
+      15.3's `symbol-audit.sh` allowlist: `___stack_chk_fail`, `___stack_chk_guard`,
+      `__tlv_bootstrap`, `_memcpy`, `_snprintf` and `_strstr`. And `tsoffset1400.ts` reported
+      `repeated 0` this gate where every gate since A2 recorded `repeated 1`, which is the run
+      to run variation the A5 entry already documents for that clip and not a change.
+
+  Findings that are not deviations, because they are properties of the code the tests found
+  and B1.2 was not chartered to change. None is asserted as correct anywhere.
+  1. `ffkmp_fmt_seek_micros` computes `av_rescale_q(micros, AV_TIME_BASE_Q,
+     ctx->streams[stream_index]->time_base)` with no bound on `stream_index` against
+     `ctx->nb_streams`. Measured in a child process: a context with one stream and
+     `stream_index=999` exits 139, SIGSEGV. The suite asserts only the NULL guard, measured
+     `AVERROR(EINVAL)` at -22, and records the hazard in a note rather than triggering
+     undefined behaviour or enshrining a crash as correct. This is D32's shape applied to C
+     and it is covered by no register item: B1-10 is buffers and B1.5 is string entry points.
+     It wants a register row of its own, in B1 or B2.
+  2. `ffkmp_frame_convert_pixfmt` aborts the process for a destination format outside the
+     enum: `AV_PIX_FMT_NONE` or any out-of-range int reaches `av_pix_fmt_desc_get` inside
+     libswscale, which asserts and exits 134. Real formats swscale cannot write, `pal8` and
+     `videotoolbox`, are refused cleanly with NULL. `test_convert.c` case 25 makes that call
+     in a forked and re-exec'd child and asserts only the honest property, that the helper
+     never returns a frame for a format that does not exist, so a future FFmpeg with
+     assertions compiled out does not fail the gate.
+  3. `ffkmp_graph_build_audio` and `ffkmp_graph_build_audio_multi` check only `if (rc < 0)` on
+     `av_channel_layout_describe` and never that `rc` is below `sizeof(layout_str)`, so a
+     description of 128 bytes or more would truncate silently and configure the filter from a
+     partial layout name. Unreachable today: over channel counts 1 to 64 the longest
+     description measures 11 bytes, and `av_channel_layout_default` produces only native or
+     unspecified layouts. `test_buffers.c` case 17 asserts `rc < 128` for every count from 1
+     to 64, so the day that stops holding the suite fails instead of the graph misbuilding.
+  4. Three contract asymmetries are now pinned by tests for whoever writes the Kotlin side.
+     The six AVRational out-param helpers have three different NULL behaviours: two leave the
+     caller's out parameters untouched, three write 0/1 and one writes 1/1. For the same
+     undeclared 0/0 input `ffkmp_frame_sample_aspect_ratio` answers 1/1 while
+     `ffkmp_codecpar_sample_aspect_ratio` answers 0/1. And `ffkmp_frame_plane_height` answers
+     for planes that do not exist, including index 8, which is past `AV_NUM_DATA_POINTERS`; it
+     touches no memory, so these are misleading answers rather than hazards, and the bound is
+     `ffkmp_frame_plane_count`.
+
+  Process notes. Every C test claim was made load bearing by mutation against copies of the
+  generated source in scratch space, never against the file in the repository: dropping
+  `sws_freeContext` from the success path of `ffkmp_frame_convert_pixfmt` fails the ownership
+  suite with 5 blocks live, removing one running-length check in the audio builder gives UBSan
+  `index 2054 out of bounds for type 'char[2048]'`, weakening any of the four copy bounds by
+  one byte gives an ASan `heap-buffer-overflow`, and dropping `AV_BUFFERSRC_FLAG_KEEP_REF`
+  fails the graph send case. Two of those forced the tests themselves to be strengthened,
+  because the first version allocated the full buffer and only passed a smaller count, which
+  made ASan a witness rather than a detector. A warm-up pass per ownership case is the tests'
+  own invention and is forced by measurement: the first `open_input, find_stream_info,
+  read_frame, close_input` cycle leaves 3 blocks live and every later cycle leaves 0, because
+  libavformat builds one-time state, so each case runs twice and only the second run is
+  measured. `-Werror` also blocks the most obvious mutant, since deleting a size parameter
+  outright fails to compile as an unused parameter, which means `-Wunused-parameter` is quietly
+  part of what protects the copy helpers. Finally, one three-variant loop failed with "1
+  failed, 1 missing" while a sibling agent was still writing a test file: the gate must not run
+  while any agent is mid-write, and this gate's numbers all come from runs made after the tree
+  went quiet. Pre-existing and untouched, as at every gate since A3: KiteCodec's two Gradle
+  plugin functional tests fail on a clean checkout, which executor contract item 5 says to
+  ignore.
+
 ---
 
 ## 15. Horizon B execution: B1

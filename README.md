@@ -9,7 +9,9 @@ in `commonMain`. Only the audio device, the video surface and the decoder are pe
 
 > **KitePlayer is early and cannot be used as a dependency.** Nothing is published to any repository,
 > there is no install path, and macOS arm64 is the only target with backends. This file states what has
-> been measured and nothing beyond it.
+> been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) in this repository is the full plan, the
+> defect register, and the running execution log: every phase, every measured number, and every decision
+> taken along the way.
 
 ## Playing a file
 

@@ -2553,3 +2553,1365 @@ is no other.
   454, the Android unit-test component wiring during kiteplayer-core configuration), and
   no frame touches a script in this tree. It cannot be silenced from these build files;
   an AGP upgrade retires it. KiteCodec untouched.
+
+- 2026-08-09, Horizon B opened, B1 planned, no production code written. Eight agents ran
+  read-only: five reconnaissance readers (the def file census, the Kotlin coupling blast
+  radius, the cinterop static library mechanics proved by building a working prototype
+  rather than by reading documentation, the real-time audio path, and FFmpeg version
+  identity), then two competing ABI designs from the same evidence, then an adversarial
+  judge. The judge rejected both designs as written and synthesised section 15 from their
+  strongest parts. What it refuted by measurement, not opinion: opaque handles satisfy
+  none of B1's three exit clauses and do not reduce the struct layout hazard, because the
+  offsets are baked into the publisher's artifact under both wirings; partial opacity
+  still emits 82 struct classes into the cinterop metadata; and the case for getting the
+  ABI right first time rests on a published artifact that does not exist, since nothing
+  is on Maven Central and `git tag` is empty in KiteCodec. It also caught one design
+  citing a KiteCodec ABI dump that does not exist, and another mandating a `cmake` gate on
+  a machine where cmake is absent and LeakSanitizer tests on a platform that has no
+  LeakSanitizer. The orchestrator verified before accepting: the append is 1323 insertions
+  and 0 deletions with sections 1 to 14 byte-identical, KiteCodec is clean at `cdb8ad2`
+  with no tags and no `api/` directory, and cmake is genuinely absent while ninja, make
+  and clang are present. Section 15.6 records the three blocking decisions, all answered.
+  The honest limit carried forward: B1's exit clause "callback allocation instrumentation
+  reads zero" cannot be measured for Kotlin on this platform, because Kotlin/Native has no
+  allocation hook, a malloc interposer is a false-negative instrument (measured: 229
+  mallocs before and 230 after a million Kotlin objects, since the allocator takes pages by
+  mmap), and sampling cannot prove absence on a path that runs 94 times a second. B1.8
+  therefore replaces the promise with a deterministic instruction audit as its primary
+  instrument and three graded supporting ones, and says so where it reports.
+
+---
+
+## 15. Horizon B execution: B1
+
+Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two
+competing ABI designs, each verified claim by claim against the source and re-measured where
+the claim was load bearing. This section is to B1 what section 10 is to Horizon A: the
+executable run. It is decision complete. An implementer needs this section, section 1, section
+2, section 9 and the code, and nothing else.
+
+### 15.0 The decision, and what it costs
+
+**The judgement.** Neither proposal ships as written. The ambitious reading (full opaque
+handles across all 176 helpers, eleven handle families, 136 exported functions, an entire
+rewrite of KiteCodec's native implementation) pays its largest cost for a benefit that no
+measurement in front of us supports and that B1's own exit criteria never ask for. The
+incremental reading is right about the spine and wrong about its end game, because its way of
+seeding the opaque surface introduces a second cinterop module, which is the one thing
+`kitecodec-core/build.gradle.kts` lines 168 to 171 exists to forbid. What follows is a
+synthesis: the incremental spine, the opaque discipline applied only to C surface that is
+new anyway, the audio work split so the shipped real-time path changes exactly once, and three
+pieces of scaffolding neither proposal had because neither measured the gap.
+
+**Why the opaque rename is not in B1.** Three reasons, in descending strength.
+
+1. B1's exit sentence has three clauses: one C implementation serves cinterop, a mismatched
+   FFmpeg runtime is rejected with a report, callback allocation instrumentation reads zero.
+   Opaque handles are required by none of them. Clause one needs external linkage. Clause two
+   needs the header macros frozen by the compilation that bakes the offsets, plus one
+   process-wide once-only initialiser, which is an argument for a real library and against a
+   header-only inline one, and has nothing to do with how a parameter is spelled. Clause three
+   lives in KitePlayer and touches no FFmpeg type.
+2. Opacity does not reduce the struct-layout hazard by one bit. The offsets are baked into the
+   publisher's compiled artifact either way: today into `cstubs.bc` inside the klib, after the
+   lift into `libkitecodec.a` inside the same klib. A consumer with a different FFmpeg gets the
+   publisher's offsets in both worlds. The identity gate is what makes that safe. A B1 that
+   shipped opacity and skipped the gate would have done the expensive thing and left the
+   dangerous one.
+3. Partial opacity buys nothing measurable. Reproduced from the incremental proposal's own
+   artifacts: a def naming only a helper header, with no FFmpeg header at all, still emits 82
+   `CStructVar` classes and still contains `ffkmp/AVFrame`, because cinterop drags in every
+   complete type reachable from a bound signature. The klib shrink arrives only when the last
+   FFmpeg-typed signature is gone, so a half-migration pays all the churn for none of the
+   prize.
+
+**What was decided against the ambitious reading, item by item.** The eleven handle families
+included six (`kc_swr`, `kc_sws`, `kc_hwdevice`, `kc_hwframes`, `kc_io`, `kc_cancel`) with
+nothing to lift: the def body contains zero `swr_` calls, zero function-pointer parameters and
+one `SwsContext` use. Its justification was that the ABI major must be right the first time.
+Measured against that: `CHANGELOG.md` states "The library is source-only for now. Nothing has
+been published, not `kitecodec-core`, not the Gradle plugin", and `git tag` in KiteCodec returns
+nothing. There is no downstream consumer for whom an ABI major bump costs anything, so
+speculative surface has no purchase. Those six families are B2's, where their consumers live.
+
+**What was decided against the incremental reading.** Its B1.5 seeded a second cinterop module
+and crossed the seam with a `reinterpret()`. That is exactly the duplicate-type hazard the
+single-module rule prevents, and it would sit in production code for the length of a migration
+that spans two horizons. Rejected. The opaque surface, when it comes, arrives inside the one
+existing `ffmpeg` cinterop module, family by family, and the FFmpeg headers leave that def only
+on the last day. Its second flaw was a mid-flight state in which the C ring is on the shipped
+path while the Kotlin callback still drives it, which changes the real-time path twice and is
+worse than either endpoint in between. Rejected: see B1.7 and B1.8.
+
+**What this section adds that neither proposal had.** A committed ABI baseline, which does not
+exist today. A coupling ratchet, so the thing being deferred can only shrink. A host C build
+that depends on neither cmake nor make. A leak instrument that works on this machine. And the
+measured fact that cinterop tracks the embedded archive as a real input, which removes the
+largest unmeasured build risk in both proposals.
+
+**Evidence gained during this judgement (level 2 unless stated).**
+
+- The cinterop task tracks the static archive. In the ambitious proposal's own prototype at
+  `scratchpad/proof-abi`, mutating only `kitecodec.c` (`kc_abi_minor` returning 1, then 77,
+  then 88), leaving the header and def untouched, made `cinteropKitecodecMacosArm64`
+  re-execute and the linked binary print `abi=1.77` and then `abi=1.88`. With nothing changed,
+  both the C compile and the cinterop task reported UP-TO-DATE. Repeated with `libraryPaths`
+  removed from the def and supplied instead as `extraOpts("-libraryPath", <absolute>)`, the
+  form both proposals recommend: same result. So there is no stale-embedded-archive hazard and
+  no `outputs.upToDateWhen { false }` is needed. The prototype was restored to its original
+  bytes.
+- KiteCodec has no ABI baseline. `KiteCodec/kitecodec-core/api` does not exist and no `.api`
+  file exists anywhere in KiteCodec outside `build/`, although `build.gradle.kts` line 61
+  configures `apiValidation` with `klib { enabled = true }`, and no CI job runs `apiCheck`.
+  The six committed dumps are all KitePlayer's. Horizon A step A6.3 said "every KitePlayer
+  module", so this gap is expected, not a regression.
+- LeakSanitizer does not run here. `ASAN_OPTIONS=detect_leaks=1` on an ASan-and-UBSan binary
+  built by Apple clang 17 prints "AddressSanitizer: detect_leaks is not supported on this
+  platform." ThreadSanitizer builds and runs. libFuzzer does not link:
+  `library '.../libclang_rt.fuzzer_osx.a' not found`.
+- cmake is not installed (`which cmake` finds nothing). `ninja` and `make` are present. GNU
+  make starts a comment at an unescaped `#`, which this repository already documents and
+  guards against in `buildSrc/src/main/kotlin/BuildFFmpegTask.kt` lines 113 to 124, and both
+  repositories live under `/Users/macbook/StudioProjects/#Kite/`. So the host C build uses a
+  shell script driving clang directly, with no make, no cmake and no ninja.
+- The incremental proposal's headline differential is right and its description is wrong. Its
+  own dumps measure 18684 filtered metadata lines for the inline variant and 18860 for the
+  archive variant, a difference of exactly 176, and the raw diff carries 176 added
+  `CCall.Direct` lines. The raw diff is 356 lines, not 178, because normal-diff format prints
+  a position marker per hunk. A gate written as `diff | wc -l` compared against 178 would fail
+  a correct build. The gate below counts the substance, not the diff lines.
+- `Frame.withPlanes` really is one plus three per plane crossings. Read at
+  `../KiteCodec/.../Playback.native.kt` lines 453 to 463: one `ffkmp_frame_plane_count`, then
+  per plane `ffkmp_frame_plane`, `ffkmp_frame_linesize` and `ffkmp_frame_plane_height`. Ten
+  for a three-plane frame.
+
+**One design claim contradicted by its own reconnaissance, recorded so it is not repeated.**
+The ambitious proposal wrote that its new packed-copy function "takes a capacity, which the
+current `ffkmp_frame_copy_to_buffer` (ffmpeg.def:116) does not". Recon R1 section 7 says the
+opposite: "Four helpers take a raw pointer plus a size and copy across it:
+`ffkmp_frame_copy_to_buffer` (L116), `ffkmp_samples_copy_to_buffer` (L130),
+`ffkmp_frame_fill_video` (L148), `ffkmp_frame_fill_audio` (L163)". The source at
+`ffmpeg.def:116` reads
+`static inline int ffkmp_frame_copy_to_buffer(AVFrame *f, uint8_t *dst, int dst_size)` and
+passes `dst_size` to `av_image_copy_to_buffer`. R1 is correct. The bound already exists; what
+is missing is a test that exercises it, which is task B1-10.
+
+**What B1 delivers.** The 176 helpers become a compiled, versioned, symbol-audited library with
+its own C tests, sanitizer runs and fuzz targets. The FFmpeg header versus runtime identity gate
+exists, is called before anything allocates, and its rejection path is proved to fire by a
+hermetic test rather than by argument. The real-time audio path becomes C from the device
+callback down, behind a differential oracle against the Kotlin ring. KiteCodec gains the ABI
+baseline it never had.
+
+**What B1 does not deliver, stated plainly so no later reader mistakes silence for completion.**
+No opaque handles over the legacy helpers. No Kotlin call-site migration: the 253 cinterop
+import lines, the 273 `ffkmp_` call sites and the 21 raw libav call sites are untouched, and the
+FFmpeg headers stay in the def. The 11 FFmpeg struct types still reach Kotlin as phantom pointer
+types. Section 15.5 records where each of those goes and what breaks if it never happens.
+
+**What would make this decision wrong.** If B7 were pulled forward into the same release as B1,
+paying the opaque migration once here would beat carrying the coupling across two horizons, and
+the ambitious reading would be correct. The roadmap puts B7 six items later. If the owner
+reorders, this section's B1.4 onwards is still valid and section 15.5's deferral becomes a
+B1.10 rather than a B2 item.
+
+### 15.1 B1 task register
+
+Same shape as section 4. Every item is located, has its fix decided, and names its test. The
+Phase line says where it is fixed; items whose fix belongs to a later Horizon B item say so and
+are carried here only so nobody rediscovers them. 25 items.
+
+#### B1-01. The def body cannot be compiled, tested, sanitized or fuzzed as a unit
+- Where: `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`, lines 13 to 961
+  (949 lines of C after the `---` separator on line 11), 176 `static inline ffkmp_*` helpers.
+- Problem: the C exists only as def-file text. It has no translation unit, no object file, no
+  test, no sanitizer run and no coverage. Its only compile check is cinterop's, and its only
+  test is whatever Kotlin happens to call. 19 of the 176 are never called from Kotlin at all.
+- Fix: extract to `include/kitecodec_helpers.h` plus `src/kitecodec_helpers.c` by a committed
+  generator, prove the extraction faithful by re-running the generator and byte-comparing, then
+  point the def at the compiled archive.
+- Phase: B1.2 and B1.3. Test: `scripts/verify-lift.sh` byte equality, plus the C suite of 15.3.
+
+#### B1-02. No FFmpeg header versus runtime identity check exists
+- Where: `../KiteCodec/.../FFmpeg.native.kt` lines 17 to 29 read only runtime values;
+  `ffmpeg.def` has two `LIBAVCODEC_VERSION_INT` gates at lines 278 and 291 and no assertion.
+- Problem: in the direction that matters, older headers against a newer runtime, every symbol
+  resolves and the link succeeds while 38 measured field offsets are wrong and 48 of the 176
+  helpers read or write through one of them. Demonstrated live during reconnaissance: wrong
+  values read, then SIGSEGV inside `av_frame_free`, with ASan naming a four byte read 36 bytes
+  past a 416 byte region. Silent in the nondeterministic case.
+- Fix: a generated translation unit inside the same C compilation freezes the six
+  `LIB*_VERSION_INT` macros; `kc_init` compares them to the six `*_version()` functions under
+  `pthread_once`; policy is major exactly equal and a hard reject, runtime minor at or above
+  header minor or reject, micro reported and never fatal, plus a cross-library
+  `*_configuration()` agreement check that catches a mixed install. Every entry point calls
+  `kc_init` first.
+- Phase: B1.6. Test: the hermetic doctored-macro negative test of 15.3, one case per verdict,
+  plus a positive test, plus the KitePlayer typed-error surface.
+
+#### B1-03. `ffmpeg.version` in the plugin DSL is unvalidated
+- Where: `../KiteCodec/kitecodec-gradle-plugin/.../KiteCodecExtension.kt` line 35, a free
+  `Property<String>` with a convention of `n8.0` from `KiteCodecPlugin.kt` line 11 and no check.
+- Problem: a consumer writing `kitecodec { ffmpeg { version = "n7.1" } }` with the default
+  `Prebuilt` source downloads FFmpeg 7.1 archives and links them against a klib whose stubs were
+  compiled against n8.0 headers. Every symbol the def needs exists in 7.1, so the static link
+  succeeds and there is no SONAME to stop it. This is the most likely route a real consumer
+  takes to the corruption of B1-02.
+- Fix: validate the property against the set of refs the artifact was built for, and fail
+  configuration with the actionable sentence naming both refs and the two ways out.
+- Phase: B1.6. Test: a Gradle plugin functional test that sets a mismatched version and asserts
+  the failure message names both refs.
+
+#### B1-04. The `n8.0` expectation is duplicated in three places bound only by a comment
+- Where: `buildSrc/.../BuildFFmpegTask.kt` line 506, `kitecodec-gradle-plugin/.../KiteCodecPlugin.kt`
+  line 11, `.github/workflows/publish.yml` line 41, whose lines 38 to 40 say to keep them in sync.
+- Problem: nothing enforces it, and nothing checks either against `vendor/ffmpeg/RELEASE` or the
+  vendored `libavutil/version.h`.
+- Fix: one build-time assertion that all three agree, and, when the vendored path is used, that
+  they agree with the checkout.
+- Phase: B1.6. Test: a buildSrc unit test over the assertion with agreeing and disagreeing inputs.
+
+#### B1-05. KiteCodec has no committed ABI baseline although the validator is configured
+- Where: `../KiteCodec/build.gradle.kts` line 61 configures `apiValidation` with klib validation
+  enabled; `kitecodec-core/api` does not exist; `.github/workflows/ci.yml` never runs `apiCheck`.
+- Problem: B1 rewrites KiteCodec's build and its C layer, and the only mechanical proof that the
+  public Kotlin API did not move is a baseline nobody generated. Without it, "the public API is
+  unchanged" is a level 8 claim.
+- Fix: generate and commit the klib dump, wire `apiCheck` into the gate and into the macOS CI job.
+- Phase: B1.1. Test: `apiCheck` is itself the test; the gate runs it after every later sub-phase.
+
+#### B1-06. The Kotlin to FFmpeg coupling has no ratchet
+- Where: nowhere; this is a missing artifact. The measured baseline is 253 cinterop import lines,
+  273 `ffkmp_` call sites, 21 direct libav call sites and 11 FFmpeg struct types reaching Kotlin,
+  across 10 Kotlin files in `kitecodec-core`.
+- Problem: B1 defers the opaque migration. A deferral with no ratchet becomes a permanent
+  half-state, and the coupling can grow while everyone believes it is shrinking.
+- Fix: commit the four counts as a baseline file and a check task that recomputes them and fails
+  when any is higher than the baseline. Lowering the baseline is a normal commit; raising it needs
+  an Execution log entry saying why.
+- Phase: B1.1. Test: the check task, run in every later gate, plus a unit test proving it fails on
+  a deliberately raised count.
+
+#### B1-07. The em dash scan does not cover the file types B1 introduces
+- Where: section 9's scan lists `*.kt`, `*.kts`, `*.md`, `*.def`.
+- Problem: B1 adds `.c`, `.h`, `.sh` and edits `.yml`. Contract item 4 bans em dashes in every
+  file, and the scan that enforces it would not see the new ones.
+- Fix: extend the scan's include list to `*.c`, `*.h`, `*.sh`, `*.yml`, `*.py`, `*.txt` for both
+  repositories, keeping the existing exclusions.
+- Phase: B1.1. Test: the scan itself, run in every gate.
+
+#### B1-08. 15 helpers are dead exported surface, and `archived/` duplicates 176 helper names
+- Where: `ffmpeg.def` lines 43, 44, 59, 76, 199, 203, 228, 315, 335, 375, 384, 444, 452, 810, 811;
+  `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/archived/` holds six def files
+  (`libavcodec.def`, `libavfilter.def`, `libavformat.def`, `libavutil.def`, `libswresample.def`,
+  `libswscale.def`) that no build file references.
+- Problem: dead `static inline` text is harmless; 15 dead exported symbols in a versioned library
+  are a compatibility promise nobody meant to make. The archived defs duplicate helper names and
+  will produce false hits in every later grep, including this item's own cross-check.
+- Fix: delete the 15 and delete the directory. Safe because nothing has been published (see 15.0)
+  and because zero KitePlayer files import from the cinterop package.
+- Phase: B1.4. Test: a repository-wide cross-check, after the directory is gone, proving zero
+  references to each deleted name in either repository, in any file type.
+
+#### B1-09. `ffkmp_strerror` returns a thread-affine pointer into static storage
+- Where: `ffmpeg.def` lines 36 to 40, `static __thread char buf[256]` at line 37, the only static
+  storage in the whole body.
+- Problem: the returned pointer is invalidated by the next call on the same thread. Nothing states
+  it and nothing tests it. `Internals.kt` line 20 consumes it immediately, which is correct today
+  by accident of call shape rather than by contract.
+- Fix in B1: state the contract in the header and prove it with a two-thread C test. The error
+  record that removes the helper is B2's, because it changes 176 signatures.
+- Phase: B1.2 for the test and the documented contract; replacement in B2. Test:
+  `tests/test_strerror_thread.c`, two threads, interleaved calls, each asserting its own message.
+
+#### B1-10. Nine fixed stack buffers and 18 snprintf sites have no C-level test
+- Where: `ffmpeg.def` line 37 (`buf[256]`), 506, 558, 663, 708 (`args[512]`), 553
+  (`layout_str[128]`), 704 (`lay_str[128]`), 623, 669, 712 (`name[16]`), 578, 723
+  (`full_desc[2048]`). Plus the four copy helpers that take a caller pointer and a size at lines
+  116, 130, 148, 163.
+- Problem: D27 installed running-length discipline in the two audio builders and A0 tested it
+  through the Kotlin API only. At the C level none of the nine buffers, and none of the four size
+  checks, has a direct test. The bound in `ffkmp_frame_copy_to_buffer` exists (see 15.0) and is
+  unexercised.
+- Fix: direct C tests driving every buffer to its limit and one byte past, and every copy helper
+  with a destination one byte short, under ASan and UBSan.
+- Phase: B1.2. Test: `tests/test_buffers.c`, table driven, one row per buffer and per copy helper.
+
+#### B1-11. cinterop embeds a wrong-architecture archive silently
+- Where: the mechanism, measured during reconnaissance: a linuxX64 ELF archive placed where the
+  macosArm64 one belongs was embedded without complaint and failed only at the consumer's final
+  link with `ld: archive member '/' not a mach-o file`.
+- Problem: B1 creates this failure mode; it does not exist today because there is no archive. It
+  surfaces at the consumer, not at the producer.
+- Fix: the C compile task's output directory is keyed by `konanTarget.name` and never shared, and
+  the task asserts the produced object's architecture before archiving.
+- Phase: B1.3. Test: a buildSrc unit test over the architecture assertion with a deliberately
+  wrong object, plus a gate step that inspects each embedded archive.
+
+#### B1-12. The def declares no `linkerOpts.ios` although three iOS targets are registered
+- Where: `ffmpeg.def` lines 5 to 9 carry `osx`, `linux`, `mingw` and `android` only;
+  `kitecodec-core/build.gradle.kts` lines 126 to 128 register `iosArm64`, `iosSimulatorArm64` and
+  `iosX64`; `StaticLinkFlags.forTarget` never emits a libav flag, so the six `-l` flags reach the
+  link only from this file.
+- Problem: on iOS they do not reach it at all.
+- Fix: add `linkerOpts.ios` with the same six flags while the def is being edited anyway.
+- Phase: B1.3. Test: none possible here. No iOS FFmpeg tree exists on this machine, so
+  `FFmpegPaths.resolve` fails and the target is skipped before the def is read. The change is
+  level 8 evidence, a declared flag, and the register row stays open until a target with an iOS
+  FFmpeg tree exists in B7 or B9.
+
+#### B1-13. libFuzzer is absent from every clang on this machine
+- Where: Apple clang 17 and konan's LLVM 21 essentials package both fail with
+  `library '.../libclang_rt.fuzzer_osx.a' not found`; Homebrew LLVM is not installed.
+- Problem: B1 promises fuzz targets. Coverage-guided fuzzing cannot run locally.
+- Fix: each fuzz entry point gets two drivers from one source: `LLVMFuzzerTestOneInput` for the
+  Linux CI job, and a corpus replay `main()` compiled everywhere, so the committed corpus runs as
+  an ordinary sanitized regression test on this machine. Installing Homebrew LLVM is optional and
+  is not a prerequisite.
+- Phase: B1.5. Test: the replay driver is the local test; the CI job is the real fuzzer.
+
+#### B1-14. LeakSanitizer is not supported on macOS arm64
+- Where: measured on this machine. `ASAN_OPTIONS=detect_leaks=1` on an ASan build by Apple clang
+  17 prints "AddressSanitizer: detect_leaks is not supported on this platform."
+- Problem: the obvious instrument for the 29 ownership helpers does not exist here, and a plan
+  that assumed it would have had no leak evidence at all on the proving platform.
+- Fix: a `malloc`, `calloc`, `realloc` and `free` interposer through the Mach-O
+  `__DATA,__interpose` section, proven working during reconnaissance, is the local instrument and
+  asserts exact pairing per helper. LSan runs in the Linux CI job as corroboration. Note that
+  naive `DYLD_INSERT_LIBRARIES` symbol shadowing silently counts zero because of the two-level
+  namespace, so the interposer must use the interpose section.
+- Phase: B1.2. Test: `tests/test_ownership.c` under the interposer, one case per ownership helper,
+  including the three awkward ones named in 15.3.
+
+#### B1-15. cmake is absent, and GNU make truncates a path at `#`
+- Where: `which cmake` finds nothing; `ninja` and `make` are present;
+  `buildSrc/.../BuildFFmpegTask.kt` lines 113 to 124 document that make "starts a COMMENT at an
+  unescaped '#'" and refuse to build under such a path; both repositories are under
+  `/Users/macbook/StudioProjects/#Kite/`.
+- Problem: any host C build routed through cmake or make is either unavailable or exposed to the
+  hazard this repository already had to guard against, in the one directory where the guard
+  applies.
+- Fix: the host C build is a shell script invoking clang directly, and the shipped per-target
+  archive is a Gradle task invoking clang and `llvm-ar` directly. No make, no cmake, no ninja.
+  Direct clang invocation under a `#` path is proven: reconnaissance compiled and archived
+  successfully in a directory literally named `hash#dir`.
+- Phase: B1.2. Test: the scripts run from this checkout, which is itself the proof.
+
+#### B1-16. The real-time thread is the seqlock reader and can spin unbounded
+- Where: `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/AudioRing.kt`
+  lines 279 to 294, inside `publishAnchor`, reached from `render` at line 261.
+- Problem: the device thread loads `segmentSeq` and `continue`s while it is odd. The writer is the
+  feeder coroutine. If the feeder is preempted between its two sequence increments, the real-time
+  thread waits with no bound. The class comment at lines 13 to 14 says "No lock anywhere", which
+  is true of mutexes and not of this. It is a priority inversion on a real-time thread and it is
+  independent of the language the ring is written in. A transliteration into C would reproduce it.
+- Fix: invert the roles. In the C ring the real-time thread is the seqlock writer and never waits;
+  the non-real-time reader retries a bounded 64 times and then keeps its previous reading. Segment
+  resolution becomes wait free through per-slot sequence numbers plus a consumer-private cache and
+  a counted give-up, so the reader dates from the cache instead of spinning.
+- Phase: B1.7. Test: a TSan run over the ring, plus a C test that holds a slot's sequence odd for
+  a bounded interval from a second thread and asserts the render path never blocks and increments
+  `segment_giveups`.
+
+#### B1-17. The real-time callback enters managed Kotlin on its first instruction
+- Where: `kiteplayer-output/src/appleMain/kotlin/.../CoreAudioSink.kt` lines 224 to 229; line 225
+  is `refCon?.asStableRef<CoreAudioSink>()?.get()`.
+- Problem: the device thread becomes a Kotlin mutator the collector must stop at a safepoint. 13
+  long-lived Kotlin objects, 14 atomic wrapper objects, two virtual interface calls, a scalar
+  float copy loop, and up to five transient cinterop view objects per callback are on that path.
+  In a debug build the view objects are real allocations: five million invocations of a faithful
+  probe produced 1235 GC epochs against 1 for a non-allocating control. In an optimized build
+  escape analysis removed them in that probe, which is a compiler heuristic with no contract and
+  is not a defence. Worst observed stop-the-world pauses on this machine were 63 to 256
+  microseconds with one allocating mutator, against a 10.67 millisecond period at 512 frames and
+  48 kHz. The honest statement is not that audio glitches today; it is that the deadline depends
+  on a pause nobody has bounded.
+- Fix: the render callback becomes a `static` C function inside `kiteplayer-rt`, installed by C,
+  reading a plain struct pointer with no `StableRef`, converting host ticks with a
+  `mach_timebase_info` cached at create, and calling `kprt_ring_render` straight into the device
+  buffer.
+- Phase: B1.8. Test: the four assertions of 15.3, in their stated order of authority, including
+  the negative control that must fail.
+
+#### B1-18. The ring's microsecond dating multiplies before dividing
+- Where: `AudioRing.kt` lines 172 and 296.
+- Problem: a frame delta is multiplied by 1,000,000 before dividing by the sample rate. That is
+  the same overflow shape D9 records against KiteCodec's timestamp helpers, latent at ordinary
+  session lengths and wrong at long ones. The Kotlin ring has it too and it should not be
+  transliterated.
+- Fix: a 128 bit intermediate or a split rescale in the C ring, and the same correction applied to
+  `KotlinAudioRing` so the differential oracle compares two correct implementations.
+- Phase: B1.7. Test: a table-driven case at a frame delta large enough to overflow the naive
+  product, asserted exact in both rings.
+
+#### B1-19. Silence fill and underrun counting are duplicated at two levels
+- Where: `CoreAudioSink.kt` lines 391 to 392 and `AudioRing.kt` lines 252 to 255; the comment at
+  `CoreAudioSink.kt` lines 90 to 93 calls the duplication deliberate.
+- Problem: after B1.8 there is no callback that can be absent, so the sink's last-line fill has no
+  case left to cover, and the comment stops being true.
+- Fix: silence and the underrun counter collapse into `kprt_ring_render`, using `memset` and
+  `memcpy` rather than the scalar loops at `CoreAudioSink.kt` lines 434 to 437 and 460 to 465. The
+  only absent-ring case becomes teardown, where the callback zeroes the whole buffer. Update the
+  KDoc.
+- Phase: B1.8. Test: the C test asserting a short read produces exactly the expected real frames
+  followed by exact zeroes, and that the underrun counter moves only when the ring is not ending.
+
+#### B1-20. After B1.8, `AudioRingTest`'s 16 tests exercise a ring no macOS user runs
+- Where: `kiteplayer-core/src/commonTest/kotlin/.../AudioRingTest.kt`, 16 `@Test` functions, plus
+  the whole A5 simulation campaign driving the Kotlin ring through `ScriptedBackend`'s fake sink.
+- Problem: `AudioRing` cannot be deleted or made an `expect class`. `kiteplayer-core`'s
+  `commonMain` targets js and wasmJs, which can never contain C, and the Kotlin ring is the only
+  oracle the C ring can be checked against. So two implementations of one contract exist forever,
+  and on macOS the 16 tests stop covering the shipped path. Letting "414 tests pass" quietly cover
+  a ring nothing uses would be exactly the substitution section 2 forbids.
+- Fix: say it plainly in the README, in `AudioRingTest`'s class KDoc and in the log entry, and
+  carry the shipped path with the C suite plus the differential oracle, which is the only thing
+  that keeps the two from drifting.
+- Phase: B1.7 for the oracle, B1.9 for the words. Test: the differential oracle of 15.3.
+
+#### B1-21. The declared FFmpeg licence flavour contradicts the linked runtime's licence string
+- Where: `kiteplayer-ffmpeg/build.gradle.kts` line 60 and `kiteplayer-sample/build.gradle.kts`
+  line 36 set `FFmpegLicense.LGPL`; the linked Homebrew runtime's `avutil_license()` returns
+  "GPL version 3 or later".
+- Problem: the build declares one thing and the artifact links another. Nothing surfaces it.
+- Fix in B1: the identity report carries the runtime licence string and the flavour the artifact
+  was built for, so the contradiction is visible in every rejection and in every diagnostic dump.
+  Resolving it is a distribution and legal question, not an ABI one.
+- Phase: B1.6 for visibility; resolution in B7. Test: an assertion that the report's two licence
+  fields are both populated, and a diagnostic path that prints them.
+
+#### B1-22. The 11 raw libav calls at 21 Kotlin call sites are behind no helper
+- Where: `FFmpeg.native.kt` 10 sites, `Frame.native.kt` 4 (lines 191, 236, 247, 253),
+  `MediaSink.native.kt` 3 (210, 496, 509), `MediaSource.native.kt` 2 (262, 283),
+  `Playback.native.kt` 2 (317, 340).
+- Problem: the four hottest paths in the codebase, decode send and receive and encode send and
+  receive, cross straight to libav with no C layer in between. Any future handle boundary leaks on
+  the busiest calls. Three of the enclosing declarations name no FFmpeg type at all
+  (`MediaSource.native.kt:279`, `Playback.native.kt:314` and `:338`), so a type-name audit misses
+  them.
+- Fix in B1: the six `*_version()` functions and `avcodec_configuration` move behind the identity
+  report, because that is where they belong. The four hot calls stay raw, because wrapping them
+  without B2's typed send and receive outcomes would change their signatures twice.
+- Phase: B1.6 for the version queries; the four hot calls and the three `find_*_by_name` queries
+  in B2. Test: the coupling ratchet records the drop in direct libav call sites and refuses a rise.
+
+#### B1-23. `ffkmp_frame_convert_pixfmt` allocates and frees an SwsContext on every call
+- Where: `ffmpeg.def` line 93.
+- Problem: the only swscale use in the library rebuilds its context per frame. B2 names cached
+  swscale contexts as its own work.
+- Fix: none in B1. Carried here so the C tests cover the current behaviour rather than being
+  rewritten when B2 changes it.
+- Phase: B2. Test: a C test asserting the current conversion is correct and leak free under the
+  interposer, so B2's caching has a baseline to match.
+
+#### B1-24. KitePlayer has no CI
+- Where: `/Users/macbook/StudioProjects/#Kite/KitePlayer` has no `.github` directory.
+- Problem: every KitePlayer gate in B1, including the 10 minute real-device audio test and its
+  negative control, runs on this one machine. That caps the evidence at level 2 on one named
+  platform and no higher, and it makes B1.8's gate a serial human-supervised run of roughly 25
+  minutes per attempt.
+- Fix: none in B1. Recorded so the evidence claims stay honest and so the gate's cost is not a
+  surprise.
+- Phase: B9. Test: none.
+
+#### B1-25. The opaque handle migration is deferred and needs a deadline
+- Where: the whole of 15.0 and 15.5.
+- Problem: a deferral with no owner and no deadline is a permanent half-state. The measured
+  coupling is 253 import lines, 273 helper call sites, 21 raw libav sites, 45 declarations naming
+  an FFmpeg type and 117 declarations touching the cinterop surface, all inside 10 files of
+  `kitecodec-core` and zero files of KitePlayer.
+- Fix: B2 owns the signatures, because B2 redesigns them anyway for typed outcomes, pooled plane
+  views with negative strides, the full channel layout and the side-data model. B7 owns the
+  completion deadline, because the Android AAR over JNI is the first consumer that benefits. The
+  ratchet of B1-06 holds the line in between. The migration happens inside the one existing
+  `ffmpeg` cinterop module, never in a second one.
+- Phase: B2 and B7. Test: the ratchet, and B7's exit criterion.
+
+### 15.2 Sub-phases
+
+Nine sub-phases, strictly in order, same rules as section 10: no sub-phase starts before the
+previous gate passed, every gate reruns for real, every sub-phase ends with an Execution log
+entry and one commit per repository touched. Contract items 1 to 13 apply unchanged, including
+the ban on branches, the ban on trailers and the ban on em dashes.
+
+**The base gate**, referred to below as "the section 9 gate", is section 9's protocol with two
+additions that B1.1 installs and every later sub-phase inherits:
+
+```bash
+# added by B1.1, part of every B1 gate from B1.1 onward
+cd ../KiteCodec && ./gradlew :kitecodec-core:apiCheck
+cd ../KiteCodec && ./gradlew checkCinteropCoupling
+
+# the em dash scan of section 9, widened for the file types B1 introduces. The pattern stays the
+# escape text backslash-u2014 expanded by the shell, exactly as in section 9, so that writing this
+# command down does not itself put a literal em dash in the repository.
+grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" \
+  --include="*.c" --include="*.h" --include="*.sh" --include="*.yml" --include="*.py" \
+  --include="*.txt" . ../KiteCodec \
+  | grep -v vendor/ | grep -v build/ | grep -v '/\.claude/'
+```
+
+Paths below are relative to the repository they belong to. `../KiteCodec` means the KiteCodec
+repository; an unprefixed path means KitePlayer.
+
+---
+
+#### B1.1 Baseline and ratchets
+
+Pure addition. Nothing in either repository's behaviour changes. This sub-phase exists so every
+later sub-phase can prove compatibility mechanically instead of asserting it.
+
+**Files.**
+- `../KiteCodec/kitecodec-core/api/kitecodec-core.klib.api` (new, generated)
+- `../KiteCodec/native/kitecodec-c/coupling-baseline.txt` (new)
+- `../KiteCodec/buildSrc/src/main/kotlin/CheckCinteropCouplingTask.kt` (new)
+- `../KiteCodec/buildSrc/src/test/kotlin/CheckCinteropCouplingTaskTest.kt` (new)
+- `../KiteCodec/build.gradle.kts` (register the check task)
+- `../KiteCodec/.github/workflows/ci.yml` (add `apiCheck` and the coupling check to the macOS job)
+
+**Steps.**
+1. Run `./gradlew :kitecodec-core:apiDump` in `../KiteCodec` and commit the generated dump.
+   Record its line count in the log entry. This closes B1-05.
+2. Write `coupling-baseline.txt` with the four measured numbers, one per line, each with the
+   command that produces it: cinterop import lines 253, `ffkmp_` call sites 273, direct libav call
+   sites 21, FFmpeg struct types named in Kotlin 11. Re-measure before committing; if a number
+   differs from this section, the measured number wins and the deviation goes in the log.
+3. Write `CheckCinteropCouplingTask`, an `abstract class ... : DefaultTask()` with
+   `DirectoryProperty` inputs and a `RegularFileProperty` baseline, recomputing the four counts
+   over `kitecodec-core/src` and failing when any exceeds its baseline. It must exclude `build/`
+   and `.claude/`, which hold gitignored scratch checkouts of the same files. Configuration cache
+   safe: no script references captured, no process started at configuration time.
+4. Widen the em dash scan as shown above, and re-run it over both repositories. This closes B1-07.
+5. Add `apiCheck` and `checkCinteropCoupling` to the macOS CI job.
+
+**Tests it must add.** `CheckCinteropCouplingTaskTest`, two cases: a baseline that matches passes,
+and a baseline lowered by one for each of the four counts fails with a message naming the count,
+the baseline and the actual. `apiCheck` is its own test.
+
+**Gate.**
+```bash
+cd ../KiteCodec && ./gradlew :kitecodec-core:apiDump && git diff --exit-code kitecodec-core/api
+cd ../KiteCodec && ./gradlew :kitecodec-core:apiCheck checkCinteropCoupling :buildSrc:test
+# then the full section 9 gate, both repositories
+```
+`git diff --exit-code` after a fresh `apiDump` is the proof that the committed dump is the one the
+build produces.
+
+**Commit first line.** `Record KiteCodec's public ABI and its FFmpeg coupling so both can only shrink`
+
+---
+
+#### B1.2 Real C sources and a host test harness, referenced by nothing
+
+Pure addition. The Gradle build does not reference the new tree; the def file is untouched; the
+klib is bit-identical to B1.1's. A regression here is impossible by construction, which is why
+the whole C test and sanitizer harness lands before the lift rather than after it.
+
+**Files**, all new, all under `../KiteCodec/native/kitecodec-c/`.
+- `tools/extract_from_def.py`
+- `include/kitecodec_helpers.h`
+- `src/kitecodec_helpers.c`
+- `scripts/build-host.sh`
+- `scripts/verify-lift.sh`
+- `scripts/run-c-tests.sh`
+- `tests/harness.h`, `tests/harness.c`
+- `tests/interpose_alloc.c`
+- `tests/test_ownership.c`, `tests/test_buffers.c`, `tests/test_rescale.c`,
+  `tests/test_strerror_thread.c`, `tests/test_convert.c`
+- `README.md`
+
+**Steps.**
+1. Write the extractor. Rules, all measured: the body is `ffmpeg.def` lines 13 to 961; its 20
+   `#include` lines move to the header; 176 declarations are emitted by paren balancing, and nine
+   signatures span more than one line (def lines 251, 262, 470, 489, 531, 616, 644, 684, 816); the
+   `.c` file is the body verbatim with the token `static inline ` removed and
+   `#include "kitecodec_helpers.h"` first. The four internal trailing-underscore helpers
+   (`ffkmp_graph_finish_` at def line 470, `ffkmp_graph_finish_multi_` at 616,
+   `ffkmp_codec_pix_fmts_` at 289, `ffkmp_ch_layout_mask_` at 908) keep `static`, lose `inline`,
+   and are not declared in the header. Each of the four is called only from within its own banner
+   section, so the split in B1.4 keeps every call intra-unit; verify that before splitting.
+2. Because the `.c` includes its own header, compiling it is the proof that all 176 declarations
+   match their definitions. Compile with `-Werror`, so one mismatch is a hard failure.
+3. Write `build-host.sh`: `/usr/bin/clang` for host test binaries, flags
+   `-std=c11 -Wall -Wextra -Werror -Werror=vla -g`, FFmpeg include and library flags from
+   `pkg-config --cflags --libs libavcodec libavformat libavfilter libavutil libswscale libswresample`
+   or from `KC_FFMPEG_PREFIX` when set. Variants: `plain`, `asan` (`-fsanitize=address,undefined
+   -fno-omit-frame-pointer -O1`), `tsan` (`-fsanitize=thread -O1`). No make, no cmake, no ninja;
+   B1-15 says why.
+4. Write `verify-lift.sh`: extract from the def body at a given git revision, byte-compare against
+   the committed sources, print the two sha256 digests.
+5. Write the C tests per 15.3. Every test binary returns non-zero on the first failure and prints
+   one line per case.
+
+**Tests it must add.** `test_ownership.c` covering all 29 ownership helpers under the interposer,
+including `ffkmp_fmt_new_stream` (allocates but the parent owns the result, so the pairing rule is
+different), `ffkmp_frame_convert_pixfmt` (allocates and frees an `SwsContext` per call and returns
+a caller-owned frame) and `ffkmp_fmt_free_output` (conditionally closes `ctx->pb` before freeing).
+`test_buffers.c` covering the nine stack buffers at limit and limit plus one, and the four
+size-taking copy helpers with a destination one byte short, closing B1-10. `test_rescale.c`
+covering the ten macro, 128 bit and by-value-struct helpers with the D9 overflow vectors.
+`test_strerror_thread.c`, closing B1-09. `test_convert.c`, the baseline for B1-23.
+
+**Gate.**
+```bash
+cd ../KiteCodec/native/kitecodec-c
+./scripts/verify-lift.sh HEAD          # byte equality against the def body, both digests printed
+./scripts/build-host.sh plain && ./scripts/run-c-tests.sh plain
+./scripts/build-host.sh asan  && ./scripts/run-c-tests.sh asan
+./scripts/build-host.sh tsan  && ./scripts/run-c-tests.sh tsan
+# then the full section 9 gate plus B1.1's additions, both repositories
+```
+The Gradle side must be untouched, so the KiteCodec and KitePlayer test counts and the klib
+metadata are identical to B1.1's. State that in the log.
+
+**Commit first line.** `Extract the FFmpeg helper layer into real C sources with their own tests`
+
+---
+
+#### B1.3 The lift
+
+The one irreversible sub-phase. Everything after it assumes the new shape. Zero Kotlin source
+edits.
+
+**Files.**
+- `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`
+- `../KiteCodec/kitecodec-core/build.gradle.kts`
+- `../KiteCodec/buildSrc/src/main/kotlin/CompileKiteCodecCTask.kt` (new)
+- `../KiteCodec/buildSrc/src/test/kotlin/CompileKiteCodecCTaskTest.kt` (new)
+- `../KiteCodec/native/kitecodec-c/scripts/klib-metadata-diff.sh` (new)
+- `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` (new)
+- `../KiteCodec/.github/workflows/ci.yml`
+
+**Steps.**
+1. Def file edit, exactly this and nothing else. Delete lines 10 to 961 inclusive: the blank line,
+   the `---` separator on line 11, and the 949 line body. On line 3, keep all 36 `headers =`
+   entries in their exact current order and append ` kitecodec_helpers.h` at the end. On line 4,
+   keep the 7 `headerFilter =` entries and append ` kitecodec_helpers.h` at the end. The helper
+   header goes LAST in both, and this is not a style preference: with it first, the metadata
+   differential measured 1725 lines instead of 178, because `AVBSFContext`, `AVBitStreamFilter`,
+   `AVFilterPadParams` and `AVFilterParams` change which of them get complete bindings, and
+   nothing in KiteCodec uses those four, so it would have compiled and passed every test while
+   quietly changing the published surface. Keep all four `linkerOpts.*` lines and the `#` comment
+   between them. Add `linkerOpts.ios` with the same six libav flags (B1-12). Add
+   `staticLibraries = libkitecodec.a`. Do NOT add `libraryPaths`: a def-relative path resolves
+   against the Gradle project directory rather than the def's directory, and the path must be per
+   konan target, so it comes from Gradle.
+2. Write `CompileKiteCodecCTask` in `buildSrc`, next to `BuildFFmpegTask`. It must be an
+   `abstract class ... : DefaultTask()` with `DirectoryProperty`, `Property` and `ListProperty`
+   inputs, an injected `ExecOperations`, and `xcrun` resolved inside `@TaskAction`. The ad-hoc
+   `tasks.register { doLast { } }` shape breaks the configuration cache, which
+   `gradle.properties` line 6 has on, with `Starting an external process 'xcrun ...' during
+   configuration time is unsupported` among five problems. Action: for each `.c` file run konan's
+   clang (`~/.konan/dependencies/llvm-21-aarch64-macos-essentials-97/bin/clang`, version 21.1.6,
+   the compiler Kotlin/Native itself uses per `konan.properties` lines 129 and 788) with the
+   target's triple and sysroot, flags
+   `-c -O2 -std=c11 -fvisibility=hidden -fPIC -Wall -Wextra -Werror -Werror=vla`, then `llvm-ar
+   crs` from the same package. Output directory keyed by `konanTarget.name` and never shared
+   (B1-11). Assert the object's architecture before archiving.
+3. Per-target triples and sysroots, all measured working from this macOS host: macos_arm64
+   `-target arm64-apple-macos11.0 -isysroot $(xcrun --sdk macosx --show-sdk-path)`; ios_arm64
+   `-target arm64-apple-ios14.0 -isysroot $(xcrun --sdk iphoneos --show-sdk-path)`; linux_x64
+   `-target x86_64-unknown-linux-gnu --sysroot=~/.konan/dependencies/x86_64-unknown-linux-gnu-gcc-8.3.0-glibc-2.19-kernel-4.9-2/x86_64-unknown-linux-gnu/sysroot`;
+   android_arm64 `-target aarch64-unknown-linux-android24
+   --sysroot=~/.konan/dependencies/target-toolchain-2-osx-android_ndk/sysroot` (the toolchain
+   package, not the sysroot package, whose `--sysroot` fails with `'stdlib.h' file not found`);
+   mingw_x64 `-target x86_64-pc-windows-gnu --sysroot=~/.konan/dependencies/msys2-mingw-w64-x86_64-2`.
+4. Wire it in `kitecodec-core/build.gradle.kts` inside the existing `knTargetMap.forEach` loop,
+   after the `} ?: return@forEach` that ends the FFmpeg path resolution, so a target with no
+   FFmpeg tree is skipped for the C compile exactly as it is skipped for the cinterop. The C
+   compile needs the same per-target FFmpeg include directory the cinterop gets, because
+   `kitecodec_helpers.c` includes libav headers. Modify the existing `create("ffmpeg")` block; do
+   not create a second cinterop. Add `includeDirs.allHeaders(<c include dir>)`,
+   `compilerOpts("-I<c include dir>")` and a second
+   `extraOpts("-libraryPath", <per-target archive dir absolute>)` alongside the existing one for
+   FFmpeg; two independent `-libraryPath` entries coexist. Make the cinterop task depend on the C
+   compile task for the same target.
+5. Do not touch `kitecodec-gradle-plugin`. The archive travels inside the klib and needs no
+   link-time search path; the FFmpeg `-l` flags still need the plugin's `-L`, and removing it
+   produces `ld: library 'avutil' not found`.
+6. Write `klib-metadata-diff.sh`: dump the ffmpeg cinterop klib metadata, filter `knifunptr_`
+   lines (they renumber for reasons with no Kotlin meaning), compare against
+   `klib-metadata-baseline.txt`, and report added and removed declarations by name. Commit the
+   baseline produced at B1.1's commit, then the one produced here.
+
+**Tests it must add.** `CompileKiteCodecCTaskTest`, two cases: a correct object archives, and an
+object of the wrong architecture fails with a message naming both architectures and the target.
+The metadata differential script is the compatibility test.
+
+**Gate.**
+```bash
+cd ../KiteCodec
+./native/kitecodec-c/scripts/klib-metadata-diff.sh
+#   ACCEPT only: exactly 176 added declarations, every one carrying
+#   @kotlinx/cinterop/internal/CCall.Direct(name = "_ffkmp_..."), zero removed declarations,
+#   and the module name line. Count the substance, not the diff lines: the raw normal-format
+#   diff is 356 lines because it prints one position marker per hunk.
+./gradlew :buildSrc:test :kitecodec-core:apiCheck checkCinteropCoupling
+./gradlew --configuration-cache :kitecodec-core:macosArm64Test   # expect: entry stored
+./gradlew --configuration-cache :kitecodec-core:macosArm64Test   # expect: entry reused
+for a in kitecodec-core/build/kitecodec-c/*/libkitecodec.a; do file "$a"; done
+#   every archive must report the object format of its own target directory
+./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
+# then the full section 9 gate plus B1.1's additions, both repositories, plus the sample e2e
+```
+State in the log which targets built an archive and which were skipped for want of an FFmpeg
+tree. On this machine that is one built and nine skipped, so "the C library builds for every
+target" is a claim this gate cannot make and must not make.
+
+**Commit first line.** `Compile the FFmpeg helpers as a real library instead of inline def-file text`
+
+---
+
+#### B1.4 One unit per subsystem, and delete what nothing uses
+
+**Files.**
+- `../KiteCodec/native/kitecodec-c/src/` split into `helpers_error.c`, `helpers_frame.c`,
+  `helpers_packet.c`, `helpers_codecpar.c`, `helpers_codec.c`, `helpers_format.c`,
+  `helpers_stream.c`, `helpers_filter.c`, `helpers_playback.c`
+- `../KiteCodec/native/kitecodec-c/include/kitecodec_helpers.h` (add `KC_API`)
+- `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh` (new)
+- `../KiteCodec/native/kitecodec-c/scripts/build-host.sh`, `tools/extract_from_def.py`,
+  `scripts/verify-lift.sh` (teach them the split)
+- `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/archived/` (delete, six files)
+- `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` (regenerate)
+
+**Steps.**
+1. Split along the banner map of the def body, which is where the sections already are. Verify
+   first that each of the four internal trailing-underscore helpers and its callers land in the
+   same unit; if any does not, that helper becomes `KC_API` rather than being made non-static
+   silently, and the log records it.
+2. Define `KC_API` as `__declspec(dllexport)` on `_WIN32` and
+   `__attribute__((visibility("default")))` elsewhere, and mark the 157 helpers Kotlin imports.
+   The four internals stay `static`. Compile with `-fvisibility=hidden`, which governs the dynamic
+   table and does not affect static linking: an unmarked helper still resolves at link time.
+3. Delete the 15 dead helpers and the `archived/` directory. Closes B1-08. Then re-run the
+   cross-check with the directory already gone, so its duplicate definitions cannot mask a real
+   reference.
+4. Write `symbol-audit.sh`: `nm -u` over the archive must resolve only to `libav*` and `libsw*`
+   symbols plus a fixed allowlist (`memcpy`, `memset`, `snprintf`, `strlen`, `strerror`), and must
+   contain no `printf`, no `av_log`, no `objc_msgSend`, no `dispatch_`. `nm -m` must show the 157
+   as external and the four internals as private external or non-external.
+5. `verify-lift.sh` can no longer byte-compare a single file, so it changes shape: it extracts
+   from the def body at the pre-B1.3 revision, concatenates the split units in banner order after
+   stripping their per-unit includes and `KC_API` tokens, and compares the normalised text. Print
+   both digests. The 15 deletions are supplied to the script as an explicit exclusion list, so the
+   comparison stays exact rather than fuzzy.
+
+**Tests it must add.** No new C behaviour tests; the existing suite must pass unchanged, which is
+the point of splitting after the harness exists. Add the symbol audit and a repository-wide
+cross-check script for the 15 deletions.
+
+**Gate.**
+```bash
+cd ../KiteCodec/native/kitecodec-c
+./scripts/verify-lift.sh <pre-B1.3-revision>     # normalised equality, minus the 15 named
+./scripts/symbol-audit.sh
+./scripts/build-host.sh plain && ./scripts/run-c-tests.sh plain
+./scripts/build-host.sh asan  && ./scripts/run-c-tests.sh asan
+./scripts/build-host.sh tsan  && ./scripts/run-c-tests.sh tsan
+cd ../KiteCodec && ./native/kitecodec-c/scripts/klib-metadata-diff.sh
+#   ACCEPT only: exactly the 15 named declarations removed, zero added
+for n in <the 15 names>; do grep -rnw "$n" . ../KitePlayer | grep -v build/ | grep -v '/\.claude/'; done
+#   must print nothing but the absence of the definitions themselves
+# then the full section 9 gate plus B1.1's additions
+```
+
+**Commit first line.** `Give the C library one unit per subsystem and delete the surface nothing uses`
+
+---
+
+#### B1.5 Fuzz every C entry point that parses a caller's string
+
+**Files.**
+- `../KiteCodec/native/kitecodec-c/fuzz/fuzz_filter_video.c`, `fuzz_filter_audio.c`,
+  `fuzz_codec_option.c`, `fuzz_format_option.c`, `fuzz_metadata.c`, `fuzz_format_name.c`
+- `../KiteCodec/native/kitecodec-c/fuzz/replay_main.c`
+- `../KiteCodec/native/kitecodec-c/fuzz/corpus/<target>/` seeds
+- `../KiteCodec/native/kitecodec-c/scripts/run-fuzz.sh`, `scripts/replay-corpus.sh`
+- `../KiteCodec/.github/workflows/ci.yml` (new job on `ubuntu-24.04`)
+
+**Steps.**
+1. Six entry points, chosen because each hands caller-controlled text to a parser: the four graph
+   builders through `avfilter_graph_parse_ptr` (def lines 483 and 638 in the pre-lift numbering),
+   `ffkmp_codecctx_set_opt` and `ffkmp_fmt_set_opt` and `ffkmp_fmt_set_metadata` through
+   `av_opt_set` and `av_dict_set`, and `ffkmp_pix_fmt_from_name` with
+   `ffkmp_sample_fmt_from_name`. Each target is one `LLVMFuzzerTestOneInput` over a source file
+   that also compiles against `replay_main.c`, so one body serves both drivers (B1-13).
+2. Seeds: the D27 vectors (descriptions of length 0, 2047, 2048, 4096 and 1048576), valid graph
+   descriptions from `FilterGraph`'s own tests, option keys and values with embedded separators
+   and NUL bytes, and format names that are valid, invalid and empty.
+3. Path entry points (`ffkmp_fmt_open_input`, `ffkmp_fmt_alloc_output2`, `ffkmp_fmt_io_open`) get
+   no fuzz target in B1: fuzzing a path opens the filesystem, and container byte fuzzing is B8's
+   remit by name. Record that boundary in the fuzz directory's README so B8 knows what it inherits.
+4. The CI job runs each target for five minutes with `-fsanitize=fuzzer,address,undefined`, uploads
+   any crash artifact, and fails on any finding. Locally, `replay-corpus.sh` runs every corpus file
+   through the replay driver under ASan and UBSan.
+
+**Tests it must add.** The six replay drivers, which are ordinary tests and run in every later
+gate. Plus one deliberately planted defect, proved to be caught and then removed in the same
+commit, so the harness is shown to have power rather than merely to be green; record the finding
+text in the log.
+
+**Gate.**
+```bash
+cd ../KiteCodec/native/kitecodec-c
+./scripts/build-host.sh asan && ./scripts/replay-corpus.sh     # every seed, zero findings
+# CI, on ubuntu-24.04: six targets, five minutes each, zero crashes, LSan enabled
+# then the full section 9 gate plus B1.1's additions
+```
+
+**Commit first line.** `Fuzz every C entry point that parses a caller's string`
+
+---
+
+#### B1.6 The FFmpeg identity gate
+
+The highest value clause in B1. Opaque from birth: this header includes no FFmpeg header and names
+no FFmpeg type, so the surface B2 grows starts clean.
+
+**Files.**
+- `../KiteCodec/native/kitecodec-c/include/kitecodec_abi.h` (new)
+- `../KiteCodec/native/kitecodec-c/src/kitecodec_abi.c` (new)
+- `../KiteCodec/native/kitecodec-c/tests/test_identity.c` (new)
+- `../KiteCodec/native/kitecodec-c/tests/fake_headers/` (new, the doctored shim tree)
+- `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def` (headers and headerFilter
+  gain `kitecodec_abi.h`, LAST, after `kitecodec_helpers.h`)
+- `../KiteCodec/kitecodec-core/build.gradle.kts` (the three `-D` defines)
+- `../KiteCodec/buildSrc/src/main/kotlin/CompileKiteCodecCTask.kt` (carry the defines as inputs)
+- `../KiteCodec/buildSrc/src/main/kotlin/BuildFFmpegTask.kt` (the three-way ref assertion)
+- `../KiteCodec/kitecodec-gradle-plugin/src/main/kotlin/.../KiteCodecPlugin.kt` and
+  `KiteCodecExtension.kt` (version validation and the configuration-time major check)
+- `../KiteCodec/kitecodec-core/src/commonMain/kotlin/.../FFmpeg.kt`, `Errors.kt`
+- `../KiteCodec/kitecodec-core/src/nativeMain/kotlin/.../FFmpeg.native.kt`, `Internals.kt`,
+  and the 15 entry points listed in step 4
+- `kiteplayer-ffmpeg/src/nativeMain/kotlin/.../KiteCodecMediaBackend.kt`, `Probe.kt`
+
+**Steps.**
+1. `kitecodec_abi.h` declares `KITECODEC_C_ABI_MAJOR 1`, `KITECODEC_C_ABI_MINOR 0`, a flat POD
+   report and three functions: `int kc_init(void)`, `void kc_ffmpeg_report_get(kc_ffmpeg_report *)`
+   and `uint32_t kc_abi_version(void)`. The report is plain data with fixed char arrays and no
+   pointers, because cinterop binds our own struct with real offsets and Kotlin reads it with one
+   `nativeHeap.alloc` and plain field reads. No two-dimensional arrays anywhere in it: cinterop
+   flattens `char names[6][16]` into a single byte array, so `names[i]` is byte `i`, not row `i`.
+   Use one accessor returning `const char *` per index instead.
+   Report contents: per library, name, header major, minor and micro, runtime major, minor and
+   micro, and a verdict; plus the six-way `*_configuration()` agreement flag and the names of any
+   that disagreed; plus the build FFmpeg ref, `av_version_info()`, `avutil_license()`, the licence
+   flavour the artifact was built for (B1-21), and the resolved provisioning directory.
+2. `kitecodec_abi.c` reads the six `LIB*_VERSION_INT` macros. It is compiled in the same task,
+   against the same include tree, as every helper unit, so the frozen expectations and the baked
+   offsets cannot diverge: if the compiler saw the offsets, it saw the macros. This is the only
+   construction that is correct by definition; nothing can recover the header version afterwards.
+3. Policy, decided, not to be reopened. Major must be exactly equal: hard reject, no override,
+   because 38 field offsets were measured to move across a major and FFmpeg's own
+   `doc/developer.texi` permits reordering struct contents at a major bump. Runtime minor must be
+   at or above header minor: reject when lower, because FFmpeg guarantees backward compatibility
+   only. Micro is compared and reported and never rejects. The six `*_configuration()` strings
+   must agree with each other, and disagreement is a reject, because that is a mixed install and
+   version numbers alone cannot see it. Guard `kc_init` with `pthread_once`; a function-local
+   static in a `static inline` function would give one flag per translation unit, which is why the
+   gate needs external linkage and why a header-only C library would not do.
+4. Call `kc_init` first in every entry point, before any allocation: `MediaSource.open`
+   (`MediaSource.native.kt:464`), `MediaSink.open` (`MediaSink.native.kt:310`),
+   `FilterGraph.buildVideo`, `buildAudio`, `buildVideoMulti`, `buildAudioMulti`
+   (`FilterGraph.native.kt:237`, `:268`, `:300`, `:332`), `Frame.ofVideo` and `Frame.ofAudio`
+   (`Frame.native.kt:285`, `:316`), `Transcoder.transcode` (`Transcoder.native.kt:8`),
+   `Remuxer.remux` (`Remuxer.native.kt:8`), and the five `FFmpeg` queries. Not a Kotlin `object`
+   `init` block: Kotlin/Native object initialisation is per-thread-reachability and gives no
+   ordering guarantee relative to a different entry point on a different thread.
+5. Kotlin side: one new `FFmpegError` subclass carrying the report, distinct from
+   `FFmpegError.Internal` so a consumer can catch it and it can never be confused with a media
+   error. `FFmpeg.versions` gains the header-side numbers so a diagnostic prints both columns.
+   `Errors.kt`'s existing `fromCode` and its `AVERROR_*` tag algebra stay untouched: B1 does not
+   introduce a C-side error category, so there is no duplicate classification to reconcile. That
+   reconciliation belongs with B2's error record.
+6. Build side: validate `ffmpeg.version` (B1-03), assert the three `n8.0` sites agree and, on the
+   vendored path, agree with the checkout (B1-04), and add a configuration-time major check for
+   `FFmpegSource.System` using the library directory `KiteCodecPlugin.kt` line 195 already
+   resolves, read through `pkg-config --modversion` which answers correctly for all six here. The
+   klib must publish its expected majors where the plugin can read them; a properties resource
+   beside the klib is sufficient and is the decided form.
+7. KitePlayer: surface a rejection as a typed `PlaybackError` through `KiteCodecMediaBackend` and
+   `Probe`. This is new code, not changed code, and it is the only KitePlayer work in B1.6.
+
+**Tests it must add.** `test_identity.c`, hermetic, no second FFmpeg install: compile
+`kitecodec_abi.c` a second time into a test-only object against `tests/fake_headers/`, a shim
+include tree carrying doctored `LIB*_VERSION_*` macros, and assert one case per verdict. Case 1,
+avutil header major 59 against runtime 60: report status negative, verdict major mismatch, both
+numbers present, provisioning sentence non-empty. Case 2, header minor above runtime minor: verdict
+runtime older, reject. Case 3, header micro above runtime micro: verdict micro older, status
+accepting. Case 4, the true build: status 0 and all six verdicts ok. Case 5, a doctored
+configuration string on one library: reject naming that library. Plus a Kotlin native test
+asserting the typed error surfaces from a KiteCodec entry point, a Gradle plugin functional test
+for the version validation, a buildSrc test for the three-way assertion, and a KitePlayer test
+asserting the rejection reaches `PlaybackError`. A gate that has never fired is level 8 evidence;
+these make it level 2.
+
+**Gate.**
+```bash
+cd ../KiteCodec/native/kitecodec-c
+./scripts/build-host.sh asan && ./scripts/run-c-tests.sh asan    # includes test_identity
+cd ../KiteCodec && ./gradlew :kitecodec-core:macosArm64Test :buildSrc:test \
+  :kitecodec-gradle-plugin:test :kitecodec-core:apiCheck checkCinteropCoupling
+./native/kitecodec-c/scripts/klib-metadata-diff.sh
+#   ACCEPT only: the kc_* declarations of kitecodec_abi.h added, zero removed
+./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
+# then the full section 9 gate plus B1.1's additions, both repositories
+```
+Note: `apiCheck` will now fail until the new error subclass is dumped. Regenerate with `apiDump`
+and commit the dump in the same commit, and state in the log exactly which public declarations
+were added. This is the only sub-phase in B1 that legitimately changes KiteCodec's public API.
+
+**Commit first lines.** KiteCodec: `Reject an FFmpeg runtime that does not match the headers we compiled against`.
+KitePlayer: `Report an incompatible FFmpeg runtime as a playback error`.
+
+---
+
+#### B1.7 The lock-free C audio ring, proved but not yet shipped
+
+The C ring is built, tested and proved against the Kotlin ring here, and it is not put on the
+device path. The shipped real-time path changes exactly once, in B1.8. This is deliberate: a
+middle state in which C holds the samples while Kotlin still drives the callback is worse than
+either endpoint and would change the real-time path twice.
+
+**Files.**
+- `kiteplayer-rt/` (new module): `native/include/kite_rt.h`, `native/src/kite_rt_ring.c`,
+  `native/tests/*.c`, `native/scripts/build-host.sh`, `native/scripts/run-c-tests.sh`,
+  `native/tests/interpose_alloc.c`, `src/nativeInterop/cinterop/kitert.def`, `build.gradle.kts`
+- `buildSrc/src/main/kotlin/CompileKiteRtTask.kt` (new; the same shape as KiteCodec's, and the
+  two must not be shared across repositories)
+- `kiteplayer-core/src/commonMain/kotlin/.../internal/AudioRingHandle.kt` (new interface)
+- `kiteplayer-core/src/commonMain/kotlin/.../internal/AudioRing.kt` (renamed to
+  `KotlinAudioRing`, implementing the interface, plus the B1-18 arithmetic fix)
+- `kiteplayer-core/src/commonMain/kotlin/.../AudioPlayback.kt` (talks to the interface; public
+  surface unchanged)
+- `kiteplayer-core/src/nativeMain/kotlin/.../internal/NativeAudioRing.kt` (new)
+- `kiteplayer-core/src/commonTest/kotlin/.../AudioRingTest.kt` (retarget to `KotlinAudioRing`,
+  add the B1-20 KDoc)
+- `kiteplayer-core/src/nativeTest/kotlin/.../AudioRingDifferentialTest.kt` (new)
+- `settings.gradle.kts`
+
+**Steps.**
+1. The library is `kiteplayer-rt`, in KitePlayer, with symbol prefix `kprt_`. It does not belong
+   in `kitecodec-c`: a lock-free audio ring has nothing to do with FFmpeg, and putting it there
+   would make KitePlayer's real-time core a transitive consequence of a codec dependency.
+2. One allocation at create, nothing afterwards: the sample block 64 byte aligned, every contended
+   counter padded onto its own cache line, and the timestamp segment ring sized at create. The
+   only function that allocates is `kprt_ring_create`, and `kprt_ring_destroy` is the only one that
+   frees.
+3. Ordering rules, stated because the Kotlin ring gets them right by accident of its two counters
+   and C must state them: in commit, fill the segment slot's `start_frame` and `pts_us`, then its
+   own sequence with a release store, then store `written` with release. The release on `written`
+   publishes both the samples and the segment, so a callback that sees the new `written` is
+   guaranteed to see the segment that dates it.
+4. Invert the seqlock (B1-16). The real-time thread is the anchor writer and never waits: two
+   sequence stores with three field stores and two release fences between them. The non-real-time
+   reader retries a bounded 64 times and then keeps its previous reading. Segment resolution walks
+   live slots newest first, validating each by its own sequence, and on failure dates from a
+   consumer-private cache while incrementing `segment_giveups`, so the give-up is visible rather
+   than silent. Publish nothing, and let the clock read null, only when the cache is empty too.
+5. The writer API is reservation shaped: `kprt_ring_begin_write` grants a window of one or two
+   spans, the caller writes its floats straight into ring storage, and `kprt_ring_commit_write`
+   publishes and opens a timestamp segment only when the pts disagrees with continuity by at least
+   the tolerance, returning a distinct status and publishing nothing when a segment was needed and
+   all live slots still date unplayed audio, so the caller retries exactly as `AudioPlayback.submit`
+   does today. This removes one full copy of every sample and the per-call `Pinned` object that
+   `usePinned` allocates.
+6. Fix B1-18 in both rings, so the oracle compares two correct implementations.
+7. The seam: extract `internal interface AudioRingHandle` in `commonMain` with exactly the members
+   `AudioPlayback` already uses, and no `render`. Do not make `AudioRing` an `expect class`: that
+   deletes the portable implementation from native, which destroys the only oracle the C code can
+   be checked against, and js and wasmJs can never contain C. `AudioPlayback`'s public surface
+   does not change.
+8. Do not wire the C ring into any sink in this sub-phase. `NativeAudioRing` exists, is
+   constructed by tests only, and the production path still uses `KotlinAudioRing`.
+
+**Tests it must add.** `AudioRingDifferentialTest`, native only, the load-bearing test of this
+sub-phase: one scripted sequence of writes, partial reads, silence tails, discontinuities and
+flushes driven through both rings at 44.1, 48 and 96 kHz, asserting the produced samples match bit
+for bit, the published anchor matches to the microsecond, and the underrun count matches exactly.
+Plus the C suite: a producer and consumer thread pair under TSan; the allocation test of 15.3; the
+bounded-reader test of B1-16; the exact-zero silence test of B1-19; the overflow case of B1-18.
+Plus the 16 existing `AudioRingTest` tests, unchanged in behaviour against `KotlinAudioRing`.
+
+**Gate.**
+```bash
+cd kiteplayer-rt/native
+./scripts/build-host.sh plain && ./scripts/run-c-tests.sh plain
+./scripts/build-host.sh asan  && ./scripts/run-c-tests.sh asan
+./scripts/build-host.sh tsan  && ./scripts/run-c-tests.sh tsan
+./scripts/run-c-tests.sh interpose        # zero malloc/calloc/realloc/free/mmap between
+                                          # kprt_ring_create returning and kprt_ring_destroy
+cd .. && ./gradlew :kiteplayer-core:macosArm64Test :kiteplayer-core:jvmTest \
+                   :kiteplayer-rt:macosArm64Test
+./gradlew :kiteplayer-core:compileKotlinJs :kiteplayer-core:compileKotlinWasmJs
+# then the full section 9 gate plus B1.1's additions
+```
+
+**Commit first line.** `Give the audio ring a lock-free C implementation and prove it against the Kotlin one`
+
+---
+
+#### B1.8 The pure C device callback
+
+**Files.**
+- `kiteplayer-rt/native/src/kite_rt_coreaudio.c` (new), `native/include/kite_rt.h`
+- `kiteplayer-rt/native/scripts/render-audit.sh` (new)
+- `kiteplayer-output/src/appleMain/kotlin/.../CoreAudioSink.kt`
+- `kiteplayer-core/src/commonMain/kotlin/.../spi/AudioSink.kt`
+- `kiteplayer-core/src/nativeMain/kotlin/.../spi/NativeRingAudioSink.kt` (new)
+- `kiteplayer-core/src/commonMain/kotlin/.../AudioPlayback.kt` and the `openAudioPath`
+  expect declaration, with one `actual` per existing source set, following the module's current
+  expect and actual layout rather than inventing a new one
+- `kiteplayer-output/src/appleTest/kotlin/.../CoreAudioSinkRealTimeTest.kt`,
+  `CoreAudioSinkTest.kt`
+- `kiteplayer-core/src/commonTest/kotlin/.../ScriptedBackend.kt`, `AudioPlaybackTest.kt`
+- `kiteplayer-ffmpeg/src/nativeTest/kotlin/.../ReferencePcmTest.kt`
+
+**Steps.**
+1. `kprt_render_cb` is a `static` C function, never exported and never reachable from Kotlin,
+   installed by `kprt_sink_create`. It casts `ref` to a plain struct pointer with no `StableRef`
+   and no reference counting; reads `sink->ring`, and when it is NULL (teardown) zeroes the whole
+   buffer and returns; computes the buffer duration from a precomputed rational; takes the host
+   time from the timestamp when the host-time-valid flag is set and otherwise from
+   `AudioGetCurrentHostTime` while incrementing `estimated_anchors`; converts host ticks with a
+   `mach_timebase_info` cached at create rather than calling `AudioConvertHostTimeToNanos` inside
+   the callback; calls `kprt_ring_render` straight into the device buffer; stores
+   `last_deadline_nanos`; updates `worst_callback_nanos` from a `mach_absolute_time` pair around
+   the body; increments `callbacks`; returns success.
+2. The device glue moves to C too, so no Kotlin ever touches an `AudioUnit`: create, negotiate,
+   set the stream format, install the callback, initialise, start, stop, set paused, destroy.
+   Every failure path disposes what it created, which is D23's transactional-open rule moved into
+   C. `kprt_sink_destroy` stops, uninitialises, disposes, and only then clears `sink->ring`, so
+   the callback is provably out before `kprt_ring_flush`'s precondition is claimed.
+3. `CoreAudioSink` becomes a thin owner of the two handles. It keeps `retainedResources()` so the
+   existing "a failed open hands back everything it created" test still has something to assert,
+   and it keeps `estimatedAnchors` and the other counters by reading them from one stats call.
+4. Add `internal interface NativeRingAudioSink : AudioSink` in `nativeMain` with one member that
+   opens against a ring rather than against an `AudioRenderCallback`. The choice is made by the
+   sink, not by the platform, because the sink owns the device callback: a native sink with no C
+   callback simply does not implement it and keeps working with `KotlinAudioRing`. This is what
+   makes it a capability rather than a fork.
+5. `AudioPlayback.open` delegates ring creation to one `internal expect` function whose native
+   `actual` branches on the sink implementing `NativeRingAudioSink` and whose every other `actual`
+   returns the Kotlin ring wired through the existing lambda. One expect function and one
+   native-only interface: every line of policy, backpressure, clock anchoring and flush ordering
+   stays in `commonMain` where it is.
+6. Collapse silence and underrun counting per B1-19 and update the KDoc that calls the duplication
+   deliberate.
+7. Retarget the six test files that pin the Kotlin callback contract. `AudioRenderCallback` stays,
+   because non-device sinks still use it, so those tests keep a real subject.
+
+**Tests it must add**, in this order of authority, which is the order the gate runs them.
+1. A symbol and instruction audit of the render translation unit, deterministic, no runtime, the
+   strongest evidence available for this claim. `nm -u` on the object must yield nothing outside a
+   fixed allowlist of `_memcpy` and `_memset`, and `objdump -d` over `kprt_ring_render` and
+   `kprt_render_cb` must contain no call to `malloc`, `calloc`, `realloc`, `free`, `objc_msgSend`,
+   `objc_retain`, `objc_release`, `pthread_mutex_lock`, `os_unfair_lock_lock`, `dispatch_`,
+   `printf`, `os_log`, `AudioConvertHostTimeToNanos`, or any symbol beginning `Kotlin_` or
+   `kfun:`. Build the unit without `-fno-builtin-memcpy` and `-fno-builtin-memset` so the
+   allowlisted calls stay visible, and close the stack-allocation loophole with `-Werror=vla` plus
+   a grep for `alloca`, because a variable length array is an allocation no symbol list shows.
+2. A C test with the allocator interposed: five million synthetic callbacks of pseudo-random frame
+   counts against a real feeder thread, asserting zero `malloc`, `calloc`, `realloc`, `free` and
+   `mmap` between create and destroy, samples out equal to samples in, the underrun count equal to
+   the deliberately induced starvations, and `segment_giveups` zero. Repeated under ASan, UBSan and
+   TSan. TSan earns its keep here: a seqlock written with `volatile` instead of C11 atomics is a
+   real race and TSan will say so, which is the reason to write it with atomics and explicit
+   fences.
+3. A GC-pressure differential on Kotlin/Native, which is what B1's exit line actually promises:
+   open a real device through the C sink, play real media for 10 minutes, and simultaneously run a
+   Kotlin thread allocating hard with `GC.autotune = false` and `GC.targetHeapBytes` pinned at 1
+   MiB so collections happen hundreds of times a second. Assert from the stats call that underruns
+   are zero, `segment_giveups` is zero, and `worst_callback_nanos` is under half the device period,
+   which is 5,333,333 ns at 512 frames and 48 kHz per B10's budget. Then run the identical test
+   against a test-only sink whose callback deliberately enters Kotlin, and require that version to
+   fail. A test that cannot fail proves nothing.
+4. A Kotlin heap drift check as corroboration only, presented as level 5 and never as the gate:
+   force a collection, record total object bytes, run 10 minutes of callbacks, force another, and
+   assert the heap did not grow. It cannot attribute growth to the callback rather than to anything
+   else alive in the process.
+
+Refused as evidence, and the log must say so: a malloc interposer as proof about Kotlin
+allocation, because Kotlin/Native takes pages by `mmap` and hands objects out of them, so an
+interposer read 229 mallocs before and 230 after one million Kotlin object allocations and would
+read zero on a callback allocating millions of objects. Sampling, because the callback runs about
+94 times a second for tens of microseconds and a clean profile would be evidence of nothing being
+sampled presented as evidence of nothing happening. And any claim that the current release-mode
+callback already allocates zero on the strength of escape analysis.
+
+**Gate.**
+```bash
+cd kiteplayer-rt/native
+./scripts/render-audit.sh                       # assertion 1, must pass
+./scripts/run-c-tests.sh interpose              # assertion 2
+./scripts/build-host.sh tsan && ./scripts/run-c-tests.sh tsan
+cd .. && ./gradlew :kiteplayer-output:macosArm64Test :kiteplayer-core:macosArm64Test \
+                   :kiteplayer-core:jvmTest :kiteplayer-ffmpeg:macosArm64Test \
+                   :kiteplayer-rt:macosArm64Test
+# assertion 3: the 10 minute device run plus the negative control, run by hand, numbers recorded
+# assertion 4: the heap drift check, recorded as corroboration
+# then the full section 9 gate plus B1.1's additions
+```
+
+**Commit first line.** `Take the real-time audio callback out of managed Kotlin`
+
+---
+
+#### B1.9 Close-out: the words, the evidence and the log
+
+**Files.**
+- `../KiteCodec/README.md`, `../KiteCodec/CHANGELOG.md`,
+  `../KiteCodec/native/kitecodec-c/README.md`
+- `README.md`, `kiteplayer-rt/README.md`
+- `../KiteCodec/native/kitecodec-c/coupling-baseline.txt` (re-record, lower or equal)
+- `api/` dumps for every KitePlayer module whose surface moved
+- `KPKMP.md` section 14 (the log entries) and section 6 (documentation truth register)
+
+**Steps.**
+1. Re-record the coupling baseline at its new, lower values and state the deltas.
+2. Write the deferral record: what is deferred, to which item, and what breaks if it never
+   happens, copied from 15.5 so the log stands alone.
+3. State B1-20 in three places: the KitePlayer README, `AudioRingTest`'s class KDoc, and the log.
+   On macOS the 16 ring tests no longer cover the shipped path; the C suite and the differential
+   oracle do.
+4. Tier table: no promotion. B1 adds no playback capability. macOS arm64 stays an experimental
+   T3-Full candidate on one development machine and everything else stays T1. Say which of the ten
+   targets built a C archive and which did not.
+5. `kitecodec-c/README.md` records the build commands, the sanitizer variants, the fuzz corpus,
+   the three instruments and what each one can and cannot prove, and the four platform limits
+   measured here: no libFuzzer, no LeakSanitizer, no cmake, one FFmpeg tree.
+
+**Tests it must add.** None. This sub-phase adds words and evidence only.
+
+**Gate.** The full section 9 gate plus B1.1's additions, both repositories, rerun for real with
+`--rerun-tasks`, plus every C suite and every sanitizer variant, plus the fuzz corpus replay, plus
+the fresh `apiDump` diff in both repositories. Record the measured test counts.
+
+**Commit first lines.** KiteCodec: `State what the C layer proves and what it does not`.
+KitePlayer: `Say plainly which audio ring the shipped path uses`.
+
+### 15.3 The C testing, fuzzing and sanitizer strategy, concretely
+
+**Compilers and tools, all measured present on this machine unless noted.**
+
+| Purpose | Tool | Notes |
+|---|---|---|
+| Host test binaries | `/usr/bin/clang`, Apple clang 17.0.0 | Sanitizers ride on this |
+| Shipped per-target archives | `~/.konan/dependencies/llvm-21-aarch64-macos-essentials-97/bin/clang`, 21.1.6 | The compiler Kotlin/Native itself uses |
+| Archiving | `llvm-ar` from the same konan package | The package has no `llvm-nm`, `llvm-strip` or `llvm-objcopy` |
+| Symbol inspection, Mach-O | `/usr/bin/nm`, `/usr/bin/objdump` | |
+| Symbol inspection, ELF | `aarch64-linux-android-nm` and `-readelf` from the Android toolchain package | These are macOS-native binaries; the Linux gcc package's own binaries are Linux ELF and cannot run here |
+| Apple sysroots | `xcrun --sdk macosx` and `--sdk iphoneos` | Resolved inside `@TaskAction`, never at configuration time |
+| FFmpeg flags | `pkg-config`, or `KC_FFMPEG_PREFIX` | Answers correctly for all six libraries here |
+| Build driver | a shell script, plus a Gradle task | Not make, not cmake, not ninja: B1-15 |
+
+**Sanitizer matrix.** Three build variants, because ASan and TSan are mutually exclusive.
+
+- `plain`: `-O2 -Wall -Wextra -Werror -Werror=vla`. Catches nothing at runtime; it is the
+  compile-fidelity and correctness variant.
+- `asan`: `-fsanitize=address,undefined -fno-omit-frame-pointer -g -O1`. Both build and run were
+  verified on this machine. This is the variant that catches the class the identity gate prevents:
+  reconnaissance reproduced a stale-header helper reading four bytes 36 bytes past a 416 byte
+  region and ASan named it exactly.
+- `tsan`: `-fsanitize=thread -g -O1`. Verified building and running here. This is the variant that
+  keeps the seqlocks honest.
+- LeakSanitizer is not available here (B1-14). Leak evidence comes from the interposer locally and
+  from LSan in the Linux CI job.
+
+**The allocation interposer.** One file, `tests/interpose_alloc.c`, using the Mach-O
+`__DATA,__interpose` section to count `malloc`, `calloc`, `realloc`, `free`, `mmap` and `munmap`.
+Naive `DYLD_INSERT_LIBRARIES` plus symbol shadowing silently counts zero because of the two-level
+namespace, which is a trap worth knowing rather than rediscovering. The interposer is exactly
+correct for C allocation, which does go through these functions, and exactly wrong for Kotlin
+allocation, which does not; 15.2 B1.8 records that refusal.
+
+**C test suites and what each targets.** Every suite is table driven, prints one line per case, and
+returns non-zero on the first failure.
+
+| Suite | Targets | What it asserts |
+|---|---|---|
+| `test_ownership.c` | the 29 ownership helpers | exact alloc and free pairing under the interposer, including the parent-owned result of `ffkmp_fmt_new_stream`, the per-call `SwsContext` in `ffkmp_frame_convert_pixfmt`, and the conditional `ctx->pb` close in `ffkmp_fmt_free_output` |
+| `test_buffers.c` | 9 stack buffers, 4 size-taking copy helpers | limit and limit plus one for each buffer; a destination one byte short for each copy helper; no write past the declared size, under ASan |
+| `test_rescale.c` | the 10 macro, 128 bit and by-value helpers | exact results at the D9 overflow vectors; `AV_CEIL_RSHIFT` plane heights for subsampled formats |
+| `test_strerror_thread.c` | `ffkmp_strerror` | two threads, interleaved calls, each sees only its own message |
+| `test_convert.c` | `ffkmp_frame_convert_pixfmt` | correct conversion and leak-free operation, as B2's caching baseline |
+| `test_identity.c` | `kc_init`, the report | five cases, one per verdict, against a doctored header shim tree |
+| `kiteplayer-rt` suites | the ring and the callback | the four assertions of B1.8, plus the bounded-reader, exact-silence and overflow cases |
+
+**Fuzzing.** Six targets, one per string entry point, listed in B1.5. One source per target
+compiles two ways: `LLVMFuzzerTestOneInput` with `-fsanitize=fuzzer,address,undefined` in the
+`ubuntu-24.04` CI job, five minutes per target, zero findings to pass; and a corpus replay `main()`
+compiled everywhere with ASan and UBSan, which is what runs on this machine and in every later
+gate. Corpus is committed, small and textual. Container byte fuzzing and path entry points are
+B8's, by its own wording, and the fuzz directory's README says so.
+
+**The audit scripts, which are tests and not documentation.**
+- `symbol-audit.sh` over the helper archive: undefined symbols resolve only to `libav*`, `libsw*`
+  and a five name allowlist; exported names are exactly the 157 the Kotlin side imports.
+- `render-audit.sh` over the render translation unit: the allowlist and forbidden-call scan of
+  B1.8, plus `-Werror=vla` and the `alloca` grep.
+- `klib-metadata-diff.sh` over the cinterop klib: the compatibility instrument for the cinterop
+  surface, which `apiCheck` does not cover because the cinterop klib is a separate artifact from
+  `kitecodec-core`'s own klib.
+
+**How each claim is graded**, against section 2. The metadata differential, the doctored-macro
+identity test, the differential ring oracle, the interposer counts and the sanitizer runs are level
+2: deterministic differentials, oracles and sanitizer results on the exact contract. The render
+audit is stronger than a runtime test for what it covers and is still level 2, because it is a
+deterministic property check rather than a device measurement. The 10 minute device run is level 1
+only for macOS arm64 in debug, on one machine, with its numbers recorded; it is not release-mode
+qualification and B10 owns that. Compilation of the per-target archives is level 7 and says nothing
+about behaviour. Any statement that the C library works on a target whose archive was never built
+is level 8 and is banned.
+
+### 15.4 Rollback, per irreversible step
+
+B1 has exactly one structurally irreversible sub-phase and four steps whose reversal costs more
+than a revert. Everything else is a plain `git revert` of one commit in one repository.
+
+**B1.3, the lift.** The only sub-phase after which the tree cannot be understood without the new
+shape. Rollback: revert the single commit. The 949 line def body is in git at the parent commit,
+and `verify-lift.sh` re-derives the extracted sources from it, so the two representations can be
+proved equal in either direction at any time. Nothing else in either repository changed in that
+commit, and the Kotlin side is untouched, so a revert restores a tree that was green minutes
+earlier. Cost: one revert plus one gate run. The precondition that makes this cheap is B1.2
+landing first: the C sources and their tests already exist and are proved faithful before the def
+is edited, so the risky commit contains only build wiring.
+
+**B1.4, deleting the 15 helpers and the `archived/` directory.** Reversible by revert, and the
+deletion is safe for a reason rather than by luck: nothing has ever been published from KiteCodec
+(`CHANGELOG.md` Unreleased, no git tags), and zero KitePlayer files import from the cinterop
+package. If a later phase discovers a need for one of the 15, restoring it is a three line change
+plus a baseline update, not a redesign. Do not perform this deletion in the same commit as the
+lift, so each can be reverted alone.
+
+**B1.6, the entry-point gate.** `kc_init` at the top of 15 entry points changes the failure
+behaviour of every public API in KiteCodec, and a false rejection would make the library refuse to
+start against a runtime that is actually fine. Two mitigations, both required. First, the policy
+has exactly one hard-reject condition set and it is the one measured to matter: major inequality,
+runtime minor below header minor, and configuration disagreement. Micro never rejects. Second, the
+gate must be provably bypassable for diagnosis: an environment variable that downgrades the
+rejection to a warning printed once, which the negative test asserts does not exist as a silent
+default and does exist when set. That escape hatch is what keeps a false positive from being an
+outage; it is not a supported configuration and the report says so when it is used.
+
+**B1.7 and B1.8, the audio path.** The irreversible-feeling part is the callback move, and the
+split is what makes it revertible. After B1.7 the C ring exists and is proved and the production
+path is unchanged, so B1.7 is revertible by revert with no behavioural consequence. B1.8 flips the
+device path in one commit; reverting it returns to a Kotlin callback over a Kotlin ring that the
+same gate proved green one sub-phase earlier. Keep `KotlinAudioRing` and `AudioRenderCallback`
+alive permanently: they are the js and wasmJs implementation, the differential oracle, and the
+rollback target, and B1-20 says they must not be presented as covering the shipped path.
+
+**B1.1, the ABI baseline.** Not irreversible, but note the direction: once `apiCheck` is in the
+gate, an accidental public API change fails a gate instead of shipping. If a legitimate change is
+needed, `apiDump` plus a log entry naming the added or removed declarations is the procedure, and
+B1.6 is the only sub-phase in B1 expected to use it.
+
+**What has no rollback, and must therefore not be attempted in B1.** Publishing anything. B1 must
+not publish to Maven Central, must not tag, and must not change `GROUP` or any coordinate. The
+moment an artifact is public, the ABI decisions in 15.0 stop being free, and the whole argument for
+deferring the opaque migration depends on them staying free until B7 decides.
+
+### 15.5 What is deferred, to which item, and what breaks if it never happens
+
+**Deferral 1, opaque handles across the 176 legacy helpers, and removing the FFmpeg headers from
+the def.** To B2 for the signatures, because B2 redesigns them anyway for typed send and receive
+outcomes, pooled plane views with negative strides, the full channel layout and the side-data
+model, and doing an opaque rename in B1 and a semantic redesign in B2 pays twice. To B7 for the
+completion deadline, because the Android AAR over the JNI bridge is the first consumer that
+genuinely benefits. Held in place meanwhile by the ratchet of B1-06. When it happens it happens
+inside the one existing `ffmpeg` cinterop module, family by family, and never in a second module.
+*If it never happens:* the published klib keeps the FFmpeg struct layout classes; a future Kotlin
+author can write `frame.pointed.sample_rate` and reintroduce a coupling the gate does not cover
+(today that is zero call sites, measured, so this is regression prevention and not a fix); and no
+non-Kotlin consumer has a supported API, which means B7's AAR carries the FFmpeg include tree into
+its NDK build. *What does not break:* correctness against a mismatched runtime, which the gate
+covers, and the practical layout coupling, which is zero today.
+
+**Deferral 2, explicit ownership annotations in the compiler-attribute sense.** Delivered instead
+as documented ownership contracts in the header plus exact pairing tests over all 29 ownership
+helpers under the interposer. `__attribute__((ownership_returns))` is honoured only by clang's
+static analyzer and not by the compiler proper, so the attribute is level 8 evidence and the test
+is level 2. *If it never happens:* nothing. The tests carry the guarantee, and this should not be
+restored later.
+
+**Deferral 3, an error record replacing `ffkmp_strerror` and the Kotlin `AVERROR_*` tag algebra.**
+To B2, with the signatures. B1 documents and tests the thread affinity instead (B1-09). *If it
+never happens:* `Errors.kt` keeps reimplementing FFmpeg's tag arithmetic in Kotlin, which is
+duplicated knowledge that can drift from the headers, and every error message crosses a
+thread-affine pointer.
+
+**Deferral 4, exhaustive fuzzing of every C entry point that accepts bytes.** B8's stated remit.
+B1 delivers the harness, the replay driver, the committed corpus and six targets over the
+parser-reaching string entry points. *If it never happens:* the demuxer and decoder byte paths stay
+unfuzzed, which is a real security gap and is B8's gap; B1's contribution is the infrastructure
+without which B8 cannot start.
+
+**Deferral 5, coverage-guided fuzzing on this machine.** Impossible here (B1-13). True fuzzing runs
+in the Linux CI job; locally the corpus replays as a sanitized regression. *If it never happens
+locally:* a new crash is found one CI cycle later instead of immediately. Installing Homebrew LLVM
+fixes it and is not a prerequisite.
+
+**Deferral 6, the six speculative handle families** (`kc_swr`, `kc_sws`, `kc_hwdevice`,
+`kc_hwframes`, `kc_io`, `kc_cancel`). To B2 for swresample, swscale caching and the interruptible
+open request, and to B5 for the hardware families. Prototyped and proved workable during design,
+including a pure C interrupt callback returning `AVERROR_EXIT` from a pre-cancelled open with no
+Kotlin function pointer anywhere, so B2 inherits a proof rather than a guess. *If it never
+happens:* nothing regresses; B2 simply cannot be finished, since these are its named contents.
+
+**Deferral 7, per-target verification of the C library.** Nine of the ten registered targets have
+no FFmpeg tree on this machine, so the real library can be compiled only for macOS arm64 here. To
+B7 and B9. *If it never happens:* the C layer's cross-target claims stay at level 7 or level 8
+forever, which the README must keep saying.
+
+**Refused permanently, not deferred.** Making `AudioRing` an `expect class`. js and wasmJs cannot
+contain C; 16 `commonTest` tests and the whole A5 virtual-time simulation campaign drive the Kotlin
+ring; and deleting the portable implementation on native destroys the only oracle the C ring can be
+checked against.
+
+**Pre-existing gaps B1 declines to fix, recorded so silence is not mistaken for completion.** The
+licence flavour contradiction (B1-21), which B1 makes visible and B7 must resolve. The absence of
+KitePlayer CI (B1-24). The def's missing iOS link flags, added in B1.3 but unverifiable here
+(B1-12). And the CI comment claiming the Linux job proves the lavc 6.x compat path: it proves 6.1
+and newer, because the def body's real compilation floor is lavc 60.30.100 and lavu 58.7.100, not a
+major boundary, and FFmpeg 6.0 fails to compile it with four errors.
+
+### 15.6 The three blocking questions, decided
+
+Answered by the orchestrator on 2026-08-09, before B1.1 started. All three are settled; do not
+reopen them. B1.3 is unblocked.
+
+1. **Is JNI, and therefore B7's Android AAR, actually coming? Yes, and the deferral's deadline is
+   B7.** This is not a preference, it is the product's founding motivation: the owner built this
+   because wiring a native player into a Kotlin Multiplatform application by hand was the pain
+   worth removing, and that application targets Android and iOS. B7 already commits to "Android
+   AAR over the JNI bridge" and B9 makes Android API 24 or newer a mandatory T5 platform, so
+   Kotlin/JVM must reach this C layer, and `androidNative` klibs cannot serve a normal Android
+   application. The consequence for 15.5's Deferral 1 is therefore concrete rather than open:
+   the opaque handle migration is owed to B7, it is scheduled rather than hypothetical, and every
+   C signature written from B1.2 onward is designed so that a later opaque wrapper can be added
+   over it without changing the implementation body.
+2. **Is a one-machine, hand-supervised device gate acceptable for B1.8? Yes, and its evidence
+   ceiling is recorded rather than glossed.** Building continuous integration first would block
+   the foundation on infrastructure, and infrastructure is not what makes the audio callback
+   correct. So B1.8 proceeds with the supervised run, and its Execution log entry must state, in
+   the same paragraph as its numbers, that the evidence is one machine, one debug binary, one
+   operator, which is level 2 on a single platform under section 2 and is not the release-mode
+   qualification B10 will demand. B1-24 stays in the register but is reassigned: continuous
+   integration belongs to **B8**, which already owes sanitizer jobs in CI and cannot deliver its
+   own gates without it. No claim anywhere may present a supervised local run as CI evidence.
+3. **May B1.6 ship the diagnostic bypass? Yes, under three conditions, all mandatory.** An
+   unbypassable gate makes a false rejection our outage in a consumer's product, and that
+   consumer cannot patch us. So the bypass exists, and it is built so that using it is never
+   quiet: it is opt-in only and never the default; it emits a warning naming the exact mismatch,
+   the expected identity and the found identity, once per process; and the fact that it was used
+   is recorded in the diagnostics a bug report carries, so no investigation ever starts from a
+   silently bypassed gate. This is the same shape the project already uses for approximate colour
+   and for refused speed: continue, but say so in a typed and visible way.
+
+One note the orchestrator checked rather than assumed: the coupling numbers in B1-06 were measured
+at KiteCodec `cdb8ad2`, which is still `HEAD` with a clean tree, so 253, 273, 21 and 11 stand and
+B1.1 may write them as its baseline without re-measuring. If that stops being true before B1.1
+runs, re-measure and record the difference.

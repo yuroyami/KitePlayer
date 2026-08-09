@@ -2,7 +2,6 @@ package io.github.yuroyami.kiteplayer.sample
 
 import io.github.yuroyami.kiteplayer.AudioPlayback
 import io.github.yuroyami.kiteplayer.FrameDropPolicy
-import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.VideoPlayback
@@ -208,7 +207,7 @@ private suspend fun runSession(
                         for (packet in videoPackets) {
                             // False means the decoder is full and the packet was NOT consumed, so it
                             // is offered again after draining rather than discarded.
-                            while (!decoder.send(packet, Generation.Initial)) {
+                            while (!decoder.send(packet)) {
                                 val frame = decoder.receive() ?: break
                                 decodedVideo++
                                 video.submit(frame)
@@ -220,7 +219,7 @@ private suspend fun runSession(
                                 video.submit(frame)
                             }
                         }
-                        decoder.send(null, Generation.Initial)
+                        decoder.send(null)
                         while (true) {
                             val frame = decoder.receive() ?: break
                             decodedVideo++
@@ -240,7 +239,7 @@ private suspend fun runSession(
                     val decoder = source.audioDecoderFactories().first().create(audioStream)!!
                     try {
                         for (packet in audioPackets) {
-                            while (!decoder.send(packet, Generation.Initial)) {
+                            while (!decoder.send(packet)) {
                                 val buffer = decoder.receive() ?: break
                                 audio.submit(buffer.pts, buffer.interleavedFloat(), buffer.frameCount)
                                 buffer.close()
@@ -254,7 +253,7 @@ private suspend fun runSession(
                                 decodedAudio++
                             }
                         }
-                        decoder.send(null, Generation.Initial)
+                        decoder.send(null)
                         while (true) {
                             val buffer = decoder.receive() ?: break
                             audio.submit(buffer.pts, buffer.interleavedFloat(), buffer.frameCount)

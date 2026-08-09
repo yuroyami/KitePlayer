@@ -1406,3 +1406,206 @@ is no other.
     every native compile, which D5 reworks in A3, and KiteCodec's two Gradle plugin
     functional tests fail on a clean checkout, which executor contract item 5 says to
     ignore.
+- 2026-08-09, phase A2, gate passed. Both repositories were touched, so the KiteCodec test
+  run and the mavenLocal republish are part of this gate. What landed:
+  1. D8: `MediaSource.restoreStreamDiscardDefaults()` puts every stream back on
+     AVDISCARD_DEFAULT, and `PacketReader.close()` calls it immediately before
+     `endPacketReader()`. The failure path of `openPacketReader` calls it too, because a
+     half-opened reader must not leave the demuxer skipping streams either.
+  2. D9: `Packet.dtsMicros`, `Packet.durationMicros`, `Frame.ptsMicros` and
+     `Frame.durationMicros` under `@KiteCodecLowLevelApi`, all through `ffkmp_rescale_q`
+     with the stream time base, null on NOPTS and on a non-positive duration. Frame
+     timestamps stay on the stream timeline; the origin is subtracted once, in KitePlayer.
+  3. D17: `StreamDecoder.isDrained`, set only when `receive()` sees end of stream (EOF and
+     EAGAIN are now separate branches), cleared by `flush()`.
+  4. D18: `seekMicros` checks `!readerActive` inside the state lock and names
+     `PacketReader.seek` in the message.
+  5. D35: `Packet.checkOpen()` in every getter that dereferences native memory
+     (`streamIndex`, `pts`, `dts`, `duration`, `isKeyframe`, `sizeBytes`, `bytePosition`;
+     the four derived getters read through those), and `packet?.checkOpen()` at the top of
+     `StreamDecoder.send`. Message `Packet is closed`. Done by the gate, see deviations.
+  6. D28: `drainTo` wraps, invokes, then unrefs the landing frame in a `finally`
+     unconditionally, and returns whether anything came out. `feedInput` and `flushInput`
+     share one `sendUntilAccepted`, which retries a send after a drain and throws
+     `FFmpegError.InvalidArgument` naming the starved multi-input condition once two
+     consecutive attempts drain nothing. Bound is 2 attempts.
+  7. D29: `EncoderCore` tracks `lastSampleCount` and both the NOPTS path and the
+     force-monotonic path step by the previous frame's samples, so 960 then 1024 start at 0
+     and 960.
+  8. D30: one shared `ffkmp_ch_layout_mask_` static plus two typed accessors
+     (`ffkmp_frame_ch_layout_mask`, `ffkmp_codecpar_ch_layout_mask`), and
+     `channelLayoutMask: Long?` on `AudioStreamInfo` and `FrameInfo`, 0 mapped to null.
+  9. D31: `Frame.withPlanes` starts with `check(info.type == MediaType.Video)` naming
+     `copyPlanesToByteArray` for audio, and `ffkmp_frame_plane_height` returns 0 when the
+     frame has no width.
+  10. D32 KiteCodec half: `ffkmp_fmt_is_seekable` (not AVFMTCTX_UNSEEKABLE, has a `pb`, and
+      `pb->seekable & AVIO_SEEKABLE_NORMAL`) and `MediaSource.isSeekable`, read once at
+      open because reading it lazily would touch a context `close()` frees. KitePlayer's
+      `KiteCodecSource.seekable` now reads it instead of being hardcoded true.
+  11. `ffkmp_stream_r_frame_rate` deleted from the def file (zero callers in either repo).
+  12. D10: `TimestampMapper(containerStartMicros)` at file scope in `KiteCodecSource.kt`
+      with the two mandatory functions, `mapTimestamp` subtracting the origin and
+      `mapDuration` shifting nothing, both null in null out. Points through the first:
+      `PlayerPacket.pts`, `PlayerPacket.dts`, `VideoFrame.pts`, `AudioBuffer.pts`,
+      `PlayerStreamInfo.startTime`. Intervals through the second: `PlayerPacket.duration`,
+      `VideoFrame.duration`, `PlayerMediaSource.duration`. `seekToKeyframe` needs no
+      conversion and says so. Missing video pts are synthesised as the previous one plus
+      the frame's own duration, else the container rate, else 40 ms, with the first
+      frame of a timestampless stream at zero as a counter's origin; missing audio pts
+      come from an anchor plus `samplesSinceAnchor * 1_000_000 / rate`, one division per
+      buffer and not one per sample run, re-anchored by any real timestamp. Both reset
+      on flush. Every manual `pts * 1_000_000 * num / den` and the raw `Pts(native.dts)`
+      cast are gone.
+  13. D22: `send` lost its `generation` parameter on all three decoder SPI interfaces and
+      `flush(newGeneration: Generation)` gained it. Both wrappers adopt the epoch inside
+      `flush`, after `decoder.flush()` succeeds, so a failed flush leaves the honest old
+      value and a buffered frame is never relabelled.
+  14. Fixtures and tests: `tsoffset1400.ts` (`sync1080p30.mp4` remuxed with `-c copy
+      -output_ts_offset 1400 -f mpegts`, container start 1401.378667 s, video stream start
+      1401.4 s, time base 1/90000) and `novts.h264` (raw Annex B, no timestamps anywhere).
+      New suites: KiteCodec `PlayerSurfaceTest` 10, `FilterGraphDrainTest` 3,
+      `EncoderRestampTest` 1; KitePlayer `RelativeTimelineTest` 5.
+
+  Gate, every step rerun for real with `--rerun-tasks`. KiteCodec
+  `:kitecodec-core:macosArm64Test`: 11 actionable tasks, 11 executed, nothing up to date
+  (`cinteropFfmpegMacosArm64` re-executed from the changed def file), 72 tests, 0
+  skipped, 0 failures, 0 errors across 10 suites: EncoderRestampTest 1, ErrorsTest 6,
+  FFmpegNativeTest 13, FilterDescriptionLengthTest 5, FilterGraphDrainTest 3,
+  FrameInfoTest 4, PipelineRoundTripTest 17, PlayerSurfaceTest 10, RationalEdgeCaseTest
+  6, RationalTest 7. That is the A0 gate's 58 plus 14 new. `publishToMavenLocal
+  -Pkitecodec.hostTargetsOnly=true --rerun-tasks`: 35 actionable tasks, 35 executed,
+  successful, and the published klibs were opened and checked: `isDrained`, `isSeekable`,
+  `channelLayoutMask`, `dtsMicros` and `durationMicros` are in
+  `kitecodec-core-macosarm64-0.0.1.klib`, `ffkmp_fmt_is_seekable`,
+  `ffkmp_frame_ch_layout_mask` and `ffkmp_codecpar_ch_layout_mask` are in the cinterop
+  klib, and `ffkmp_stream_r_frame_rate` is in neither. KitePlayer, one invocation of the
+  five test tasks plus the three cross-target compiles plus
+  `linkDebugExecutableMacosArm64`: 63 actionable tasks, 63 executed, and the only two
+  UP-TO-DATE tasks are AGP's `androidPreBuild` and `preAndroidMainBuild`, which have no
+  actions. Suites: `:kiteplayer-core:jvmTest` 88, `:kiteplayer-core:macosArm64Test` 88,
+  `:kiteplayer-output:macosArm64Test` 7, `:kiteplayer-ffmpeg:macosArm64Test` 11
+  (DecodeAndConvertTest 6, RelativeTimelineTest 5), `:kiteplayer-subtitles:jvmTest` 8, so
+  202 test executions, 0 skipped, 0 failures, 0 errors, against 197 at the A1 gate.
+  `./scripts/testmedia.sh` exit 0, all 14 files written. Sample runs, debug binary,
+  development evidence only: `sync1080p30.mp4` 300 decoded and 300 submitted, 0 dropped, 0
+  repeated, 0 underruns, clock drift 0 ms on every line, final a/v drift 17 ms, worst
+  schedule 5 ms; `truevfr720.mp4` 240 and 240, 0 dropped, 0 repeated, 0 underruns, final
+  drift 18 ms, worst schedule 7 ms; `hevc4k10.mp4` 180 and 180, 0 dropped, 0 repeated, no
+  audio track so video drives the clock, clock drift between -4 and 0 ms, run completes,
+  worst schedule 6 ms; `tsoffset1400.ts` 300 and 300, 0 dropped, 1 repeated, 0 underruns,
+  final drift 5 ms, worst schedule 6 ms, and the position line runs `0:00.181` to
+  `0:09.952` against a duration of `0:10.021`, which is D10 end to end on a container that
+  starts at 1401 s and would have printed 23:21 before this phase; `/nonexistent.mp4`
+  prints `cannot play /nonexistent.mp4` and `No such file or directory (code=-2)`, exit
+  status 1, no stack trace. Em dash scan over both repositories: 0 hits. Every added line
+  is inside the 120 column convention and contains no non-ASCII character.
+
+  Deviations, each with its proof:
+  - No implementer report said FAILED, so nothing was redone: the working tree on disk
+    matched the three reports file for file. One report recorded a mid-run failure in
+    another agent's in-progress test file; that was stale, and the combined tree passes.
+    Recorded because a failed report is normally a reason to redo the step.
+  - D35 was named by A2 step 3 but landed in no implementer's do-list, and both KiteCodec
+    reports flagged it as not done. Verified directly before repairing: `Packet` had
+    `private var closed` and not one `checkOpen()`, and `send` did not look at its
+    argument. The gate implemented it and proved the test bites: with `checkOpen()`
+    emptied, `PlayerSurfaceTest.aClosedPacketRefusesToBeReadOrSent` fails with
+    `streamIndex read a closed packet. Expected an exception of
+    kotlin.IllegalStateException to be thrown, but was completed successfully with the
+    result: <0>`, which is a read of freed memory answering with a plausible number. The
+    guard was restored from a backup and re-verified by diff afterwards.
+  - The D10 mapper takes microseconds, not `(rawTicks, timeBase)` as the register writes
+    it. Proof that the register's signature contradicts itself: D9 requires the rescale to
+    go through KiteCodec's overflow-safe helpers and deletes every multiply from
+    KitePlayer, so a mapper taking raw ticks would have to redo the exact rescale D9
+    removes. The mandatory distinction between a point and an interval is intact and
+    visible at every call site.
+  - `KiteCodecSource.seekable` was changed although step 7 names only the KiteCodec half of
+    D32. D32's own entry says in one sentence that `KiteCodecSource.seekable` reads
+    `isSeekable` in phase A2, and leaving it would have closed A2 with the fabricated
+    `= true` the defect exists to remove.
+  - D30 is one shared def helper plus two typed accessors, not the register's "one new def
+    helper". The mask has to be read from two different native structs, `AVFrame` for
+    `FrameInfo` and `AVCodecParameters` for `buildStreams`. This tightens the requirement.
+  - D8's test asserts more than the register's "assert frames arrive", because that
+    assertion would have passed on the unfixed code. Measured with an out-of-tree program
+    against the linked FFmpeg 8.0: a Matroska audio track marked AVDISCARD_ALL still
+    delivers its first packet, 1 against 47 with the default. The test therefore compares
+    total decoded samples on the same source before the reader and after it closes, which
+    must be exactly equal.
+  - D31's def-file half is defence in depth and not the behaviour fix. Measured: the old
+    `ffkmp_frame_plane_height` already returned 0 on an audio frame, because an audio
+    frame's height is 0, even though it read a sample-format ordinal as a pixel format (s16
+    resolves to yuyv422). The observable defect was `withPlanes` handing a caller plane
+    pointers, an audio buffer size as a row pitch and heights of 0 with no way to notice,
+    which the Kotlin `check` stops. Both halves were implemented as prescribed.
+  - D28's prescribed test, "a two-input graph fed only on one pad fails with the typed
+    error instead of hanging", is unreachable through the public API against this FFmpeg.
+    Proof from the vendored RELEASE 8.0 tree: `ffkmp_graph_send` is
+    `av_buffersrc_add_frame_flags`, which returns 0, AVERROR_EOF, EINVAL, ENOMEM or
+    `ff_filter_frame`'s result, and `ff_filter_frame` queues onto the link fifo and returns
+    0. There is no EAGAIN path, so a starved graph returns with no output instead of
+    spinning. The test was split rather than the guard weakened: one case drives a real
+    `amix=inputs=2` graph fed on one pad only, which returns from every call, emits nothing
+    and releases the mix once the starved pad is flushed, and one case drives the retry
+    rule on that same real graph with an injected send that reports EAGAIN and asserts the
+    typed error names the pad and the filter. That injection is why `sendUntilAccepted` is
+    `internal` and takes a `send: () -> Int`.
+  - `novts.h264` and its test are additions beyond the register. Reason: the prescribed D10
+    test cannot reach the pts synthesis rule at all, because KiteCodec's `receive()`
+    promotes `best_effort_timestamp` into the frame, so no normal container yields a
+    pts-less frame. Measured on the new fixture: all 25 packets and all 25 frames carry
+    AV_NOPTS_VALUE and the decoder still reports a 40 ms duration, and the synthesised
+    timeline is exactly 0, 40000, ... 960000 microseconds.
+  - The ordering of the first two video pts fallbacks is not tested, only the synthesis
+    itself. On `novts.h264` the frame's own duration and the container's declared rate both
+    give 40 ms, so the fixture cannot separate them. The order is justified at the code
+    from first principles instead: a per-frame duration survives a rate change, a declared
+    rate is one average of the whole stream. An earlier draft of that test claimed 50 fps
+    from ffprobe's `r_frame_rate` and failed, which is how this was found; KiteCodec
+    exposes `avg_frame_rate`, the correct 25.
+  - `KiteCodecVideoFrame` lost its `stream: PlayerStreamInfo` parameter, which nothing
+    read. The constructor is `internal`, its parameter list was being rewritten anyway for
+    pts and duration, contract item 12 makes signature changes free, and A1's D3 set the
+    precedent.
+  - `openDecoder` is now reached through two new `internal` factory methods on
+    `KiteCodecSource`. The decoder wrappers need the mapper, D10 requires the mapper to be
+    private, and Kotlin cannot expose a private type through an `internal` property. No
+    public API was added.
+  - A zero sample rate holds the audio anchor instead of coercing the divisor to 1.
+    Coercing would date the next buffer days into the file; repeating the anchor is
+    degenerate but bounded, and only a stream that declares no rate and whose decoder
+    reports none can reach it.
+  - `PlayerStreamInfo.startTime` corner, recorded and not fixed: KiteCodec collapses a
+    stream with no declared start to `startTimeMicros = 0`, so on a container starting at
+    1401 s such a stream would report a negative relative start. Null would be the honest
+    answer and KiteCodec's non-null `Long` cannot express it. Every real stream in
+    `testmedia` declares a start, and `startTime` has no consumer in the repository yet.
+  - `tsoffset1400.ts` reports `repeated 1` every run. Its video starts 21 ms after its
+    audio, so on the first tick the master clock is already at 0 while the first picture is
+    not yet due, and the sync law repeats once. Correct behaviour on a real stream offset.
+  - `hevc4k10.mp4` dropped 1 frame in 2 of 4 runs during the adoption step, where the A1
+    log records 180 of 180; this gate's own run is 180 of 180 with 0 dropped. Not caused by
+    the change: that clip's container start is 0.000000, so `mapTimestamp` subtracts zero
+    and `mapDuration` is the identity, and the only numeric difference is `av_rescale_q`
+    rounding to nearest where the old multiply truncated, worth at most 1 microsecond. Same
+    debug-build scheduler variance the A1 log recorded for `truevfr720.mp4`, on the
+    heaviest clip in the set.
+  - The `RationalEdgeCaseTest` suite that one report could not account for is not a mystery
+    and not a stray build artifact: it is a second class declared inside the tracked file
+    `RationalTest.kt` at line 63. So 58 tracked tests at the A0 gate, plus 10 in
+    `PlayerSurfaceTest`, 3 in `FilterGraphDrainTest` and 1 in `EncoderRestampTest`, is the
+    measured 72.
+  - Section 9's em dash scan covers `*.kt`, `*.kts`, `*.md` and `*.def` only. Widening it
+    to `*.sh` and `*.yml` finds 37 hits in KiteCodec, all older than this run and all in
+    build and CI infrastructure: `.github/workflows/ci.yml` 13,
+    `.github/scripts/package-ffmpeg.sh` 13, `.github/workflows/publish.yml` 6,
+    `.github/workflows/release-binaries.yml` 5, `scripts/e2e.sh` 3. KitePlayer has none,
+    including the two fixtures added to `scripts/testmedia.sh`. Left for a later phase
+    rather than mixed into this commit: none of those files is named by an A2 step, and
+    editing a release workflow to fix punctuation is not a change this gate can verify.
+  - Pre-existing and untouched, the same two as at the A0 and A1 gates:
+    `AppKitVideoRenderer.kt:90` emits an `ExperimentalCoroutinesApi` opt-in warning on
+    every native compile, which D5 reworks in A3, and KiteCodec's two Gradle plugin
+    functional tests fail on a clean checkout, which executor contract item 5 says to
+    ignore.

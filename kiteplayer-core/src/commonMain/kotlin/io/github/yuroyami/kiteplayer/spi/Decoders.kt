@@ -13,6 +13,12 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  *
  * A decoder with a different natural shape, for example the browser's `VideoDecoder`, adapts to
  * this one easily. The reverse is not true, which is why this shape was chosen.
+ *
+ * Epochs are the other half of the contract. A decoder holds frames from packets it has already
+ * accepted, so the epoch a frame belongs to is decided when the packet was offered and not when the
+ * frame comes out. That is why `send` carries no generation: the only legal way to move a decoder to
+ * a new epoch is [VideoDecoder.flush], which drops what is buffered and takes the new generation as
+ * its argument. Stamping the new epoch on a send would relabel frames decoded before it.
  */
 public interface VideoDecoderFactory {
     /** Null when this factory cannot handle the stream. The engine then tries the next candidate. */
@@ -31,19 +37,26 @@ public interface VideoDecoder : AutoCloseable {
      * @return false when the decoder is full and the caller must [receive] before offering again.
      *         The caller must then retry the same packet, never discard it.
      */
-    public suspend fun send(packet: PlayerPacket?, generation: Generation): Boolean
+    public suspend fun send(packet: PlayerPacket?): Boolean
 
-    /** @return the next decoded frame, or null when more input is needed. */
+    /**
+     * @return the next decoded frame, or null when more input is needed. The frame carries the
+     *         generation the decoder was in when its packets were offered, which is the generation
+     *         the last [flush] set.
+     */
     public suspend fun receive(): VideoFrame?
 
     /**
-     * Discards all internal state.
+     * Discards all internal state and enters [newGeneration].
+     *
+     * This is the only epoch boundary a decoder has. Every frame received after it carries
+     * [newGeneration], and every frame decoded before it is gone rather than relabelled.
      *
      * Called after the queues have been cleared and before any packet of the new generation is
      * offered. The order matters: flushing before the queues are cleared lets a stale packet reach
      * a freshly flushed decoder.
      */
-    public suspend fun flush()
+    public suspend fun flush(newGeneration: Generation)
 }
 
 public interface AudioDecoderFactory {
@@ -55,9 +68,11 @@ public interface AudioDecoder : AutoCloseable {
     /** What this decoder produces. May change mid-stream, which the engine handles. */
     public val outputFormat: AudioFormat
 
-    public suspend fun send(packet: PlayerPacket?, generation: Generation): Boolean
+    public suspend fun send(packet: PlayerPacket?): Boolean
     public suspend fun receive(): AudioBuffer?
-    public suspend fun flush()
+
+    /** The only epoch boundary. See [VideoDecoder.flush]. */
+    public suspend fun flush(newGeneration: Generation)
 }
 
 public interface SubtitleDecoderFactory {
@@ -66,7 +81,7 @@ public interface SubtitleDecoderFactory {
 }
 
 public interface SubtitleDecoder : AutoCloseable {
-    public suspend fun send(packet: PlayerPacket?, generation: Generation): Boolean
+    public suspend fun send(packet: PlayerPacket?): Boolean
 
     /**
      * @return cues decoded from the packets sent so far. A single packet can produce several cues,
@@ -74,7 +89,8 @@ public interface SubtitleDecoder : AutoCloseable {
      */
     public suspend fun receive(): List<SubtitleCue>
 
-    public suspend fun flush()
+    /** The only epoch boundary. See [VideoDecoder.flush]. */
+    public suspend fun flush(newGeneration: Generation)
 }
 
 /**

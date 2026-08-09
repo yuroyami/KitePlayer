@@ -2,7 +2,6 @@
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
-import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
@@ -70,7 +69,7 @@ class DecodeAndConvertTest {
             val packet = source.readPacket()
             if (packet == null) {
                 // End of file: drain the decoder, which is what the null packet is for.
-                decoder.send(null, Generation.Initial)
+                decoder.send(null)
                 frame = decoder.receive()
                 break
             }
@@ -80,7 +79,7 @@ class DecodeAndConvertTest {
             }
             // A false return means the decoder is full and the packet was NOT consumed, so it must be
             // offered again after draining rather than discarded.
-            while (!decoder.send(packet, Generation.Initial)) {
+            while (!decoder.send(packet)) {
                 frame = decoder.receive()
                 if (frame != null) break
             }
@@ -198,7 +197,7 @@ class DecodeAndConvertTest {
             while (true) {
                 val packet = source.readPacket()
                 if (packet == null) {
-                    decoder.send(null, Generation.Initial)
+                    decoder.send(null)
                     while (true) {
                         val frame = decoder.receive() ?: break
                         assertTrue(frame.pts >= previous, "timestamps went backwards at frame $count")
@@ -208,7 +207,7 @@ class DecodeAndConvertTest {
                     }
                     break
                 }
-                while (!decoder.send(packet, Generation.Initial)) {
+                while (!decoder.send(packet)) {
                     val frame = decoder.receive() ?: break
                     assertTrue(frame.pts >= previous, "timestamps went backwards at frame $count")
                     previous = frame.pts

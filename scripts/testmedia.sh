@@ -33,6 +33,16 @@ ffmpeg -v error -y \
   -fps_mode:v passthrough -enc_time_base:v 1/90000 -video_track_timescale 90000 \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac truevfr720.mp4
 
+echo "MPEG-TS remux of the 1080p clip, timestamps pushed 1400 seconds into the future"
+# The relative timeline fixture. An MPEG-TS capture never starts at zero: the muxer already begins
+# at 1.4s, and -output_ts_offset adds another 1400 seconds on top, so the container start is about
+# 1401.4s. A player that fails to normalise the origin exactly once reports a first frame 23 minutes
+# in. -c copy keeps the pictures and the packet durations identical to sync1080p30.mp4, which is what
+# makes the two comparable: a duration must come out the same in both, because an interval has no
+# origin to subtract.
+ffmpeg -v error -y -i sync1080p30.mp4 -c copy \
+  -output_ts_offset 1400 -f mpegts tsoffset1400.ts
+
 echo "4K HEVC Main10, 6s, no audio, for hardware decode"
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=3840x2160:rate=30:duration=6" \
@@ -57,6 +67,13 @@ for space in bt709 bt601; do
   ffmpeg -v error -y -i "colors-$space.mp4" -frames:v 1 \
     -vf "format=rgba" -sws_flags neighbor -f rawvideo "colors-$space.rgba"
 done
+
+echo "Raw H.264 elementary stream with no timestamps at all"
+# An Annex B stream carries no container timestamps, so every packet and every decoded frame arrives
+# with none and the player has to synthesise them from the previous one. The clip is one second of
+# 25 fps, which the decoder reports as a 40ms duration per frame, so the synthesised timeline is
+# checkable to the microsecond.
+ffmpeg -v error -y -i colors-bt709.mp4 -c copy -bsf:v h264_mp4toannexb -f h264 novts.h264
 
 echo "10-bit clip, to check the high bits are the ones kept"
 ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" \

@@ -1,18 +1,21 @@
 # KPKMP: the pilot document
 
-KitePlayer Kotlin Multiplatform, the piloting plan. Written 2026-08-09.
+KitePlayer Kotlin Multiplatform, the piloting plan. Written 2026-08-09, revised the same
+day after a second independent full audit of both repositories was verified claim by claim
+against the source and merged in. This is the only planning document. Everything the
+executor needs is in this file and in the code.
 
-This is the only planning document. It was distilled from the original build plan, from the
-state of the committed code in this repository and in `../KiteCodec`, and from a full
-adversarial review of that code done file by file with the code as the only source of truth.
-Everything the executor needs is in this file and in the code. There is no other document to
-consult, and no decision below points anywhere else for its justification.
+**Who this is for.** An executor agent (Opus 5, Ultracode) that will do the work but not
+the thinking. Every decision in this file is already made. Do not reopen decisions. Where
+this file is silent, the committed code's existing behaviour is the specification. If the
+code proves a decision here wrong, take the smallest correct alternative and record the
+deviation, with proof, in the Execution log (section 14).
 
-**Who this is for.** An executor agent (Opus 5, Ultracode) that will do the work but not the
-thinking. Every decision in this file is already made. Do not reopen decisions. Where this
-file is silent, the committed code's existing behaviour is the specification. If the code
-proves a decision here wrong, take the smallest correct alternative and record the deviation,
-with proof, in the Execution log (section 13).
+**The shape of the plan.** Two horizons. Horizon A (section 10) is the executable run:
+phases A0 to A6, each with named defects, tests and a gate. Horizon B (section 11) is the
+product roadmap to a real 1.0: it is sequenced and decided but NOT part of this run. Do not
+start Horizon B work unless the owner says so. Do not let Horizon A ship a claim that only
+Horizon B can make true.
 
 ---
 
@@ -20,18 +23,18 @@ with proof, in the Execution log (section 13).
 
 Read this section twice.
 
-1. Work the phases in section 9 strictly in order: P0, P1, P2, P3, P4, P5, P6. Do not start
-   a phase before the previous phase's gate passed. Do not start anything in section 10
-   (backlog) at all.
-2. Every phase ends with its verification gate (section 8), an Execution log entry
-   (section 13), and one git commit per repository touched. Commit style: first line is one
+1. Work the phases in section 10 strictly in order: A0, A1, A2, A3, A4, A5, A6. Do not
+   start a phase before the previous phase's gate passed. Do not start anything in
+   section 11.
+2. Every phase ends with its verification gate (section 9), an Execution log entry
+   (section 14), and one git commit per repository touched. Commit style: first line is one
    imperative sentence describing the outcome, like the existing history ("Play video and
    audio in sync, and check the colours against FFmpeg"). Body is short prose. Never add a
    Co-Authored-By trailer or any other trailer.
 3. Never create a git branch. Both repositories work on `main`, local commits only, never
    push anywhere.
 4. No em dashes in any file: no code comment, no Markdown, no commit message. After every
-   phase run the em dash scan in section 8 and fix anything it finds.
+   phase run the em dash scan in section 9 and fix anything it finds.
 5. Editing `../KiteCodec` is allowed and expected. Its 53 core tests must pass after every
    KiteCodec change. Its 2 Gradle plugin functional tests
    (`kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks`,
@@ -39,20 +42,20 @@ Read this section twice.
    already, from before any of this work. Ignore those two, fix nothing about them, do not
    let them block a gate.
 6. Never apply the atomicfu Gradle plugin to any module. The library dependency is fine.
-   The plugin's bytecode transform registers a task depending on `androidMainClasses`, which
-   AGP 9's Kotlin Multiplatform library plugin does not create, so applying it breaks the
-   Android target. The cost of not having the transform is one wrapper object per atomic
-   field, allocated at construction, never per operation, so the real-time audio path still
-   allocates nothing. This is the single most likely trap to re-trigger by "cleaning up" a
-   build file.
+   The plugin's bytecode transform registers a task depending on `androidMainClasses`,
+   which AGP 9's Kotlin Multiplatform library plugin does not create, so applying it breaks
+   the Android target. The cost of not having the transform is one wrapper object per
+   atomic field, allocated at construction, never per operation. This is the single most
+   likely trap to re-trigger by "cleaning up" a build file.
 7. `kiteplayer-ffmpeg` and `kiteplayer-sample` need the KiteCodec Gradle plugin applied (it
    supplies the FFmpeg library search path at link time; KiteCodec's cinterop declares bare
    `-lavformat` and friends with no `-L`) and resolve KiteCodec from `mavenLocal()`. If
    resolution fails, run in `../KiteCodec`:
    `./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true`. After any KiteCodec
-   change that KitePlayer must see, republish the same way.
-8. Native tests read test media through the `KITEPLAYER_TESTMEDIA` environment variable, set
-   by the Gradle test task. Test clips are generated by `scripts/testmedia.sh` (needs
+   change that KitePlayer must see, republish the same way. This developer-machine loop is
+   a build convenience, not a distribution story; distribution is Horizon B.
+8. Native tests read test media through the `KITEPLAYER_TESTMEDIA` environment variable,
+   set by the Gradle test task. Test clips are generated by `scripts/testmedia.sh` (needs
    `ffmpeg` on PATH) and are gitignored, as is `vendor/`. Regenerate clips whenever the
    script changes.
 9. Legal rule. KitePlayer ships Apache-2.0. The reference players that were studied for its
@@ -63,141 +66,174 @@ Read this section twice.
    transliterate their code. Never name a study-only source in a code comment as the origin
    of an implementation. Android Media3 and ExoPlayer are Apache-2.0 and may be ported
    directly with credit in NOTICE. Using `ffmpeg` and `ffprobe` binaries as test oracles is
-   always fine.
+   always fine. Differential testing against other players compares outputs, never source.
 10. Documentation rules, binding for README, KDoc and everything public: no em dashes, no
     porting-journey narration, provenance gets one mention plus the License section, and no
-    claim the code cannot support. `POM_DESCRIPTION`, when publishing ever happens, must
-    describe only what is implemented at that moment.
+    claim the code cannot support. Support is a measured property of a runnable artifact on
+    a named platform, never an intention, a source-set declaration, or the compilation of
+    an interface module. `POM_DESCRIPTION`, when publishing ever happens, must describe
+    only what is implemented at that moment.
 11. Multi-agent hints, since Ultracode fans out: agents may verify, read and test in
     parallel freely. Agents must never edit the same file in parallel. KiteCodec work in a
     phase completes and republishes to mavenLocal before KitePlayer adoption work in the
     same phase starts. Within one repository, parallel edits are safe only when the touched
-    file sets are disjoint; the phase step lists in section 9 mark what is independent.
-12. `explicitApi()` is on in every KitePlayer module. Nothing is published yet, so signature
-    changes are free. Do not add new public API beyond what a phase step names.
-13. Append to the Execution log (section 13) at the end of every phase, and immediately
-    whenever a decision deviates from this file.
+    file sets are disjoint; the phase step lists mark what is independent.
+12. `explicitApi()` is on in every KitePlayer module. Nothing is published yet, so
+    signature changes are free. Do not add new public API beyond what a phase step names.
+13. Append to the Execution log (section 14) at the end of every phase, and immediately
+    whenever a decision deviates from this file. A deviation may tighten, replace or split
+    a requirement when evidence proves the original wrong; it may never silently weaken a
+    product promise.
 
 ---
 
-## 2. State of the code, verified
+## 2. Evidence rules
 
-What exists and is proven, so the executor does not re-derive it.
+Every claim carries the strength of its evidence and no more. From strongest to weakest:
 
-**Proven working, measured on this machine.** Audio and video playback in sync on macOS
-arm64: 1080p30 (300/300 frames, 0 dropped, 0 underruns), 720p59.94 (480 frames, 0 dropped),
-4K HEVC 10-bit video-master (180 frames), 3 minute audio soak with 0 ms clock drift. Colour
-conversion is verified against `ffmpeg` CLI output with mean component error under 2 of 255
-for BT.709, BT.601 and 10-bit. A window draws real frames via Core Graphics. 163 tests pass
-across 4 suites (75 engine tests twice, on JVM and native, 7 real-device audio tests, 6 real
-decode and colour tests). KitePlayer HEAD is `3fe8042 Draw the video in a window`; KiteCodec
-HEAD is `f442b82 Add the API a real-time player needs`. A leftover audio-only reader
-(`FFmpegAudioReader`) was deleted when this document landed; nothing referenced it.
+1. A repeatable release-mode automated test on a named real device with saved metrics.
+2. A deterministic model, differential oracle, sanitizer or fuzz result on the exact
+   contract.
+3. A clean consumer build using only published artifacts.
+4. A source-level proof with ownership and state invariants.
+5. A unit test around an isolated helper.
+6. A manual observation.
+7. Compilation alone.
+8. A declared target, KDoc, plan or README sentence.
 
-**The architecture that is settled and correct.** One engine in `commonMain` with no
-platform code and an injected `MonotonicClock`, so every timing behaviour is testable in
-virtual time. Pull-shaped audio sink whose real-time callback publishes (pts, audibleAtNanos)
-anchors through a seqlock; the clock is anchored to what the device reports, never estimated
-from queued sample counts. Generation counters (an integer on every packet, frame, queue and
-clock) invalidate stale work after a seek by comparison at the next hop, replacing any flush
-handshake across threads. The video sync law and its constants are the ffplay-lineage ones
-and live in code (`SyncLaw`, `FrameDurationEstimator`, `SeekTiming`, `BufferPolicy`
-defaults); they are the residue of a decade of bug reports and are not to be retuned without
-evidence. The KiteCodec low-level layer (`PacketReader`, `StreamDecoder`, `withPlanes`,
-`hardwareSurface`, behind the `@KiteCodecLowLevelApi` opt-in) mirrors libavcodec's
-send/receive shape correctly, moves packet references without copying, and promotes
-best-effort timestamps. None of this gets redesigned.
+No lower item may be presented as a higher one. The existing "163 tests pass" is level 5
+plus level 6 evidence for macOS arm64 and nothing else. A cached up-to-date Gradle run
+proves only that the cache is not red; gates rerun for real.
 
-**What does not exist.** There is no `KitePlayer` facade class and no `PlaybackCore`; the
-sample wires the pipeline by hand with plain channels. Seeking is designed and
-constant-tuned but connected to nothing. There is no resampler, no downmixer, no gain stage.
-Rotation metadata stops at the KiteCodec boundary. Subtitles are one orphaned parser. Only
-macOS arm64 has backends; the engine itself compiles for every Kotlin target including js
-and wasmJs.
+**Support tiers**, used in every platform statement from phase A0 onward:
 
-**The review verdict this file acts on.** The engine core is genuinely Kotlin-first and the
-KiteCodec layer is genuinely FFmpeg-first, but the middle layer (`kiteplayer-ffmpeg`)
-re-derives things FFmpeg already solved and got two wrong (timestamp rescale overflow, start
-time ignored), and the sample violates the engine's own threading contract. About a third of
-the public API surface has zero consumers today; most of it is kept because phase P5 makes
-it real, and the rest is deleted in P0.
+| Tier | Meaning |
+|---|---|
+| T1 API | Common code compiles for the target. No playback claim of any kind. |
+| T2 Codec | A runtime on the target can open, decode, seek, cancel and close real media. |
+| T3-Full | Qualified audio plus video output, sync, subtitles and lifecycle on the target. |
+| T3-Audio | Qualified audio-only output and lifecycle; explicitly no video or subtitle claim. |
+| T4 Product | T3 plus the OS integrations (focus, background, PiP, routes) and clean packaging. |
+| T5 Supported | T4 plus real-device qualification, security, performance and release gates, documented OS range. |
+
+At this baseline no platform is above an experimental T3-Full candidate on macOS arm64.
+Everything else is T1. The READMEs must say so from A0 onward.
 
 ---
 
-## 3. Defect register
+## 3. State of the code, verified
 
-Every defect is numbered, located, and has its fix decided. The phase line says where it is
-fixed. "Test" names the regression test the fix must add. Do not fix a defect without its
-test unless the row says none.
+**Proven working, measured on this machine (evidence levels 5 and 6).** Audio and video
+playback in sync on macOS arm64: 1080p30 (300/300 frames, 0 dropped, 0 underruns),
+720p59.94 (480 frames, 0 dropped), 4K HEVC 10-bit video-master (180 frames), 3 minute
+audio soak with 0 ms clock drift. Colour conversion verified against `ffmpeg` CLI output
+with mean component error under 2 of 255 for BT.709, BT.601 and yuv420p10le. A window
+draws real frames via Core Graphics. 163 tests pass across 4 suites. KitePlayer baseline
+is `e5ddccc`; KiteCodec baseline is `f442b82`.
+
+**The architecture that is settled.** One engine in `commonMain` with no platform code and
+an injected `MonotonicClock`. Pull-shaped audio sink whose real-time callback publishes
+(pts, audibleAtNanos) anchors through a seqlock; the clock is anchored to what the device
+reports, never estimated from queued sample counts. Generation counters invalidate stale
+work after a seek by comparison at the next hop; they are defence in depth, and after this
+revision they no longer substitute for quiescence (see D34). The sync law and its
+constants live in code (`SyncLaw`, `FrameDurationEstimator`, `SeekTiming`, `BufferPolicy`
+defaults) and are not retuned without evidence. The KiteCodec low-level layer
+(`PacketReader`, `StreamDecoder`, `withPlanes`, `hardwareSurface`, behind
+`@KiteCodecLowLevelApi`) mirrors libavcodec's send/receive shape and moves packet
+references without copying.
+
+**What does not exist.** No `KitePlayer` facade, no `PlaybackCore`; the sample wires the
+pipeline by hand. Seeking is designed but connected to nothing. No resampler, downmixer or
+gain stage. Rotation stops at the KiteCodec boundary. Subtitles are one orphaned parser.
+Only macOS arm64 has backends. There is no Metal renderer, no hardware decode, no
+network/live path, no published artifact of any kind, and KiteCodec's own README records
+that its Maven artifacts and prebuilt FFmpeg release assets do not exist yet.
+
+**The verdict this file acts on.** Two independent reviews agree: the engine core is
+genuinely Kotlin-first, the KiteCodec layer is genuinely FFmpeg-first, and the faults
+cluster in three places. First, the middle layer re-derives things FFmpeg already solved
+and gets some wrong (timestamp rescale, DTS units, start time, channel layouts). Second,
+ownership is inconsistent at exactly one seam (the shown frame) and the real-time audio
+contract is violated in one place (per-callback allocation). Third, a large public surface
+promises what nothing implements. The correct response is to repair the substrate in
+Horizon A, then build the facade on valid contracts, and to let Horizon B carry everything
+that makes it a product.
+
+---
+
+## 4. Defect register
+
+Every defect is numbered, located, verified against source, and has its fix decided. The
+phase line says where it is fixed. "Test" names the regression test the fix must add. Do
+not fix a defect without its test unless the row says none. D1 to D19 are from the first
+review; D20 to D35 were found by the second audit and each was re-verified against the
+code before being accepted here. Two earlier prescriptions (inside D9 and D10) were
+corrected by that audit; the corrected text below is authoritative.
 
 ### D1. Late-drop uses the wrong frame's duration
 - Where: `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/VideoPlayback.kt`,
-  the late-drop block in `tick()` (around line 153).
+  the late-drop block in `tick()`.
 - Problem: the drop deadline reuses `nominalUs`, the duration of the frame already shown.
-  The correct rule uses the duration of the candidate frame, meaning
-  `following.pts - next.pts`. Identical for constant frame rate, wrong for VFR, which is
-  exactly when drops happen.
-- Fix: compute `candidateDurationUs = following.pts.micros - next.pts.micros` when both are
-  from the current generation and the value is positive and at most `maxFrameDurationUs`;
-  otherwise fall back to `nominalUs`. Use that in the drop comparison.
-- Phase: P1. Test: a `VideoPlaybackTest` case with VFR timestamps where the old rule drops
-  the wrong frame and the new rule drops the right one.
+  The correct rule uses the duration of the candidate frame, `following.pts - next.pts`.
+  Identical for constant frame rate, wrong for VFR, which is when drops happen.
+- Fix: compute the candidate duration when both frames are from the current generation and
+  the value is positive and at most `maxFrameDurationUs`; otherwise fall back to
+  `nominalUs`.
+- Phase: A1. Test: a `VideoPlaybackTest` VFR case where the old rule drops the wrong frame.
 
 ### D2. `repeatedFrames` overcounts
-- Where: same file, the `SyncLaw.classify` call before the "not due yet" early return
-  (around line 139).
+- Where: same file, the `SyncLaw.classify` call before the "not due yet" early return.
 - Problem: classification runs on every poll of a not-yet-due frame, so one repeated frame
   increments the counter once per scheduler wake-up.
-- Fix: remove the early classify. Count exactly once, at the moment the frame is presented:
-  after the due check passes, if the delay used for this frame satisfied
-  `delayUs >= nominalUs * 2`, increment `repeated` once.
-- Phase: P1. Test: `VideoPlaybackTest` case where video is ahead of the master, the
-  scheduler polls the same frame five times, and `repeatedFrames` ends at exactly 1.
+- Fix: count exactly once, at the moment the frame is presented, when the delay used
+  satisfied `delayUs >= nominalUs * 2`. (Renderer-reported repeats are a separate Horizon B
+  statistic; this counter means scheduler-decided repeats and its KDoc says so.)
+- Phase: A1. Test: video ahead of master, five polls of one frame, counter ends at 1.
 
 ### D3. Dead parameter in `present()`
 - Where: same file, `private suspend fun present(frame: VideoFrame, ...)`.
-- Problem: the `frame` parameter is never read; the body uses `queue.advance()`.
-- Fix: delete the parameter. Phase: P1. Test: none (compiler enforces).
+- Fix: delete the parameter. Phase: A1. Test: none (compiler enforces).
 
 ### D4. The sample races the clock across threads
-- Where: `kiteplayer-sample/src/macosArm64Main/kotlin/Main.kt` (progress loop and present
-  loop both call `audio.position()`), and
-  `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/AudioPlayback.kt`.
-- Problem: `AudioPlayback.position()` re-anchors the internal `MediaClock`, which is
-  documented single-owner, from two threads concurrently.
-- Fix: make `AudioPlayback` internally thread-safe: one
-  `kotlinx.atomicfu.locks.SynchronizedObject` guarding `anchorClock`, `position`, `flush`,
-  `play`, `pause` and the `speed` setter. The lock is uncontended in practice and removes
-  the contract violation. `MediaClock` itself stays unsynchronised and single-owner. Also
-  fix the KDoc of `anchorClock`, which currently claims `position` does not re-anchor; it
-  does, and after this fix the claim is simply deleted.
-- Phase: P1. Test: none practical for a race; the lock plus the KDoc correction is the fix.
+- Where: `kiteplayer-sample/.../Main.kt` (progress loop and present loop both call
+  `audio.position()`), and `kiteplayer-core/.../AudioPlayback.kt`.
+- Problem: `AudioPlayback.position()` re-anchors the internal `MediaClock`, documented
+  single-owner, from two threads concurrently.
+- Fix: an internal `SynchronizedObject` in `AudioPlayback` guarding the NON-suspending
+  members: `anchorClock`, `position`, and the `speed` setter. The suspending members
+  (`play`, `pause`, `flush`, `drain`) are NOT wrapped in the lock (a lock cannot hold
+  across suspension); they stay thread-confined to the session owner, and their KDoc says
+  so. In A5 the core actor becomes that owner. Also fix the `anchorClock` KDoc, which
+  claims `position` does not re-anchor.
+- Phase: A1. Test: none practical for the race; the lock plus KDoc is the fix.
 
-### D5. AppKit renderer: close race, unhandled channel exception, leaked thread
-- Where: `kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/AppKitVideoRenderer.kt`.
-- Problems, all in one class:
-  1. `present()` checks `closed` then stores into `pending`; a `close()` between the two
-     leaves the stored frame unclosed forever.
-  2. `close()` calls `signal.close()`, so the worker's `signal.receive()` throws
-     `ClosedReceiveChannelException`, unhandled.
-  3. The `newSingleThreadContext` dispatcher is never closed: one leaked thread per
-     renderer instance.
+### D5. AppKit renderer: close race, unhandled channel exception, leaked thread, unbounded main-queue work
+- Where: `kiteplayer-output/.../AppKitVideoRenderer.kt`.
+- Problems: (1) `present()` checks `closed` then stores into `pending`; a `close()` between
+  the two strands the stored frame. (2) `close()` closes the signal channel, so the
+  worker's `receive()` throws `ClosedReceiveChannelException`, unhandled. (3) The
+  `newSingleThreadContext` dispatcher is never closed: one leaked thread per renderer.
+  (4) Every converted frame is `dispatch_async`ed to the main queue; a slow main thread
+  accumulates unbounded image work, and cancellation does not await an in-progress
+  conversion or fence main-queue delivery.
 - Fix: hold the dispatcher in a field. In `present()`, after `pending.getAndSet(frame)`,
-  re-check `closed`; if now closed, drain the slot (`pending.getAndSet(null)?.close()`) and
-  return false. The worker loop wraps `signal.receive()` in try/catch for
-  `ClosedReceiveChannelException` and exits the loop. `close()` order: CAS `closed`,
-  `signal.close()`, `worker.cancel()`, drain `pending`, `dispatcher.close()`.
-- Phase: P3. Test: an appleTest that creates the renderer, presents frames from one
-  coroutine while closing from another in a loop (100 iterations), and asserts through a
-  counting fake frame that every frame was closed exactly once.
+  re-check `closed`; if closed, drain the slot and return false. Worker loop catches
+  `ClosedReceiveChannelException` and exits. Main-thread delivery goes through its own
+  latest-only slot: the worker stores the finished image in an atomic slot and enqueues at
+  most one main-queue drain block at a time; a newer image replaces the waiting one.
+  `close()` order: CAS closed, close signal, cancel worker and JOIN it (await the running
+  conversion), drain pending, drain the image slot, close the dispatcher.
+- Phase: A3. Test: appleTest presenting from one coroutine while closing from another, 100
+  iterations, counting fake frames prove exactly-once close; plus a slow-main-queue
+  simulation proving at most one queued delivery block.
 
 ### D6. Sample decode loop can discard an unconsumed packet
-- Where: `Main.kt`, both decode loops, the `while (!decoder.send(packet, ...))` blocks.
+- Where: `Main.kt`, both decode loops.
 - Problem: when `send` returns false and `receive` returns null, `break` exits and
-  `packet.close()` runs on a packet the decoder never accepted. The comment on the same
-  line claims the opposite. Codec semantics make the state near-impossible, which is why it
-  survived.
-- Fix: canonical loop shape, used for both audio and video:
+  `packet.close()` runs on a packet the decoder never accepted. The adjacent comment claims
+  the opposite.
+- Fix: canonical loop for both streams:
   ```kotlin
   for (packet in channel) {
       while (!decoder.send(packet, generation)) {
@@ -209,421 +245,589 @@ test unless the row says none.
       while (true) { val frame = decoder.receive() ?: break; deliver(frame) }
   }
   ```
-  Surfacing the impossible state as an error beats silently losing a packet. Also check the
-  return value of `video.submit(frame)`: on false, stop the decode loop (the queue is
-  closed).
-- Phase: P3 (the sample is rewritten again in P5; carry the shape forward). Test: none
-  beyond the sample runs in the gate.
+  Also check `video.submit(frame)`'s return; on false, stop the loop.
+- Phase: A3. Test: none beyond the gate's sample runs.
 
 ### D7. AudioRing: dead `epoch` field and a documented behaviour that does not exist
-- Where: `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/AudioRing.kt`.
-- Problem: `epoch` is incremented in `flush()` and never read anywhere; its KDoc says "so
-  the callback stops handing out stale audio", which is false. `flush()` also writes
-  `consumed`, the callback's counter, which is safe only because callers stop the device
-  first, a precondition stated nowhere.
-- Fix: delete `epoch`. Extend `flush()` KDoc: the caller must stop the sink before
-  flushing; both sides must be quiescent; `AudioPlayback.flush` already does this.
-- Phase: P1. Test: none (deletion plus documentation).
+- Where: `kiteplayer-core/.../internal/AudioRing.kt`.
+- Problem: `epoch` is written and never read; its KDoc describes filtering that does not
+  exist. `flush()` writes `consumed`, the callback's counter, safely only because callers
+  stop the sink first, stated nowhere.
+- Fix: delete `epoch`. `flush()` KDoc gains the precondition: sink stopped, both sides
+  quiescent. (The timestamp-segment work in D24 supersedes the single-anchor mapping.)
+- Phase: A1. Test: none (deletion plus documentation).
 
 ### D8. KiteCodec: `openPacketReader` poisons stream discard flags permanently
-- Where: `../KiteCodec/kitecodec-core/src/nativeMain/kotlin/io/github/yuroyami/kitecodec/MediaSource.native.kt`
-  and `Playback.native.kt` (`PacketReader.close`).
-- Problem: opening a reader sets discard-all on unselected streams; closing the reader
-  never restores them. The batch decode API then silently returns zero frames for those
-  streams on the same `MediaSource`.
-- Fix: in `PacketReader.close()`, before `endPacketReader()`, iterate every stream of the
-  format context (`ffkmp_fmt_nb_streams` / `ffkmp_fmt_stream`) and set discard back to
-  default (`ffkmp_stream_discard_none`).
-- Phase: P2. Test: KiteCodec native test: open a two-stream file, open a reader selecting
-  only stream 0, close it, then `decodeStreams` on stream 1 and assert frames arrive.
+- Where: `../KiteCodec/.../MediaSource.native.kt` and `Playback.native.kt`.
+- Problem: opening a reader sets discard-all on unselected streams; close never restores
+  them, so the batch decode API silently returns zero frames for those streams afterward.
+- Fix: `PacketReader.close()` restores discard-default on every stream before
+  `endPacketReader()`.
+- Phase: A2. Test: open reader on stream 0 of a two-stream file, close, batch-decode
+  stream 1, assert frames arrive.
 
-### D9. KiteCodec: no microsecond helpers for frames, so KitePlayer hand-rolled and overflowed
-- Where: `../KiteCodec/.../Playback.native.kt` and `Frame.native.kt`; consumer damage in
-  `kiteplayer-ffmpeg/.../KiteCodecSource.kt` (`KiteCodecVideoFrame.pts`, `.duration`,
-  `KiteCodecPacket.duration`, `KiteCodecAudioBuffer.pts`).
-- Problem: KitePlayer computes `pts * 1_000_000 * num / den` in Long arithmetic, which
-  overflows on large-timebase containers (a nanosecond-timescale MP4 overflows after
-  roughly 2.5 hours). The overflow-safe `ffkmp_rescale_q` (128-bit intermediate) exists in
-  the C helper layer and is already used for `Packet.ptsMicros`.
-- Fix, KiteCodec side: add native extension properties under `@KiteCodecLowLevelApi`:
-  `Frame.ptsMicros: Long?` (null when no pts), `Frame.durationMicros: Long?` (null when 0),
-  `Packet.durationMicros: Long?` (null when 0), all via `ffkmp_rescale_q` with the stream
-  time base.
-- Fix, KitePlayer side: delete every manual timestamp multiply; use the new helpers (see
-  D10 for what happens when a pts is absent).
-- Phase: P2. Test: KiteCodec unit test rescaling a value that would overflow the naive
-  multiply (for example pts = 10^13 in time base 1/10^9) and asserting the exact result.
+### D9. KiteCodec: missing overflow-safe microsecond helpers (pts, dts, duration)
+- Where: `../KiteCodec/.../Playback.native.kt`, `Frame.native.kt`; consumer damage in
+  `kiteplayer-ffmpeg/.../KiteCodecSource.kt`.
+- Problems, all verified: KitePlayer computes `pts * 1_000_000 * num / den` in Long, which
+  overflows on large time bases (a nanosecond-timescale MP4 after ~2.5 hours). Packet DTS
+  is exposed as RAW TICKS wrapped in a microsecond type (`Pts(native.dts)`), no rescale at
+  all. `ffkmp_rescale_q` (128-bit intermediate) exists and is already used for
+  `Packet.ptsMicros`.
+- Fix, KiteCodec: add under `@KiteCodecLowLevelApi`: `Packet.dtsMicros: Long?`,
+  `Packet.durationMicros: Long?`, `Frame.ptsMicros: Long?`, `Frame.durationMicros: Long?`,
+  all via `ffkmp_rescale_q` with the stream time base, null on NOPTS or zero duration.
+- Fix, KitePlayer: delete every manual timestamp multiply and the raw-DTS cast; use the
+  helpers through D10's mapper.
+- Phase: A2. Test: rescale a value that overflows the naive multiply (pts 10^13 at
+  1/10^9) and assert the exact result; assert dtsMicros for a 90 kHz stream.
 
-### D10. Timeline: absolute versus relative timestamps disagree, and a missing pts becomes 0
+### D10. Timeline: one relative timeline, and no fabricated zero
 - Where: `kiteplayer-ffmpeg/.../KiteCodecSource.kt` throughout.
-- Problems:
-  1. `PacketReader.seek()` takes content-relative microseconds, but every packet and frame
-     timestamp KitePlayer produces is absolute (container start time never subtracted).
-     Self-consistent for sync, wrong for position display on transport streams, and fatal
-     for the future precise-seek comparison.
-  2. A frame with no pts is reported as `Pts(0)`, a fabricated real timestamp.
-- Fix, one mechanism: `KiteCodecSource` gains a private timestamp mapper holding the
-  container `startTimeMicros` (already public on KiteCodec's `MediaSource`). Every pts, dts
-  and duration crossing into KitePlayer goes through it: rescale via the D9 helpers, then
-  subtract the container start. The rule this implements: **timestamps are normalised
-  exactly once, at the source boundary, and the engine's timeline always starts at zero.**
-  For missing pts, synthesise inside the decoder wrappers: video, previous pts plus a
-  duration estimate (the frame's own duration, else the container frame rate, else 40 ms);
-  audio, a running counter advanced by `sampleCount / sampleRate` from the last real pts.
-  The SPI keeps non-null `VideoFrame.pts`.
-- Phase: P2. Test: add a transport-stream clip with a nonzero start offset to
-  `scripts/testmedia.sh` (`-output_ts_offset 1400 -f mpegts`), then a `kiteplayer-ffmpeg`
-  native test asserting the first video frame pts is within one frame duration of zero.
+- Problems: seek takes content-relative micros while every produced timestamp stays
+  absolute; a frame with no pts is reported as `Pts(0)`, a fabricated real timestamp.
+- Fix, one mechanism with two distinct functions (this distinction is mandatory):
+  `mapTimestamp(rawTicks, timeBase)` rescales AND subtracts the container start;
+  `mapDuration(rawTicks, timeBase)` rescales ONLY. A duration is an interval; subtracting
+  an origin from it is a bug. PTS and DTS both go through `mapTimestamp`; packet and frame
+  durations go through `mapDuration`. The engine timeline starts at zero, normalised
+  exactly once at this boundary. For missing pts, synthesise inside the decoder wrappers:
+  video, previous pts plus a duration estimate (frame duration, else container rate, else
+  40 ms); audio, a running counter advanced by exact sample count over sample rate. The
+  SPI keeps non-null `VideoFrame.pts`.
+- Phase: A2. Test: transport-stream clip with `-output_ts_offset 1400`; first frame pts
+  within one frame duration of zero; packet duration unchanged by the offset; DTS relative.
 
 ### D11. CoreAudioSink half-honours its injected clock
-- Where: `kiteplayer-output/.../CoreAudioSink.kt`; `renderFromDevice` uses `AppleHostClock`
-  directly while the constructor accepts any `MonotonicClock`.
-- Fix: `init { require(clock === AppleHostClock) { "CoreAudioSink derives its deadlines from CoreAudio host time; pass AppleHostClock (and give the engine the same clock)" } }`.
-  Keep the parameter, since a future implementation could translate time bases.
-- Phase: P3. Test: appleTest asserting the require message on a foreign clock.
+- Where: `kiteplayer-output/.../CoreAudioSink.kt`.
+- Fix: `init { require(clock === AppleHostClock) { ... } }` with a message explaining the
+  shared time base. Keep the parameter for a future base-translating implementation.
+- Phase: A3. Test: appleTest asserting the message on a foreign clock.
 
 ### D12. Multichannel audio plays garbage, and nothing resamples
-- Where: end to end. The decoder outputs N-channel interleaved float; `CoreAudioSink.open`
-  coerces channels to 1..2; nothing downmixes or resamples; the sample feeds N-channel data
-  into a ring created for the negotiated format. Every 5.1 file breaks. Mid-stream format
-  changes have no resampler to rebuild, though the decoder wrapper already detects them.
-- Fix: a new internal commonMain stage in `kiteplayer-core`, wired by the caller between
-  decoder and `AudioPlayback.submit`:
-  - `ChannelMixer`: mixes any of mono/stereo/quad/5.1/7.1 to the negotiated layout with the
-    standard ITU downmix coefficients (centre and LFE at -3 dB, surrounds at -3 dB for 5.1
-    to stereo; document the exact matrix rows in KDoc). Unknown layouts: take the first N
-    channels and emit a warning once.
-  - `LinearResampler`: linear-interpolation sample rate conversion, stateful across buffer
-    boundaries, documented as tier 0 quality (the FFmpeg swresample replacement is backlog
-    item B3).
-  - `GainStage`: one multiply for volume and mute, applied last. This is what makes the
-    facade's `setVolume` and `setMuted` real in P5.
-  - A small `AudioPipeline` composing the three, rebuilt whenever the decoder's
-    `outputFormat` stops matching the negotiated format.
-- Phase: P4. Tests: mixer matrix unit tests (a known 5.1 frame mixes to the exact expected
-  stereo values); resampler ratio test (441 frames at 44.1 kHz in, 480 out at 48 kHz,
-  energy preserved within tolerance); plus a `surround51.mp4` clip added to `testmedia.sh`
-  and a native test comparing pipeline output against
-  `ffmpeg -i surround51.mp4 -ac 2 -f f32le` reference PCM with a small mean error
-  tolerance.
+- Where: end to end. Decoder outputs N-channel interleaved float; the sink coerces to
+  stereo; nothing downmixes or resamples; the ring receives N-channel data as 2-channel.
+- Fix: a new internal commonMain stage wired between decoder and `AudioPlayback.submit`:
+  - `ChannelMixer`: mixes named layouts (mono, stereo, 2.1, quad, 5.0, 5.1, 5.1side, 6.1,
+    7.1) to the negotiated layout with the standard ITU coefficients (centre and LFE at
+    -3 dB, surrounds at -3 dB into stereo; exact matrix rows in KDoc). The layout comes
+    from the channel MASK (see D30), not the count; 5.1 side and 5.1 back are distinct
+    named cases that happen to share a stereo matrix but must not be conflated in the
+    model. Unknown mask: first N channels plus a one-time warning.
+  - `LinearResampler`: linear-interpolation rate conversion, stateful across buffers,
+    KDoc-documented as interim quality, replaced by libswresample in Horizon B (B4). It is
+    not the 1.0 production default and no document may present it as such.
+  - `GainStage`: one multiply for volume and mute, applied last, with a short linear ramp
+    (default 5 ms) so changes do not click.
+  - `AudioPipeline` composing the three, rebuilt when the decoder's `outputFormat` stops
+    matching the negotiated format.
+- Phase: A4. Tests: mixer matrix unit tests per named layout (impulse per input channel,
+  exact expected output); resampler ratio and continuity tests; `surround51.mp4` in
+  testmedia compared against `ffmpeg -ac 2` reference PCM; ramp test (no step larger than
+  the ramp slope).
 
 ### D13. `speed` is a lie while audio plays
 - Where: `AudioPlayback.speed`, `MediaClock.speed`.
-- Problem: setting speed scales the clock only; the device still consumes at 1x and the
-  next device anchor overwrites the scaled reading. There is no tempo stage (backlog B4).
-- Fix: the `AudioPlayback.speed` setter throws `UnsupportedOperationException` with a clear
-  message when a ring is open and the value is not 1.0. Video-only playback may honour
-  speed through the video clock (that path is real). The facade's `setSpeed` surfaces the
-  same behaviour honestly in P5. `AudioConfig.preservePitch` KDoc gains "not implemented
-  yet; see the backlog".
-- Phase: P4. Test: core unit test asserting the throw with audio open and success with
-  video only.
+- Fix: the setter throws `UnsupportedOperationException` when a ring is open and the value
+  is not 1.0. Video-only speed through the video clock stays legal.
+  `AudioConfig.preservePitch` KDoc gains "not implemented; Horizon B".
+- Phase: A4. Test: throws with audio open; succeeds video-only.
 
 ### D14. Frame queue holds more than the documented bound
-- Where: the `VideoPlayback` constructor passes `FrameQueue(queueCapacity + 1)`.
-- Problem: default 4 becomes 5 pending plus 1 shown, 6 frames held, against the design
-  bound of 4 pending plus 1 shown and against the hardware-pool warning in FrameQueue's own
-  KDoc (hardware decoder pools can be as small as 4 buffers total; holding more stalls
-  decoding, which looks like random freezing).
-- Fix: pass `queueCapacity` through unchanged; keep the default at 4; document total held
-  as `queueCapacity + 1` (the shown frame).
-- Phase: P1. Test: assert `queuedFrames` never exceeds 4 in the `VideoPlaybackTest`
-  harness.
+- Where: `VideoPlayback` passes `FrameQueue(queueCapacity + 1)`.
+- Fix: pass `queueCapacity` unchanged; default 4; document total held as capacity plus the
+  shown slot (which after D20 is metadata, not a frame).
+- Phase: A1. Test: `queuedFrames` never exceeds 4 in the harness.
 
 ### D15. SoftwareConverter correctness leftovers
 - Where: `kiteplayer-ffmpeg/.../SoftwareConverter.kt`.
-- Problems and fixes, all small:
-  1. `Coefficients.of(colorSpace, depth)`: the `depth` parameter is unused. Delete it.
-  2. SMPTE 240M content is converted with BT.601 numbers. Give it its own row:
-     rCr = 1.576, gCb = 0.2266, gCr = 0.4769, bCb = 1.826 (Kr = 0.212, Kb = 0.087).
-  3. The NV12 path ignores chroma siting while the planar path honours it. Apply the same
-     `chromaSampleShift` in `convertNv12`.
-  4. The `readComponent` KDoc says the high two bits are dropped for 10-bit input; the code
-     (correctly) keeps the high eight and drops the low two. Fix the sentence.
-- Phase: P0 for items 1 and 4 (hygiene), P4 for items 2 and 3 (behaviour, needs goldens).
-- Test for items 2 and 3: extend the golden-image test set with an smpte240m-tagged clip
-  and an NV12 centre-sited clip generated in `testmedia.sh`, mean error under 2 of 255.
+- Items: (1) unused `depth` parameter on `Coefficients.of`: delete (A0). (2) SMPTE 240M
+  gets BT.601 numbers: own row, rCr 1.576, gCb 0.2266, gCr 0.4769, bCb 1.826 (A4).
+  (3) NV12 ignores chroma siting: apply the same shift as planar (A4). (4) `readComponent`
+  KDoc has the bit-dropping direction backwards (A0). (5) See D26 for P010.
+- Tests for 2 and 3: smpte240m-tagged and centre-sited NV12 goldens, mean error under 2.
 
 ### D16. HDR converts silently with no tone mapping
-- Where: `SoftwareConverter` accepts PQ and HLG frames and converts with the BT.2020 matrix
-  only, so HDR content renders washed out with no signal to the application.
-- Fix: keep converting (a washed-out picture beats no picture), but make it loud: add
-  `PlaybackWarning.TonemappingUnavailable(detail: String)` to `PlaybackError.kt`, emit it
-  once per stream from the video decode path when `colorSpace.isHdr`. The sample prints it;
-  the facade forwards it in P5.
-- Phase: P4. Test: decode the existing 4K 10-bit clip re-tagged with PQ in `testmedia.sh`
-  and assert the warning is emitted exactly once.
+- Where: `SoftwareConverter` accepts PQ and HLG and converts with the matrix only.
+- Fix for Horizon A: keep converting, add
+  `PlaybackWarning.TonemappingUnavailable(detail)`, emit once per stream. This
+  approximate-plus-warning behaviour is ALSO the documented user-visible policy default
+  until the colour-managed pipeline exists; the 1.0 gate in Horizon B (B5) requires a real
+  tone-mapped path, and approximate output then becomes an explicit opt-in policy rather
+  than the only behaviour.
+- Phase: A4. Test: PQ-tagged clip emits the warning exactly once.
 
 ### D17. KiteCodec: `receive()` cannot distinguish "need input" from "drained"
-- Where: `../KiteCodec/.../Playback.native.kt`; `StreamDecoder.receive` returns null for
-  both the try-again case and the fully-drained case.
-- Fix: add `public val isDrained: Boolean` on `StreamDecoder`, set true when the underlying
-  receive reports end of stream, reset by `flush()`. Non-breaking, and `PlaybackCore` needs
-  it for the end-of-stream logic (digest 7.1).
-- Phase: P2. Test: KiteCodec test driving a decoder to full drain, asserting the flag
-  flips, and that `flush()` clears it.
+- Where: `../KiteCodec/.../Playback.native.kt`.
+- Fix: `public val isDrained: Boolean` on `StreamDecoder`, set on end-of-stream from
+  receive, cleared by `flush()`.
+- Phase: A2. Test: drive to drain, flag flips, flush clears. (The full typed
+  send/receive outcome model is Horizon B, B2.)
 
 ### D18. KiteCodec: `seekMicros` not guarded against an open PacketReader
-- Where: `MediaSource.native.kt`; `seekMicros` checks `demuxing` but not `readerActive`,
-  so the batch seek can move the cursor out from under an open reader.
-- Fix: add `check(!readerActive)` with a message directing callers to `PacketReader.seek`.
-- Phase: P2. Test: assert the throw.
+- Where: `MediaSource.native.kt`.
+- Fix: `check(!readerActive)` directing callers to `PacketReader.seek`.
+- Phase: A2. Test: assert the throw.
 
 ### D19. Window close leaves playback running headless
-- Where: `AppKitWindow.kt`: no window delegate; `stop()` relies on `NSApp.stop`, which only
-  takes effect after the next event arrives.
-- Fix: `AppKitWindow` gains an `onCloseRequested: (() -> Unit)?` property backed by an
-  `NSWindowDelegateProtocol` object implementing `windowWillClose`. `stop()` posts a dummy
-  `NSApplicationDefined` event after `NSApp.stop(null)` so the run loop actually wakes. The
-  sample's window path sets `onCloseRequested` to cancel the session scope.
-- Phase: P3. Test: manual gate check (open window, press the red button, process exits
-  cleanly with the summary printed).
+- Where: `AppKitWindow.kt`.
+- Fix: `onCloseRequested` callback via an `NSWindowDelegateProtocol` object; `stop()` posts
+  a dummy `NSApplicationDefined` event after `NSApp.stop` so the run loop wakes; the
+  sample cancels its session scope on close.
+- Phase: A3. Test: manual gate check (red button ends the process cleanly).
+
+### D20. Shown-frame ownership is contradictory (double close)
+- Where: `FrameQueue` stores the advanced frame as `shown` and closes it later (on the
+  next advance, on flush, on close); `VideoPlayback.present` hands the SAME object to
+  `renderer.present`, whose contract says the renderer owns and closes it. Verified: every
+  presented frame is closed twice; the KiteCodec wrapper's idempotent `close()` masks it,
+  `peekShown()` can observe a closed frame, and for future hardware surfaces this returns
+  a buffer to its pool while in use.
+- Fix, decided: the queue never retains a renderer-owned object. `FrameQueue` keeps a
+  small value record of the last shown frame's metadata (`pts`, `duration`, `generation`)
+  for duration measurement and generation checks, and the frame object itself has exactly
+  one owner at every instant: queue until advance, renderer after present. Redraw-on-resize
+  is the renderer's concern (the AppKit renderer already holds its last image).
+  Reference-counted leases are the Horizon B answer for hardware surfaces (B5); they are
+  not built now.
+- Phase: A1 (queue and scheduler), A3 (renderer side unchanged but re-tested).
+- Test: ledger test proving exactly one close per frame across present, drop, supersede,
+  flush and close; `peekShown` is gone from the API so misuse cannot compile.
+
+### D21. Presentation target time is not passed, and submission is counted as presentation
+- Where: `VideoPlayback.present` calls `renderer.present(shown, nowNanos)`; the design
+  says the renderer receives the intended presentation time. Verified. Also
+  `presentedFrames` increments on renderer ACCEPTANCE (or on null renderer), while the
+  AppKit renderer may later fail or supersede the frame, so engine statistics conflate
+  submitted with drawn.
+- Fix, decided for Horizon A: (1) pass the frame's target time (`frameTimerNanos`-derived)
+  instead of `now`. (2) Rename engine counters to what they measure: `submittedFrames`
+  (accepted by a renderer), `headlessFrames` (no renderer attached), keep `droppedFrames`
+  and `repeatedFrames` as scheduler decisions. The renderer's own `presentedFrames`,
+  `supersededFrames`, `failedFrames` remain the drawing truth and A5 surfaces both groups
+  distinctly in `PlaybackStats` with KDoc stating the difference. First-frame semantics:
+  any "first frame" signal in A5 means terminal renderer feedback, not submission. The
+  full per-frame feedback protocol (typed terminal Presented/Superseded/Failed/Cancelled
+  per submission with scanout quality) is Horizon B (B5).
+- Phase: A1 (target time, renames), A5 (stats wiring).
+- Test: harness renderer records received target times and they match the schedule, not
+  the call instant; stats naming test.
+
+### D22. Decoder wrappers restamp buffered frames with a new generation
+- Where: `kiteplayer-ffmpeg/.../KiteCodecSource.kt`: both decoder wrappers set
+  `this.generation = generation` on every `send`, before knowing whether the packet was
+  accepted; frames still buffered from before then surface stamped with the new
+  generation.
+- Fix: the generation field changes only in `flush()` (which takes the new generation as a
+  parameter); `send` never mutates it. The SPI `send(packet, generation)` parameter is
+  removed and `flush(newGeneration: Generation)` added, since flush is the only legal
+  epoch boundary.
+- Phase: A2. Test: scripted sequence, send returns false with output pending, flush to a
+  new generation, buffered frames must carry the OLD generation before the flush and none
+  after.
+
+### D23. CoreAudio real-time callback allocates, and open is not transactional
+- Where: `CoreAudioSink.renderFromDevice` constructs a `CoreAudioSinkBuffer` on every
+  device callback (verified), violating the sink's own no-allocation contract; a null ring
+  path returns without explicitly zero-filling; the callback's returned frame count is
+  ignored; `mHostTime` validity flags are unchecked; a failure between
+  `AudioComponentInstanceNew` and the end of `open` leaks the instance or the `StableRef`.
+- Fix for Horizon A: preallocate ONE reusable buffer wrapper at open; the callback only
+  updates its target pointer and frame count fields (plain field writes, zero allocation).
+  When the render callback is absent or returns fewer frames than requested, the sink
+  zero-fills the remainder itself (the ring already writes silence; the sink is the last
+  line). Validate `kAudioTimeStampHostTimeValid`; when absent, fall back to
+  `clock.nanos()` plus the buffer duration and mark the anchor Estimated. Make `open`
+  transactional: every failure path disposes what was created. The stricter rule (pure
+  C-only callback body that never enters Kotlin) arrives with the shared C ABI in
+  Horizon B (B1) and is recorded there.
+- Phase: A3. Test: appleTest asserting one wrapper identity across callbacks (via a
+  counting fake), silence-fill on a null callback, and no leak on a forced mid-open
+  failure.
+
+### D24. Audio anchor is one sample period off, and one anchor cannot describe two segments
+- Where: `AudioRing.render` pairs the PTS of the last real sample (its start instant) with
+  the deadline of the buffer end (the instant AFTER that sample finishes). Verified: the
+  anchor is one sample period late. Also `anchorMapping` keeps ONE (pts, frame) mapping;
+  writing a discontinuous segment while older samples are still queued re-anchors the
+  mapping those older samples still need.
+- Fix: standardise on the boundary convention: the published anchor is
+  (ptsOfLastRealSample + one sample duration) at (deadline minus the silence adjustment),
+  meaning "media time at the playhead boundary". Replace the single mapping with a small
+  fixed ring of up to 4 ordered (startFrame, pts) segments; the writer appends on
+  discontinuity, the callback resolves a frame index against the segment that contains it,
+  and segments are retired once consumed. All storage preallocated, seqlock-published as
+  today.
+- Phase: A1. Test: table-driven ring tests: partial callbacks, silence tails, a callback
+  ending exactly on a segment boundary, a callback crossing a discontinuity, at 44.1, 48
+  and 96 kHz; the published anchor is sample-exact in every case.
+
+### D25. Seek and flush ordering can race the device callback (plan defect, now fixed here)
+- Where: the previous revision of this document ordered a seek as "clear queues and ring,
+  then stop the sink". The code (`AudioPlayback.flush`) stops the sink first; the PLAN had
+  it backwards, and generation tags do not excuse racing a real-time reader.
+- Fix: the canonical quiesce-first sequence in digest 8.1 is authoritative: sink stopped
+  and callback provably out before the ring is touched; workers acknowledge quiescence
+  before their queues are cleared; decoders flush on their owning workers.
+- Phase: A5 (PlaybackCore implements it); A1 keeps `AudioPlayback.flush`'s existing
+  correct order and documents it as a contract.
+- Test: A5 native stress: seeks fired during every pipeline stage; zero stale audible
+  samples; bounded completion.
+
+### D26. P010 is read with the wrong bit alignment
+- Where: `SoftwareConverter.readComponent` shifts 10-bit words down by `depth - 8`,
+  correct for low-aligned yuv420p10le, wrong for P010 whose samples are HIGH-aligned in
+  16-bit words (the golden suite only covered the low-aligned case). Verified latent.
+- Fix: the converter distinguishes low-aligned and high-aligned 10-bit formats; P010
+  components are `word shr 8` (take the high byte). BT.2020 constant luminance is NOT
+  silently treated as non-constant: it gets the same treatment as HDR (convert
+  approximately plus a one-time typed warning), because a correct CL path needs the
+  Horizon B colour pipeline.
+- Phase: A4. Test: P010 golden generated in testmedia, mean error under 2; CL-tagged clip
+  emits the warning.
+
+### D27. Public filter descriptions can corrupt native stack memory
+- Where: `../KiteCodec/.../ffmpeg.def`, both audio filter-description builders (the
+  single-input and multi-input variants). Verified: repeated
+  `n += snprintf(buf + n, sizeof(buf) - n, ...)` with the overflow check only AFTER all
+  appends. snprintf returns the WOULD-BE length on truncation, so a user description near
+  or over 2048 bytes makes `buf + n` point outside the array and `sizeof - n` wrap to a
+  huge size_t: undefined behaviour reachable from the public `FilterGraph` API.
+- Fix: after EVERY snprintf, check `n` (or `len`) against the buffer size and fail with
+  `AVERROR(EINVAL)` before computing the next destination pointer. Both sites. (Moving to
+  AVBPrint is fine but not required now.)
+- Phase: A0 (memory safety does not wait). Test: KiteCodec test feeding descriptions of
+  length 0, 2047, 2048, 4096 and 1 MB; all either succeed or fail cleanly, run under the
+  default test harness plus one ASan-enabled local run recorded in the log.
+
+### D28. FilterGraph: multi-input can spin forever, and the drain landing frame is not always released
+- Where: `../KiteCodec/.../FilterGraph.native.kt`. Verified: `feedInput` retries the same
+  pad after EAGAIN plus a synchronous drain; in a multi-input graph (overlay, amix) the
+  sink's EAGAIN can mean "need the OTHER input", so the loop can spin without progress.
+  And `drainTo` wraps the landing frame for the callback without an unconditional unref: a
+  callback that neither closes nor throws leaves the landing frame populated, violating
+  the empty-destination precondition of the next receive.
+- Fix: in `drainTo`, wrap, invoke, then ALWAYS `av_frame_unref` the landing frame in a
+  finally block (a consumer needing ownership clones, which `Frame.copy()` already does).
+  In `feedInput`, track whether the drain produced any frame; on a second consecutive
+  EAGAIN with no progress, throw a typed error naming the starved multi-input condition.
+  Fair multi-input scheduling (NeedInput(pads) results) is Horizon B (B2).
+- Phase: A2. Test: no-op callback across two consecutive outputs (frame content must not
+  leak between them); a two-input graph fed only on one pad fails with the typed error
+  instead of hanging.
+
+### D29. MediaSink advances missing audio timestamps by the wrong frame's samples
+- Where: `../KiteCodec/.../MediaSink.native.kt`, `restampPts`. Verified: the NOPTS path
+  and the monotonic-force path both step by the CURRENT frame's `nb_samples`; the correct
+  step is the PREVIOUS frame's duration (960 then 1024 must start at 0 and 960, not 0 and
+  1024).
+- Fix: track the previous frame's sample count and use it as the step in both paths.
+- Phase: A2. Test: encode frames of 960 and 1024 samples with missing pts; output pts are
+  0 and 960; ffprobe agrees on total duration.
+
+### D30. Channel layout is reduced to a count
+- Where: KiteCodec discards `AVChannelLayout` (a count-derived default is invented);
+  KitePlayer's `ChannelLayout.forChannelCount` guesses from the count. 5.1 side versus
+  back, custom orders and anything above 8 channels are unrepresentable, and D12's mixer
+  would route wrong speakers without this.
+- Fix for Horizon A: KiteCodec exposes `channelLayoutMask: Long?` (the native order mask,
+  null for custom/unspecified) on `AudioStreamInfo` and `FrameInfo` via one new def
+  helper; KitePlayer's `AudioFormat` gains the mask, and the D12 mixer keys on it, falling
+  back to count only when the mask is absent (with the warning). Full first-class layouts
+  (custom order, ambisonics, above 8 channels, extended_data access) are Horizon B (B2).
+- Phase: A2 (KiteCodec), A4 (mixer use). Test: a 5.1(side) clip reports the side mask and
+  mixes with the 5.1 matrix, not the first-six fallback.
+
+### D31. `withPlanes` on an audio frame computes nonsense heights
+- Where: `ffkmp_frame_plane_height` interprets the frame format as a pixel format
+  unconditionally; for audio frames that is a sample-format ordinal. Verified.
+- Fix: `Frame.withPlanes` requires a video frame (`check(info.type == MediaType.Video)`),
+  and the def helper returns 0 for a frame whose width is 0.
+- Phase: A2. Test: audio frame throws the check message.
+
+### D32. Fabricated source capabilities and unvalidated numeric inputs
+- Where: `KiteCodecSource` hardcodes `seekable = true` (verified); `MediaClock.speed`
+  accepts positive infinity (`require(value > 0.0)` passes for Inf; verified).
+- Fix: KiteCodec adds `ffkmp_fmt_is_seekable` (pb seekable flag plus format flags) and
+  `MediaSource.isSeekable`; `KiteCodecSource.seekable` reads it. `MediaClock.speed`
+  requires finite and positive; every numeric public input added in A5 (volume, rate,
+  seek positions, durations) validates finite value and documented range at the boundary.
+- Phase: A2 (seekable), A1 (speed), A5 (facade inputs). Test: a pipe input reports
+  non-seekable; `speed = Double.POSITIVE_INFINITY` throws.
+
+### D33. The VFR fixture is not VFR, and one drift sign contradicts the other
+- Where: `scripts/testmedia.sh` generates `vfr720p60.mp4` as a CONSTANT 59.94 fps stream
+  (verified: plain testsrc2 rate, no timestamp modulation), so nothing exercises real VFR.
+  And `PlaybackStats.avDrift` KDoc says positive means video late while
+  `VideoPlayback.drift` is video minus master, positive meaning video ahead.
+- Fix: regenerate the clip with genuine irregular timestamps (a `setpts` expression
+  alternating frame durations) and rename it `truevfr720.mp4`; update every reference.
+  Define ONE sign convention for the whole project: positive drift means video is AHEAD of
+  the master clock; fix the `PlaybackStats` KDoc and any display strings.
+- Phase: A0 (fixture, sign KDoc); the D1 VFR test uses the new clip in A1.
+
+### D34. Backend composition cannot construct generic playback
+- Where: `PlayerConfig.Backends` has video decoder factories, an audio SINK factory, a
+  source factory and a clock, but NO audio decoder factory and no subtitle decoder factory
+  (verified); the sample reaches them by downcasting to `KiteCodecSource`. Kotlin/Native
+  has no classpath service discovery, so "the platform default is found on the classpath"
+  cannot work either.
+- Fix, decided: the SPI gains a session-shaped backend contract and the facade consumes
+  only it:
+  ```kotlin
+  public interface MediaBackend {
+      public suspend fun open(media: MediaItem): BackendSession
+  }
+  public interface BackendSession : AutoCloseable {
+      public val source: PlayerMediaSource
+      public val videoDecoders: List<VideoDecoderFactory>
+      public val audioDecoders: List<AudioDecoderFactory>
+      public val subtitleDecoders: List<SubtitleDecoderFactory>
+  }
+  ```
+  `Backends` shrinks to `backend: MediaBackend?`, `output: OutputBackend?` where
+  `OutputBackend` pairs the clock with the sink factory and (optionally) a renderer
+  provider, so a mismatched clock/sink pair (D11) cannot be assembled. Defaults are
+  explicit composition: on macOS the sample (and later the umbrella module, Horizon B B7)
+  passes `KiteCodecMediaBackend` and `AppleOutputBackend` objects; core never guesses.
+- Phase: A5 (this is the first A5 step, before PlaybackCore consumes it). Test: a fake
+  backend and the FFmpeg backend both drive PlaybackCore with no cast anywhere.
+
+### D35. Wrapper misuse guards
+- Where: `../KiteCodec/Playback.native.kt`: `Packet` getters dereference native memory
+  after `close()` (no checkOpen); `StreamDecoder.send` accepts a closed packet.
+- Fix: `checkOpen()` in every `Packet` getter and at the top of `send` for the packet
+  argument. Full confinement-or-lease enforcement across every wrapper is Horizon B (B2).
+- Phase: A2. Test: closed-packet getter and closed-packet send both throw the message.
 
 ---
 
-## 4. Dead surface disposition
-
-Reviewed symbol by symbol. "Keep, P5" means the facade phase makes it real; do not delete
-it.
+## 5. Dead surface disposition
 
 | Symbol | Disposition |
 |---|---|
-| `PlayerConfig`, `BufferPolicy`, `AudioConfig`, `SubtitleConfig`, `Backends`, `PlayerLogger`, `PlayerEvent`, `PlaybackStats`, `PlayerSnapshot`, `Progress`, `Tracks`, `TrackId`, `TrackKind`, `LoopMode`, `SyncMode`, `MasterClock`, `PlaybackStatus`, `PlaybackError`, `SeekMode`, `Chapter` | Keep, P5 wires them into the facade |
-| `SeekRequest`, `SeekTarget`, `SeekPhase`, `SeekTiming` | Keep, P5 (the seek machine) |
-| `PacketQueue.isReady`, `isWellBuffered`, `awaitDrain`, `dropFromTail`; `FrameQueue.awaitFrame`; `MediaClock.snapshot`, `ClockSnapshot` | Keep, P5 (PlaybackCore consumes them) |
-| `MediaIo`, `SubtitleSource`, `HwdecPolicy.Prefer`, `HwdecKind`, `HwSurfaceKind` values, `AudioSinkBuffer.writePlane`, `AudioSink.latencyNanos`, `LatencyQuality` | Keep: SPI surface for backlog backends; costs nothing |
-| `NO_PTS` top-level const in `MonotonicClock.kt` | Delete in P0 (zero usages, and it contradicts the `Pts?` convention its own KDoc states) |
-| `AudioRing.epoch` | Delete in P1 (D7) |
-| `MediaClock.lastUpdatedNanos` | Keep, but rewrite its KDoc in P0: it must describe its real consumer, the pause and resume arithmetic of digest 7.1, without citing anything that does not exist yet |
-| `ffkmp_stream_r_frame_rate` in `../KiteCodec/.../ffmpeg.def` | Delete in P2 (never called; `avg_frame_rate` is the one the duration estimator wants) |
-| `kiteplayer-subtitles` module, `SubRipParser` | Keep. In P0: rename its package from `io.github.yuroyami.kiteplayer.subtitles` to `io.github.yuroyami.kiteplayer.subtitle` to match the cue model's package, and add parser unit tests (BOM, CRLF, missing sequence numbers, overlapping cues, malformed timestamps, the `subs.srt` from testmedia). Rendering stays backlog |
+| `PlayerConfig`, `BufferPolicy`, `AudioConfig`, `SubtitleConfig`, `PlayerLogger`, `PlayerEvent`, `PlaybackStats`, `PlayerSnapshot`, `Progress`, `Tracks`, `TrackId`, `TrackKind`, `LoopMode`, `SyncMode`, `MasterClock`, `PlaybackStatus`, `PlaybackError`, `SeekMode`, `Chapter` | Keep, A5 wires them into the facade. Every member that A5 does not implement gets an explicit KDoc marker "not implemented; see the roadmap" in A0 (the truth ledger seed), and A5's gate re-checks the list: implemented, typed-rejected, or removed. |
+| `Backends` | Reshaped in A5 per D34. |
+| `SeekRequest`, `SeekTarget`, `SeekPhase`, `SeekTiming` | Keep, A5 (the seek machine). |
+| `PacketQueue.isReady`, `isWellBuffered`, `awaitDrain`, `dropFromTail`; `FrameQueue.awaitFrame`; `MediaClock.snapshot`, `ClockSnapshot` | Keep, A5 consumes them. `dropFromTail` gains a KDoc warning that arbitrary compressed-packet dropping is only legal at the tail of a not-yet-decoded run; GOP-safe discard is Horizon B. |
+| `MediaIo`, `SubtitleSource`, `HwdecPolicy.Prefer`, `HwdecKind`, `HwSurfaceKind` values, `AudioSinkBuffer.writePlane`, `AudioSink.latencyNanos`, `LatencyQuality` | Keep: SPI surface for Horizon B backends; costs nothing; marked in the truth ledger. |
+| `NO_PTS` top-level const | Delete in A0 (zero usages). |
+| `AudioRing.epoch` | Delete in A1 (D7). |
+| `MediaClock.lastUpdatedNanos` | Keep; KDoc rewritten in A0 to describe its real consumer, the pause and resume arithmetic of digest 8.1. |
+| `FrameQueue.peekShown` | Removed in A1 by D20 (replaced by the metadata record). |
+| `ffkmp_stream_r_frame_rate` in the def file | Delete in A2 (never called). |
+| `kiteplayer-subtitles` module, `SubRipParser` | Keep. A0: package rename from `subtitles` to `subtitle` to match the cue model, plus parser unit tests (BOM, CRLF, missing sequence numbers, overlapping cues, malformed timestamps, the generated `subs.srt`). Rendering is Horizon B (B3). |
 
 ---
 
-## 5. Documentation truth register
+## 6. Documentation truth register
 
-Every place the repository's words claim something the code disproves. All fixed in P0
-unless marked otherwise.
-
-1. `README.md` is one commit stale: it says a window is missing, says the renderer only
-   counts frames, and calls the sample "a CLI that plays a file's audio". The window,
-   the drawing renderer and video playback all exist. It also contains dead links left from
-   deleted planning files. Rewrite it against reality in P0; rewrite it again at the end of
-   P6.
-2. `AudioPlayback.anchorClock` KDoc claims a separation from `position()` that the code
-   does not have (fixed together with D4 in P1).
-3. `AudioRing.epoch` KDoc describes behaviour that does not exist (deleted with D7 in P1).
-4. `SoftwareConverter.readComponent` KDoc has the bit-dropping direction backwards
-   (D15.4, P0).
-5. `MediaClock.lastUpdatedNanos` KDoc cites a class that does not exist yet. Reword in P0
-   per section 4.
-6. KDoc in `PlayerConfig.kt`, `PlayerState.kt` and `PlayerEvent.kt` links to a `KitePlayer`
-   facade class that does not exist until P5. In P0, soften those references to prose ("the
-   player facade"); in P5, restore real links when the class exists.
-7. `CoreAudioSink` and `AppleHostClock` KDoc describe wiring through
-   `PlayerConfig.backends.clock`, true only after P5. Soften in P0, restore in P5.
+1. `README.md` (both repos from A0): rewritten against reality, including the tier table
+   from section 2 with today's honest values (macOS arm64 experimental T3-Full candidate;
+   everything else T1; no published install path). Rewritten again at the end of A6.
+2. `AudioPlayback.anchorClock` KDoc: false separation claim (fixed with D4, A1).
+3. `AudioRing.epoch` KDoc: describes nonexistent behaviour (deleted with D7, A1).
+4. `SoftwareConverter.readComponent` KDoc: bit-drop direction backwards (D15.4, A0).
+5. `MediaClock.lastUpdatedNanos` KDoc: cites a class that does not exist (A0).
+6. KDoc in `PlayerConfig.kt`, `PlayerState.kt`, `PlayerEvent.kt` links to the not-yet
+   existing facade: soften in A0, restore in A5.
+7. `CoreAudioSink` and `AppleHostClock` KDoc reference config wiring that exists only
+   after A5: soften in A0, restore in A5.
+8. `PlaybackStats.avDrift` sign contradiction (D33, A0).
+9. Truth ledger seed (A0): every public configuration member that nothing implements
+   gains the explicit KDoc marker. The A5 gate walks the list again.
 
 ---
 
-## 6. Constants
+## 7. Constants
 
-Every tuned number already lives in code, not in prose. The authoritative homes:
-
-| Code symbol | Holds |
-|---|---|
-| `SyncLaw` | sync thresholds (40 ms floor, 100 ms ceiling), frame duplication threshold (100 ms), no-sync threshold (10 s), frame timer resync (100 ms), max frame duration (3600 s normal, 10 s discontinuity-prone) |
-| `FrameDurationEstimator` | timestamp unrounding tolerance (3.1 ms, Matroska millisecond rounding), snap after 16 agreeing samples, 40 ms fallback |
-| `SeekTiming` | seek coalescing window (0.3 s), precise seek tolerance (5 ms), overshoot backoff ladder (0, 0.5 s, 2 s, 8 s) |
-| `BufferPolicy` defaults | ready at 25 packets or 1 s, soft target 5 s, total cap 32 MB and 30 s, video frame queue 4, live back buffer 20 s, live max lag 10 s |
-| `AudioPlayback` | ring sized at max(8 device buffers, 200 ms) |
-
-These are the empirical residue of a decade of other players' bug reports. Port nothing,
-retune nothing, without measured evidence from real content recorded in the Execution log.
-Two constants arrive with P5 and are decided now: the core loop sleeps at most 50 ms when
-nothing asks for an earlier wake-up, and a still image or cover-art frame displays for 5 s.
+Every tuned number lives in code: `SyncLaw` (sync thresholds 40/100 ms, duplication
+100 ms, no-sync 10 s, resync 100 ms, max frame duration 3600 s / 10 s),
+`FrameDurationEstimator` (3.1 ms unrounding, snap after 16, 40 ms fallback), `SeekTiming`
+(coalesce 0.3 s, precise tolerance 5 ms, backoff ladder 0 / 0.5 / 2 / 8 s), `BufferPolicy`
+defaults (ready 25 packets or 1 s, soft 5 s, caps 32 MB and 30 s, frame queue 4, live
+window 20 s / 10 s), `AudioPlayback` (ring: max of 8 device buffers or 200 ms). They are
+the residue of a decade of other players' bug reports; retune only with measured evidence
+recorded in the Execution log. Two more are decided for A5: the core loop sleeps at most
+50 ms when nothing asks earlier, and a still image or cover-art frame displays for 5 s.
+The gain ramp default is 5 ms (D12).
 
 ---
 
-## 7. Design digests
+## 8. Design digests
 
-Decision-complete designs for what the phases build. These are the authority; nothing else
-exists to consult.
+### 8.1 PlaybackCore (built in A5)
 
-### 7.1 PlaybackCore (built in P5)
+One session actor coroutine on a dedicated single-thread dispatcher owning all playback
+state, command replies, track selection, epochs and the published snapshot. Workers (demux
+pump, audio decoder, video decoder, audio feeder, video scheduler) are coroutines on their
+own single-thread dispatchers (a decoder context is touched by exactly one thread),
+communicating only through the existing queues and typed commands. No foreign thread
+touches core state; every external interaction is a message with a `CompletableDeferred`
+reply. All worker terminal outcomes (including crashes) arrive on one channel the actor
+selects on, so a dead worker becomes a handled failure, not a hang.
 
-One coroutine on a dedicated single-thread dispatcher owning all playback state. Workers
-(demux pump, audio decoder, video decoder, audio feeder, video scheduler) are plain
-coroutines on their own single-thread dispatchers (a decoder context must only ever be
-touched by one thread), communicating only through the existing queues (`PacketQueue`,
-`FrameQueue`, `AudioRing`) and typed commands. No foreign thread ever touches core state;
-every external interaction is a message with a `CompletableDeferred` reply.
-
-The loop is level-triggered: every handler is small, takes no arguments, reads current
-state, decides, and may only lower the shared wake-up deadline. None is a transition hook,
-so a condition that becomes true at the wrong moment is simply noticed on the next pass and
-no sequence of user actions can wedge the player. Each iteration, in this exact order:
+The loop is level-triggered: handlers are small, read state, decide, and may only lower
+the shared wake-up deadline; none is a transition hook, so a condition that becomes true
+at the wrong moment is noticed on the next pass and no command sequence can wedge the
+player. Each iteration, in this exact order, asserted by a test:
 
 ```
-drainCommands()          // typed commands with replies
+drainCommands()
 handleTrackChanges()
-handleAudioFill()        // feeder health; pipeline rebuild on a format change
+handleAudioFill()
 handleVideoWrite()
-handlePlaybackRestart()  // the Ready rendezvous below
-handlePlaybackTime()     // anchor the audio clock once per iteration
-handleBuffering()        // the two-signal rule below
+handlePlaybackRestart()
+handlePlaybackTime()
+handleBuffering()
 handleSubtitles()        // empty body this run, present so the order is stable
-handleEof()              // the six conditions below
+handleEof()
 handleLoop()
 handleQueuedSeek()       // exactly one seek per iteration
 publishSnapshot()
-awaitWork(wakeAt)        // select on the command channel with the computed timeout, 50 ms floor
+awaitWork(wakeAt)        // select on the command channel, 50 ms floor
 ```
 
-Handler order is asserted by a test (a recording fake and a list comparison), not by a
-comment.
+**Command legality.** Every command has a documented legal-state rule and completes
+exactly once:
 
-**Stream status and the start rendezvous.** Each selected stream carries an ordered status:
+| Command | Rule |
+|---|---|
+| open | Legal from Idle and Ended. From any playing state it requires `stop()` first (an explicit replace policy is Horizon B). Cancellation of a suspended `open` leaves Idle, never a half-open graph. |
+| play / pause | Idempotent in their own state; queued during Opening and Seeking; rejected after close. Pause completes only after the sink is quiescent and clocks are frozen. |
+| seek (suspend) | Completes with the landed position or a typed failure, exactly once. Concurrent suspend seeks queue; each completes (Applied or Superseded). |
+| seekLater | Fire-and-forget, coalescing by contract (the merge rules in `SeekRequest`). |
+| stop | Preempts open, seek and drain; returns to Idle after teardown of the session's workers completes. |
+| close | Idempotent terminal; resolves every outstanding command exactly once; bounded. A wedged native call cannot be force-killed in process, so close that exceeds its deadline completes with a typed `RuntimeCompromised` failure rather than pretending success (full isolation is Horizon B). |
+| selectTrack | Legal while open; reopens per digest 8.3. |
+| attachRenderer / detachRenderer | Legal at any time; detach fences outstanding renderer work before returning. |
+
+Errors: suspending commands throw a typed `PlaybackException` (wrapping the
+`PlaybackError` value); caller cancellation stays `CancellationException` and is never
+converted into a failure or an end-of-stream. A terminal failure is ALSO retained in
+`PlayerSnapshot.error` until replaced, because a replay-zero event stream must never be
+the only record of a fatal error.
+
+**Stream status and the start rendezvous.** Per selected stream:
 `Syncing, Ready, Playing, Draining, Eof`. Playback starts only when every selected stream
-has reached at least Ready (enough buffered: the `BufferPolicy` ready thresholds, or the
-stream already ended), and the initial fill happens while the clock is paused. This one
-rule prevents audio starting before the first frame is visible, video playing silently
-after a seek, and audio clipped at the start of every seek.
+is at least Ready (BufferPolicy thresholds or already ended) and the initial fill happened
+paused.
 
-**End of stream is six conditions, not one flag:** demuxer end (no more packets), audio
-decoder drained, video decoder drained (both via `StreamDecoder.isDrained` from D17,
-surfaced through the backend), draining (decoders done, sink still playing out), sink
-drained, and keep-open (the last frame stays on screen). Playback ends only when every
-selected stream is at Eof, every queue is empty, and the sink has drained; never while
-paused with a frame on screen. End of stream travels in band as a null packet per stream.
-The per-decoder finished marker holds a generation, not a boolean, so a seek during a drain
-cancels it cleanly.
+**End of stream is six conditions:** demuxer end; audio decoder drained; video decoder
+drained (`StreamDecoder.isDrained` via the backend); draining (decoders done, sink playing
+out); sink drained (bounded: device loss during drain completes the drain as failed rather
+than polling forever); keep-open (last frame stays). Ended only when every selected stream
+is Eof, queues empty, sink drained; never while paused with a frame on screen. EOS travels
+in band as a null packet; the per-decoder finished marker holds a generation.
 
-**Buffering needs two signals.** Enter Buffering only on a remembered demuxer underrun AND
-a current output underrun; an output underrun alone can be slow decoding and acting on it
-makes the spinner flicker. Leave Buffering when the start rule is satisfied again. The
-demuxer underrun flag is sticky until the cache recovers.
+**Buffering needs two signals:** a remembered demuxer underrun AND a current output
+underrun; leave when the start rule holds again; the demuxer flag is sticky until the
+cache recovers.
 
-**Open sequence:** status Opening; open the source on the demux dispatcher and list
-streams; select default tracks (first non-cover-art video; audio by configured language
-preference, else container default disposition, else first); create decoders from the
-candidate list, deselecting a stream whose decoders all fail (open fails only when nothing
-playable remains); open the audio sink and build the audio pipeline against the negotiated
-format; fill queues with the clock paused until every stream is Ready; present the first
-video frame with the clock still stopped (a free poster frame); return with status Paused,
-so `play()` is instant.
+**Open sequence:** Opening; open the backend session on the demux dispatcher; select
+defaults (first non-cover-art video; audio by language preference, else default
+disposition, else first); create decoders from the session's factory lists, deselecting a
+stream whose factories all fail (open fails only when nothing playable remains); open the
+sink and build the audio pipeline against the negotiated format; fill paused until Ready
+everywhere; present the first frame with the clock stopped; return Paused.
 
-**Seek execution order, not negotiable:** bump the generation and publish Buffering; stop
-the pump and await its acknowledgement (this is what stops old-generation packets arriving
-after the flush); clear packet queues, frame queue and audio ring; flush decoders (after
-the queues, never before); stop the sink; invalidate clocks; move the source cursor to the
-keyframe at or before the target; restart pump and decoders under the new generation; for
-Precise and KeyframeThenRefine modes, discard decoded frames earlier than the target minus
-the precise tolerance; set clocks from the first accepted frame, present it, restore the
-previous play state. Coalescing uses the two rules already encoded in `SeekPhase` and
-`SeekTiming`: within the coalescing window a new request waits until a frame from the
-previous seek has been shown (otherwise holding an arrow key freezes the picture), and a
-precise seek also waits for the restart to complete (otherwise a seek past the end has its
-end-of-stream result overwritten and playback never terminates). Overshoot: the source's
-keyframe seek is a preference, not a guarantee, on containers without an index; aim at the
-target, and only when the first decoded frame proves the landing is late, retry earlier
-using the `SeekTiming.OVERSHOOT_BACKOFF_US` ladder. Almost every seek costs one attempt.
+**Seek execution order (quiesce first; this order is the contract):**
 
-**Pause and resume:** pause freezes clocks and pauses the sink; buffered data is kept and
-the pump keeps running. On resume, shift the video scheduler's `frameTimerNanos` forward by
-`now - videoClock.lastUpdatedNanos` and re-anchor the clock at its frozen value, so the
-clock and the schedule move by exactly the same amount. Getting this wrong shows as a
-skipped or repeated frame on every unpause.
+1. Coalesce per `SeekRequest`/`SeekPhase`; bump the requested epoch; publish Buffering.
+2. Stop the sink (the device callback is provably out before anything it reads is
+   touched). Ask the pump and every decoder/feeder/scheduler worker to quiesce at a safe
+   boundary; await bounded acknowledgements.
+3. Fence the renderer: no submission for the old epoch after this point.
+4. Flush each decoder ON its owning worker with the new generation (D22's
+   `flush(newGeneration)`).
+5. Clear packet queues, frame queue and the audio ring, now that every consumer is
+   quiescent.
+6. Seek the source on its owner.
+7. Restart workers under the acknowledged epoch; preroll; for Precise and
+   KeyframeThenRefine discard frames earlier than target minus the precise tolerance;
+   overshoot uses the `OVERSHOOT_BACKOFF_US` ladder when the first decoded frame proves a
+   late landing.
+8. Anchor clocks from the first accepted frame, present it, restore play state, complete
+   the command exactly once.
 
-**Timestamp rules in the wild**, applied at the boundaries PlaybackCore owns: a video frame
-with no pts uses the decoder's best-effort value, else synthesis per D10; audio with no pts
-uses the running counter per D10; a jump of 5 s or more in a stream that does not declare
-discontinuities is treated as a stream reset at the new position; containers that declare
-discontinuities (`timestampsMayJump`) tolerate jumps up to 5 s and already use the 10 s
-frame duration ceiling.
+Generations remain defence in depth at every hop; they do not replace the acknowledgements
+above.
 
-### 7.2 The KitePlayer facade (built in P5)
+**Pause and resume:** pause freezes clocks after the sink is quiescent and CONSUMES the
+final device anchor first (a late callback must not re-anchor a frozen clock). Resume
+shifts the scheduler's `frameTimerNanos` forward by `now - videoClock.lastUpdatedNanos`
+and re-anchors the clock at its frozen value.
 
-The public class applications use. The v-now surface, exactly:
+**Timestamp rules in the wild:** missing video pts uses best-effort then synthesis (D10);
+missing audio pts uses the exact sample counter; a jump of 5 s or more in a
+non-discontinuous stream is a stream reset at the new position; `timestampsMayJump`
+containers tolerate jumps to 5 s and already use the 10 s duration ceiling.
+
+### 8.2 The KitePlayer facade (built in A5)
+
+The v-now surface, exactly:
 
 ```
-state: StateFlow<PlayerSnapshot>          // changes rarely, emits on change
-progress: StateFlow<Progress>             // position and buffered extent, on a timer while playing
-stats: StateFlow<PlaybackStats>           // diagnostics, sampled per statsInterval
-events: SharedFlow<PlayerEvent>           // things that happened; replay 0, nothing accumulates
-position(): Duration                      // cheap, from the master clock, for a render loop
-suspend open(media: MediaItem)            // returns with the first frame ready, status Paused
+state: StateFlow<PlayerSnapshot>
+progress: StateFlow<Progress>
+stats: StateFlow<PlaybackStats>
+events: SharedFlow<PlayerEvent>
+position(): Duration
+suspend open(media: MediaItem)
 play(); pause()
 suspend seek(to: Duration, mode: SeekMode = Precise)
-seekLater(to: Duration, mode: SeekMode = KeyframeThenRefine)   // fire and forget, coalesces
-suspend stop()                            // back to Idle, player stays usable
-setSpeed(Double)                          // honest per D13
-setVolume(Float); setMuted(Boolean)       // real via the P4 GainStage
-setLoop(LoopMode)
-suspend selectTrack(kind: TrackKind, track: TrackId?)          // video and audio kinds only
-attachRenderer(renderer: VideoRenderer); detachRenderer()      // legal at any time
+seekLater(to: Duration, mode: SeekMode = KeyframeThenRefine)
+suspend stop()
+setSpeed(Double)                          // honest per D13; validates finite
+setVolume(Float); setMuted(Boolean)       // real via the GainStage; validated
+setLoop(LoopMode)                         // LoopMode.All rejects: no queue exists yet
+suspend selectTrack(kind: TrackKind, track: TrackId?)   // video and audio only
+attachRenderer(renderer: VideoRenderer); detachRenderer()
 close()
 companion: create(config: PlayerConfig = PlayerConfig()): KitePlayer
 ```
 
-Not in this run (do not add, do not stub publicly): external subtitle loading, video and
-audio filter chains, a generic command escape hatch, chapter queries. Adding them later is
-additive.
+Not in this run (marked in the truth ledger, not stubbed): external subtitles, filter
+chains, a command escape hatch, chapters (empty list plus marker), playlist/queue,
+frame stepping, balance. `create()` resolves `config.backends`; on macOS the explicit
+defaults are the FFmpeg `MediaBackend` and the Apple `OutputBackend` (D34); a null backend
+on a target with no default is a typed configuration error, never reflection. Warnings and
+errors flow through `events` AND the snapshot per digest 8.1. `stats` separates scheduler
+counters from renderer counters per D21. The sample shrinks to: parse args, create, open,
+play, collect progress, window wiring, summary.
 
-`create()` resolves backends from `PlayerConfig.backends`; null entries resolve to platform
-defaults (`KiteCodecSourceFactory`, `CoreAudioSinkFactory`, `AppleHostClock` on macOS).
-Warnings and errors flow through `events`; the D16 tone-mapping warning and the D12
-unknown-layout warning arrive there. The rule that keeps the error model honest: a warning
-never stops playback, an error always does; there is no third category and no silent
-degradation. `stats` is assembled from counters that already exist (`presentedFrames`,
-`droppedFrames`, `repeatedFrames`, `underruns`, `drift`, `buffered`, `latencyNanos`,
-`latencyQuality`).
+### 8.3 Track selection limitation
 
-The sample then shrinks to: parse args, `KitePlayer.create`, `open`, `play`, collect
-`progress` for the status line, plus the window wiring. Keep the `--window` and
-`--no-video` flags and the final summary lines the gate greps for.
+`selectStreams` permits one call before the first read, so A5's `selectTrack` reopens the
+source and seeks back under a new generation. Legal ONLY when the source reports seekable
+(D32); a non-seekable source gets a typed rejection. Seamless switching is Horizon B (B6).
 
-### 7.3 Track selection limitation
+### 8.4 Rotation (built in A6)
 
-`KiteCodecSource.selectStreams` permits exactly one call, before the first read. P5's
-`selectTrack` for a different audio or video track therefore reopens the source and seeks
-back to the current position under a new generation. That is the decided v-now behaviour
-(seamless switching is backlog B10). Document it on `selectTrack`.
+KiteCodec already exposes `rotationDegrees`. Add it to `PlayerStreamInfo`, populate in
+`toPlayerStream()`, apply in the AppKit renderer's `makeImage` via a rotated `CGContext`
+(90/270 swap output dimensions, 180 flips). `VideoSize` is storage, not presentation. Full
+display-matrix support (mirror, arbitrary affine) is Horizon B (B5). Test: a
+`-display_rotation 90` clip draws with swapped dimensions.
 
-### 7.4 Rotation (built in P6)
+### 8.5 Simulation invariants (A5 testing)
 
-KiteCodec already exposes `StreamInfo.rotationDegrees` (read from the container's display
-matrix; phones write it into every recording, and ignoring it plays portrait video on its
-side). Plumb it: add `rotationDegrees: Int = 0` to `PlayerStreamInfo`; populate it in
-`toPlayerStream()`; the AppKit renderer applies it in `makeImage` by drawing through a
-rotated `CGContext` (90 and 270 swap output width and height; 180 flips both axes).
-`VideoSize` is not changed; rotation is presentation, not storage. Add a rotated clip to
-`testmedia.sh` (`-display_rotation 90` on a test-pattern clip) and verify by decoding one
-frame through the renderer path and checking the output dimensions swap.
-
-### 7.5 Simulation invariants (used by P5 testing)
-
-An entire playback session runs under `kotlinx-coroutines-test` virtual time with a
-scripted fake source, sink and renderer, plus a seeded schedule that injects faults. Assert
-invariants, not outcomes:
-
-1. No frame from a superseded generation is ever presented (the definition of seek
-   correctness).
-2. Within one generation, presented timestamps never decrease.
-3. Every frame handed to the engine is closed exactly once (the existing `LeakLedger` test
-   support does this).
-4. The session reaches a terminal state within bounded virtual time (deadlock detection).
-5. Measured drift between the audio clock and presented video stays inside the sync law's
-   tolerances.
-6. Status transitions follow the state machine with no illegal edge.
-
-One hundred seeded runs in P5. A failing seed is checked in by name as a permanent
-regression test.
+Scripted fake backend, sink and renderer under virtual time plus seeded fault injection.
+Invariants, not outcomes: no frame from a superseded generation is ever presented OR
+AUDIBLE; within a generation presented timestamps never decrease; every frame and packet
+is closed exactly once (LeakLedger); the session reaches a terminal state in bounded
+virtual time; drift stays inside the sync law's tolerance; status transitions follow the
+state machine; every command completes exactly once. One hundred seeds per run; a failing
+seed is checked in by name. Virtual-time tests cannot find native races: A5 also runs one
+real-thread native stress test (seek and close hammered during playback of a real clip)
+as its own gate step.
 
 ---
 
-## 8. Verification protocol
+## 9. Verification protocol
 
-The gate for every phase. A phase is done only when all of it passes.
+The gate for every phase. A phase is done only when all of it passes, rerun for real (no
+up-to-date-only evidence).
 
 ```bash
 # KiteCodec, when touched in the phase
@@ -634,227 +838,309 @@ cd ../KiteCodec && ./gradlew :kitecodec-core:macosArm64Test
 cd ../KitePlayer
 ./gradlew :kiteplayer-core:jvmTest :kiteplayer-core:macosArm64Test \
           :kiteplayer-output:macosArm64Test :kiteplayer-ffmpeg:macosArm64Test \
-          :kiteplayer-subtitles:jvmTest      # subtitles tests exist from P0 onward
+          :kiteplayer-subtitles:jvmTest      # subtitles tests exist from A0 onward
 
-# Cross-target compile spot checks, always (the atomicfu trap and the explicitApi trap both bite here)
+# Cross-target compile spot checks, always
 ./gradlew :kiteplayer-core:compileKotlinJs :kiteplayer-core:compileKotlinWasmJs \
           :kiteplayer-core:assembleAndroidMain
 
-# Sample runs, from P1 onward; regenerate media first when testmedia.sh changed
+# Sample runs, from A1 onward; regenerate media first when testmedia.sh changed
 ./scripts/testmedia.sh
 ./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64
 BIN=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
-$BIN testmedia/sync1080p30.mp4        # expect: all frames presented, 0 dropped, 0 underruns
-$BIN testmedia/vfr720p60.mp4          # expect: 0 dropped
+$BIN testmedia/sync1080p30.mp4        # expect: all frames submitted, 0 dropped, 0 underruns
+$BIN testmedia/truevfr720.mp4         # expect: 0 dropped (real VFR from A0 onward)
 $BIN testmedia/hevc4k10.mp4           # expect: video-master playback completes
 $BIN /nonexistent.mp4                 # expect: one sentence, no stack trace
 
 # Em dash scan, always, both repos; must print nothing. The pattern is the escape
-# text backslash-u2014 (expanded by the shell), so no literal em dash exists in this repo.
+# text backslash-u2014 (expanded by the shell), so no literal em dash exists in the repos.
 grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" . ../KiteCodec \
   | grep -v vendor/ | grep -v build/
 ```
 
-From P2 add the transport-stream offset clip, from P4 add `surround51.mp4`, from P6 add the
-rotated clip to the sample run list, each with the expected line stated in its phase.
+From A2 add the transport-stream offset clip, from A4 add `surround51.mp4` and the P010
+golden, from A6 add the rotated clip, each with the expected line stated in its phase.
+The sample binary is a debug executable and its numbers are development evidence
+(level 6), never performance qualification; qualification budgets live in Horizon B.
 
 Multi-pass rule, owner-mandated: after each phase's code is written, re-read every changed
-file once against this document before running the gate, then run the gate, then write the
-Execution log entry, then commit.
+file once against this document, run the gate, write the Execution log entry, then commit.
 
 ---
 
-## 9. Phases
+## 10. Horizon A: the executable run
 
-### P0: truth and hygiene (no behaviour changes)
-1. Rewrite `README.md` against what exists (section 5 item 1): video and audio play in
-   sync, the window exists, the measured numbers from section 2, an honest limits list
-   (no facade yet, no seeking yet, macOS arm64 only, 1080p window drawing is CPU-bound by
-   design). Remove all dead links.
-2. KDoc truth fixes: section 5 items 4, 5, 6, 7.
-3. Deletions and small hygiene: `NO_PTS` const; `Coefficients` depth parameter (D15.1).
-4. Subtitles module: package rename and parser tests per the last row of section 4.
-5. Gate. Commit ("Make the words match the code, and delete what nothing calls").
+### A0: truth, hygiene, and the memory-safety fix
+1. D27 snprintf bounds checks in both def-file sites, plus the length tests. This is the
+   only code-behaviour change in A0 and it ships first.
+2. README rewrites per section 6 item 1, including the tier table; KDoc truth fixes
+   (section 6 items 4, 5, 6, 7, 8); truth-ledger markers (item 9).
+3. Deletions and nits: `NO_PTS`; `Coefficients` depth parameter; `readComponent` comment.
+4. D33 fixture: regenerate real VFR, rename, update references; drift sign KDoc.
+5. Subtitles module package rename plus parser tests (section 5 last row).
+6. Gate. Commit ("Fix the filter buffer overflow, and make the words match the code").
 
-### P1: engine correctness
-1. D1, D2, D3, D14 in `VideoPlayback`, plus a new `VideoPlaybackTest` in commonTest: a
-   scripted harness with the existing `TestClock`, fake frames, and a recording renderer,
-   covering the VFR drop case, the repeat count, the queue bound, generation discard, and
-   schedule resync after a stall.
-2. D4 lock in `AudioPlayback` plus its KDoc (section 5 item 2).
-3. D7 (`epoch` deletion and the flush precondition KDoc).
-4. Gate. Commit ("Fix the scheduler's drop and repeat accounting, and make the audio clock
-   safe to read").
+### A1: engine correctness and ownership
+1. D1, D2, D3, D14 in `VideoPlayback`; D21 target-time and counter renames; new
+   `VideoPlaybackTest` harness (TestClock, fake frames, recording renderer) covering VFR
+   drop, repeat count, queue bound, generation discard, resync, and target-time delivery.
+2. D20 shown-frame ownership: metadata record replaces the retained frame; ledger test.
+3. D24 anchor boundary and timestamp segments in `AudioRing`; table-driven tests.
+4. D4 lock and KDoc; D7 epoch deletion; D32 finite-speed check.
+5. Gate. Commit ("Give every frame one owner, and make the audio anchor sample-exact").
 
-### P2: KiteCodec correctness, then adoption
-KiteCodec first, republish, then KitePlayer. KiteCodec steps 1 to 4 touch disjoint files
-and may run in parallel; step 5 onward is KitePlayer and strictly after the republish.
-1. D8 discard restore plus its test.
-2. D9 microsecond helpers plus the overflow test.
-3. D17 `isDrained` plus test; D18 seek guard plus test.
-4. Delete `ffkmp_stream_r_frame_rate` from the def file.
-5. KitePlayer: D10 timestamp mapper and pts synthesis in both decoder wrappers; delete all
-   manual timestamp multiplies (D9 adoption); add the transport-stream offset clip and the
-   first-pts test.
-6. Gate. Commit in each repo ("Restore the demuxer after a reader closes, and rescale
-   timestamps safely" / "Put the whole player on one relative timeline").
+### A2: KiteCodec correctness, then adoption
+KiteCodec steps 1 to 6 first (disjoint files may run in parallel), republish, then
+KitePlayer steps 7 to 8.
+1. D8 discard restore. 2. D9 helpers (pts, dts, duration) plus overflow tests.
+3. D17 `isDrained`; D18 seek guard; D35 closed guards. 4. D28 drain unref and multi-input
+   bound. 5. D29 previous-frame step in `restampPts`. 6. D30 channel mask helper; D31
+   audio-plane guard; D32 `isSeekable`; delete `ffkmp_stream_r_frame_rate`.
+7. KitePlayer: D10 mapper (mapTimestamp versus mapDuration), pts synthesis, delete manual
+   multiplies and the raw DTS cast; D22 generation-on-flush SPI change; transport-stream
+   clip and tests.
+8. Gate. Commits ("Make every wrapper safe against misuse, and every timestamp exact" /
+   "Put the whole player on one relative timeline").
 
-### P3: output layer
-1. D5 renderer rework plus the close-race test.
-2. D11 clock check plus test.
-3. D19 window delegate and stop wake-up; the sample window path cancels its session scope.
-4. D6 canonical decode loops in the sample.
-5. Gate, including a manual `--window` run and the red-button check. Commit ("Close the
-   renderer without leaking, and let the window close end playback").
+### A3: output layer
+1. D5 renderer rework (including the main-queue latest-only slot) plus tests.
+2. D23 CoreAudio: preallocated buffer, silence fill, host-time validation, transactional
+   open, plus tests. 3. D11 clock check. 4. D19 window delegate and stop wake-up.
+5. D6 canonical decode loops in the sample.
+6. Gate, including the manual window and red-button checks. Commit ("Honour the real-time
+   audio contract, and close the renderer without leaking").
 
-### P4: the audio pipeline
-1. D12: `ChannelMixer`, `LinearResampler`, `GainStage`, `AudioPipeline` in commonMain with
-   the tests named in D12; `surround51.mp4` in testmedia; the reference-PCM comparison
-   test; wire the pipeline into the sample between decoder and submit.
-2. D13 speed honesty plus tests.
-3. D15.2 and D15.3 (the SMPTE 240M row, NV12 siting) plus their goldens.
-4. D16 HDR warning plus test.
-5. Gate; the sample list now includes `surround51.mp4` (expect sane playback, 0 underruns;
-   the PCM comparison test is the objective check). Commit ("Downmix, resample and gain in
-   the engine, and stop pretending about speed").
+### A4: the audio pipeline and converter correctness
+1. D12 mixer (mask-keyed per D30), resampler, gain ramp, pipeline, `surround51.mp4`,
+   reference-PCM comparison, wired into the sample.
+2. D13 speed honesty. 3. D15 items 2 and 3 with goldens. 4. D26 P010 fix with golden;
+   BT.2020 CL warning. 5. D16 HDR warning.
+6. Gate. Commit ("Downmix and resample correctly, and stop pretending about speed").
 
-### P5: PlaybackCore, the facade, and seeking end to end
-The largest phase. Build order inside it:
-1. `PlaybackCore` per digest 7.1, in `kiteplayer-core`, with the handler-order test.
-2. The seek machine: `SeekRequest` merging, `SeekPhase`, the coalescing rules, the
-   overshoot ladder, generation flow through every queue. Unit tests in virtual time:
-   twenty seeks in one virtual millisecond produce exactly one flush cycle; no frame from
-   a stale generation is ever presented; the session reaches a terminal state within
-   bounded virtual time.
-3. Simulation tests per digest 7.5.
-4. The `KitePlayer` facade per digest 7.2, `create()` backend resolution, state and stats
-   publication, warnings and errors through `events`. Restore the KDoc links from section
-   5 items 6 and 7.
-5. Rewrite the sample onto the facade (digest 7.2, last paragraph).
-6. Real-media seek test in `kiteplayer-ffmpeg` nativeTest: 20 random seeks in
-   `sync1080p30.mp4` under Precise mode, every landed frame within one frame duration of
-   the target; plus one seek past the end (clean Ended) and one seek to 0 during playback.
-7. Gate, all previous sample runs still green. Commit ("Give the player its core loop, its
-   facade and real seeking").
+### A5: PlaybackCore, the facade, and seeking end to end
+1. D34 backend session SPI, fake backend, FFmpeg backend adoption.
+2. PlaybackCore per digest 8.1 with the handler-order test and the command-legality
+   table tests.
+3. The seek machine with the quiesce-first sequence (D25); virtual-time seek tests
+   (twenty seeks in one virtual millisecond, one flush cycle; stale-generation and
+   bounded-termination invariants).
+4. Simulation campaign per digest 8.5, including the one real-thread native stress step.
+5. The facade per digest 8.2 with input validation (D32), exception policy, snapshot
+   error retention, stats separation (D21), and the truth-ledger walk.
+6. Sample rewritten onto the facade; real-media seek test (20 precise seeks land within
+   one frame duration; seek past end reaches Ended; seek to 0 mid-play works).
+7. Gate. Commit ("Give the player its core loop, its facade and real seeking").
 
-### P6: rotation, polish, and the honest rewrite
-1. Rotation per digest 7.4 plus the rotated-clip check.
-2. `README.md` rewritten again: facade code sample first, the limits table, the backlog
-   stated as not done.
-3. Generate and commit the ABI dumps (`abiValidation` is configured on every module; no
-   baseline exists yet, so nothing catches an accidental signature change until this is
-   done).
-4. A soak: `$BIN testmedia/soak30min.mp4 --no-video` for the full 30 minutes and the 1080p
-   clip with video for at least 10 minutes; drift under 40 ms, resident memory flat,
-   zero underruns.
-5. Full gate. Final Execution log entry. Commit ("Rotate what phones record, and make every
-   document match the code").
+### A6: rotation, polish, and the honest rewrite
+1. Rotation per digest 8.4 with the rotated-clip check.
+2. README rewritten again: facade sample first, tier table updated with evidence, limits
+   list, Horizon B stated as not done.
+3. ABI dumps generated and committed for every KitePlayer module.
+4. Soak: `soak30min.mp4` audio-only full length, 1080p with video at least 10 minutes;
+   drift under 40 ms, no underruns, resident set reaches a plateau and stays there for the
+   final 20 minutes (recorded numbers in the log; this is development evidence, not the
+   Horizon B 24-hour qualification).
+5. Full gate. Final log entry. Commit ("Rotate what phones record, and make every document
+   match the code").
 
 ---
 
-## 10. Backlog: specified, decided, and OUT of this run
+## 11. Horizon B: the product roadmap (decided, sequenced, NOT this run)
 
-Do not start these. They are listed so nobody mistakes their absence for an oversight, in
-priority order for whatever run comes next.
+Everything the owner's product goals require beyond the run above. Order is
+dependency-driven. Each item ends with its exit truth.
 
-- B1. A Metal renderer: planes uploaded as textures, colour conversion in a fragment
-  shader, presentation via `MTLDrawable.present(at:)` with the scheduler's target time.
-  Replaces the CPU path for real-time 1080p and above; the CPU path stays as reference and
-  fallback.
-- B2. VideoToolbox hardware decode: KiteCodec grows `av_hwdevice_ctx_create` plus a C-side
-  get_format shim (a static C function reading the wanted format from the codec context's
-  opaque field, since Kotlin/Native static functions cannot capture state), and the
-  vendored FFmpeg build gains the hwaccel flags. Frames then surface through the existing
-  `hardwareSurface` accessor.
-- B3. A swresample-backed resampler in KiteCodec (the library is already linked and never
-  called), replacing the linear tier 0 one, including drift compensation for the
-  video-master sync mode.
-- B4. A time-stretch (WSOLA) tempo stage in commonMain, which unlocks real `setSpeed` with
-  audio and pitch preserved.
-- B5. Subtitle rendering: cue timing in the core loop, a `TextRasterizer` implemented on
-  CoreText, overlay compositing in the renderer. The parser and the cue model already
-  exist.
-- B6. KiteCodec demuxer and decoder options (HTTP headers, probesize, timeouts), then
-  custom I/O through an `AVIOContext` with an interrupt callback (which also makes blocking
-  network reads cancellable), then TLS in the vendored build for https, HLS and DASH.
-- B7. The JNI bridge: lift the C helper layer out of the cinterop def into a real header,
-  generate JNI entry points and Kotlin/JVM externals from it, package Android AAR and
-  desktop natives. One bridge unlocks Android and JVM desktop, the largest audience.
-- B8. CoreAudio device-change and underrun listeners feeding `AudioSinkEvent`;
-  route-change latency handling; upgrading `latencyQuality` to Exact by summing the
-  device latency properties.
-- B9. The umbrella `kiteplayer` module, `kiteplayer-compose`, CI, a docs site, publishing.
-- B10. Seamless track switching without reopening, chapters, background refine for
-  KeyframeThenRefine.
+- **B1. Shared C ABI and the real-time gold standard.** Lift the def-file helpers into a
+  versioned `kitecodec-c` library with opaque handles, explicit ownership annotations, no
+  public FFmpeg struct embedding, error records, C unit tests, fuzz targets and
+  sanitizers. Kotlin/Native binds to it; the same ABI later serves JNI. FFmpeg
+  header/runtime major-version identity is validated at startup, and the audio device
+  callback becomes pure native code that never enters managed Kotlin. Exit: one C
+  implementation serves cinterop; a mismatched FFmpeg runtime is rejected with a report;
+  callback allocation instrumentation reads zero.
+- **B2. KiteCodec completion for experts and the player.** Typed send/receive outcomes
+  (Consumed, NeedOutput, Drained, RecoverableInvalidData, Fatal and the receive
+  equivalents with FormatChanged), full `AVChannelLayout` and `extended_data` (1 to 32
+  channels, custom and ambisonic), complete colour and side-data model (mastering,
+  content light, HDR10+/Dolby Vision identifiers, full display matrix), interruptible
+  `OpenRequest` (custom IO, headers, options, deadlines, protocol allowlist), pooled
+  plane views (zero steady-state allocation, negative strides), managed swresample and
+  cached swscale contexts, bitstream filters, subtitle decode (text and bitmap with
+  attachments and fonts), fair multi-input filter scheduling, corruption-budget policy,
+  transactional output replacement (never truncate an input that is the output path),
+  half-open trim semantics for Transcoder, and closed-state leases across every wrapper.
+  Exit: an expert builds a C-equivalent pipeline with no internal binding and no lossy
+  mapping; the batch APIs preserve VFR and variable audio timing.
+- **B3. Subtitles.** Cue timing in the core loop; SubRip and WebVTT policy paths; libass
+  as the reference ASS/SSA renderer in a `kiteplayer-subtitles-libass` module; bitmap
+  subtitle pipeline (PGS, VobSub, DVB); seek reconstruction of active state; forced and
+  accessibility dispositions in auto-selection; user style precedence (accessibility
+  wins, then user override, then authored, then defaults); HDR-aware composition.
+  Exit: the reference corpus (scripts, bidi, karaoke, overlaps, palettes, seeks) matches
+  pinned libass output; SRT-only support is never called subtitle support.
+- **B4. Audio quality completion.** swresample replaces the linear resampler as default;
+  WSOLA (or better) tempo with pitch preserved, making `setSpeed` and `preservePitch`
+  real; drift compensation for video-master and external-master modes; gapless (priming
+  and padding accounting) and A-B loop; device-change and latency-quality upgrades on
+  every sink; passthrough and bit-perfect modes as negotiated capabilities.
+  Exit: spectral gates (alias energy, impulse response), sample-exact gapless captures,
+  and the tempo range published with evidence.
+- **B5. Video quality completion.** Metal renderer (plane textures, shader conversion,
+  `present(at:)` timing, quality-tagged presentation feedback per submission with
+  terminal Presented/Superseded/Failed/Cancelled); VideoToolbox hardware decode with
+  typed surface leases, pool negotiation and device-loss recovery; the colour-managed
+  pipeline (correct P010/CL handling, transfer linearisation, gamut and tone mapping,
+  display capability queries, dithering); deinterlacing policy; full display matrix;
+  display-rate policies. The CPU converter remains the reference oracle and fallback.
+  Exit: 1080p60 software and 4K60 hardware sustain 30 minutes on named Macs with the
+  scanout-error budget met and colour goldens (DeltaE distributions, not mean byte error)
+  passing.
+- **B6. Sources, network, live and adaptive.** Interruptible network operations with
+  deadlines; TLS and protocol profile work in the FFmpeg build (https, HLS, DASH, RTSP);
+  a real packet cache (byte/time watermarks, GOP-safe discard, live window with published
+  seekable ranges); capability snapshots replacing seekable booleans; delegated versus
+  player-owned adaptive architectures chosen per open; reconnect policy; in-place track
+  switching where the backend permits. Exit: network chaos tests (stall, 404, redirect
+  loops, token expiry, reconnect) pass; live edge and DVR windows behave; blocked reads
+  cancel within their deadline.
+- **B7. Distribution and packaging.** The umbrella `kiteplayer` artifact with per-target
+  default composition; KiteCodec runtime artifacts published so ordinary consumption is
+  ONE dependency line with no plugin (static-library-in-klib or runtime-variant strategy
+  per target; the plugin remains for custom profiles, system FFmpeg and GPL opt-ins that
+  never arrive transitively); Android AAR over the JNI bridge (16 KiB page alignment,
+  extractNativeLibs=false, per-ABI jniLibs); JVM desktop runtime jars; iOS/tvOS
+  frameworks; content-addressed plugin cache with digest and provenance validation,
+  bounded extraction, and profile-aware identity; licensing bundles (notices, exact
+  corresponding source, relink material) with no categorical legal claims about static
+  LGPL on the App Store. Exit: a clean consumer on each shipped ecosystem builds and
+  plays with one dependency and zero local setup.
+- **B8. Security and supply chain.** Fuzz every C entry point that accepts bytes,
+  descriptions or options; sanitizer jobs in CI; resource budgets (dimensions, channels,
+  probe bytes, playlist depth, decompression ratio) with typed limit errors; protocol
+  allowlists and SSRF policy; secret redaction; SBOM, provenance, reproducible builds,
+  CVE monitoring with a patch SLA. Exit: no known reachable Critical or High issue at any
+  release; two isolated rebuilds byte-match or explain their differences.
+- **B9. Platform qualification to 1.0.** The mandatory set, each to T5 for its named
+  profile with real-device evidence: macOS 13+ (arm64, x64), iOS 16+ and tvOS 16+
+  (devices; simulators at least T4), Android API 24+ (arm64-v8a and x86_64; drop or
+  qualify armeabi-v7a explicitly), JVM desktop on JDK 17+ (Windows 10 22H2+ x64,
+  macOS 13+, Ubuntu 22.04-baseline Linux x64/arm64), current-and-previous stable
+  browsers for a documented Web capability profile (WebCodecs/WebAudio/MSE backend), and
+  watchOS 9+ either qualified T3-Audio or removed from the product coordinate. Per
+  platform: OS integrations (focus, sessions, PiP, background, routes, media keys),
+  lifecycle, packaging and consumer smoke. Exit: generated support tables from
+  qualification runs replace every hand-written claim.
+- **B10. Performance constitution and parity.** Release-mode benchmarks on pinned
+  devices and media with distributions (p50/p95/p99 and worst), warm and cold: audio
+  callback worst case under half its deadline with zero engine-caused underruns; zero
+  full-frame CPU copies on qualified paths; local open-to-first-feedback p50 100 ms and
+  p95 250 ms; keyframe seek p95 200 ms; precise seek p95 500 ms landing within one
+  frame; A/V drift p99 within 20 ms; scanout error p95 within a quarter refresh; 24-hour
+  soak with a bounded RSS slope; a copy-and-allocation ledger per qualified graph; and a
+  published parity dashboard against pinned mpv, VLC and QMPlay2 builds. Marketing never
+  substitutes for the dashboard. Exit: the numbers exist, with raw artifacts retained.
+- **B11. Product facade completion.** Playlist/queue (which unlocks LoopMode.All),
+  chapters, editions and programs, frame stepping, filters (video, audio, subtitle) with
+  typed graph descriptions, external audio/video tracks, the advanced option escape
+  hatch with namespaced dictionaries and unused-option reporting, screenshots, support
+  bundles, Compose integration, Swift and Java ergonomics, and the API truth ledger
+  completed: every public member implemented, typed-rejected, or gone.
+
+**What does not count as done, ever:** one frame per minute; a source set compiling; a
+unit test around a fake renderer presented as playback; enqueuing a frame and calling it
+displayed; an FFmpeg feature present in source but absent from the shipped profile; a
+warning standing in for correct colour at 1.0; an ignored configuration field; a
+developer-machine build via Homebrew or mavenLocal presented as installation; a debug
+benchmark; a ten-minute soak called leak-free; a simulator standing in for a device
+claim; a README promise without a passing gate.
 
 ---
 
-## 11. Decisions already taken (do not re-litigate)
+## 12. DRM and scope boundaries
 
-Standing decisions from the project's history, restated so nothing needs to be looked up:
-
-1. Clean-room legality as in contract rule 9. The engine is written against a written
-   specification in a different language with different structures; if any file ever reads
-   like a transliteration of a study-only source, that file is a defect to rewrite.
-2. Both repositories live on `main`, commits local, nothing pushed. `vendor/` and
-   `testmedia/` stay untracked.
-3. macOS arm64 is the proving ground because it is the only target where decode, audio,
-   GPU and this machine all meet. The engine stays free of macOS assumptions.
-4. KiteCodec exposes what a player needs behind the `@KiteCodecLowLevelApi` opt-in rather
-   than absorbing the player; raw pointers with manual lifetimes deserve an explicit
-   consumer acknowledgement.
-5. The audio path is pull-shaped end to end; push platforms get a writer-coroutine wrapper
-   when they arrive. Settled by the physics of real-time audio threads.
-6. KiteCodec is consumed from mavenLocal (contract rule 7), not a composite build, because
-   the KiteCodec Gradle plugin is load-bearing for linking.
-7. The atomicfu Gradle plugin stays banned (contract rule 6).
-8. The Core Graphics window renderer stays the only renderer this run; its 1080p slowness
-   is by design, contained (a slow renderer supersedes frames without degrading the
-   engine), and B1 is the fix.
-
-New decisions from the review, binding on this run:
-
-9. The engine's SPI stays backend-neutral (two vocabularies, mapped in
-   `kiteplayer-ffmpeg/Conversions.kt`), because `kiteplayer-core` compiles for js and
-   wasmJs where KiteCodec cannot exist. The mapping's information losses that matter were
-   D15 and D16; the rest is accepted.
-10. Timestamps become container-relative exactly once, at the source boundary (D10). The
-    engine timeline starts at zero everywhere.
-11. Missing pts is synthesised at the decoder wrapper, not made representable in the SPI.
-    `VideoFrame.pts` stays non-null.
-12. The tier 0 resampler is linear interpolation in commonMain, not swresample (B3), so
-    the correctness hole closes now and the quality upgrade stays a swap behind one
-    interface.
-13. Speed with audio open is an honest `UnsupportedOperationException` until B4, not a
-    silently wrong clock.
-14. Track switching reopens the source (digest 7.3) until B10.
-15. HDR renders un-tone-mapped with a typed warning (D16) rather than refusing to play.
-16. The facade ships without filters, external subtitles and a command escape hatch
-    (digest 7.2); adding them later is additive.
-17. `AudioPlayback` takes an internal lock (D4) rather than pushing thread confinement
-    onto every caller; PlaybackCore becomes the main caller and the lock stays as armour.
+Widevine, FairPlay, PlayReady and protected surfaces are licensed platform systems, not
+FFmpeg features. Until a CDM integration exists (a separate product decision), DRM
+content returns a typed `DRMUnsupported` result. Transport encryption FFmpeg can decrypt
+with application-supplied keys is distinct and belongs to B6. Casting (Chromecast,
+AirPlay) is a remote target abstraction, Horizon B at the earliest. Optical-disc menu
+navigation is out of scope entirely. "Dependency-only" never means native-code-free: it
+means the native runtime arrives transitively, legally and verified, without the consumer
+writing build scripts.
 
 ---
 
-## 12. Definition of done for this run
+## 13. Decisions already taken (do not re-litigate)
 
-A consumer of the sample can open a local file; video and audio play in sync; play, pause,
-seek (all three modes), volume and mute work and are not perceptibly laggy; 5.1 and
-44.1 kHz content plays correctly; rotated phone video plays upright; nothing leaks over the
-soak; every failure surfaces as one typed value or one printed sentence, never a hang or a
-stack trace; the README tells the truth; both repositories' tests pass; and every phase
-above is committed on `main`, unpushed, with its Execution log entry written.
+Standing decisions:
+
+1. Clean-room legality per contract rule 9; a file that reads like a transliteration is a
+   defect to rewrite.
+2. Both repositories on `main`, local commits, nothing pushed; `vendor/` and `testmedia/`
+   untracked.
+3. macOS arm64 is the proving ground; the engine stays free of macOS assumptions, and
+   platform-neutral APIs are checked against the Horizon B platform set before they
+   freeze (the A5 gate includes that review for the facade surface).
+4. KiteCodec exposes player needs behind `@KiteCodecLowLevelApi`; raw lifetimes deserve
+   an explicit opt-in.
+5. The audio path is pull-shaped end to end.
+6. mavenLocal consumption is the developer loop (contract rule 7); distribution is B7 and
+   the Gradle plugin is one provisioning strategy, not a law.
+7. The atomicfu Gradle plugin stays banned.
+8. The Core Graphics renderer is the Horizon A renderer and the permanent correctness
+   reference; Metal (B5) is the qualifying renderer.
+
+Decisions from the merged reviews, binding on this run:
+
+9. The SPI stays backend-neutral, but information loss that destroys correctness is not
+   accepted: channel masks (D30), colour metadata, and the timestamp model survive the
+   mapping. Remaining lossy corners are named in the truth ledger.
+10. Timestamps normalise exactly once at the source boundary; `mapTimestamp` subtracts
+    the origin, `mapDuration` never does (D10).
+11. Missing pts is synthesised at the decoder wrapper; `VideoFrame.pts` stays non-null.
+    Low-level KiteCodec keeps representing absence honestly (null helpers).
+12. The linear resampler is interim, labelled as such in KDoc and README, and is replaced
+    by swresample in B4. It is not the 1.0 default.
+13. Speed with audio open throws until B4.
+14. Track switching reopens seekable sources only (D32 gate) until B6.
+15. HDR and BT.2020 CL render approximately WITH a typed warning in Horizon A; the 1.0
+    gate requires the managed path (B5), at which point approximate output becomes an
+    explicit opt-in policy.
+16. The facade ships the digest 8.2 surface; everything else is truth-ledger-marked, not
+    stubbed.
+17. `AudioPlayback` locks only its non-suspending members (D4); actor confinement is the
+    real answer and A5 delivers it.
+18. Frame ownership: single owner per instant now (D20); reference-counted leases arrive
+    with hardware surfaces (B5).
+19. Generations are defence in depth; quiescence acknowledgements are the seek contract
+    (D25).
+20. Presentation truth: submitted and drawn are different numbers with different names
+    (D21); "first frame" always means terminal renderer feedback.
+21. Support claims use the tier vocabulary of section 2, generated from evidence in
+    Horizon B; hand-written claims carry today's honest tiers meanwhile.
+22. The evidence hierarchy of section 2 governs every "done": when code, artifact,
+    documentation and measurement disagree, the weakest result is the truth until all
+    four agree.
 
 ---
 
-## 13. Execution log
+## 14. Execution log
 
-Append-only. One entry per phase, plus one immediately for any deviation from this file.
-Entry shape: date, phase, what landed, the gate's measured numbers, deviations with the
-proof that forced them. This section is the project's progress record and its decision
-record; there is no other.
+Append-only. One entry per phase, plus one immediately for any deviation. Entry shape:
+date, phase, what landed, the gate's measured numbers, deviations with the proof that
+forced them. This section is the project's progress record and its decision record; there
+is no other.
 
-- 2026-08-09, pre-P0. This document landed and became the sole planning document. The
-  superseded planning files were deleted (git history retains them). Code comments across
-  both repositories no longer cite external documents. The unused `FFmpegAudioReader` was
-  deleted from `kiteplayer-ffmpeg`; nothing referenced it.
+- 2026-08-09, pre-A0. This document became the sole planning document; the superseded
+  planning files were deleted (git history retains them). Code comments across both
+  repositories no longer cite external documents. The unused `FFmpegAudioReader` was
+  deleted; nothing referenced it.
+- 2026-08-09, pre-A0, second entry. A second independent audit of both repositories was
+  verified claim by claim against the source and merged into this document. It added
+  defects D20 to D35 (all re-verified in code before acceptance, including a
+  memory-unsafe snprintf pattern reachable from the public filter API), corrected two
+  errors in this document's own earlier prescriptions (duration-origin subtraction in
+  D10; ring-before-sink ordering in the seek digest, now D25), widened the plan into two
+  horizons, and contributed the evidence rules, tier vocabulary and Horizon B roadmap.
+  Its source document was never committed and was deleted after distillation; this
+  document is the sole surviving record of its findings.

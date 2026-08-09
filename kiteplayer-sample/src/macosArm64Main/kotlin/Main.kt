@@ -14,6 +14,7 @@ import io.github.yuroyami.kiteplayer.output.AppleHostClock
 import io.github.yuroyami.kiteplayer.output.AppKitVideoRenderer
 import io.github.yuroyami.kiteplayer.output.AppKitWindow
 import io.github.yuroyami.kiteplayer.output.CoreAudioSink
+import io.github.yuroyami.kiteplayer.spi.AudioBuffer
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
@@ -78,6 +79,11 @@ fun main(args: Array<String>) {
         println("  ${failure.message ?: failure::class.simpleName}")
         exitProcess(1)
     }
+
+    // What the backend had to approximate: an HDR clip converted without tone mapping, a colour space
+    // this build does not handle exactly. A warning never stops playback, so it is printed and
+    // playback carries on.
+    source.onWarning = { println("warning: ${it.message}") }
 
     val videoStream = if (videoEnabled) source.firstVideo else null
     val audioStream = source.firstAudio
@@ -179,6 +185,21 @@ private suspend fun runSession(
                     "device    ${negotiated.sampleRate} Hz, ${negotiated.channels} channel(s), " +
                         "latency ${audio.latencyQuality}",
                 )
+
+                // The conversion stage is keyed on what the decoder produces against what the device
+                // accepted. The same channel count at the same rate makes every stage a copy; anything
+                // else is a downmix, a rate conversion, or both, and a 5.1 file on a stereo device is
+                // the case that used to reach the ring as garbage.
+                val converts = decoderFormat.channels != negotiated.channels ||
+                    decoderFormat.sampleRate != negotiated.sampleRate
+                println(
+                    if (converts) {
+                        "pipeline  ${decoderFormat.channels} channel(s) at ${decoderFormat.sampleRate} Hz " +
+                            "into ${negotiated.channels} at ${negotiated.sampleRate} Hz"
+                    } else {
+                        "pipeline  pass through, the device took what the decoder produces"
+                    },
+                )
             }
             println()
 
@@ -255,34 +276,43 @@ private suspend fun runSession(
             val audioDecode = if (audioStream != null) {
                 launch(audioContext) {
                     val decoder = source.audioDecoderFactories().first().create(audioStream)!!
+
+                    // Every buffer goes through the audio path's conversion stage: the downmix, the
+                    // rate conversion, then volume. The format comes from the buffer rather than from
+                    // the decoder, so a stream that changes format mid-file is followed on the buffer
+                    // that changed rather than one buffer later.
+                    suspend fun hand(buffer: AudioBuffer) {
+                        audio.submitDecoded(
+                            pts = buffer.pts,
+                            interleaved = buffer.interleavedFloat(),
+                            frames = buffer.frameCount,
+                            sourceFormat = buffer.format,
+                        )
+                        buffer.close()
+                        decodedAudio++
+                    }
+
                     try {
                         for (packet in audioPackets) {
                             // The same rule as the video loop: a refused packet is offered again after
                             // draining, and a decoder that neither takes it nor gives anything back has
                             // broken its own contract.
                             while (!decoder.send(packet)) {
-                                val buffer = decoder.receive() ?: error(
-                                    "decoder refused a packet and produced nothing; " +
-                                        "this violates the codec contract",
+                                hand(
+                                    decoder.receive() ?: error(
+                                        "decoder refused a packet and produced nothing; " +
+                                            "this violates the codec contract",
+                                    ),
                                 )
-                                audio.submit(buffer.pts, buffer.interleavedFloat(), buffer.frameCount)
-                                buffer.close()
-                                decodedAudio++
                             }
                             packet.close()
                             while (true) {
-                                val buffer = decoder.receive() ?: break
-                                audio.submit(buffer.pts, buffer.interleavedFloat(), buffer.frameCount)
-                                buffer.close()
-                                decodedAudio++
+                                hand(decoder.receive() ?: break)
                             }
                         }
                         decoder.send(null)
                         while (true) {
-                            val buffer = decoder.receive() ?: break
-                            audio.submit(buffer.pts, buffer.interleavedFloat(), buffer.frameCount)
-                            buffer.close()
-                            decodedAudio++
+                            hand(decoder.receive() ?: break)
                         }
                     } finally {
                         decoder.close()

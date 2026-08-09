@@ -123,6 +123,17 @@ public data class AudioFormat(
     val channels: Int,
     val sampleFormat: SampleFormat,
     val channelLayout: ChannelLayout = ChannelLayout.forChannelCount(channels),
+    /**
+     * Which speaker each channel drives, as the native order mask: one bit per speaker, channels in
+     * the order of those bits from the lowest upward.
+     *
+     * This is what the engine's downmix keys on, and [channels] cannot replace it. Six channels are
+     * 5.1 with side surrounds or 5.1 with back surrounds, and a downmix that guesses wrong sends the
+     * surround content to speakers the mix never intended. Null when the source declared no layout,
+     * or declared one no mask can describe, which is a custom channel order or ambisonics. The engine
+     * then falls back to the channel count and says so through a warning.
+     */
+    val channelLayoutMask: Long? = null,
 ) {
     public val bytesPerFrame: Int get() = channels * sampleFormat.bytes
 

@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.AudioPipeline
 import io.github.yuroyami.kiteplayer.internal.AudioRing
 import io.github.yuroyami.kiteplayer.internal.MediaClock
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
@@ -29,7 +30,8 @@ import kotlin.time.Duration.Companion.milliseconds
  *
  * ### Threading
  *
- * [submit] belongs to one coroutine, the audio feeder, because it is the ring's single producer. The
+ * [submit] and [submitDecoded] belong to one coroutine, the audio feeder, because it is the ring's
+ * single producer, and the conversion stage behind [submitDecoded] belongs to the same coroutine. The
  * device's real-time callback is the single consumer and touches nothing else in this class, so
  * neither side takes a lock.
  *
@@ -57,6 +59,13 @@ public class AudioPlayback(
 
     private var ring: AudioRing? = null
     private val mediaClock = MediaClock(clock)
+
+    /**
+     * The conversion from what the decoder produces to what the device took. Built on the first
+     * [submitDecoded] and rebuilt whenever the decoder's format changes, so a caller that converts on
+     * its own and uses [submit] never has one.
+     */
+    private var pipeline: AudioPipeline? = null
 
     /** Guards the media clock against the members that may be called from more than one thread. */
     private val lock = SynchronizedObject()
@@ -143,6 +152,43 @@ public class AudioPlayback(
     }
 
     /**
+     * Converts decoded audio into the negotiated format and hands it over.
+     *
+     * [submit] takes samples that are already in the negotiated format. This takes them in
+     * [sourceFormat], which is what the decoder said it produced, and runs the audio path's
+     * conversion stage first: the channel mix, then the rate conversion, then volume. A decoder
+     * feeding a device that took a different layout or a different rate has to come through here,
+     * because nothing else in the player converts anything.
+     *
+     * The stage is keyed on [sourceFormat] against the format it was built for, so a decoder that
+     * changes format mid-stream gets a new one on the buffer that changed rather than one buffer
+     * later. When [sourceFormat] already is the negotiated format every stage is a copy and the cost
+     * is one pass over the samples.
+     *
+     * @param pts the media timestamp of the first frame, as in [submit].
+     * @param interleaved channel-interleaved float samples in [sourceFormat].
+     * @param frames sample frames in [interleaved], meaning one value per channel each.
+     */
+    public suspend fun submitDecoded(
+        pts: Pts?,
+        interleaved: FloatArray,
+        frames: Int,
+        sourceFormat: AudioFormat,
+    ) {
+        val negotiated = format ?: error("submitDecoded was called before open")
+        val existing = pipeline
+        val stage = when {
+            existing == null -> AudioPipeline(sourceFormat, negotiated, onWarning)
+            existing.matches(sourceFormat) -> existing
+            else -> existing.rebuiltFor(sourceFormat)
+        }
+        pipeline = stage
+
+        val produced = stage.process(interleaved, frames)
+        if (produced > 0) submit(pts, stage.output, produced)
+    }
+
+    /**
      * Anchors the clock from what the device last reported.
      *
      * The core calls this once at the top of an iteration, so the anchoring happens at one known
@@ -199,6 +245,10 @@ public class AudioPlayback(
     public suspend fun flush(newGeneration: Generation) {
         sink.stop()
         ring?.flush()
+        // The conversion stage holds one sample frame across buffers. After a seek that frame belongs
+        // to the position that was abandoned, so interpolating the new position out of it would mix
+        // the two.
+        pipeline?.reset()
         mediaClock.invalidate()
         generation = newGeneration
     }
@@ -231,12 +281,29 @@ public class AudioPlayback(
     /**
      * The playback rate as a multiplier of real time. Finite and positive.
      *
+     * **While audio is open the only accepted value is 1.0.** Anything else throws
+     * [UnsupportedOperationException], because there is no tempo stage: the samples would still reach
+     * the device at the device's rate, so the sound would play at normal speed while this clock, and
+     * every frame timed against it, ran at another. A player that accepts the value and does nothing
+     * with it is worse than one that refuses, because the caller cannot tell which it got.
+     *
+     * With no ring open the value is stored and nothing refuses it, which is what keeps the rate a
+     * property of the clock rather than of the device. That is not a working speed control on its own:
+     * the video scheduler still paces frames by their own durations. A real one needs the tempo stage
+     * and a scaled frame timer, and both are Horizon B; see KPKMP.md section 11.
+     *
      * Setting it takes the lock, because a rate change re-anchors the clock, so it is safe from any
      * thread. Reading it is a plain read of one value.
      */
     public var speed: Double
         get() = mediaClock.speed
         set(value) {
+            if (ring != null && value != 1.0) {
+                throw UnsupportedOperationException(
+                    "audio playback runs at 1.0 only: there is no tempo stage, so a rate of $value " +
+                        "would move the clock without moving the sound",
+                )
+            }
             synchronized(lock) { mediaClock.speed = value }
         }
 
@@ -245,6 +312,7 @@ public class AudioPlayback(
         closed = true
         sink.close()
         ring = null
+        pipeline = null
     }
 
     private companion object {

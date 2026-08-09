@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.VideoSize
@@ -15,6 +16,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioDecoder
 import io.github.yuroyami.kiteplayer.spi.AudioDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.ChannelLayout
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.MediaSourceFactory
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
@@ -60,6 +62,19 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
 
     private val byIndex: Map<Int, StreamInfo> = source.streams.associateBy { it.index }
     private var reader: PacketReader? = null
+
+    /**
+     * Where this source's decoders report a degradation they had to accept and carry on through.
+     *
+     * The decoders are the only place that knows, because the knowledge arrives with the frames and
+     * not with the container: a stream can start standard dynamic range and change. Today one warning
+     * comes out of here, `PlaybackWarning.TonemappingUnavailable`, emitted at most once per stream by
+     * the video decoder when the colour it was handed can only be converted approximately.
+     *
+     * The callback runs on whichever thread called `receive`, which is the decoder's own thread, so it
+     * must be cheap and must not block. Set it before decoding starts. The default discards.
+     */
+    public var onWarning: (PlaybackWarning) -> Unit = {}
 
     /**
      * The single place the container's timeline becomes the engine's. Declared before [streams]
@@ -127,16 +142,26 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     /**
      * The decoder wrappers are built here rather than in the factories, because they need the
      * timestamp mapper and the mapper stays private to this file.
+     *
+     * The warning sink is passed as a lambda that reads [onWarning] when it fires, not as the current
+     * value of it, so a caller that sets the property after building its decoders is still heard.
      */
     internal fun newVideoDecoder(stream: PlayerStreamInfo): VideoDecoder =
-        KiteCodecVideoDecoder(openDecoder(stream.index, lowDelay = false), stream, mapper)
+        KiteCodecVideoDecoder(openDecoder(stream.index, lowDelay = false), stream, mapper) { onWarning(it) }
 
     /**
      * Low delay for audio: a player is waiting on these frames, and the decoder holding them back
      * for reordering costs latency for no benefit.
      */
     internal fun newAudioDecoder(stream: PlayerStreamInfo): AudioDecoder =
-        KiteCodecAudioDecoder(openDecoder(stream.index, lowDelay = true), stream, mapper)
+        KiteCodecAudioDecoder(
+            decoder = openDecoder(stream.index, lowDelay = true),
+            stream = stream,
+            mapper = mapper,
+            // The container's answer, used until the decoder gives its own. A stream that declares no
+            // layout, or one no mask can describe, reports null and the mixer falls back to the count.
+            declaredChannelLayoutMask = kiteStream(stream.index).audio?.channelLayoutMask,
+        )
 
     /** Video decoders for this source. Ordered best first, which today means software only. */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> =
@@ -261,6 +286,7 @@ private class KiteCodecVideoDecoder(
     private val decoder: StreamDecoder,
     private val stream: PlayerStreamInfo,
     private val mapper: TimestampMapper,
+    private val warn: (PlaybackWarning) -> Unit,
 ) : VideoDecoder {
 
     override val hardware: HwdecStatus = HwdecStatus.Software
@@ -273,6 +299,14 @@ private class KiteCodecVideoDecoder(
      */
     private var lastPts: Pts? = null
 
+    /**
+     * Whether the approximate-colour warning has already gone out for this stream.
+     *
+     * Once per stream and not once per epoch, so it survives a seek: the viewer does not need telling
+     * again that the file is what it was a second ago.
+     */
+    private var warnedAboutColor = false
+
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteCodecPacket?)?.native)
 
@@ -281,7 +315,40 @@ private class KiteCodecVideoDecoder(
         val duration = mapper.mapDuration(frame.durationMicros)
         val pts = mapper.mapTimestamp(frame.ptsMicros) ?: synthesisedPts(duration)
         lastPts = pts
-        return KiteCodecVideoFrame(frame, pts, duration, generation)
+        val wrapped = KiteCodecVideoFrame(frame, pts, duration, generation)
+        warnIfColorIsApproximated(wrapped.colorSpace)
+        return wrapped
+    }
+
+    /**
+     * Says once, out loud, that the picture is not colour correct and will still be shown.
+     *
+     * Two colours reach the converter that it can only approximate, and both approximate in the same
+     * way, by running the matrix and nothing else:
+     *
+     * - PQ and HLG are high dynamic range transfer functions. There is no tone mapping anywhere in the
+     *   engine, so a 1000 nit picture is displayed as if its code values were standard dynamic range.
+     *   Highlights flatten and the whole image reads dull.
+     * - BT.2020 constant luminance encodes luma after the transfer function rather than before it, so
+     *   the non-constant luminance matrix is the wrong inverse for it. Chroma-heavy areas shift.
+     *
+     * Neither is fixable with a matrix, because both need the transfer function in the loop, which is
+     * the colour managed pipeline this engine does not have. The honest behaviour is to convert
+     * approximately and say so, which is also the documented default until that pipeline exists.
+     */
+    private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
+        if (warnedAboutColor) return
+        val detail = when {
+            color.isHdr -> "${color.transfer} transfer converted as standard dynamic range on stream ${stream.index}"
+            color.matrix == ColorMatrix.Bt2020Cl ->
+                "BT.2020 constant luminance converted with the non-constant luminance matrix on " +
+                    "stream ${stream.index}"
+            else -> return
+        }
+        // Latched before the callback runs, so a callback that throws cannot turn a one-time warning
+        // into one per frame.
+        warnedAboutColor = true
+        warn(PlaybackWarning.TonemappingUnavailable(detail))
     }
 
     /**
@@ -330,10 +397,39 @@ public class KiteCodecAudioDecoderFactory internal constructor(
     }
 }
 
+/** The most channels the engine models. Anything wider is truncated, and then the mask cannot stand. */
+private const val MAX_MODELLED_CHANNELS: Int = 8
+
+/**
+ * One decoded audio format, with the channel mask kept only while it still describes the channels.
+ *
+ * The mask is FFmpeg's native order mask, one bit per speaker, and it is the only thing that
+ * distinguishes 5.1 with side surrounds from 5.1 with back surrounds. The count cannot: both are six.
+ * A mixer keyed on the count sends the surround content to the wrong pair of speakers, which sounds
+ * like a broken file.
+ *
+ * The mask is dropped when its bit count and the reported channel count disagree, which happens when
+ * a stream is wider than [MAX_MODELLED_CHANNELS] and the count is truncated to fit. Reporting a mask
+ * for channels that are not there would be worse than reporting none: none means "fall back to the
+ * count and say that you did", which is a defined behaviour, while a mismatched mask names speakers
+ * for samples that were never handed over.
+ */
+private fun audioFormat(sampleRate: Int, sourceChannels: Int, mask: Long?): AudioFormat {
+    val channels = sourceChannels.coerceIn(1, MAX_MODELLED_CHANNELS)
+    return AudioFormat(
+        sampleRate = sampleRate,
+        channels = channels,
+        sampleFormat = SampleFormat.F32,
+        channelLayout = ChannelLayout.forChannelCount(channels),
+        channelLayoutMask = mask?.takeIf { it.countOneBits() == channels },
+    )
+}
+
 private class KiteCodecAudioDecoder(
     private val decoder: StreamDecoder,
     stream: PlayerStreamInfo,
     private val mapper: TimestampMapper,
+    declaredChannelLayoutMask: Long?,
 ) : AudioDecoder {
 
     private var generation: Generation = Generation.Initial
@@ -348,11 +444,10 @@ private class KiteCodecAudioDecoder(
     private var anchorMicros: Long = 0
     private var samplesSinceAnchor: Long = 0
 
-    override var outputFormat: AudioFormat = AudioFormat(
+    override var outputFormat: AudioFormat = audioFormat(
         sampleRate = stream.sampleRate ?: 48_000,
-        channels = (stream.channels ?: 2).coerceIn(1, 8),
-        sampleFormat = SampleFormat.F32,
-        channelLayout = ChannelLayout.forChannelCount((stream.channels ?: 2).coerceIn(1, 8)),
+        sourceChannels = stream.channels ?: 2,
+        mask = declaredChannelLayoutMask,
     )
         private set
 
@@ -362,18 +457,12 @@ private class KiteCodecAudioDecoder(
     override suspend fun receive(): AudioBuffer? {
         val frame = decoder.receive() ?: return null
         val info = frame.info
-        // A stream can change its rate or channel count mid-file. Reporting it here lets the engine
-        // rebuild its resampler rather than quietly playing at the wrong speed.
+        // A stream can change its rate, channel count or layout mid-file. Reporting it here lets the
+        // engine rebuild its mixer and resampler rather than quietly playing at the wrong speed or
+        // sending surround content to the wrong speakers.
         if (info.sampleRate > 0 && info.channelCount > 0) {
-            val channels = info.channelCount.coerceIn(1, 8)
-            if (info.sampleRate != outputFormat.sampleRate || channels != outputFormat.channels) {
-                outputFormat = AudioFormat(
-                    sampleRate = info.sampleRate,
-                    channels = channels,
-                    sampleFormat = SampleFormat.F32,
-                    channelLayout = ChannelLayout.forChannelCount(channels),
-                )
-            }
+            val candidate = audioFormat(info.sampleRate, info.channelCount, info.channelLayoutMask)
+            if (candidate != outputFormat) outputFormat = candidate
         }
 
         val mapped = mapper.mapTimestamp(frame.ptsMicros)

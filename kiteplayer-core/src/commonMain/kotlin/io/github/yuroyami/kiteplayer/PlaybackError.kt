@@ -95,6 +95,28 @@ public sealed class PlaybackWarning {
         override val message: String get() = "audio latency is not measurable: $detail"
     }
 
+    /**
+     * The stream carries HDR transfer characteristics and there is no tone mapping, so it is
+     * converted with the matrix alone: highlights clip and the picture looks flat next to a
+     * tone-mapped one. Emitted once per stream.
+     *
+     * This is the documented behaviour and not a failure. A real tone-mapped path is Horizon B
+     * (KPKMP.md section 11, B5), after which approximate output becomes something a caller asks for
+     * rather than the only thing on offer.
+     */
+    public data class TonemappingUnavailable(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "no tone mapping: $detail"
+    }
+
+    /**
+     * The source's channel layout could not be identified well enough to mix by speaker, so the
+     * layout was guessed from the channel count or the channels were passed through in source order.
+     * Emitted once per audio format.
+     */
+    public data class ChannelLayoutUnknown(val channels: Int, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "unknown channel layout for $channels channels: $detail"
+    }
+
     /** Timestamps in the stream are broken and the engine is compensating. */
     public data class BadTimestamps(val detail: String) : PlaybackWarning() {
         override val message: String get() = "compensating for bad timestamps: $detail"

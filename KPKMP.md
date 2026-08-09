@@ -1795,3 +1795,243 @@ is no other.
     clean checkout, which executor contract item 5 says to ignore. The other standing
     item from A0, A1 and A2, the `AppKitVideoRenderer.kt` opt-in warning, is gone with
     this phase.
+- 2026-08-09, phase A4, gate passed. KiteCodec was not touched, so its test run and the
+  mavenLocal republish are not part of this gate and `../KiteCodec` is clean at `d078c66`,
+  the A2 commit that already exposes the channel mask this phase consumes. What landed:
+  1. D12's mixer, keyed on the MASK and never on the count. A new internal commonMain
+     `MixLayout` enum names the nine layouts by FFmpeg's own masks: mono 0x4, stereo 0x3,
+     2.1 0xB, quad 0x33, 5.0 0x37, 5.1 back 0x3F, 5.1 side 0x60F, 6.1 0x70F, 7.1 0x63F.
+     5.1 back and 5.1 side are separate entries that share a stereo matrix, exactly as the
+     register requires, so a later target layout that treats side and back differently has
+     two cases to answer rather than one. `ChannelMixer` applies -3 dB, written once as
+     `MINUS_3_DB = 0.70710678f`, to centre, LFE and every surround; all nine rows are in
+     the class KDoc and again as hand-written expectations in the test. There is no
+     normalisation and no limiter, which the KDoc states plainly: the coefficients are
+     applied as written, a source loud in several channels at once can clip, and measured
+     normalisation belongs with libswresample in Horizon B B4.
+  2. D12's three fallbacks, each warned exactly once per pipeline. No mask at all: the
+     layout is guessed from the channel count and the guess is reported. A mask that names
+     nothing this build models, or that disagrees with the channel count: the first
+     channels pass through in source order. A known source layout with no matrix reaching
+     the target channel count: the same pass-through. Only the source layout is ever
+     guessed; the device's channel count is the authority.
+  3. D12's `LinearResampler`, stateful across buffers. The read position is an integer
+     frame index plus an exact remainder over the target rate, so it is not a
+     floating-point accumulator and cannot drift; each buffer moves the origin back by
+     exactly its own frame count; the previous buffer's last frame is carried so the output
+     frames that straddle a boundary have both neighbours. Startup holds the first frame,
+     which is one input frame of delay and 23 microseconds at 44.1 kHz, and that delay is
+     the whole timing error of the stage because timestamps pass through untouched. The
+     KDoc states the interim quality, names libswresample in B4 as the replacement, and
+     says it is not the production default.
+  4. D12's `GainStage`: one multiply, applied last, at a fixed slope so the full range from
+     silence to unity takes `DEFAULT_RAMP_DURATION`, which is the 5 ms section 7 decides,
+     cross-referenced there. A fresh stage starts at unity so opening a file does not fade
+     in, and unity is a no-op rather than a pass over the samples.
+  5. D12's `AudioPipeline` composing the three in the prescribed order, mix then resample
+     then gain, so the rate conversion runs on two channels instead of eight and a mute is
+     silent immediately. It owns its output buffers, never writes to or hands back the
+     caller's array, and `matches(decoderFormat)` and `rebuiltFor(decoderFormat)` carry the
+     volume and mute across a rebuild so a mid-stream format change is inaudible.
+  6. `AudioPlayback.submitDecoded(pts, interleaved, frames, sourceFormat)`, the one new
+     public member of the phase, plus the pipeline field, `pipeline?.reset()` inside
+     `flush`, and `pipeline = null` in `close`. See the deviations for why it exists.
+  7. D13: `AudioPlayback.speed` throws `UnsupportedOperationException` when a ring is open
+     and the value is not 1.0, and 1.0 stays legal. With no ring open the value is stored,
+     which keeps the rate a property of the clock. The KDoc says why, and does not claim a
+     working speed control exists. `AudioConfig.preservePitch` already carried the A0 truth
+     marker plus the sentence that there is no tempo stage, so `PlayerConfig.kt` needed
+     nothing.
+  8. D15 item 2: `Coefficients.of` gives `ColorMatrix.Smpte240m` its own row, `rCr 1.576`,
+     `gCb 0.2266`, `gCr 0.4769`, `bCb 1.826`, sharing the studio-range offset and the two
+     range scales. It is no longer BT.601 under another name.
+  9. D15 item 3: one `chromaSampleShift(location, subsampleX)` read by both conversion
+     paths, and `convertNv12` now applies it. A new `chromaColumns` bound clamps the
+     sampled column into the plane, so a converter reading native memory cannot be one
+     shift away from reading past the end of a row.
+  10. D26: a private `SampleLayout(bytesPerSample, dropBits)` enum, `Eight(1, 0)`,
+      `TenLowAligned(2, 2)` and `TenHighAligned(2, 8)`, replaces the `depth` parameter that
+      could not express the difference. `P010le` takes the high-aligned entry, so
+      `readComponent` returns `word shr 8`. `Bt2020Cl` keeps the NCL row with a comment
+      saying it is an approximation, and warns instead of pretending.
+  11. D16 and D26's constant-luminance half, delivered through the phase's second fixed
+      contract. `KiteCodecSource.onWarning` is public and documented (which thread, what it
+      costs, that the default discards), and is passed to the video decoder as a lambda that
+      reads the property when it fires, so a caller that sets it after building its decoders
+      is still heard. `warnIfColorIsApproximated` runs per received frame, latches its flag
+      before invoking the callback so a throwing callback cannot turn a one-time warning
+      into one per frame, and emits `PlaybackWarning.TonemappingUnavailable` for a PQ or HLG
+      transfer or for `Bt2020Cl`, naming which approximation and which stream. Once per
+      stream and not per epoch, so it survives a seek.
+  12. D30's KitePlayer half, delivered through the phase's first fixed contract.
+      `AudioFormat` gains `channelLayoutMask: Long?` as its last field, the mixer keys on
+      it, and one `audioFormat(sampleRate, sourceChannels, mask)` helper builds every
+      `AudioFormat` the audio decoder reports: from the container's
+      `AudioStreamInfo.channelLayoutMask` at construction, then from the per-frame
+      `FrameInfo.channelLayoutMask` whenever the decoded format changes in rate, count or
+      layout.
+  13. Fixtures in `scripts/testmedia.sh`: `colors-smpte240m.mp4` and `colors-nv12.mkv` and
+      `colors-p010.mp4` each with an `.rgba` reference dump, `colors-pq.mp4` and
+      `colors-bt2020cl.mp4` with no dump because they exist to be counted rather than
+      compared, and `surround51.mp4` and `surround51side.wav` each with an `-ac 2` float
+      reference. Every dump follows the existing `colors-*` pattern, `-sws_flags neighbor`
+      into `-f rawvideo`.
+  14. Tests, 91 new: `ChannelMixerTest` 8 (including a case that fails if a named layout
+      has no expectation), `LinearResamplerTest` 9, `GainStageTest` 9, `AudioPipelineTest`
+      8 and `AudioPlaybackTest` 6 in core, so 40 per core target; `ColorPolicyTest` 4,
+      `ReferencePcmTest` 4 and three added `DecodeAndConvertTest` cases in the FFmpeg
+      module, so 11 there.
+
+  Gate, every step rerun for real with `--rerun-tasks` after a `clean`, in one invocation
+  of the five test tasks plus the three cross-target compiles plus
+  `linkDebugExecutableMacosArm64`: 63 actionable tasks, 63 executed, and the only two
+  UP-TO-DATE tasks are AGP's `androidPreBuild` and `preAndroidMainBuild`, which have no
+  actions. Not one compiler warning anywhere. Suites: `:kiteplayer-core:jvmTest` 128,
+  `:kiteplayer-core:macosArm64Test` the same 128, `:kiteplayer-output:macosArm64Test` 18,
+  `:kiteplayer-ffmpeg:macosArm64Test` 22 (DecodeAndConvertTest 9, RelativeTimelineTest 5,
+  ColorPolicyTest 4, ReferencePcmTest 4), `:kiteplayer-subtitles:jvmTest` 8, so 304 test
+  executions, 0 skipped, 0 failures, 0 errors, against 213 at the A3 gate. Cross-target
+  compiles successful, and the artifacts were opened rather than trusted:
+  `AudioPipeline`, `ChannelMixer`, `MixLayout`, `GainStage` and `LinearResampler` are all
+  present in the `js` and `wasmJs` linkdata and as classes in
+  `kiteplayer-core/build/outputs/aar/kiteplayer-core.aar`. `./scripts/testmedia.sh` exit 0,
+  all 26 files written. Sample linked and run, debug binary, development evidence only:
+  `sync1080p30.mp4` 300 decoded and 300 submitted, 0 dropped, 0 repeated, 0 underruns,
+  clock drift 0 ms on every line, final a/v drift 17 ms, worst schedule 5 ms;
+  `truevfr720.mp4` 240 and 240, 0 dropped, 0 repeated, 0 underruns, drift 17 ms, worst
+  schedule 5 ms; `hevc4k10.mp4` 180 and 180, 0 dropped, 0 repeated, no audio track so video
+  drives the clock, clock drift 0 to 5 ms, worst schedule 6 ms, run completes;
+  `tsoffset1400.ts` 300 and 300, 0 dropped, 1 repeated as every gate since A2 has recorded,
+  0 underruns, drift 7 ms, worst schedule 5 ms, position running `0:00.181` to `0:09.921`
+  against a duration of `0:10.021`; `surround51.mp4`, the phase's new gate clip, prints
+  `pipeline  6 channel(s) at 48000 Hz into 2 at 48000 Hz`, plays 141 audio buffers with
+  clock drift 0 ms on every line and 0 underruns, so the mixer is in the path and the path
+  keeps up; `/nonexistent.mp4` prints `cannot play /nonexistent.mp4` and `No such file or
+  directory (code=-2)`, exit status 1, no stack trace. Four extra sample runs for the
+  colour work: `colors-pq.mp4` prints `warning: no tone mapping: Pq transfer converted as
+  standard dynamic range on stream 0` exactly once across 5 frames, `colors-bt2020cl.mp4`
+  prints the constant-luminance detail exactly once, `colors-nv12.mkv` plays its 2 frames
+  with 0 dropped, and `colors-smpte240m.mp4` prints no warning at all, which is the
+  negative control on the warning itself. Em dash scan over both repositories: no output.
+  Every changed file is pure ASCII, and the only line over 120 columns anywhere in the
+  changed set is `scripts/testmedia.sh:52` at 147, which is A0's subtitle `printf` and was
+  not touched.
+
+  Measured numbers behind the goldens, from the implementers and recorded here because they
+  are the evidence the register's bounds are met. Mean component error against the FFmpeg
+  reference: smpte240m 0.176, nv12 0.314, p010 0.579, with bt709 0.137, bt601 0.187 and
+  10bit 0.618 for context, all far under the register's bound of 2. Each of the three new
+  cases was proved to bite with a negative control, one temporary patch breaking all three
+  at once, then restored and hash-verified: SMPTE 240M on the BT.601 row gives a mean of
+  7.726 and a worst of 36; a chroma shift of 1 for centre siting gives 8.124 and 62; P010
+  read low-aligned gives 97.481 and 255. The reference-PCM comparison is tighter than a
+  golden by design, mean under 0.0001 and worst under 0.001 per sample, because both sides
+  decode the same bytes with the same libavcodec and only the mix can differ. The gate
+  re-verified the two fixture claims the audio tests rest on with `ffprobe`:
+  `surround51.mp4` is `aac, 48000, 6, 5.1` and `surround51side.wav` is
+  `pcm_f32le, 48000, 6, 5.1(side)`; `colors-nv12.mkv` is `rawvideo, nv12,
+  chroma_location=center`; `colors-p010.mp4` is `yuv420p10le`, not P010, which is the
+  subject of a deviation below.
+
+  Deviations, each with its proof:
+  - One new public member, `AudioPlayback.submitDecoded`, and it was forced. D12 requires
+    the stage to be internal commonMain, `internal` in Kotlin is module-scoped, and
+    `kiteplayer-sample` is a separate Gradle module with no friend path, so the sample and
+    the FFmpeg module's test cannot name `AudioPipeline` at all. The smallest alternative
+    was taken: the pipeline stays internal, `submitDecoded` runs the stage and then calls
+    the existing `submit`, and `submit` keeps its exact contract for a caller that converts
+    on its own. A5 can delete `submitDecoded` when PlaybackCore's feeder owns the stage.
+  - One new public warning, `PlaybackWarning.ChannelLayoutUnknown(channels, detail)`. D12
+    requires a one-time warning for the unknown-mask fallback and D30 for the count
+    fallback, and no existing case describes a guessed or unmodelled channel layout.
+    Reusing a wrong one would have broken the documentation truth rule.
+  - The mixer's matrices go into stereo only. A target that is not stereo falls through to
+    the pass-through path with a warning rather than to a matrix. Proof that this is
+    unreachable rather than a hole: `CoreAudioSink.kt:161` negotiates
+    `request.channels.coerceIn(1, 2)`, so the only non-stereo target that exists is mono,
+    which only ever happens for a mono source, where the mix is a copy. Writing a mono
+    matrix would have added untested and unreachable code at gate time. The mixer warns and
+    its KDoc states the case, so nothing is claimed that the code does not do.
+  - `surround51.mp4` is 5.1 back, not 5.1 side, although D30's test wants the side variant.
+    AAC cannot deliver it: the encoder writes a program config element for side surrounds
+    and FFmpeg's own decoder still reports back channels, measured, and re-verified by the
+    gate with `ffprobe`. So the side layout ships as `surround51side.wav`, whose extensible
+    header carries the exact mask, D30's prescribed test runs on that clip, and both clips
+    get an `-ac 2` reference and are compared. The register's requirement is met on the
+    clip that can carry it, and the register's named clip is still in the gate.
+  - No P010 file exists on disk and the P010 test lifts the frame instead. FFmpeg has no
+    P010 entry in its raw pixel-format tag table, so no container stores it (mkv, nut, avi
+    and mov all read back as rgb555le, measured) and no software decoder outputs it.
+    `colors-p010.mp4` is tagged 10-bit planar and the test lifts the decoded frame through a
+    one-filter graph, while the reference dump goes through the same `p010le` intermediate,
+    so what is compared is a real P010 frame against FFmpeg's own reading of the same P010
+    bytes. The lift restates `range=tv:colorspace=bt709`, because a buffer source declares
+    its link colour unspecified and the inserted scale would otherwise expand studio range
+    to full: without the restatement the mean is 7.38 instead of 0.58 and the first pixel's
+    lifted luma reads 349 of 1023 where the source holds 288, so the case would have
+    measured a range conversion and called it a bit alignment.
+  - The correct chroma shift is 0 for every horizontal siting, so D15 item 3 is numerically
+    a no-op today. It was implemented as prescribed anyway, one function read by both
+    paths and a table that forces a new siting to be decided in one place, and it earns its
+    keep through the negative control above. Two independent checks agree that 0 is right:
+    two `-sws_flags neighbor` RGBA dumps of `colors-nv12.mkv`, one retagged
+    `chroma_location=left` and one `center`, are byte-identical (`shasum ea072d20...` both,
+    `cmp` clean), and a nearest-filtered GPU texture samples chroma texel `x / 2` whatever
+    the metadata says. Siting sets the phase of an interpolating upsampler, which is tier 1.
+  - The NV12 reference goes through `format=yuv420p` on the way to RGBA. That step is a
+    plane deinterleave and changes no sample value, and it avoids a swscale path
+    difference: NV12 straight to RGB reads chroma row `(row+1)/2` for a luma row while the
+    planar path reads `row/2`, measured a mean of 0.98 apart on a clip with vertical colour
+    detail. The planar rule is the one nearest neighbour gives, so it is the one to compare
+    against. The fixture is a dense sine field rather than testsrc2 so that a half-sample
+    chroma error is unmissable, and it is raw video in Matroska because no software codec in
+    FFmpeg outputs a semi-planar format.
+  - The mask is dropped when its bit count and the reported channel count disagree.
+    `audioFormat` coerces channels to 8 and then keeps the mask only if
+    `mask.countOneBits() == channels`. A stream wider than 8 has its count truncated, and a
+    mask naming speakers for samples never handed over is worse than the register's defined
+    "absent mask, fall back to the count with a warning" path. This tightens the register
+    rather than weakening it.
+  - `AudioPlayback.flush()` now calls `pipeline?.reset()`, although D12 says nothing about
+    seek. The resampler carries one frame across buffers, and interpolating a pre-seek frame
+    into the new position would mix two positions into one output frame.
+  - The D13 check is on the setter only, so a rate stored while no ring was open is not
+    revisited by `open()`. Left deliberately: nothing in Horizon A sets a rate, and A5's
+    facade owns rate policy and input validation.
+  - Layout naming follows FFmpeg's own table, so bare 5.0 and 5.1 are the back variants and
+    5.1 side is 0x60F. Where the count fallback's conventional default is a layout outside
+    the named nine (three channels are usually FL FR FC, five usually 5.0 side) the entry
+    used carries the same coefficients in the same channel positions, so the stereo result
+    is identical. Stated in the KDoc rather than left to be discovered.
+  - `assertMatchesReference` in `DecodeAndConvertTest` gained an optional
+    `check: (KiteCodecVideoFrame) -> Unit = {}`, and the SMPTE 240M case asserts
+    `frame.colorSpace.matrix == ColorMatrix.Smpte240m` before comparing. Without it a
+    retagged fixture would silently become a second BT.709 test. No other call site
+    changed.
+  - One report said `:kiteplayer-sample:compileKotlinMacosArm64` FAILED. The tree was
+    checked before anything was redone, per the lesson the A2 and A3 entries both record,
+    and nothing was missing: the failure was inside the other agent's in-flight
+    `KiteCodecSource.kt`, four unresolved `PlaybackWarning` references and one
+    `ColorMatrix`, all of which are imports that landed minutes later. The combined tree
+    compiles, links and runs. Both declared cross-agent seams are therefore closed with no
+    repair: the sample compiles against the `onWarning` contract, and the reference-PCM test
+    compiles against the public `submitDecoded` rather than against an internal name.
+  - Two edits by the gate itself, both documentation truth and neither behaviour. First,
+    `AudioPipeline.process` KDoc said that when it returns zero "those input frames are held
+    for the next call rather than lost", which the code does not do: only the last input
+    frame and the read position carry, and the frames in between fall between output
+    positions, which is what a downsampler does. The sentence now says that. Second, the
+    README had been falsified by this phase: it claimed 171 test executions across 5 suites
+    (stale since A1), and its "What does not exist yet" list still said "Audio is mono or
+    stereo only. Nothing downmixes ... Nothing resamples". Corrected to 304 across the five
+    suites with the per-suite split, the colour list widened to the six compared clips with
+    the measured range, a new bullet for the 5.1 comparison, the speed bullet rewritten as
+    the refusal D13 implements, a new bullet naming the rate conversion's interim quality
+    and the missing downmix normalisation, and the HDR paragraph extended to say that both
+    approximations now warn. Precedent: the A0 gate corrected the same file's own numbers
+    for the same reason. The rest of that README is A6 step 2's work, including the stale
+    word "presented" in the evidence list that A1's rename left behind.
+  - Pre-existing and untouched, and the same single item as at the A3 gate: KiteCodec's two
+    Gradle plugin functional tests fail on a clean checkout, which executor contract item 5
+    says to ignore. `scripts/testmedia.sh:52` at 147 columns is A0's line and is also
+    untouched.

@@ -43,11 +43,15 @@ enough to call any platform supported.
   41.7 ms: 240 frames decoded, 240 presented, 0 dropped, 0 repeated, 0 audio underruns.
 - 4K HEVC 10-bit with no audio track: 180 frames, with video driving the clock.
 - 3 minutes of audio: 0 ms of clock drift.
-- Colour: BT.709, BT.601 and yuv420p10le clips decoded, converted, and compared pixel by pixel against
-  what the `ffmpeg` command line produces. Mean component error under 2 of 255.
-- 171 test executions pass across 5 suites, with nothing skipped: 75 engine tests on the JVM in under
-  a second, the same 75 compiled for macOS arm64, 7 against the real audio device, 6 that decode real
-  media, and 8 for the SubRip parser.
+- Colour: BT.709, BT.601, yuv420p10le, SMPTE 240M, centre-sited NV12 and P010 clips decoded,
+  converted, and compared pixel by pixel against what the `ffmpeg` command line produces. Mean
+  component error under 2 of 255, and measured between 0.14 and 0.62 on the six.
+- Audio: a 5.1 file downmixed to stereo and compared sample by sample against `ffmpeg -ac 2` on the
+  same file. Mean sample error under 0.0001, so the mix matrix and the channel order are the same
+  ones FFmpeg applies.
+- 304 test executions pass across 5 suites, with nothing skipped: 128 engine tests on the JVM in
+  under a second, the same 128 compiled for macOS arm64, 18 against the real audio device and the
+  renderer, 22 that decode real media, and 8 for the SubRip parser.
 
 ## What does not exist yet
 
@@ -56,9 +60,12 @@ enough to call any platform supported.
   only assembly there is.
 - **Seeking is not connected.** The seek state machine, its coalescing rules and its timing constants
   are written and unit tested. Nothing calls them.
-- **Audio is mono or stereo only.** Nothing downmixes, so a 5.1 track is passed to the device as if it
-  were stereo and comes out as garbage. Nothing resamples, and there is no tempo stage, so a playback
-  speed other than 1.0 is wrong whenever audio is playing.
+- **No tempo stage.** A playback speed other than 1.0 is refused while audio is open, because the
+  samples would still reach the device at the device's rate. Video-only speed is legal.
+- **The rate conversion is interim quality.** Channel downmixing and rate conversion exist and are
+  compared against FFmpeg, but the conversion is linear interpolation, which dulls the top end of
+  music. libswresample replaces it before 1.0. There is no normalisation on the downmix either, so a
+  source that is loud in several channels at once can clip.
 - **Subtitles are one parser.** `kiteplayer-subtitles` reads SubRip. Nothing times, positions or draws
   a cue, and the player never reads a subtitle track.
 - **No hardware decode and no GPU renderer.** Frames are converted on the CPU and drawn through Core
@@ -138,7 +145,8 @@ and compared per pixel against the `ffmpeg` command line's output. The mean comp
 units of 255.
 
 High dynamic range is the current hole in this: PQ and HLG clips are converted with the matrix alone,
-with no tone mapping, so they play and they look wrong.
+with no tone mapping, so they play and they look wrong. BT.2020 constant luminance is the same case.
+Both now say so, once per stream, through a typed playback warning rather than silently.
 
 ## Why the engine has no platform code
 

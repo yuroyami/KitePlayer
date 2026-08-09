@@ -78,6 +78,13 @@ public data class PlayerStreamInfo(
     val startTime: Pts? = null,
     // Video.
     val videoSize: VideoSize? = null,
+    /**
+     * Clockwise rotation the container asks a renderer to apply, in degrees.
+     *
+     * Zero for everything a camera did not turn on its side. See [VideoFrame.rotationDegrees] for what
+     * it means to a renderer and why [videoSize] does not change with it.
+     */
+    val rotationDegrees: Int = 0,
     /** The container's declared frame rate. Used to snap measured durations. */
     val frameRate: Double? = null,
     val colorSpace: ColorSpaceInfo? = null,

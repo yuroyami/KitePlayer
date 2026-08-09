@@ -246,6 +246,10 @@ private fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo
                 pixelAspectDenominator = it.sampleAspectRatio.den,
             )
         },
+        // The container's display matrix, already reduced to clockwise degrees by KiteCodec. Only a
+        // video stream is ever muxed with one, and a value on any other kind reaches no renderer, so
+        // no stream kind has to be excluded here.
+        rotationDegrees = rotationDegrees,
         frameRate = video?.frameRate?.let { if (it.den == 0) null else it.num.toDouble() / it.den },
         // A stream with exactly one frame of cover art must never carry the timeline or drive
         // synchronisation. Treating it as normal video makes the player hang at the end of every
@@ -329,7 +333,9 @@ private class KiteCodecVideoDecoder(
         val duration = mapper.mapDuration(frame.durationMicros)
         val pts = mapper.mapTimestamp(frame.ptsMicros) ?: synthesisedPts(duration)
         lastPts = pts
-        val wrapped = KiteCodecVideoFrame(frame, pts, duration, generation)
+        // The rotation is the stream's, taken from the container's display matrix once at open. Every
+        // frame of the stream carries it, because the renderer sees frames and nothing else.
+        val wrapped = KiteCodecVideoFrame(frame, pts, duration, generation, stream.rotationDegrees)
         warnIfColorIsApproximated(wrapped.colorSpace)
         return wrapped
     }
@@ -524,6 +530,13 @@ public class KiteCodecVideoFrame internal constructor(
     override val pts: Pts,
     override val duration: Pts?,
     override val generation: Generation,
+    /**
+     * The stream's own clockwise rotation, from the container's display matrix.
+     *
+     * No default on purpose, like every other parameter here. A default of zero would let a new call
+     * site drop the rotation silently, which is the exact bug this phase exists to remove.
+     */
+    override val rotationDegrees: Int,
 ) : VideoFrame {
 
     private val info = frame.info

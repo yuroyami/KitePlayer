@@ -148,6 +148,18 @@ ffmpeg -v error -y \
   -vf "format=yuv420p10le,$cl_tag" \
   -c:v libx265 -preset ultrafast -x265-params log-level=error -tag:v hvc1 -g 1 colors-bt2020cl.mp4
 
+echo "Rotated clip, for the renderer's quarter turn"
+# What a phone writes: the pixels are stored landscape and a display matrix in the container tells the
+# player to turn them. -display_rotation is an INPUT option and its own unit is counter-clockwise
+# degrees, so 90 here is the matrix for a quarter turn counter-clockwise, which is 270 clockwise, and
+# that is the number KiteCodec reports because it reports clockwise. Either quarter turn swaps the
+# output width and height, which is what the test checks.
+# It has to be a two step recipe. Applied to a decoded input with autorotation on, ffmpeg turns the
+# PIXELS at the filter stage and writes no matrix at all, which is the opposite of the fixture wanted.
+# Remuxing an already encoded clip with -c copy leaves the pictures alone and writes the matrix, so the
+# stored frames stay 320x240 and only the metadata says otherwise.
+ffmpeg -v error -y -display_rotation:v 90 -i colors-bt709.mp4 -c copy rotated90ccw.mp4
+
 echo "5.1 clips plus their stereo reference PCM"
 # Six channels, one tone each, so a downmix that routes a channel to the wrong speaker is audible in
 # the numbers rather than only in a listening test. aevalsrc is used instead of the sine source

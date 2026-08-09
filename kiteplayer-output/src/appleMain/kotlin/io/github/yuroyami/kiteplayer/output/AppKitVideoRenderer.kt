@@ -30,13 +30,20 @@ import platform.AppKit.NSImage
 import platform.CoreGraphics.CGBitmapContextCreate
 import platform.CoreGraphics.CGBitmapContextCreateImage
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
+import platform.CoreGraphics.CGColorSpaceRef
 import platform.CoreGraphics.CGColorSpaceRelease
+import platform.CoreGraphics.CGContextDrawImage
 import platform.CoreGraphics.CGContextRelease
+import platform.CoreGraphics.CGContextRotateCTM
+import platform.CoreGraphics.CGContextTranslateCTM
 import platform.CoreGraphics.CGImageAlphaInfo
+import platform.CoreGraphics.CGImageRef
 import platform.CoreGraphics.CGImageRelease
+import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
+import kotlin.math.PI
 
 /**
  * Draws frames into an [AppKitWindow].
@@ -84,6 +91,10 @@ import platform.darwin.dispatch_get_main_queue
  * closed while it is still in hand. AppKit is touched only from the main thread, through
  * `dispatch_async`, and never waited on: blocking the engine on the UI thread is how a player
  * deadlocks, and libmpv's own headers warn about that twice.
+ *
+ * A frame that carries a [VideoFrame.rotationDegrees] is drawn turned, so a recording made in portrait
+ * is not shown on its side. The turn is a second pass over the pixels and is only paid by a clip whose
+ * container asks for one.
  *
  * [close] is the one place that blocks, and only on this renderer's own worker. It marks the renderer
  * closed, ends the worker's wait, then waits for a conversion already running to finish before draining
@@ -224,8 +235,9 @@ public class AppKitVideoRenderer internal constructor(
         val width = frame.size.width
         val height = frame.size.height
         val displayWidth = frame.size.displayWidth
+        val rotation = quarterTurn(frame.rotationDegrees)
         val image = try {
-            if (width <= 0 || height <= 0) null else makeImage(convert(frame), width, height, displayWidth)
+            if (width <= 0 || height <= 0) null else makeImage(convert(frame), width, height, displayWidth, rotation)
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "conversion failed"))
             null
@@ -277,13 +289,35 @@ public class AppKitVideoRenderer internal constructor(
     }
 
     /**
-     * Builds an image from RGBA bytes.
+     * The quarter turn this renderer will actually draw, given a frame's [VideoFrame.rotationDegrees].
+     *
+     * Only 0, 90, 180 and 270 are drawn. A display matrix can in principle describe any affine
+     * transform, and a value that is not a quarter turn comes back as 0, which shows the picture as
+     * stored rather than refusing to show it at all: a slightly skewed picture is not worth a black
+     * window. Negative and out-of-range values are normalised first, so a source that reports -90
+     * rather than 270 is drawn the same way.
+     */
+    private fun quarterTurn(rotationDegrees: Int): Int {
+        val normalised = ((rotationDegrees % 360) + 360) % 360
+        return if (normalised == 90 || normalised == 180 || normalised == 270) normalised else 0
+    }
+
+    /**
+     * Builds an image from RGBA bytes, turned by [rotationDegrees] if the container asked for it.
      *
      * A bitmap context is used rather than a data provider so that Core Graphics copies the pixels
      * immediately. The alternative keeps a reference to the caller's buffer and requires it to outlive
      * the image, which across a `dispatch_async` boundary is a use-after-free waiting to happen.
+     *
+     * [rotationDegrees] is already a quarter turn, from [quarterTurn].
      */
-    private fun makeImage(rgba: ByteArray, width: Int, height: Int, displayWidth: Int): NSImage? {
+    private fun makeImage(
+        rgba: ByteArray,
+        width: Int,
+        height: Int,
+        displayWidth: Int,
+        rotationDegrees: Int,
+    ): NSImage? {
         val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
         try {
             return rgba.usePinned { pinned ->
@@ -300,13 +334,30 @@ public class AppKitVideoRenderer internal constructor(
                 ) ?: return@usePinned null
 
                 try {
-                    val cgImage = CGBitmapContextCreateImage(context) ?: return@usePinned null
+                    val stored = CGBitmapContextCreateImage(context) ?: return@usePinned null
                     try {
                         // Sizing by the display width applies a non-square pixel aspect, so anamorphic
-                        // content is not stretched.
-                        NSImage(cGImage = cgImage, size = CGSizeMake(displayWidth.toDouble(), height.toDouble()))
+                        // content is not stretched. A quarter turn moves that stretch onto the other
+                        // axis, because the picture's own width is vertical afterwards.
+                        val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
+                        val size = if (quarterTurned) {
+                            CGSizeMake(height.toDouble(), displayWidth.toDouble())
+                        } else {
+                            CGSizeMake(displayWidth.toDouble(), height.toDouble())
+                        }
+                        if (rotationDegrees == 0) {
+                            NSImage(cGImage = stored, size = size)
+                        } else {
+                            val turned = turn(stored, width, height, rotationDegrees, colorSpace)
+                                ?: return@usePinned null
+                            try {
+                                NSImage(cGImage = turned, size = size)
+                            } finally {
+                                CGImageRelease(turned)
+                            }
+                        }
                     } finally {
-                        CGImageRelease(cgImage)
+                        CGImageRelease(stored)
                     }
                 } finally {
                     CGContextRelease(context)
@@ -314,6 +365,62 @@ public class AppKitVideoRenderer internal constructor(
             }
         } finally {
             CGColorSpaceRelease(colorSpace)
+        }
+    }
+
+    /**
+     * Redraws [image] turned clockwise by [rotationDegrees], into a bitmap of its own.
+     *
+     * Core Graphics rotates about the origin and its bitmap contexts have their origin at the bottom
+     * left with y increasing upward, so each turn needs a translation that brings the turned rectangle
+     * back over the destination. The transform is written as a translate followed by a rotate because
+     * that is the order Core Graphics applies to the point it is given: the point is rotated first and
+     * the translation lands the result.
+     *
+     * A positive angle turns counter-clockwise in this space, so a clockwise quarter turn is a negative
+     * angle. The angles are exact quarters and the destination rectangle is the source rectangle to the
+     * pixel, so nothing is resampled: this moves bytes, it does not filter them.
+     */
+    private fun turn(
+        image: CGImageRef,
+        width: Int,
+        height: Int,
+        rotationDegrees: Int,
+        colorSpace: CGColorSpaceRef,
+    ): CGImageRef? {
+        val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
+        val outputWidth = if (quarterTurned) height else width
+        val outputHeight = if (quarterTurned) width else height
+        val context = CGBitmapContextCreate(
+            // Core Graphics allocates and owns this buffer, and works out its own row alignment. The
+            // pixels are read back through an image, so no Kotlin array has to be kept alive for it.
+            data = null,
+            width = outputWidth.toULong(),
+            height = outputHeight.toULong(),
+            bitsPerComponent = 8u,
+            bytesPerRow = 0u,
+            space = colorSpace,
+            bitmapInfo = CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value,
+        ) ?: return null
+        try {
+            when (rotationDegrees) {
+                90 -> {
+                    CGContextTranslateCTM(context, 0.0, width.toDouble())
+                    CGContextRotateCTM(context, -PI / 2)
+                }
+                180 -> {
+                    CGContextTranslateCTM(context, width.toDouble(), height.toDouble())
+                    CGContextRotateCTM(context, PI)
+                }
+                270 -> {
+                    CGContextTranslateCTM(context, height.toDouble(), 0.0)
+                    CGContextRotateCTM(context, PI / 2)
+                }
+            }
+            CGContextDrawImage(context, CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()), image)
+            return CGBitmapContextCreateImage(context)
+        } finally {
+            CGContextRelease(context)
         }
     }
 

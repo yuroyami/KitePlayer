@@ -31,6 +31,23 @@ public interface VideoFrame : AutoCloseable {
     public val pixelFormat: PlayerPixelFormat
     public val colorSpace: ColorSpaceInfo
 
+    /**
+     * Clockwise rotation a renderer applies before the picture is shown, in degrees.
+     *
+     * Phones write this into every recording they make in portrait, and a player that ignores it shows
+     * the whole video on its side. It is a presentation instruction and not a property of the pixels,
+     * which is why it travels here next to [colorSpace] rather than inside [size]: [size] is the size
+     * the frame is stored at, so a quarter turn produces an output whose width and height are swapped
+     * while [size] still reads the other way round. A non-square pixel aspect stretches the stored
+     * width, so after a quarter turn that stretch applies to the output's height.
+     *
+     * Real media produces 0, 90, 180 and 270. A renderer draws any other value unrotated rather than
+     * refusing the frame, because a picture the right way up matters more than an exact affine
+     * transform. Mirrored and arbitrarily skewed display matrices are not modelled; see the roadmap in
+     * KPKMP.md section 11.
+     */
+    public val rotationDegrees: Int get() = 0
+
     /** Set when the frame lives in GPU or hardware memory and needs a matching renderer. */
     public val hardwareSurface: HwSurfaceKind?
 

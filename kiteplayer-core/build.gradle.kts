@@ -9,12 +9,12 @@ plugins {
 }
 
 /*
- * :kiteplayer-core is the engine. It holds every playback decision: the clock, A/V
- * synchronisation, packet and frame queues, buffering policy, the seek state machine, track
- * selection and subtitle timing.
+ * :kiteplayer-core is the engine. It holds every playback decision: the player class, the session
+ * loop, the clock, A/V synchronisation, packet and frame queues, buffering policy, the seek state
+ * machine and track selection. Cue timing is not among them; no cue is timed anywhere yet.
  *
  * It depends on kotlinx-coroutines and atomicfu, and nothing else. Every playback decision in it is
- * platform free, which is why it compiles for every target Kotlin supports, including js and wasm,
+ * platform free, which is why it compiles for every target it declares, including js and wasm,
  * before any backend for those targets exists. There is exactly one platform-dependent declaration,
  * `platformPlaybackDispatchers`, because a thread per worker cannot be asked for in common code:
  * `newSingleThreadContext` does not exist on every target. Its actual is one expression per platform.

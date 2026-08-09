@@ -11,6 +11,38 @@ in `commonMain`. Only the audio device, the video surface and the decoder are pe
 > there is no install path, and macOS arm64 is the only target with backends. This file states what has
 > been measured and nothing beyond it.
 
+## Playing a file
+
+```kotlin
+val player = KitePlayer.create(
+    PlayerConfig(
+        backends = Backends(
+            backend = KiteCodecMediaBackend(),   // reads and decodes, over KiteCodec
+            output = AppleOutputBackend,         // the clock and the audio device, paired so they cannot mismatch
+        ),
+    ),
+)
+
+player.attachRenderer(AppKitVideoRenderer(window) { SoftwareConverter.toRgba(it as KiteCodecVideoFrame) })
+player.open(MediaItem(path))                     // suspends, and returns paused with the first frame drawn
+player.play()
+player.seek(5.seconds)                           // suspends, and completes on the position it landed on
+println("${player.state.value.status} at ${player.position()}")
+player.close()
+```
+
+That is the whole playback path. Everything else, meaning the demux pump, both decoders, the audio
+feeder, the presentation schedule, the seek machine and the state it publishes, belongs to the player.
+
+Both backends are named rather than discovered. Kotlin/Native has no classpath service lookup, so the
+alternative would be a reflective search that fails differently on every platform, and a null backend on
+a target with no default is a typed configuration error instead of a surprise at the first frame.
+
+The surface is small on purpose: `open`, `play`, `pause`, `seek`, `seekLater`, `stop`, `setSpeed`,
+`setVolume`, `setMuted`, `setLoop`, `selectTrack`, `attachRenderer`, `detachRenderer`, `close`, plus four
+flows (`state`, `progress`, `stats`, `events`) and `position()`. Anything a member cannot honour is
+refused with a typed error rather than accepted and ignored.
+
 ## Support today
 
 Every platform claim in this project means one of these tiers, and nothing more.
@@ -32,6 +64,19 @@ Today, honestly:
 | JVM, Android, iOS, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no audio device, no renderer and no decoder for it, so there is no playback. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
 
+macOS arm64 is still the only candidate above T1, and it is still a candidate rather than a tier: no
+platform here has real-device qualification, a performance budget, or a packaged consumer build, and
+those are what T4 and T5 mean.
+
+**What changed in this run.** Rotation, the most visible thing a container could say that this player
+ignored. A display matrix now travels from the container to the stream, from the stream to every frame of
+it, and the Core Graphics renderer draws the quarter turn, so a recording made in portrait is shown the
+right way up instead of on its side. Other container metadata is still dropped, and the list is short but
+real: chapters, mastering display and content light levels, and any display matrix that is not one of the
+four quarter turns. Nothing else about the tiers moved: the same platform has the same backends, and the
+run added no target. Alongside it, every library module now carries a checked-in dump of its public API,
+so a signature cannot change without the change being visible in a diff.
+
 ## What is proven
 
 Measured on one Apple silicon development machine, with a debug binary, on clips
@@ -39,29 +84,40 @@ Measured on one Apple silicon development machine, with a debug binary, on clips
 enough to call any platform supported.
 
 - 1080p30 for 10 seconds: 300 frames decoded, 300 submitted to the renderer, 0 dropped, 0 repeated,
-  0 audio underruns, and a final audio to video drift of 1 ms.
+  0 audio underruns, and a final audio to video drift inside 1 ms on every run of it.
 - Real variable frame rate 720p for 8 seconds, frame durations cycling through 16.7, 33.3, 50, 25 and
   41.7 ms: 240 frames decoded, 240 submitted, 0 dropped, 0 repeated, 0 audio underruns.
 - 4K HEVC 10-bit with no audio track: 180 frames, with video driving the clock.
-- MPEG-TS with a 1400 second start offset: 300 frames decoded, 300 submitted, 0 dropped, 0 repeated.
+- MPEG-TS with a 1400 second start offset: 300 frames decoded, 300 submitted, 0 dropped, 0 repeated, and
+  a position that runs from 0 rather than from 23 minutes.
 - Seeking in real media: 20 random precise seeks in a 1080p30 file each land within one frame duration
   of the position asked for, a seek past the end finishes the file, and a seek to 0 mid-playback carries
   on from the start. A mid-playback seek to 5 seconds lands on 5.000 and plays through to the end with
   nothing dropped.
-- 3 minutes of audio: 0 ms of clock drift.
+- Two long runs, both played to the last frame: 30 minutes of audio with the video track deselected,
+  and 11 minutes of 1080p30 with video. 0 audio underruns and 0 rebuffers in either. The video run
+  decoded 19800 frames, submitted 19799, dropped 1 late and repeated none, and its audio to video drift
+  never left the band of -31 to +5 ms, against the 40 ms the sync law corrects at. Both positions ended
+  on the file's own duration. Resident set, sampled once a minute, ended lower than it started in both
+  runs: the audio run settled at 41.2 MB after peaking at 79.7 MB while it filled its buffers.
 - Colour: BT.709, BT.601, yuv420p10le, SMPTE 240M, centre-sited NV12 and P010 clips decoded,
   converted, and compared pixel by pixel against what the `ffmpeg` command line produces. Mean
   component error under 2 of 255, and measured between 0.14 and 0.62 on the six.
 - Audio: a 5.1 file downmixed to stereo and compared sample by sample against `ffmpeg -ac 2` on the
   same file. Mean sample error under 0.0001, so the mix matrix and the channel order are the same
   ones FFmpeg applies.
+- Rotation: a clip carrying a quarter turn in its display matrix reports that turn on its stream and on
+  every one of its frames, while the stored frame size stays the 320 by 240 the pictures really are.
+  Each of the four turns is drawn and read back pixel by pixel, so what is checked is where the picture
+  landed and not only that its shape changed, and at that clip's own geometry the drawn picture comes
+  out 240 by 320.
 - One hundred seeded simulated sessions, each with faults injected on purpose, hold every invariant:
   nothing from a superseded seek is ever shown or heard, timestamps never go backwards, every frame and
   packet is closed exactly once, every command completes exactly once, and every session reaches a
   terminal state. Twenty seeks in one virtual millisecond cost exactly one flush cycle.
-- 409 test executions pass across 5 suites, with nothing skipped: 178 engine tests on the JVM in
-  under a second, 179 compiled for macOS arm64, 18 against the real audio device and the renderer,
-  26 that decode and seek in real media, and 8 for the SubRip parser.
+- 414 test executions pass across 5 suites, with nothing skipped: 178 engine tests on the JVM in
+  under a second, 179 compiled for macOS arm64, 20 against the real audio device and the renderer,
+  29 that decode and seek in real media, and 8 for the SubRip parser.
 
 ## What does not exist yet
 
@@ -74,17 +130,35 @@ enough to call any platform supported.
   music. libswresample replaces it before 1.0. There is no normalisation on the downmix either, so a
   source that is loud in several channels at once can clip.
 - **Subtitles are one parser.** `kiteplayer-subtitles` reads SubRip. Nothing times, positions or draws
-  a cue, and the player never reads a subtitle track.
+  a cue, and the player never reads a subtitle track. SubRip parsing is not subtitle support.
 - **No hardware decode and no GPU renderer.** Frames are converted on the CPU and drawn through Core
   Graphics, which costs milliseconds per frame at 1080p.
-- **No rotation.** A video that carries 90 degrees of rotation metadata draws sideways.
+- **Rotation is four turns and no more.** The three quarter turns and no rotation are drawn. A display
+  matrix that mirrors the picture or skews it by an arbitrary angle is drawn as stored, which keeps the
+  picture rather than the exact transform.
+- **No tone mapping.** PQ, HLG and BT.2020 constant luminance are converted with the matrix alone, so
+  they play and they look wrong. Each says so once per stream through a typed warning.
 - **No network path, no live or adaptive streaming, no DRM.**
+- **No qualification of any kind.** Every number above comes from a debug binary on one machine. There
+  is no release-mode benchmark, no real-device run and no performance budget in this evidence. The two
+  long runs are that same debug binary watched with `ps`, so they say the engine holds together for half
+  an hour and nothing more, and no platform here is above the experimental candidate in the table.
 - **Nothing is published.** Building this needs a local KiteCodec publication and an FFmpeg on the
   machine, both set up by hand.
 
-The public API says the same thing about itself: a configuration member that nothing implements carries
-a marker in its own documentation, pointing at where it is planned. The plan is `KPKMP.md` in this
-repository.
+The public API says the same thing about itself: a member that nothing implements carries a marker in
+its own documentation, pointing at where it is planned.
+
+## What comes after this, and is not started
+
+The plan is `KPKMP.md` in this repository, and it has two horizons. Horizon A is the work above, and it
+is finished. Horizon B is everything that turns this engine into a product, it is sequenced and decided,
+and **none of it is done**: a shared C ABI with fuzzing and sanitizers, the rest of the codec layer,
+subtitles end to end with libass, swresample and real tempo control, a Metal renderer with hardware
+decode and a colour-managed pipeline, network and live sources, published artifacts on every ecosystem,
+supply chain and security work, per-platform qualification to T5, a performance constitution with
+published distributions, and the remaining product surface. Read the roadmap as a plan and never as a
+capability.
 
 ## Run it here
 
@@ -103,27 +177,11 @@ BIN=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
 $BIN testmedia/sync1080p30.mp4 --window
 ```
 
-The sample creates a player, hands it the two backends this platform has, opens a file and plays it.
-That is the whole playback path: the demux pump, both decoders, the audio feeder, the presentation
-schedule and the seek machine are the player's own. It prints the position, the video drift against the
-master clock and the frame accounting as it goes, all read from the player's own flows. Without
-`--window` the frames go to a counting renderer that records how far each one landed from its requested
-time, `--no-video` plays the audio track only, and `--seek=<seconds>` seeks once playback is under way
-and reports where it landed.
-
-```kotlin
-val player = KitePlayer.create(
-    PlayerConfig(
-        backends = Backends(
-            backend = KiteCodecMediaBackend(),
-            output = AppleOutputBackend,
-        ),
-    ),
-)
-player.open(MediaItem(path))
-player.play()
-player.seek(5.seconds)
-```
+The sample creates a player, hands it the two backends this platform has, opens a file and plays it. It
+prints the position, the video drift against the master clock and the frame accounting as it goes, all
+read from the player's own flows. Without `--window` the frames go to a counting renderer that records
+how far each one landed from its requested time, `--no-video` plays the audio track only, and
+`--seek=<seconds>` seeks once playback is under way and reports where it landed.
 
 ## Why the position is exact
 
@@ -163,13 +221,17 @@ public data class ColorSpaceInfo(
 )
 ```
 
-Three clips, BT.709, BT.601 and 10-bit, are decoded through the engine, converted by the software path,
-and compared per pixel against the `ffmpeg` command line's output. The mean component error is under 2
-units of 255.
+Six clips are decoded through the engine, converted by the software path, and compared per pixel against
+the `ffmpeg` command line's output. The mean component error is under 2 units of 255 on all six.
+
+Rotation travels the same way and for the same reason: it is a presentation instruction, so it sits on
+the frame next to the colour rather than inside the frame's size. A frame's size is what the pixels are,
+which is what every stride in the converter depends on, and a quarter turn changes what is shown without
+changing that.
 
 High dynamic range is the current hole in this: PQ and HLG clips are converted with the matrix alone,
 with no tone mapping, so they play and they look wrong. BT.2020 constant luminance is the same case.
-Both now say so, once per stream, through a typed playback warning rather than silently.
+Both say so, once per stream, through a typed playback warning rather than silently.
 
 ## Why the engine has no platform code
 
@@ -200,21 +262,26 @@ public interface MonotonicClock {
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-output` | the CoreAudio sink, the AppKit window and the Core Graphics renderer | macOS arm64 |
 | `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64 |
-| `kiteplayer-subtitles` | SubRip parsing, with rasterisation left to the platform. Not connected to playback | every target it declares |
+| `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
 | `kiteplayer-sample` | a CLI that creates a player, plays a file and reports what the player says happened | macOS arm64 |
 
 The dependency arrow never points into `kiteplayer-core`. The core declares interfaces and the backends
 implement them, which is what allows a completely different backend, for example WebCodecs in a
 browser, without the engine noticing.
 
+Every library module tracks its own public API in a checked-in dump under `api/`. `updateKotlinAbi`
+rewrites the dumps, `checkKotlinAbi` fails the build when the code and the dumps disagree, and the
+sample has neither because an executable has no public API to keep.
+
 ## Build and test it here
 
 ```bash
 ./gradlew :kiteplayer-core:jvmTest            # 178 tests, the engine in virtual time
 ./gradlew :kiteplayer-core:macosArm64Test     # 179: the same, plus a real-thread stress test
-./gradlew :kiteplayer-output:macosArm64Test   # 18 tests against the real audio device
-./gradlew :kiteplayer-ffmpeg:macosArm64Test   # 26: real decode, real seeking, colour against a reference
+./gradlew :kiteplayer-output:macosArm64Test   # 20 tests against the real audio device and the renderer
+./gradlew :kiteplayer-ffmpeg:macosArm64Test   # 29: real decode, real seeking, colour against a reference
 ./gradlew :kiteplayer-subtitles:jvmTest       # 8 tests, the SubRip parser
+./gradlew checkKotlinAbi                      # the public API against its committed dumps
 ```
 
 The device tests open the default output and play a short quiet tone. They exist because the one thing

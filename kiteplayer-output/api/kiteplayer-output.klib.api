@@ -1,0 +1,81 @@
+// Klib ABI Dump
+// Targets: [macosArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-output>
+final class io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.output/AppKitWindow, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppKitWindow;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>){}[0]
+
+    final val events // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.events.<get-events>|<get-events>(){}[0]
+    final val failedFrames // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val presentedFrames // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    final val supersededFrames // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.supersededFrames|{}supersededFrames[0]
+        final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.close|close(){}[0]
+    final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
+    final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
+    final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+    final fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
+    final suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
+    final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.output/AppKitWindow { // io.github.yuroyami.kiteplayer.output/AppKitWindow|null[0]
+    constructor <init>(kotlin/String, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.output/AppKitWindow.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Int){}[0]
+
+    final var onCloseRequested // io.github.yuroyami.kiteplayer.output/AppKitWindow.onCloseRequested|{}onCloseRequested[0]
+        final fun <get-onCloseRequested>(): kotlin/Function0<kotlin/Unit>? // io.github.yuroyami.kiteplayer.output/AppKitWindow.onCloseRequested.<get-onCloseRequested>|<get-onCloseRequested>(){}[0]
+        final fun <set-onCloseRequested>(kotlin/Function0<kotlin/Unit>?) // io.github.yuroyami.kiteplayer.output/AppKitWindow.onCloseRequested.<set-onCloseRequested>|<set-onCloseRequested>(kotlin.Function0<kotlin.Unit>?){}[0]
+
+    final fun runEventLoop() // io.github.yuroyami.kiteplayer.output/AppKitWindow.runEventLoop|runEventLoop(){}[0]
+    final fun stop() // io.github.yuroyami.kiteplayer.output/AppKitWindow.stop|stop(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink { // io.github.yuroyami.kiteplayer.output/CoreAudioSink|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
+
+    final val deviceBufferFrames // io.github.yuroyami.kiteplayer.output/CoreAudioSink.deviceBufferFrames|{}deviceBufferFrames[0]
+        final fun <get-deviceBufferFrames>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/CoreAudioSink.deviceBufferFrames.<get-deviceBufferFrames>|<get-deviceBufferFrames>(){}[0]
+    final val events // io.github.yuroyami.kiteplayer.output/CoreAudioSink.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/AudioSinkEvent> // io.github.yuroyami.kiteplayer.output/CoreAudioSink.events.<get-events>|<get-events>(){}[0]
+    final val latencyQuality // io.github.yuroyami.kiteplayer.output/CoreAudioSink.latencyQuality|{}latencyQuality[0]
+        final fun <get-latencyQuality>(): io.github.yuroyami.kiteplayer/LatencyQuality // io.github.yuroyami.kiteplayer.output/CoreAudioSink.latencyQuality.<get-latencyQuality>|<get-latencyQuality>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.close|close(){}[0]
+    final fun latencyNanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/CoreAudioSink.latencyNanos|latencyNanos(){}[0]
+    final suspend fun drain() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.drain|drain(){}[0]
+    final suspend fun open(io.github.yuroyami.kiteplayer.spi/AudioFormat, io.github.yuroyami.kiteplayer.spi/AudioRenderCallback): io.github.yuroyami.kiteplayer.spi/AudioFormat // io.github.yuroyami.kiteplayer.output/CoreAudioSink.open|open(io.github.yuroyami.kiteplayer.spi.AudioFormat;io.github.yuroyami.kiteplayer.spi.AudioRenderCallback){}[0]
+    final suspend fun setPaused(kotlin/Boolean): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/CoreAudioSink.setPaused|setPaused(kotlin.Boolean){}[0]
+    final suspend fun start() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.start|start(){}[0]
+    final suspend fun stop() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.stop|stop(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.github.yuroyami.kiteplayer.spi/AudioSinkFactory { // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
+
+    final val name // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.name.<get-name>|<get-name>(){}[0]
+
+    final suspend fun create(): io.github.yuroyami.kiteplayer.spi/AudioSink // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.create|create(){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.output/AppleHostClock : io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer.output/AppleHostClock|null[0]
+    final fun hostTimeToNanos(kotlin/ULong): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppleHostClock.hostTimeToNanos|hostTimeToNanos(kotlin.ULong){}[0]
+    final fun nanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppleHostClock.nanos|nanos(){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github.yuroyami.kiteplayer.spi/OutputBackend { // io.github.yuroyami.kiteplayer.output/AppleOutputBackend|null[0]
+    final val audioSink // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.audioSink|{}audioSink[0]
+        final fun <get-audioSink>(): io.github.yuroyami.kiteplayer.spi/AudioSinkFactory // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.audioSink.<get-audioSink>|<get-audioSink>(){}[0]
+    final val clock // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.clock|{}clock[0]
+        final fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.clock.<get-clock>|<get-clock>(){}[0]
+    final val videoRenderer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer|{}videoRenderer[0]
+        final fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
+}

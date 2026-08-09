@@ -9,11 +9,12 @@ plugins {
 }
 
 /*
- * :kiteplayer-subtitles parses subtitle formats and lays cues out for a viewport. Pure Kotlin.
+ * :kiteplayer-subtitles parses subtitle formats. Pure Kotlin. Today that is SubRip and nothing else:
+ * no cue is timed, laid out or drawn, and the player never reads a subtitle track.
  *
- * It does not rasterise glyphs. Font matching, complex script shaping and bidirectional text are
- * decades of work that every platform already ships, so this module measures and positions text
- * through the TextRasterizer interface and lets the platform draw it.
+ * It will not rasterise glyphs when it does more. Font matching, complex script shaping and
+ * bidirectional text are decades of work that every platform already ships, so layout will measure
+ * and position text and let the platform draw it. That work is in KPKMP.md section 11.
  */
 kotlin {
     explicitApi()

@@ -27,14 +27,15 @@ plugins {
 rootProject.name = "KitePlayer-KMP"
 
 // :kiteplayer-core is the engine. Pure Kotlin, coroutines and atomicfu only. It holds every
-// playback decision: the clock, sync, queues, buffering, the seek state machine, track
-// selection and subtitle timing. It has no platform dependency and no expect declaration, so
-// it compiles for every target Kotlin supports and is fully testable with a virtual clock.
+// playback decision: the player class, the session loop, the clock, sync, queues, buffering,
+// the seek state machine and track selection. It calls no platform API and holds one internal
+// expect declaration, the single-thread dispatchers its workers are confined to, so it
+// compiles for every target it declares and is fully testable with a virtual clock.
 include(":kiteplayer-core")
 
-// :kiteplayer-subtitles parses subtitle formats and lays cues out. Pure Kotlin. Glyph
-// rasterisation is delegated to the platform through a TextRasterizer, so no font engine
-// ships here.
+// :kiteplayer-subtitles parses subtitle formats. Pure Kotlin. Today that is SubRip and nothing
+// else: no cue is timed, laid out or drawn, and the player does not read a subtitle track. Cue
+// layout and rasterisation are in KPKMP.md section 11.
 include(":kiteplayer-subtitles")
 
 // Modules added as their milestones land. Kept commented rather than absent so the intended

@@ -2268,3 +2268,273 @@ is no other.
   Gradle plugin functional tests fail on a clean checkout, which executor contract item 5
   says to ignore. `scripts/testmedia.sh:52` at 147 columns is A0's line and is also
   untouched.
+
+- 2026-08-09, phase A6, gate passed, and Horizon A is complete. KiteCodec was not touched,
+  so its test run and the mavenLocal republish are not part of this gate and `../KiteCodec`
+  is clean at `d078c66`. The published `kitecodec-core-macosarm64-0.0.1` klib from A2
+  already carries `rotationDegrees`, so no republish was needed either. What landed:
+  1. Rotation per digest 8.4, end to end. `PlayerStreamInfo.rotationDegrees` carries the
+     container's display matrix, already reduced to clockwise degrees by KiteCodec;
+     `toPlayerStream()` copies it once at open; the video decoder puts it on every
+     `KiteCodecVideoFrame` of the stream, because the renderer sees frames and nothing else;
+     `VideoFrame.rotationDegrees` defaults to 0 on the interface, so no other backend had to
+     change. `VideoSize` is untouched and its KDoc says why: the size is what the pixels
+     are, which is what every stride in the converter depends on. The AppKit renderer
+     normalises the value, draws 0, 90, 180 and 270 and draws anything else unrotated rather
+     than refusing the frame, and redraws through its own bitmap context with a translate
+     followed by a rotate. A quarter turn swaps the output width and height and moves a
+     non-square pixel aspect onto the other axis; 180 flips both. The turn is a second pass
+     over the pixels and is paid only by a clip whose container asks for one.
+  2. `README.md` rewritten a second time: the facade sample first and the hand-wired block
+     gone, the tier table unchanged because nothing about the tiers moved, a paragraph
+     naming what this run added and what container metadata is still dropped, the
+     measured-evidence list, the honest limits list with rotation moved out of it, and a
+     closing section stating Horizon B as decided, sequenced and not started.
+  3. Public API dumps checked in for all four library modules, six files: the klib dump for
+     each and the JVM dump for the two modules with a JVM target. `kiteplayer-ffmpeg` needed
+     the `abiValidation {}` block added, which the phase statement had assumed was already
+     there. `kiteplayer-sample` gets none: it is an executable, it does not call
+     `explicitApi()`, and the tooling registers no task for it.
+  4. The soak, run by this gate, numbers below.
+
+  State this gate found on arrival. Steps 1 to 3 were already on disk, uncommitted, with no
+  log entry and no commit for any of it, reading as an interrupted earlier run of the same
+  task. Nothing in it was trusted on sight. The implementer verified it against the source,
+  the fixture, the linked FFmpeg and KiteCodec, corrected it and completed it, and this gate
+  re-verified every claim independently before running anything: the two negative controls
+  it had used were confirmed restored by hash (`kiteplayer-output.klib.api` back to
+  `fac2809e`, `quarterTurn` intact), and the fixture's own identity claim was re-measured
+  rather than read.
+
+  Gate, every step rerun for real with `--rerun-tasks`, four times, in one invocation of the
+  five test tasks plus the three cross-target compiles plus `linkDebugExecutableMacosArm64`
+  plus `checkKotlinAbi`: 123 actionable tasks, 123 executed every time, `BUILD SUCCESSFUL` in
+  40 s, 37 s, 42 s and 37 s, and 414 tests with nothing failing or skipped in every one of
+  them. The last two ran on the final state of every file a Gradle task reads, source, tests,
+  API dumps, build files, `gradle.properties` and `README.md`; only this log entry changed
+  after them, and no task reads it. The only two UP-TO-DATE tasks are AGP's `androidPreBuild`
+  and `preAndroidMainBuild`, which have no actions, the same two every gate since A1 has
+  recorded. Not one compiler warning anywhere: `grep` for `w: ` and for `warning:` over all
+  four logs returns nothing. The third log does carry Gradle's own footer saying deprecated
+  Gradle features were used, which the other three do not, and the difference is only that the
+  third run re-stored the configuration cache while the rest reused it. Run down with
+  `./gradlew help --warning-mode all --no-configuration-cache`, it is one message: using a
+  Project object as a dependency notation is deprecated and fails in Gradle 10, which is what
+  the type-safe accessors `projects.kiteplayerCore` and the seven like them compile to. Every
+  one of those eight lines is older than this phase and none is touched by it, the only
+  build-file changes here being the `abiValidation {}` block and three comments, so it is
+  recorded and left rather than fixed inside a phase that does not name it. Suites:
+  `:kiteplayer-core:jvmTest` 178,
+  `:kiteplayer-core:macosArm64Test` 179 (the same plus `RealThreadStressTest` 1),
+  `:kiteplayer-output:macosArm64Test` 20 (`AppKitVideoRendererTest` 4, `CoreAudioSinkTest`
+  11, `CoreAudioSinkRealTimeTest` 5), `:kiteplayer-ffmpeg:macosArm64Test` 29
+  (`DecodeAndConvertTest` 9, `RelativeTimelineTest` 5, `ColorPolicyTest` 4,
+  `ReferencePcmTest` 4, `RealMediaSeekTest` 3, `RotationTest` 3, `BackendSeekStressTest` 1),
+  `:kiteplayer-subtitles:jvmTest` 8, so 414 test executions, 0 skipped, 0 failures, 0
+  errors, against 409 at the A5 gate. The five new ones are `RotationTest`'s three and the
+  renderer's two. All four `checkKotlinAbi` tasks ran and passed in the same invocation.
+  `scripts/testmedia.sh` changed in this phase, so this gate regenerated the clips for real
+  rather than trusting the ones on disk: exit 0 in 24.8 s, 27 files, one more than the 26 at
+  the A4 gate.
+
+  The ABI tooling's task names, discovered with `./gradlew tasks --all` rather than assumed:
+  **`updateKotlinAbi`** and **`checkKotlinAbi`**, both carrying descriptions.
+  `updateLegacyAbi` and `checkLegacyAbi` exist as undescribed siblings on the same four
+  modules and were not used; there is no `updateAbi`. `updateKotlinAbi --rerun-tasks`
+  executed 76 of 76 tasks and left all six checked-in dumps byte identical, so what is
+  committed is exactly what the tooling emits. This gate ran its own negative control rather
+  than accepting the implementer's: one fake declaration appended to
+  `kiteplayer-core.klib.api` made `:kiteplayer-core:checkKotlinAbi` fail with `<<<ABI has
+  changed>>>` naming it, and after restoring the file the hash was back to `590268ae` and
+  the check green. `rotationDegrees` is visible in the core dump on both `VideoFrame` and
+  `PlayerStreamInfo`, which is the point of checking the dumps in.
+
+  Sample runs, debug binary, development evidence only (level 6). `rotated90ccw.mp4`, the
+  new clip, 25 decoded, 25 submitted, 0 headless, 0 dropped, 0 repeated, 0 underruns, drift
+  0 ms, master clock Video, worst schedule 3 ms, played to 0:00.963 of 0:01.000, warnings 0.
+  The same clip through the real Core Graphics renderer with `--window`: 25 decoded, 24
+  submitted, 1 headless because the renderer is attached after the open on that path, window
+  drew 22, superseded 2, never drawn 0, 0 dropped, 0 repeated. `sync1080p30.mp4` 300 and
+  300, 0 dropped, 0 repeated, 0 underruns, drift -1 ms, worst schedule 2 ms, 0:10.005 of
+  0:10.000. `truevfr720.mp4` 240 and 240, 0 dropped, 0 repeated, 0 underruns, drift -2 ms,
+  0:08.010 of 0:08.000. `hevc4k10.mp4` 180 and 180, 0 dropped, master clock Video, worst
+  schedule 22 ms, 0:05.969 of 0:06.000. `tsoffset1400.ts` 300 and 300, 0 dropped, 0
+  repeated, 0 underruns, drift 21 ms, 0:10.026 of 0:10.021. `surround51.mp4` prints
+  `pipeline  6 channel(s) at 48000 Hz into 2 at 48000 Hz`, 0 underruns, 0:03.008 of
+  0:03.000. `/nonexistent.mp4` prints `cannot play /nonexistent.mp4` and `No such file or
+  directory (code=-2)`, exit status 1, no stack trace. The seek case: `sync1080p30.mp4
+  --seek=5` prints `landed at  0:05.000`, reports `status     Playing` one interval later
+  and plays on to 0:10.005 with 0 dropped, 0 repeated and 0 underruns. The four colour clips
+  still behave: `colors-pq.mp4` and `colors-bt2020cl.mp4` print their warning once and
+  report `warnings 1`, `colors-smpte240m.mp4` and `colors-nv12.mkv` report 0, which is the
+  negative control.
+
+  The soak, phase step 4, two runs, resident set sampled with `ps -o rss=` once a minute.
+  Audio, `soak30min.mp4` with `--no-video`, its full 30 minutes: played to 30:00.000 of
+  30:00.000, 0 audio underruns, 0 rebuffers, 0 warnings. Audio to video drift is 0 for the
+  whole run by construction, since the video track is deselected, so the number worth
+  recording is the position against real time, 8743 samples of it: band -61 to +10 ms, mean
+  -21.4 ms, and the per-minute mean holds -14 to -19 ms for minutes 0 to 18, steps once to
+  about -28 ms at minute 19 and holds -27 to -30 ms to the end. That is a constant offset
+  with one step in it and no trend, and the accumulated error is nil, because the position
+  ended exactly on the file's duration after 1800 seconds. About an eighth of the individual
+  samples sit past 40 ms of real time, which is recorded rather than hidden: the sample
+  reads the position and the host clock at two different instants 200 ms apart, so its own
+  scheduling jitter is inside every one of those figures, and 40 ms is `SyncLaw`'s
+  audio-to-video correction threshold, which is a different quantity from this one. Resident
+  set, in KB by minute: 352, 79664, then 49792, 49792, 49808, 49824, 49824, 49840, 49856,
+  49840 for minutes 2 to 9 (a 64 KB band, slope +9 KB/min), a step DOWN to 39248 at minute
+  10, then 39440, 39568, 39728, 39760, 40080, 40240, 40432, 40592, 40944, 41136, 40688,
+  40848, 41008, 41232, 41216, 41216, 41280, 41056, 41216, 41168. So it plateaus twice. Over
+  the final 20 minutes the band is 2032 KB and the slope decays from +101.7 KB/min (minutes
+  10 to 30) to +31.1 (20 to 30) to -12.6 (24 to 30), where the band is 224 KB, half a
+  percent. Judged strictly, the register's "plateau for the final 20 minutes" is met in the
+  last seven of them and approached before that; judged on whether anything leaks, the
+  answer is cleaner than the criterion asks, because the process ends at 41.2 MB having been
+  at 49.8 MB in its second minute, so there is no growth across the run at all. Video, an 11
+  minute 1080p30 clip: 19800 decoded, 19799 submitted, 1 dropped late, 0 repeated, 0
+  underruns, 0 rebuffers, 0 warnings, final audio to video drift 4 ms, worst schedule 30 ms,
+  played to 11:00.010 of 11:00.000. Over 3216 samples the audio-to-video drift stayed in the
+  band -31 to +5 ms, mean +0.60, so it never left the 40 ms the sync law corrects at, and
+  the position against real time stayed in -25 to +3 ms. Its resident set: 174928 KB at
+  minute 1 rising to 177968 by minute 3, a step down to 154064 at minute 5, then 156112,
+  156304, 156512, 156704, 156912, 158384, a slope of +534 KB/min over that last stretch, and
+  again an end below its own start. The same sawtooth shape in both runs, a rise then a
+  release then a rise, is what an allocator pooling and returning pages looks like through
+  `ps`, and `ps` is the whole instrument here. This is development evidence and not the
+  Horizon B 24 hour qualification, and the frame and packet ownership claim rests on the
+  LeakLedger tests rather than on these figures.
+
+  Em dash scan over both repositories with the section 9 command: no output. Every changed
+  Kotlin file is pure ASCII. The only lines over 120 columns in the changed set are six
+  Markdown table rows in `README.md`, all six of them already over 120 at `HEAD` and
+  unwrappable, and `scripts/testmedia.sh:52` at 147, which is A0's untouched `printf`. The
+  truth ledger's fixed marker sentence still greps to exactly 51, the number the A5 walk
+  left.
+
+  Deviations, each with its proof. The implementer recorded fifteen; they are restated here
+  because this section is the only record, and this gate re-proved each one rather than
+  copying it.
+  1. The register's single joined test is split across two modules, because the joined test
+     cannot exist. `AppKitVideoRenderer`'s injectable constructor is `internal` and
+     `internal` in Kotlin does not cross a Gradle module boundary; the A5 log records that
+     Kotlin/Native's `-friend-modules` takes exactly one path which the Kotlin Gradle plugin
+     already spends; and the public constructor gives a test no way to read what was drawn,
+     while adding one is new public API that contract item 12 forbids. So `RotationTest` in
+     `kiteplayer-ffmpeg` decodes all 25 frames of the real clip and proves the turn reaches
+     the stream and every frame while `SoftwareConverter.toRgba` still returns the stored
+     320x240x4 bytes, and `AppKitVideoRendererTest` in `kiteplayer-output` drives the real
+     renderer through 0, 90, 180, 270 and one non-quarter angle, reading every pixel back
+     out of the drawn image, and then again at the fixture's own 320x240 at 270 where the
+     drawn picture is 240x320. Both halves are measurements and they meet on the same
+     numbers.
+  2. The fixture reports 270 and not 90, and the sign is the point. `ffmpeg -h full` in the
+     linked binary documents `-display_rotation` as "set pure counter-clockwise rotation in
+     degrees", so `-display_rotation:v 90` writes the matrix for a quarter turn
+     counter-clockwise, which is 270 clockwise, and KiteCodec reports clockwise because
+     `ffkmp_stream_rotation_degrees` negates `av_display_rotation_get`. `ffprobe` prints
+     `rotation=90` on that clip, which is the un-negated value, and ffmpeg's own autorotate
+     applies `transpose=clock` for the negated one. The option the register names is the
+     option used, and either quarter turn swaps the output dimensions, which is what is
+     asserted.
+  3. `-display_rotation` is present in this ffmpeg 8.0, so the display-matrix side-data
+     fallback the phase allowed for was not needed.
+  4. The clip is a two-step recipe. Applied to a decoded input, ffmpeg's autorotation turns
+     the pixels at the filter stage and writes no matrix, which is the opposite of the
+     fixture wanted, so `colors-bt709.mp4` is remuxed with `-c copy`. Proof, re-measured by
+     this gate: extracted as elementary streams the two clips are byte identical, `shasum
+     cb05cecae0e244f8675258266467eb24d88d576a` for both, and only the remuxed one carries
+     the side data. That is what makes the pair a measurement, because the unrotated clip is
+     the negative control.
+  5. `abiValidation` was not configured on every module, though the phase statement says it
+     was. `git show HEAD:kiteplayer-ffmpeg/build.gradle.kts` has no `abi` line while core,
+     output and subtitles do, so the block was added there.
+  6. Task names recorded as `updateKotlinAbi` and `checkKotlinAbi`, not the `updateAbi` the
+     phase text implies, with the legacy pair noted and unused.
+  7. The README's test count is 414, which does not match the A5 entry's 409. This phase
+     adds five tests, so a README consistent with the older entry would be a false claim
+     about the code. 414 is what the gate measured above. Precedent: the A0, A4 and A5 gates
+     each corrected that file's own numbers.
+  8. `sync1080p30.mp4` drift is stated in the README as a bound rather than an exact figure.
+     Measured across five runs now, including this gate's: 1, 0, 0, -1 and -1 ms. The A5
+     entry's "0 ms" is one run of a number that moves.
+  9. `KiteCodecVideoFrame.rotationDegrees` was given no default value, which no step asked
+     for. A default of zero on the one field this phase exists to deliver is a silent-drop
+     hazard and no other parameter there has one. It is free: the ffmpeg ABI dump is byte
+     identical at `f6bbd1fa` because that constructor is `internal`, and the 29 ffmpeg tests
+     are green.
+  10. Three stale build-file comments were fixed beyond the named steps, because all three
+      were false claims about the code and this phase's own commit line is "make every
+      document match the code". `settings.gradle.kts` said `kiteplayer-core` has "no expect
+      declaration", where `grep` finds the one internal `expect`,
+      `platformPlaybackDispatchers`, that A5 added and that the A5 gate had already
+      corrected in the README for the same reason; `settings.gradle.kts` and
+      `kiteplayer-subtitles/build.gradle.kts` both said the subtitles module "lays cues out"
+      through a `TextRasterizer` interface, and `grep -rn TextRasterizer` over both
+      repositories returns nothing while the module holds exactly `SubRipParser.kt`; and
+      `kiteplayer-core/build.gradle.kts` claimed "subtitle timing" and compilation for
+      "every target Kotlin supports" where the truth is the 21 its own build file declares.
+  11. The new `VideoFrame.rotationDegrees` KDoc points at section 11 without being a
+      truth-ledger marker, which is correct: the member is implemented and only mirrors and
+      arbitrary affine matrices are not, and digest 8.4 sends those to B5. The fixed marker
+      sentence still greps to 51, so the ledger count is unaffected.
+  12. Observation, not fixed. The sample sizes its window from `snapshot.videoSize`, which
+      is storage, so a rotated clip is drawn correctly and letterboxed rather than filling a
+      portrait window. Making the window match needs either `TrackInfo.rotationDegrees`,
+      which is new public API no step names, or `PlayerSnapshot.videoSize` to become a
+      presentation size, which digest 8.4 forbids in one sentence.
+  13. `gradle.properties` `DESCRIPTION` claimed "subtitle timing" and per-platform backends
+      for "GPU presentation and hardware decoding", none of which exists. The implementer
+      left it, reasoning that contract rule 10 binds `POM_DESCRIPTION` at publication and
+      publication is B7. This gate fixed it instead: it is a document claim the code cannot
+      support, which rule 10 forbids on its own, no build file reads the property yet so
+      nothing about publication changes, and leaving a false string to be caught in a later
+      horizon is exactly the habit this document exists against. It now names the player,
+      the session loop, the clock, synchronisation, queueing, buffering, seeking and track
+      selection, says the backends are per platform with only macOS arm64 implemented, and
+      says nothing is published.
+  14. Not re-measured and no longer claimed. The README's old "3 minutes of audio: 0 ms of
+      clock drift", carried from the A0 gate, is replaced by this phase's two long runs,
+      which measure the same property over ten times as long and report a band instead of a
+      single zero.
+  15. The video soak's fixture was replaced mid-gate, and the first attempt is recorded
+      because its numbers were nearly reported as the engine's. There is no 1080p clip
+      longer than 10 seconds in `testmedia/`, so the first attempt concatenated
+      `sync1080p30.mp4` 66 times with the concat demuxer and `-c copy`. It ran 2 minutes 38
+      seconds and showed audio to video drift wobbling at 22 to 31 ms and the position
+      falling behind real time at 0.25 percent, 398 ms of it by 2:38, with 11 repeated
+      frames. That is the fixture, not the player. Proof: each 10 second segment carries 470
+      AAC frames, which is 470 x 1024 / 48000 = 10.0267 seconds of samples against a
+      declared duration of 10.000, because the original clip trims the difference through
+      its edit list and the concat demuxer keeps every frame; stacked 66 times the audio
+      timeline gains about 26.7 ms per segment, and 26.7 ms per 10 s is exactly the 0.25
+      percent measured. The run was killed, an 11 minute 1080p30 clip was encoded
+      continuously from `lavfi` instead, and on it the same binary reported clock drift of
+      -25 to +3 ms and audio to video drift of -31 to +5 ms. The aborted logs are kept
+      outside the repository. Both soak clips live in scratch space, not in `testmedia/`, so
+      `scripts/testmedia.sh` is unchanged by this and the 11 minute clip has to be
+      re-encoded by anyone repeating the soak.
+  16. Pre-existing and untouched, the same single item as at the A3, A4 and A5 gates:
+      KiteCodec's two Gradle plugin functional tests fail on a clean checkout, which
+      executor contract item 5 says to ignore.
+
+  Horizon A is complete. All six phases, A0 through A5 and now A6, are done and gated, each
+  with its own entry above, and every defect the register lists as Horizon A work is fixed
+  with a test that fails without the fix. Inside the boundaries section 12 draws, nothing is
+  left unfinished: DRM returns a typed `DRMUnsupported` result and a CDM integration was
+  never Horizon A work, casting is a Horizon B remote-target abstraction at the earliest,
+  and optical-disc menu navigation is out of scope entirely. What remains for the owner as a
+  manual check is small and named. First, the physical press of a window's red button,
+  deferred at the A3 gate and still unperformed: the A3 gate proved the same delegate and
+  the same run-loop wake-up through a programmatic close and through a clip that ends by
+  itself, and `windowWillClose` cannot tell the three apart, so nothing about D19 is
+  unproved, only that one click. Second, the visual check that a rotated clip looks right on
+  screen rather than only in a pixel table: this gate played `rotated90ccw.mp4` through the
+  real Core Graphics renderer and the window drew 22 of 24 frames with none failing, and the
+  four turns are asserted pixel by pixel, but no human has looked at the window. Third,
+  everything the evidence rules place above level 6 is still absent by design: no
+  release-mode benchmark, no real device, no performance budget, no packaged consumer build,
+  and no 24 hour soak. Those are Horizon B's gates and the README says so in as many words.
+  The tier table is unchanged and correct: macOS arm64 is an experimental T3-Full candidate
+  on one development machine, everything else is T1, and no line of this run earned a
+  promotion.

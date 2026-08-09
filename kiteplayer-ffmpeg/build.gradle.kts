@@ -28,6 +28,13 @@ kotlin {
     explicitApi()
     jvmToolchain(21)
 
+    // Public API tracking, the same as every other library module here. `updateKotlinAbi` refreshes
+    // api/*.api, `checkKotlinAbi` fails the build when the committed dump and the code disagree.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation {
+        // Declaring the block is what switches tracking on.
+    }
+
     macosArm64()
 
     sourceSets {

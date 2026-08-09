@@ -259,7 +259,9 @@ class DecodeAndConvertTest {
             graph.feedInput(0, frame) { filtered ->
                 // A frame handed to this callback is valid only for the call, so what is kept is a
                 // copy, which takes a reference rather than copying pixels.
-                if (lifted == null) lifted = KiteCodecVideoFrame(filtered.copy(), pts, duration, generation)
+                if (lifted == null) {
+                    lifted = KiteCodecVideoFrame(filtered.copy(), pts, duration, generation, rotationDegrees)
+                }
             }
         } finally {
             graph.close()

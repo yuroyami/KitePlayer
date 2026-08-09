@@ -33,12 +33,3 @@ private object SystemMonotonicClock : MonotonicClock {
     private val origin = TimeSource.Monotonic.markNow()
     override fun nanos(): Long = origin.elapsedNow().inWholeNanoseconds
 }
-
-/**
- * The timestamp value meaning "absent".
- *
- * Containers routinely omit timestamps. A packet with no presentation timestamp is normal, not
- * an error, and the engine has rules for every place one can appear. This constant is the same
- * sentinel FFmpeg uses, so no conversion is needed at the boundary.
- */
-public const val NO_PTS: Long = Long.MIN_VALUE

@@ -79,7 +79,7 @@ public object SoftwareConverter {
     ) {
         val width = size.width
         val height = size.height
-        val coefficients = Coefficients.of(colorSpace, depth)
+        val coefficients = Coefficients.of(colorSpace)
         val chromaShift = chromaSampleShift(colorSpace.chromaLocation, subsampleX)
 
         frame.withPlanes { planes, strides, _ ->
@@ -113,7 +113,7 @@ public object SoftwareConverter {
     private fun KiteCodecVideoFrame.convertNv12(out: ByteArray, depth: Int) {
         val width = size.width
         val height = size.height
-        val coefficients = Coefficients.of(colorSpace, depth)
+        val coefficients = Coefficients.of(colorSpace)
 
         frame.withPlanes { planes, strides, _ ->
             require(planes.size >= 2) { "an NV12 frame needs two planes, got ${planes.size}" }
@@ -168,9 +168,10 @@ public object SoftwareConverter {
     /**
      * Reads one component, scaled to the 0 to 255 range whatever the source depth.
      *
-     * 10-bit samples are little endian and occupy the low bits of a 16-bit word, so the high two bits
-     * of the value are dropped rather than the low two. Dropping the wrong end produces an image that
-     * is dark and noisy, which looks like a decode failure rather than a conversion bug.
+     * 10-bit samples are little endian and occupy the low ten bits of a 16-bit word. Scaling one to
+     * eight bits keeps the top eight of those ten and drops the low two, which is what the right shift
+     * below does. Keeping the low eight instead throws away each sample's magnitude and produces an
+     * image that is dark and noisy, which looks like a decode failure rather than a conversion bug.
      */
     private fun readComponent(
         plane: kotlinx.cinterop.CPointer<kotlinx.cinterop.UByteVar>,
@@ -258,7 +259,7 @@ public object SoftwareConverter {
              * 1.5748 times 1.138 is 1.793, which is the figure the standard studio-range matrix
              * quotes for the red-from-Cr term.
              */
-            fun of(colorSpace: ColorSpaceInfo, depth: Int): Coefficients {
+            fun of(colorSpace: ColorSpaceInfo): Coefficients {
                 val offset = if (colorSpace.fullRange) 0 else 16
                 val lumaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 219.0
                 val chromaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 224.0

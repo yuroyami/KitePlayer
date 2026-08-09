@@ -60,6 +60,10 @@ public interface AudioSink : AutoCloseable {
      * backends and produces a fixed A/V offset of tens to hundreds of milliseconds that nothing ever
      * corrects. Report what the platform actually says, and declare how much it can be trusted
      * through [latencyQuality].
+     *
+     * No engine code reads this. The audio clock is anchored from the deadline the render callback
+     * carries, which needs no latency figure, so this exists for diagnostics and for a later sink
+     * that has no such callback. Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     public fun latencyNanos(): Long
 
@@ -114,7 +118,13 @@ public interface AudioSinkBuffer {
      */
     public fun writeInterleaved(source: FloatArray, sourceOffset: Int, destinationFrameOffset: Int, frames: Int)
 
-    /** Planar write, one channel at a time, for devices that want planes. */
+    /**
+     * Planar write, one channel at a time, for devices that want planes.
+     *
+     * Nothing calls it: the engine's ring is interleaved and writes through [writeInterleaved]. It is
+     * here for a platform whose device buffer is planar.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public fun writePlane(
         channel: Int,
         source: FloatArray,

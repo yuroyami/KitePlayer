@@ -340,7 +340,12 @@ public class CoreAudioSink(
     }
 }
 
-/** Creates [CoreAudioSink] instances. Supply this in `PlayerConfig.backends.audioSink`. */
+/**
+ * Creates [CoreAudioSink] instances.
+ *
+ * Hand it to whatever assembles the pipeline, with the same clock the engine reads. Today that is
+ * the sample.
+ */
 public class CoreAudioSinkFactory(
     private val clock: MonotonicClock = AppleHostClock,
 ) : AudioSinkFactory {

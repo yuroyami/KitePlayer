@@ -8,8 +8,8 @@ import kotlin.time.Duration.Companion.ZERO
  *
  * Position is deliberately not here. A position field would make this snapshot change sixty times
  * a second, and every consumer collecting it would recompose or redraw at that rate for a value
- * most of them wanted at 4 Hz. Read the position from [KitePlayer.position] when you need it now,
- * or collect [KitePlayer.progress] when you want it on a timer.
+ * most of them wanted at 4 Hz. The player reads the position on demand, and publishes it on a timer
+ * as [Progress], as two separate things.
  */
 public data class PlayerSnapshot(
     val status: PlaybackStatus = PlaybackStatus.Idle,
@@ -19,6 +19,12 @@ public data class PlayerSnapshot(
     val seekable: Boolean = false,
     val videoSize: VideoSize? = null,
     val tracks: Tracks = Tracks.Empty,
+    /**
+     * The chapters of the current media item.
+     *
+     * Always empty: no source reads a chapter list out of a container.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val chapters: List<Chapter> = emptyList(),
     val speed: Double = 1.0,
     val volume: Float = 1.0f,
@@ -78,7 +84,14 @@ public data class PlaybackStats(
     val repeatedFrames: Long = 0,
     val audioUnderruns: Long = 0,
     val rebuffers: Long = 0,
-    /** Audio clock minus video clock at the last presented frame. Positive means video is late. */
+    /**
+     * Video clock minus the master clock at the last presented frame. Positive means video is AHEAD
+     * of the master clock.
+     *
+     * That sign convention is the same one everywhere in this project, including
+     * `VideoPlayback.drift`, which is where this figure comes from. One convention, chosen once, so
+     * no reader has to work out which way round a drift number runs.
+     */
     val avDrift: Duration = ZERO,
     val videoDecodeFps: Double = 0.0,
     val videoQueueDepth: Duration = ZERO,
@@ -108,31 +121,69 @@ public data class VideoSize(
         get() = if (height == 0) 0f else displayWidth.toFloat() / height.toFloat()
 }
 
-public enum class LoopMode { Off, One, All }
+public enum class LoopMode {
+    /** Play once and stop. */
+    Off,
+
+    /** Repeat the current media item. */
+    One,
+
+    /**
+     * Repeat the whole queue.
+     *
+     * There is no queue and no playlist, so there is nothing for this to repeat.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
+    All,
+}
 
 public enum class SyncMode {
     /** Audio drives the clock when there is audio, video otherwise. The right default. */
     Auto,
     AudioMaster,
     VideoMaster,
-    /** A wall clock drives playback and audio is resampled to follow it. */
+
+    /**
+     * A wall clock drives playback and audio is resampled to follow it.
+     *
+     * Nothing drives playback from an external clock, and nothing resamples audio to follow one.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     ExternalMaster,
 }
 
-/** Which clock is actually in charge right now, as opposed to which was requested. */
+/**
+ * Which clock is actually in charge right now, as opposed to which was requested.
+ *
+ * [External] is never reported, because [SyncMode.ExternalMaster] is not implemented.
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public enum class MasterClock { None, Audio, Video, External }
 
+/**
+ * How much a sink's latency figure can be trusted.
+ *
+ * A sink reports one of these and the engine's tolerances do not change. The only response today is
+ * a single warning when a sink says [Unreliable], and the one sink that exists says [Estimated].
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public enum class LatencyQuality {
-    /** The platform reports a real measured figure. Normal sync tolerances apply. */
+    /** The platform reports a real measured figure. */
     Exact,
 
-    /** A figure that needs low-pass filtering before use. Tolerances widen. */
+    /** A figure that moves around and needs low-pass filtering before it is used. */
     Estimated,
 
-    /** No usable figure. The engine counts frames and applies a configured nominal latency. */
+    /** No usable figure at all. */
     Unreliable,
 }
 
+/**
+ * How the current video track is being decoded.
+ *
+ * Only [Software] is ever reported: no decoder in this library uses a hardware device.
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public sealed class HwdecStatus {
     /** Decoding in software. */
     public data object Software : HwdecStatus()
@@ -144,6 +195,12 @@ public sealed class HwdecStatus {
     public data class HardwareWithDownload(val kind: HwdecKind) : HwdecStatus()
 }
 
+/**
+ * A hardware decoding API.
+ *
+ * This is naming for a capability nothing has: no target decodes in hardware.
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public enum class HwdecKind {
     VideoToolbox,
     MediaCodec,
@@ -161,10 +218,21 @@ public enum class FrameDropPolicy {
     /** Drop frames whose presentation time has already passed. The default. */
     LateOnly,
 
-    /** Also drop before decoding, when the decoder cannot keep up. Needed for 4K on weak hardware. */
+    /**
+     * Also drop before decoding, when the decoder cannot keep up. Needed for 4K on weak hardware.
+     *
+     * Nothing drops a packet before decoding it, so this behaves like [LateOnly].
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     LateAndDecode,
 }
 
+/**
+ * One chapter of the current media item.
+ *
+ * Nothing produces one: no source reads a container's chapter list, and no boundary is ever crossed.
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public data class Chapter(
     val index: Int,
     val start: Duration,

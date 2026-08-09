@@ -5,8 +5,9 @@ import kotlin.time.Duration
 /**
  * Something that happened, as opposed to something that is.
  *
- * The division of labour between this and [PlayerSnapshot] is strict, and it is the fix for the
- * single most common mistake made against player APIs.
+ * Nothing emits these yet: the event stream arrives with the player class, and this file is the
+ * contract it will be built against. The division of labour between this and [PlayerSnapshot] is
+ * strict, and it is the fix for the single most common mistake made against player APIs.
  *
  * - **State** goes in the snapshot. A snapshot conflates: a consumer that misses an intermediate
  *   value still ends up correct, because the latest value is the truth.
@@ -48,11 +49,21 @@ public sealed interface PlayerEvent {
     /** Playback stopped. The same error is on the snapshot. */
     public data class Failed(val error: PlaybackError) : PlayerEvent
 
-    /** A chapter boundary was crossed. */
+    /**
+     * A chapter boundary was crossed.
+     *
+     * Never emitted: no source produces a [Chapter].
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     public data class ChapterChanged(val chapter: Chapter?) : PlayerEvent
 }
 
-/** Where the engine sends its diagnostics. Supply one in [PlayerConfig] to see them. */
+/**
+ * Where the engine will send its diagnostics.
+ *
+ * Nothing calls it. No engine code writes a log line, so one supplied through [PlayerConfig] stays
+ * silent. Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public fun interface PlayerLogger {
     public fun log(level: LogLevel, tag: String, message: String, throwable: Throwable?)
 }

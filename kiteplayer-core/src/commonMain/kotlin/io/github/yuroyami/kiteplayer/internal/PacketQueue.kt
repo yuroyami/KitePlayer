@@ -178,6 +178,12 @@ internal class PacketQueue(
      * stream must be truncated so another can keep playing. A gap in one stream beats a frozen
      * player.
      *
+     * Legal only at the tail of a run that has not been decoded yet. Compressed frames reference each
+     * other, so dropping an arbitrary packet from the middle of a group of pictures leaves every later
+     * frame in that group undecodable, and the picture breaks up instead of skipping. A discard that
+     * is safe anywhere has to cut whole groups of pictures, which needs a cache that knows where they
+     * begin; that cache does not exist yet, so nothing may call this outside the case above.
+     *
      * @return how many packets were dropped.
      */
     fun dropFromTail(targetBytes: Long): Int {

@@ -128,7 +128,12 @@ public enum class ColorPrimaries { Bt601, Bt709, Bt2020, DciP3, DisplayP3 }
 public enum class ColorTransfer { Bt601, Bt709, Srgb, Linear, Gamma22, Gamma28, Pq, Hlg }
 public enum class ChromaLocation { Left, Center, TopLeft, Top, BottomLeft, Bottom }
 
-/** What kind of hardware surface a frame holds, so a renderer can say whether it can draw it. */
+/**
+ * What kind of hardware surface a frame holds, so a renderer can say whether it can draw it.
+ *
+ * No frame ever holds one: nothing decodes in hardware, and the one renderer that exists supports no
+ * surface kind at all. Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public enum class HwSurfaceKind {
     /** Apple `CVPixelBuffer` backed by an `IOSurface`. Reaches Metal with no copy. */
     CoreVideoPixelBuffer,

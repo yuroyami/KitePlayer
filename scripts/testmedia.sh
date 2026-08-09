@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regenerate the test clips used by KitePlayer's playback tests.
-# Needs the ffmpeg CLI on PATH. Writes into testmedia/, which is gitignored.
+# Needs the ffmpeg CLI on PATH, recent enough to know -fps_mode and -enc_time_base, which the
+# variable frame rate clip below uses. Writes into testmedia/, which is gitignored.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -14,11 +15,23 @@ ffmpeg -v error -y \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 30 \
   -c:a aac -b:a 128k -shortest sync1080p30.mp4
 
-echo "720p59.94 h264 + aac, 8s, non-integer frame rate"
+echo "720p variable frame rate h264 + aac, 8s, five frame durations in a repeating cycle"
+# Genuinely variable, not a fractional constant rate: no two neighbouring frames last the same
+# time. settb pins the timebase at 1/90000, then setpts rewrites every presentation timestamp
+# onto a five frame cycle of 1/60, 1/30, 1/20, 1/40 and 1/24 of a second, which is 1500, 3000,
+# 4500, 2250 and 3750 ticks and 15000 ticks per cycle. The cycle averages exactly 30 fps, so the
+# 240 source frames still cover 8 seconds. passthrough stops ffmpeg from putting the timestamps
+# back on a constant grid, and pinning the encoder and track timebases to 1/90000 keeps every
+# tick above exact instead of rounded.
+vfr_pts="floor(N/5)*15000"
+vfr_pts="$vfr_pts + if(eq(mod(N,5),0), 0, if(eq(mod(N,5),1), 1500, \
+  if(eq(mod(N,5),2), 4500, if(eq(mod(N,5),3), 9000, 11250))))"
 ffmpeg -v error -y \
-  -f lavfi -i "testsrc2=size=1280x720:rate=59.94:duration=8" \
+  -f lavfi -i "testsrc2=size=1280x720:rate=30:duration=8" \
   -f lavfi -i "sine=frequency=330:sample_rate=44100:duration=8" \
-  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac vfr720p60.mp4
+  -vf "settb=1/90000,setpts='$vfr_pts'" \
+  -fps_mode:v passthrough -enc_time_base:v 1/90000 -video_track_timescale 90000 \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac truevfr720.mp4
 
 echo "4K HEVC Main10, 6s, no audio, for hardware decode"
 ffmpeg -v error -y \

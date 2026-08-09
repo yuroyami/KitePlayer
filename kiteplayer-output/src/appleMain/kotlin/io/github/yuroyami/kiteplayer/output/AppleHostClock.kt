@@ -13,9 +13,9 @@ import platform.CoreAudio.AudioGetCurrentHostTime
  * source, the two would agree only by luck, and audio and video would sit at a constant offset that
  * no correction could ever find, because both sides would believe they were right.
  *
- * So the sink and the engine are handed the same clock explicitly, through
- * `PlayerConfig.backends.clock`, rather than each picking its own. Using CoreAudio's own conversion
- * for both readings is what guarantees one time base.
+ * So the sink and the engine are handed the same clock explicitly, by whatever assembles the
+ * pipeline, rather than each picking its own. Today that is the sample, which passes this object to
+ * both. Using CoreAudio's own conversion for both readings is what guarantees one time base.
  */
 @OptIn(ExperimentalForeignApi::class)
 public object AppleHostClock : MonotonicClock {

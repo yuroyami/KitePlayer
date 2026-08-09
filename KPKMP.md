@@ -855,8 +855,10 @@ $BIN /nonexistent.mp4                 # expect: one sentence, no stack trace
 
 # Em dash scan, always, both repos; must print nothing. The pattern is the escape
 # text backslash-u2014 (expanded by the shell), so no literal em dash exists in the repos.
+# .claude/worktrees holds gitignored scratch checkouts of the same repository at older commits,
+# so scanning them reports the same text many times over and buries the real hits.
 grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" . ../KiteCodec \
-  | grep -v vendor/ | grep -v build/
+  | grep -v vendor/ | grep -v build/ | grep -v '/\.claude/'
 ```
 
 From A2 add the transport-stream offset clip, from A4 add `surround51.mp4` and the P010
@@ -1144,3 +1146,122 @@ is no other.
   horizons, and contributed the evidence rules, tier vocabulary and Horizon B roadmap.
   Its source document was never committed and was deleted after distillation; this
   document is the sole surviving record of its findings.
+- 2026-08-09, phase A0, gate passed. What landed:
+  1. D27, the only code-behaviour change in the phase. Both audio filter-description
+     builders in `../KiteCodec/.../ffmpeg.def` now check the running length against the
+     2048 byte buffer after EVERY `snprintf` and before the next append computes a
+     destination pointer, and refuse an over-long description with `AVERROR(EINVAL)`
+     instead of truncating it. `FilterGraph.buildAudio` and `buildAudioMulti` KDoc state
+     the bound and the refusal. New `FilterDescriptionLengthTest` feeds descriptions of
+     length 0, 2047, 2048, 4096 and 1048576 through both builders, with and without
+     output pins. The two remaining accumulating `snprintf` sites in the file were
+     audited and are the same two; every other call writes once into its own buffer.
+  2. KitePlayer's README rewritten against reality: the section 2 tier table, a
+     per-platform table (macOS arm64 experimental T3-Full candidate, every other declared
+     target T1, macOS x64 not a target), a measured "What is proven" list, and an explicit
+     "What does not exist yet" list naming the missing player class, the unconnected seek
+     machine, mono and stereo only with no downmix or resample, the unconnected subtitle
+     parser, no hardware decode, no GPU renderer, no rotation, no network and no published
+     artifact. The stale "no window" claim and the claim that the engine widens tolerances
+     on `LatencyQuality` are gone. The HDR tone-mapping hole is stated. KiteCodec's README
+     gained the same tier vocabulary in its Targets section, with `macosArm64` at T2 on
+     measured evidence, `linuxX64` and `mingwX64` at T2 on CI evidence only, the
+     `androidNative*` klibs at T1, and the unbuilt triples carrying no tier; its test count
+     is corrected from 53 to 58.
+  3. Documentation truth register items 4 to 8: `SoftwareConverter.readComponent` bit-drop
+     direction corrected; `MediaClock.lastUpdatedNanos` now describes the pause and resume
+     arithmetic of digest 8.1 instead of citing a class that does not exist; every dangling
+     link to the unwritten facade removed from `PlayerConfig.kt`, `PlayerState.kt` and
+     `PlayerEvent.kt`; `CoreAudioSink` and `AppleHostClock` no longer name config wiring
+     that arrives in A5; `PlaybackStats.avDrift` now states one project-wide sign
+     convention, video minus master, positive meaning video is ahead, matching
+     `VideoPlayback.drift`.
+  4. Truth ledger seed, item 9: 32 members carry the exact sentence
+     `Not implemented yet; see the roadmap in KPKMP.md section 11.` The A5 gate walks the
+     list again. `PacketQueue.dropFromTail` carries the section 5 warning that arbitrary
+     compressed-packet dropping is legal only at the tail of a not-yet-decoded run.
+  5. Deletions and nits: `NO_PTS` deleted (no usages left, and no dangling reference);
+     `Coefficients.of` lost its unused `depth` parameter at both call sites.
+  6. D33 fixture: `vfr720p60.mp4`, a constant 59.94 fps clip, is replaced by
+     `truevfr720.mp4`, genuinely variable. `settb=1/90000` plus a `setpts` cycle gives
+     frame durations of 1500, 3000, 4500, 2250 and 3750 ticks, which is 1/60, 1/30, 1/20,
+     1/40 and 1/24 second, averaging exactly 30 fps over 240 frames and 8 seconds.
+     `-fps_mode:v passthrough -enc_time_base:v 1/90000 -video_track_timescale 90000` keep
+     the muxed ticks exact.
+  7. `kiteplayer-subtitles` package renamed from `subtitles` to `subtitle` to match the cue
+     model, with 8 `SubRipParser` tests over inline fixtures: BOM, CRLF against LF, mixed
+     line endings, missing sequence numbers, overlapping out-of-order cues, malformed
+     timing lines, and end before start.
+  8. Em dash hygiene across `../KiteCodec`: 80 hits in 16 tracked files, all older than
+     this run, rewritten as ordinary prose. Files: `settings.gradle.kts`,
+     `kitecodec-core/build.gradle.kts`, `kitecodec-sample/build.gradle.kts`,
+     `buildSrc/.../FFmpegPaths.kt`, `buildSrc/.../BuildFFmpegTask.kt`,
+     `kitecodec-gradle-plugin/.../FetchFFmpegTask.kt`, `Errors.kt`, `Rational.kt`,
+     `MediaSink.native.kt`, `MediaSource.native.kt`, `Frame.native.kt`,
+     `Transcoder.native.kt`, `ffmpeg.def`, `archived/libavutil.def`,
+     `archived/libavcodec.def`, `kitecodec-sample/.../Main.kt`.
+
+  Gate, every step rerun for real with `--rerun-tasks`, nothing up-to-date:
+  `:kitecodec-core:macosArm64Test` 58 tests, 0 skipped, 0 failures, 0 errors (53 before,
+  plus the 5 new length tests); `publishToMavenLocal -Pkitecodec.hostTargetsOnly=true`
+  successful. KitePlayer suites: `:kiteplayer-core:jvmTest` 75,
+  `:kiteplayer-core:macosArm64Test` 75, `:kiteplayer-output:macosArm64Test` 7,
+  `:kiteplayer-ffmpeg:macosArm64Test` 6, `:kiteplayer-subtitles:jvmTest` 8, so 171 test
+  executions, 0 skipped, 0 failures, 0 errors. Cross-target compiles
+  (`compileKotlinJs`, `compileKotlinWasmJs`, `assembleAndroidMain`) successful.
+  `./scripts/testmedia.sh` exit 0, all 12 files written. Sample linked and run:
+  `sync1080p30.mp4` 300 decoded, 300 presented, 0 dropped, 0 repeated, 0 underruns, final
+  drift 13 ms, worst schedule 0 ms; `truevfr720.mp4` 240 decoded, 240 presented, 0
+  dropped, 0 repeated, 0 underruns, final drift 14 ms; `hevc4k10.mp4` 180 decoded, 180
+  presented, no audio track, video drives the clock, run completes; `/nonexistent.mp4`
+  prints `cannot play /nonexistent.mp4` and `No such file or directory (code=-2)`, exit
+  status 1, no stack trace. Em dash scan over both repositories: 0 hits. Independent
+  ffprobe check of the new fixture: duration histogram 47x1500, 49x3000, 48x4500,
+  48x2250, 47x3750 ticks over 240 frames, and 0 equal-duration neighbouring pairs out of
+  239. Audio-only observation on `soak30min.mp4`, 3:01 played: clock drift 0 ms on every
+  progress line, 0 underruns (development evidence, level 6; the real soak is A6).
+
+  Deviations, each with its proof:
+  - The D27 implementer's run reported itself as failed, but its work was on disk and
+    correct: both def-file sites, the KDoc, and the test file. Rerunning the gate with
+    `--rerun-tasks` rebuilt the cinterop from the changed def file and the 58 tests
+    passed, so no repair was needed. Recorded because a failed report is normally a reason
+    to redo the step.
+  - Section 9's em dash scan walked `.claude/worktrees`, which holds three gitignored
+    scratch checkouts of KiteCodec at older commits. It reported 1002 duplicate hits and
+    buried the 80 real ones. Proof: `git check-ignore -v .claude/worktrees` answers
+    `.git/info/exclude:7`, and `git worktree list` shows the three checkouts. The section 9
+    command now filters `/.claude/`. This tightens the gate; it does not relax it.
+  - Truth ledger marker scope. Section 6 item 9 says "every public configuration member
+    that nothing implements", which taken literally is every member of `PlayerConfig`,
+    since no player class exists. Section 5's own qualifier, "every member that A5 does not
+    implement", was applied instead, because the marker sentence points at section 11, the
+    Horizon B roadmap, and pointing a reader there for something A5 delivers would be a new
+    false claim. So `progressInterval`, `statsInterval`, `preferredLanguages`, the non-live
+    `BufferPolicy` members, `syncMode`, `frameDrop` except `LateAndDecode`, and `SeekMode`
+    carry no marker. The A5 ledger walk is the check on this call.
+  - `Backends` KDoc claimed that leaving a factory null selects the platform default,
+    "whatever backend module is on the classpath". D34 proves Kotlin/Native has no such
+    lookup, so that was a false claim about the code. Replaced with explicit-composition
+    prose plus a pointer to D34, and deliberately given no section 11 marker, because D34
+    lands in A5 and not in Horizon B.
+  - `Pts.kt` was edited although no A0 step names it: its KDoc was the only referrer to
+    `NO_PTS`, and deleting the constant would have left a dangling link.
+  - Section 9 marks the sample runs as "from A1 onward". They were run in A0 anyway,
+    because the new VFR fixture and the README's measured numbers have no other evidence.
+    Results are above.
+  - The README's own numbers were corrected by the gate: it claimed 163 test executions
+    across 4 suites, which was the count before the 8 subtitle tests, and it carried the
+    old fixture's line "720p59.94: 480 frames, 0 dropped" for a clip that no longer
+    exists. Now 171 across 5 suites, and the measured `truevfr720.mp4` line.
+  - D33's defect-register entry still names `vfr720p60.mp4`. Left deliberately: that
+    paragraph records the defect as it was found, and the rest of the document already
+    names `truevfr720.mp4`.
+  - No implementer covered the KiteCodec half of section 6 item 1, so the gate did it:
+    the tier vocabulary and the corrected test count, and nothing more. The rest of that
+    README was already written against reality, target by target, with its own honest
+    Limits table.
+  - Pre-existing and untouched: `AppKitVideoRenderer.kt:90` emits an
+    `ExperimentalCoroutinesApi` opt-in warning on every native compile, and KiteCodec's
+    two Gradle plugin functional tests fail on a clean checkout, which executor contract
+    item 5 says to ignore. Neither is an A0 item.

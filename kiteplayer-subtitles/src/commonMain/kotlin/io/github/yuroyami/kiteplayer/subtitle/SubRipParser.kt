@@ -1,8 +1,4 @@
-package io.github.yuroyami.kiteplayer.subtitles
-
-import io.github.yuroyami.kiteplayer.subtitle.CueStyle
-import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
-import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
+package io.github.yuroyami.kiteplayer.subtitle
 
 /**
  * Reads SubRip (`.srt`) subtitles.

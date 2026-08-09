@@ -30,7 +30,15 @@ internal class MediaClock(private val monotonic: MonotonicClock) {
     private var lastSetNanos: Long = 0
     private var anchor: Pts? = null
 
-    /** The system time of the last anchoring. Needed by the resume arithmetic in [PlaybackCore]. */
+    /**
+     * The system time of the last anchoring.
+     *
+     * This is what resuming needs. Pausing freezes the clock at its current reading, so the interval
+     * spent paused is `now - lastUpdatedNanos` when playback resumes. The video scheduler's frame
+     * timer is shifted forward by exactly that interval, and the clock is re-anchored at the reading
+     * it was frozen at. Without the shift the paused interval counts as time already waited, and
+     * every frame buffered at the moment of the pause is late the instant playback resumes.
+     */
     val lastUpdatedNanos: Long get() = lastSetNanos
 
     var generation: Generation = Generation.Initial

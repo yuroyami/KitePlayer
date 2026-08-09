@@ -15,7 +15,8 @@ import kotlin.time.Duration.Companion.microseconds
  * and nanoseconds, values already divided by playback speed and values not yet divided. Making the
  * unit part of the type turns those mistakes into compile errors.
  *
- * [NO_PTS] is not representable here. A timestamp that may be absent is a `Pts?`.
+ * There is no sentinel for "absent". A timestamp that may be missing is a `Pts?`, so the compiler
+ * asks for the check that FFmpeg's `AV_NOPTS_VALUE` leaves to the reader.
  */
 @JvmInline
 public value class Pts(public val micros: Long) : Comparable<Pts> {

@@ -9,16 +9,39 @@ public data class MediaItem(
      * Ignored when [io] is set, except as a hint for format probing and as a label.
      */
     val uri: String,
-    /** Request headers, for the http and https protocols. */
+    /**
+     * Request headers, for the http and https protocols.
+     *
+     * Not passed to the demuxer by any source here, so they reach nothing.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val headers: Map<String, String> = emptyMap(),
+    /**
+     * Subtitle files to load alongside the media.
+     *
+     * Nothing loads them. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val externalSubtitles: List<SubtitleSource> = emptyList(),
-    /** Where to start. Null means the beginning, or the container's own start time. */
+    /**
+     * Where to start. Null means the beginning, or the container's own start time.
+     *
+     * Nothing reads this: opening always starts where the container does.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val startPosition: Duration? = null,
-    /** Read the bytes through your own code instead of through FFmpeg's protocols. */
+    /**
+     * Read the bytes through your own code instead of through FFmpeg's protocols.
+     *
+     * The FFmpeg source rejects a non-null value: KiteCodec has no custom I/O path.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     */
     val io: MediaIo? = null,
     /**
      * A hint for the demuxer, for example "mpegts", when the bytes have no recognisable header.
      * Almost never needed. Probing is reliable.
+     *
+     * Not passed to the demuxer by any source here.
+     * Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     val formatHint: String? = null,
 ) {
@@ -35,6 +58,10 @@ public data class MediaItem(
  *
  * Threading: called from the demux worker only, one call at a time, never concurrently.
  * Implementations do not need to be thread safe. They may suspend.
+ *
+ * No source calls any of this. It is interface surface a later backend will implement, and the one
+ * backend that exists rejects a [MediaItem] that carries one.
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
  */
 public interface MediaIo : AutoCloseable {
     /** Total size in bytes, or null when unknown, for example a live stream. */
@@ -56,7 +83,12 @@ public interface MediaIo : AutoCloseable {
     public suspend fun seek(position: Long)
 }
 
-/** An external subtitle file or stream, added alongside a media item. */
+/**
+ * An external subtitle file or stream, added alongside a media item.
+ *
+ * Nothing opens one, and no cue reaches a screen.
+ * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ */
 public data class SubtitleSource(
     val uri: String,
     /** Shown in a track menu. Defaults to the file name. */

@@ -1,8 +1,9 @@
 # KitePlayer
 
-A media player engine for Kotlin Multiplatform. The player, its session loop, the clock, audio and video
-synchronisation, the packet and frame queues, the buffering policy and the seek machine are pure Kotlin
-in `commonMain`. Only the audio device, the video surface and the decoder are per platform.
+A media player for Kotlin Multiplatform, written in Kotlin from the ground up. It does not wrap
+ExoPlayer, AVPlayer or libmpv: everything that makes it a player is pure Kotlin in `commonMain`, so it
+behaves the same wherever it runs, and FFmpeg (through KiteCodec) does the decoding. Only the audio
+device, the video surface and the decoder are per platform.
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)

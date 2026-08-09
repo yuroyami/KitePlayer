@@ -3052,6 +3052,401 @@ is no other.
   plugin functional tests fail on a clean checkout, which executor contract item 5 says to
   ignore.
 
+- 2026-08-09, B1.4, B1.5 and B1.6 done and gated as one tree, three KiteCodec commits plus one
+  KitePlayer commit plus this entry. Three sub-phases were executed in parallel by three agents
+  against one working tree and gated together by a fourth. That is a deviation from 15.2's "one
+  commit per sub-phase, gate before the next starts" and it is recorded as deviation 1 below,
+  with what it cost and what it could not prove. Every number here was re-measured by the gate
+  run, not carried from a sub-phase report; where a sub-phase's number did not reproduce, the
+  gate's measurement won and the difference is a deviation.
+
+  **B1.4, one unit per subsystem, and the surface nothing uses deleted.** The single 938 line
+  `src/kitecodec_helpers.c` became nine units along the def body's own banner map:
+  `helpers_error.c` 28 lines, `helpers_frame.c` 147, `helpers_packet.c` 31, `helpers_codecpar.c`
+  35, `helpers_codec.c` 108, `helpers_format.c` 96, `helpers_stream.c` 33, `helpers_filter.c` 326,
+  `helpers_playback.c` 186. `helpers_frame.c` carries three banners rather than one, because two of
+  the eleven banners name no subsystem and sit between AVFrame and AVPacket, and a unit has to be a
+  contiguous run for the concatenation check to work. `KC_API` is `__declspec(dllexport)` on
+  `_WIN32` and `__attribute__((visibility("default")))` elsewhere; the header carries it on every
+  exported helper and `include/kitecodec_helpers.h` is now 457 lines. The step 1 trap was answered
+  by experiment and not by reading: all four trailing-underscore internals stay `static`, proved
+  twice, once by a script that re-derived the banner map and every reference from the def at
+  `5364329` and found zero cross-unit references, and once mechanically, because the nine units
+  compile separately under `-Wall -Wextra -Werror` where a `static` helper called from another unit
+  is an implicit declaration and one defined but never called is an unused function. The generator
+  now enforces that property on every run. The 15 dead exported helpers were derived rather than
+  copied, as the difference between the 172 the header declared and the 157 distinct `ffkmp_` names
+  the Kotlin sources import, and the difference is exactly the plan's list: `ffkmp_averror_einval`,
+  `ffkmp_nopts_value`, `ffkmp_frame_ref`, `ffkmp_frame_make_writable`, `ffkmp_packet_ref`,
+  `ffkmp_packet_flags`, `ffkmp_codecpar_video_delay`, `ffkmp_codecctx_sample_fmt`,
+  `ffkmp_codec_name`, `ffkmp_fmt_bit_rate`, `ffkmp_fmt_alloc_output`, `ffkmp_stream_duration`,
+  `ffkmp_stream_nb_frames`, `ffkmp_avseek_flag_byte`, `ffkmp_avseek_flag_frame`. The 15 and the six
+  unreferenced def files under `kitecodec-core/src/nativeInterop/cinterop/archived/`
+  (`libavcodec.def` 120 lines, `libavfilter.def` 96, `libavformat.def` 120, `libavutil.def` 114,
+  `libswresample.def` 7, `libswscale.def` 35) were deleted FIRST and the cross-check ran afterwards,
+  which `check-deleted-surface.sh` enforces by failing outright if the directory is back.
+
+  **B1.5, every C entry point that parses a caller's string is fuzzed.** Six targets under
+  `native/kitecodec-c/fuzz/`, one `LLVMFuzzerTestOneInput` per source and no `main`, with
+  `replay_main.c` supplying `main()` for the local build and libFuzzer supplying its own in CI:
+  `fuzz_filter_video.c` and `fuzz_filter_audio.c` over the four graph builders,
+  `fuzz_codec_option.c` and `fuzz_format_option.c` over `av_opt_set`, `fuzz_metadata.c` over
+  `av_dict_set`, and `fuzz_format_name.c` over the two `*_from_name` lookups. Shared plumbing lives
+  in `fuzz/kc_fuzz.h` and `fuzz/kc_fuzz.c`, which the plan's file list does not name; they hold the
+  input contract and the three functions every target needs, and duplicating them six times would
+  have let the corpus and the split drift apart. Every caller string is a NUL terminated heap copy
+  and never a pointer into the driver's buffer, because libFuzzer's data is not terminated and ASan
+  can redzone a heap block but not the middle of the fuzzer's own buffer. The corpus is 103
+  committed files, 38077 bytes, all textual, and 9 of them carry a real embedded NUL byte verified
+  with `od`. libFuzzer cannot link on this machine at all: Apple clang 17.0.0 and konan's clang
+  21.1.6 both fail with `library '.../libclang_rt.fuzzer_osx.a' not found` and Homebrew LLVM is not
+  installed, so `run-fuzz.sh` refuses with exit 3 and one sentence naming the missing runtime. No
+  fuzz run has ever happened on this host and none has happened in CI either, because there is no
+  Linux host here; the `fuzz-linux` job on `ubuntu-24.04` is the fuzz run and it is unexecuted. What
+  runs locally is the corpus replay, which is a regression test over the committed seeds at evidence
+  level 2 for those inputs and nothing more. That distinction is stated in the job's own comment
+  block, in `fuzz/README.md` and here, because calling the replay a fuzz run would be exactly the
+  substitution section 2 forbids.
+
+  **B1.6, the FFmpeg identity gate.** `include/kitecodec_abi.h` 217 lines declares
+  `KITECODEC_C_ABI_MAJOR 1`, `KITECODEC_C_ABI_MINOR 0`, a flat POD report with fixed char arrays and
+  no pointers and no two dimensional arrays, and `kc_init`, `kc_ffmpeg_report_get` and
+  `kc_abi_version`, plus three accessors beyond the plan's three: `kc_ffmpeg_library_name`, which is
+  the per index accessor step 1 explicitly asks for instead of `char names[6][16]`,
+  `kc_verdict_name`, so the Kotlin side prints verdicts without a second copy of the table, and
+  `kc_ffmpeg_configuration`, which is the only way B1-22 can move `avcodec_configuration` behind the
+  report without putting a 984 byte configure line into a flat struct. `src/kitecodec_abi.c` 341
+  lines reads the six `LIB*_VERSION_INT` macros through `include/kitecodec_ffmpeg_versions.h` and is
+  compiled by the same task and the same include tree as the nine helper units, so the frozen
+  expectations and the baked offsets cannot diverge; the build log reads `compiling 10 C source(s)
+  for macos_arm64`. Policy as decided and not reopened: major exactly equal or hard reject, runtime
+  minor below header minor rejects, micro reported and never fatal, six way `*_configuration()`
+  agreement or reject, all under `pthread_once`. `kc_init` is called first in all 15 entry points
+  through `internal fun requireCompatibleFFmpeg()` in `Internals.kt`, and not from an object
+  initialiser. Kotlin gained `FFmpegError.IncompatibleFFmpegRuntime(identity)`, distinct from
+  `Internal`, and `Versions` gained six `*Header` fields; `Errors.kt`'s `fromCode` and its
+  `AVERROR_*` tag algebra are untouched. KitePlayer maps the rejection to
+  `PlaybackError.ConfigurationInvalid` in `KiteCodecMediaBackend.open` and `probeOpen`, which is the
+  only KitePlayer work in all three sub-phases.
+
+  **The gate rejects, and this is what the rejection said.** `test_identity` case 1 is the plan's
+  exact pair reproduced on this machine: libavutil headers 59.8.100 against runtime 60.8.100,
+  verdict major mismatch, status -1, bypassed 0, provisioning sentence 483 of 1024 bytes. The report
+  carries the B1-21 contradiction in the same block: built for the `lgpl` flavour from
+  `/opt/homebrew/Cellar/ffmpeg/8.0_1/lib`, while the linked runtime reports 8.0 with licence "GPL
+  version 3 or later". The provisioning sentence names both identities and the two ways out, and
+  says that `KITECODEC_FFMPEG_ABI_BYPASS=1` downgrades the rejection for diagnosis only, is not a
+  supported configuration, and is recorded in the report when used. The test is not vacuous, proved
+  two ways by the sub-phase and both reproduced by the gate's clean run: changing
+  `saw_major_mismatch = 1` to `= 0` fails case 1 with `actual 0, expected -1`, and putting the shim
+  include directory after `-I include` makes the real header win and the link fail with
+  `Undefined symbols: "_kc_major_mismatch_init"`, so the wiring cannot degrade into a silent pass.
+  The bypass satisfies all three mandatory conditions of 15.4: case 1 runs with the variable unset
+  and asserts it is not a silent default; the warning names the mismatch and both identities, 729
+  bytes on stderr captured through a `dup2` swap with all seven required fragments present; the
+  second call writes 0 bytes, so it is once per process and not once per call; and the report records
+  `status 0, bypassed -1`.
+
+  **Register items.** B1-08 closed: the 15 dead exported helpers are gone from the header, the nine
+  units, the archive and the cinterop klib, `archived/` is gone, and the cross-check ran after the
+  deletion and proves zero use sites in either repository in any file type. B1-13 closed: each of
+  the six entry points has one source compiling two ways, and the committed corpus runs as an
+  ordinary sanitized regression test in every later gate. B1-02 closed: the gate exists, runs before
+  any allocation at 15 entry points, and its rejection path is proved to fire by a hermetic
+  differential at evidence level 2 rather than by argument. B1-03 closed: `FFmpegExpectations`
+  refuses a release the artifacts were not built for, wired at `afterEvaluate`, with a functional
+  test asserting both refs and both ways out. B1-04 closed: a configuration time assertion over four
+  sites including `vendor/ffmpeg/RELEASE`, plus the plugin's `EXPECTED_MAJORS` table checked against
+  the vendored headers. B1-21 carried as required, not closed: `runtime_license` and
+  `build_license_flavour` are in every report, both asserted populated by the C test and the Kotlin
+  test, and the contradiction prints in every rejection; resolution is B7's. B1-22 partly closed:
+  the six `*_version()` queries and `avcodec_configuration` are behind the report and
+  `direct_libav_call_sites` fell 21 to 14 with the baseline lowered in the same change; the four hot
+  decode and encode calls and the three `find_*_by_name` queries stay raw for B2. B1-10
+  corroborated, not closed, since it is B1.2's: the D27 site now has a standing proof that its
+  length checks are load bearing.
+
+  **The composed gate, every step rerun for real.** `verify-lift.sh` against `5364329`, the pre-B1.3
+  revision and now the script's default so it cannot be pointed at a HEAD with no body: exit 0, the
+  header and all nine units byte equal, and the concatenation the plan asks for equal on both sides
+  at sha256 `e63a7b56e4fe61a8f804d65b6066478dfa5e7eebcf5485685c327081391726ea`, 909 lines, where 909
+  is 949 body lines minus 20 includes minus the 20 definition lines of the 15 deletions. Two negative
+  tests keep that from being a vacuous pass: a wrong exclusion list exits 2 naming the missing
+  entries, and a hand edit appended to one unit exits 1 reporting both the per unit and the
+  concatenation mismatch. `symbol-audit.sh` PASS on both the shipped `macos_arm64` archive and the
+  host archive: 10 members, 163 exported symbols equal to the two headers' `KC_API` set exactly
+  (157 `ffkmp_` plus 6 `kc_`), every undefined symbol libav or libsw or on a re measured 13 name
+  allowlist, no `printf`, no `av_log`, no `objc_msgSend`, no `dispatch_`, no `_exit`, no `abort`,
+  `ffkmp_graph_finish_` and `ffkmp_graph_finish_multi_` present and non external, and
+  `ffkmp_codec_pix_fmts_` and `ffkmp_ch_layout_mask_` absent from the symbol table entirely because
+  clang inlined them at `-O2`. A fifth check now proves only `src/kitecodec_abi.c` may mention a
+  stream, so the `_fputs` permission the bypass warning needs cannot be reused by a future unit.
+  `check-deleted-surface.sh` exit 0 across all five of its checks. The C suite, all three variants,
+  exit 0 each: `test_ownership` 39, `test_buffers` 32, `test_rescale` 114, `test_strerror_thread` 24,
+  `test_convert` 25, `test_identity` 16, total 250 cases per variant and 750 case runs. The asan
+  corpus replay, which is the plan's B1.5 gate line verbatim, exit 0 with 6 targets passed, 0 failed
+  and 105 corpus files replayed, 103 committed plus 2 generated, in 4.6 seconds wall clock; plain and
+  tsan replays also exit 0 over the same 105 files. `replay-corpus.sh --prove-power asan` PASSED:
+  the mutant exited 134 on the first corpus file, `fuzz/corpus/filter_audio/d27_len_2047`, and the
+  finding reads `runtime error: index 2056 out of bounds for type 'char[2048]'` at
+  `build/asan/fuzz/mutant/src/helpers_filter.c:132:37`, inside `ffkmp_graph_build_audio`, reached
+  through `build_single fuzz_filter_audio.c:68` and `LLVMFuzzerTestOneInput fuzz_filter_audio.c:124`
+  and `main replay_main.c:102`, with `SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior` on the
+  same line. 2056 is 2047 plus the 9 bytes `,aformat=` would have written. `diff` shows exactly one
+  line deleted from the copy, line 128, the running length check D27 installed, and the repository
+  file is unmodified, so the defect was never in the repository and did not need removing. The
+  metadata differential against B1.3's committed baseline, 18844 lines, against the current klib at
+  19024 lines: declarations LOST by set difference 15, and they are exactly the 15 named above;
+  declarations gained 55, every one of them from `kitecodec_abi.h`, being the six `kc_` functions,
+  the report struct's fields and the two ABI version macros; declarations relocated and present in
+  both lists 2, the `AVAudioServiceType` and `AVAudioServiceTypeVar` typealiases; direct bindings
+  added 6, all `_kc_*` and none `_ffkmp_`; direct bindings removed 15, the same 15. Against the
+  committed baseline, `--check` exits 0 with every one of its fourteen counters at zero.
+  `:kitecodec-core:apiDump` under `--rerun-tasks`, run twice, leaves the committed dump byte
+  identical at sha256 `8227f21d907209176a1a2854f66db7f5e53af29705f7c9dbf1c9015abf78f148`, 1082 lines,
+  up from B1.1's 988. `:kitecodec-core:apiCheck` passes. `checkCinteropCoupling` reports
+  `cinterop_import_lines: 246 (baseline 246)`, `ffkmp_call_sites: 273 (baseline 273)`,
+  `direct_libav_call_sites: 14 (baseline 14)` and `ffmpeg_struct_types_named_in_kotlin: 11 (baseline
+  11)`, so three of the four numbers were lowered in the same change that caused the drop, which is
+  what B1-06 says a normal commit looks like. `:buildSrc:test` 16 tests, 0 failures
+  (`BuildFFmpegRefsTest` 9, `CheckCinteropCouplingTaskTest` 3, `CompileKiteCodecCTaskTest` 4).
+  `:kitecodec-gradle-plugin:test` 16 tests, 2 failed, and the two are exactly
+  `kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks` and
+  `missingLicenseChoiceFailsConfigurationWithInstructions`, the pair executor contract item 5 names
+  and says to ignore. `:kitecodec-core:macosArm64Test` 85 tests, 0 failures, 0 errors, up from 72.
+  `--configuration-cache :kitecodec-core:macosArm64Test` stores an entry and then reuses it.
+  `file -b` over each embedded archive reports one archive only, `macos_arm64`, "current ar archive",
+  with ten targets skipped for want of an FFmpeg tree, so "the C library builds for every target" is
+  a claim this gate still cannot make and does not make. `publishToMavenLocal
+  -Pkitecodec.hostTargetsOnly=true` BUILD SUCCESSFUL. KitePlayer, all five suites under
+  `--rerun-tasks`: core jvm 178, core native 179, output 20, ffmpeg 35, subtitles 8, total 420 tests,
+  0 failures and 0 errors. `compileKotlinJs`, `compileKotlinWasmJs` and `assembleAndroidMain` all
+  BUILD SUCCESSFUL. The sample e2e: `sync1080p30.mp4` decoded 300, submitted 300, dropped late 0,
+  renderer got 300, underruns 0, rebuffers 0, played 0:10.005 of 0:10.000, worst schedule 2 ms;
+  `truevfr720.mp4` 240 submitted, 0 dropped late, 0 underruns, played 0:08.010 of 0:08.000;
+  `hevc4k10.mp4` 180 submitted, 0 dropped late, video master clock, played 0:05.969 of 0:06.000;
+  `/nonexistent.mp4` prints `cannot play /nonexistent.mp4` and `No such file or directory (code=-2)`
+  and exits 1 with no stack trace. The widened em dash scan in its tightened `--exclude-dir` form
+  prints nothing over both repositories, and a separate scan of the fuzz corpus and of every file
+  type in the C tree, which the `--include` list cannot see, also prints nothing.
+
+  **B1.3's lesson re-proved, on the gate's own initiative, because a false measured claim survived a
+  whole planning round once.** B1.3 recorded that cinterop does NOT track the embedded archive by
+  itself and that `inputs.files` is what makes a C body edit reach the klib. That was measured with
+  one C source. It is now nine plus the identity unit, so the gate re-measured it rather than
+  assuming the fix generalises, and did so in a scratch clone of the working tree under the
+  scratchpad, never in the repository. In the clone, `ffkmp_stream_index`'s fallback was changed from
+  `-1` to `-4242`, a body only edit in one of the nine units. Both
+  `compileKiteCodecCForMacosArm64` and `cinteropFfmpegMacosArm64` re-executed, and extracting the
+  archive from inside the klib at
+  `build/classes/kotlin/macosArm64/main/cinterop/kitecodec-core-cinterop-ffmpeg/default/targets/macos_arm64/included/libkitecodec.a`
+  and disassembling `helpers_stream.o` gave `mov w0, #-0x1092 ; =-4242`, against `mov w0, #-0x1`
+  before the edit. The archive has 10 members. Reverting restored `#-0x1`, and a second unchanged
+  build reported both tasks UP-TO-DATE, so the tracking holds and nothing churns. So B1.3's
+  declaration still works with ten sources instead of one, and that is a measurement and not an
+  inference.
+
+  **Deviations, each with the evidence that forced it.**
+  1. Three sub-phases were built in parallel against one tree and gated once, instead of three
+     serial sub-phases each with its own gate. What that cost, stated plainly: no gate ever ran
+     against B1.4 alone or B1.5 alone, so "the existing suite passes unchanged after the split" and
+     "the corpus replays clean before the identity gate exists" are not observations this run can
+     make. What survives is stronger in one respect and weaker in another: the composed tree is
+     green on every instrument, and each sub-phase's own acceptance condition was checked
+     separately inside the composed differential, but the bisecting power of three gates is gone.
+     The three commits partition the final tree by which sub-phase owns each file, and seven files
+     were edited by two sub-phases (`native/kitecodec-c/README.md`, `scripts/build-host.sh`,
+     `scripts/run-c-tests.sh`, `scripts/klib-metadata-diff.sh`, `klib-metadata-baseline.txt`,
+     `kitecodec-core/build.gradle.kts` and `buildSrc/.../CompileKiteCodecCTask.kt`); those sit in
+     the later commit, because reconstructing an intermediate version of a file nobody ever wrote
+     would be inventing history rather than recording it. The consequence, stated rather than
+     hidden: only the third KiteCodec commit's tree is the tree this gate measured, so the first two
+     are not independently green and `git revert` of one alone is not a proved operation. What 15.4
+     does ask for is met: the deletion of the 15 helpers and of `archived/` is not in the same
+     commit as B1.3's lift, so the lift can still be reverted on its own. `ci.yml` is the one shared
+     file that was split, because both jobs are contiguous blocks and the split is verifiable in
+     both directions rather than guessed.
+  2. The metadata differential cannot show "exactly the 15 removed and zero added" for B1.4 and
+     "the kc_ declarations added and zero removed" for B1.6 as two separate readings, because both
+     changes are in one tree. The gate read the composition instead and required both halves of it:
+     15 declarations LOST by set difference and they are exactly the plan's 15, and 55 gained with
+     every one of them from `kitecodec_abi.h` and nothing else. That is the conjunction of the two
+     acceptance conditions and it is the strongest reading available from one tree.
+  3. The C suite could not "pass unchanged" and is 234 cases at B1.4, not the plan's 240, and 250
+     with B1.6's `test_identity` in the tree. Five of the 15 deleted helpers had C test sites, and
+     the build failed with six `call to undeclared function` errors before they were removed. Four
+     ownership cases and two rescale cases were deleted because their subject is gone; one case was
+     kept and moved rather than dropped, `fmt_alloc_output infers the container` becoming
+     `fmt_alloc_output2 infers the container` against the same inference path the deleted helper
+     wrapped, so no coverage was lost; every other use was incidental and now spells the libav macro
+     directly, `AVERROR(EINVAL)` at 9 sites and `AV_NOPTS_VALUE` at 1. Counts corrected in the file
+     headers and in the README.
+  4. The plan's literal cross-check command is unfit and a script replaced it, and the gate
+     reproduced the failure itself rather than restating the sub-phase's claim. Run literally under
+     `/usr/bin/grep` the pipeline prints 72 lines for the 15 names, of which 13 are binary
+     commonizer metadata under the gitignored `.kotlin/` cache. Run literally under the grep this
+     shell resolves, which is a shell function and not `/usr/bin/grep`, the paths come back without
+     the leading `./`, so the `grep -v '/\.claude/'` filter never matches and the scratch checkouts
+     under `.claude/worktrees` survive, including a line reading
+     `.claude/worktrees/silly-shaw-1ebb54/.../MediaSource.native.kt:12:import ffmpeg.ffkmp_codec_name`
+     that looks exactly like a live Kotlin reference and is an old commit. So the sub-phase's
+     observation reproduces and its stated mechanism is right for the grep the shell resolves and
+     wrong in general; the honest statement is that the pipeline's result depends on which grep
+     answers, which is by itself a reason not to gate on it. This is the same class of failure
+     section 9 already records against the piped form. `check-deleted-surface.sh` uses
+     `--exclude-dir` for `build`, `.claude`, `.git`, `vendor`, `.gradle`, `.kotlin` and `testmedia`,
+     and it splits the question into a mechanical half, a name followed by an open parenthesis, which
+     must be zero and measured zero, and a prose half, which must be confined to an allowlist and is:
+     59 prose lines in 7 files, all of which record the deletion.
+  5. `apiDump` needs `-Pkitecodec.hostTargetsOnly=true` and the plan spells it bare. Bare it fails,
+     and the gate measured the failure to be wider than the sub-phases reported: not three iOS
+     targets but eight, `compileKotlinIosArm64`, `IosSimulatorArm64`, `IosX64`, `AndroidNativeArm32`,
+     `AndroidNativeArm64`, `AndroidNativeX64`, `LinuxArm64` and `LinuxX64`, every one of them with
+     `Unresolved reference 'ffmpeg'` in `FFmpeg.native.kt` because those targets have no FFmpeg tree
+     and their cinterop is skipped. Pre-existing and unrelated to these sub-phases. The plan's
+     `git diff --exit-code kitecodec-core/api` form also cannot pass in an uncommitted tree, because
+     the dump legitimately changed from 988 lines to 1082; the equivalent and slightly stronger check
+     was substituted, running `apiDump` twice under `--rerun-tasks` and proving the committed file
+     byte identical to what the build produces both times, which is what that gate step actually
+     asserts.
+  6. The planted defect of B1.5 lives in a copy and was never in the repository, so "removed in the
+     same commit" is satisfied by never having been added. It became `--prove-power`, a repeatable
+     check with a guard that refuses unless the mutation site matches exactly once, verified refusing
+     at 0 matches and at 2 with `the mutation site matched N times, expected exactly 1`. This is the
+     same mutation against copies discipline B1.4 established and it is a stronger property than a
+     one time observation.
+  7. The 1048576 byte D27 vector is generated rather than committed, and only for `filter_audio`.
+     Committing it would violate 15.3's "small and textual" by 27 times the whole rest of the corpus,
+     and libFuzzer derives `-max_len` from the largest seed when the flag is absent so the budget
+     would go on padding; `run-fuzz.sh` passes `-max_len=8192` explicitly. Audio only, because the
+     same 1 MB description through the video builder does not finish under the gate's ASan options:
+     measured 0.25 s with `detect_leaks=0:abort_on_error=1` and not finished inside 120 s once
+     `strict_string_checks=1` is added, which is what `run-c-tests.sh` sets. That cost is ASan's
+     string interceptors validating a whole buffer per call against a parser making many calls, and
+     it is not a library defect. The property underneath it is worth recording and is in
+     `fuzz/README.md`: the two audio builders refuse a 1 MB description instantly because they have a
+     composition buffer, while `ffkmp_graph_build_video` and `ffkmp_graph_build_video_multi` apply no
+     length policy at all and hand the whole string to the parser. Committed video seeds therefore
+     stop at 4096 bytes. A length or time policy for caller supplied filter text is B8's, together
+     with the resource classification container fuzzing needs anyway.
+  8. The CI replay step builds the helper archive inline instead of calling `build-host.sh asan`,
+     because `build-host.sh` is macOS only by construction: it also builds the allocation interposer
+     with `-dynamiclib`, `-install_name` and the Mach-O `__DATA,__interpose` section, none of which
+     exist on Linux. That is a source level proof at evidence level 4 and not a Linux measurement,
+     since no Linux host is available. The interposer exists because LSan is unsupported on macOS
+     arm64, which is exactly the instrument the Linux runner has, so Linux never needs it. Making the
+     interposer conditional would remove six lines from the yml and is left as a requested change.
+  9. `pkg-config --modversion` cannot run at configuration time although the plan's step 6 names it.
+     Measured: the build fails with `Starting an external process 'pkg-config --modversion libavutil'
+     during configuration time is unsupported` and `Configuration cache entry discarded with 12
+     problems`, once per libav library. `afterEvaluate` is still configuration time and
+     `ProcessBuilder` makes no difference. Replaced with a `providers.fileContents` read of
+     `<prefix>/include/libav*/version*.h`, which is a tracked configuration input and is closer to
+     the question, because those are the headers a consumer's cinterop would compile against.
+  10. The properties resource beside the klib is not needed for the refs and is not there. For the
+      ref check the plugin's own `DEFAULT_FFMPEG_VERSION` is authoritative and B1-04's new assertion
+      proves at configuration time that it equals buildSrc's constant, `publish.yml` and
+      `vendor/ffmpeg/RELEASE`; for the majors the table lives in
+      `FFmpegExpectations.EXPECTED_MAJORS` and the root build checks it against the vendored
+      `version.h` and `version_major.h` when the checkout is present. The register row for a
+      published resource stays open for B7, when a real consumer resolves the plugin from a
+      repository rather than from this checkout.
+  11. Two bugs in that majors check passed silently and were caught only by negative tests, recorded
+      so they are not repeated. First the `lib` prefix was stripped, so every read returned null,
+      every entry was skipped, and the check reported success against a table deliberately
+      falsified. Then only `version.h` was read, and FFmpeg keeps the MAJOR of every library except
+      libavutil in `version_major.h`, so the regex found nothing and it passed again. Fixed by
+      reading both files; the check now fails correctly per library, for example
+      `libavcodec: vendor/ffmpeg says 62, FFmpegExpectations says 61`.
+  12. The bypass variable is `KITECODEC_FFMPEG_ABI_BYPASS` and only the exact value `1` enables it.
+      The plan says "an environment variable" without naming one, and exact value matching rather
+      than truthiness means it cannot be switched on by accident.
+  13. `cinterop_import_lines` counts FFmpeg coupling and now excludes the opaque `kc_` surface, and
+      the baseline was lowered 253 to 246. Measured: the gate removed 7 FFmpeg imports and added 26
+      `kc_` and `KC_` ones, so counting them together reads as 253 rising to 272 and the ratchet
+      would have failed a change whose net effect is less coupling. `kitecodec_abi.h` includes no
+      FFmpeg header and names no FFmpeg type, so importing it is not coupling to FFmpeg. The opaque
+      surface is deliberately not ratcheted in either direction because it is meant to grow;
+      `symbol-audit.sh` holds it to a decided set.
+  14. `direct_libav_call_sites` counts comments too, which held the number at 17 instead of 14 after
+      the real calls were gone. Three KDoc mentions written `av_version_info()`, `avutil_license()`
+      and `avcodec_configuration()` matched the ratchet's "name followed by an opening bracket" rule
+      in non import lines. Rewritten without brackets, the count fell to 14, which is 21 minus the
+      seven call sites removed, and the reason is recorded in `coupling-baseline.txt` and above
+      `FFmpeg.native.kt`'s object body so nobody puts the brackets back.
+  15. The plan's own metadata instrument reported a removal that was a relocation. It said 2
+      declarations removed, and they were `AVAudioServiceType` and `AVAudioServiceTypeVar`, pushed
+      from line 7595 to 7714 by the inserted `kc_` typealiases and present in the added list as well.
+      The script now reports LOST, GAINED and RELOCATED as set differences beside the diff derived
+      counts, and LOST is what the acceptance condition reads. The gate confirmed by set difference
+      that not one line of the B1.4 baseline is absent from the B1.6 one.
+  16. `KC_TEXT_SENTENCE` is 1024 and not 512, because the provisioning sentence measured 483 bytes
+      against a 512 byte field, so a provisioning directory thirty characters longer than this
+      machine's would have truncated the actionable half away. The report grew 512 bytes, the klib
+      metadata was re-baselined, and `test_identity` now asserts
+      `strlen(provisioning) < capacity - 1` so it cannot go back to being tight.
+  17. Micro is compared only within one minor. FFmpeg restarts micro at each minor, so a runtime one
+      minor ahead with a lower micro is newer and not older; implemented as
+      `runtime_minor == header_minor && runtime_micro < header_micro`.
+  18. One pre-existing plugin functional test had its mechanism destroyed by B1-03 and its sentinel
+      was changed. `kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks` proved laziness with
+      `version = "n9.9-test"`, which B1-03 now refuses, so it failed for the new checker's reason
+      instead of its own. The sentinel moved to `license = FFmpegLicense.GPL`, which is a stronger
+      laziness proof because `license` has no convention and an eager reader would see an unset
+      property. Both remaining plugin failures are the same pre-existing cause, now diagnosed: the
+      tests assert British spellings that the plugin's messages spell American, `flavour` against
+      `flavor` and `licence` against `license`. Contract item 5 says to fix nothing about them, so
+      nothing was fixed.
+  19. Three files were changed by the gate itself during reconciliation, and they are named here so
+      the commits are not a surprise. `native/kitecodec-c/README.md` still said "Not here, by
+      sub-phase: the fuzz targets and their corpus (B1.5), and the FFmpeg header versus runtime
+      identity gate (B1.6)", which both landed, so the sentence was a false claim of the kind
+      contract item 10 forbids; it was narrowed to what is genuinely absent, which is B1.7's and
+      B1.8's `kiteplayer-rt`, and the Layout table gained rows for `fuzz/`, `replay-corpus.sh` and
+      `run-fuzz.sh`. `scripts/check-deleted-surface.sh` carried a real `shellcheck` error, SC1087,
+      because `$name[[:space:]]` reads as an array subscript; braces were added and the script's
+      output was verified identical before and after. Nothing else was edited by the gate.
+  20. One flaky KitePlayer test was flagged by B1.4 and did not reproduce here.
+      `RealMediaSeekTest.kt:167` failed once for that sub-phase with `Expected <Playing>, actual
+      <Buffering>`, because the test awaits position advancing past the seek landing and then samples
+      the status flag immediately. In the gate's `--rerun-tasks` run `:kiteplayer-ffmpeg:macosArm64Test`
+      passed 35 of 35. Not a regression; tightening the test is a separate task.
+  21. KitePlayer reports 420 tests and not 414. The rise is exactly B1.6's six new tests in
+      `kiteplayer-ffmpeg`, 29 to 35, with core jvm 178, core native 179, output 20 and subtitles 8
+      all unchanged. No test was lost.
+  22. B1.5's suggested commit first line differs from the plan's by one apostrophe. The plan's 15.2
+      writes `Fuzz every C entry point that parses a caller's string` and the commit uses the plan's
+      text, because 15.2 is the decision complete source for commit lines.
+  23. This entry broke `check-deleted-surface.sh`, and the break is worth recording because it is the
+      check earning its place. Writing the 15 deleted helper names into this log made check 3 fail
+      with `not on the allowlist: KPKMP.md`, and its message reads "A prose mention outside the
+      record of the deletion is how a real reference arrives disguised. Either remove it or add the
+      file with a reason." That is exactly the right refusal: the script cannot tell a log entry from
+      a resurrected call site, so it demands a human reason instead of guessing. `KPKMP.md` was added
+      to the allowlist with that reason written beside it, because this log IS the primary record of
+      the deletion and naming all 15 here is what lets a later reader check the list without
+      re-deriving it. Checks 1 and 2, the mechanical halves, were unaffected and stayed at zero use
+      sites and zero mentions in `.kt`, `.kts` and `.def`. The script then exits 0. The fix rides in
+      the third KiteCodec commit for the same reason the other shared files do.
+
+  **One new finding for the register, not fixed here and here is why.** `ffkmp_fmt_set_opt` does not
+  guard a NULL key although both its siblings do: `ffkmp_codecctx_set_opt` at
+  `src/helpers_codec.c:91` and `ffkmp_fmt_set_metadata` at `src/helpers_format.c:93` both read
+  `if (!c || !key) return AVERROR(EINVAL);`, while `ffkmp_fmt_set_opt` at `src/helpers_format.c:57`
+  reads `if (!c)` only. So a NULL key reaches `av_opt_set`, which walks the table with
+  `strcmp(o->name, name)` and never tests `name`. Measured against FFmpeg 8.0, libavutil 60.8.100,
+  under `-fsanitize=address,undefined`: `AddressSanitizer: SEGV on unknown address 0x000000000000`,
+  a read access, in `strcmp` under `av_opt_find2`. It is not reachable from KiteCodec's Kotlin today,
+  because `MediaSink.native.kt:326` passes the keys of a `Map<String, String>` which cannot hold
+  null, but it is reachable by any other C consumer of the exported symbol, which is what `KC_API`
+  now permits. It was deliberately not fixed. The nine helper units are the def body verbatim and
+  `verify-lift.sh` proves that byte for byte against `5364329`; adding the guard would break that
+  proof, so the fix belongs with the generator and its exclusion machinery, which is B2's error
+  record work. It was also deliberately not asserted in `fuzz_format_option.c`, because a target
+  that crashes on every input is a monument to a known defect instead of a search for unknown ones.
+  The one line guard and the one line assertion it unlocks are written out in that target's file
+  header and in `fuzz/README.md`.
+
 ---
 
 ## 15. Horizon B execution: B1

@@ -81,12 +81,18 @@ public sealed class PlaybackError {
     }
 
     /**
-     * The player was asked to exist without something it cannot invent.
+     * The player was asked to exist without something it cannot invent, or against a runtime it cannot
+     * use.
      *
-     * The one case today is a missing backend. Kotlin/Native has no classpath service lookup, so there is
-     * no such thing as finding the platform's decoder or its audio device at runtime: whoever creates the
-     * player passes both in. Saying so as a typed error is the alternative to reflection, and it names
-     * what to pass rather than failing later with a null.
+     * Two cases today. A missing backend: Kotlin/Native has no classpath service lookup, so there is no
+     * such thing as finding the platform's decoder or its audio device at runtime, and whoever creates
+     * the player passes both in. Saying so as a typed error is the alternative to reflection, and it
+     * names what to pass rather than failing later with a null.
+     *
+     * The second is an FFmpeg runtime that does not match the headers the native layer was compiled
+     * against. Nothing about that failure depends on the media: every file fails, the next file will fail
+     * too, and retrying is pointless, which is what separates it from [SourceUnavailable]. The detail
+     * carries both version columns for all six libraries and one actionable sentence.
      */
     public data class ConfigurationInvalid(val detail: String) : PlaybackError() {
         override val message: String get() = "the player cannot be built as configured: $detail"

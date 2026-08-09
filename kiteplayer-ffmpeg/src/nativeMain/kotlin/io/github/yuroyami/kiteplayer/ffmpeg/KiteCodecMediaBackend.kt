@@ -34,7 +34,12 @@ public class KiteCodecMediaBackend(
         require(media.io == null) {
             "Custom I/O is not wired yet. KiteCodec has no AVIOContext path."
         }
-        val source = KiteCodecSource(MediaSource.open(media.uri))
+        // MediaSource.open is where KiteCodec's FFmpeg identity gate runs, before its first allocation.
+        // A rejection there is not about this file and never will be: it means the linked FFmpeg does not
+        // match the headers KiteCodec was compiled against, so every open fails and retrying is pointless.
+        // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
+        // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
+        val source = mappingFFmpegRuntimeRejection { KiteCodecSource(MediaSource.open(media.uri)) }
         source.onWarning = onWarning
         return KiteCodecBackendSession(source)
     }

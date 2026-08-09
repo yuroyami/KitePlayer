@@ -857,8 +857,13 @@ $BIN /nonexistent.mp4                 # expect: one sentence, no stack trace
 # text backslash-u2014 (expanded by the shell), so no literal em dash exists in the repos.
 # .claude/worktrees holds gitignored scratch checkouts of the same repository at older commits,
 # so scanning them reports the same text many times over and buries the real hits.
-grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" . ../KiteCodec \
-  | grep -v vendor/ | grep -v build/ | grep -v '/\.claude/'
+# The exclusions are --exclude-dir and not `| grep -v vendor/ | grep -v build/`, tightened at
+# B1.3: the piped form matches the OUTPUT LINE, so it silently drops a real hit whose own text
+# happens to mention one of those words. Measured at B1.3: three em dashes in
+# .github/scripts/package-ffmpeg.sh survived every scan since B1.1 because one line says
+# "vendor/ffmpeg", one says "ffbuild/config.log" and one says "build/install".
+grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" \
+  --exclude-dir=vendor --exclude-dir=build --exclude-dir=.claude . ../KiteCodec
 ```
 
 From A2 add the transport-stream offset clip, from A4 add `surround51.mp4` and the P010
@@ -2826,6 +2831,227 @@ is no other.
   plugin functional tests fail on a clean checkout, which executor contract item 5 says to
   ignore.
 
+- 2026-08-09, B1.3, the lift. The one irreversible sub-phase. The 949 line body left
+  `ffmpeg.def` (961 lines to 18) and the compiled archive took its place: the def now appends
+  `kitecodec_helpers.h` LAST to both `headers` (37th entry) and `headerFilter` (8th entry), keeps
+  all four original `linkerOpts.*` lines and the MediaCodec comment, adds `linkerOpts.ios` with
+  the same six libav flags, adds `staticLibraries = libkitecodec.a`, and deliberately carries no
+  `libraryPaths`. `CompileKiteCodecCTask` in buildSrc compiles every `.c` under
+  `native/kitecodec-c/src` with konan's own clang
+  (`llvm-21-aarch64-macos-essentials-97`, measured `clang version 21.1.6`) under
+  `-c -O2 -std=c11 -fvisibility=hidden -fPIC -Wall -Wextra -Werror -Werror=vla`, archives with
+  `llvm-ar crs` from the same package, writes into a directory keyed by `konanTarget.name`,
+  refuses to run when handed a directory not named after its own target, and checks every
+  object's `file -b` string against a per-target expectation before archiving. The wiring sits
+  inside `knTargetMap.forEach` immediately after the `} ?: return@forEach` that ends FFmpeg path
+  resolution, so a target with no FFmpeg tree is skipped for the C compile exactly as for the
+  cinterop; the existing `create("ffmpeg")` block was modified rather than duplicated, gaining
+  the C include directory and a second `-libraryPath`. `kitecodec-gradle-plugin` was not touched.
+  `native/kitecodec-c/scripts/klib-metadata-diff.sh` plus a committed
+  `klib-metadata-baseline.txt` are the new compatibility instrument. ZERO Kotlin source edits:
+  proved by `git diff`, where the only file changed under any module `src/` is `ffmpeg.def` and
+  the only `.kt` files touched anywhere are the four under `buildSrc/`, which this sub-phase's
+  own file list names. Addresses B1-01 (with B1.2), B1-11 and B1-12. B1-03 and B1-04 are B1.6's,
+  so nothing about `ffmpeg.version` validation or the three-way `n8.0` assertion landed here.
+
+  **The compatibility differential, judged in substance.** Pre-lift dump 18684 filtered lines,
+  sha256 `0995efd057266fdbc133556a76c0d461028b89dbbbe04a14068a6109c1c9245c`, which is exactly the
+  18684 section 15.0 records for the inline variant. Post-lift 18844 lines, sha256
+  `a142ee53312e2700ec3fef8d431940daa9505f50646bf30afa2f8d114f748c27`. Against the pre-lift dump:
+  0 declarations added, 4 declarations removed, 172 direct bindings added, 0 direct bindings
+  removed, 277 changed lines added and 117 removed, of which 75 each way are the dump's
+  structural boilerplate realigned by `diff` and the rest are accounted for line by line. All 172
+  added lines are `@kotlinx/cinterop/internal/CCall.Direct(name = "_ffkmp_...")`, 172 of 172 with
+  the `_ffkmp_` prefix and no exception. Verified independently of the report, by set comparison
+  rather than by reading: the 172 direct-binding names equal EXACTLY the 172 `ffkmp_` functions
+  declared in `kitecodec_helpers.h`, with nothing in one set and not the other, while the `.c`
+  holds 176 definitions. `--check` against the committed baseline exits 0 with every counter at
+  zero, and exits 1 against the pre-lift dump. `verify-lift.sh 5364329` prints MATCH for both
+  files, header `ee4e8ce2...`, source `08413845...`, so the extraction is still byte identical to
+  the def body it came from.
+
+  **Which targets built an archive.** ONE built: `macos_arm64`, 35632 bytes, 1 object. TEN
+  skipped for want of an FFmpeg tree, each with its own warning naming the missing tree:
+  `macos-x64`, `ios-arm64`, `ios-simulator-arm64`, `ios-x64`, `linux-x64`, `linux-arm64`,
+  `android-arm64`, `android-arm32`, `android-x64`, `mingw-x64`. Only
+  `compileKiteCodecCForMacosArm64` is registered at all. "The C library builds for every target"
+  is a claim this gate cannot make and does not make. The eleven triples and sysroots in
+  `specFor` were each confirmed to compile a trivial translation unit, which is level 7 evidence
+  and says nothing about behaviour; ten of the eleven produced no archive here.
+
+  **Archive architecture.** `file -b` on the archive reports `current ar archive` and no
+  architecture; the architecture appears on the object, `Mach-O 64-bit object arm64`, and
+  `lipo -info` reports `architecture: arm64` for both. The guarantee lives on the producer side:
+  the task checks every object before archiving and refuses otherwise, which is B1-11's fix, and
+  a buildSrc case drives that refusal with a real x86_64 object. The archive travels inside the
+  klib at `default/targets/macos_arm64/included/libkitecodec.a`, byte identical to the built one
+  (`6ad670ad...`), and byte identical again inside the artifact `publishToMavenLocal` produced.
+  `-fvisibility=hidden` behaves: 172 `_ffkmp_` symbols are `private external`, 0 are plain
+  `external`, and the two internal statics that survived `-O2` plus the two thread-storage
+  entries of `ffkmp_strerror` are `non-external`. Neither sample binary exports one `_ffkmp_`
+  symbol globally.
+
+  **Numbers the gate produced, every one rerun for real.** KiteCodec: `:buildSrc:test`
+  `--rerun-tasks` 5 tests 0 failures 0 errors (2 coupling, 3 C compile task);
+  `:kitecodec-core:apiCheck -Pkitecodec.hostTargetsOnly=true --rerun-tasks` BUILD SUCCESSFUL with
+  `klibApiCheck` executed; `checkCinteropCoupling --rerun-tasks` 253/253, 273/273, 21/21, 11/11;
+  `:kitecodec-core:macosArm64Test --rerun-tasks` 72 tests, 0 skipped, 0 failures, 0 errors;
+  `publishToMavenLocal -Pkitecodec.hostTargetsOnly=true` successful. Configuration cache, two
+  consecutive `--configuration-cache :kitecodec-core:macosArm64Test` runs from a deleted cache
+  directory: run 1 "Calculating task graph as no cached configuration is available" then
+  "Configuration cache entry stored", run 2 "Reusing configuration cache" then "Configuration
+  cache entry reused", and in run 2 both `compileKiteCodecCForMacosArm64` and
+  `cinteropFfmpegMacosArm64` report UP-TO-DATE, so the new input declaration adds no churn. The C
+  suite, rerun in all three variants because the source now sits under the Gradle build: `plain`,
+  `asan` and `tsan` each built clean and ran 240 cases with 0 failures and 0 missing suites
+  (`test_ownership` 43, `test_buffers` 32, `test_rescale` 116, `test_strerror_thread` 24,
+  `test_convert` 25), 720 case runs in total, and 0 sanitizer diagnostic lines in any variant. The
+  KiteCodec sample linked and `scripts/e2e.sh` printed
+  `e2e OK (A/V=3.041814s, remux=3.067000s, trim=1.021678s, audio-only=2.023220s)`, including the
+  VideoToolbox path. KitePlayer, which is the consumer that must notice nothing: 414 test
+  executions, 0 skipped, 0 failures, 0 errors (178 core jvm, 179 core native, 20 output, 29
+  ffmpeg, 8 subtitles), all 40 tasks executed under `--rerun-tasks`; js, wasmJs and androidMain
+  compiles green; the sample linked and played `sync1080p30.mp4` 300 submitted 0 dropped 0
+  repeated 0 underruns, `truevfr720.mp4` 240 and 0, `hevc4k10.mp4` 180 submitted on the video
+  master, `tsoffset1400.ts` 300 and 0 with 0 repeated, `surround51.mp4` audio only with 0
+  underruns, `rotated90ccw.mp4` 25 and 0, and `/nonexistent.mp4` printed two short lines with no
+  stack trace and exited 1. The em dash scan printed nothing in both its section 9 and its
+  widened B1 form, in both repositories, after the fix recorded as deviation 2 below. KitePlayer
+  carries only this log entry and the two section 15 corrections; its code is untouched.
+
+  **What the independent verifier attacked, and what it found.** It rebuilt the pre-lift and
+  post-lift klibs in its own clones rather than trusting any number, and reproduced 18684 and
+  18844 with the same two digests. It then re-derived the differential as an order-insensitive
+  MULTISET instead of a positional diff, which removes the realignment noise entirely: 172 line
+  instances added, all of them `CCall.Direct` annotations, and 12 removed, being 4 `fun` lines,
+  their 4 `@ExperimentalForeignApi` lines and 4 blanks. It confirmed the def deletion loses
+  nothing (176 `static inline` definitions in the old body, 176 in the `.c`, sets equal), that the
+  archive is byte identical inside both the built and the published klib, that hidden visibility
+  works, that the coupling ratchet still measures 11 rather than 0, and that the revert target at
+  `5364329` is measurably green (72 tests). It also killed one of the plan's own explanations:
+  moving the helper header FIRST in both lists is a PURE PERMUTATION of the identical metadata,
+  `sorted(post) == sorted(trap)` is True, 619 positions churn and NOT ONE declaration enters or
+  leaves the surface, so header-last is a baseline-stability and readability rule, not the
+  surface-safety rule section 15.2 claims, and the 1725 figure could not be reproduced (1368 or
+  1984 changed lines depending on the baseline). The tree carries header-last as mandated, so
+  nothing there blocked the commit. It returned NOT SAFE on exactly one finding, which is
+  deviation 1 below, and it declared as unverified what it could not measure: ten of the eleven
+  targets, `linkerOpts.ios` reaching a real link, the asan and tsan variants and the e2e run, all
+  of which this gate then ran or left at their B1.2 strength.
+
+  Deviations, each with the evidence that forced it.
+  1. **The archive was not a tracked input of the cinterop task, and section 15.0 said it was.**
+     The verifier's finding, reproduced in this repository before anything was redone: with
+     everything up to date, editing only `native/kitecodec-c/src/kitecodec_helpers.c` re-executed
+     `compileKiteCodecCForMacosArm64` and wrote a new archive (`da6406da...`) while
+     `cinteropFfmpegMacosArm64` reported UP-TO-DATE and the klib kept the stale `6ad670ad...`.
+     Gradle's own reason, under `--info`: "CInterop task uses custom Up-To-Date check for content
+     of headers instead of Gradle mechanisms". A clean build and CI were always correct, since a
+     fresh checkout has no task history and the cinterop task is not build-cacheable; the
+     exposure was local incremental development, and every sub-phase from B1.4 onward edits C
+     bodies, so it was a false-green instrument aimed straight at the rest of B1. Fixed inside the
+     existing `tasks.matching { }.configureEach { }` block with
+     `inputs.files(compileC.map { it.outputDir.file(ARCHIVE_NAME) })`, three lines, in the one
+     file this sub-phase already rewires. Proved after the fix, with no build-script change in
+     between the two runs: a second C-body-only edit re-executed cinterop, the embedded archive
+     became `da6406da...`, and the object inside the klib disassembled to
+     `mov w8, #0x4d ; =77`. Restoring the source returned the digest to `6ad670ad...` and
+     `verify-lift.sh` still prints MATCH. The build comment that asserted the opposite was
+     rewritten, and section 15.0's evidence bullet was corrected in place rather than left to
+     mislead a later reader, because a false level-2 claim inside the justification section is
+     the exact failure mode this document exists to prevent. No `upToDateWhen { false }` was
+     added and none is needed.
+  2. **Three em dashes survived every scan since B1.1, because the scan hides them.** Contract
+     item 4 bans an em dash in every file and B1-07 put `.sh` in scope, yet
+     `.github/scripts/package-ffmpeg.sh` still carried three, at lines 15, 75 and 178. The reason
+     is the instrument, not the file: the scan filtered its OUTPUT LINES with
+     `| grep -v vendor/ | grep -v build/`, and those three lines happen to say "vendor/ffmpeg",
+     "ffbuild/config.log" and "build/install", so one was eaten by the vendor filter and two by
+     the build filter. Measured both ways: the piped form prints nothing while a path-based form
+     prints exactly those three. All three were rewritten with plain punctuation, `bash -n` still
+     parses the file, and the scan in section 9 and in the widened B1 form now excludes by
+     `--exclude-dir=vendor --exclude-dir=build --exclude-dir=.claude`, which is what the piped
+     greps were meant to do. Both repositories now print nothing under both forms. This tightens
+     a gate rather than weakening one, which contract item 13 allows; the file is otherwise
+     untouched and its three edits change one comment and two error strings that nothing asserts
+     on.
+  3. **172 added direct bindings and 4 removed declarations, not "exactly 176 added declarations,
+     zero removed".** The pre-lift def bound 176 `ffkmp_` functions because cinterop binds
+     `static inline` text, including the four internal trailing-underscore helpers. B1.2's
+     committed extractor keeps those four `static`, drops `inline`, and deliberately does not
+     declare them in the header, which is that sub-phase's own step 1 and is already gated by
+     `verify-lift.sh` byte equality. A function cinterop cannot see cannot be bound, so after the
+     lift the surface can only hold 172 and the four must leave. The B1.3 gate line as written is
+     therefore unsatisfiable, and it is the plan that is wrong, not the build: 172 added plus the
+     four named removals is the correct outcome. Benign, measured rather than argued: the four
+     are `ffkmp_graph_finish_`, `ffkmp_graph_finish_multi_`, `ffkmp_codec_pix_fmts_` and
+     `ffkmp_ch_layout_mask_`; a whole-word search across both repositories finds zero code
+     references to any of them outside the C translation unit that defines them, the extractor's
+     own list and prose; nothing has ever been published from KiteCodec and there are no tags, so
+     no consumer exists; and `apiCheck` passes unchanged. Net line delta is +160, being 172 added
+     minus 12 removed, where the plan's prototype measured +176 because its header carried all
+     176.
+  4. **The coupling ratchet had to be repaired, or the lift would have blinded it.**
+     `CheckCinteropCouplingTask` derived count four's candidate FFmpeg struct type names from
+     `ffmpeg.def`. Deleting the body took that set from 18 names to 0, so count four measured 11
+     before the lift and 0 after: a ratchet that passes while measuring nothing, plus a failing
+     `theCommittedBaselineMatchesTheMeasuredCoupling`. Lowering the baseline to 0 would have
+     destroyed the instrument B1-06 and B1-25 depend on for two horizons. The derivation now
+     reads the def PLUS the extracted C tree, which is the same text proved byte for byte by
+     `verify-lift.sh`. Measured: the C tree alone yields the identical 18 names and the identical
+     11 Kotlin hits, the union yields 18 and 11, and the post-lift def alone yields 0 and 0, so
+     the committed baseline needed no number change and only its comment for count four was
+     rewritten. Cost: a new `@InputFiles cDeclarationFiles`, a `measure(sourceDir, files)`
+     signature, one `fileTree` in the root `build.gradle.kts`, and the existing test updated, so
+     four files beyond B1.3's list.
+  5. **`klib-metadata-baseline.txt` is committed as the POST-lift dump.** Step 6 says to commit
+     the baseline produced at B1.1's commit and then the one produced here, which cannot both
+     hold in one commit. The post-lift dump wins, because B1.4's own gate criterion (exactly the
+     15 named declarations removed, zero added) is only satisfiable against a post-lift baseline,
+     and because a committed baseline that permanently disagrees with the build is a red ratchet
+     nobody would trust. The pre-lift capture is preserved three ways: as a file in scratch space,
+     as its line count, digest and the four removed names written into the script's own header
+     comment, and as a documented reproduction path (restore the def from the lift's parent,
+     rebuild, run the script, read the mirror image). `--check` was added so CI can assert the
+     committed baseline still matches, and was confirmed to exit 1 against the pre-lift dump.
+  6. **`file` on an ar archive does not report an architecture.** The gate step expects every
+     archive to report the object format of its own target directory; on macOS `file -b` on an
+     archive returns `current ar archive` and nothing more. The architecture is read from the
+     object, and `lipo -info` reports it for both. The gate and CI print archives and objects
+     both, and the assertion that actually protects a consumer is the producer-side check inside
+     the task.
+  7. **`apiCheck` must be scoped with `-Pkitecodec.hostTargetsOnly=true`.** Unscoped it fails at
+     `compileKotlinLinuxArm64` with `Unresolved reference 'ffmpeg'`, because that target's
+     cinterop is skipped for want of an FFmpeg tree. Pre-existing, not caused by the lift: the
+     verifier reproduced the identical failure at `5364329` with the whole change stashed, and
+     `ci.yml` lines 59 to 63, written at B1.1, already document exactly this.
+  8. **Three additions the plan does not name, all small.** A third buildSrc case covering the
+     output-directory-name guard, since that guard is the other half of B1-11. One
+     `import java.io.File` in `kitecodec-core/build.gradle.kts`, because inside a Gradle Kotlin
+     script `java` resolves to the java extension, and `project.file(...)` inside a
+     task-configuration provider discards the configuration cache entry with "cannot serialize
+     Gradle script object references". A README update, since leaving it listing three scripts
+     when there are four would be stale documentation under contract item 10. `ci.yml`'s steps
+     were chosen rather than specified: the macOS job now builds the cinterop and runs
+     `klib-metadata-diff.sh --check`, lists every produced archive and object, and runs
+     `:buildSrc:test`, which nothing ran in CI before because buildSrc tests are outside the main
+     task graph.
+  9. **`CompileKiteCodecCTask.resolveLlvmBinDir` falls back to the newest installed LLVM package
+     when the named one is absent**, which the plan does not authorise. It logs the substitution,
+     and on this host the named package is present so nothing was substituted. Recorded because
+     the verifier flagged it and because a CI host with a different Kotlin/Native distribution is
+     the case it exists for.
+
+  Two implementation notes worth carrying to B1.4. The cinterop task is registered by the Kotlin
+  plugin AFTER the `knTargetMap.forEach` block runs, so `tasks.named("cinteropFfmpeg...")` fails
+  and the dependency plus the archive input are wired through
+  `tasks.matching { it.name == ... }.configureEach { }`, a filtered live collection that covers
+  tasks added later. And the one task that executes on every run is
+  `kmpPartiallyResolvedDependenciesChecker`, which has no outputs and is the Kotlin plugin's, not
+  this sub-phase's. Pre-existing and untouched, as at every gate since A3: KiteCodec's two Gradle
+  plugin functional tests fail on a clean checkout, which executor contract item 5 says to
+  ignore.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -2892,20 +3118,34 @@ worse than either endpoint in between. Rejected: see B1.7 and B1.8.
 **What this section adds that neither proposal had.** A committed ABI baseline, which does not
 exist today. A coupling ratchet, so the thing being deferred can only shrink. A host C build
 that depends on neither cmake nor make. A leak instrument that works on this machine. And the
-measured fact that cinterop tracks the embedded archive as a real input, which removes the
-largest unmeasured build risk in both proposals.
+stale-embedded-archive question asked out loud, which is the largest unmeasured build risk in
+both proposals; B1.3 measured it, found that cinterop does NOT track the archive on its own, and
+declared it an input. See the corrected first bullet below.
 
 **Evidence gained during this judgement (level 2 unless stated).**
 
-- The cinterop task tracks the static archive. In the ambitious proposal's own prototype at
-  `scratchpad/proof-abi`, mutating only `kitecodec.c` (`kc_abi_minor` returning 1, then 77,
-  then 88), leaving the header and def untouched, made `cinteropKitecodecMacosArm64`
-  re-execute and the linked binary print `abi=1.77` and then `abi=1.88`. With nothing changed,
-  both the C compile and the cinterop task reported UP-TO-DATE. Repeated with `libraryPaths`
-  removed from the def and supplied instead as `extraOpts("-libraryPath", <absolute>)`, the
-  form both proposals recommend: same result. So there is no stale-embedded-archive hazard and
-  no `outputs.upToDateWhen { false }` is needed. The prototype was restored to its original
-  bytes.
+- CORRECTED AT B1.3, and the correction is the load-bearing part. This bullet used to read "the
+  cinterop task tracks the static archive", on the strength of the ambitious proposal's prototype
+  at `scratchpad/proof-abi`, where mutating only `kitecodec.c` (`kc_abi_minor` returning 1, then
+  77, then 88) made `cinteropKitecodecMacosArm64` re-execute and the linked binary print
+  `abi=1.77` and then `abi=1.88`. That prototype result is real but it does not generalise, and
+  B1.3 measured the opposite in the actual wiring: with the archive named only by
+  `staticLibraries` in the def and its directory supplied as `extraOpts("-libraryPath", ...)`,
+  editing only `native/kitecodec-c/src/kitecodec_helpers.c` re-executes the C compile and writes
+  a new archive, and `cinteropFfmpegMacosArm64` then reports UP-TO-DATE and leaves the STALE
+  archive inside the klib, with the configuration cache on or off. Gradle names the mechanism
+  under `--info`: "CInterop task uses custom Up-To-Date check for content of headers instead of
+  Gradle mechanisms", and that check covers the def and the headers, not a library the def merely
+  names. A `.h` edit or a def edit does re-execute it, and a MISSING archive fails loudly with a
+  non-zero exit, so the hazard is exactly one shape: a C body edit during local incremental
+  development, which is what every sub-phase from B1.4 onward does. The fix is three lines in
+  `kitecodec-core/build.gradle.kts`, `inputs.files(<the archive>)` on the cinterop task, because
+  an input change makes a task out of date whatever its own predicate says; no
+  `outputs.upToDateWhen { false }` is needed and none was added. Proved at level 2 both ways:
+  before the fix the embedded archive stayed at digest `6ad670ad...` while the built one moved to
+  `da6406da...`; after it, the same C-body-only edit made cinterop re-execute and the object
+  inside the klib disassembled to `mov w8, #0x4d ; =77`. A no-op rebuild still reports both tasks
+  UP-TO-DATE, so nothing churns.
 - KiteCodec has no ABI baseline. `KiteCodec/kitecodec-core/api` does not exist and no `.api`
   file exists anywhere in KiteCodec outside `build/`, although `build.gradle.kts` line 61
   configures `apiValidation` with `klib { enabled = true }`, and no CI job runs `apiCheck`.
@@ -3290,11 +3530,13 @@ cd ../KiteCodec && ./gradlew checkCinteropCoupling
 
 # the em dash scan of section 9, widened for the file types B1 introduces. The pattern stays the
 # escape text backslash-u2014 expanded by the shell, exactly as in section 9, so that writing this
-# command down does not itself put a literal em dash in the repository.
+# command down does not itself put a literal em dash in the repository. The exclusions are
+# --exclude-dir, tightened at B1.3 for the reason section 9 now records: the piped `grep -v` form
+# filtered the output line, so it hid three real hits whose own text mentioned vendor/ or build/.
 grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" \
   --include="*.c" --include="*.h" --include="*.sh" --include="*.yml" --include="*.py" \
-  --include="*.txt" . ../KiteCodec \
-  | grep -v vendor/ | grep -v build/ | grep -v '/\.claude/'
+  --include="*.txt" --exclude-dir=vendor --exclude-dir=build --exclude-dir=.claude \
+  . ../KiteCodec
 ```
 
 Paths below are relative to the repository they belong to. `../KiteCodec` means the KiteCodec

@@ -208,6 +208,37 @@ static int wait_for_anchor_reads(run_state *state, int64_t wanted, long max_mill
     return atomic_load_explicit(&state->anchor_reads, memory_order_relaxed) >= wanted;
 }
 
+/* ---- Interlude item I-06: the flush-versus-feeder scaffolding ---- */
+typedef struct flush_race_state {
+    kprt_ring *ring;
+    atomic_int stop;
+    int64_t begins;
+} flush_race_state;
+
+static void *flush_race_feeder(void *arg)
+{
+    flush_race_state *frs = (flush_race_state *)arg;
+    float scratch[64 * 8];
+    while (!atomic_load(&frs->stop)) {
+        kprt_ring_write_window window;
+        int32_t granted = kprt_ring_begin_write(frs->ring, 64, &window);
+        if (granted > 0) {
+            int32_t samples = granted * CHANNELS;
+            int32_t i;
+            (void)scratch;
+            for (i = 0; i < window.first_frames * CHANNELS; i++)
+                window.first[i] = 0.25f;
+            if (window.second != NULL)
+                for (i = 0; i < window.second_frames * CHANNELS; i++)
+                    window.second[i] = 0.25f;
+            (void)samples;
+            (void)kprt_ring_commit_write(frs->ring, granted, 0, 0);
+        }
+        frs->begins++;
+    }
+    return NULL;
+}
+
 int main(void)
 {
     static run_state state;
@@ -296,5 +327,34 @@ int main(void)
     KT_EQ_INT(kprt_test_feed(state.ring, 64, 0, 1, 0), 64);
 
     kprt_ring_destroy(state.ring);
+    /* ---- Interlude item I-06: a flusher racing a live feeder is DEFINED, not clean-by-luck ----
+     *
+     * The engine reaches this interleaving on purpose: runSeek warns BadTimestamps when its
+     * quiesce times out and then continues to the flush, so a flush CAN land between a feeder's
+     * begin and its commit. The semantic outcome is contractual (the commit answers
+     * KPRT_COMMIT_BAD_ARGUMENT and the Kotlin side decides what that means); what must never be
+     * true is that the interleaving is a DATA RACE, and before the reservation fields went
+     * _Atomic, TSan reported exactly that here: `Write of size 4 kprt_ring_flush ... Previous
+     * write kprt_ring_begin_write`. This case drives the race hard under the tsan variant and
+     * accepts every verdict; the sanitizer is the assertion. */
+    {
+        static flush_race_state frs;
+        pthread_t feeder_thread;
+        int flushes;
+        frs.ring = kprt_ring_create(SAMPLE_RATE, CHANNELS, 4096);
+        KT_NOT_NULL(frs.ring);
+        atomic_store(&frs.stop, 0);
+        kt_case("a flush racing a live feeder is a defined interleaving");
+        KT_CHECKF(pthread_create(&feeder_thread, NULL, flush_race_feeder, &frs) == 0,
+                  "pthread_create failed");
+        for (flushes = 0; flushes < 20000; flushes++)
+            kprt_ring_flush(frs.ring);
+        atomic_store(&frs.stop, 1);
+        pthread_join(feeder_thread, NULL);
+        kt_detail("feeder made %lld begins against 20000 flushes", (long long)frs.begins);
+        KT_CHECKF(frs.begins > 0, "the feeder never ran, so nothing raced");
+        kprt_ring_destroy(frs.ring);
+    }
+
     return kt_suite_end();
 }

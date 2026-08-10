@@ -299,6 +299,13 @@ abstract class CompileKiteRtTask @Inject constructor(
          * `watchos_arm64` is `arm64_32`, a 32 bit pointer ABI, while `watchos_device_arm64` is the
          * ordinary 64 bit `arm64`.
          */
+        /*
+         * A NEW TARGET'S POINTER WIDTH MUST BE CHECKED against kprt_ring_create's byte-count guard
+         * (interlude item I-01): the guard bounds the PRODUCT against SIZE_MAX, and three
+         * _Static_asserts beside it prove the arithmetic at each width the seventeen current targets
+         * have. A width neither 32 nor 64 bit would fail those asserts at compile time, which is the
+         * check working; extend the asserts with the new width's expectation rather than deleting them.
+         */
         fun specFor(konanTargetName: String): CTargetSpec = when (konanTargetName) {
             "macos_arm64" -> CTargetSpec("arm64-apple-macos11.0", appleSdk = "macosx")
             "macos_x64" -> CTargetSpec("x86_64-apple-macos11.0", appleSdk = "macosx")

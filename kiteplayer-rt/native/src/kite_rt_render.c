@@ -56,6 +56,16 @@ int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate)
     rate = (int64_t)sample_rate;
     whole = frames / rate;
     rest = frames % rate;
+    /* Saturate instead of overflowing, matching the decision add_saturating already took for
+     * the anchor (interlude item I-05): `whole * 1000000` was measured overflowing under UBSan
+     * through this exported entry point at INT64_MAX frames. A duration that does not fit int64
+     * microseconds is already meaningless; what matters is that both implementations of the
+     * contract produce the SAME meaningless number, and the differential oracle carries a row
+     * at each end of the range to hold them to it. */
+    if (whole > INT64_MAX / 1000000)
+        return INT64_MAX;
+    if (whole < INT64_MIN / 1000000)
+        return INT64_MIN;
     return whole * 1000000 + rest * 1000000 / rate;
 }
 
@@ -81,6 +91,18 @@ static int64_t add_saturating(int64_t a, int64_t b)
     if (!__builtin_add_overflow(a, b, &sum))
         return sum;
     return b < 0 ? INT64_MIN : INT64_MAX;
+}
+
+/* `a - b`, saturating, the mirror of add_saturating for the one subtraction on the render path:
+ * the silence back-dating below, where UBSan measured `INT64_MIN - 1333333 cannot be
+ * represented` through the public surface (interlude item I-05). Same cost, same reasoning, and
+ * with it the anchor path holds no unchecked signed arithmetic at all. */
+static int64_t sub_saturating(int64_t a, int64_t b)
+{
+    int64_t difference;
+    if (__builtin_sub_overflow(a, b, &difference))
+        return b > 0 ? INT64_MIN : INT64_MAX;
+    return difference;
 }
 
 /* ---- The ring's consumer side ---- */
@@ -222,8 +244,8 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
         /* The request's last frame lands at `deadline_nanos`. Our last real frame is earlier by
          * however much of the request was silence. Double arithmetic, identical expression to
          * KotlinAudioRing's, because the oracle compares the published instant exactly. */
-        int64_t boundary_nanos = deadline_nanos -
-            (int64_t)((double)(frames - to_read) * ring->nanos_per_frame);
+        int64_t boundary_nanos = sub_saturating(deadline_nanos,
+            (int64_t)((double)(frames - to_read) * ring->nanos_per_frame));
         publish_anchor(ring, start + to_read - 1, boundary_nanos);
     }
 

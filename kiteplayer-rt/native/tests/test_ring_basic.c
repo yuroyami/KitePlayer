@@ -320,6 +320,51 @@ int main(void)
 
     {
         kprt_ring *ring = make_ring(48000, 100);
+        kprt_ring_write_window first_window;
+        kprt_ring_write_window second_window;
+        int32_t i;
+        kt_case("a second begin without a commit is refused with the first reservation intact");
+        /* Interlude item I-04. Before the fix a second begin recomputed the grant: measured
+         * through this surface, grant1=128 grant2=512 with the ring poisoned, a commit of the
+         * second grant published 1024 samples of which 768 were the poison the reservation never
+         * wrote; and the mirror case, a smaller second grant, made the FIRST commit answer
+         * KPRT_COMMIT_BAD_ARGUMENT and lose a filled buffer. Refusing beats clamping because a
+         * clamped grant leaves a caller believing it holds a window it does not. */
+        KT_EQ_INT(kprt_ring_begin_write(ring, 32, &first_window), 32);
+        for (i = 0; i < 32 * 2; i++)
+            first_window.first[i] = kprt_test_frame_value(i / 2);
+        /* Larger ask, smaller ask, same ask: all refused while the reservation is outstanding. */
+        KT_EQ_INT(kprt_ring_begin_write(ring, 64, &second_window), 0);
+        KT_EQ_INT(kprt_ring_begin_write(ring, 8, &second_window), 0);
+        KT_EQ_INT(kprt_ring_begin_write(ring, 32, &second_window), 0);
+        KT_NULL(second_window.first);
+        /* The first reservation is untouched and its commit publishes exactly what was written. */
+        KT_EQ_INT(kprt_ring_commit_write(ring, 32, 0, 0), KPRT_COMMIT_PUBLISHED);
+        KT_EQ_INT(render(ring, 32, 0), 32);
+        expect_ramp(32, 0);
+        /* And the ring is not wedged: the NEXT begin, after the commit, is granted again. */
+        KT_EQ_INT(kprt_ring_begin_write(ring, 16, &second_window), 16);
+        KT_EQ_INT(kprt_ring_commit_write(ring, 16, 0, 0), KPRT_COMMIT_PUBLISHED);
+        kprt_ring_destroy(ring);
+    }
+
+    {
+        kprt_ring *ring = make_ring(48000, 100);
+        kt_case("renders against INT64_MIN and INT64_MAX deadlines stay defined");
+        /* Interlude item I-05. The silence back-dating in kprt_ring_render subtracts from the
+         * deadline, and UBSan measured `INT64_MIN - 1333333 cannot be represented` through this
+         * exact call before the subtraction went saturating. The asan variant carries UBSan, so
+         * this case is the regression trap: it needs no assertion beyond survival and a sane
+         * render count, because halt_on_error turns any overflow into a suite failure. */
+        KT_EQ_INT(kprt_test_feed(ring, 64, 0, 1, 0), 64);
+        KT_EQ_INT(render(ring, 128, INT64_MIN), 64);
+        KT_EQ_INT(kprt_test_feed(ring, 64, 64, 0, 0), 64);
+        KT_EQ_INT(render(ring, 128, INT64_MAX), 64);
+        kprt_ring_destroy(ring);
+    }
+
+    {
+        kprt_ring *ring = make_ring(48000, 100);
         kt_case("a write larger than the free space is accepted in part");
         KT_EQ_INT(kprt_test_feed(ring, 500, 0, 1, 0), 100);
         KT_EQ_INT(kprt_test_feed(ring, 10, 100, 0, 0), 0);

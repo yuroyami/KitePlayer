@@ -32,7 +32,7 @@
  *    `kprt_ring_commit_write`, and the segment ring behind them.
  *  - One consumer thread, the device's real-time callback. It owns `kprt_ring_render` and the
  *    anchor it publishes. It never allocates, never takes a lock, never waits and never blocks.
- *  - Any thread may call `kprt_ring_anchor`, `kprt_ring_underruns`,
+ *  - Any thread may call `kprt_ring_anchor` (but see the flush rule below), `kprt_ring_underruns`,
  *    `kprt_ring_buffered_frames`, `kprt_ring_free_frames`, `kprt_ring_segment_giveups`,
  *    `kprt_ring_anchor_giveups` and `kprt_ring_read_stats`, one at a time, AND ONLY WHILE THE RING IS
  *    ALIVE. In KitePlayer the anchor reader is serialised by `AudioPlayback`'s own lock, and the same
@@ -40,9 +40,16 @@
  *    another thread is destroying is a use-after-free that no amount of atomics inside the ring can
  *    prevent, and the B1.8 verification proved it with AddressSanitizer rather than arguing it.
  *  - `kprt_ring_flush` and `kprt_ring_destroy` require both sides quiescent: the callback is
- *    provably out of `kprt_ring_render` and the feeder is not between a begin and a commit. This
- *    is a precondition and not advice, because flush writes the consumer's own counter and drops
- *    the segments the consumer dates its anchor from.
+ *    provably out of `kprt_ring_render` and the feeder is not between a begin and a commit. The
+ *    ANCHOR READER is part of that quiescence too (interlude, I-06): flush clears the anchor and
+ *    both caches, so a concurrent `kprt_ring_anchor` may observe the cleared state, and the
+ *    caller who wants a coherent answer serialises the two, which is what `AudioPlayback`'s lock
+ *    does. This is a precondition and not advice, because flush writes the consumer's own
+ *    counter and drops the segments the consumer dates its anchor from. A flush that races a
+ *    feeder mid-reservation is DEFINED since the interlude (the reservation fields are atomic;
+ *    the racing commit answers KPRT_COMMIT_BAD_ARGUMENT), but it is still the precondition
+ *    being violated, and the engine treats that commit verdict as the loud programming error it
+ *    is.
  *
  * WHO WAITS FOR WHOM. The Kotlin ring publishes its segment ring under one sequence counter
  * whose writer is the feeder and whose reader is the real-time thread, so the real-time thread
@@ -207,8 +214,11 @@ KPRT_API void kprt_ring_destroy(kprt_ring *ring);
  * to the consumer until that commit, so a caller that gives up between the two loses only the
  * bytes it wrote into storage the consumer cannot reach.
  *
- * Calling this twice without a commit in between replaces the reservation, which is a
- * programming error rather than a supported idiom; the second call reports the same window. */
+ * Calling this twice without a commit in between is REFUSED: the second call returns 0, grants
+ * nothing, and leaves the outstanding reservation untouched, so the first commit still
+ * publishes exactly what was written into the first window. (Until the interlude, I-04, the
+ * second call recomputed the grant, which was measured publishing ring storage the caller
+ * never wrote when room had grown, and losing a filled buffer when it had shrunk.) */
 KPRT_API int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_window *out);
 
 /* Publishes `frames` frames of the outstanding reservation, and dates them when `has_pts` is
@@ -222,7 +232,10 @@ KPRT_API int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_rin
  *
  * @return one of the KPRT_COMMIT_* verdicts. On KPRT_COMMIT_NEEDS_SEGMENT nothing at all was
  *         published and the reservation stays outstanding, so the caller may simply retry the
- *         commit after the device has consumed something. */
+ *         commit after the device has consumed something. A caller that gives up instead MUST
+ *         release the reservation with a zero-frame commit (`frames == 0` publishes nothing and
+ *         clears it): since the interlude (I-04) `kprt_ring_begin_write` refuses while a
+ *         reservation is outstanding, so abandoning without releasing wedges the producer. */
 KPRT_API int32_t kprt_ring_commit_write(kprt_ring *ring, int32_t frames, int32_t has_pts, int64_t pts_us);
 
 /* Tells the ring that the feeder has finished, so trailing silence is the end of the media

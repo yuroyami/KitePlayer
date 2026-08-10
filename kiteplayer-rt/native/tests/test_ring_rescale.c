@@ -50,6 +50,15 @@ static const rescale_row rows[] = {
     { "a whole second at 48 kHz",             48000,                    48000,             1000000, 0 },
     { "zero frames",                              0,                    48000,                   0, 0 },
 
+    /* Interlude item I-05: the ends of the range, where the exact form's `whole * 1000000`
+     * multiply was measured overflowing under UBSan through the public surface
+     * (kprt_frames_to_micros(INT64_MAX, 1)). The contract is saturation, matching the decision
+     * add_saturating already took for the anchor: a duration that does not fit int64 microseconds
+     * is already meaningless, and both implementations must produce the SAME meaningless number.
+     * The oracle carries the same two rows so the Kotlin ring is pinned to this answer too. */
+    { "INT64_MAX frames at 1 Hz saturates",     INT64_MAX,                  1,           INT64_MAX, 1 },
+    { "INT64_MIN frames at 1 Hz saturates",     INT64_MIN,                  1,           INT64_MIN, 1 },
+
     /* The register item's own vectors. 1e13 frames at 48 kHz is about 6.6 years of audio, which is
      * not a session anybody plays; the point is that the arithmetic is wrong there rather than
      * saturating, and a player that runs for a week is only three orders of magnitude away. */

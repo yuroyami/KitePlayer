@@ -185,7 +185,17 @@ internal class NativeAudioRing private constructor(
             when (val status = kprt_ring_commit_write(handle, granted, if (pts != null) 1 else 0, pts?.micros ?: 0L)) {
                 KPRT_COMMIT_PUBLISHED.toInt() -> granted
                 // The same answer KotlinAudioRing gives: nothing was taken, the caller retries.
-                KPRT_COMMIT_NEEDS_SEGMENT.toInt() -> 0
+                KPRT_COMMIT_NEEDS_SEGMENT.toInt() -> {
+                    // Release the reservation before reporting "try later": since the interlude
+                    // (I-04) a second begin is refused while one is outstanding, so returning 0
+                    // with the reservation still held would make every retry of submit's loop
+                    // begin-refuse forever, a livelock on the shipped feeder. A zero-frame commit
+                    // publishes nothing and frees the reservation; the fill work is lost, which
+                    // is the documented cost of giving up between a begin and a commit, and the
+                    // Kotlin ring's needs-segment answer costs the same.
+                    kprt_ring_commit_write(handle, 0, 0, 0)
+                    0
+                }
                 KPRT_COMMIT_BAD_ARGUMENT.toInt() ->
                     error("kprt_ring_commit_write rejected $granted frames as a bad argument")
                 else -> error("kprt_ring_commit_write returned an unknown status $status")

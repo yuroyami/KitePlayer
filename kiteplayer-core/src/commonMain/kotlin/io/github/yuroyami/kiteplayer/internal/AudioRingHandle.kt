@@ -113,6 +113,14 @@ internal data class AudioAnchor(val pts: Pts, val audibleAtNanos: Long)
  * translation unit with the rest of the render path, and that move is what makes the unit's undefined
  * symbol list auditable.
  *
+ * ### Saturating at the ends of the range, since the interlude (I-05)
+ *
+ * `whole * 1_000_000L` overflows a Long once `whole` passes about 9.2e12. In Kotlin that wrap is
+ * DEFINED behaviour and in the C twin it was UNDEFINED, so at the top of the range the oracle was
+ * comparing two different kinds of wrong and calling any agreement a proof. Both implementations
+ * now saturate to `Long.MAX_VALUE`/`MIN_VALUE` instead, the same decision `addSaturating` took
+ * for the anchor, and the oracle carries a row at each end holding them to the same answer.
+ *
  * Returns 0 for a non-positive [sampleRate], matching [AudioFormat.durationOf].
  */
 internal fun framesToMicros(frames: Long, sampleRate: Int): Long {
@@ -120,5 +128,7 @@ internal fun framesToMicros(frames: Long, sampleRate: Int): Long {
     val rate = sampleRate.toLong()
     val whole = frames / rate
     val rest = frames % rate
+    if (whole > Long.MAX_VALUE / 1_000_000L) return Long.MAX_VALUE
+    if (whole < Long.MIN_VALUE / 1_000_000L) return Long.MIN_VALUE
     return whole * 1_000_000L + rest * 1_000_000L / rate
 }

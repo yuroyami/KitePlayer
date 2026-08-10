@@ -96,15 +96,25 @@ struct kprt_ring {
     _Atomic int64_t cache_base_pts_us;
     _Atomic int32_t cache_valid;
 
-    /* ---- Anchor-reader-private state. Only `kprt_ring_anchor` writes these. ---- */
+    /* ---- Anchor-reader-private state. `kprt_ring_anchor` writes these, and so does
+     * `kprt_ring_flush`, which clears `reader_valid` when it abandons a position; the comment
+     * that said "only kprt_ring_anchor" was corrected at the interlude (I-06), the same
+     * exception the cache_* block above always documented. ---- */
     _Alignas(KPRT_CACHELINE) _Atomic int64_t reader_pts_us;
     _Atomic int64_t reader_nanos;
     _Atomic int32_t reader_valid;
 
-    /* ---- The outstanding write reservation. Feeder-private, so plain fields. ---- */
-    _Alignas(KPRT_CACHELINE) int64_t pending_start_frame;
-    int32_t pending_frames;
-    int32_t has_pending;
+    /* ---- The outstanding write reservation. Written by the feeder between begin and commit,
+     * and by `kprt_ring_flush` from the session owner's thread, which the engine reaches on
+     * purpose when a seek's quiesce times out; so these are _Atomic like every other field two
+     * threads touch, per this struct's own capitalised rule above. They were plain until the
+     * interlude (I-06), with a comment claiming "feeder-private", and ThreadSanitizer showed
+     * the flush-versus-begin write-write race the claim was hiding. Relaxed everywhere: the
+     * fields carry no publication edge, they are reservation bookkeeping, and relaxed atomics
+     * compile to plain loads and stores on every target here. ---- */
+    _Alignas(KPRT_CACHELINE) _Atomic int64_t pending_start_frame;
+    _Atomic int32_t pending_frames;
+    _Atomic int32_t has_pending;
 };
 
 #endif /* KITE_RT_RING_INTERNAL_H */

@@ -207,5 +207,23 @@ int main(void)
     KT_NULL(kprt_ring_create(48000, 2, 0));
     KT_ALLOC_SILENT(&before);
 
+    /* ---- a create the size guard refuses allocates nothing (interlude item I-01) ---- */
+    /* The factor bounds are cheap sanity checks; the PRODUCT bound is the memory safety. On the
+     * four 32-bit targets an admitted factor pair can wrap the byte count to a tiny number and
+     * kprt_ring_create would return a ring whose storage is smaller than its capacity claims,
+     * which ASan showed as a heap-buffer-overflow on the first ordinary fill. The three
+     * _Static_asserts beside the guard in kite_rt_ring.c prove the arithmetic at EVERY target's
+     * own pointer width at compile time; this case proves the refusal path allocates nothing,
+     * and on a 32-bit build it also drives the wrap vector through the public surface. */
+    kt_case("a create the size guard refuses allocates nothing");
+    kt_alloc_snapshot(&before);
+    KT_NULL(kprt_ring_create(48000, 65, 1024));
+    KT_NULL(kprt_ring_create(48000, 2, (1 << 27) + 1));
+#if SIZE_MAX <= 0xFFFFFFFFu
+    /* The review's vector: admitted by both factor bounds, wraps the byte count at this width. */
+    KT_NULL(kprt_ring_create(48000, 32, 1 << 27));
+#endif
+    KT_ALLOC_SILENT(&before);
+
     return kt_suite_end();
 }

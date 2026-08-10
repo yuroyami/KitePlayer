@@ -529,6 +529,33 @@ class AudioRingDifferentialTest {
     }
 
     @Test
+    fun `both implementations of framesToMicros saturate identically at the ends`() {
+        // Interlude item I-05. `whole * 1000000` overflowed at the top of the range on both sides
+        // of the contract: DEFINED wrapping in Kotlin, UNDEFINED behaviour in C (measured under
+        // UBSan through kprt_frames_to_micros(INT64_MAX, 1)), so up here the oracle used to
+        // compare two different kinds of wrong. Both saturate now, and this row pins them to the
+        // same answer at both ends plus one large mid-range value that must stay exact.
+        for ((frames, expected) in listOf(
+            Long.MAX_VALUE to Long.MAX_VALUE,
+            Long.MIN_VALUE to Long.MIN_VALUE,
+        )) {
+            assertEquals(expected, framesToMicros(frames, 1), "Kotlin at $frames")
+            assertEquals(
+                expected,
+                io.github.yuroyami.kiteplayer.rt.cinterop.kprt_frames_to_micros(frames, 1),
+                "C at $frames",
+            )
+        }
+        val large = 10_000_000_000L
+        assertEquals(
+            framesToMicros(large, 48_000),
+            io.github.yuroyami.kiteplayer.rt.cinterop.kprt_frames_to_micros(large, 48_000),
+            "the two implementations disagree inside the representable range",
+        )
+        assertEquals(208_333_333_333L, framesToMicros(large, 48_000), "exactness lost inside the range")
+    }
+
+    @Test
     fun `both rings agree across a long pseudo-random session`() {
         // The scenarios above are the shapes somebody thought of. This is the part that finds the
         // shape nobody thought of: a deterministic sequence long enough to wrap the ring hundreds of

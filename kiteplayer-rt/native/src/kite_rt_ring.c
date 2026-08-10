@@ -63,10 +63,37 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
 
     if (sample_rate <= 0 || channels <= 0 || capacity_frames <= 0)
         return NULL;
-    /* Refuse a size whose byte count would not survive the multiply. 1 << 27 frames is over 46
-     * minutes of 48 kHz audio, so the bound costs nothing real and removes the overflow. */
+    /* Cheap sanity bounds on the factors. 1 << 27 frames is over 46 minutes of 48 kHz audio, so
+     * neither bound costs anything real. What these do NOT do, and were wrongly documented as
+     * doing until the interlude (I-01), is remove the overflow of the byte-count multiply: that
+     * reasoning held only for a 64 bit size_t, and four of the seventeen shipped targets have a
+     * 32 bit one, where an admitted pair like (1 << 27 frames, 32 channels) wraps the byte count
+     * and the first ordinary fill writes past the allocation. The PRODUCT bound below is the
+     * memory safety; the three _Static_asserts after it prove the arithmetic at every target's
+     * own pointer width at compile time, in the build itself. A new target's pointer width must
+     * be checked against this guard; CompileKiteRtTask.specFor's comment says so. */
     if (capacity_frames > (1 << 27) || channels > 64)
         return NULL;
+    if ((uint64_t)capacity_frames * (uint64_t)channels * sizeof(float)
+            > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE)
+        return NULL;
+
+    /* The guard above, proved at this target's own width: the three vectors the review measured
+     * wrapping on the 32 bit targets must be refused there and admitted on 64 bit. The
+     * expressions mirror the guard exactly; if the guard's arithmetic ever changes, these change
+     * with it or the build stops. */
+    _Static_assert(
+        (uint64_t)(1 << 27) * 8u * sizeof(float) > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE
+            ? sizeof(size_t) == 4 : sizeof(size_t) >= 8,
+        "the (1<<27, 8) byte count must overflow exactly on 32 bit size_t");
+    _Static_assert(
+        (uint64_t)(1 << 27) * 32u * sizeof(float) > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE
+            ? sizeof(size_t) == 4 : sizeof(size_t) >= 8,
+        "the (1<<27, 32) byte count must overflow exactly on 32 bit size_t");
+    _Static_assert(
+        (uint64_t)(1 << 24) * 64u * sizeof(float) > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE
+            ? sizeof(size_t) == 4 : sizeof(size_t) >= 8,
+        "the (1<<24, 64) byte count must overflow exactly on 32 bit size_t");
 
     header_bytes = KPRT_ALIGN_UP_SIZE(sizeof(kprt_ring), KPRT_CACHELINE);
     sample_bytes = (size_t)capacity_frames * (size_t)channels * sizeof(float);
@@ -246,13 +273,21 @@ int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_w
     out->start_frame = 0;
     if (ring == NULL || frames <= 0)
         return 0;
+    /* Interlude item I-04: a second begin while a reservation is outstanding is REFUSED, with
+     * the outstanding reservation untouched. The old behaviour recomputed the grant, and was
+     * measured publishing 768 samples of ring poison the caller never wrote when the second
+     * grant was larger, and losing a filled buffer to KPRT_COMMIT_BAD_ARGUMENT when it was
+     * smaller. Refusing beats clamping because a clamped form leaves a caller believing it
+     * holds a window it does not. */
+    if (atomic_load_explicit(&ring->has_pending, memory_order_relaxed))
+        return 0;
 
     written = atomic_load_explicit(&ring->written, memory_order_relaxed);
     consumed = atomic_load_explicit(&ring->consumed, memory_order_acquire);
     room = (int64_t)ring->capacity_frames - (written - consumed);
     if (room <= 0) {
-        ring->has_pending = 0;
-        ring->pending_frames = 0;
+        atomic_store_explicit(&ring->has_pending, 0, memory_order_relaxed);
+        atomic_store_explicit(&ring->pending_frames, 0, memory_order_relaxed);
         return 0;
     }
     granted = (int64_t)frames < room ? frames : (int32_t)room;
@@ -270,9 +305,9 @@ int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_w
     }
     out->start_frame = written;
 
-    ring->has_pending = 1;
-    ring->pending_start_frame = written;
-    ring->pending_frames = granted;
+    atomic_store_explicit(&ring->pending_start_frame, written, memory_order_relaxed);
+    atomic_store_explicit(&ring->pending_frames, granted, memory_order_relaxed);
+    atomic_store_explicit(&ring->has_pending, 1, memory_order_relaxed);
     return granted;
 }
 
@@ -282,13 +317,14 @@ int32_t kprt_ring_commit_write(kprt_ring *ring, int32_t frames, int32_t has_pts,
 
     if (ring == NULL)
         return KPRT_COMMIT_BAD_ARGUMENT;
-    if (!ring->has_pending || frames < 0 || frames > ring->pending_frames)
+    if (!atomic_load_explicit(&ring->has_pending, memory_order_relaxed) || frames < 0 ||
+        frames > atomic_load_explicit(&ring->pending_frames, memory_order_relaxed))
         return KPRT_COMMIT_BAD_ARGUMENT;
 
-    start = ring->pending_start_frame;
+    start = atomic_load_explicit(&ring->pending_start_frame, memory_order_relaxed);
     if (frames == 0) {
-        ring->has_pending = 0;
-        ring->pending_frames = 0;
+        atomic_store_explicit(&ring->has_pending, 0, memory_order_relaxed);
+        atomic_store_explicit(&ring->pending_frames, 0, memory_order_relaxed);
         return KPRT_COMMIT_PUBLISHED;
     }
 
@@ -301,8 +337,8 @@ int32_t kprt_ring_commit_write(kprt_ring *ring, int32_t frames, int32_t has_pts,
     /* The release on `written` publishes both the samples the caller wrote into the window and
      * the segment that dates them, so a render that sees this value is guaranteed to see both. */
     atomic_store_explicit(&ring->written, start + frames, memory_order_release);
-    ring->has_pending = 0;
-    ring->pending_frames = 0;
+    atomic_store_explicit(&ring->has_pending, 0, memory_order_relaxed);
+    atomic_store_explicit(&ring->pending_frames, 0, memory_order_relaxed);
     return KPRT_COMMIT_PUBLISHED;
 }
 
@@ -478,6 +514,6 @@ void kprt_ring_flush(kprt_ring *ring)
                           atomic_load_explicit(&ring->written, memory_order_relaxed),
                           memory_order_release);
 
-    ring->has_pending = 0;
-    ring->pending_frames = 0;
+    atomic_store_explicit(&ring->has_pending, 0, memory_order_relaxed);
+    atomic_store_explicit(&ring->pending_frames, 0, memory_order_relaxed);
 }

@@ -148,11 +148,15 @@ enough to call any platform supported.
   with nothing over budget, no starvation, no degraded clock reading and no missing ring. Real media
   through the whole shipped path for ten minutes, sixty times through a container with a real
   decoder and the engine's own feeder, played 598.23 seconds of audio in 600 seconds of wall clock
-  with zero starvations, on a ring less than half the size. The same ten minutes against a Kotlin
-  callback, which is the arrangement this run removed, was outside the budget on 1,482 of 51,533
-  callbacks with a worst body of 57.1 milliseconds; removing the manufactured collector pressure
-  from that control left it outside the budget 159 times with a worst body of 81.4 milliseconds,
-  which is worse rather than better, so what fails is a managed callback and not a collector pause.
+  and zero starvations in that run, on a ring less than half the size. The same test against a
+  Kotlin callback, which is the arrangement this run removed, misses the budget with or without
+  the manufactured collector pressure: the original ten minute control was over budget on 1,482
+  of 51,533 callbacks with a worst body of 57.1 milliseconds under pressure and 159 times with a
+  worst body of 81.4 milliseconds without it, and a shorter re-run at the whole-of-B1 review was
+  over budget 99 times under pressure and 18 times without, with a worst body of 10.5
+  milliseconds while the collector ran only 31 times. Which arm is worse varies between runs;
+  what does not vary is that a managed callback misses a hard deadline on its own, which is why
+  it was removed rather than tuned around.
   An earlier ten minute run of the same positive case measured 9,083 nanoseconds and 21
   starvations, and those starvations belong to that test's own managed feeder rather than to the
   callback, which is why the starvation count there is bounded and the callback's own numbers are

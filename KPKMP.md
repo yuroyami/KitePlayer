@@ -3709,14 +3709,20 @@ is no other.
 
   Cross-target: `compileKotlinJs`, `compileKotlinWasmJs` and `assembleAndroidMain` all green, 17
   tasks executed. All 17 `compileKiteRtCFor*` tasks executed and each produced an
-  architecture-verified archive: macos_arm64 10264 bytes over 4 objects, ios_arm64 7840 over 4,
-  ios_simulator_arm64 7728 over 4, ios_x64 8776 over 4, tvos_arm64 7840 over 4,
-  tvos_simulator_arm64 7728 over 4, watchos_arm32 8664 over 4, watchos_arm64 7128 over 4,
-  watchos_device_arm64 7728 over 4, watchos_simulator_arm64 7728 over 4, android_arm32 10548 over 5,
-  android_arm64 10380 over 5, android_x64 10628 over 5, android_x86 11408 over 5, linux_x64 10924
-  over 5, linux_arm64 10276 over 5, mingw_x64 10688 over 6. Only macos_arm64's archive carries the
-  device implementation; the other sixteen carry the refusing stubs, which is why the Apple ones are
-  smaller, and it is visible evidence rather than a promise that the implementation is macOS only.
+  architecture-verified archive: macos_arm64 10264 bytes, ios_arm64 7840, ios_simulator_arm64
+  7728, ios_x64 8776, tvos_arm64 7840, tvos_simulator_arm64 7728, watchos_arm32 8664,
+  watchos_arm64 7128, watchos_device_arm64 7728, watchos_simulator_arm64 7728, android_arm32
+  10548, android_arm64 10380, android_x64 10628, android_x86 11408, linux_x64 10924, linux_arm64
+  10276, mingw_x64 10688. Two corrections at the interlude (I-16), both re-measured on 2026-08-10
+  against freshly built archives. The "4, 5 or 6 objects" this sentence used to count per archive
+  were archive bookkeeping members, not objects: every one of the seventeen holds exactly the
+  module's three objects, `kite_rt_ring.o`, `kite_rt_render.o` and `kite_rt_coreaudio.o` (`llvm-ar
+  t` lists three everywhere; `/usr/bin/ar t` lists four on Mach-O because it prints `__.SYMDEF`,
+  and other object formats carry their own index members). And the causal clause that stood here,
+  that the Apple archives are smaller because only macos_arm64 carries the device implementation,
+  fails its own table: the sixteen non-Apple archives carry the same refusing stubs and are
+  LARGER, so size tracks object format and nothing else. The evidence that sixteen targets carry
+  stubs is the refusal constant in their compiled `kite_rt_coreaudio.o`, not archive arithmetic.
   That is level 7 evidence, compilation, and says nothing about behaviour anywhere but here.
 
   The stale-embedded-archive hazard B1.3 measured was checked again in this module and holds: the
@@ -3776,10 +3782,15 @@ is no other.
   `real=337639444` under `plain` and reports a partial under `asan` and `tsan`, because those two
   runtimes own the allocator.
 
-  Assertion 3, the supervised device run, level 1 for macOS arm64 in a debug binary, on one machine,
-  with one operator, and not release-mode qualification, which is B10's. Two commands, ten minutes
-  each as the plan asks, with the negative control at ten minutes per arm, so fifty minutes of real
-  sound in total. Run at this gate and quoted from its own output.
+  Assertion 3, the supervised device run. Graded level 1 when this entry was first written and
+  corrected to level 6 at the interlude (I-16): section 2's level 1 is a repeatable release-mode
+  automated test on a named real device with saved metrics, and this was a debug binary run by one
+  operator on one machine, which is section 2's level 6, a manual observation with saved metrics.
+  Section 2 ends with "No lower item may be presented as a higher one" and this entry broke that
+  rule until the interlude corrected it. Assertion 3's authority rests on assertions 1 and 2, which are level 2 and
+  unchanged. Two commands, ten minutes each as the plan asks, with the negative control at ten
+  minutes per arm, so fifty minutes of real sound in total. Run at this gate and quoted from its
+  own output.
 
   The positive case, quoted from its own output: `C callback, 10.0 minutes: callbacks=51679
   worstCallbackNanos=9208 budget=5333333 worstAsPercentOfBudget=0.17265 underruns=0
@@ -3800,17 +3811,32 @@ is no other.
   | with no collector pressure | 51,675 | 81,357,584 | 159 | 624 | 0 |
 
   Read against the positive case that is a factor of 6,196 on the worst body with the pressure, and
-  8,836 with it removed. And it settles the attribution the verification asked about, in the
-  strongest direction available: with the collector pressure gone, 99.4 percent of the collections
-  gone and the per-call allocation gone, the managed arrangement was still outside the budget on 159
-  callbacks and its worst body was 81.4 milliseconds, which is WORSE than the pressured arm and more
-  than seven whole device periods. The collector pause was never the mechanism. What fails is the
+  8,836 with it removed. Corrected at the interlude (I-16), because the paragraph that stood here
+  did not survive a rerun. It concluded from the table above that the unpressured arm is "WORSE
+  than the pressured arm and more than seven whole device periods" and that "The collector pause
+  was never the mechanism". Three later measurements reverse that direction: the test's own KDoc
+  in `RealTimeSoakTest.kt` records the unpressured arm as the better one, this entry's own 0.4
+  minute decomposition does the same, and the interlude review re-measured both arms on 2026-08-10
+  at 0.5 minutes per arm on the same machine: pressured worst 12,444,083 nanoseconds with 99 of
+  2,575 over budget and 4,175 collections; unpressured worst 10,519,500 nanoseconds with 18 of
+  2,585 over budget and 31 collections. So the unpressured arm is better on both numbers, the ten
+  minute table above is the outlier on that comparison, and both runs now stand here together so
+  the next reader weighs them instead of inheriting one. What survives, and it is
+  the load bearing part, is the reproducible statement: the managed arrangement misses the budget
+  even with the manufactured pressure removed, 18 callbacks over a 5,333,333 nanosecond budget
+  with a worst body of 10.5 milliseconds while the collector ran only 31 times. A managed callback
+  fails on its own, with or without collector pressure; which arm is worse varies run to run, and
+  no causal story about the collector pause rests on this control any more. What fails is the
   arrangement, and that is why B1.8 replaced the arrangement rather than tuning the collector. The
   test asserts on the over-budget count of the pressured arm and prints the unpressured arm without
   asserting a mechanism it has not isolated.
 
-  The other half of assertion 3, the whole shipped path with real media, and this is the result that
-  carries the zero-underrun promise: `10.0 minutes of sync1080p30.mp4 audio: loops=60
+  The other half of assertion 3, the whole shipped path with real media. What this result carries
+  is a bound, not a promise, and the sentence that stood here said "promise" until the interlude
+  (I-16) corrected it: the committed test asserts `audio.underruns <= loops`, its own comment
+  records that a first version asserted zero and reported one after three loops in 24 seconds, so
+  starvation is bounded by the loop seams and this ten minute run measured zero. The run: `10.0
+  minutes of sync1080p30.mp4 audio: loops=60
   framesDecoded=28715008 underruns=0 position=7693446 buffered=199.395ms collections=96860
   allocations=2910894000`. Sixty times through a real container, a real decoder and
   `AudioPlayback.submitDecoded` with its real backpressure and conversion stage, into the C ring and
@@ -3990,10 +4016,14 @@ is no other.
 
   **B1 exit criteria, clause by clause.**
 
-  1. "One C implementation serves cinterop." MET. The 176 def-body helpers are nine compiled
-     translation units plus a generated identity unit, embedded per konan target in the klib, and
-     `verify-lift.sh` proves the extracted C is byte for byte the def body it came from. No Kotlin
-     call site changed and the public API dump did not move.
+  1. "One C implementation serves cinterop." MET. The 176 def-body helpers became nine compiled
+     translation units defining 161 of them, 157 exported under `KC_API` plus 4 static, because
+     B1.4 deleted the 15 nothing used; the sentence that stood here said "the 176 helpers are nine
+     units", which double-counted the deleted, and was corrected at the interlude (I-16) against
+     `verify-lift.sh`'s own accounting (176 declared, 15 deleted, 157 emitted with `KC_API`, 4
+     internal). A generated identity unit rides beside them, embedded per konan target in the
+     klib, and `verify-lift.sh` proves the extracted C is byte for byte the def body it came from.
+     No Kotlin call site changed and the public API dump did not move.
   2. "A mismatched FFmpeg runtime is rejected with a report." MET. `kc_init` runs first in fifteen
      entry points, the policy is major equality, runtime minor at or above header minor and
      configuration agreement, micro is never fatal, and one case per verdict is tested against
@@ -4009,7 +4039,9 @@ is no other.
      no allocator, lock, log or framework symbol to call on any run, and cannot see an allocation the
      optimiser deleted. The interposed C test is level 2, proves zero C allocations across five
      million callbacks driving the shipped body, and says nothing whatever about Kotlin allocation.
-     The supervised device run is level 1 on one machine in a debug binary with one operator and is
+     The supervised device run is level 6, a manual observation with saved metrics, corrected from
+     the "level 1" that stood here (interlude I-16): a debug binary with one operator on one
+     machine is not section 2's repeatable release-mode automated test, and is
      not release-mode qualification. The heap drift check is level 5 corroboration that cannot
      attribute growth or its absence to the callback rather than to anything else alive in the
      process. No report in these three sub-phases presents any of the four above its level.
@@ -4025,7 +4057,9 @@ is no other.
   register from the verification: the callback's contract with the device is checked for size now,
   but nothing tests a device that answers with a layout it did not negotiate, because nothing here
   can make one. It is two compares and a comment today, and a real test needs a mock AudioUnit, which
-  is B8's kind of work.
+  is B8's kind of work. Interlude correction (I-16): this entry announced that row and no row was
+  ever written, and section 15.1 still ended at B1-25 when the interlude review counted it. The
+  row exists now, written by I-19 at the end of section 16.1, owned by B8.
 
   **The deferral record, so this entry stands alone.** Copied from 15.5 with its consequences,
   because a deferral whose cost is only written in a plan section is a deferral nobody will weigh
@@ -4119,6 +4153,51 @@ is no other.
   reruns on the quiet machine dropped zero with zero underruns. The expected line stays "0
   dropped" and the observation stays here: a debug sample on a loaded development machine is
   level 6 evidence and section 9 already says it qualifies nothing.
+
+- 2026-08-10, interlude sub-phase I.2 (items I-16, I-17, I-18, I-19), gate passed. The record,
+  corrected. In this file: the negative control paragraph now carries both runs and quotes the
+  reproducible statement instead of the outlier, and no causal claim about the collector pause
+  rests on it; the media soak sentence says bound, not promise, in the words of the test's own
+  assertion; the supervised device run is level 6 in all three places and in
+  `kiteplayer-rt/README.md`, with its authority resting on the two level 2 assertions; exit
+  clause 1 counts 161 defined helpers (157 `KC_API` plus 4 static) instead of repeating 176; the
+  seventeen archive counts are corrected to the module's three objects everywhere, re-measured
+  with `llvm-ar t` against freshly built archives, and the size-tracks-implementation causal
+  clause is withdrawn because the stub-carrying archives are larger; the announced register row
+  exists (see below); and B1-24 is settled on B8. The two rows I-19 owed are written at the end
+  of section 16.1: R-B2-guards, the eighteen argument-crashing exports with their locations and
+  the two the interlude itself fixes under I-12, and R-B8-layout, the un-negotiated device
+  layout. `README.md`'s callback bullet now quotes both negative control runs and claims only
+  what does not vary between them.
+
+  In KiteCodec: the four sentences grading never-run continuous integration now say the jobs are
+  configured and have not run, the fuzz README's libFuzzer row is regraded from level 2 to level
+  8 with the corpus replay's level 2 stated separately, the TestKit count is 4, the CHANGELOG
+  gains an Added entry naming `FFmpegIdentity`, `FFmpegLibraryIdentity`,
+  `FFmpegError.IncompatibleFFmpegRuntime` and the `Versions` header/runtime accessors (every
+  name checked against the committed API dump before writing), and `ci.yml`'s claim that the
+  Linux job proves a "compat path in ffmpeg.def" is replaced by what it can prove, with the
+  measured floor lavc 60.30.100 and lavu 58.7.100 stated. `KC_TEXT_SENTENCE` rose from 1024 to
+  1152 and `test_identity` now asserts the worst case arithmetically: this machine's sentence
+  plus the headroom every one of the five embedded fields still has to its declared capacity
+  must fit the field. Proved able to fail by rebuilding a copy at 1024, where the new check
+  fails case 1; at 1152 all 16 identity cases pass. Both `LICENSE` em dashes are gone and
+  KitePlayer's licence note now describes KitePlayer (I-18).
+
+  The capacity change moved the cinterop struct, so the metadata ratchet fired exactly as the
+  section 9 move table says it should, and the move is recorded per its convention. The
+  differential was reviewed before re-baselining and is three lines with one cause: the struct
+  spelling's `provisioning[1024]` became `[1152]`, the struct size `2048L` became `2176L`, and
+  the `KC_TEXT_SENTENCE` constant `1024` became `1152`. The script's summary block after
+  `--update`: target macosArm64, baseline
+  `native/kitecodec-c/klib-metadata-baseline.txt`, lines 19024, sha256
+  `0380e7a1eb13504218a54cc1e1a194fc3fcbaf0e666a8b3003350f3e53d37f5b`. `--check` is clean after
+  the move. Gate: KiteCodec 6 C suites in plain, asan and tsan; corpus replay under asan;
+  `symbol-audit.sh` PASS; `check-deleted-surface.sh` clean; `apiCheck` and coupling unchanged;
+  `macosArm64Test` rerun for real. KitePlayer: all five test tasks with `--rerun`, 8 C suites in
+  all four modes, render audit, source discipline, spot checks, three sample clips with zero
+  underruns and the nonexistent-file refusal. The em dash scan prints nothing over both
+  repositories for the first time since the LICENSE files were committed.
 ---
 
 ## 15. Horizon B execution: B1
@@ -4565,7 +4644,8 @@ are carried here only so nobody rediscovers them. 25 items.
   minutes per attempt.
 - Fix: none in B1. Recorded so the evidence claims stay honest and so the gate's cost is not a
   surprise.
-- Phase: B9. Test: none.
+- Phase: B8, settled at the interlude (I-16): this row said B9 while section 15.6 question 2
+  reassigned continuous integration to B8 and section 11's B9 text names no CI. Test: none.
 
 #### B1-25. The opaque handle migration is deferred and needs a deadline
 - Where: the whole of 15.0 and 15.5.
@@ -5303,8 +5383,10 @@ B8's, by its own wording, and the fuzz directory's README says so.
 identity test, the differential ring oracle, the interposer counts and the sanitizer runs are level
 2: deterministic differentials, oracles and sanitizer results on the exact contract. The render
 audit is stronger than a runtime test for what it covers and is still level 2, because it is a
-deterministic property check rather than a device measurement. The 10 minute device run is level 1
-only for macOS arm64 in debug, on one machine, with its numbers recorded; it is not release-mode
+deterministic property check rather than a device measurement. The 10 minute device run is level 6,
+a manual observation with saved metrics, corrected at the interlude (I-16) from the "level 1" that
+stood here: one operator and a debug binary do not meet section 2's level 1 wording, and its
+authority rests on the two level 2 assertions beside it. It is not release-mode
 qualification and B10 owns that. Compilation of the per-target archives is level 7 and says nothing
 about behaviour. Any statement that the C library works on a target whose archive was never built
 is level 8 and is banned.
@@ -6197,6 +6279,50 @@ names its test. 20 items.
   real resolution against a Linux shaped and a Windows shaped dependencies tree, both measured to
   fail today, asserting each resolves. The jobs themselves stay unexecuted, so their evidence
   stays level 8 and no document may say otherwise until a run exists.
+
+#### Register rows written by I-19, owned by later phases
+
+These two are register rows and not interlude items: I-19's deliverable is that they exist where
+a register search finds them, because both were previously recorded only inside log entry prose.
+
+**R-B2-guards. Eighteen exported entry points crash on an argument.**
+- Where: `../KiteCodec/native/kitecodec-c/src/helpers_frame.c:30` (`ffkmp_frame_get_buffer`);
+  `helpers_codecpar.c:25` and `:30` (`ffkmp_codecpar_from_context`,
+  `ffkmp_codecpar_copy_for_mux`); `helpers_format.c:12`, `:21`, `:22`, `:27`, `:49`, `:56` and
+  `:86` (`ffkmp_fmt_open_input` NULL out pointer, `ffkmp_fmt_find_stream_info`,
+  `ffkmp_fmt_seek_micros` out of range stream index, `ffkmp_fmt_read_frame`,
+  `ffkmp_fmt_alloc_output2` NULL out pointer, `ffkmp_fmt_set_opt` NULL key,
+  `ffkmp_fmt_write_frame`); `helpers_codec.c:14` and `:15` (`ffkmp_codecctx_open`,
+  `ffkmp_codecctx_from_par`); `helpers_filter.c:39`, `:85`, `:196`, `:205` to `:212`, `:235`,
+  `:243` to `:255`, `:308` and `:311` (the filter graph builders and accessors).
+- Problem: the frozen body's NULL guard discipline is inconsistent: roughly twenty helpers guard
+  and these do not, and B1.4 made the inconsistency exported `KC_API` surface of a versioned
+  archive. Twelve of the twelve probed reproduce as signal 11 at level 2, one fork per call
+  against the committed host archive, with two calibration controls that guard and answer
+  cleanly.
+- Fix: B2, as one change through the generator plus its exclusion machinery, unblocked by I-12's
+  retirement of the byte equality proof that made each hand edit expensive. Two of the eighteen
+  are fixed in the interlude under I-12 because they had no owner at all: `ffkmp_fmt_set_opt`'s
+  NULL key and `ffkmp_fmt_seek_micros`'s unbounded `stream_index`. The header contract sentence
+  B2 must add to `include/kitecodec_helpers.h`, which today documents ownership only: for every
+  argument-taking helper, state what a NULL or out of range argument returns, in the shape
+  `ffkmp_fmt_set_opt`'s line 282 already uses for its context ("A NULL context is refused with
+  AVERROR(EINVAL)") while saying nothing about the key that segfaults.
+- Phase: B2. Test: one C case per guard, each proved able to fail by reverting its guard, in the
+  suite that owns the unit.
+
+**R-B8-layout. Nothing tests a device that answers with a layout it did not negotiate.**
+- Where: the callback's contract checks in `kiteplayer-rt/native/src/kite_rt_coreaudio.c`; the
+  B1 closing entry announced this row and never wrote it.
+- Problem: the callback checks its buffer's size against the negotiated layout, two compares and
+  a comment, but nothing can present a wrong layout to test the refusal, because making one needs
+  a mock AudioUnit and no such harness exists here.
+- Fix: B8, where the mock AudioUnit work lives. The header contract sentence the mock must pin:
+  a callback handed a buffer list whose shape differs from the negotiated stream format must
+  refuse the whole callback and zero what it can see, never render into a shape it did not
+  negotiate.
+- Phase: B8. Test: the mock-driven case itself, with the two compares proved load bearing by
+  deleting each.
 
 ### 16.2 Sub-phases
 

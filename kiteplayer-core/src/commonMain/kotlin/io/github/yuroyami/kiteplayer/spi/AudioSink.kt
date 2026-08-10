@@ -25,6 +25,14 @@ public interface AudioSink : AutoCloseable {
     /**
      * Opens the device.
      *
+     * **A sink that owns its device callback in C does not implement this.** On such a sink this
+     * throws, because the alternative is worse: a device whose C callback ignores the lambda it was
+     * handed would play correctly while the caller believed its callback was being called. Those
+     * sinks say so by implementing `NativeRingAudioSink`, which exists only in the native source set
+     * and hands back a C ring instead of taking a callback, and the engine calls that entry point
+     * instead. `CoreAudioSink` is one of them, since B1.8 and register item B1-17. Every other sink,
+     * including every test fake and every push-model sink, is opened here and works exactly as before.
+     *
      * @param request what the engine would like.
      * @param render the callback the device will call. See [AudioRenderCallback] for its contract.
      * @return what the device actually accepted, which may differ in rate, format or layout. The
@@ -91,8 +99,8 @@ public interface AudioSinkFactory {
  *
  * - Not a suspending function. There is no coroutine on this thread and no dispatcher to resume on.
  * - Must not allocate, must not take a contended lock, must not log, must not throw.
- * - Reads from a preallocated single-producer single-consumer ring with a try-lock, and on
- *   contention writes silence and returns rather than blocking the device.
+ * - Reads from a preallocated single-producer single-consumer ring, and when that ring is dry writes
+ *   silence and returns rather than waiting for the feeder.
  * - [deadlineNanos] is when the **last** frame of this buffer becomes audible, on the engine's
  *   monotonic clock. It is what the audio clock is anchored to, and it is the reason this callback
  *   takes a time at all.
@@ -100,7 +108,27 @@ public interface AudioSinkFactory {
  * ffplay does the opposite of all of this: it resamples, allocates and computes A/V correction
  * inside the device callback. The busy-wait workaround in its Windows path is the visible scar.
  *
- * @return frames written. Fewer than [frames] means the remainder is silence.
+ * ### What this interface can and cannot promise, corrected
+ *
+ * An earlier version of this note said the ring is read "with a try-lock, and on contention writes
+ * silence". That was never true of any ring in this library: `KotlinAudioRing` takes no lock at all.
+ * What it does instead is worse in one specific place and is register item B1-16: while publishing the
+ * clock anchor, the real-time thread reads a sequence counter the feeder writes, and it retries with
+ * no bound if it catches the feeder mid-update. That is a priority inversion on a real-time thread,
+ * and it is why the shipped macOS path no longer goes through this interface at all: `CoreAudioSink`
+ * owns a C callback over a C ring in which the real-time thread is the writer and never waits.
+ *
+ * This interface remains the contract for every other sink, and `KotlinAudioRing` remains its
+ * implementation, permanently: js and wasmJs can never contain C, and the Kotlin ring is the only
+ * oracle the C one can be checked against (register item B1-20). What it must not be presented as is
+ * coverage of the macOS device path.
+ *
+ * @return frames written, counted from the start of the buffer. Fewer than [frames] means the
+ *         remainder is silence, and writing that silence is the sink's own obligation. That is
+ *         stated rather than implied because B1-19 moved the engine's silence fill into
+ *         `kprt_ring_render`, which is the C path and is not this one: on this path nothing above the
+ *         sink zeroes the tail, and an unwritten device buffer plays whatever was left in it.
+ *         [AudioSinkBuffer.writeSilence] is what a sink writes it with.
  */
 public fun interface AudioRenderCallback {
     public fun onRender(destination: AudioSinkBuffer, frames: Int, deadlineNanos: Long): Int
@@ -109,8 +137,12 @@ public fun interface AudioRenderCallback {
 /**
  * The device's own buffer, to be written in place.
  *
- * The engine writes through this rather than returning an array so that the CoreAudio and AAudio
- * callbacks can hand over the buffer the OS gave them, with no copy anywhere in the path.
+ * The engine writes through this rather than returning an array so that a device callback can hand over
+ * the buffer the OS gave it, with no copy anywhere in the path.
+ *
+ * CoreAudio no longer arrives here: since B1.8 its callback is C and writes the device's memory with
+ * `memcpy` and `memset` inside `kprt_ring_render`. This stays because it is the shape every other sink
+ * uses, including a future AAudio one, and because it is how the portable ring is tested.
  */
 public interface AudioSinkBuffer {
     public val format: AudioFormat

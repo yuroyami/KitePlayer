@@ -1,130 +1,108 @@
+@file:OptIn(ExperimentalForeignApi::class)
+
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
-import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.FloatVar
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.allocArray
-import kotlinx.cinterop.get
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.set
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import platform.CoreAudio.AudioGetCurrentHostTime
-import platform.CoreAudioTypes.AudioBufferList
-import platform.CoreAudioTypes.AudioTimeStamp
-import platform.CoreAudioTypes.kAudioTimeStampHostTimeValid
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * Drives the sink's real-time path over memory the test owns.
+ * The real-time path, as far as Kotlin can still see it.
  *
- * The device decides when it calls, how much it wants and what its timestamp claims, so the cases
- * that matter most cannot be asked for on demand: a callback that fills less than it was handed, no
- * callback at all, a timestamp whose host time CoreAudio marks meaningless. Passing the sink a buffer
- * list of our own turns each one into a plain assertion. The device tests in `CoreAudioSinkTest` still
- * cover the path CoreAudio itself takes, and the sink is opened here but never started, so nothing but
- * this test calls the render path.
+ * ### What this file used to do, and why it cannot any more
+ *
+ * Before B1.8 the sink's real-time body was a Kotlin method, `fillDeviceBuffer(callback, timeStamp,
+ * frames, bufferList)`, and this file called it directly over memory the test allocated. That made three
+ * awkward cases into plain assertions: a callback that filled less than it was handed, no callback at
+ * all, and a timestamp whose host time CoreAudio marked meaningless.
+ *
+ * That method is gone, and its absence is the point of the sub-phase. The body is now `kprt_render_into`
+ * in `kiteplayer-rt/native/src/kite_rt_render.c`, reached from a `static` C function that
+ * `include/kite_rt.h` does not name, so the cinterop bindings do not contain it and Kotlin has no way to
+ * call it. Register item B1-17: a callback Kotlin can reach is a callback the garbage collector has to
+ * stop.
+ *
+ * ### Where the three cases went, named rather than implied
+ *
+ * All three moved into C, into `kiteplayer-rt/native/tests/test_sink_callback.c`, which drives the same
+ * body five million times with no device:
+ *
+ *  - "a device buffer with no callback to fill it comes back silent" is now "a callback that finds no
+ *    ring zeroes the whole buffer and counts it". The state is reachable in production only during
+ *    teardown, and it is the only silence case left outside `kprt_ring_render` (register item B1-19).
+ *  - "a short render has its remainder zero filled" is now "a short read is exact zeroes after the real
+ *    frames and counts one underrun", asserted on the exact bytes.
+ *  - "an invalid host time falls back to the engine clock" is now "a host time the device did not flag
+ *    valid is counted as estimated". The fallback clock read is in the C callback, and
+ *    `test_sink_timebase.c` proves that clock is the same one `AudioGetCurrentHostTime` reads.
+ *
+ * The fourth case, "a render longer than the device asked for cannot leave the buffer", has no
+ * equivalent because it has no subject: it guarded a Kotlin wrapper that clamped a caller's frame count,
+ * and `kprt_ring_render` writes exactly the frame count it was given. `test_ring_basic.c` covers the
+ * boundary.
+ *
+ * ### What is left here
+ *
+ * The observations that need a real device and can only be made from outside it: that the device really
+ * enters the C callback, that the sink's counters describe what happened, and that teardown while the
+ * device is running is safe in the order the C code claims.
  */
-@OptIn(ExperimentalForeignApi::class)
 class CoreAudioSinkRealTimeTest {
 
     private val format = AudioFormat(sampleRate = 48_000, channels = 2, sampleFormat = SampleFormat.F32)
 
-    /** A callback that behaves: fills everything it was given and says so. */
-    private val fillsEverything = AudioRenderCallback { destination, frames, _ ->
-        destination.writeSilence(0, frames)
-        frames
-    }
-
-    private fun openIdleSink(): CoreAudioSink {
+    @Test
+    fun `an idle open sink has made no callback and holds a ring`() = runBlocking {
+        // Opened but never started, so nothing has pulled. The ring exists from the moment open returns,
+        // which is what makes it safe for the engine to start feeding before it starts the device.
         val sink = CoreAudioSink()
-        runBlocking { sink.open(format, fillsEverything) }
-        return sink
-    }
-
-    /**
-     * One turn of the real-time path, and what it left behind.
-     *
-     * The scratch memory starts at [prefill] rather than zero, so silence in the result is something
-     * the sink wrote and not something that was already there.
-     */
-    private fun renderOnce(
-        sink: CoreAudioSink,
-        frames: Int,
-        callback: AudioRenderCallback?,
-        hostTimeValid: Boolean = true,
-        prefill: Float = 1f,
-    ): FloatArray {
-        val samples = frames * format.channels
-        return memScoped {
-            val storage = allocArray<FloatVar>(samples)
-            for (i in 0 until samples) storage[i] = prefill
-
-            val bufferList = alloc<AudioBufferList>()
-            bufferList.mNumberBuffers = 1u
-            bufferList.mBuffers[0].mNumberChannels = format.channels.toUInt()
-            bufferList.mBuffers[0].mDataByteSize = (samples * 4).toUInt()
-            bufferList.mBuffers[0].mData = storage
-
-            val timeStamp = alloc<AudioTimeStamp>()
-            timeStamp.mHostTime = AudioGetCurrentHostTime()
-            timeStamp.mFlags = if (hostTimeValid) kAudioTimeStampHostTimeValid else 0u
-
-            sink.fillDeviceBuffer(callback, timeStamp, frames, bufferList)
-            FloatArray(samples) { storage[it] }
-        }
-    }
-
-    private fun assertAllSilent(samples: FloatArray, from: Int, until: Int, what: String) {
-        for (i in from until until) {
-            assertEquals(0f, samples[i], "$what: sample $i of $until was ${samples[i]}")
-        }
-    }
-
-    @Test
-    fun `a device buffer with no callback to fill it comes back silent`() {
-        // Between close clearing the callback and the device noticing, the buffer would otherwise go
-        // back holding whatever was in it, which is a burst of noise. The sink is the last line here.
-        val sink = openIdleSink()
+        val handoff = sink.openWithRing(format) { 4_800 }
         try {
-            val filled = renderOnce(sink, frames = 64, callback = null)
-            assertAllSilent(filled, 0, filled.size, "a callback-less render must zero the whole buffer")
+            assertEquals(0, sink.callbacks, "an unstarted device must not have called anything")
+            assertEquals(0, sink.zeroFilledCallbacks)
+            assertEquals(4_800, ringBuffered(handoff.ring) + ringFree(handoff.ring), "the ring holds what was asked for")
+            assertEquals(48_000, ringSampleRate(handoff.ring))
+            assertEquals(0L, ringConsumed(handoff.ring))
+            assertEquals(0L, ringUnderruns(handoff.ring))
+            assertEquals(3, sink.retainedResources())
         } finally {
             sink.close()
         }
     }
 
     @Test
-    fun `a short render has its remainder zero filled`() {
-        // A ring near the end of a file writes what it has and returns that count. The frames it did
-        // not write are the sink's problem, not the device's.
-        val sink = openIdleSink()
+    fun `the device enters the C callback and dates what it played`() = runBlocking {
+        val sink = CoreAudioSink()
+        val handoff = sink.openWithRing(format) { 24_000 }
+        val ring = handoff.ring
         try {
-            val frames = 64
-            val supplied = 16
-            val tone = FloatArray(supplied * format.channels) { 0.5f }
+            fillRing(ring, 0)
+            sink.start()
+            delay(200)
+            sink.stop()
 
-            val filled = renderOnce(
-                sink,
-                frames = frames,
-                callback = AudioRenderCallback { destination, _, _ ->
-                    destination.writeInterleaved(tone, 0, 0, supplied)
-                    supplied
-                },
-            )
+            val consumed = ringConsumed(ring)
+            val anchor = ringAnchor(ring)
+            assertTrue(sink.callbacks > 0, "the device never entered the callback")
+            assertTrue(consumed > 0, "the device consumed nothing")
+            assertTrue(anchor.valid, "the callback published no anchor")
+            assertTrue(!anchor.fromCache, "the anchor reader should not have needed its cache: it is unloaded here")
 
-            for (i in 0 until supplied * format.channels) {
-                assertEquals(0.5f, filled[i], "the frames the callback wrote must survive: sample $i")
-            }
-            assertAllSilent(
-                filled,
-                supplied * format.channels,
-                filled.size,
-                "the frames the callback did not write must be silence",
+            // The published media time is the boundary after the last frame handed over, so it must equal
+            // the duration of everything consumed, to the microsecond, through the same exact rescale the
+            // ring uses. This is the property register item B1-24's one-machine caveat cannot weaken: it
+            // is arithmetic, not timing.
+            assertEquals(
+                framesToMicros(consumed, 48_000),
+                anchor.ptsUs,
+                "the anchor must date exactly the frames the device took: consumed=$consumed",
             )
         } finally {
             sink.close()
@@ -132,64 +110,80 @@ class CoreAudioSinkRealTimeTest {
     }
 
     @Test
-    fun `a render longer than the device asked for cannot leave the buffer`() {
-        // Writing past a buffer CoreAudio owns is memory corruption rather than a wrong sample, so the
-        // wrapper clamps to the frame count the device gave it. The guard sample after the end proves
-        // the clamp held.
-        val sink = openIdleSink()
+    fun `every callback on this machine carried a valid host time`() = runBlocking {
+        // Not a promise about all hardware, and not asserted as one: CoreAudio is allowed to hand over a
+        // timestamp with no valid host time, which is why the C callback has a fallback and counts it.
+        // What this records is that on this device, over a few hundred callbacks, it never did. The
+        // counter itself is asserted in test_sink_callback.c, where the flag can be forced.
+        val sink = CoreAudioSink()
+        val handoff = sink.openWithRing(format) { 24_000 }
         try {
-            val frames = 32
-            val tooMuch = FloatArray(frames * 2 * format.channels) { 0.25f }
-
-            val filled = renderOnce(
-                sink,
-                frames = frames,
-                callback = AudioRenderCallback { destination, _, _ ->
-                    destination.writeInterleaved(tooMuch, 0, 0, frames * 2)
-                    destination.writeInterleaved(tooMuch, 0, frames, frames)
-                    destination.writeSilence(frames, frames)
-                    frames
-                },
+            fillRing(handoff.ring, 0)
+            sink.start()
+            delay(200)
+            sink.stop()
+            assertTrue(sink.callbacks > 0)
+            assertEquals(
+                0,
+                sink.estimatedAnchors,
+                "this device flagged an invalid host time on ${sink.estimatedAnchors} of ${sink.callbacks} " +
+                    "callbacks, so the fallback path is live here and the anchor is an estimate that often",
             )
-
-            assertEquals(frames * format.channels, filled.size)
-            for (i in filled.indices) {
-                assertEquals(0.25f, filled[i], "the clamp must still write everything that does fit: sample $i")
-            }
         } finally {
             sink.close()
         }
     }
 
     @Test
-    fun `an invalid host time falls back to the engine clock`() {
-        // CoreAudio says which fields of its timestamp mean anything. Reading a host time it did not
-        // flag valid would anchor the audio clock to a number with no meaning.
-        val sink = openIdleSink()
+    fun `closing while the device is running is safe and stops the callbacks`() = runBlocking {
+        // The ordering claim of `kprt_sink_destroy`: stop, uninitialise, dispose, and only then let go of
+        // the ring. If it were the other way round the callback could read a freed ring, which is the
+        // classic use-after-free in an audio teardown. This case cannot prove the order by inspection; it
+        // does what a caller would do at the worst possible moment and asserts the process survives it and
+        // the sink ends up owning nothing.
+        val sink = CoreAudioSink()
+        val handoff = sink.openWithRing(format) { 24_000 }
+        fillRing(handoff.ring, 0)
+        sink.start()
+        delay(60)
+        val duringPlayback = sink.callbacks
+        assertTrue(duringPlayback > 0, "the device was not running yet, so this closes nothing interesting")
+
+        sink.close()
+
+        assertEquals(0, sink.retainedResources(), "close must let go of both handles and the format")
+        // Reading the stats of a closed sink answers zeroes rather than throwing or crashing, because the
+        // C reader tolerates a NULL sink. A diagnostic call after close must not be a fault.
+        assertEquals(0, sink.callbacks)
+        assertEquals(0, sink.worstCallbackNanos)
+        // And it is idempotent, which a session owner that closes twice depends on.
+        sink.close()
+        assertEquals(0, sink.retainedResources())
+    }
+
+    @Test
+    fun `a sink can be opened again after it is closed`() = runBlocking {
+        val sink = CoreAudioSink()
+        sink.openWithRing(format) { 4_800 }
+        sink.close()
+        val second = sink.openWithRing(format) { 4_800 }
         try {
-            val frames = 256
-            val bufferNanos = frames.toLong() * 1_000_000_000L / format.sampleRate
-            val estimatesBefore = sink.estimatedAnchors
-            var deadline = 0L
+            assertEquals(48_000, second.format.sampleRate)
+            assertEquals(3, sink.retainedResources())
+        } finally {
+            sink.close()
+        }
+    }
 
-            val before = AppleHostClock.nanos()
-            renderOnce(
-                sink,
-                frames = frames,
-                hostTimeValid = false,
-                callback = AudioRenderCallback { destination, count, deadlineNanos ->
-                    deadline = deadlineNanos
-                    destination.writeSilence(0, count)
-                    count
-                },
-            )
-            val after = AppleHostClock.nanos()
-
-            assertEquals(estimatesBefore + 1, sink.estimatedAnchors, "an estimated anchor must be counted")
+    @Test
+    fun `a second open on a live sink is refused`() = runBlocking {
+        val sink = CoreAudioSink()
+        sink.openWithRing(format) { 4_800 }
+        try {
+            val failure = assertFailsWith<IllegalStateException> { sink.openWithRing(format) { 4_800 } }
             assertTrue(
-                deadline in (before + bufferNanos)..(after + bufferNanos),
-                "the fallback anchor is now plus this buffer: expected ${before + bufferNanos} .. " +
-                    "${after + bufferNanos}, was $deadline",
+                failure.message?.contains("already open") == true,
+                "the message must say what is wrong: ${failure.message}",
             )
         } finally {
             sink.close()
@@ -197,31 +191,73 @@ class CoreAudioSinkRealTimeTest {
     }
 
     @Test
-    fun `a valid host time is used as it stands`() {
-        val sink = openIdleSink()
+    fun `the device period the sink reports is what the ring is sized against`() = runBlocking {
+        val sink = CoreAudioSink()
+        var askedWith = 0
+        val handoff = sink.openWithRing(format) { negotiated ->
+            askedWith = negotiated.sampleRate
+            sink.deviceBufferFrames * 8
+        }
         try {
-            val frames = 256
-            val bufferNanos = frames.toLong() * 1_000_000_000L / format.sampleRate
-            val estimatesBefore = sink.estimatedAnchors
-            var deadline = 0L
+            assertEquals(48_000, askedWith, "the capacity function must be given the format the device took")
+            assertEquals(512, sink.deviceBufferFrames)
+            // The ring really was created at that capacity, which is the only way to know the number the
+            // engine computed was the number C used.
+            assertEquals(512 * 8, ringBuffered(handoff.ring) + ringFree(handoff.ring))
+        } finally {
+            sink.close()
+        }
+    }
 
-            val before = AppleHostClock.nanos()
-            renderOnce(
-                sink,
-                frames = frames,
-                callback = AudioRenderCallback { destination, count, deadlineNanos ->
-                    deadline = deadlineNanos
-                    destination.writeSilence(0, count)
-                    count
-                },
-            )
-            val after = AppleHostClock.nanos()
+    @Test
+    fun `a mono request is accepted and a nine channel request is clamped`() = runBlocking {
+        // The C negotiation clamps to what CoreAudio's default output takes here, and reports what it
+        // settled on rather than what it was asked for. A sink that silently kept the request would have
+        // the engine resample into a layout the device never agreed to.
+        val mono = CoreAudioSink()
+        val monoOpened = mono.openWithRing(
+            AudioFormat(sampleRate = 44_100, channels = 1, sampleFormat = SampleFormat.F32),
+        ) { 4_410 }
+        try {
+            assertEquals(1, monoOpened.format.channels)
+            assertEquals(44_100, monoOpened.format.sampleRate)
+        } finally {
+            mono.close()
+        }
 
-            assertEquals(estimatesBefore, sink.estimatedAnchors, "a valid host time needs no estimate")
+        val many = CoreAudioSink()
+        val manyOpened = many.openWithRing(
+            AudioFormat(sampleRate = 48_000, channels = 9, sampleFormat = SampleFormat.F32),
+        ) { 4_800 }
+        try {
+            assertEquals(2, manyOpened.format.channels, "nine channels must come back clamped, not accepted")
+        } finally {
+            many.close()
+        }
+    }
+
+    @Test
+    fun `the anchor advances with the device rather than with the clock`() = runBlocking {
+        // Two readings a fixed wall time apart. The media time between them must grow by about that wall
+        // time, because the device consumes at real speed; a clock derived from submissions instead would
+        // jump ahead as fast as the feeder could write.
+        val sink = CoreAudioSink()
+        val handoff = sink.openWithRing(format) { 48_000 }
+        val ring = handoff.ring
+        try {
+            fillRing(ring, 0)
+            sink.start()
+            delay(80)
+            val first = ringAnchor(ring)
+            delay(200)
+            val second = ringAnchor(ring)
+            sink.stop()
+
+            assertTrue(first.valid && second.valid, "both readings must be real anchors")
+            val advancedUs = second.ptsUs - first.ptsUs
             assertTrue(
-                deadline in (before + bufferNanos)..(after + bufferNanos),
-                "the host time taken inside this call plus the buffer must land inside the call: expected " +
-                    "${before + bufferNanos} .. ${after + bufferNanos}, was $deadline",
+                abs(advancedUs - 200_000) < 60_000,
+                "200 ms of wall time must advance the media clock by about 200 ms, was $advancedUs us",
             )
         } finally {
             sink.close()

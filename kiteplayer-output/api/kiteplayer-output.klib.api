@@ -38,7 +38,7 @@ final class io.github.yuroyami.kiteplayer.output/AppKitWindow { // io.github.yur
     final fun stop() // io.github.yuroyami.kiteplayer.output/AppKitWindow.stop|stop(){}[0]
 }
 
-final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink { // io.github.yuroyami.kiteplayer.output/CoreAudioSink|null[0]
+final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink { // io.github.yuroyami.kiteplayer.output/CoreAudioSink|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
 
     final val deviceBufferFrames // io.github.yuroyami.kiteplayer.output/CoreAudioSink.deviceBufferFrames|{}deviceBufferFrames[0]
@@ -52,6 +52,7 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroy
     final fun latencyNanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/CoreAudioSink.latencyNanos|latencyNanos(){}[0]
     final suspend fun drain() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.drain|drain(){}[0]
     final suspend fun open(io.github.yuroyami.kiteplayer.spi/AudioFormat, io.github.yuroyami.kiteplayer.spi/AudioRenderCallback): io.github.yuroyami.kiteplayer.spi/AudioFormat // io.github.yuroyami.kiteplayer.output/CoreAudioSink.open|open(io.github.yuroyami.kiteplayer.spi.AudioFormat;io.github.yuroyami.kiteplayer.spi.AudioRenderCallback){}[0]
+    final suspend fun openWithRing(io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Int>): io.github.yuroyami.kiteplayer.spi/NativeRingHandoff // io.github.yuroyami.kiteplayer.output/CoreAudioSink.openWithRing|openWithRing(io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.AudioFormat,kotlin.Int>){}[0]
     final suspend fun setPaused(kotlin/Boolean): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/CoreAudioSink.setPaused|setPaused(kotlin.Boolean){}[0]
     final suspend fun start() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.start|start(){}[0]
     final suspend fun stop() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.stop|stop(){}[0]

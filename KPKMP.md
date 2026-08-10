@@ -843,26 +843,64 @@ as its own gate step.
 
 ## 9. Verification protocol
 
-The gate for every phase. A phase is done only when all of it passes, rerun for real (no
-up-to-date-only evidence).
+The standing gate for every phase. Promoted at the interlude (I-15) from B1's base gate, so that
+contract item 2 again points at the whole gate: before the interlude this section named none of
+the thirteen instruments B1 built, and an executor following the contract would have fired none of
+them. A phase is done only when all of it passes, rerun for real. A cached `UP-TO-DATE` run proves
+nothing; section 2 says why, and the rule bears repeating here because the C archives and the
+cinterop klib have both been observed stale while Gradle reported success.
+
+On this machine every `apiDump`, `apiCheck` and cinterop invocation in KiteCodec needs
+`-Pkitecodec.hostTargetsOnly=true`: only macosArm64 has an FFmpeg tree here, and without the flag
+the other targets fail on unresolved `ffmpeg` references. The B1 log recorded that twice as a
+deviation; it is now part of the protocol. A scratch clone additionally needs the Android SDK
+location that the gitignored `local.properties` carries in the working tree, or
+`assembleAndroidMain` fails before its task graph exists: copy `local.properties` into the clone
+or export `ANDROID_HOME` first. Both clean-clone requirements in this paragraph were found by
+running this gate from clean clones at I.1, not deduced.
 
 ```bash
-# KiteCodec, when touched in the phase
-cd ../KiteCodec && ./gradlew :kitecodec-core:macosArm64Test
+# KiteCodec, when touched in the phase. Build first, then audit what was built: every audit
+# below reads the archive or the klib the two gradle lines produce.
+cd ../KiteCodec
+./gradlew :kitecodec-core:cinteropFfmpegMacosArm64 -Pkitecodec.hostTargetsOnly=true
+./gradlew :kitecodec-core:apiCheck -Pkitecodec.hostTargetsOnly=true
+./gradlew checkCinteropCoupling
+./gradlew :buildSrc:test
+./native/kitecodec-c/scripts/build-host.sh plain && ./native/kitecodec-c/scripts/run-c-tests.sh plain
+./native/kitecodec-c/scripts/build-host.sh asan  && ./native/kitecodec-c/scripts/run-c-tests.sh asan
+./native/kitecodec-c/scripts/build-host.sh tsan  && ./native/kitecodec-c/scripts/run-c-tests.sh tsan
+./native/kitecodec-c/scripts/replay-corpus.sh asan
+./native/kitecodec-c/scripts/symbol-audit.sh          # the shipped macos_arm64 archive
+./native/kitecodec-c/scripts/klib-metadata-diff.sh --check
+./native/kitecodec-c/scripts/check-deleted-surface.sh
+./gradlew :kitecodec-core:macosArm64Test
 ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true   # when KitePlayer must see changes
 
-# KitePlayer, always
+# KitePlayer, always. Media generation comes FIRST, not with the sample runs where it used to
+# sit: kiteplayer-ffmpeg's native tests read testmedia/, which is gitignored and generated, so a
+# clean checkout has none. Found by this gate's own clean-clone arm at I.1, where 29 tests failed
+# on missing files with the generation line still four commands below them; a working tree keeps
+# old media around, which is why the wrong order never bit before.
 cd ../KitePlayer
+./scripts/testmedia.sh                                # regenerate when testmedia.sh changed
+./gradlew checkKotlinAbi                              # the four committed api dumps
+./gradlew :buildSrc:test
 ./gradlew :kiteplayer-core:jvmTest :kiteplayer-core:macosArm64Test \
           :kiteplayer-output:macosArm64Test :kiteplayer-ffmpeg:macosArm64Test \
           :kiteplayer-subtitles:jvmTest      # subtitles tests exist from A0 onward
+kiteplayer-rt/native/scripts/build-host.sh plain && kiteplayer-rt/native/scripts/run-c-tests.sh plain
+kiteplayer-rt/native/scripts/build-host.sh asan  && kiteplayer-rt/native/scripts/run-c-tests.sh asan
+kiteplayer-rt/native/scripts/build-host.sh tsan  && kiteplayer-rt/native/scripts/run-c-tests.sh tsan
+kiteplayer-rt/native/scripts/run-c-tests.sh interpose  # plain binaries, interposer must be live
+kiteplayer-rt/native/scripts/render-audit.sh
+kiteplayer-rt/native/scripts/source-discipline.sh
 
 # Cross-target compile spot checks, always
 ./gradlew :kiteplayer-core:compileKotlinJs :kiteplayer-core:compileKotlinWasmJs \
           :kiteplayer-core:assembleAndroidMain
 
-# Sample runs, from A1 onward; regenerate media first when testmedia.sh changed
-./scripts/testmedia.sh
+# Sample runs, from A1 onward; the media was generated at the top of the KitePlayer block
 ./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64
 BIN=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
 $BIN testmedia/sync1080p30.mp4        # expect: all frames submitted, 0 dropped, 0 underruns
@@ -870,23 +908,43 @@ $BIN testmedia/truevfr720.mp4         # expect: 0 dropped (real VFR from A0 onwa
 $BIN testmedia/hevc4k10.mp4           # expect: video-master playback completes
 $BIN /nonexistent.mp4                 # expect: one sentence, no stack trace
 
-# Em dash scan, always, both repos; must print nothing. The pattern is the escape
+# Em dash scan, always, both repositories; must print nothing. The pattern is the escape
 # text backslash-u2014 (expanded by the shell), so no literal em dash exists in the repos.
-# .claude/worktrees holds gitignored scratch checkouts of the same repository at older commits,
-# so scanning them reports the same text many times over and buries the real hits.
-# The exclusions are --exclude-dir and not `| grep -v vendor/ | grep -v build/`, tightened at
-# B1.3: the piped form matches the OUTPUT LINE, so it silently drops a real hit whose own text
-# happens to mention one of those words. Measured at B1.3: three em dashes in
-# .github/scripts/package-ffmpeg.sh survived every scan since B1.1 because one line says
-# "vendor/ffmpeg", one says "ffbuild/config.log" and one says "build/install".
-grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" \
-  --exclude-dir=vendor --exclude-dir=build --exclude-dir=.claude . ../KiteCodec
+# The scan walks `git ls-files`, replacing the extension allowlist the gate used through B1:
+# an allowlist cannot reach an extensionless file, and both LICENSE files carried an em dash
+# through every widened run until the interlude (I-18) found them. Tracked files only, so the
+# gitignored scratch checkouts under .claude/, build/ and vendor/ are excluded by construction
+# rather than by flags. grep exits 1 when it finds nothing, and for this scan that exit is the
+# passing outcome; do not wrap it in `set -e` and read the exit as failure.
+cd ../KiteCodec  && git ls-files -z | xargs -0 grep -n $'\u2014'
+cd ../KitePlayer && git ls-files -z | xargs -0 grep -n $'\u2014'
 ```
+
+The `interpose` run mode exists in `kiteplayer-rt` today; `kitecodec-c` gains the same mode at
+interlude sub-phase I.4 (I-08), and from that sub-phase onward the KiteCodec block above carries
+`./native/kitecodec-c/scripts/run-c-tests.sh interpose` beside the other three.
 
 From A2 add the transport-stream offset clip, from A4 add `surround51.mp4` and the P010
 golden, from A6 add the rotated clip, each with the expected line stated in its phase.
 The sample binary is a debug executable and its numbers are development evidence
 (level 6), never performance qualification; qualification budgets live in Horizon B.
+
+### How every ratchet moves
+
+One row per committed baseline. A ratchet without a written move procedure gets moved by whatever
+the executor improvises at the moment it fires, which is how a real change gets absorbed silently;
+this table is the procedure. Two of the files are installed by the interlude itself and their rows
+say which sub-phase.
+
+| Baseline | Fires when | The move | The log entry must say |
+|---|---|---|---|
+| `../KiteCodec/kitecodec-core/api/kitecodec-core.klib.api` | `:kitecodec-core:apiCheck`, on any public API change in kitecodec-core's own klib | `./gradlew :kitecodec-core:apiDump -Pkitecodec.hostTargetsOnly=true`, commit the dump with the change | every declaration added or removed, and why |
+| the four KitePlayer api dumps under `*/api/` | `checkKotlinAbi`, on any public API change in the four modules | `./gradlew updateKotlinAbi`, commit the dumps with the change | every declaration added or removed, and why |
+| `../KiteCodec/native/kitecodec-c/coupling-baseline.txt` | `checkCinteropCoupling`, when a ratcheted count rises | edit the number by hand to the value re-measured with the command written beside it in the file | the old and new number, and the change that moved it |
+| `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` | `klib-metadata-diff.sh --check`, on any cinterop metadata difference | `./scripts/klib-metadata-diff.sh --update`, in the same commit as the deliberate surface change | the script's whole SUMMARY block, pasted, so the record carries the reviewed numbers and not a pointer to a 19,000 line diff |
+| `../KiteCodec/native/kitecodec-c/deleted-surface.txt` (installed by I.3) | `check-deleted-surface.sh`, on any use of a name whose status is `deleted` | change that name's status to `resurrected-in-<item>` in the same commit that resurrects it | one sentence naming the item and the reason |
+| `../KiteCodec/native/kitecodec-c/exported-symbols-baseline.txt` (installed by I.4) | `symbol-audit.sh` check 6, when the archive's exported name set differs from the baseline | regenerate with the command the baseline's own header names, in the same commit as the deliberate export change | every symbol added or removed, and why |
+| `ALLOWED_UNDEFINED` in `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh` | `symbol-audit.sh` check 4, when an archive references an undefined symbol outside the list | add the symbol to the list in the same commit as the code that needs it | the symbol and the helper that pulls it in |
 
 Multi-pass rule, owner-mandated: after each phase's code is written, re-read every changed
 file once against this document, run the gate, write the Execution log entry, then commit.
@@ -4024,6 +4082,43 @@ is no other.
   sixteen of the seventeen are level 7 evidence and their audio entry points refuse loudly rather
   than claiming to work. What changed in B1 is how much of the audio path is provable, not what it
   can play.
+
+- 2026-08-10, interlude sub-phase I.1 (item I-15), gate passed. Executed single-threaded by Fable
+  5. What landed: section 9 is again the whole standing gate, holding the two ratchet tasks and
+  the eleven scripts B1 built, in dependency order, with the build-then-audit rule stated; the
+  ratchet move table with one row per committed baseline, including the two files the interlude
+  installs later (marked I.3 and I.4); the em dash scan replaced by the `git ls-files` form over
+  tracked files; the widened extension form deleted from 15.2 with the reason; and in KiteCodec's
+  `ci.yml`, the macos-arm64 job's FFmpeg install pinned and `check-deleted-surface.sh` added
+  beside the coupling ratchet. The pin is an assert on the exact avutil header version the
+  metadata baseline froze (60.8.100), not a versioned formula, because Homebrew has none for
+  this release: `ffmpeg@8` is an alias of the moving main formula, checked 2026-08-10 with the
+  formula already at 8.1.2 upstream. The assert fails the job at the install step with the move
+  procedure in its own output, instead of failing it later inside a 19,000 line metadata diff.
+  That CI change is level 8 until a run exists, like every other line of that file.
+
+  The gate ran from clean clones of both repositories, which no B1 gate ever did, and the
+  clean-clone arm earned its cost immediately by finding two protocol defects this entry
+  records as fixed in the same commit. First, section 9 generated test media below the test
+  tasks that read it: 29 of 36 `kiteplayer-ffmpeg:macosArm64Test` tests failed on missing files
+  in the first clean-clone run, because a working tree keeps old media and the wrong order never
+  bit in B1. Media generation now opens the KitePlayer block. Second, `assembleAndroidMain`
+  needs the SDK location that the gitignored `local.properties` carries, so a scratch clone
+  fails before the task graph exists; section 9 now says to copy the file or export
+  `ANDROID_HOME`. Measured on the passing rerun: KiteCodec 6 C suites passed in plain, asan and
+  tsan; corpus replay under asan clean; `symbol-audit.sh` PASS; `klib-metadata-diff.sh --check`
+  clean; `check-deleted-surface.sh` clean; `macosArm64Test` rerun for real with `--rerun`;
+  KitePlayer 8 C suites passed in plain, asan, tsan and interpose; `render-audit.sh` and
+  `source-discipline.sh` (5 checks) passed; all five test tasks passed with `--rerun`; the
+  three sample clips played to completion. The falsifiability arm behaved exactly as required:
+  the new scan reported exactly `LICENSE:20` in each repository and nothing else, the two hits
+  I-18 removes next, which the retired extension allowlist could not see.
+
+  One deviation to record honestly: in the loaded gate run, `truevfr720.mp4` dropped one frame
+  at a 27 millisecond scheduler stall while every suite in the protocol ran beside it; two
+  reruns on the quiet machine dropped zero with zero underruns. The expected line stays "0
+  dropped" and the observation stays here: a debug sample on a loaded development machine is
+  level 6 evidence and section 9 already says it qualifies nothing.
 ---
 
 ## 15. Horizon B execution: B1
@@ -4492,24 +4587,13 @@ previous gate passed, every gate reruns for real, every sub-phase ends with an E
 entry and one commit per repository touched. Contract items 1 to 13 apply unchanged, including
 the ban on branches, the ban on trailers and the ban on em dashes.
 
-**The base gate**, referred to below as "the section 9 gate", is section 9's protocol with two
-additions that B1.1 installs and every later sub-phase inherits:
-
-```bash
-# added by B1.1, part of every B1 gate from B1.1 onward
-cd ../KiteCodec && ./gradlew :kitecodec-core:apiCheck
-cd ../KiteCodec && ./gradlew checkCinteropCoupling
-
-# the em dash scan of section 9, widened for the file types B1 introduces. The pattern stays the
-# escape text backslash-u2014 expanded by the shell, exactly as in section 9, so that writing this
-# command down does not itself put a literal em dash in the repository. The exclusions are
-# --exclude-dir, tightened at B1.3 for the reason section 9 now records: the piped `grep -v` form
-# filtered the output line, so it hid three real hits whose own text mentioned vendor/ or build/.
-grep -rn $'\u2014' --include="*.kt" --include="*.kts" --include="*.md" --include="*.def" \
-  --include="*.c" --include="*.h" --include="*.sh" --include="*.yml" --include="*.py" \
-  --include="*.txt" --exclude-dir=vendor --exclude-dir=build --exclude-dir=.claude \
-  . ../KiteCodec
-```
+**The base gate**, referred to below as "the section 9 gate", was section 9's protocol plus two
+additions installed at B1.1, `:kitecodec-core:apiCheck` and `checkCinteropCoupling`, plus an em
+dash scan widened by file extension. The interlude (I-15) promoted both gradle additions into
+section 9 itself and deleted the widened scan in favour of section 9's `git ls-files` form,
+because an extension allowlist cannot reach an extensionless file: both `LICENSE` files carried an
+em dash through every widened run until I-18 found them. Where an entry below says "the section 9
+gate", read today's section 9.
 
 Paths below are relative to the repository they belong to. `../KiteCodec` means the KiteCodec
 repository; an unprefixed path means KitePlayer.

@@ -545,4 +545,57 @@ class PlaybackCoreTest {
         assertEquals(0, harness.ledger.liveCount, "with nothing left live")
         harness.close()
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // The interlude's real-time seam, Kotlin half (I-02, I-03).
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a failed selectStreams still closes the audio path it had opened`() = runTest {
+        // Interlude item I-03. buildSession opens the audio path, then selects streams; a throw
+        // from selectStreams used to close only the backend session, leaking a live sink that
+        // since B1.8 owns a C sink, a C ring and an initialised AudioUnit, while
+        // retainedResources() reported zero. The scripted sink records its close, so the leak is
+        // one boolean here: remove the inner catch in buildSession and this is the test that
+        // fails.
+        val faults = FaultPlan()
+        faults.failSelectStreams = true
+        val harness = CoreHarness(this, faults = faults)
+
+        assertFailsWith<PlaybackException> { harness.open() }
+        assertTrue(harness.sink.closed, "the audio path leaked through a failed open")
+        harness.close()
+    }
+
+    @Test
+    fun `a close with a stalled worker still completes and closes the audio path exactly once`() = runTest(timeout = 150.seconds) {
+        // Interlude item I-02, the reachable half. The audio decoder parks on a cancellable
+        // suspension and never reaches a quiescent boundary, so its quiesce burns a full
+        // QUIESCE_DEADLINE; close must still complete, cancel the parked job, join it, and only
+        // then close the audio path, exactly once.
+        //
+        // What this test measured about the UNREACHABLE half, recorded here because it is the
+        // reason no scripted test exhausts the close budget: the budget arithmetic hazard of the
+        // review (five quiesce deadlines summing to the whole CLOSE_DEADLINE, the joins then
+        // swallowed in a cancelled context) needs at least five workers stuck at once, and only
+        // three of the five can stall at all, since the audio feeder and the video scheduler
+        // quiesce cooperatively by construction. Three stalls burn 6 of the 10 seconds and the
+        // teardown still finishes. So the NonCancellable join's own falsification lives at the C
+        // level, where the review reproduced the freed-ring write under AddressSanitizer; this
+        // test pins the Kotlin contract around it.
+        val faults = FaultPlan()
+        faults.stallAudioDecodeReceive = true
+        val harness = CoreHarness(this, faults = faults)
+
+        harness.open()
+        harness.core.play()
+        harness.run(100.milliseconds)
+        harness.close()
+
+        assertTrue(harness.sink.closed, "the audio path must be closed despite the stalled worker")
+        assertTrue(
+            harness.sink.stopCount > 0,
+            "teardown stops the device before anything lets go of the ring",
+        )
+    }
 }

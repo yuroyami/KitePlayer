@@ -44,7 +44,9 @@ import kotlin.time.Duration.Companion.milliseconds
  * [speed] is a plain read of one value and needs nothing.
  *
  * [open], [play], [pause], [flush], [drain], [endOfStream] and [close] are thread confined to the
- * session owner instead. A lock cannot be held across a suspension point, so the suspending ones
+ * session owner instead. [submit] and [submitDecoded] run on the feed worker, and each reads the
+ * ring FIELD under the lock (interlude, I-02), so the rule is one sentence again: any member that
+ * may run beside another thread touches that field only under the lock. A lock cannot be held across a suspension point, so the suspending ones
  * could not be guarded even in principle, and their contract is confinement. In A5 the core's session
  * actor becomes that owner. The seek path already depends on this: the ring's own flush requires both
  * of its sides to be quiescent first.
@@ -162,7 +164,13 @@ public class AudioPlayback(
      * @param frames sample frames in [interleaved], meaning one value per channel each.
      */
     public suspend fun submit(pts: Pts?, interleaved: FloatArray, frames: Int) {
-        val ring = ring ?: error("submit was called before open")
+        // The FIELD is read under the lock, extending the one-sentence rule to the producer
+        // (interlude item I-02): a member that may run beside [close] touches `ring` only under
+        // the lock, so a submit can never load the reference in the same instant close is
+        // clearing and freeing it. What the lock cannot do is protect the rest of this loop; that
+        // is [close]'s quiescence precondition, and the engine honours it by joining the feeder
+        // before anything frees a ring.
+        val ring = synchronized(lock) { ring } ?: error("submit was called before open")
         var offset = 0
         var firstChunk = true
         while (offset < frames) {
@@ -280,7 +288,12 @@ public class AudioPlayback(
      */
     public suspend fun flush(newGeneration: Generation) {
         sink.stop()
-        ring?.flush()
+        // Under the lock since the interlude (I-06): the C ring's flush clears the anchor and both
+        // caches, and [position] and [anchorClock] read them under this same lock, so without it
+        // nothing excluded a progress report from interleaving with the clearing. The C contract
+        // now names the anchor reader in its quiescence sentence; this lock is how this class
+        // honours it.
+        synchronized(lock) { ring?.flush() }
         // The conversion stage holds one sample frame across buffers. After a seek that frame belongs
         // to the position that was abandoned, so interpolating the new position out of it would mix
         // the two.
@@ -376,6 +389,14 @@ public class AudioPlayback(
             synchronized(lock) { mediaClock.speed = value }
         }
 
+    /**
+     * Quiescence precondition, stated in the same words [flush]'s is (interlude item I-02): the
+     * feeder must not be between a [submit] call's start and its return when this runs. Confinement
+     * alone does not give that, because [submit] runs on the feed worker rather than the session
+     * owner; what gives it is the engine joining the feeder's job before teardown reaches this
+     * call. A submit that races a close anyway reads the cleared field under the lock and fails
+     * loudly instead of touching freed memory.
+     */
     override fun close() {
         if (closed) return
         closed = true

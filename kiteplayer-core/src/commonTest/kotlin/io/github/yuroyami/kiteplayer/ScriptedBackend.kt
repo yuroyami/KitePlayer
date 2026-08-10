@@ -21,6 +21,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -121,6 +122,14 @@ internal class FaultPlan(
 
     /** True makes every audio decoder factory refuse. */
     var audioDecodersRefuse: Boolean = false
+
+    /** True makes [ScriptedSource.selectStreams] throw, which is buildSession's reachable thrower
+     * AFTER the audio path has gone live (interlude item I-03). */
+    var failSelectStreams: Boolean = false
+
+    /** True parks every audio decoder's receive until cancellation, a worker that refuses to reach
+     * a quiescent boundary (interlude item I-02). */
+    var stallAudioDecodeReceive: Boolean = false
 
     /** True makes the video decoder accept every packet and never produce a frame. */
     var videoDecodeProducesNothing: Boolean = false
@@ -289,6 +298,7 @@ internal class ScriptedSource(
         private set
 
     override fun selectStreams(indices: Set<Int>) {
+        if (faults.failSelectStreams) error("scripted selectStreams failure (interlude item I-03)")
         check(selectCalls == 0) { "streams must be selected before the first read" }
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         selected = indices
@@ -501,6 +511,9 @@ internal class ScriptedAudioDecoder(
     }
 
     override suspend fun receive(): AudioBuffer? {
+        // A worker that never reaches a quiescent boundary: parked on a cancellable suspension,
+        // so quiesce fails while cancellation still works (interlude item I-02).
+        if (faults.stallAudioDecodeReceive) awaitCancellation()
         val buffer = pending.removeFirstOrNull()
         if (buffer == null && ending) drained = true
         return buffer

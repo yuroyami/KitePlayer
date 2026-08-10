@@ -200,4 +200,30 @@ class AudioPlaybackTest {
             "while the sink was releasing the ring, a reader still reached it",
         )
     }
+
+    @Test
+    fun `a submit that races a close fails loudly instead of touching a cleared ring`() = runTest {
+        // Interlude item I-02. [submit] reads the ring FIELD under the same lock [close] clears it
+        // under, so the two can interleave only in whole steps: a submit that loads the reference
+        // before the clear writes into a ring the engine has not freed yet (the engine's join is
+        // what guarantees that), and one that loads after the clear finds null and fails loudly.
+        // What must never happen is the third outcome the old plain read allowed, a load torn
+        // against the clear. This drives the pair through both orders; the C-level race below
+        // Kotlin's visibility is TSan's and AddressSanitizer's to judge, and was.
+        val audio = AudioPlayback(FakeAudioSink(), TestClock())
+        audio.open(format(2))
+        val samples = FloatArray(64 * 2)
+
+        // Order one: submit completes, then close.
+        audio.submit(pts = null, interleaved = samples, frames = 64)
+        audio.close()
+
+        // Order two: close first, then submit must fail loudly, not silently drop or corrupt.
+        val late = AudioPlayback(FakeAudioSink(), TestClock())
+        late.open(format(2))
+        late.close()
+        assertFailsWith<IllegalStateException> {
+            late.submit(pts = null, interleaved = samples, frames = 64)
+        }
+    }
 }

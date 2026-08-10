@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
@@ -805,8 +806,20 @@ internal class PlaybackCore(
                 eventSink.tryEmit(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
 
-            withContext(dispatchers.demux) {
-                source.selectStreams(setOfNotNull(videoStream?.index, audioStream?.index))
+            try {
+                withContext(dispatchers.demux) {
+                    source.selectStreams(setOfNotNull(videoStream?.index, audioStream?.index))
+                }
+            } catch (failure: Throwable) {
+                // Interlude item I-03. The audio path above is already live: a created sink, an
+                // opened AudioPlayback, and since B1.8 that pair owns a C sink, a C ring and an
+                // initialised AudioUnit. The catch at the bottom of this function closes only the
+                // backend session, and runClose's teardownSession returns immediately because
+                // `this.session` is not assigned yet, so a throw from here used to leak all three
+                // while `retainedResources()` reported zero. `selectStreams` is the reachable
+                // thrower: it ends in a `check`, a `require` and `openPacketReader`.
+                runCatching { audioPlayback?.close() }
+                throw failure
             }
 
             tracks = tracks
@@ -840,7 +853,11 @@ internal class PlaybackCore(
                 negotiatedFormat = negotiated,
             )
         } catch (failure: Throwable) {
-            // Nothing half built survives an open that failed, including the backend's own session.
+            // The backend session is the one resource every failure path above owes back from
+            // here; the audio path closes itself in the inner catch at its own creation site
+            // (interlude item I-03), because this outer catch cannot know whether it was reached
+            // before or after the device went live. Corrected at the interlude: the comment that
+            // stood here claimed nothing half built survives, while the audio path did.
             runCatching { backendSession.close() }
             throw failure
         }
@@ -1488,8 +1505,20 @@ internal class PlaybackCore(
         session.schedulerMode.value = SCHEDULER_IDLE
         runCatching { session.sink?.stop() }
         session.workers.forEach { it.quiesce(QUIESCE_DEADLINE) }
-        session.jobs.forEach { it.cancel() }
-        session.jobs.forEach { runCatching { it.join() } }
+        // The join is the ONLY thing standing between a cancelled feeder and a freed C ring, so it
+        // runs under NonCancellable (interlude item I-02). Without it, the close budget arithmetic
+        // makes the joins vanish exactly when they matter: five quiesce deadlines can consume the
+        // whole CLOSE_DEADLINE, the withTimeoutOrNull above then cancels this block, and a plain
+        // `runCatching { it.join() }` in a cancelled coroutine catches the join's own
+        // CancellationException and returns WITHOUT waiting, so `session.audio?.close()` below,
+        // which never suspends, frees the C ring while a cancelled feeder can still be executing a
+        // whole buffer of ring writes on its own thread. That producer-side call on a freed ring
+        // was measured as a heap-use-after-free under AddressSanitizer at the interlude review,
+        // not argued.
+        withContext(NonCancellable) {
+            session.jobs.forEach { it.cancel() }
+            session.jobs.forEach { runCatching { it.join() } }
+        }
         session.videoDecoder?.let { decoder ->
             runCatching { withContext(dispatchers.videoDecode) { decoder.close() } }
         }

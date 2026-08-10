@@ -4198,6 +4198,167 @@ is no other.
   all four modes, render audit, source discipline, spot checks, three sample clips with zero
   underruns and the nonexistent-file refusal. The em dash scan prints nothing over both
   repositories for the first time since the LICENSE files were committed.
+
+- 2026-08-10, interlude sub-phase I.3 (items I-12, I-13, I-14), gate passed. Three KiteCodec
+  commits in the planned order plus this KitePlayer commit. The retirement is recorded first,
+  because the record is the part that cannot be reconstructed later.
+
+  The final run of `verify-lift.sh`, at KiteCodec `2b4287f`, exit 0, output complete and
+  unabridged; this is the permanent proof that the lift was faithful, and the script that
+  produced it is deleted in the same commit that pastes it here:
+
+  ```
+  verify-lift.sh: repository /private/tmp/claude-501/-Users-macbook-StudioProjects--Kite/fe2ee324-f503-402c-b020-7db69b228a50/scratchpad/vl-final
+    revision   5364329 (5364329fa89f7201f633d29f44a46cecb7e4654d)
+    def        kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def
+    excluded   15 helpers, register item B1-08
+  def:                  /var/folders/qr/7h9vl5x91ks45f_xf9phsfgm0000gn/T/tmp.nPHYPbtpOi/ffmpeg.def
+  body:                 def lines 13 to 961 (949 lines)
+  include lines moved:  20
+  declarations found:   176
+    exported:           172
+    internal (static):  4 (ffkmp_codec_pix_fmts_, ffkmp_graph_finish_, ffkmp_graph_finish_multi_, ffkmp_ch_layout_mask_)
+  deleted (B1-08):      15
+  exported and emitted: 157 with KC_API
+  multi-line signatures: 9 at def lines 251, 262, 470, 489, 531, 616, 644, 684, 816
+  banner sections:      11
+    def   34 to   53    6 helpers  Errors & macros
+    def   54 to  178   31 helpers  AVFrame
+    def  179 to  185    4 helpers  Pixel/sample format names
+    def  186 to  193    3 helpers  AVDictionary iteration
+    def  194 to  217   16 helpers  AVPacket
+    def  218 to  244   12 helpers  AVCodecParameters
+    def  245 to  345   24 helpers  AVCodec / AVCodecContext
+    def  346 to  439   24 helpers  AVFormatContext (input + output)
+    def  440 to  465   10 helpers  AVStream
+    def  466 to  782   11 helpers  Filter graphs (single-input video / audio)
+    def  783 to  961   35 helpers  Playback additions
+  translation units:    9
+    def   13 to   53    6 helpers  2 deleted   29 lines  helpers_error.c
+    def   54 to  193   38 helpers  2 deleted  148 lines  helpers_frame.c
+    def  194 to  217   16 helpers  2 deleted   32 lines  helpers_packet.c
+    def  218 to  244   12 helpers  1 deleted   36 lines  helpers_codecpar.c
+    def  245 to  345   24 helpers  2 deleted  109 lines  helpers_codec.c
+    def  346 to  439   24 helpers  2 deleted   97 lines  helpers_format.c
+    def  440 to  465   10 helpers  2 deleted   34 lines  helpers_stream.c
+    def  466 to  782   11 helpers  0 deleted  327 lines  helpers_filter.c
+    def  783 to  961   35 helpers  2 deleted  187 lines  helpers_playback.c
+  header lines:         458
+  payload lines:        909
+  
+  A and B. byte comparison of the header and of every unit
+  
+  include/kitecodec_helpers.h
+    extracted from 5364329     3673e1a0a93a0367924cbad214e91e973dd8a59baaed83ba591e64aa5b38e30e
+    committed in the tree      3673e1a0a93a0367924cbad214e91e973dd8a59baaed83ba591e64aa5b38e30e
+    MATCH
+  
+  src/helpers_error.c
+    extracted from 5364329     b809780b77c278d3e026f843b4e9a3163cb7fd18de3268052978ab11287a251e
+    committed in the tree      b809780b77c278d3e026f843b4e9a3163cb7fd18de3268052978ab11287a251e
+    MATCH
+  
+  src/helpers_frame.c
+    extracted from 5364329     f005f672c063cb3db9977d2a67441f33eba03eaec5ecc4df0814b0de882d0120
+    committed in the tree      f005f672c063cb3db9977d2a67441f33eba03eaec5ecc4df0814b0de882d0120
+    MATCH
+  
+  src/helpers_packet.c
+    extracted from 5364329     1c5b59c1dc270b785e109f54efeb990551541363cf95a3fb96e205bdbcd67fd3
+    committed in the tree      1c5b59c1dc270b785e109f54efeb990551541363cf95a3fb96e205bdbcd67fd3
+    MATCH
+  
+  src/helpers_codecpar.c
+    extracted from 5364329     97a2f1a7a048b1dff959db9beb0bc3ae5a8440a8c965c528e55dede8b11e3ea4
+    committed in the tree      97a2f1a7a048b1dff959db9beb0bc3ae5a8440a8c965c528e55dede8b11e3ea4
+    MATCH
+  
+  src/helpers_codec.c
+    extracted from 5364329     6e95314e368f53d7ad2180c5918aa9b8739af63bc5ed2a559e3f41353c0009b0
+    committed in the tree      6e95314e368f53d7ad2180c5918aa9b8739af63bc5ed2a559e3f41353c0009b0
+    MATCH
+  
+  src/helpers_format.c
+    extracted from 5364329     3a3dde0ca9c915a4f0df3a3e7ed3b594b67999b1bc6ba02cba04be96675ce951
+    committed in the tree      3a3dde0ca9c915a4f0df3a3e7ed3b594b67999b1bc6ba02cba04be96675ce951
+    MATCH
+  
+  src/helpers_stream.c
+    extracted from 5364329     ce9ea55657d065df1377fb90d3475c4c67ce7dd61377d06e198147816178f4b2
+    committed in the tree      ce9ea55657d065df1377fb90d3475c4c67ce7dd61377d06e198147816178f4b2
+    MATCH
+  
+  src/helpers_filter.c
+    extracted from 5364329     586bf304d049df457d6a5c49e6c040d9e65c3281805af75566cd8a924babc25c
+    committed in the tree      586bf304d049df457d6a5c49e6c040d9e65c3281805af75566cd8a924babc25c
+    MATCH
+  
+  src/helpers_playback.c
+    extracted from 5364329     24944723608dbf5ce684d0e810f3bffb5253fa960a43929fc789c7b106f3fcba
+    committed in the tree      24944723608dbf5ce684d0e810f3bffb5253fa960a43929fc789c7b106f3fcba
+    MATCH
+  
+  C. the nine units concatenated in banner order against the def body
+     order: helpers_error.c helpers_frame.c helpers_packet.c helpers_codecpar.c helpers_codec.c helpers_format.c helpers_stream.c helpers_filter.c helpers_playback.c 
+    def body payload at 5364329    e63a7b56e4fe61a8f804d65b6066478dfa5e7eebcf5485685c327081391726ea  (909 lines)
+    committed units concatenated   e63a7b56e4fe61a8f804d65b6066478dfa5e7eebcf5485685c327081391726ea  (909 lines)
+    MATCH: the nine units are the def body, minus the 15 deletions, and nothing else
+  
+  verify-lift.sh: the header, the nine units and their concatenation all agree with the
+                  extraction from 5364329
+  ```
+
+  What changed under I-12. `scripts/verify-lift.sh` and `tools/extract_from_def.py` are deleted:
+  the anchor `5364329` is a fixed point no future revision can replace (re-anchoring to HEAD was
+  measured to exit 2 at the review, because no later def has a body), and the byte equality
+  proof was blocking two crash fixes the B1.6 log already recorded as blocked. The ten lifted
+  files now carry maintained-source headers naming this entry as the proof's record, both
+  READMEs say the nine units are ordinary maintained sources, and section 15.4 says rollback to
+  a pre-lift state is withdrawn, replaced by the ordinary revert of whichever commit changed a
+  unit. The two guards landed with reproduction-first discipline: the new `test_ownership` cases
+  were written against the unguarded code and reproduced both crashes (the suite died with
+  signal 11 at the new NULL-key case), then the guards went in, all 41 cases pass, and reverting
+  either guard alone fails the suite. One measurement made along the way is now in the header
+  instead of an assumption: a NULL option VALUE is answered `AVERROR(EINVAL)` by `av_opt_set`
+  itself without crashing, measured through the helper for a flags option and an int option.
+  The remaining sixteen unguarded exports stay with register row R-B2-guards.
+
+  What changed under I-14. The fifteen names live in `deleted-surface.txt` alone, one status
+  each, with the resurrection procedure in the file's own header and in section 9's move table.
+  `check-deleted-surface.sh` reads the file and integrity-checks it first (15 names, no
+  duplicates, legal statuses), and its falsifiability was proved four ways in one sitting: a
+  planted use of a deleted name fails; flipping that name to `resurrected-in-TEST` makes the
+  same use legal; a second planted name still fails while the first is resurrected; restoring
+  the file and deleting the plant returns exit 0. The check also earned its keep against this
+  very sub-phase: my first edit left a helper name inside the script's own allowlist comment,
+  and the check refused it until the comment was rewritten, which is exactly the disguise it
+  exists to catch.
+
+  What changed under I-13. `checkCinteropCoupling` now ratchets two numbers,
+  `cinterop_import_lines` at 246 and `ffmpeg_typed_crossings` at 287, the crossings being helper
+  mentions plus raw libav calls so that a category move is neutral by construction; the two
+  components are printed every run and recorded nowhere. Counting runs over comment-stripped
+  Kotlin (line comments, KDoc, NESTED block comments; string literals preserved including raw
+  strings; the stripper has its own test). The struct type count became a named allowlist of ten
+  `allowed_struct_type` lines. Measured on the rework, and worth keeping: the crossings did not
+  move under stripping, 273 plus 14 either way, so no helper or libav mention lived in a
+  comment; and the old count of eleven named types contained `AVRational`, whose entire coupling
+  to Kotlin was one KDoc sentence in `Rational.kt`, which is the measured proof that the old
+  count punished documentation. Three new task tests pin the three scenarios the review
+  measured, each now behaving the opposite way: the `Playback.native.kt:317` category move
+  passes where it failed at 274 against 273, the `AVChannelLayout` comment passes where it
+  failed at 12 against 11, and a genuinely new typed call still fails. The fourteen-site split
+  is corrected in the baseline and in B1-22's row, every line number re-verified against the
+  tree (two were stale: MediaSink.native.kt 496 and 509 are 498 and 511).
+
+  Gate, over the working trees: KiteCodec 6 C suites in plain, asan and tsan (the ownership
+  suite now 41 cases); corpus replay under asan clean; `symbol-audit.sh` PASS;
+  `klib-metadata-diff.sh --check` clean and UNCHANGED, which the sub-phase requires since
+  neither guard adds a declaration; `check-deleted-surface.sh` PASS in its reworked form;
+  `apiCheck` green; the reworked `checkCinteropCoupling` green at its measured numbers;
+  KiteCodec `:buildSrc:test` 20 tests 0 failures; KitePlayer all five test tasks, 8 C suites in
+  four modes, render audit, source discipline, spot checks, three sample clips clean, and the
+  em dash scan prints nothing over both repositories.
 ---
 
 ## 15. Horizon B execution: B1
@@ -4614,8 +4775,8 @@ are carried here only so nobody rediscovers them. 25 items.
 
 #### B1-22. The 11 raw libav calls at 21 Kotlin call sites are behind no helper
 - Where: `FFmpeg.native.kt` 10 sites, `Frame.native.kt` 4 (lines 191, 236, 247, 253),
-  `MediaSink.native.kt` 3 (210, 496, 509), `MediaSource.native.kt` 2 (262, 283),
-  `Playback.native.kt` 2 (317, 340).
+  `MediaSink.native.kt` 3 (210, 498, 511; re-measured at the interlude, this row said 496 and
+  509), `MediaSource.native.kt` 2 (262, 283), `Playback.native.kt` 2 (317, 340).
 - Problem: the four hottest paths in the codebase, decode send and receive and encode send and
   receive, cross straight to libav with no C layer in between. Any future handle boundary leaks on
   the busiest calls. Three of the enclosing declarations name no FFmpeg type at all
@@ -4624,8 +4785,13 @@ are carried here only so nobody rediscovers them. 25 items.
 - Fix in B1: the six `*_version()` functions and `avcodec_configuration` move behind the identity
   report, because that is where they belong. The four hot calls stay raw, because wrapping them
   without B2's typed send and receive outcomes would change their signatures twice.
-- Phase: B1.6 for the version queries; the four hot calls and the three `find_*_by_name` queries
-  in B2. Test: the coupling ratchet records the drop in direct libav call sites and refuses a rise.
+- Phase: B1.6 for the version queries; in B2, the four hot functions at their NINE sites and the
+  three `find_*_by_name` queries at their FIVE sites (split corrected at the interlude per I-13:
+  this row and the baseline's prose both said seven hot sites and four lookups, which matched no
+  measurement; the fourteen sites are enumerated with their lines in `coupling-baseline.txt`).
+  Test: since I-13 the coupling ratchet counts one `ffmpeg_typed_crossings` number, so moving
+  these behind helpers is neutral where it used to fail the build, and a genuine rise still
+  refuses.
 
 #### B1-23. `ffkmp_frame_convert_pixfmt` allocates and frees an SwsContext on every call
 - Where: `ffmpeg.def` line 93.
@@ -5404,6 +5570,15 @@ commit, and the Kotlin side is untouched, so a revert restores a tree that was g
 earlier. Cost: one revert plus one gate run. The precondition that makes this cheap is B1.2
 landing first: the C sources and their tests already exist and are proved faithful before the def
 is edited, so the risky commit contains only build wiring.
+
+  *Withdrawn at the interlude (I-12).* The paragraph above was true while `verify-lift.sh` and
+  the extractor existed; both are retired, because their anchor was a fixed point no future
+  revision could replace and the byte equality proof was blocking real fixes to exported code,
+  including two reproduced crashes. Rollback to a pre-lift state therefore stops being an
+  available operation, and nothing replaces it in kind: the lift's faithfulness is a recorded
+  historical fact (the final run at `2b4287f`, all eleven comparisons matching, is pasted in the
+  I.3 Execution log entry), and from the interlude onward the nine units are ordinary maintained
+  sources whose rollback story is the ordinary revert of whichever commit changed a unit.
 
 **B1.4, deleting the 15 helpers and the `archived/` directory.** Reversible by revert, and the
 deletion is safe for a reason rather than by luck: nothing has ever been published from KiteCodec

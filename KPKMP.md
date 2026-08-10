@@ -4716,6 +4716,16 @@ is no other.
   with Android zero-copy parked as research at KV-7. 17.1 gains the rider refinement so a
   cross-stage package may appear in a stage exit explicitly. Estimates moved: S2 120 to 165, S3
   75 to 115, whole road 660 to 945. S1 untouched at 225 to 315: usable beats beautiful stands.
+
+- 2026-08-11, section 18.3 added: the executor's fence. Prose only, Tier 1 gate (selected by
+  rule). The owner asked whether the document can guide a code-strong, design-weak external
+  executor without over- or under-engineering, and proposed raising detail everywhere; the
+  answer recorded here is that pre-written depth is the measured failure mode (the 4,655-line
+  draft carried ten blockers and two fabricated facts), that level-B detail arrives per stage at
+  entry via 17.2's expansion ritual, and that the missing piece was behavioural: eight fence
+  rules (scope fence, smallest-change, no new dependencies, no future-stage code, stop on
+  tree-versus-register contradiction, stop when no expansion exists, done defined by exits,
+  deviations reported louder than successes). Section 18's reading order now names the fence.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7606,7 +7616,8 @@ feeds, mini players) loses nothing, because Compose was compositing those pixels
 ## 18. The skeleton, for any executor
 
 Written so a capable implementer with NO context, human or model, can work on this project
-without damaging it. Read this, then section 1, 2, 9, and the phase register you are executing.
+without damaging it. Read this, then sections 1, 2 and 9, then the register of the stage you are
+executing, and obey 18.3 before your first edit.
 
 ### 18.1 The endoskeleton: what the thing is made of
 
@@ -7674,3 +7685,35 @@ its one lock.
 10. **When you do not know**: measure. When you cannot measure: write ASSUMED and the cheapest
     experiment that would settle it, and prefer running that experiment before building on the
     assumption.
+
+### 18.3 The executor's fence: how not to over-build or under-build
+
+Written for a code-strong, design-weak executor. The register says WHAT; this fence keeps the HOW
+inside the lines. These are rules, not advice.
+
+1. **Touch only the files the sub-phase names.** Anything else you believe needs changing: write
+   it up as a proposed register item and leave the file alone. A fix that "also cleaned up" a
+   neighbouring file is a defect at review, even when the cleanup is good.
+2. **Build the smallest change that makes the named test pass and the gate green.** No
+   abstraction, interface, helper, wrapper, configuration knob or generality the register did not
+   ask for. If the Fix says "add a guard", add a guard, not a validation framework. Extract
+   shared code only at the third repetition, and only when every touched file is already inside
+   the sub-phase.
+3. **No new dependencies without a register item.** Not a library, not a plugin, not a toolchain
+   or Gradle version bump. Dependencies are owner decisions.
+4. **No code for a later stage.** "While I am here, S2 will need..." is forbidden; S2's needs are
+   decided at S2 entry, against the tree as it exists then.
+5. **When the tree contradicts the register, STOP.** A path that does not exist, a symbol that is
+   not there, an API that drifted, a test that already passes before your change: report the
+   contradiction and wait. Never improvise the register back into truth. Both false claims this
+   project has caught (section 14) were prose drifting from the tree; an executor who silently
+   adapts recreates that defect class.
+6. **When your stage has no expansion, STOP.** Expansion (17.2) is a planning act with its own
+   adversarial ritual. If the register for your stage does not exist, request it; never author a
+   plan and execute it in the same breath.
+7. **Done is defined by exits, not by effort.** You are done when the named test passes, the
+   selected tier is green, the exit criterion is demonstrable and the log entry is written. Under
+   that bar nothing counts; above it nothing more is required.
+8. **Report deviations louder than successes.** A skipped step, a flaky test, a widened
+   tolerance, anything ASSUMED: its own sentence in the log entry. A deviation reported is
+   process; a deviation hidden is corruption.

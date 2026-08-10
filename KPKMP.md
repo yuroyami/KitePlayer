@@ -27,7 +27,10 @@ Read this section twice.
    start a phase before the previous phase's gate passed. Do not start anything in
    section 11.
 2. Every phase ends with its verification gate (section 9), an Execution log entry
-   (section 14), and one git commit per repository touched. Commit style: first line is one
+   (section 14), and one git commit per repository touched. Section 9 has THREE TIERS and the
+   tier is selected by the paths the phase changed, not by judgement; the log entry must name
+   which tier ran and the rule that selected it. Tier 1 costs fourteen measured seconds and runs
+   for every phase including a prose-only one. Commit style: first line is one
    imperative sentence describing the outcome, like the existing history ("Play video and
    audio in sync, and check the colours against FFmpeg"). Body is short prose. Never add a
    Co-Authored-By trailer or any other trailer.
@@ -843,12 +846,35 @@ as its own gate step.
 
 ## 9. Verification protocol
 
-The standing gate for every phase. Promoted at the interlude (I-15) from B1's base gate, so that
-contract item 2 again points at the whole gate: before the interlude this section named none of
-the thirteen instruments B1 built, and an executor following the contract would have fired none of
-them. A phase is done only when all of it passes, rerun for real. A cached `UP-TO-DATE` run proves
-nothing; section 2 says why, and the rule bears repeating here because the C archives and the
-cinterop klib have both been observed stale while Gradle reported success.
+The standing gate for every phase, in THREE TIERS chosen by what the phase changed. A phase is
+done only when its tier passes, rerun for real. A cached `UP-TO-DATE` run proves nothing; section
+2 says why, and the rule bears repeating here because the C archives and the cinterop klib have
+both been observed stale while Gradle reported success.
+
+**Why the tiers exist, owner-mandated 2026-08-10.** Promoted at the interlude (I-15) from B1's
+base gate, this section became one undivided gate, and the interlude then ran that whole gate six
+times, once per sub-phase. Sub-phase I.2 changed only prose in Markdown files, and verifying
+spelling corrections cost three real-media sample runs and a seventeen-target cross compile. That
+is measured waste, not diligence. The split below is the correction: the cheap half of the gate
+was measured at FOURTEEN SECONDS, by running the Tier 1 block below exactly as written on
+2026-08-10, so it runs every phase without exception and no schedule pressure can ever justify
+skipping it; the expensive half runs when what changed can actually break it. (The first estimate
+of this number was seven seconds, taken over a smaller subset before Tier 1's contents were
+settled. It is corrected here rather than left standing, because a gate document that rounds its
+own cost downward is how a gate starts getting skipped.)
+
+**The three rules that stop this from becoming a loophole.**
+
+1. *The trigger is the changed path, never the executor's confidence.* A tier is selected by the
+   mechanical file rules below. An executor may not choose a lower tier because a higher one is
+   slow, and may not choose a lower tier because the change "obviously cannot" break anything;
+   the interlude's own I-04 fix looked obviously local and broke an unrelated segment test.
+2. *Every Execution log entry names the tier that ran and the rule that selected it.* An entry
+   with no tier named is an incomplete entry.
+3. *A defect must never become load-bearing.* Tier 1 every phase is what enforces this, and it is
+   why fourteen seconds is not negotiable: a later phase must never be built on an ungated one. The
+   interlude exists because seams BETWEEN gated sub-phases went unowned, so deferring verification
+   across whole horizon items would turn the same class of defect from a fix into a redesign.
 
 On this machine every `apiDump`, `apiCheck` and cinterop invocation in KiteCodec needs
 `-Pkitecodec.hostTargetsOnly=true`: only macosArm64 has an FFmpeg tree here, and without the flag
@@ -859,72 +885,129 @@ location that the gitignored `local.properties` carries in the working tree, or
 or export `ANDROID_HOME` first. Both clean-clone requirements in this paragraph were found by
 running this gate from clean clones at I.1, not deduced.
 
+### Tier 1, FAST. Every phase, no exception. Measured 14 seconds
+
+Selected by: every change, including a change to prose alone. Nothing is exempt.
+
 ```bash
-# KiteCodec, when touched in the phase. Build first, then audit what was built: every audit
-# below reads the archive or the klib the two gradle lines produce.
+# Neither block needs a build: these read source text, committed baselines and the tree itself,
+# or run already-built host binaries. Run the C suites' build step only when a C file changed.
+cd ../KiteCodec
+./gradlew checkCinteropCoupling                       # counts source text, no build required
+./native/kitecodec-c/scripts/check-deleted-surface.sh  # reads the tree only
+./native/kitecodec-c/scripts/run-c-tests.sh plain
+
+cd ../KitePlayer
+./gradlew checkKotlinAbi                              # the four committed api dumps
+./gradlew :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest
+kiteplayer-rt/native/scripts/run-c-tests.sh plain
+kiteplayer-rt/native/scripts/render-audit.sh
+kiteplayer-rt/native/scripts/source-discipline.sh
+
+# The em dash scan, both repositories, must print nothing. The pattern is the escape text
+# backslash-u2014 (expanded by the shell), so no literal em dash exists in the repos. The scan
+# walks `git ls-files`, replacing the extension allowlist the gate used through B1: an allowlist
+# cannot reach an extensionless file, and both LICENSE files carried an em dash through every
+# widened run until the interlude (I-18) found them. Tracked files only, so the gitignored scratch
+# checkouts under .claude/, build/ and vendor/ are excluded by construction rather than by flags.
+# grep exits 1 when it finds nothing, and for this scan that exit is the passing outcome; do not
+# wrap it in `set -e` and read the exit as failure.
+cd ../KiteCodec  && git ls-files -z | xargs -0 grep -n $'\u2014'
+cd ../KitePlayer && git ls-files -z | xargs -0 grep -n $'\u2014'
+```
+
+**What Tier 1 cannot catch, stated so nobody reads a green Tier 1 as a green gate.** No data race
+(that is tsan), no wrong-architecture archive (that is the per-target compile), no cinterop
+surface change (that needs the klib built), no real-media regression, and nothing at all about a
+target whose archive this run did not build.
+
+### Tier 2, MEDIUM. Roughly 10 to 15 minutes
+
+Selected by ANY of these, mechanically, by changed path:
+
+- any file under `native/` in either repository (C sources, headers, scripts, corpus)
+- any file under `buildSrc/` in either repository
+- any `*.def`, any `build.gradle.kts`, any `gradle/libs.versions.toml`
+- any Kotlin under a `nativeMain`, `appleMain`, `macosArm64Main` or `nativeTest` source set
+- the completion of any Horizon item, unconditionally, whatever it changed
+
+```bash
+# Tier 1 first, then everything below. Build before you audit: every audit here reads the archive
+# or the klib that the gradle lines produce.
 cd ../KiteCodec
 ./gradlew :kitecodec-core:cinteropFfmpegMacosArm64 -Pkitecodec.hostTargetsOnly=true
 ./gradlew :kitecodec-core:apiCheck -Pkitecodec.hostTargetsOnly=true
-./gradlew checkCinteropCoupling
 ./gradlew :buildSrc:test
-./native/kitecodec-c/scripts/build-host.sh plain && ./native/kitecodec-c/scripts/run-c-tests.sh plain
 ./native/kitecodec-c/scripts/build-host.sh asan  && ./native/kitecodec-c/scripts/run-c-tests.sh asan
 ./native/kitecodec-c/scripts/build-host.sh tsan  && ./native/kitecodec-c/scripts/run-c-tests.sh tsan
 ./native/kitecodec-c/scripts/run-c-tests.sh interpose   # plain binaries, accounting REQUIRED (I-08)
 ./native/kitecodec-c/scripts/replay-corpus.sh asan
-./native/kitecodec-c/scripts/symbol-audit.sh          # the shipped macos_arm64 archive
+./native/kitecodec-c/scripts/symbol-audit.sh            # the shipped macos_arm64 archive
 ./native/kitecodec-c/scripts/klib-metadata-diff.sh --check
-./native/kitecodec-c/scripts/check-deleted-surface.sh
 ./gradlew :kitecodec-core:macosArm64Test
 ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true   # when KitePlayer must see changes
 
-# KitePlayer, always. Media generation comes FIRST, not with the sample runs where it used to
-# sit: kiteplayer-ffmpeg's native tests read testmedia/, which is gitignored and generated, so a
-# clean checkout has none. Found by this gate's own clean-clone arm at I.1, where 29 tests failed
-# on missing files with the generation line still four commands below them; a working tree keeps
-# old media around, which is why the wrong order never bit before.
+# KitePlayer. Media generation comes FIRST, not with the sample runs where it used to sit:
+# kiteplayer-ffmpeg's native tests read testmedia/, which is gitignored and generated, so a clean
+# checkout has none. Found by this gate's own clean-clone arm at I.1, where 29 tests failed on
+# missing files with the generation line still four commands below them; a working tree keeps old
+# media around, which is why the wrong order never bit before.
 cd ../KitePlayer
 ./scripts/testmedia.sh                                # regenerate when testmedia.sh changed
-./gradlew checkKotlinAbi                              # the four committed api dumps
 ./gradlew :buildSrc:test
-./gradlew :kiteplayer-core:jvmTest :kiteplayer-core:macosArm64Test \
-          :kiteplayer-output:macosArm64Test :kiteplayer-ffmpeg:macosArm64Test \
-          :kiteplayer-subtitles:jvmTest      # subtitles tests exist from A0 onward
-kiteplayer-rt/native/scripts/build-host.sh plain && kiteplayer-rt/native/scripts/run-c-tests.sh plain
+./gradlew :kiteplayer-core:macosArm64Test :kiteplayer-output:macosArm64Test \
+          :kiteplayer-ffmpeg:macosArm64Test
 kiteplayer-rt/native/scripts/build-host.sh asan  && kiteplayer-rt/native/scripts/run-c-tests.sh asan
 kiteplayer-rt/native/scripts/build-host.sh tsan  && kiteplayer-rt/native/scripts/run-c-tests.sh tsan
 kiteplayer-rt/native/scripts/run-c-tests.sh interpose  # plain binaries, interposer must be live
-kiteplayer-rt/native/scripts/render-audit.sh
-kiteplayer-rt/native/scripts/source-discipline.sh
 
-# Cross-target compile spot checks, always
+# Cross-target compile spot checks
 ./gradlew :kiteplayer-core:compileKotlinJs :kiteplayer-core:compileKotlinWasmJs \
           :kiteplayer-core:assembleAndroidMain
 
-# Sample runs, from A1 onward; the media was generated at the top of the KitePlayer block
+# Sample runs, from A1 onward; the media was generated at the top of this block
 ./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64
 BIN=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
 $BIN testmedia/sync1080p30.mp4        # expect: all frames submitted, 0 dropped, 0 underruns
 $BIN testmedia/truevfr720.mp4         # expect: 0 dropped (real VFR from A0 onward)
 $BIN testmedia/hevc4k10.mp4           # expect: video-master playback completes
 $BIN /nonexistent.mp4                 # expect: one sentence, no stack trace
-
-# Em dash scan, always, both repositories; must print nothing. The pattern is the escape
-# text backslash-u2014 (expanded by the shell), so no literal em dash exists in the repos.
-# The scan walks `git ls-files`, replacing the extension allowlist the gate used through B1:
-# an allowlist cannot reach an extensionless file, and both LICENSE files carried an em dash
-# through every widened run until the interlude (I-18) found them. Tracked files only, so the
-# gitignored scratch checkouts under .claude/, build/ and vendor/ are excluded by construction
-# rather than by flags. grep exits 1 when it finds nothing, and for this scan that exit is the
-# passing outcome; do not wrap it in `set -e` and read the exit as failure.
-cd ../KiteCodec  && git ls-files -z | xargs -0 grep -n $'\u2014'
-cd ../KitePlayer && git ls-files -z | xargs -0 grep -n $'\u2014'
 ```
 
-From A2 add the transport-stream offset clip, from A4 add `surround51.mp4` and the P010
-golden, from A6 add the rotated clip, each with the expected line stated in its phase.
-The sample binary is a debug executable and its numbers are development evidence
-(level 6), never performance qualification; qualification budgets live in Horizon B.
+From A2 add the transport-stream offset clip, from A4 add `surround51.mp4` and the P010 golden,
+from A6 add the rotated clip, each with the expected line stated in its phase. The sample binary
+is a debug executable and its numbers are development evidence (level 6), never performance
+qualification; qualification budgets live in Horizon B. A sample clip that misses its expected
+line on a LOADED machine and meets it on two quiet reruns is a load observation and is recorded as
+one, not silently rerun until green: I.1 recorded a dropped frame and I.6 a Buffering seek that
+way.
+
+**What Tier 2 cannot catch.** A real-time deadline miss on a real audio device under collector
+pressure. Only Tier 3 sees that, and only on this one machine.
+
+### Tier 3, HEAVY. Roughly 50 minutes, supervised
+
+Selected by ANY of these:
+
+- any change to `kiteplayer-rt/native/src/kite_rt_render.c`, which is the whole of what the
+  device's thread executes
+- any change to `kprt_render_cb` or to the ring handoff and teardown ordering in
+  `kite_rt_coreaudio.c`
+- any change to the ordering of `AudioPlayback`'s `submit`, `flush` or `close`, or to
+  `PlaybackCore`'s `teardownSession`
+- any proposed support-tier promotion under section 3
+- before publishing a release artifact
+
+Tier 2, plus the supervised device run and its negative control: two ten-minute commands with the
+control at ten minutes per arm. Its numbers are level 6, a manual observation with saved metrics on
+one machine in a debug binary with one operator, and its authority rests on `render-audit.sh` and
+the interposed C suites, which are level 2. Never present it as level 1; section 2 forbids it and
+the interlude corrected exactly that overclaim (I-16).
+
+**Deliberately not gated by Tier 3.** A phase that changes no line of the render path, the
+callback, or the teardown ordering does not run it, even when it touches audio elsewhere: the
+render audit proves the shipped object has no allocator, lock, log or framework symbol to call on
+any run, and that proof does not weaken because a resampler changed.
 
 ### How every ratchet moves
 
@@ -4557,6 +4640,40 @@ is no other.
   ratchets that fought its first named improvements now pass them by construction (measured as
   task tests), the units it must edit are ordinary maintained sources, and the standing gate it
   will be measured by is section 9, whole.
+
+- 2026-08-10, verification protocol restructured into three tiers, owner-mandated, outside any
+  named phase. No product code changed. The owner's instruction was to stop over-testing and to
+  gate in the most time-effective way that loses no effectiveness elsewhere, and to record the
+  policy here rather than leave it in a conversation.
+
+  What prompted it, measured rather than felt: the interlude ran the single undivided gate six
+  times, once per sub-phase, and sub-phase I.2 changed only prose in Markdown files, so verifying
+  spelling corrections cost three real-media sample runs and a seventeen-target cross compile.
+  Section 9 now has Tier 1 (fast, every phase without exception), Tier 2 (medium, selected by
+  changed path or by the completion of any Horizon item) and Tier 3 (heavy, the supervised device
+  run, selected only by a change to the render path, the callback, the teardown ordering, a tier
+  promotion, or a release). Contract item 2 now says the tier is chosen mechanically and that
+  every log entry must name which tier ran and why.
+
+  Tier 1's cost was MEASURED by running its block exactly as section 9 writes it: 14 seconds for
+  the coupling ratchet, the deleted-surface check, both repositories' plain C suites, the four api
+  dumps, the two jvm test tasks, the render audit, the source discipline script and the em dash
+  scan over both repositories. Every one passed at this tree. An earlier figure of seven seconds
+  was quoted from a smaller subset taken before Tier 1's contents were settled; section 9 records
+  the correction in place, on the reasoning that a gate document which rounds its own cost
+  downward is how a gate starts being skipped.
+
+  Three anti-loophole rules are written into section 9 with it, because a tiered gate is a gate
+  with a discretion hole in it unless they are: the trigger is the changed path and never the
+  executor's confidence (the interlude's own I-04 fix looked local and broke an unrelated segment
+  test); every log entry names its tier; and Tier 1 runs every phase so that no later phase is
+  ever built on an ungated one, which is the mechanism the interlude itself was created to repair.
+  Each tier also states what it cannot catch, so a green Tier 1 is never read as a green gate.
+
+  What this does NOT change: no evidence level moves, no claim is upgraded, section 2's hierarchy
+  and the ban on level 8 claims stand, the ratchet move table stands, and the supervised device
+  run stays level 6. Expected effect on the rest of Horizon B is that Tier 3 runs three or four
+  times across B2 to B11 rather than once per phase.
 ---
 
 ## 15. Horizon B execution: B1

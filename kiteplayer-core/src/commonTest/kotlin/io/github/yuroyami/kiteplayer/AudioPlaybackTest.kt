@@ -146,4 +146,58 @@ class AudioPlaybackTest {
         )
         audio.close()
     }
+
+    @Test
+    // No comma in the name: a backtick test name containing one is rejected by Kotlin/Native with
+    // `Name contains illegal characters: ","`, which the JVM compiler accepts. This case is in
+    // commonTest, so it is compiled for both and the stricter one decides.
+    fun `close drops the ring before the sink releases it and every reader sees that`() = runTest {
+        // The teardown order the independent verification of B1.8 found broken, from the engine's own
+        // API. Before B1.8 the ring was a managed object and this ordering was cosmetic; now the ring
+        // can be memory the sink frees inside `close`, and four public members that are documented safe
+        // from any thread read it. What this case pins is the half a test can observe: at the instant the
+        // sink releases the device, the reference is already gone and the readers answer their empty
+        // values instead of reaching a ring that is being freed.
+        //
+        // What it cannot observe, stated so the evidence is not overread: a use-after-free. There is no
+        // instrument for that in Kotlin/Native on this platform, and the ring here is a Kotlin object
+        // anyway. That the hazard is real was proved at the C level with AddressSanitizer over
+        // `kprt_ring_anchor` racing `kprt_sink_destroy`, and that the two are now ordered rests on the
+        // reference being cleared inside the same lock every cross-thread reader takes, which is this
+        // case plus the lock's own semantics.
+        var readersDuringSinkClose: String? = null
+        var audio: AudioPlayback? = null
+        val sink = object : AudioSink {
+            override suspend fun open(request: AudioFormat, render: AudioRenderCallback) = request
+            override suspend fun start() = Unit
+            override suspend fun stop() = Unit
+            override suspend fun drain() = Unit
+            override suspend fun setPaused(paused: Boolean): Boolean = true
+            override val deviceBufferFrames: Int = 512
+            override fun latencyNanos(): Long = 0
+            override val latencyQuality: LatencyQuality = LatencyQuality.Estimated
+            override val events: Flow<AudioSinkEvent> = emptyFlow()
+            override fun close() {
+                // Stands in for `kprt_sink_destroy`, which frees the C ring. Whatever the readers can
+                // still see at this moment is what a real teardown would hand them.
+                val player = audio ?: return
+                readersDuringSinkClose =
+                    "position=${player.position()} buffered=${player.buffered} underruns=${player.underruns}"
+            }
+        }
+
+        val player = AudioPlayback(sink, TestClock())
+        audio = player
+        player.open(format(2))
+        player.submit(pts(0), FloatArray(480 * 2), 480)
+        assertEquals(10, player.buffered.inWholeMilliseconds, "the ring took the audio before the close")
+
+        player.close()
+
+        assertEquals(
+            "position=null buffered=0s underruns=0",
+            readersDuringSinkClose,
+            "while the sink was releasing the ring, a reader still reached it",
+        )
+    }
 }

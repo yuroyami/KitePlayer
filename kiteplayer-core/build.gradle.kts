@@ -78,5 +78,26 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
         }
+
+        /*
+         * The C audio ring, for `internal/NativeAudioRing.kt` and the differential oracle in
+         * `nativeTest`. Native only: js and wasmJs can never contain C, which is exactly why
+         * `KotlinAudioRing` stays the portable implementation and cannot become an `expect class`
+         * (register item B1-20).
+         *
+         * `api` and not `implementation`: what this dependency really carries is a cinterop klib, and
+         * `nativeTest` is a different compilation from `nativeMain`, so the bindings have to be
+         * exposed rather than hidden. Nothing public leaks by doing so, because `kiteplayer-rt` has no
+         * Kotlin sources of its own; its whole surface is the generated `kitert` bindings.
+         *
+         * In B1.7 nothing on the shipped path constructed a `NativeAudioRing`: `AudioPlayback.open`
+         * built a `KotlinAudioRing` and the device callback was still a Kotlin closure. B1.8 changed
+         * that, once, and it is the only sub-phase in B1 that touched the real-time path. Since then a
+         * sink that owns a C callback is handed a C ring and every other sink is not, which is decided
+         * in `internal/AudioPath.kt` and nowhere else.
+         */
+        nativeMain.dependencies {
+            api(projects.kiteplayerRt)
+        }
     }
 }

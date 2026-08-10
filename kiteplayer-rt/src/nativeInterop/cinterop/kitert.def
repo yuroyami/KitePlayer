@@ -1,0 +1,34 @@
+# cinterop for the KitePlayer real-time audio ring.
+#
+# One module, one header, no third party header anywhere. That is the whole point of the split:
+# `kite_rt.h` includes only <stdint.h>, so this def drags in no FFmpeg type, no platform type and no
+# struct whose layout a consumer's own libraries could disagree about. Compare KiteCodec's
+# `ffmpeg.def`, which emits 82 CStructVar classes because cinterop pulls in every complete type
+# reachable from a bound signature.
+#
+# `headerFilter` keeps <stdint.h>'s own declarations out of the generated bindings, so the Kotlin
+# side sees the kprt_ functions and the two small structs and nothing else.
+#
+# `staticLibraries` names the archive CompileKiteRtTask produces. The directory it lives in is NOT
+# given here: a def-relative library path resolves against the Gradle project directory rather than
+# against the def, and there is one archive directory per konan target, so `build.gradle.kts` passes
+# it as `extraOpts("-libraryPath", ...)` per target instead.
+#
+# One linkerOpts line, and only for macOS. The ring needs libc and nothing else, and libc is already in
+# every link Kotlin/Native performs. B1.8 added the audio device, whose AudioUnit entry points live in
+# AudioToolbox, so the macOS link needs that framework and no other link needs anything: the device unit
+# compiles to a set of refusals on every non-macOS target and references no framework there.
+#
+# `mach_absolute_time` and `mach_timebase_info` are in libSystem and need no flag. There is no
+# `-framework CoreAudio` because nothing in the shipped library calls it; the one place
+# `AudioConvertHostTimeToNanos` and `AudioGetCurrentHostTime` are used is
+# `native/tests/test_sink_timebase.c`, which is a host test binary and links its own frameworks.
+#
+# The lesson of register item B1-12, which was iOS flags missing from KiteCodec's def, is not "declare
+# every platform": it is "declare exactly what the code on that platform needs". Naming AudioToolbox for
+# iOS here would be a flag for an implementation that does not exist.
+package = io.github.yuroyami.kiteplayer.rt.cinterop
+headers = kite_rt.h
+headerFilter = kite_rt.h
+staticLibraries = libkiteplayerrt.a
+linkerOpts.osx = -framework AudioToolbox

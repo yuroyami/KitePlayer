@@ -1,5 +1,6 @@
 // Klib ABI Dump
 // Targets: [androidNativeArm32, androidNativeArm64, androidNativeX64, androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, js, linuxArm64, linuxX64, macosArm64, mingwX64, tvosArm64, tvosSimulatorArm64, wasmJs, watchosArm32, watchosArm64, watchosDeviceArm64, watchosSimulatorArm64]
+// Alias: native => [androidNativeArm32, androidNativeArm64, androidNativeX64, androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, linuxArm64, linuxX64, macosArm64, mingwX64, tvosArm64, tvosSimulatorArm64, watchosArm32, watchosArm64, watchosDeviceArm64, watchosSimulatorArm64]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
@@ -2165,4 +2166,19 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.toString|toString(){}[0]
     }
+}
+
+// Targets: [native]
+abstract interface io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink { // io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink|null[0]
+    abstract suspend fun openWithRing(io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Int>): io.github.yuroyami.kiteplayer.spi/NativeRingHandoff // io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink.openWithRing|openWithRing(io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.AudioFormat,kotlin.Int>){}[0]
+}
+
+// Targets: [native]
+final class io.github.yuroyami.kiteplayer.spi/NativeRingHandoff { // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlinx.cinterop/CPointer<cnames.structs/kprt_ring>) // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.<init>|<init>(io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlinx.cinterop.CPointer<cnames.structs.kprt_ring>){}[0]
+
+    final val format // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.format|{}format[0]
+        final fun <get-format>(): io.github.yuroyami.kiteplayer.spi/AudioFormat // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.format.<get-format>|<get-format>(){}[0]
+    final val ring // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.ring|{}ring[0]
+        final fun <get-ring>(): kotlinx.cinterop/CPointer<cnames.structs/kprt_ring> // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.ring.<get-ring>|<get-ring>(){}[0]
 }

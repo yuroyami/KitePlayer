@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
-import io.github.yuroyami.kiteplayer.internal.AudioRing
+import io.github.yuroyami.kiteplayer.internal.KotlinAudioRing
+import io.github.yuroyami.kiteplayer.internal.framesToMicros
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
@@ -76,6 +77,27 @@ private class Pull(
 
 private class RingCase(val name: String, val steps: List<RingStep>)
 
+/**
+ * The portable ring's own tests.
+ *
+ * ### What these 18 tests cover, and what they do NOT cover
+ *
+ * They cover [KotlinAudioRing], which is the implementation js, wasmJs, jvm and Android use. From
+ * B1.8 onward it is NOT the implementation the macOS device path uses: there the C ring in
+ * `kiteplayer-rt` holds the samples and a `static` C function renders them. So on macOS these tests
+ * exercise a ring no user runs, and letting a total test count quietly imply otherwise would be
+ * exactly the substitution KPKMP.md section 2 forbids. That is register item B1-20, and the plan
+ * requires it said in three places: here, in the README, and in the execution log.
+ *
+ * The shipped macOS path is carried by two other things instead. The C suites under
+ * `kiteplayer-rt/native/tests`, which run under plain, ASan plus UBSan, and TSan builds. And
+ * `AudioRingDifferentialTest` in `kiteplayer-core/src/nativeTest`, which drives both rings through
+ * the same scripted sequence and asserts the samples, the frame counts, the published anchor and the
+ * underrun counter agree exactly. The oracle is the only thing that keeps the two implementations of
+ * one contract from drifting apart, and neither of them can be deleted: `commonMain` targets js and
+ * wasmJs, which can never contain C, and the Kotlin ring is the only oracle the C ring can be checked
+ * against.
+ */
 class AudioRingTest {
 
     private val stereo48k = AudioFormat(sampleRate = 48_000, channels = 2, sampleFormat = SampleFormat.F32)
@@ -86,7 +108,7 @@ class AudioRingTest {
 
     @Test
     fun `samples come back in order`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 1_024)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 1_024)
         assertEquals(256, ring.write(ramp(256), 0, 256, pts(0)))
 
         val out = CapturingSinkBuffer(stereo48k, 256)
@@ -99,7 +121,7 @@ class AudioRingTest {
     fun `a read that wraps the ring still lands contiguously in the device buffer`() {
         // This is the bug a destination offset exists to prevent: the second half of a wrapped read
         // overwriting the first half instead of following it.
-        val ring = AudioRing(stereo48k, capacityFrames = 100)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 100)
 
         // Fill and drain most of the ring so the write cursor sits near the end.
         ring.write(ramp(80), 0, 80, pts(0))
@@ -117,7 +139,7 @@ class AudioRingTest {
 
     @Test
     fun `a write larger than the free space is accepted in part`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 100)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 100)
         assertEquals(100, ring.write(ramp(500), 0, 500, pts(0)))
         assertEquals(0, ring.write(ramp(10), 0, 10, null), "a full ring accepts nothing")
         assertEquals(0, ring.freeFrames)
@@ -129,7 +151,7 @@ class AudioRingTest {
 
     @Test
     fun `running dry writes silence and counts an underrun`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 512)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 512)
         ring.write(ramp(100, from = 1), 0, 100, pts(0))
 
         val out = CapturingSinkBuffer(stereo48k, 256)
@@ -145,7 +167,7 @@ class AudioRingTest {
 
     @Test
     fun `buffered duration is reported in media time`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 48_000)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 48_000)
         ring.write(ramp(4_800), 0, 4_800, pts(0))
         assertEquals(100.milliseconds.inWholeMicroseconds, ring.bufferedUs)
         assertEquals(4_800, ring.bufferedFrames)
@@ -153,7 +175,7 @@ class AudioRingTest {
 
     @Test
     fun `there is no anchor before the device has played anything`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 1_024)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 1_024)
         assertNull(ring.anchor())
 
         ring.write(ramp(100), 0, 100, pts(0))
@@ -162,7 +184,7 @@ class AudioRingTest {
 
     @Test
     fun `the anchor is the media time at the playhead boundary when that boundary is reached`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 4_800)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 4_800)
         // 480 frames is 10 ms at 48 kHz, starting at media time 5.000 s.
         ring.write(ramp(480), 0, 480, pts(5_000))
 
@@ -183,7 +205,7 @@ class AudioRingTest {
 
     @Test
     fun `a partly silent buffer back-dates the anchor by the silence`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 4_800)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 4_800)
         ring.write(ramp(240), 0, 240, pts(1_000))
 
         // The device asked for 480 frames and got 240 of audio then 240 of silence. The last real
@@ -200,7 +222,7 @@ class AudioRingTest {
     fun `the timestamp mapping survives buffers that carry no timestamp`() {
         // Most decoded audio buffers after the first carry a timestamp, but not all do, and the
         // mapping must keep working by continuity when they do not.
-        val ring = AudioRing(stereo48k, capacityFrames = 48_000)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 48_000)
         ring.write(ramp(480), 0, 480, pts(2_000))
         repeat(9) { ring.write(ramp(480), 0, 480, null) }
 
@@ -212,7 +234,7 @@ class AudioRingTest {
 
     @Test
     fun `a real discontinuity opens a segment of its own`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 48_000)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 48_000)
         ring.write(ramp(480), 0, 480, pts(1_000))
         // The next buffer claims 9.000 s, an eight second gap. Continuity would predict 1.010 s, so
         // this buffer needs a segment of its own rather than the previous one being moved.
@@ -227,7 +249,7 @@ class AudioRingTest {
 
     @Test
     fun `flush discards what is unplayed and drops the anchor`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 4_800)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 4_800)
         ring.write(ramp(1_000), 0, 1_000, pts(3_000))
         ring.render(CapturingSinkBuffer(stereo48k, 100), 100, deadlineNanos = 0)
         assertNotNull(ring.anchor())
@@ -244,7 +266,7 @@ class AudioRingTest {
 
     @Test
     fun `a fifth segment waits for one to be consumed and then dates its own samples`() {
-        val ring = AudioRing(stereo48k, capacityFrames = 4_800)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 4_800)
         // Four discontinuous buffers, none of them played, so all four segments are still needed to
         // date what is queued.
         for (segment in 0 until 4) {
@@ -279,6 +301,80 @@ class AudioRingTest {
     fun `the published anchor is sample exact at 96000 Hz`() {
         for (case in anchorCases) checkAnchors(case, sampleRate = 96_000)
     }
+
+    @Test
+    fun `the published anchor is sample exact at 192000 Hz`() {
+        for (case in anchorCases) checkAnchors(case, sampleRate = 192_000)
+    }
+
+    @Test
+    fun `dating a frame delta divides before it multiplies`() {
+        // Register item B1-18. Both places this ring dates a frame used to compute
+        // `delta * 1_000_000L / sampleRate`, whose product overflows a signed 64 bit intermediate once
+        // the delta passes about 9.2e12: the same shape KPKMP.md section 4 records against KiteCodec's
+        // timestamp helpers as defect D9.
+        //
+        // The table has to go through `framesToMicros` rather than through `write` and `render`,
+        // because reaching a delta of 1e13 frames through the ring's own API would mean actually
+        // writing ten trillion frames. Each overflowing row asserts twice: the correct answer, and
+        // that the naive product really does wrap to something else, so a row whose vector was too
+        // small to overflow cannot pass while proving nothing. The naive form is computed in ULong,
+        // whose wrap-around is defined, because signed overflow in Kotlin/Native is not something to
+        // rely on either.
+        val rows = listOf(
+            // frames, sampleRate, expected micros, whether the naive product overflows
+            Rescale(480L, 48_000, 10_000L, overflows = false),
+            Rescale(480L, 44_100, 10_884L, overflows = false),
+            Rescale(1L, 192_000, 5L, overflows = false),
+            Rescale(48_000L, 48_000, 1_000_000L, overflows = false),
+            Rescale(0L, 48_000, 0L, overflows = false),
+            Rescale(10_000_000_000_000L, 48_000, 208_333_333_333_333L, overflows = true),
+            Rescale(10_000_000_000_000L, 44_100, 226_757_369_614_512L, overflows = true),
+            Rescale(10_000_000_000_000L, 96_000, 104_166_666_666_666L, overflows = true),
+            Rescale(10_000_000_000_000L, 192_000, 52_083_333_333_333L, overflows = true),
+            Rescale(9_223_372_036_855L, 48_000, 192_153_584_101_145L, overflows = true),
+            Rescale(100_000_000_000_000L, 48_000, 2_083_333_333_333_333L, overflows = true),
+            Rescale(400_000_000_000_000_000L, 48_000, 8_333_333_333_333_333_333L, overflows = true),
+            Rescale(-480L, 48_000, -10_000L, overflows = false),
+            Rescale(-10_000_000_000_000L, 44_100, -226_757_369_614_512L, overflows = true),
+            // AudioFormat.durationOf answers zero for a zero rate, so this does too.
+            Rescale(480L, 0, 0L, overflows = false),
+        )
+
+        for (row in rows) {
+            val where = "${row.frames} frames at ${row.sampleRate} Hz"
+            assertEquals(row.expectedUs, framesToMicros(row.frames, row.sampleRate), where)
+            if (row.overflows) {
+                val naive = (row.frames.toULong() * 1_000_000UL).toLong() / row.sampleRate
+                assertTrue(
+                    naive != row.expectedUs,
+                    "$where claims to overflow the naive product, but the naive form answered " +
+                        "$naive, which is the correct answer: the vector proves nothing",
+                )
+            }
+        }
+
+        // A sweep, against an independent derivation that is safe because it stays small. A different
+        // derivation is a check; restating the implementation would not be.
+        for (sampleRate in listOf(44_100, 48_000, 96_000, 192_000)) {
+            var frames = 0L
+            while (frames < 1_000_000L) {
+                assertEquals(
+                    frames * 1_000_000L / sampleRate,
+                    framesToMicros(frames, sampleRate),
+                    "$frames frames at $sampleRate Hz",
+                )
+                frames += 4_999L
+            }
+        }
+    }
+
+    private class Rescale(
+        val frames: Long,
+        val sampleRate: Int,
+        val expectedUs: Long,
+        val overflows: Boolean,
+    )
 
     /**
      * Every callback shape the device can produce, checked against the boundary convention.
@@ -374,7 +470,7 @@ class AudioRingTest {
     private fun checkAnchors(case: RingCase, sampleRate: Int) {
         val where = "${case.name}, at $sampleRate Hz"
         val format = AudioFormat(sampleRate = sampleRate, channels = 2, sampleFormat = SampleFormat.F32)
-        val ring = AudioRing(format, capacityFrames = 2_048)
+        val ring = KotlinAudioRing(format, capacityFrames = 2_048)
         val nanosPerFrame = 1_000_000_000.0 / sampleRate
         var writtenFrames = 0
         var pullIndex = 0
@@ -422,7 +518,7 @@ class AudioRingTest {
     @Test
     fun `a long session of small writes and reads stays consistent`() {
         // Exercises the wrap arithmetic repeatedly, which is where an off-by-one hides.
-        val ring = AudioRing(stereo48k, capacityFrames = 333)
+        val ring = KotlinAudioRing(stereo48k, capacityFrames = 333)
         var nextFrame = 0
         var readFrames = 0
 

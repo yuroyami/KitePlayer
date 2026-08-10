@@ -1,10 +1,10 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.AudioPipeline
-import io.github.yuroyami.kiteplayer.internal.AudioRing
+import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
 import io.github.yuroyami.kiteplayer.internal.MediaClock
+import io.github.yuroyami.kiteplayer.internal.openAudioPath
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
-import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
 import io.github.yuroyami.kiteplayer.spi.AudioSink
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
@@ -36,16 +36,23 @@ import kotlin.time.Duration.Companion.milliseconds
  * device's real-time callback is the single consumer and touches nothing else in this class, so
  * neither side takes a lock.
  *
- * [anchorClock], [position] and the [speed] setter are guarded by one internal lock. They write the
- * media clock, which has one writer by design, and a player reports progress from a thread that is
- * not the one driving playback: two callers re-anchoring the same clock at once is what the lock is
- * for. Reading [speed] is a plain read of one value and needs nothing.
+ * [anchorClock], [position], [buffered], [underruns] and the [speed] setter are guarded by one
+ * internal lock. The first two write the media clock, which has one writer by design, and a player
+ * reports progress from a thread that is not the one driving playback: two callers re-anchoring the
+ * same clock at once is what the lock is for. [buffered] and [underruns] take it for a second reason
+ * that arrived with B1.8: they read the ring, and the ring can now be memory [close] frees. Reading
+ * [speed] is a plain read of one value and needs nothing.
  *
  * [open], [play], [pause], [flush], [drain], [endOfStream] and [close] are thread confined to the
  * session owner instead. A lock cannot be held across a suspension point, so the suspending ones
  * could not be guarded even in principle, and their contract is confinement. In A5 the core's session
  * actor becomes that owner. The seek path already depends on this: the ring's own flush requires both
  * of its sides to be quiescent first.
+ *
+ * [close] is the one member that is confined AND takes the lock, for one statement. Confinement says
+ * no other owner call runs beside it; it says nothing about the four members above, which are
+ * documented safe from any thread. Clearing the ring reference inside the lock is what makes those
+ * four safe against a teardown that frees a C ring underneath them.
  */
 public class AudioPlayback(
     private val sink: AudioSink,
@@ -58,7 +65,17 @@ public class AudioPlayback(
     private val onWarning: (PlaybackWarning) -> Unit = {},
 ) : AutoCloseable {
 
-    private var ring: AudioRing? = null
+    /**
+     * The ring, behind the interface, because there are two implementations of it and there always
+     * will be: see [AudioRingHandle] and register item B1-20.
+     *
+     * Which one this is depends on the sink and not on the platform, and this class does not know
+     * which it got. A sink that owns its device callback in C owns a C ring and the engine writes into
+     * it; every other sink gets a `KotlinAudioRing` behind a Kotlin render callback. The one line that
+     * decides is `openAudioPath`, and nothing else in this file changes with the answer.
+     */
+    private var ring: AudioRingHandle? = null
+
     private val mediaClock = MediaClock(clock)
 
     /**
@@ -85,11 +102,18 @@ public class AudioPlayback(
     /** The format the device accepted. Null before [open]. */
     public val negotiatedFormat: AudioFormat? get() = format
 
-    /** How much submitted audio has not yet been handed to the device. */
+    /**
+     * How much submitted audio has not yet been handed to the device.
+     *
+     * Under the lock, like [position], and for the reason given on [close]: after B1.8 the ring can be
+     * a pointer into C that [close] frees, so every member that may be called from another thread
+     * reads the field inside the lock that [close] clears it in.
+     */
     public val buffered: Duration
-        get() = (ring?.bufferedUs ?: 0L).microseconds
+        get() = synchronized(lock) { (ring?.bufferedUs ?: 0L).microseconds }
 
-    public val underruns: Long get() = ring?.underruns ?: 0
+    /** Callbacks handed silence because the ring had run dry. Under the lock, as [buffered] is. */
+    public val underruns: Long get() = synchronized(lock) { ring?.underruns ?: 0 }
 
     public val latencyQuality: LatencyQuality get() = sink.latencyQuality
 
@@ -102,16 +126,17 @@ public class AudioPlayback(
     public suspend fun open(request: AudioFormat): AudioFormat {
         check(ring == null) { "this audio path is already open" }
 
-        val negotiated = sink.open(request) { destination, frames, deadlineNanos ->
-            // The real-time path. Everything it touches is preallocated, and it never waits.
-            ring?.render(destination, frames, deadlineNanos) ?: 0
+        // The device and the ring, opened together, because the ring's format is the format the device
+        // accepted and its capacity depends on that format and on the device's own period. Which kind
+        // of ring comes back is the sink's choice; see `openAudioPath`.
+        val opened = openAudioPath(sink, request) { negotiated ->
+            max(
+                sink.deviceBufferFrames * DEVICE_BUFFER_MULTIPLE,
+                negotiated.framesIn(Pts(bufferDuration.inWholeMicroseconds)),
+            )
         }
-
-        val capacity = max(
-            sink.deviceBufferFrames * DEVICE_BUFFER_MULTIPLE,
-            negotiated.framesIn(Pts(bufferDuration.inWholeMicroseconds)),
-        )
-        ring = AudioRing(negotiated, capacityFrames = capacity)
+        val negotiated = opened.format
+        ring = opened.ring
         format = negotiated
 
         if (sink.latencyQuality == LatencyQuality.Unreliable && !warnedAboutLatency) {
@@ -329,13 +354,20 @@ public class AudioPlayback(
      * the video scheduler still paces frames by their own durations. A real one needs the tempo stage
      * and a scaled frame timer, and both are Horizon B; see KPKMP.md section 11.
      *
-     * Setting it takes the lock, because a rate change re-anchors the clock, so it is safe from any
-     * thread. Reading it is a plain read of one value.
+     * Setting it takes the lock, because a rate change re-anchors the clock and because it asks
+     * whether an audio path is open, so it is safe from any thread. Reading it is a plain read of one
+     * value.
      */
     public var speed: Double
         get() = mediaClock.speed
         set(value) {
-            if (ring != null && value != 1.0) {
+            // The null test is inside the lock with every other cross-thread read of this field, so
+            // the rule is one sentence rather than a case analysis: a member that may be called from
+            // another thread touches `ring` only under `lock`. This one never dereferences it, so it
+            // was not part of the use-after-free the B1.8 verification found, and an exception to a
+            // rule about a freed pointer is not worth the reader's time.
+            val open = synchronized(lock) { ring != null }
+            if (open && value != 1.0) {
                 throw UnsupportedOperationException(
                     "audio playback runs at 1.0 only: there is no tempo stage, so a rate of $value " +
                         "would move the clock without moving the sound",
@@ -347,9 +379,27 @@ public class AudioPlayback(
     override fun close() {
         if (closed) return
         closed = true
-        sink.close()
-        ring = null
+        // The reference goes first and the device second, and the order matters now that a ring can
+        // belong to the sink: after `sink.close()` a C ring has been freed, so a field still pointing
+        // at it is a dangling pointer waiting for a reader. Dropping it first also costs the device
+        // nothing, because a callback that finds no ring writes silence, which is what closing means.
+        //
+        // UNDER THE LOCK, and this is not tidiness. [position], [anchorClock], [buffered] and
+        // [underruns] are documented safe from any thread and all four read this field; before B1.8
+        // the ring was a managed object and a reader that had already loaded the reference was
+        // merely reading a ring nobody would use again. After B1.8 it can be a pointer that
+        // `sink.close()` frees, and clearing the field first narrows that window without closing
+        // it: a reader already inside `anchor()` is still there. Proved rather than argued, with
+        // AddressSanitizer over the two C calls in that order:
+        // `heap-use-after-free ... READ of size 8 ... in kprt_ring_anchor ... freed by ...
+        // kprt_sink_destroy`. Taking the lock here is what orders the two, because every
+        // cross-thread reader takes it: a reader in flight finishes before the field is cleared,
+        // and one that arrives afterwards sees null. The lock is released before `sink.close()`,
+        // which is correct and necessary: the sink's own teardown fences the device callback out,
+        // and holding a lock across it would put the session owner behind the audio device.
+        synchronized(lock) { ring = null }
         pipeline = null
+        sink.close()
     }
 
     private companion object {

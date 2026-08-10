@@ -4497,6 +4497,66 @@ is no other.
   exactly as section 16.2 prescribes: nothing here changes the callback body, and
   `render-audit.sh` plus the interposed C suites are what carry that claim; this sentence exists
   so a reader does not wonder where the fifty minutes of sound went.
+
+- 2026-08-10, interlude sub-phase I.6 (item I-20) and the CLOSE OF THE B1 TO B2 INTERLUDE, gate
+  passed. One commit per repository for the build host fix, plus this entry's commit, which ends
+  the interlude.
+
+  I-20. The Android NDK sysroot package name derives from the konan host (osx, linux or windows,
+  the spelling `konan.properties` itself uses) instead of hardcoding osx, and the konan LLVM
+  tools resolve by bare name and then by `.exe` name. Four new build tests, two per repository,
+  drive a Linux shaped and a Windows shaped dependencies tree from this machine: the Windows
+  shape resolves `clang.exe` and `llvm-ar.exe` where `canExecute()` on the bare name was
+  measured false at the review, and the Linux shape resolves the linux-named NDK package where
+  the hardcoded osx name found nothing. The four continuous integration jobs these unblock
+  remain unexecuted, so their evidence is level 8, and every document that mentions them says
+  so.
+
+  The interlude, closed. Twenty register items, six sub-phases, all executed single-threaded by
+  Fable 5 with reproduction-first discipline; the per-sub-phase entries above carry the detail
+  and this entry carries the whole. What the interlude changed about shipped behaviour is
+  exactly sub-phase I.5's list and nothing else. What it changed about the project's ability to
+  verify itself is larger: section 9 is the whole standing gate again with a move procedure per
+  ratchet; the record contains no number or grade a rerun contradicts; the extraction proof that
+  froze 909 lines of exported C is retired with its final run pasted into the I.3 entry, and the
+  two crashes it blocked are fixed; the coupling ratchet rewards the reduction B2 exists to
+  make; every instrument that could report success while measuring nothing now fails loudly
+  instead, proved by the same blindings that used to pass; and all eighteen ordering decisions
+  in the real-time C are pinned with negative controls.
+
+  Instruments retired and re-anchored, confirmed against the tree at this close, per section
+  16.3: `verify-lift.sh` and the extractor GONE with their guarantee converted to the recorded
+  digests plus the export baseline and the suites; `coupling-baseline.txt` re-anchored on
+  `ffmpeg_typed_crossings` 287 with a ten-name type allowlist; `deleted-surface.txt` the single
+  copy of the fifteen names with a written resurrection move; `source-discipline.sh` at
+  eighteen checks; `exported-symbols-baseline.txt` NEW at 163 names with check 6 comparing;
+  `KC_REQUIRE_ALLOC_ACCOUNTING` and the `interpose` mode NEW in kitecodec-c; the two-bakings
+  assertion NEW in `klib-metadata-diff.sh`, whose bare form now fails on a mismatch.
+
+  The closing gate, rerun for real over both repositories at this tree: KiteCodec 6 C suites in
+  plain, asan, tsan and interpose; corpus replay under asan; `symbol-audit.sh` PASS with the
+  baseline equal at 163; `klib-metadata-diff.sh --check` clean with both bakings at 3934308;
+  `check-deleted-surface.sh` PASS; `apiCheck` and `checkCinteropCoupling` green;
+  `:buildSrc:test` 28 tests. KitePlayer: `checkKotlinAbi`; `:buildSrc:test` 16 tests; all five
+  test tasks (183 jvm, 192 native, 36 ffmpeg, plus output and subtitles); 8 C suites in four
+  modes; `render-audit.sh` 15 checks; `source-discipline.sh` 18 checks; spot checks; three
+  sample clips with zero underruns and the nonexistent-file refusal; and the em dash scan
+  printing nothing over both repositories.
+
+  One deviation at this gate, recorded with its evidence. In the loaded closing run,
+  `RealMediaSeekTest`'s twenty-seek case caught the player still Buffering at seek 15's landing
+  assertion while the full gate ran beside it; the identical runtime code had passed the same
+  case at the I.5 gate, I.6 changed only buildSrc, three isolated reruns and one full five-task
+  rerun all passed, and the case is a real-media timing assertion on a loaded development
+  machine, which is level 6 territory by section 9's own words. The same class of flake was
+  recorded at I.1 (one dropped frame under load, zero on the quiet reruns).
+
+  Verdict: the four conditions section 16.0 fired on are all discharged. Nothing in the
+  interlude promoted a tier, added a target, or grew the public API beyond the register's own
+  items. Section 16.4's deferrals stand recorded with their owners. B2 IS UNBLOCKED: the two
+  ratchets that fought its first named improvements now pass them by construction (measured as
+  task tests), the units it must edit are ordinary maintained sources, and the standing gate it
+  will be measured by is section 9, whole.
 ---
 
 ## 15. Horizon B execution: B1

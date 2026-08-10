@@ -4419,6 +4419,84 @@ is no other.
   coupling ratchet green; KitePlayer 8 C suites in four modes; `render-audit.sh`;
   `source-discipline.sh` at 18 checks; all five KitePlayer test tasks with `--rerun`; spot
   checks; three sample clips clean; and the em dash scan prints nothing over both repositories.
+
+- 2026-08-10, interlude sub-phase I.5 (items I-01 to I-06), gate passed. Two KitePlayer commits,
+  the only sub-phase of the interlude that changes shipped behaviour, and every fix landed
+  reproduction first: the new tests ran against the unfixed code and failed at exactly the lines
+  the review measured, then the fixes went in, then everything passed.
+
+  The reproductions, before any fix: the double-begin case failed in plain (the second grant
+  recomputed instead of refused); the asan variant, which carries UndefinedBehaviorSanitizer,
+  reported `kite_rt_render.c:59:18: signed integer overflow: 9223372036854775807 * 1000000`
+  through the public surface; and the tsan variant reported `data race kite_rt_ring.c:481 in
+  kprt_ring_flush ... Previous write kprt_ring_begin_write`, the exact write-write race of the
+  review's I-06 measurement.
+
+  I-01. `kprt_ring_create` bounds the PRODUCT of its factors against SIZE_MAX; the factor bounds
+  stay as cheap sanity checks and their comment no longer claims they remove the overflow, which
+  was true only at a 64 bit size_t and false on four of the seventeen shipped targets. Three
+  `_Static_assert`s beside the guard prove the arithmetic at every target's own pointer width in
+  the build itself, compiled and proved on watchos_arm32 and android_x86 with macos_arm64 as the
+  64 bit control. A refused create is proved to allocate nothing under the interposer, and on a
+  32 bit build the alloc case drives the review's wrap vector through the public surface.
+  `CompileKiteRtTask.specFor` carries the new-target pointer-width sentence.
+
+  I-04. A second `kprt_ring_begin_write` while a reservation is outstanding returns 0 with the
+  reservation intact, and `kite_rt.h` says so in place of the sentence that called the old
+  recompute harmless. The refusal immediately caught its own second-order consequence, which is
+  the reason reproduction-first is the discipline: the retry-via-begin idiom in the test feed
+  helper and in the shipped `NativeAudioRing.write` would have livelocked the feeder on
+  KPRT_COMMIT_NEEDS_SEGMENT, measured as an existing segment case failing the moment the refusal
+  landed. The abandon spelling, a zero-frame commit, is now documented in the header and wired
+  through both callers; the new basic case pins refusal in three sizes, the intact first commit,
+  and the un-wedged ring after it.
+
+  I-05. The render silence back-dating subtracts through a new `sub_saturating`, mirroring
+  `add_saturating` twelve lines above it, and `frames_to_micros` saturates at the ends of the
+  range in BOTH implementations, so the oracle stops comparing Kotlin's defined wrap against C's
+  undefined behaviour and pins the two to the same answer at INT64_MAX, at INT64_MIN, and at a
+  large in-range value that must stay exact (208,333,333,333 microseconds for 1e10 frames at 48
+  kHz). Both header comments state saturation in place of the unqualified "Exact"; two rescale
+  rows and a deadline-ends render case run under asan where UBSan is the assertion.
+
+  I-06. The three reservation fields are `_Atomic` with relaxed access, which honours the
+  internal header's own capitalised rule and is zero instructions on every target here; the new
+  flush-versus-feeder threads case is clean under tsan where the same interleaving raced before.
+  Both false comments are corrected, `kite_rt.h`'s quiescence sentence names the anchor reader,
+  and `AudioPlayback.flush` runs the ring flush under the same lock `position` and `anchorClock`
+  read under.
+
+  I-02 and I-03, the Kotlin half. `teardownSession`'s cancel-and-join pair runs under
+  NonCancellable, with the budget arithmetic written beside it: five quiesce deadlines can
+  consume the whole close budget, the timeout then cancels the block, and a swallowed join in a
+  cancelled coroutine waits for nothing while the non-suspending audio close frees the C ring
+  under a feeder mid-write, which is the heap-use-after-free AddressSanitizer reproduced at the
+  review. `submit` reads the ring field under the lock, `close` carries the quiescence
+  precondition in `flush`'s words, and a failed open after the audio path is live closes that
+  path before rethrowing, with `selectStreams` as the reachable thrower. The scripted backend
+  gained the two fault knobs, and reverting the open-leak catch in a scratch clone fails exactly
+  the new leak test, 1 of 184.
+
+  One deviation, recorded instead of papered over. The plan asked for the NonCancellable wrapper
+  to be proved falsifiable by a Kotlin test; the measurement says the scripted engine cannot
+  reach the failure: exhausting the close budget needs at least five workers stuck at once, only
+  three of the five can stall at all (the feeder and the video scheduler quiesce cooperatively
+  by construction), and three stalls burn 6 of the 10 seconds. That arithmetic is now written in
+  the stalled-worker test itself, which pins the reachable contract: a close with a stalled
+  worker completes, joins what it cancelled, and closes the audio path exactly once. The
+  wrapper's falsification therefore rests on the review's level 2 ASan reproduction and the
+  budget reasoning, and this entry says so rather than presenting a test that cannot fail as if
+  it could.
+
+  Gate: the standing gate over both repositories, all green: KiteCodec 6 C suites in four modes
+  plus corpus replay, symbol audit with the export baseline, metadata check with the two bakings
+  agreeing, deleted surface; KitePlayer 8 C suites in four modes (the new alloc case under the
+  interposer), render audit unchanged at 15 checks, source discipline at 18, all five test tasks
+  with `--rerun` (183 jvm, 192 native), spot checks, three sample clips with zero underruns, and
+  the em dash scan printing nothing. The supervised device run was NOT rerun for this sub-phase,
+  exactly as section 16.2 prescribes: nothing here changes the callback body, and
+  `render-audit.sh` plus the interposed C suites are what carry that claim; this sentence exists
+  so a reader does not wonder where the fifty minutes of sound went.
 ---
 
 ## 15. Horizon B execution: B1

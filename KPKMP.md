@@ -5375,3 +5375,1131 @@ One note the orchestrator checked rather than assumed: the coupling numbers in B
 at KiteCodec `cdb8ad2`, which is still `HEAD` with a clean tree, so 253, 273, 21 and 11 stand and
 B1.1 may write them as its baseline without re-measuring. If that stops being true before B1.1
 runs, re-measure and record the difference.
+
+---
+
+## 16. The B1 to B2 interlude
+
+Written 2026-08-10 by the B1 close-out review, after B1 was closed and before B2 opened. Six
+independent review fronts attacked the combined end state at KiteCodec `2b4287f` and KitePlayer
+`1fd0e15`: the real-time C memory model, the `kitecodec-c` end state, the Kotlin seams, build and
+packaging and CI, the claims and the register, and B2 readiness. Their findings were treated as
+claims and not as facts: every finding severe enough to influence the verdict was reproduced by
+measurement in a scratch clone before it was accepted, and one was discarded because it did not
+reproduce. This section is to the interlude what section 15.2 is to B1: the executable run. It is
+decision complete. An implementer needs this section, section 1, section 2, section 9 and the
+code, and nothing else.
+
+### 16.0 The verdict, and the bound on this section
+
+**The verdict: B1 to B2 interlude required.** B1 is not defective in the sense that would reopen a
+sub-phase. Every sub-phase's deliverable survived attack: the memory ordering is textbook in all
+four seqlocks, the lift is byte for byte faithful and was re-proved at this review, the identity
+gate rejects every verdict it claims to, the render audit and the interposed C test both hold, and
+the shipped callback body measured a worst case of 5,958 nanoseconds against a 5,333,333
+nanosecond budget with no underrun, no give-up, no zero-filled callback and no estimated anchor.
+What did not survive is the space between the sub-phases: seams no per-phase gate owned,
+instruments whose coverage is narrower than the record reads, ratchets that fire on the work B2 is
+about to do, and a handful of numbers and grades in the record that a rerun contradicts.
+
+**The four conditions the owner set, and what fires each.** A finding that B2 will fix in its
+natural course does not need this section. A finding that would corrupt memory, mislead the
+project record, fire a ratchet with no documented move procedure, or silently invalidate an
+instrument the plan relies on, does. All four fire.
+
+1. *Would corrupt memory.* I-01 (a byte count that wraps to zero on four of the seventeen shipped
+   targets, admitting a heap overflow), I-02 (a use after free on the shipped audio path when a
+   close times out), I-04 (a replaced reservation publishing ring storage nobody wrote), I-05 (two
+   unchecked signed arithmetic sites on documented public parameters).
+2. *Would mislead the project record.* I-16 (a ten minute negative control whose direction three
+   later measurements reverse, with the causal conclusion built on it), I-17 (four sentences in a
+   public repository that grade or present continuous integration which has never executed, one of
+   them grading a never-run job level 2 under section 2's own scale), I-18 (one em dash in each
+   repository, in the one file every documented scan is blind to, with contract item 4 forbidding
+   it), I-19 (a register row the closing entry announced and never wrote, plus eighteen exported
+   entry points that crash on an argument and are recorded nowhere the register can see).
+3. *Would fire a ratchet with no documented move procedure.* I-12 (`verify-lift.sh` freezes 909
+   lines of C against an anchor no future revision can replace, and it already blocks a proved
+   crash fix), I-13 (the coupling ratchet fails B2's own first named improvement, and fires on a
+   KDoc comment), I-14 (the deleted surface list lives in three files with no way to resurrect a
+   name), I-15 (the standing gate of section 9 runs none of the thirteen instruments B1 built, so
+   a B2 executor following contract item 2 fires none of them at all).
+4. *Would silently invalidate an instrument the plan relies on.* I-07 (the FFmpeg include tree is
+   not a tracked input, so the archive's frozen identity macros and struct offsets go stale while
+   the cinterop half of the same klib regenerates), I-08 (the allocation interposer can be blinded
+   by one word and the ownership gate still reports success, which is the whole of deferral 2's
+   guarantee), I-09 (the exported C surface can grow with every check reporting the two sets
+   equal), I-10 (the only producer side guard against a wrong architecture archive can be deleted
+   at its call site with every test still green), I-11 (thirteen of eighteen load bearing ordering
+   decisions have no instrument, and both ends of the one edge that stops the feeder overwriting
+   storage the consumer is copying out of are among them).
+
+**The bound.** This is an interlude and not a horizon. It adds no product capability, no target,
+no backend and no public API beyond what an item below names. It promotes no tier. Twenty items,
+six sub-phases, and an explicit list in section 16.4 of what was deliberately left to B2 with the
+reason. Anything a reviewer proposed that B2 will do anyway is in that list and not in the
+register.
+
+**What was rejected, and by what measurement.** One finding was discarded rather than carried.
+`check-deleted-surface.sh` was reported to have no positive control, on the strength of a run in
+which all three checks reported clean while eight files really did mention the deleted names. That
+run reached the two repositories through sibling symlinks, and BSD `grep -r` with that
+`--exclude-dir` set does not descend a symlinked path argument. Run from a real checkout, which is
+what the gate does, the check bites: resurrecting `ffkmp_frame_make_writable` in a scratch clone
+gives `FAIL: 1 use site(s) survive` and exit 1, and the untouched tree gives exit 0. So the
+committed gate is sound and the reported defect was an artifact of the reviewer's own layout. The
+hardening it suggested, failing when the prose set is empty because the allowlist proves at least
+eight files must match, is recorded in section 16.4 as a B2 nicety and is not in the register.
+
+### 16.1 The interlude task register
+
+Same shape as section 15.1. Every item is located, has its fix decided, names its sub-phase and
+names its test. 20 items.
+
+#### I-01. `kprt_ring_create` bounds the factors, not the product, and admits a heap overflow on four targets
+- Where: `kiteplayer-rt/native/src/kite_rt_ring.c:68` (the validation) and `:72` (the multiply);
+  consequence at `:79` and at every `memcpy` in `kite_rt_render.c:198` to `:205`. The target list
+  that decides which targets are affected is `buildSrc/src/main/kotlin/CompileKiteRtTask.kt:295`
+  to `:320`.
+- Problem: line 68 refuses `capacity_frames > (1 << 27) || channels > 64` and its comment says the
+  purpose is to remove the overflow of the multiply on line 72. That reasoning holds only for a 64
+  bit `size_t`. Four of the seventeen shipped targets have a 32 bit `size_t`, and every admitted
+  pair whose frame count times channel count reaches 2^30 wraps. Measured with the shipped konan
+  clang and the shipped triples: three `_Static_assert`s over the exact expression of line 72, at
+  `(1 << 27, 8)`, `(1 << 27, 32)` and `(1 << 24, 64)`, all hold on `armv7k-apple-watchos7.0`,
+  `arm64_32-apple-watchos7.0`, `armv7a-unknown-linux-androideabi24` and
+  `i686-unknown-linux-android24`, and all three are rejected with three failures each on the two
+  controls `arm64-apple-macos11.0` and `aarch64-unknown-linux-android24`. In a deterministic model
+  in which only the three byte count widths of `kprt_ring_create` become 32 bit and nothing else
+  changes, `kprt_ring_create(48000, 32, 1 << 27)` succeeds, reports `capacity=134217728
+  channels=32`, and the first ordinary feeder fill of the granted window gives `AddressSanitizer:
+  heap-buffer-overflow ... WRITE of size 4 ... 0 bytes after 960-byte region ... allocated by ...
+  kprt_ring_create`. The unmodified 64 bit control at the same vector is clean. Level 2 both ways,
+  with a control that rejects. Not reachable from the shipped device path today, which was checked
+  rather than assumed: `kprt_sink_create` clamps to `KPRT_MIN_CHANNELS` 1 and `KPRT_MAX_CHANNELS`
+  2, and at two channels the admitted maximum product is 2^30 bytes, which does not wrap. It is
+  reachable through `kprt_ring_create` itself, which is `KPRT_API` exported, and through
+  `NativeAudioRing`, whose constructor passes `format.channels` and which the differential oracle
+  drives at 6 and 8 channels. The defect is that the validation whose only job is memory safety
+  does not do that job on four shipped targets.
+- Fix: bound the product and not the factors. Keep the two existing refusals as cheap sanity
+  bounds, and add, before the multiply, `if ((uint64_t)capacity_frames * (uint64_t)channels *
+  sizeof(float) > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE) return NULL;` so the guard is correct
+  at every pointer width. Add one sentence to `CompileKiteRtTask.specFor`'s comment saying that a
+  new target must be checked for pointer width against this guard.
+- Sub-phase: I.5. Test: a new `test_ring_alloc` case asserting that a create whose byte count
+  cannot be represented is refused and allocates nothing, driven under `interpose` so the refusal
+  is proved to allocate nothing rather than argued; plus the three `_Static_assert`s of the
+  measurement above, kept as a compile time check in `kite_rt_ring.c` so the arithmetic is proved
+  at every target's own pointer width by the build itself.
+
+#### I-02. `AudioPlayback.close()` orders the four documented readers against the free and leaves the feeder out
+- Where:
+  `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/AudioPlayback.kt:379` to
+  `:403` (close), `:164` to `:184` (submit), and the class KDoc at `:46` to `:56`;
+  `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/PlaybackCore.kt:1449`
+  and `:1485` to `:1508` (teardown).
+- Problem: the B1.8 blocking finding was fixed by clearing `ring` inside the lock every
+  cross-thread reader takes, which covers `position`, `anchorClock`, `buffered` and `underruns`.
+  `submit` is not in that set and is not in the class KDoc's list of members confined to the
+  session owner, so the documented contract does not exclude a `submit` concurrent with a `close`,
+  and `close` states no quiescence precondition although `flush` states one in the same file. The
+  producer side call on a freed ring is a use after free and not an argument: measured under
+  AddressSanitizer, `heap-use-after-free ... READ of size 8 ... in kprt_ring_begin_write
+  kite_rt_ring.c:250 ... 64 bytes inside of 33728-byte region ... freed by`. Level 2 for the
+  hazard. The engine route is level 4 and every link was read: `runClose` wraps `teardownSession`
+  in `withTimeoutOrNull(CLOSE_DEADLINE)` with `CLOSE_DEADLINE` at 10 seconds; `teardownSession`
+  first calls `workers.forEach { it.quiesce(QUIESCE_DEADLINE) }` with `QUIESCE_DEADLINE` at 2
+  seconds across five workers, which is exactly the close budget; it then cancels the jobs and
+  joins them with `runCatching { it.join() }`, and `runCatching` catches `CancellationException`,
+  so once the timeout has fired every join throws and is swallowed and the joins do not wait; and
+  `session.audio?.close()` is not a suspend call, so it runs to completion in the cancelled
+  coroutine and frees the C ring. `submit`'s only suspension point is `delay(FULL_RING_WAIT)`,
+  reached only when the ring is full, so a cancelled feeder can execute a whole buffer of
+  `ring.write` calls after the free.
+- Fix: two changes, both small, and the second is what makes the first true. Extend the one
+  sentence rule to the producer: `submit` and `submitDecoded` read `ring` under the lock, so the
+  rule stays "a member that may be called from another thread touches that field only under the
+  lock", and add the quiescence precondition to `close`'s KDoc in the same words `flush` uses.
+  Make `teardownSession` join for real: wrap the cancel and join pair in
+  `withContext(NonCancellable)` so a close that has run out of budget still waits for the feeder
+  before anything frees a ring, and say in the KDoc that the join is the only thing standing
+  between a cancelled feeder and a freed C ring.
+- Sub-phase: I.5. Test: a `PlaybackCoreTest` case that makes one worker refuse to reach a
+  quiescent boundary, drives a close, and asserts the feeder is finished before the audio path is
+  closed; proved falsifiable by removing the `NonCancellable` wrapper, which must fail it. Plus
+  one `AudioPlaybackTest` case pinning that a `submit` racing a `close` never touches a cleared
+  ring.
+
+#### I-03. A failed open after the device is negotiated leaks the C sink, the C ring and an initialised AudioUnit
+- Where:
+  `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/PlaybackCore.kt:796`
+  to `:846`; the catch at `:842` to `:846`.
+- Problem: `sink = output.audioSink.create()` and `audioPlayback.open(...)` publish a live device
+  into locals. The catch closes only `backendSession`, although its comment says "Nothing half
+  built survives an open that failed", and `runOpen`'s catch calls `teardownSession()`, which
+  returns immediately because `this.session` has not been assigned yet. The reachable thrower is
+  the very next statement, `withContext(dispatchers.demux) { source.selectStreams(...) }`, which
+  reaches `KiteCodecSource.selectStreams`
+  (`kiteplayer-ffmpeg/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSource.kt:114`
+  to `:119`), a `check`, a `require` and `source.openPacketReader`. Level 4, with the ownership
+  invariant read from the code: `CoreAudioSink.close()` is the only caller of `kprt_sink_destroy`,
+  and `grep` over `PlaybackCore.kt` shows `session.sink` is only ever stopped, never closed.
+  Before B1.8 this leaked a Kotlin object holding an AudioUnit; it now also leaks two C
+  allocations while `retainedResources()` reports zero.
+- Fix: wrap everything after the audio path is opened in a `try`, and on any throwable
+  `runCatching { audioPlayback?.close() }` before rethrowing. Correct the catch comment to say
+  what it now covers.
+- Sub-phase: I.5. Test: a `PlaybackCoreTest` case with a source that throws from `selectStreams`,
+  asserting the fake sink recorded exactly one close; proved falsifiable by removing the new
+  catch.
+
+#### I-04. A second `kprt_ring_begin_write` can publish ring storage the caller never wrote
+- Where: `kiteplayer-rt/native/src/kite_rt_ring.c:250` to `:276`, and the contract at
+  `kiteplayer-rt/native/include/kite_rt.h:210` to `:211`.
+- Problem: `begin_write` never checks `has_pending`, so a second call recomputes the grant from
+  the current `consumed` and can hand back a larger window than the first, and `pending_frames`
+  becomes the larger number. Measured through the public surface only, under AddressSanitizer and
+  UndefinedBehaviorSanitizer: with the ring poisoned by an earlier write, `grant1=128 grant2=512`,
+  a commit of the second grant returns `KPRT_COMMIT_PUBLISHED`, and of the 1024 published samples
+  768 are the poison the reservation never wrote. The mirror case is a smaller second grant:
+  `grant=256 probe grant=64`, and the original commit is then refused with
+  `KPRT_COMMIT_BAD_ARGUMENT` and `written` stays at 0, losing a filled buffer. Level 2. The header
+  says a double begin is "a programming error rather than a supported idiom" and then says "the
+  second call reports the same window", which is true only when the second call asks for the same
+  count and room has not changed, and which is what makes the idiom look harmless. Not reachable
+  from the shipped consumer today, which was checked: `NativeAudioRing.write` begins, fills and
+  commits inside one function, and `AudioPlayback.submit` retries with identical arguments so the
+  window is refilled every time.
+- Fix: refuse a second begin while `has_pending` is set, returning 0 and leaving the outstanding
+  reservation untouched, and correct `kite_rt.h:210` to `:211` to say exactly that. Refusing beats
+  clamping because the clamped form leaves a caller believing it holds a window it does not.
+- Sub-phase: I.5. Test: two `test_ring_basic` cases, one per direction, asserting that a second
+  begin returns 0 with the first reservation intact and that the first commit then still publishes
+  exactly what was written; plus one row in the differential oracle so both rings agree.
+
+#### I-05. Two unchecked signed arithmetic sites on documented public parameters
+- Where: `kiteplayer-rt/native/src/kite_rt_render.c:225` to `:226` (the silence back-dating in
+  `kprt_ring_render`) and `:37` to `:59` (`kprt_frames_to_micros`, the multiply at `:59`).
+  Documented at `kite_rt.h:245` to `:249` and `:289` to `:296`.
+- Problem: both are signed overflow, which is undefined behaviour, on `KPRT_API` entry points with
+  no stated domain. Measured under UndefinedBehaviorSanitizer through the public surface:
+  `kprt_ring_render(frames=128, deadline_nanos=INT64_MIN)` with 64 frames available gives
+  `kite_rt_render.c:225:49: runtime error: signed integer overflow: -9223372036854775808 - 1333333
+  cannot be represented in type 'int64_t'`, and `kprt_frames_to_micros(INT64_MAX, 1)` gives
+  `kite_rt_render.c:59:18: runtime error: signed integer overflow: 9223372036854775807 * 1000000`.
+  Level 2 for both. Neither is reachable from a real clock or a real frame count, and that was
+  measured rather than assumed. The sibling site in `publish_anchor` was given `add_saturating` at
+  the B1.8 verification and these two were not, so this is the last unchecked signed arithmetic on
+  the anchor path. `kprt_frames_to_micros` matters twice over, because its whole reason for being
+  exported is that both implementations of the contract must agree on it, and `KotlinAudioRing`'s
+  `Long` arithmetic wraps with defined behaviour where this wraps with undefined behaviour, so the
+  differential oracle compares two different kinds of wrong at the top of the range.
+- Fix: a `sub_saturating` at `:225` mirroring the `add_saturating` twelve lines above it, and
+  saturation in `kprt_frames_to_micros`, matching the decision already taken for the anchor. State
+  the saturating behaviour in both header comments in place of the current unqualified "Exact, not
+  approximate".
+- Sub-phase: I.5. Test: two `test_ring_rescale` rows at each end of the range and one
+  `test_ring_basic` case rendering against `INT64_MIN` and `INT64_MAX` deadlines, all four run
+  under the asan variant which carries UndefinedBehaviorSanitizer; plus two differential oracle
+  rows at the ends so the two rings are pinned to the same answer rather than to two different
+  wraps.
+
+#### I-06. The reservation fields break the internal header's own stated rule, and a flush between begin and commit fails the player
+- Where: `kiteplayer-rt/native/src/kite_rt_ring_internal.h:13` to `:18` (the rule), `:99` and
+  `:104` to `:107` (the two false comments), `kite_rt_ring.c:471` and `:481` to `:482` (flush
+  writing them), `kite_rt.h:35` to `:45` (the quiescence contract),
+  `kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/NativeAudioRing.kt:189`
+  to `:190` (the throw),
+  `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/PlaybackCore.kt:1292`
+  to `:1296` (the seek path that continues after a failed quiesce), and
+  `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/AudioPlayback.kt:281` to
+  `:283` (flush called outside the lock).
+- Problem: three related truths, all read from the code. The internal header states in capitals
+  that every field touched by more than one thread is `_Atomic` and that this is not decoration,
+  then declares `pending_start_frame`, `pending_frames` and `has_pending` plain with the comment
+  "Feeder-private, so plain fields", and `kprt_ring_flush` writes two of them from the session
+  owner's thread. The same header says of the `reader_*` block "Only `kprt_ring_anchor` writes
+  these", which `kite_rt_ring.c:471` contradicts, while the neighbouring `cache_*` block documents
+  the identical exception correctly. And the consequence of the documented precondition being
+  violated is now a hard failure rather than a degradation: a flush landing between the feeder's
+  begin and its commit makes the commit answer `KPRT_COMMIT_BAD_ARGUMENT`, which was measured
+  (`commit(first grant) verdict=2 written=0`), and `NativeAudioRing.write` turns that verdict into
+  an `error(...)`, which kills the audio feed worker and fails the player with
+  `PlaybackError.Internal`. The engine reaches exactly that state on purpose: `runSeek` warns
+  `PlaybackWarning.BadTimestamps` when `quiesceWorkers` times out and then continues to the flush.
+  The Kotlin ring had no such state and degraded to garbled audio. Level 4 for the reachability,
+  level 2 for the C behaviour. Separately, `kprt_ring_flush` clears the anchor and both caches
+  while `kite_rt.h:35` to `:41` says any thread may call `kprt_ring_anchor` while the ring is
+  alive, and `AudioPlayback.flush` calls `ring?.flush()` outside the lock that `position()` and
+  `anchorClock()` take, so nothing excludes the two. The reviewer could not make that interleaving
+  fire: 400,000 flushes against 2,304,154 concurrent anchor reads produced zero resurrections,
+  which is level 2 negative evidence, and the consequence is marked unverified.
+- Fix: four things, none of which is a design change. Make the three reservation fields `_Atomic`
+  with relaxed access, which is zero instructions on every target here and makes the struct honour
+  its own rule; correct both false comments; add the anchor reader to the quiescence sentence in
+  `kite_rt.h:42` to `:45`, so the C contract says what the code needs; and move `ring?.flush()`
+  inside `synchronized(lock)` in `AudioPlayback.flush`. Leave `NativeAudioRing.write`'s throw as
+  it is: a `BAD_ARGUMENT` after a correct call sequence is a real programming error and must be
+  loud.
+- Sub-phase: I.5. Test: a `test_ring_threads` case running a flusher against a live feeder under
+  ThreadSanitizer, which must be clean after the change and which was proved to report a race
+  before it (`data race ... Write of size 4 ... kprt_ring_flush kite_rt_ring.c:481 ... Previous
+  write ... kprt_ring_begin_write kite_rt_ring.c:273`); plus the existing `AudioPlaybackTest`
+  extended with one case pinning that `flush` and `position` cannot interleave.
+
+#### I-07. The FFmpeg include tree is not a tracked input, so the archive's frozen identity and the klib's cinterop half can disagree
+- Where: `../KiteCodec/buildSrc/src/main/kotlin/CompileKiteCodecCTask.kt:86` to `:87` (`@get:Input
+  abstract val ffmpegIncludeDirs: ListProperty<String>`), wired at
+  `../KiteCodec/kitecodec-core/build.gradle.kts:189`. The claim it falsifies is at
+  `../KiteCodec/native/kitecodec-c/include/kitecodec_abi.h:24` to `:28`.
+- Problem: the include tree is tracked as a list of path strings, so its contents are not
+  fingerprinted, while `cinteropFfmpeg<Target>` tracks header content through its own custom up to
+  date check. Measured at byte level in a scratch clone against a copied FFmpeg prefix: changing
+  only `LIBAVUTIL_VERSION_MICRO` from 100 to 177 inside that tree, with every path unchanged,
+  makes `compileKiteCodecCForMacosArm64` report UP-TO-DATE while `cinteropFfmpegMacosArm64`
+  re-executes, and `kitecodec_abi.o` stays byte identical, still carrying the word `6408 3c00`,
+  which is `AV_VERSION_INT(60, 8, 100)`. Forcing the compile to rerun against the same edited
+  header changes exactly one byte, at offset 4185, from `0x64` to `0xB1`, so the UP-TO-DATE
+  verdict hid a real change to the frozen expectation the identity gate compares. Level 2, byte
+  level. Reachable on the default developer path, because `FFmpegPaths.resolveSystem` returns the
+  unversioned `/opt/homebrew/include`, so `brew upgrade ffmpeg` changes header content with the
+  path string unchanged. This is the mirror image of the hazard B1.3 measured and fixed with
+  `inputs.files` on the other input, and the reverse direction was never measured. The consequence
+  today is contained by FFmpeg's within-major ABI promise and by the gate rejecting rather than
+  corrupting across a major, so it is not a live corruption; it is the instrument that carries
+  B1's second exit clause becoming stale without a word.
+- Fix: make the FFmpeg include tree a real input. Change `ffmpegIncludeDirs` to a tracked file
+  collection with `@InputFiles` and `@PathSensitive(PathSensitivity.NAME_ONLY)`, or keep the
+  string property for the compiler arguments and add `inputs.files(...)` over the six `version.h`
+  files beside it. Then close the gap the fix leaves open: add one assertion to
+  `klib-metadata-diff.sh` that the cinterop klib's `LIBAVUTIL_VERSION_INT` equals the archive's
+  own reported `header_*` value for avutil, so the two bakings inside one klib are compared rather
+  than assumed equal. Correct the two header comments at `kitecodec_abi.h:24` to `:28` to say
+  which compile they describe.
+- Sub-phase: I.4. Test: a `CompileKiteCodecCTaskTest` case proving the task is out of date after a
+  header content change with no path change; plus the new assertion, proved able to fail by
+  doctoring one of the two sides.
+
+#### I-08. The allocation interposer can be blinded by one word and the ownership gate still reports success
+- Where: `../KiteCodec/native/kitecodec-c/tests/harness.h:234` to `:256`,
+  `../KiteCodec/native/kitecodec-c/tests/harness.c:50`,
+  `../KiteCodec/native/kitecodec-c/tests/interpose_alloc.c:172`,
+  `../KiteCodec/native/kitecodec-c/scripts/run-c-tests.sh:33`. The already written fix is at
+  `kiteplayer-rt/native/scripts/run-c-tests.sh:59` to `:62` and its `harness.c`.
+- Problem: `KC_ALLOC_BALANCED` and `KC_ALLOC_LIVE` degrade to `kc_partial()` when the interposer
+  is not effective, and there is no mode that makes ineffectiveness a failure. Measured: renaming
+  the Mach-O section in `interpose_alloc.c` from `__DATA,__interpose` to `__DATA,__nointerpose`,
+  one word, and rebuilding gives `test_ownership: 39 cases, 39 passed, 39 with a property this
+  variant cannot observe` and exit 0, where the same cases print real counters before the change.
+  Level 2. This matters more than a missing test, because section 15.5's deferral 2 says the
+  ownership guarantee is carried by "exact pairing tests over all 39 ownership helpers under the
+  interposer" in place of a compiler attribute, so the whole of that guarantee can go dark with
+  the gate green. KitePlayer's `kiteplayer-rt` already solved this and the older copy did not,
+  which is the first concrete cost of the two harnesses having forked.
+- Fix: port the `interpose` run mode and the `KPRT_REQUIRE_ALLOC_ACCOUNTING` mechanism into
+  `kitecodec-c` under the name `KC_REQUIRE_ALLOC_ACCOUNTING`, so "the interposer is not effective"
+  becomes a hard failure rather than a recorded partial, and add the mode to `run-c-tests.sh` and
+  to the standing gate of I-15. Record in both READMEs that the harness and the interposer exist
+  in two repositories, that a fix to either lands in both, and that the mirror is part of the same
+  commit.
+- Sub-phase: I.4. Test: the new mode itself, proved able to fail by the same one word section
+  rename, which must now report a failure rather than a partial.
+
+#### I-09. Nothing constrains the exported C surface, and one gate command exits 0 on a real mismatch
+- Where: `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh:158` to `:160` and `:245` to
+  `:260`; `../KiteCodec/native/kitecodec-c/scripts/klib-metadata-diff.sh:315`.
+- Problem: two instrument defects that answer each other. Check 3 of `symbol-audit.sh` derives the
+  expected export set from the two headers and compares it to `nm`, so it is a header against
+  archive consistency check and not a baseline: declaring a new symbol makes it expected.
+  Measured, by adding one ordinary `KC_API int32_t` function to `src/kitecodec_abi.c` with a well
+  formed declaration beside its neighbours in `include/kitecodec_abi.h`: `nm` confirms the new `T`
+  symbol in the archive and `symbol-audit.sh --host` reports `header declares 164 KC_API helpers`,
+  `archive exports 164 symbols`, `ok: the two sets are equal`, PASS, with `verify-lift.sh` and
+  `check-deleted-surface.sh` both exit 0. The coupling ratchet excludes the `kc_` surface by
+  construction, so nothing in the base gate holds the line. The one instrument that does catch a
+  surface change is `klib-metadata-diff.sh --check`, and the plan writes that gate in the bare
+  form at three places, which exits 0 on a real mismatch: measured on the same injected mismatch,
+  `--check` exits 1 and the bare form exits 0. Level 2 for both.
+- Fix: commit `native/kitecodec-c/exported-symbols-baseline.txt`, the 163 external names of the
+  archive today, 157 `ffkmp_` plus 6 `kc_`, generated by `symbol-audit.sh` itself; add a sixth
+  check comparing the archive against that baseline as well as against the headers, with the same
+  move procedure the coupling baseline already has, which I-15 writes down. Change the three bare
+  invocations in section 15.2's gate blocks to `--check` and make the bare form exit non-zero on a
+  mismatch so the two forms cannot disagree.
+- Sub-phase: I.4. Test: the new check, proved able to fail by the same declared probe export, and
+  a negative control proving the bare form now exits non-zero.
+
+#### I-10. The producer side architecture guard can be deleted at its call site with every test green
+- Where: `buildSrc/src/main/kotlin/CompileKiteRtTask.kt:191` and
+  `../KiteCodec/buildSrc/src/main/kotlin/CompileKiteCodecCTask.kt:217` (the call sites);
+  `buildSrc/src/test/kotlin/CompileKiteRtTaskTest.kt` and
+  `../KiteCodec/buildSrc/src/test/kotlin/CompileKiteCodecCTaskTest.kt` (the suites).
+- Problem: both suites test the predicate `verifyObjectArchitecture` thoroughly and neither
+  asserts that the task action calls it, so the only producer side guard against register item
+  B1-11 is fully tested and fully bypassable. Measured: replacing the call site in
+  `CompileKiteRtTask` with a comment, verified one call site before and zero after, leaves
+  `:buildSrc:test` at 11 tests and BUILD SUCCESSFUL. Level 2. The CI step that echoes `file -b`
+  asserts nothing on its output.
+- Fix: one test per repository that runs `compile()` for a target whose expected object
+  description cannot match the object the compiler will actually produce, and asserts the failure
+  names both architectures and the target. KiteCodec's fixture already compiles real objects for
+  two targets, so the material exists on both sides. While both suites are open, copy across the
+  three guards the mutation matrix showed each suite missing, so the two near twin tasks are
+  covered identically: the output directory naming guard, the numeric LLVM package ordering, and
+  the stale object clearing.
+- Sub-phase: I.4. Test: the new cases themselves, each proved able to fail by deleting the guard
+  it covers.
+
+#### I-11. Thirteen of eighteen load bearing ordering decisions have no instrument
+- Where: `kiteplayer-rt/native/scripts/source-discipline.sh:124` to `:168` (the five checks that
+  exist); the unpinned decisions at `kite_rt_ring.c:117,131,158,159,164,251,332,343`,
+  `kite_rt_render.c:110,121,206,288` and `kite_rt_coreaudio.c:299`.
+- Problem: `source-discipline.sh` was added because a planted ordering defect passed the whole
+  gate, and it pins five decisions: the `written` release store, the `written` acquire load, the
+  closing release store on a segment slot's sequence, and the two release fences in
+  `publish_anchor` counted as at least two. Measured at this review, the script reports exactly `5
+  checks, all passed`. Three mutants were planted on unpinned decisions and each passed
+  everything: the `consumed` release store downgraded to relaxed at `kite_rt_render.c:206`, the
+  `consumed` acquire load downgraded to relaxed at `kite_rt_ring.c:251`, and the `sink->ring`
+  release store downgraded to relaxed at `kite_rt_coreaudio.c:299`. Each of the three passed
+  `run-c-tests.sh` in all four modes including tsan, plus `source-discipline.sh` and
+  `render-audit.sh`. The suites are not inert, which was checked with a functional control in the
+  same clone: breaking the wrap arithmetic at `kite_rt_render.c:195` is rejected by
+  `test_ring_basic`, `test_ring_threads` and `test_sink_callback`. Level 2. Two of the three are
+  worse than untested. The `consumed` pair is the only happens before edge that stops the feeder
+  from overwriting ring storage the consumer is still copying out of, and the `sink->ring` pair is
+  the edge whose own comment says that without it a callback could read whatever `malloc` last
+  held in the sample block.
+- Fix: extend `source-discipline.sh` from five checks to eighteen, one grep per load bearing
+  ordering decision, with one negative control each, in exactly the shape of the checks already
+  there. Keep the script's own header sentence that it is level 4 and that ThreadSanitizer grades
+  atomicity and not ordering strength, and add one sentence naming how many decisions are pinned,
+  so the count cannot be read as coverage again. Correct the B1.9 log entry's "five checks"
+  sentence in the same commit, per I-16.
+- Sub-phase: I.4. Test: the script's own `--prove-it-can-fail` arm, extended to thirteen new
+  negative controls, every one of which must be rejected.
+
+#### I-12. `verify-lift.sh` freezes 909 lines of C against an anchor that can never move, and it blocks a proved crash fix
+- Where: `../KiteCodec/native/kitecodec-c/scripts/verify-lift.sh:40`
+  (`PRE_LIFT_REVISION="5364329"`) and its comparison C at `:140` to `:168`;
+  `../KiteCodec/native/kitecodec-c/tools/extract_from_def.py` (1108 lines);
+  `../KiteCodec/native/kitecodec-c/src/helpers_format.c:57` and `:22` to `:25` (the two blocked
+  guards); `../KiteCodec/native/kitecodec-c/README.md` and `../KiteCodec/README.md:347`.
+- Problem: the script proves the committed C is byte for byte what the extractor produces from the
+  def body at `5364329`. Every commit from the lift onward has a def with no body, so the anchor
+  is a fixed point in history no future revision can replace. Measured in a scratch clone: at HEAD
+  all eleven comparisons MATCH with payload digest
+  `e63a7b56e4fe61a8f804d65b6066478dfa5e7eebcf5485685c327081391726ea` over 909 lines on both sides
+  and exit 0; applying the one line NULL key guard the B1.6 log entry already records as blocked
+  gives `MISMATCH: the units do not reassemble into the def body` and exit 1, with the failure
+  message telling the reader to "Re-run the extractor and commit its output, or fix the def",
+  which cannot be done because the def has no body; and re-anchoring with
+  `./scripts/verify-lift.sh HEAD` exits 2 with `extract_from_def.py: expected exactly one '---'
+  separator line, found 0`. Level 2. The cost is not hypothetical. Eighteen exported helpers crash
+  on a NULL or out of range argument, and twelve of the twelve probed were reproduced at level 2,
+  one fork per call against the committed host archive: signal 11 for `ffkmp_frame_get_buffer`,
+  `ffkmp_codecpar_from_context`, `ffkmp_codecpar_copy_for_mux`, `ffkmp_fmt_open_input` with a NULL
+  out pointer, `ffkmp_fmt_find_stream_info`, `ffkmp_fmt_seek_micros` with an out of range stream
+  index, `ffkmp_fmt_read_frame`, `ffkmp_fmt_alloc_output2` with a NULL out pointer,
+  `ffkmp_fmt_set_opt` with a NULL key, `ffkmp_fmt_write_frame`, `ffkmp_codecctx_open` and
+  `ffkmp_codecctx_from_par`, against two calibration controls that guard and answer cleanly. Every
+  one of them is exported `KC_API` surface of a public library, and the reason none is fixed is a
+  script.
+- Fix: retire and replace, because re-anchoring is impossible and splitting the units into frozen
+  and evolving buys only bookkeeping, since B2's first named edits touch five of the nine. In one
+  commit: run `verify-lift.sh` at `2b4287f` one last time and paste its full output into the log
+  entry, all eleven pairs and both digests, as the permanent record that the lift was faithful;
+  delete `scripts/verify-lift.sh` and `tools/extract_from_def.py`; rewrite the README sections so
+  they say the nine units are now ordinary maintained sources and the lift's faithfulness is a
+  historical fact with recorded digests; and land the two guards the instrument was blocking, `!k`
+  in `ffkmp_fmt_set_opt` and a `stream_index` bound in `ffkmp_fmt_seek_micros`, which are the two
+  reproduced crashes with no owner at all. The remaining sixteen get register rows under I-19 and
+  are B2's, because they want the generator plus its exclusion machinery and B2 owns that.
+- Sub-phase: I.3. Test: two new `test_ownership` or `test_buffers` cases, one per guard, each
+  proved able to fail by reverting its guard; the full C suite in all three variants plus the new
+  `interpose` mode of I-08; `symbol-audit.sh` including its new baseline check;
+  `klib-metadata-diff.sh --check`, which must be unchanged because neither guard adds a
+  declaration; and the corpus replay under asan.
+
+#### I-13. The coupling ratchet fails B2's own first named improvement, and fires on a comment
+- Where: `../KiteCodec/buildSrc/src/main/kotlin/CheckCinteropCouplingTask.kt:156`, `:162` and
+  `:180` to `:200`; `../KiteCodec/native/kitecodec-c/coupling-baseline.txt:50`, `:57` to `:60` and
+  `:66`.
+- Problem: three defects in one instrument. Counts 2 and 3 are separate ceilings, and moving a
+  call from raw libav behind a helper, which is exactly what register item B1-22 asks B2 to do to
+  the hot decode and encode calls, lowers count 3 and raises count 2, and the ratchet only looks
+  at rises. Measured: replacing `avcodec_send_packet(` with `ffkmp_codecctx_send_packet(` at
+  `Playback.native.kt:317` gives `ffkmp_call_sites: baseline 273, actual 274` and BUILD FAILED,
+  with a message that reads "this coupling may only shrink" and offers only "raise the baseline".
+  Count 4 is measured over whole file text, comments included, so a KDoc sentence naming a struct
+  type moves it with no code change at all: appending the single line `// B2 note: the full
+  AVChannelLayout model lands here.` to `FFmpeg.kt` gives `ffmpeg_struct_types_named_in_kotlin:
+  baseline 11, actual 12` and BUILD FAILED, and B2's headline deliverable is the full
+  `AVChannelLayout` model, so B2 cannot document its own work. And the baseline's own prose
+  mis-splits the fourteen remaining raw libav sites: it says "the four hot decode and encode calls
+  at 7 sites, the three `find_*_by_name` queries at 4 sites, and 3 more send/receive sites", while
+  the baseline's own command finds nine hot send and receive sites (`avcodec_send_packet` at
+  `MediaSource.native.kt:262` and `Playback.native.kt:317`, `avcodec_receive_frame` at
+  `MediaSource.native.kt:283` and `Playback.native.kt:340`, `avcodec_send_frame` at
+  `Frame.native.kt:247`, `Frame.native.kt:253` and `MediaSink.native.kt:498`,
+  `avcodec_receive_packet` at `Frame.native.kt:236` and `MediaSink.native.kt:511`) and five lookup
+  sites (`avcodec_find_encoder_by_name` at `FFmpeg.native.kt:55`, `Frame.native.kt:191` and
+  `MediaSink.native.kt:210`, `avcodec_find_decoder_by_name` at `FFmpeg.native.kt:60`,
+  `avfilter_get_by_name` at `FFmpeg.native.kt:65`). The total, fourteen, is right; the split is
+  not, and B1-22's row carries the same error, so B2 would plan against seven sites where there
+  are nine. Level 2 for all three.
+- Fix: make the ratchet measure coupling. Introduce one ratcheted number,
+  `ffmpeg_typed_crossings`, defined as helper mentions plus raw libav calls, which is 287 today,
+  and keep the two components as reported detail that is not ratcheted, so a category move is
+  neutral and a genuine reduction shows as a fall. Strip line comments and KDoc before counting,
+  because a comment is not coupling. Turn count 4 from a bare number into a named allowlist of the
+  eleven types, so a raise is reviewed per type. Correct the baseline's prose split and B1-22's
+  row to nine hot sites and five lookup sites.
+- Sub-phase: I.3. Test: three new `CheckCinteropCouplingTaskTest` cases, each measured here: the
+  `Playback.native.kt:317` move must now pass where it fails today at 274 against 273; the comment
+  naming `AVChannelLayout` must now pass where it fails today at 12 against 11; and a genuinely
+  new FFmpeg typed call must still fail.
+
+#### I-14. The deleted surface list lives in three files with no way to resurrect a name
+- Where: `../KiteCodec/native/kitecodec-c/scripts/check-deleted-surface.sh:47` (`DELETED=`),
+  `../KiteCodec/native/kitecodec-c/scripts/verify-lift.sh:45` (`DELETED_HELPERS=`),
+  `../KiteCodec/native/kitecodec-c/tools/extract_from_def.py:151` (`DELETED = {`).
+- Problem: check 1 treats any of the fifteen names followed by an open bracket as a failure, in
+  any file type, in both repositories, and there is no `--update`, no baseline and no written
+  procedure: a grep of the script for an update path, an allow path or a baseline finds nothing.
+  Meanwhile the script's check 4 pins its own list to the extractor's table and refuses any
+  difference, and the extractor additionally validates each name against a recorded def line range
+  in a def that no longer has a body. Measured: resurrecting `ffkmp_frame_make_writable` as an
+  ordinary `KC_API` helper gives `check-deleted-surface.sh` exit 1 with `FAIL: 1 use site(s)
+  survive` and `verify-lift.sh` exit 1, and restoring the tree returns both to exit 0. Level 2.
+  Four of the fifteen are plausible B2 needs: `ffkmp_fmt_alloc_output` for transactional output
+  replacement, `ffkmp_frame_ref` and `ffkmp_frame_make_writable` for pooled plane views, and
+  `ffkmp_packet_ref` for bitstream filters. That B2 wants them is judgement and is recorded as a
+  risk rather than a measurement; that the mechanism has no move procedure is measured.
+- Fix: collapse the three copies into one committed data file,
+  `native/kitecodec-c/deleted-surface.txt`, one name per line with a status column reading
+  `deleted` or `resurrected-in-<item>`. `check-deleted-surface.sh` reads it; the extractor stops
+  existing under I-12; the third copy therefore disappears with it. A resurrection becomes one
+  line changed plus one Execution log sentence, which is the same weight as lowering a ratchet
+  number, and check 1 keeps its full power over every name still marked `deleted`. Write the
+  procedure into the file's own header and into section 9's move table under I-15.
+- Sub-phase: I.3. Test: `check-deleted-surface.sh` still failing on a planted use site of every
+  name marked `deleted`, and passing for exactly the one name marked `resurrected`, with the other
+  fourteen still failing, which is the falsifiability arm.
+
+#### I-15. Section 9, the standing gate, runs none of the thirteen instruments B1 built
+- Where: KPKMP.md section 9 (the gate every phase is pointed at by contract item 2) against
+  section 15.2's base gate; `../KiteCodec/.github/workflows/ci.yml:54` and `:78` to `:81`;
+  `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt`.
+- Problem: contract item 2 points every phase at section 9. Section 9 names `macosArm64Test`,
+  `publishToMavenLocal`, four KitePlayer test tasks, three cross compile spot checks, four sample
+  runs and the em dash scan. It names none of `:kitecodec-core:apiCheck`, `checkCinteropCoupling`,
+  `klib-metadata-diff.sh --check`, `symbol-audit.sh`, `check-deleted-surface.sh`, the host C suite
+  in either repository, `replay-corpus.sh`, either `:buildSrc:test`, `checkLegacyAbi`,
+  `render-audit.sh` or `source-discipline.sh`. Measured by grep over the whole plan: every one of
+  those thirteen names appears zero times inside section 9's block. The two that are in a standing
+  gate at all, `apiCheck` and `checkCinteropCoupling`, live inside 15.2's base gate, which is
+  described as inherited by "every later sub-phase" of B1, and B1 is closed. So every ratchet B1
+  built now depends on a continuous integration workflow that has never executed and on nobody
+  forgetting. Level 4 for the gap, with level 2 that the instruments themselves are healthy: every
+  one of them was run at HEAD in a clean clone at this review and every one passed, including
+  `symbol-audit.sh` PASS at 163 declared and 163 exported, `klib-metadata-diff.sh --check` exit 0
+  at 19024 lines and sha256 `5e90ff81806aec7e3b9087a50316a78c5045c6bb8dccda081030d01c69a6986c`
+  with every one of its fourteen counters at zero, `check-deleted-surface.sh` exit 0,
+  `verify-lift.sh` exit 0, both C suites in every variant, `apiCheck` green,
+  `checkCinteropCoupling` at 246, 273, 14 and 11, `checkKotlinAbi` green across four modules, and
+  `kiteplayer-core:macosArm64Test` at 189 tests and 0 failures. Two adjacent defects belong with
+  it. Neither `verify-lift.sh` nor `check-deleted-surface.sh` appears in any workflow file,
+  measured as zero matches across all four. And the 19024 line metadata baseline hardcodes 24
+  FFmpeg version constants, including exact micro values, while `ci.yml:54` installs FFmpeg with
+  an unpinned `brew install ffmpeg`, so the macOS job goes red on the next Homebrew bump and the
+  local gate goes red after any `brew upgrade`, and the cheapest way out of that red is an
+  `--update` that would absorb a real surface change in the same commit.
+- Fix: three text changes and one CI change, and this item lands first so the rest of the
+  interlude is gated by the result. Promote the B1 base gate and the eleven scripts into section 9
+  as the standing gate, in dependency order, so section 9 is again the whole gate an executor
+  needs. Add to section 9 a ratchet move table with one row per baseline: the file, what makes it
+  fire, the exact command that moves it, and what the Execution log entry must say. Rows for
+  `coupling-baseline.txt`, `klib-metadata-baseline.txt`, `kitecodec-core.klib.api`, the four
+  KitePlayer api dumps, `deleted-surface.txt` of I-14, `exported-symbols-baseline.txt` of I-09 and
+  `symbol-audit.sh`'s `ALLOWED_UNDEFINED` list; and one convention, that a metadata re-baseline
+  pastes the script's own SUMMARY block into the log entry, so the record carries the reviewed
+  numbers rather than a pointer to a 19000 line diff. Change section 9's em dash scan from an
+  extension allowlist to `git ls-files -z | xargs -0 grep -n`, so no extensionless file can hide
+  from it again, and delete the now redundant widened form from 15.2. Add
+  `check-deleted-surface.sh` to the macOS CI job beside the coupling ratchet, and pin the FFmpeg
+  that CI installs to an exact formula version so the metadata baseline stops being hostage to a
+  package manager.
+- Sub-phase: I.1. Test: run the promoted gate verbatim from a clean clone of both repositories and
+  require it to pass; then run the new `git ls-files` scan and require it to find the two LICENSE
+  hits, which is the falsifiability arm and which I-18 then fixes.
+
+#### I-16. Numbers and grades in the record that a rerun contradicts
+- Where: KPKMP.md at the B1.7 to B1.9 entry: the negative control table and the paragraph after
+  it, the zero underrun sentence, the level 1 grading in three places, exit clause 1's helper
+  count, the seventeen archive object counts, the announced register row, and B1-24's owner;
+  `README.md:145` to `:158`; `kiteplayer-rt/README.md:80`.
+- Problem: seven record defects, each measured.
+  1. The ten minute negative control's numbers do not reproduce and the two documents disagree in
+     direction on the pair that carries the causal attribution. The entry records pressured worst
+     57,051,458 nanoseconds with 1,482 of 51,533 over budget and unpressured worst 81,357,584 with
+     159 of 51,675 over, and concludes the unpressured arm is "WORSE than the pressured arm and
+     more than seven whole device periods" and therefore "The collector pause was never the
+     mechanism". `RealTimeSoakTest.kt`'s own KDoc records the opposite direction for the same two
+     arms, and so does the entry's own 0.4 minute decomposition. Re-measured at this review at 0.5
+     minutes per arm on the same machine: pressured worst 12,444,083 nanoseconds with 99 of 2,575
+     over budget and 4,175 collections; unpressured worst 10,519,500 nanoseconds with 18 of 2,585
+     over budget and 31 collections. So the unpressured arm is better on both numbers, which is
+     the KDoc's direction and the reverse of the entry's. Level 2. What survives is the load
+     bearing conclusion: the managed arrangement misses the budget with the pressure removed, 18
+     callbacks over a 5,333,333 nanosecond budget with a worst body of 10.5 milliseconds and 31
+     collections. What does not survive is "worse rather than better" and the 81.4 millisecond
+     figure.
+  2. "Zero starvations" is presented as the property the media soak carries. The committed test
+     asserts `audio.underruns <= loops` and its own comment records that "a first version asserted
+     zero and reported one after three loops in 24 seconds", so the ten minute zero is a
+     measurement of one run and not a property the gate holds.
+  3. The supervised device run is graded level 1 in three places in this file and in
+     `kiteplayer-rt/README.md`, while section 2's level 1 is "a repeatable release-mode automated
+     test on a named real device with saved metrics" and the same sentences say debug binary and
+     one operator. Section 2 ends with "No lower item may be presented as a higher one".
+  4. Exit clause 1 says "The 176 def-body helpers are nine compiled translation units". The nine
+     units define 161: 157 with `KC_API` and 4 `static`, measured, because 15 were deleted at
+     B1.4.
+  5. The seventeen archive object counts are archive bookkeeping members and not objects. Measured
+     on the macos_arm64 archive: 10264 bytes, `llvm-ar t` reports 3 members and the three C
+     sources of the module, `/usr/bin/ar t` reports 4 because it lists `__.SYMDEF`. The entry says
+     4. The causal clause, that the Apple archives are smaller because only macos_arm64 carries
+     the device implementation, also fails, because the non Apple archives carry the same refusing
+     stubs and are larger; size tracks object format.
+  6. The entry announces "one new row for the register from the verification" about a device
+     answering with a layout it did not negotiate. Section 15.1 still says 25 items and still ends
+     at B1-25, measured as 25 rows.
+  7. B1-24's row says "Phase: B9" while section 15.6 question 2 says continuous integration is
+     reassigned to B8, and section 11's B9 text contains no mention of CI while B8's does.
+- Fix: correct each in place, append only, with the measurement beside it. For 1, print both runs
+  with their dates and quote the reproducible statement rather than the outlier, in this file and
+  in `README.md`. For 2, say what the test says: starvation is bounded by the loop seams and the
+  ten minute run measured zero. For 3, relabel the supervised run as a manual observation with
+  saved metrics, level 6 under section 2, and say in the same sentence that assertion 3's
+  authority rests on assertions 1 and 2, which are level 2 and unchanged; amend no level and add
+  none. For 4, 161. For 5, three objects and the refusal constant as the evidence that sixteen
+  targets carry stubs. For 6, write the announced row as I-19 does. For 7, settle B1-24 on B8 in
+  the row itself. Also correct the B1.9 entry's "five checks" sentence to name how many ordering
+  decisions are pinned, per I-11.
+- Sub-phase: I.2. Test: the em dash scan and a rerun of each corrected number, with the run that
+  produced it named in the text.
+
+#### I-17. Public KiteCodec documents grade or present continuous integration that has never executed
+- Where: `../KiteCodec/native/kitecodec-c/fuzz/README.md:13`, `../KiteCodec/CHANGELOG.md:18`,
+  `../KiteCodec/README.md:315`, `../KiteCodec/README.md:333`, `../KiteCodec/README.md:355`,
+  `../KiteCodec/.github/workflows/ci.yml:5`,
+  `../KiteCodec/native/kitecodec-c/include/kitecodec_abi.h:59` to `:65` and `:150` to `:156`,
+  `../KiteCodec/kitecodec-core/api/kitecodec-core.klib.api`.
+- Problem: five claim defects in a public repository, all measured, and all reachable by anyone
+  the moment the seven local commits are pushed.
+  1. `fuzz/README.md:13` grades the libFuzzer row "Level 2. A real search for unknown inputs" for
+     a job that has never run, and `CHANGELOG.md:18` says the six targets "build as libFuzzer
+     targets in a Linux CI job" when no libFuzzer driver has ever been linked anywhere. That is
+     level 8, a declared configuration, presented as level 2. `README.md:315` says `apiCheck`
+     "verifies in the macOS CI job, so an accidental signature change fails a build" and
+     `README.md:355` says coverage guided fuzzing "runs only in the Linux CI job". The workflow
+     file itself is honest and the plan is honest; these four sentences are not.
+  2. `README.md:333` says "3 TestKit functional tests for the Gradle plugin". There are 4,
+     measured by name: `kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks`,
+     `missingLicenseChoiceFailsConfigurationWithInstructions`,
+     `mismatchedFFmpegVersionFailsConfigurationNamingBothRefs` and
+     `prebuiltSourceForTripleWithoutAssetFailsConfigurationWithOptions`. The same commit that
+     corrected 72 to 85 in the line above left this one at 3.
+  3. B1.6 added 32 public declarations and no public document names one of them. Measured: the api
+     dump grew to 1082 lines and `git grep` over `README.md`, `CHANGELOG.md` and `docs/` finds
+     zero occurrences of `FFmpegIdentity`, `FFmpegLibraryIdentity`, `IncompatibleFFmpegRuntime` or
+     `avutilHeader`. A Keep a Changelog "Added" section is exactly where a consumer looks for a
+     new public type.
+  4. `ci.yml:5` still says the Linux job "also proves the lavc 6.x compat path in ffmpeg.def". The
+     def holds no C since B1.3, and section 15.5 already records that the claim is wrong because
+     the real compilation floor is lavc 60.30.100 and lavu 58.7.100.
+  5. `kitecodec_abi.h` says the provisioning sentence is "sized so it is never truncated either"
+     and that 1024 "leaves the whole sentence room even with a 511 byte directory in the middle of
+     it". Measured by compiling `src/kitecodec_abi.c` with the three build defines at their
+     declared field capacities: `strlen(report.provisioning)` is 1011 of 1024, with
+     `runtime_version_info` at 3 of 64 and `runtime_license` at 22 of 64, so the margin is 12
+     bytes and a git built FFmpeg's longer `av_version_info()` plus a long provisioning directory
+     drops the tail sentence, which is the part that records that the bypass was used. Contract
+     item 10 forbids a claim the code cannot support.
+- Fix: one clause per sentence for 1, saying the job is configured and has not run yet, and
+  regrade the fuzz README row from level 2 to level 8 with the corpus replay's level 2 stated
+  separately. One word for 2. An "Added" entry naming the new public types for 3. Correct the
+  comment for 4 to what 15.5 already records. For 5, raise `KC_TEXT_SENTENCE` to 1152 and soften
+  the header sentence to what the arithmetic supports, and extend `test_identity`'s non truncation
+  case to assert against the worst case capacity rather than against this machine's instance.
+- Sub-phase: I.2. Test: the C suite for the capacity change, including a case at full declared
+  capacities; the em dash scan; and a read of each corrected sentence against the state of the
+  repository at the commit that makes it.
+
+#### I-18. One em dash in each repository, in the one file every documented scan is blind to
+- Where: `LICENSE:20` and `../KiteCodec/LICENSE:20`.
+- Problem: both documented scans, section 9's and 15.2's widened form, print nothing, and `git
+  grep` over all tracked files finds exactly one hit in each repository: `licence (LGPL-2.1+
+  minimum; GPL when --enable-gpl is set , effectively GPL-3.0 for` with an em dash where that
+  comma is written here. No extension allowlist can reach a file called `LICENSE`. Contract item 4
+  says no em dashes in any file, so the instrument cannot enforce the rule it was widened to
+  enforce, and B1-07 was recorded as closed. Level 2. The same line is a second defect in
+  KitePlayer: the two `LICENSE` files are byte identical, measured, so KitePlayer's own licence
+  file says "KiteCodec merely binds to FFmpeg" and describes "KiteCodec's GPL build flavour".
+- Fix: replace the em dash in both files; reword KitePlayer's `LICENSE` note so it describes
+  KitePlayer; and rely on the `git ls-files` scan I-15 installs, which finds these two hits today
+  and will find the next one.
+- Sub-phase: I.2. Test: the new scan, which must print nothing over both repositories after the
+  fix and which was proved able to find these two before it.
+
+#### I-19. Eighteen exported entry points crash on an argument, and the announced register row was never written
+- Where: `../KiteCodec/native/kitecodec-c/src/helpers_frame.c:30`;
+  `../KiteCodec/native/kitecodec-c/src/helpers_codecpar.c:25` and `:30`;
+  `../KiteCodec/native/kitecodec-c/src/helpers_format.c:12`, `:21`, `:22`, `:27`, `:49`, `:56` and
+  `:86`; `../KiteCodec/native/kitecodec-c/src/helpers_codec.c:14` and `:15`;
+  `../KiteCodec/native/kitecodec-c/src/helpers_filter.c:39`, `:85`, `:196`, `:205` to `:212`,
+  `:235`, `:243` to `:255`, `:308` and `:311`; and section 15.1 of this file.
+- Problem: the frozen body's NULL guard discipline is inconsistent, roughly twenty helpers guard
+  and these do not, and B1.4 turned that inconsistency into exported surface with default
+  visibility in a versioned archive. Twelve of the twelve probed were reproduced at level 2 as
+  signal 11, listed under I-12, against two calibration controls that guard and answer. Two are
+  recorded today only inside log entry prose: `ffkmp_fmt_seek_micros`'s unbounded `stream_index`,
+  whose own log sentence says it "wants a register row of its own, in B1 or B2" and never got one,
+  and `ffkmp_fmt_set_opt`'s NULL key, assigned in prose to "B2's error record work". None of the
+  eighteen is in the register. Separately the B1 closing entry announces a register row about a
+  device answering with a layout it did not negotiate, and section 15.1 still ends at B1-25 with
+  25 rows.
+- Fix: write the rows, in this section rather than in section 15.1, so section 15.1 stays the
+  record of what B1 decided. One row enumerating all eighteen argument guards with their
+  locations, owned by B2 and to be fixed as one change through the generator plus its exclusion
+  machinery now that I-12 has removed the byte equality proof that made each hand edit expensive;
+  two of the eighteen are fixed in the interlude under I-12 and the row says which. One row for
+  the un-negotiated device layout, owned by B8, because a real test needs a mock AudioUnit and B8
+  is where that work lives. Both rows carry the header contract sentence they need, since
+  `include/kitecodec_helpers.h` documents ownership only and says nothing about arguments, and for
+  `ffkmp_fmt_set_opt` says at line 282 that "A NULL context is refused with AVERROR(EINVAL)" while
+  saying nothing about the key that segfaults.
+- Sub-phase: I.2. Test: none of its own; the rows are the deliverable, and their tests are named
+  in the rows.
+
+#### I-20. Four continuous integration jobs fail on the first push because two toolchain names are host specific
+- Where: `../KiteCodec/buildSrc/src/main/kotlin/CompileKiteCodecCTask.kt:383` (used at `:359`,
+  `:363`, `:367`), `:155`, `:156`, `:439` and `:444`; the same two shapes at
+  `buildSrc/src/main/kotlin/CompileKiteRtTask.kt:335` (used at `:317`, `:320`, `:322`, `:323`),
+  `:131`, `:132`, `:398` and `:403`; failing jobs at `../KiteCodec/.github/workflows/ci.yml:372`
+  to `:409` (the `android` matrix of three on `ubuntu-24.04`) and `:616` (`windows-x64`).
+- Problem: two hardcoded host spellings. `ANDROID_TOOLCHAIN_SYSROOT` is
+  `"target-toolchain-2-osx-android_ndk/sysroot"`, and konan names that package per host: the
+  authoritative `konan.properties` on this machine reads `targetToolchain.linux_x64-android_arm64
+  = target-toolchain-2-linux-android_ndk` and `targetToolchain.mingw_x64-android_arm64 =
+  target-toolchain-2-windows-android_ndk`. On the Ubuntu runner the osx package never exists, so
+  the C compile task throws before cinterop and `compileKotlinAndroidNative<Abi>` cannot run;
+  before B1.3 there was no C compile on that path and the job passed. And the konan tools are
+  looked up as `bin/clang` and `bin/llvm-ar` with `File.canExecute()`, in both the preferred
+  package and the newest package fallback, so on a Windows host where the package ships
+  `clang.exe` and `llvm-ar.exe` every candidate is rejected and the task throws; measured against
+  a Windows shaped dependencies tree, `File("bin/clang").canExecute()` is false and
+  `File("bin/clang.exe").canExecute()` is true. Level 2 for the package names and the predicate,
+  level 4 for the code paths. The release path is unaffected, because `publish.yml`'s core job
+  runs on `macos-latest`.
+- Fix: derive both from the build host rather than hardcoding them. One helper returning the konan
+  host infix, `osx`, `linux` or `windows`, used to build the Android toolchain package name; and a
+  tool resolution that tries the bare name and then the `.exe` name, used in all four places in
+  each repository. Same change in both repositories, in one commit each, because the two files are
+  byte identical in these regions.
+- Sub-phase: I.6. Test: `CompileKiteCodecCTaskTest` and `CompileKiteRtTaskTest` cases driving the
+  real resolution against a Linux shaped and a Windows shaped dependencies tree, both measured to
+  fail today, asserting each resolves. The jobs themselves stay unexecuted, so their evidence
+  stays level 8 and no document may say otherwise until a run exists.
+
+### 16.2 Sub-phases
+
+Paths are relative to the repository they belong to. `../KiteCodec` means the KiteCodec
+repository; an unprefixed path means KitePlayer. Every sub-phase ends with the standing gate that
+I.1 installs, an Execution log entry, and one commit per repository touched. Contract items 1 to
+13 apply unchanged, including the ban on branches, the ban on trailers and the ban on em dashes.
+
+**Dependency order and why.** I.1 first, because it installs the gate the rest of the interlude is
+measured by and the scan that finds what I.2 fixes. I.2 second, because the record must be correct
+before any of it is pushed and because nothing in it can break code. I.3 third, because retiring
+the extraction proof is what unblocks every later edit to the nine units, and because two ratchets
+must stop firing on B2's own work before B2's first commit. I.4 fourth, because the instruments it
+repairs are what the last two sub-phases are checked with. I.5 fifth, the only sub-phase that
+changes shipped behaviour. I.6 last, because it touches build logic that only continuous
+integration exercises.
+
+#### I.1 The standing gate, and how every ratchet moves
+
+Items: I-15.
+
+Files: `KPKMP.md` (section 9, and the redundant widened scan in 15.2);
+`../KiteCodec/.github/workflows/ci.yml`.
+
+Steps.
+1. Rewrite section 9's command block as the standing gate for every phase from here on: the
+   existing KiteCodec and KitePlayer test tasks and sample runs, plus `:kitecodec-core:apiCheck`,
+   `checkCinteropCoupling`, `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh`,
+   `../KiteCodec/native/kitecodec-c/scripts/klib-metadata-diff.sh --check`,
+   `../KiteCodec/native/kitecodec-c/scripts/check-deleted-surface.sh`, both host C builds and test
+   runs in every variant and mode, `../KiteCodec/native/kitecodec-c/scripts/replay-corpus.sh
+   asan`, both `:buildSrc:test`, `checkLegacyAbi`, `kiteplayer-rt/native/scripts/render-audit.sh`
+   and `kiteplayer-rt/native/scripts/source-discipline.sh`. State beside the block that a cached
+   up to date run proves nothing, which section 2 already says, and that `apiDump` needs
+   `-Pkitecodec.hostTargetsOnly=true` on this machine, which the B1 log recorded twice as a
+   deviation and which 15.2's own gate lines never absorbed.
+2. Replace section 9's em dash scan with `git ls-files -z | xargs -0 grep -n` over both
+   repositories, and delete the widened extension form from 15.2 with one sentence saying why it
+   was replaced rather than tightened again.
+3. Add the ratchet move table to section 9: one row per baseline, with the file, what makes it
+   fire, the exact command that moves it, and what the Execution log entry must say. Include the
+   rows named in I-15 and the convention that a metadata re-baseline pastes the script's SUMMARY
+   block into the entry.
+4. In `ci.yml`, pin the FFmpeg the macOS job installs to an exact formula version, and add
+   `check-deleted-surface.sh` to that job beside the coupling ratchet.
+
+Gate. Run the promoted section 9 gate verbatim from a clean clone of both repositories; it must
+pass. Run the new scan; it must report exactly the two `LICENSE` hits, which is the proof it can
+see what the old form could not.
+
+Commit first lines. KitePlayer: `Make section 9 the standing gate and say how every ratchet
+moves`. KiteCodec: `Pin the FFmpeg continuous integration installs and run the deleted surface
+check`.
+
+#### I.2 The record, corrected
+
+Items: I-16, I-17, I-18, I-19.
+
+Files: `KPKMP.md`; `README.md`; `kiteplayer-rt/README.md`; `LICENSE`; `../KiteCodec/LICENSE`;
+`../KiteCodec/README.md`; `../KiteCodec/CHANGELOG.md`;
+`../KiteCodec/native/kitecodec-c/fuzz/README.md`; `../KiteCodec/.github/workflows/ci.yml`;
+`../KiteCodec/native/kitecodec-c/include/kitecodec_abi.h`;
+`../KiteCodec/native/kitecodec-c/tests/test_identity.c`.
+
+Steps.
+1. Correct the seven record defects of I-16 in place, each with the run that measured it named.
+2. Correct the five public claim defects of I-17, including raising `KC_TEXT_SENTENCE` to 1152 and
+   extending `test_identity`'s non truncation case to the worst case capacity.
+3. Replace the em dash in both `LICENSE` files and reword KitePlayer's note so it describes
+   KitePlayer.
+4. Append the two register rows of I-19 to this section, one for the eighteen argument guards
+   owned by B2 and one for the un-negotiated device layout owned by B8.
+
+Gate. The standing gate of I.1, whose scan must now print nothing; the C suite in all three
+variants for the capacity change; and a read of every corrected sentence against the state of the
+repository at this commit, which is the multi-pass rule of section 9 applied to prose.
+
+Commit first lines. KitePlayer: `Quote the runs the gate measured, not the ones it did not`.
+KiteCodec: `Say that the continuous integration jobs are configured and have not run`.
+
+#### I.3 The two ratchets that cannot move, and the guards one of them blocked
+
+Items: I-12, I-13, I-14.
+
+Files: `../KiteCodec/native/kitecodec-c/scripts/verify-lift.sh` (deleted);
+`../KiteCodec/native/kitecodec-c/tools/extract_from_def.py` (deleted);
+`../KiteCodec/native/kitecodec-c/scripts/check-deleted-surface.sh`;
+`../KiteCodec/native/kitecodec-c/deleted-surface.txt` (new);
+`../KiteCodec/native/kitecodec-c/src/helpers_format.c`;
+`../KiteCodec/native/kitecodec-c/include/kitecodec_helpers.h`;
+`../KiteCodec/native/kitecodec-c/tests/test_buffers.c`;
+`../KiteCodec/buildSrc/src/main/kotlin/CheckCinteropCouplingTask.kt`;
+`../KiteCodec/buildSrc/src/test/kotlin/CheckCinteropCouplingTaskTest.kt`;
+`../KiteCodec/native/kitecodec-c/coupling-baseline.txt`;
+`../KiteCodec/native/kitecodec-c/README.md`; `../KiteCodec/README.md`; `KPKMP.md` (B1-22's row and
+section 15.4's rollback story).
+
+Steps.
+1. Run `verify-lift.sh` at `2b4287f` and capture its complete output. Paste it into the Execution
+   log entry, including the payload digest
+   `e63a7b56e4fe61a8f804d65b6066478dfa5e7eebcf5485685c327081391726ea` over 909 lines on both sides
+   and all eleven comparison lines. That output is the permanent record of the lift's
+   faithfulness.
+2. Delete `scripts/verify-lift.sh` and `tools/extract_from_def.py`. Rewrite the README sections
+   that tell a reader to "Change the def, or change the generator", which is an instruction that
+   cannot be followed, so that they say the nine units are ordinary maintained sources and the
+   lift is a recorded historical fact. Amend section 15.4 to say that rollback to a pre-lift state
+   is no longer an option and what replaces it, which is the ordinary revert of the commits that
+   changed a unit.
+3. Create `deleted-surface.txt` with the fifteen names and a status column, make
+   `check-deleted-surface.sh` read it, and delete its hardcoded list and its check 4 against the
+   extractor. Write the resurrection procedure into the file's header.
+4. Add the two guards: `if (!c || !k)` in `ffkmp_fmt_set_opt`, and a `stream_index` bound in
+   `ffkmp_fmt_seek_micros` returning `AVERROR(EINVAL)` for an index outside `0` to
+   `ctx->nb_streams` with `-1` still meaning any stream, which is what the only Kotlin caller
+   passes. Document both in `kitecodec_helpers.h` beside the ownership sentences.
+5. Rework `CheckCinteropCouplingTask` per I-13: one ratcheted `ffmpeg_typed_crossings` at 287, the
+   two components reported and not ratcheted, comments and KDoc stripped before counting, and
+   count 4 a named allowlist of the eleven types. Correct the baseline's prose split and B1-22's
+   row to nine hot sites and five lookup sites.
+
+Gate. The standing gate. Additionally: the two new C cases, each proved able to fail by reverting
+its guard; the three new coupling cases, each measured at this review to behave the opposite way
+today; `klib-metadata-diff.sh --check` unchanged, because neither guard adds a declaration; and
+`check-deleted-surface.sh` failing on a planted use site of every name still marked `deleted`.
+
+Commit first lines. KiteCodec, three commits in this order: `Record that the lift was faithful,
+then retire the proof that froze it`; `Refuse a NULL option key and an out of range stream index`;
+`Count FFmpeg coupling so that reducing it cannot fail the ratchet`. KitePlayer: `Say that
+rollback to a pre-lift state is no longer available`.
+
+#### I.4 The instruments that can go blind
+
+Items: I-07, I-08, I-09, I-10, I-11.
+
+Files: `../KiteCodec/buildSrc/src/main/kotlin/CompileKiteCodecCTask.kt`;
+`../KiteCodec/buildSrc/src/test/kotlin/CompileKiteCodecCTaskTest.kt`;
+`../KiteCodec/kitecodec-core/build.gradle.kts`;
+`../KiteCodec/native/kitecodec-c/include/kitecodec_abi.h`;
+`../KiteCodec/native/kitecodec-c/scripts/klib-metadata-diff.sh`;
+`../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh`;
+`../KiteCodec/native/kitecodec-c/exported-symbols-baseline.txt` (new);
+`../KiteCodec/native/kitecodec-c/tests/harness.h`;
+`../KiteCodec/native/kitecodec-c/tests/harness.c`;
+`../KiteCodec/native/kitecodec-c/scripts/run-c-tests.sh`;
+`../KiteCodec/native/kitecodec-c/README.md`; `kiteplayer-rt/README.md`;
+`buildSrc/src/main/kotlin/CompileKiteRtTask.kt`;
+`buildSrc/src/test/kotlin/CompileKiteRtTaskTest.kt`;
+`kiteplayer-rt/native/scripts/source-discipline.sh`; `KPKMP.md` (the B1.9 five checks sentence).
+
+Steps.
+1. Make the FFmpeg include tree a tracked input and add the klib against archive version assertion
+   to `klib-metadata-diff.sh`. Correct the two `kitecodec_abi.h` comments to name which compile
+   they describe.
+2. Generate `exported-symbols-baseline.txt` from `symbol-audit.sh` and add the sixth check. Make
+   the bare form of `klib-metadata-diff.sh` exit non-zero on a mismatch.
+3. Port the `interpose` mode and `KC_REQUIRE_ALLOC_ACCOUNTING` into `kitecodec-c`'s harness, add
+   the mode to `run-c-tests.sh` and to the standing gate, and write the two repository harness
+   pairing rule into both READMEs.
+4. Add the call site test for `verifyObjectArchitecture` in both repositories, and copy across the
+   three guards each suite was missing.
+5. Extend `source-discipline.sh` from five checks to eighteen with one negative control each, and
+   correct the B1.9 entry's sentence.
+
+Gate. The standing gate, now including the new `interpose` mode and the eighteen check discipline
+script. Additionally every new check must be proved able to fail: the header content change with
+no path change, the declared probe export, the one word section rename, the deleted guard call
+site, and thirteen ordering mutants.
+
+Commit first lines. KiteCodec, two commits: `Track the FFmpeg headers the archive freezes, and
+compare both bakings`; `Make a blind interposer and a grown surface fail the gate`. KitePlayer:
+`Pin every ordering decision the design took, and the guard call site`.
+
+#### I.5 The real-time seam
+
+Items: I-01, I-02, I-03, I-04, I-05, I-06.
+
+Files: `kiteplayer-rt/native/src/kite_rt_ring.c`; `kiteplayer-rt/native/src/kite_rt_render.c`;
+`kiteplayer-rt/native/src/kite_rt_ring_internal.h`; `kiteplayer-rt/native/include/kite_rt.h`;
+`kiteplayer-rt/native/tests/test_ring_alloc.c`; `kiteplayer-rt/native/tests/test_ring_basic.c`;
+`kiteplayer-rt/native/tests/test_ring_rescale.c`;
+`kiteplayer-rt/native/tests/test_ring_threads.c`; `buildSrc/src/main/kotlin/CompileKiteRtTask.kt`
+(one comment);
+`kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/AudioPlayback.kt`;
+`kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/PlaybackCore.kt`;
+`kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/KotlinAudioRing.kt`
+(only where the oracle needs the same answer);
+`kiteplayer-core/src/nativeTest/kotlin/io/github/yuroyami/kiteplayer/AudioRingDifferentialTest.kt`;
+`kiteplayer-core/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/AudioPlaybackTest.kt`;
+`kiteplayer-core/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/PlaybackCoreTest.kt`.
+
+Steps.
+1. Bound the product in `kprt_ring_create` and add the three compile time assertions, plus the
+   pointer width sentence in `CompileKiteRtTask.specFor`'s comment.
+2. Refuse a second `begin_write` while a reservation is outstanding and correct `kite_rt.h:210` to
+   `:211`.
+3. Saturate the two signed arithmetic sites and state the saturating behaviour in both header
+   comments; mirror the decision in `KotlinAudioRing` only where the oracle compares the two, so
+   the oracle keeps comparing two correct implementations rather than two matching ones.
+4. Make the three reservation fields `_Atomic`, correct the two false comments in
+   `kite_rt_ring_internal.h`, and add the anchor reader to the quiescence sentence in `kite_rt.h`.
+5. Move `ring?.flush()` inside the lock in `AudioPlayback.flush`; extend the one sentence lock
+   rule to `submit` and `submitDecoded`; add the quiescence precondition to `close`'s KDoc; wrap
+   `teardownSession`'s cancel and join pair in `withContext(NonCancellable)`.
+6. Close the failed open leak in `buildSession` and correct its catch comment.
+
+Gate. The standing gate. Additionally: the new C cases under the asan variant so
+UndefinedBehaviorSanitizer sees the two saturating sites; the new `test_ring_threads` flusher case
+under tsan, which must be clean and which was measured to report a race before the change; the
+differential oracle with its new rows; and the two new Kotlin cases, each proved able to fail by
+reverting the line it covers. The supervised device run is NOT required for this sub-phase:
+nothing here changes the callback body, and `render-audit.sh` plus the interposed C test are what
+carry that claim. Say so in the entry rather than leaving a reader to wonder why fifty minutes of
+sound is missing.
+
+Commit first lines. KitePlayer, two commits: `Bound the ring by the byte count it will actually
+allocate`; `Make a close wait for the feeder before anything frees a ring`.
+
+#### I.6 The build host, and the closing entry
+
+Items: I-20.
+
+Files: `../KiteCodec/buildSrc/src/main/kotlin/CompileKiteCodecCTask.kt`;
+`../KiteCodec/buildSrc/src/test/kotlin/CompileKiteCodecCTaskTest.kt`;
+`buildSrc/src/main/kotlin/CompileKiteRtTask.kt`;
+`buildSrc/src/test/kotlin/CompileKiteRtTaskTest.kt`; `KPKMP.md` (the closing entry).
+
+Steps.
+1. Derive the Android toolchain package infix from the build host in both repositories.
+2. Resolve `clang` and `llvm-ar` by bare name and then by `.exe` name, in all four places in each
+   repository.
+3. Write the interlude's Execution log entry: what landed per sub-phase, every number the closing
+   gate measured, the instruments retired and re-anchored with what replaces each guarantee, the
+   deviations with the evidence that forced each, and the statement that the four continuous
+   integration jobs remain unexecuted so their evidence is level 8.
+
+Gate. The standing gate, rerun for real in both repositories, plus the four new build logic cases.
+
+Commit first lines. KiteCodec: `Name the build host in the toolchain package it is named after`.
+KitePlayer: `Name the build host in the toolchain package it is named after` and `Record the
+interlude, its measurements and its retired instruments`.
+
+### 16.3 Instruments retired, re-anchored, and what replaces each guarantee
+
+This is the part a later reader needs most, because an instrument that disappears without a
+replacement is how a guarantee is lost quietly.
+
+**Retired: `verify-lift.sh` and `tools/extract_from_def.py`.** They carried three things. First,
+that the nine units are byte for byte the def body at `5364329` minus the fifteen deletions. That
+becomes a historical fact, recorded with its digests in the I.3 log entry, verified once more at
+`2b4287f` immediately before deletion; a one time event does not need a permanently re-executable
+proof, and a re-executable proof that forbids every future edit is a liability. Second, that
+nobody hand edits generated code unnoticed. After retirement there is no generated code: the nine
+units become ordinary maintained sources, and what holds their shape is the export baseline of
+I-09, the six C suites in three variants plus the new `interpose` mode, `symbol-audit.sh`'s five
+other checks, and `klib-metadata-diff.sh --check`. Third, the rollback story of section 15.4 for
+the one irreversible sub-phase. That guarantee is withdrawn rather than replaced, and 15.4 must
+say so: rollback to a pre-lift state stops being available, and what replaces it is the ordinary
+revert of whichever commit changed a unit.
+
+**Re-anchored: `coupling-baseline.txt`.** Counts 2 and 3 collapse into one ratcheted number,
+`ffmpeg_typed_crossings`, at 287 today. The guarantee before was "the deferred coupling can only
+shrink", and it was false in one direction, because the improvement that reduces coupling most
+raised count 2. The guarantee after is the same sentence, now true: a category move is neutral, a
+genuine reduction shows as a fall, and the two components remain visible as reported detail so
+nothing is hidden. Count 4 becomes a named allowlist of the eleven struct types, so the guarantee
+changes from "the number eleven does not rise" to "no new FFmpeg struct type reaches Kotlin
+without being named in a commit", which is stronger and is what the deferral actually needs.
+Comments and KDoc leave the measurement, because a comment is not coupling and the count must not
+punish B2 for documenting its own work.
+
+**Re-anchored: `check-deleted-surface.sh`'s list, into `deleted-surface.txt`.** Same fifteen
+names, same power over every name marked `deleted`. What is added is a move: one line changed to
+`resurrected-in-<item>` plus one Execution log sentence. Check 4 against the extractor's table
+disappears with the extractor, and what replaces it is that there is now exactly one copy of the
+list instead of three.
+
+**Re-anchored: `source-discipline.sh`, five checks to eighteen.** Before, it proved that five
+ordering decisions are still written where the design put them, and the record read as though that
+were the ordering front. After, it proves the same thing for all eighteen. Its level does not
+change: it is level 4, a text check, and it remains the right shape for a decision that was
+reversed rather than for a property, which its own header says and which stays.
+
+**New: `exported-symbols-baseline.txt`.** Nothing carried this before. It replaces a false
+impression rather than a real guarantee: `symbol-audit.sh` check 3 reads like a baseline and is a
+consistency check, and the B1.4 log entry's sentence that the opaque surface is "deliberately not
+ratcheted in either direction because it is meant to grow; `symbol-audit.sh` holds it to a decided
+set" is wrong in its second clause. After I-09 the second clause is true.
+
+**New: `KC_REQUIRE_ALLOC_ACCOUNTING` and the `interpose` mode in `kitecodec-c`.** It replaces
+nothing that existed and it protects something that did: deferral 2's decision to deliver
+ownership guarantees as pairing tests instead of a compiler attribute. Before, those tests could
+all report "cannot observe" and pass. After, an ineffective interposer is a failure, which is the
+same distinction `kiteplayer-rt` already draws.
+
+**Unchanged and deliberately so.** `kitecodec-core.klib.api` and the four KitePlayer api dumps
+keep `apiDump` as their move, which was verified to reproduce byte for byte at this review.
+`klib-metadata-baseline.txt` keeps its content and gains only a gate form and a log convention.
+`KITECODEC_C_ABI_MAJOR` and `KITECODEC_C_ABI_MINOR` gain no ratchet here: B2 is the first item
+that grows the `kc_` surface, so the rule belongs in the same commit as the first growth, and it
+is in section 16.4.
+
+### 16.4 Not in the interlude, and where each lands
+
+Everything a review front proposed that is not in the register above, with its owner and the
+reason it waits. A deferral whose cost is written nowhere is a deferral nobody weighs again.
+
+1. **The sixteen remaining argument guards.** B2, as one change through the generator plus its
+   exclusion machinery, now unblocked by I-12. Recorded as a register row by I-19. *If it never
+   happens:* eighteen exported entry points of a public library keep crashing on a NULL, and B7's
+   JNI bridge inherits them.
+2. **A gate call in the C library itself.** B2. The identity gate is enforced by fifteen Kotlin
+   call sites and the C library never calls `kc_init`, measured as zero references from any of the
+   nine units. The cheap form is a gate call in the ten or so constructor helpers and not in all
+   157, so no hot path pays. *If it never happens:* a JNI or C consumer reaches FFmpeg with no
+   gate at all, which is the exit clause B1 met for one language only.
+3. **An entry point audit for `requireCompatibleFFmpeg`.** B2. Fifteen call sites exist today and
+   nothing keeps them complete as the surface triples. *If it never happens:* a forgotten call is
+   silent on a healthy machine.
+4. **A C ABI version ratchet.** B2 phase one, in the same commit as the first growth of the `kc_`
+   surface, using the baseline I-09 commits. *If it never happens:* the library keeps claiming ABI
+   1.0 while its surface grows, which is worse than no version number because a consumer may trust
+   it.
+5. **A rule tying a new string parsing entry point to a fuzz target, and the corpus gaps.** B2 for
+   the rule and the seeds, B8 for the fuzzing. Measured: 103 files, 38,077 bytes, 64 distinct byte
+   values, 9 with an embedded NUL, and the single quote, double quote, backslash, carriage return,
+   semicolon and backtick all absent, which is exactly libavfilter's own escaping and chain
+   separator alphabet. Two text entry points reachable from public Kotlin API have no target at
+   all, `ffkmp_fmt_alloc_output2`'s `format` argument and the three raw `*_by_name` lookups. *If
+   it never happens:* the parser paths that exist stay unexercised by anything but committed
+   seeds.
+6. **Splitting `test_convert.c` into contract and baseline.** B2, which owns the caching that
+   changes the two per call allocation counts. The cheap half, a comment beside each of the two
+   counts naming B2 as their owner, may ride with any commit. *If it never happens:* an
+   implementer facing a red test changes a number instead of thinking.
+7. **`symbol-audit.sh`'s `ALLOWED_UNDEFINED` entries for `pthread_mutex_*`.** B2, measured against
+   the real change rather than guessed in advance, because a speculative entry weakens the audit.
+   Named in B2's phase one notes so its first C commit expects two refusals at once.
+8. **Deriving the C suite and fuzz target lists from the files on disk.** B2, cheapest fix on the
+   whole list. Six hardcoded literals across both repositories, consistent today. *If it never
+   happens:* a new suite added to `build-host.sh` and not to `run-c-tests.sh` is compiled and
+   never run, with every gate green.
+9. **An opt-in marker on `NativeRingHandoff`, and the decision about the exported `kprt_`
+   surface.** B2 to mark it, B7 to decide it. `kiteplayer-core`'s committed dump exposes
+   `NativeRingHandoff.ring: CPointer<cnames.structs/kprt_ring>` and, through
+   `api(projects.kiteplayerRt)`, the whole `kprt_` cinterop surface; the build comment's reasoning
+   that "Nothing public leaks by doing so" is inverted, because the generated bindings are the
+   surface. Nothing is published from KitePlayer, verified, so the decision is free. Correct the
+   comment whenever that file is next touched. *If it never happens:* B7 publishes a consumer's
+   ability to destroy a ring under a running device.
+10. **The Kotlin and C write asymmetry, the documented retry that is not the shipped retry, the
+    two dead accessors, the `AudioRenderCallback` sentence the Kotlin ring contradicts, and the
+    misattached KDoc block in `KotlinAudioRing`.** B2 or B4, all small, all recorded here so they
+    are not rediscovered: `NativeAudioRing.write`'s `require` rejects short sources the Kotlin
+    ring accepts; `kite_rt.h:203` to `:226` calls the shipped retry a programming error and
+    documents a different one as supported; `writtenFrames` and `consumedFrames` have no reader
+    and the oracle's KDoc claims both totals are compared when `assertSameState` compares neither;
+    `AudioSink.kt:127` to `:131` says nothing above the sink zeroes the tail while
+    `KotlinAudioRing.render` does exactly that.
+11. **Teardown defence in depth, and the un-negotiated device layout.** B8, with a mock AudioUnit.
+    The order in `kprt_sink_destroy` is right and was proved by disassembly rather than by the
+    text check, and 280 real teardowns under both sanitizers were clean; what is recorded is that
+    the platform promise is the only thing standing there, and that it becomes live the moment any
+    path releases a ring without going through the sink that stopped the device. The register row
+    is written by I-19.
+12. **The four early returns in the device callback that leave the buffer unwritten and do not set
+    `kAudioUnitRenderAction_OutputIsSilence`.** B2 or B8. `kite_rt_render.c:291` to `:297` zeroes
+    the whole buffer for the same hazard and gives the reason; the callback applies the opposite
+    policy. Zeroing every listed buffer and setting the flag adds no call, so the audited call set
+    of `kprt_render_cb` is unchanged.
+13. **The two forked harnesses.** B4 or B5 to decide whether one becomes the source and the other
+    vendors a pinned copy with a digest. I-08 pays the first concrete cost and writes the pairing
+    rule into both READMEs, which is the minimum. *If it never happens:* every instrument fix
+    costs two edits in two repositories with two gates.
+14. **KitePlayer continuous integration.** B8, per section 15.6 question 2, and B1-24's row now
+    says so. One mitigation that costs nothing and is not new infrastructure: make "publish to
+    mavenLocal and run the standing gate in KitePlayer" a step of every B2 sub-phase that changes
+    a KiteCodec signature, not only of the sub-phase that adopts it.
+15. **Failing `check-deleted-surface.sh` when its prose set is empty.** B2, a nicety. The
+    allowlist proves at least eight files must match, so an empty set means the grep died rather
+    than that the tree is clean. The committed gate is sound from a real checkout, which was
+    measured; this is hardening and not a defect.
+16. **Per target verification of both C libraries, and the single target metadata baseline.** B7
+    and B9, unchanged from deferral 7. Everything measured in this review is one target, and
+    `symbol-audit.sh`'s cross `nm` path for an ELF archive was not exercised.
+17. **The opaque migration prototype.** B2, early rather than late. The whole of deferral 1 rests
+    on the assumption that the migration works inside the one existing `ffmpeg` cinterop module,
+    family by family. That assumption is supported by reconnaissance and was not re-proved at this
+    review. One prototype of a single family, early in B2, converts an assumption into a
+    measurement before B2's shape depends on it.

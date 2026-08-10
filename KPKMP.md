@@ -1111,7 +1111,7 @@ KitePlayer steps 7 to 8.
 ## 11. Horizon B: the product roadmap (decided, sequenced, NOT this run)
 
 > **Superseded 2026-08-11:** items B2 to B11 below remain the historical roadmap, but the live
-> map of remaining work is section 17, which absorbs every obligation here into phases P0 to P7
+> map of remaining work is section 17, which absorbs every obligation here into stages S1 to S7
 > (network parked at 17.8 by owner decision D-4). B1 and the interlude were executed from
 > sections 15 and 16 and are complete.
 
@@ -4690,6 +4690,19 @@ is no other.
   helper that does not exist) are P0-04 and P0-06. Section 18 writes the endoskeleton (layers,
   data flow, ownership rules) and the exoskeleton (the process) for any future executor. P1 to P7
   expand at entry per 17.2's rule; P0 is expanded now and is next.
+
+- 2026-08-11, section 17 restaged by outcome, owner-directed, prose only, Tier 1 gate. The owner
+  judged the P0 to P7 phase map engineering-shaped and confusing for any executor: the primary
+  outcome, a library usable on Android and iOS including Compose Multiplatform, was smeared
+  across three phases instead of being stage one's name. The stage law now stands in 17.1: every
+  stage is named by the user-visible outcome its completion delivers, prerequisites live inside
+  the stage that needs them, and engineering order rules only within a stage. S1 IT PLAYS ON
+  PHONES (foundations, iOS backend with a CPU renderer, Android over the JNI bridge, the two view
+  surfaces including the optional Compose module, 225 to 315 hours); S2 beautiful Apple video
+  (Metal and VideoToolbox moved AFTER usable, deliberately); S3 desktop; S4 subtitles and DX; S5
+  public artifacts and size tiers; S6 web behind its spike; S7 qualification and 1.0. The P0
+  register keeps its item IDs and is S1.a. Yesterday's log entry describing the P-shape stands
+  unedited as history, per append-only.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7224,9 +7237,8 @@ reason it waits. A deferral whose cost is written nowhere is a deferral nobody w
 ## 17. The road to 1.0
 
 Written 2026-08-11 by Fable 5 under the owner's direction, after the B5/B6/B7 planning run and its
-three adversarial verifications. This section supersedes section 11's items B2 to B11 as the map of
-what remains: section 11 stays as the historical roadmap, and every one of its obligations is
-absorbed into a phase below. The B-numbering is retired; work from here is phased P0 to P7.
+three adversarial verifications. This section supersedes section 11's items B2 to B11 as the map of what remains: section 11 stays as the historical roadmap, and every one of its obligations is
+absorbed into a phase below. The B-numbering is retired; work from here is staged S1 to S7, each stage named by the outcome it delivers.
 
 ### 17.0 The nine goals, and the decisions that shape them
 
@@ -7257,132 +7269,137 @@ The owner set nine goals on 2026-08-11, recorded here verbatim in substance:
 - **D-3, push rule.** The executor never pushes. Local commits only; the owner pushes. Publication
   steps are prepared by the executor and executed by the owner. This amends the working reading of
   contract item 3: the branch ban, the trailer ban and the em dash ban stand unchanged.
-- **D-4, network is parked.** Goal scope is local file playback. The old B6 (network, live,
-  adaptive) moves to a parked register at 17.8 with its costs stated. The engine's existing
+- **D-4, network is parked.** Goal scope is local file playback. The old B6 (network, live, adaptive) moves to a parked register at 17.8 with its costs stated. The engine's existing
   URL-open path stays undocumented rather than removed.
 - **D-5, size is a policy, not a wish.** "All formats" and "smallest stub" oppose each other. The
   resolution is published profile tiers (17.6): a lean default artifact and opt-in fuller ones,
   with measured per-target sizes as exit criteria, using the profile machinery KiteCodec's plugin
   already has.
 
-### 17.1 Goal traceability
+### 17.1 The stage law, and the reading order
 
-| Goal | Carried by | Exit proof |
+Restructured 2026-08-11 at the owner's direction, because the first shape of this section ordered
+work by engineering dependency and left the owner's primary outcome, a library USABLE on phones,
+smeared across three phases. The law now: **every stage is named by the user-visible outcome its
+completion delivers, and a stage is done when that outcome is demonstrable, not when its code
+merges.** Prerequisites live INSIDE the stage that needs them. Engineering order still rules
+inside a stage; it never defines a stage.
+
+Reading order for a NEW executor (this is how to onboard, not what to build first): section 18,
+then sections 1, 2 and 9, then the register of the stage being executed, and nothing else until
+it is needed. Build order is 17.2.
+
+| Goal | Delivered by | Exit proof |
 |---|---|---|
-| 1 Android | P2 | a real device plays the format matrix from one `implementation()` line |
-| 2 iOS | P1 | an iPhone (simulator gate, device by owner) plays the format matrix |
-| 3 Desktop | P0+P1 (macOS done), P3 (Windows, Linux) | format matrix on each named OS |
-| 4 Web | P6 | wasm build plays the matrix at stated resolution limits |
-| 5 Size | P5 | measured artifact sizes per tier per target, in the log |
-| 6 One line | P5 | a scratch consumer project with one dependency line builds and plays |
-| 7 DX | P4 | the debuggability register closed; SPI docs; sample cookbook |
-| 8 Subtitles | P4 | the old B3 exit criteria |
-| 9 FFmpeg everywhere | every phase | D-1 and D-2 hold in every backend; no platform demuxer exists anywhere |
+| 1 Android | S1 | format matrix plays on a named device from one dependency line |
+| 2 iOS | S1 | format matrix plays on an iPhone (simulator here, device with owner) |
+| 3 Desktop | macOS done; S3 for Windows and Linux | format matrix per named OS |
+| 4 Web | S6 | matrix at stated resolution limits, spike-gated |
+| 5 Size | S5 | measured artifact sizes per tier per target |
+| 6 One line | S1 for the owner's apps (mavenLocal or private repo); S5 publicly | scratch consumer builds and plays |
+| 7 DX | S4 | debuggability register closed |
+| 8 Subtitles | S4 | old B3 exit criteria |
+| 9 FFmpeg everywhere | every stage | D-1 and D-2 hold; no platform demuxer exists anywhere |
 
-### 17.2 The phase map
+### 17.2 The stages
 
-Dependency order, with the rule that each phase receives its section-15-style execution expansion
-at entry: located register items, decided fixes, sub-phases with files, steps, gates and commit
-first lines, authored against the tree AT THAT TIME and adversarially verified before execution.
-That ritual is not overhead; run on 2026-08-10 it caught ten blocking defects in a plan that two
-of three verifiers judged unsafe to execute, including one false measured claim. A phase entered
-without its expansion is a contract violation.
+Each stage receives its section-15-style execution expansion AT ENTRY: located register items,
+decided fixes, sub-phases with files, steps, gates and commit first lines, authored against the
+tree at that time and adversarially verified before execution. Run on 2026-08-10 that ritual
+caught ten blocking defects, including one false measured claim; a stage entered without its
+expansion is a contract violation.
 
-**P0. Foundations and corrections.** Everything the verifiers proved wrong or missing, plus the
-ratchet and coordinate groundwork every later phase leans on. KiteCodec window 1. Detail: 17.4.
+**S1. IT PLAYS ON PHONES.** Exit: one `implementation()` line in a Compose Multiplatform app (and
+a plain-view app) plays the 17.5 format matrix on a named Android device and an iPhone, audio in
+sync, seeking working, FFmpeg powered per D-1/D-2. Consumption at this stage is mavenLocal or the
+owner's private repository; PUBLIC publication is deliberately not here (S5). Sub-stages, in
+dependency order inside the stage:
+  - **S1.a Foundations** (the register at 17.4, formerly named P0): the verifier corrections, the
+    ratchet groundwork, and the opaque handle migration that the JNI bridge stands on.
+  - **S1.b iOS backend**: kiteplayer-output splits AppKit-only code out of appleMain; iosArm64 and
+    iosSimulatorArm64 targets; the CoreAudio sink qualified on iOS (the kiteplayer-rt C ring has
+    cross-compiled for iOS since B1); AVAudioSession policy; a straightforward CPU-converter
+    renderer into a CALayer-backed view (Metal is S2, deliberately: usable beats beautiful);
+    an iOS sample.
+  - **S1.c Android backend over the JNI bridge**: the engine runs as JVM bytecode (already proven
+    by jvmTest and assembleAndroidMain); KiteCodec gains a JVM actual implemented as JNI over the
+    kc_/ffkmp_ C ABI that S1.a finishes; FFmpeg built per Android ABI by the existing android
+    profile with mediacodec decoders inside FFmpeg per D-2; AudioTrack sink in JVM Kotlin over
+    KotlinAudioRing; video onto a Surface via the CPU converter first; AAR packaging (per-ABI
+    jniLibs, 16 KiB alignment, extractNativeLibs=false).
+  - **S1.d The pluggable views**: KitePlayerView (plain Android View, and the iOS counterpart),
+    plus the SEPARATE optional :kiteplayer-compose module exposing one Composable that wraps
+    AndroidView on Android and UIKitView on iOS, so a non-Compose consumer never pulls Compose.
+  - **S1.e Stage exit**: the two demo apps, the matrix run on both platforms, the log entry with
+    every measured number, owner device session.
 
-**P1. Apple video complete, iOS becomes real.** The Metal renderer on macOS (absorbing draft items
-C-09 to C-31: plane targets, texture pools, stride discipline, presentation feedback, vsync
-snapping, the colour instrument), VideoToolbox inside FFmpeg per D-2 (absorbing C-33, C-48 to
-C-50), and the new work section 11 never made concrete: kiteplayer-output splits its AppKit-only
-code out of appleMain, gains iosArm64 and iosSimulatorArm64, the CoreAudio sink is qualified on
-iOS (the kiteplayer-rt C ring already cross-compiles for every iOS target since B1), an
-AVAudioSession policy item, a CAMetalLayer-backed iOS renderer, and an iOS sample app. Exit: the
-format matrix plays on a named Mac and on an iPhone simulator here, on a device with the owner.
+**S2. IT PLAYS BEAUTIFULLY ON APPLE.** Exit: Metal renderer on macOS and iOS, VideoToolbox inside
+FFmpeg per D-2 with measured software fallback, colour instrument, vsync-snapped scheduling,
+sustained 4K runs with committed thresholds. Absorbs draft items C-09 to C-31, C-33, C-48 to
+C-50 with their verifier corrections.
 
-**P2. Android through the JNI bridge, FFmpeg powered.** The architecture decided: the ENGINE runs
-as JVM bytecode on Android (it already compiles and tests there); KiteCodec gains a JVM actual
-whose implementation is JNI onto the same C ABI the opaque-handle work exposes (the kc_/ffkmp_
-surface is the stable boundary, which is why P0 finishes the opaque migration first); FFmpeg is
-built per Android ABI by the existing BuildFFmpegTask android profile with mediacodec decoders
-enabled inside it per D-2; audio is an AudioTrack sink in JVM Kotlin over KotlinAudioRing (the
-ring that exists for exactly the targets the C ring cannot serve); video lands on a Surface.
-Packaging: AAR with per-ABI jniLibs, 16 KiB page alignment, extractNativeLibs=false (absorbing
-C-45, C-46, C-52 where JNI is the boundary named). Plus the view layer: a plain KitePlayerView,
-and a separate optional Compose module. Exit: format matrix on a named Android device (owner
-assisted), zero platform demuxing anywhere.
+**S3. IT PLAYS ON EVERY DESKTOP.** Exit: format matrix on named Windows and Linux machines.
+WASAPI and ALSA/Pulse sinks in C inside kiteplayer-rt, same ring and audit discipline; desktop
+rendering through the JVM path for Compose Desktop and native paths for K/N consumers; the mingw
+and linux FFmpeg triples become consumable artifacts.
 
-**P3. Desktop completion: Windows and Linux.** WASAPI and ALSA/Pulse audio sinks written in C in
-kiteplayer-rt beside the CoreAudio unit, same ring, same callback discipline, same render-audit
-instrument extended per platform; software renderers over the existing CPU converter first
-(desktop windows via the JVM path of P2 for Compose Desktop, native paths for K/N consumers); the
-mingw and linux FFmpeg triples that already build in CI become consumable runtime artifacts.
-Exit: format matrix on a named Windows and a named Linux machine (owner assisted).
+**S4. IT EXPLAINS ITSELF.** Exit: subtitles per old B3, the debuggability register (diagnostics
+dump API, logging policy, typed warning audit, SPI cookbook with a worked custom backend), facade
+completion absorbed from old B11.
 
-**P4. Subtitles and the developer experience register.** The old B3 in full (text and bitmap
-subtitle decode through FFmpeg, timing, styling hooks, selection API), then the debuggability
-register: one diagnostics dump API that snapshots player state, queues, clocks and identity
-report; a documented logging policy; typed warning audit; the SPI cookbook with a worked custom
-backend example; sample apps promoted to teaching material. Absorbs old B11's facade completion.
+**S5. ANYONE CAN HAVE IT.** Exit: public artifacts. Size tiers of 17.6 measured per target; the
+umbrella artifact; POMs, licences, readiness checks (named steps HERE, never in Tier 1 earlier);
+publication PREPARED by the executor, EXECUTED by the owner per D-3. Absorbs draft C-32 to C-42.
 
-**P5. Size policy and distribution.** The profile tiers of D-5 with measured sizes (absorbing
-C-32, C-34 to C-42: the playback profile, native-libs population, per-target archive audits, the
-runtime artifacts, the umbrella artifact, POMs, licensing surface, the consumer smoke project);
-publication PREPARED by the executor and EXECUTED by the owner per D-3, with the readiness task
-run as a named step in this phase only, never in Tier 1 before it (verifier finding B1/B7
-honoured). Exit: goal 6's one-line consumer proof, sizes in the log per tier per target.
+**S6. IT PLAYS ON THE WEB.** Spike first, timeboxed, measured (FFmpeg-to-wasm size and decode
+throughput, threads and SIMD, the JS interop shape over the same C ABI); build only if the spike
+clears its bar; exit criteria carry the physics honestly (software decode, 1080p target, 4K a
+stated non-goal of v1). If the spike fails, web ships engine-only and the register says so.
 
-**P6. Web.** A feasibility spike FIRST, timeboxed and gated: FFmpeg compiled to wasm with the
-playback profile, size and decode throughput measured, threads and SIMD flags settled, the
-Kotlin/JS interop shape chosen (KiteCodec cinterop does not exist on wasm; this is a new binding
-layer over the same C ABI). Only if the spike's numbers clear the bar does the backend get built:
-wasm audio via AudioWorklet over KotlinAudioRing, video via WebGL/WebGPU texture upload or canvas.
-Exit criteria carry the physics honestly: software decode, 1080p target, 4K explicitly a non-goal
-of v1 on web. If the spike fails the bar, web ships engine-only (a consumer supplies decode) and
-the register says so.
+**S7. IT IS 1.0.** Per-platform soak matrix, conformance suite everywhere, CI actually running
+(level 8 until then), fuzz jobs executed, tier promotions per section 3, the parked security
+rows. 1.0 is declared here and nowhere earlier.
 
-**P7. Qualification and hardening.** The per-platform soak matrix (each platform's equivalent of
-B1.8's supervised run, owner assisted on devices), the format conformance suite run everywhere
-(17.5), tier promotions per section 3 done honestly, absorbing old B8's security work: CI that has
-actually run (the workflows exist and remain level 8 until then), fuzz jobs executed, the
-R-B8-layout register row, the un-negotiated device layout mock. 1.0 is declared here and nowhere
-earlier.
-
-### 17.3 Phase estimates and KiteCodec windows
+### 17.3 Stage estimates and KiteCodec windows
 
 KiteCodec changes are batched so KitePlayer re-consumes as few times as possible: window 1 inside
-P0 (opaque migration, guards, hardware knobs groundwork), window 2 inside P1 (VideoToolbox device
-context), window 3 inside P2 (JVM actuals and JNI), window 4 inside P5 (runtime artifacts), window
-5 inside P6 (wasm binding) if the spike passes.
+S1.a (opaque migration, guards), window 2 inside S1.c (JVM actuals and JNI), window 3 inside S2
+(VideoToolbox device context), window 4 inside S5 (runtime artifacts), window 5 inside S6 (wasm
+binding) if the spike passes.
 
-| Phase | Hours, honest range | Dominated by |
+| Stage | Hours, honest range | Dominated by |
 |---|---|---|
-| P0 | 25 to 35 | four check tasks, opaque migration completion, corrections |
-| P1 | 120 to 160 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; the iOS split and sample |
-| P2 | 140 to 190 | JNI actuals with a shared differential suite across JVM and native |
-| P3 | 60 to 90 | two C audio sinks with their instruments |
-| P4 | 60 to 80 | subtitle rendering correctness |
-| P5 | 40 to 60 | cheap in hours, irreversible in consequence |
-| P6 | 80 to 120 | the spike bounds it; failure path is cheap |
-| P7 | 60 to 90 | soak time and owner device sessions |
+| S1.a | 25 to 35 | four check tasks, opaque migration completion, corrections |
+| S1.b | 35 to 50 | the appleMain split and the iOS audio qualification |
+| S1.c | 140 to 190 | JNI actuals with a shared differential suite across JVM and native |
+| S1.d + S1.e | 25 to 40 | two view surfaces, two demo apps, the matrix runs |
+| S2 | 90 to 120 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync |
+| S3 | 60 to 90 | two C audio sinks with their instruments |
+| S4 | 60 to 80 | subtitle rendering correctness |
+| S5 | 40 to 60 | cheap in hours, irreversible in consequence |
+| S6 | 80 to 120 | the spike bounds it; failure path is cheap |
+| S7 | 60 to 90 | soak time and owner device sessions |
 
-Total 585 to 825 focused hours, network excluded. The 2026-08-10 estimate of 555 to 778 for
-B5+B6+B7 reconciles: network left (B6's bulk), iOS, desktop, web and subtitles entered.
+**S1 in total: 225 to 315 hours to the owner's first outcome.** Whole road: 615 to 875 focused
+hours, network excluded. The earlier phase-shaped totals reconcile: the same work moved between
+containers, plus the iOS-usable slice pulled forward out of the old P1.
 
-### 17.4 The P0 register, decision complete
+### 17.4 The S1.a register, decision complete
 
 Every item below comes from a verifier finding of 2026-08-10 (all three reports are in the run
-records; the findings were independently spot-checked) or from an owner decision. P0 is expanded
-NOW because it is next; P1 to P7 expand at entry per 17.2's rule.
+records; the findings were independently spot-checked) or from an owner decision. The item IDs
+keep their original P0- prefix, since the 2026-08-11 log entry already refers to them; P0 and
+S1.a name the same work package. S1.a is expanded NOW because it is next; later sub-stages and
+stages expand at entry per 17.2's rule.
 
 #### P0-01. Contract item 3's working reading is D-3
-- Where: KPKMP.md section 1 item 3; every publication-touching step in P5.
+- Where: KPKMP.md section 1 item 3; every publication-touching step in S5.
 - Problem: item 3 says local commits only and never push, written when pushing was deferred; both
   repositories are now pushed and publication is on the road. Three verifiers flagged the plan
   amending every rule except this one.
 - Fix: append the D-3 reading to item 3: executor never pushes, owner pushes, publication steps
   are prepared-not-executed by the executor. Branch, trailer and em dash bans unchanged.
-- Sub-phase: P0.1. Test: prose only; the tier 1 scan and a reread.
+- Sub-phase: S1.a.1. Test: prose only; the tier 1 scan and a reread.
 
 #### P0-02. The kiteplayer-rt coordinate question is decided: it publishes
 - Where: kiteplayer-core/build.gradle.kts nativeMain api(projects.kiteplayerRt); section 16.4
@@ -7394,26 +7411,26 @@ NOW because it is next; P1 to P7 expand at entry per 17.2's rule.
   with the RingHandle opt-in annotation closing 16.4 item 9's exposure in the same change.
   Merging it into kiteplayer-core was rejected: the module boundary carries its own C build,
   tests and audits, and folding them would blur the render-audit's object scope.
-- Sub-phase: P0.2. Test: a scratch consumer resolves kiteplayer-core from mavenLocal with no
+- Sub-phase: S1.a.2. Test: a scratch consumer resolves kiteplayer-core from mavenLocal with no
   unresolved coordinate; the readiness task (P0-03) stops naming kiteplayer-rt.
 
-#### P0-03. CheckPublicationReadinessTask exists but joins no tier until P5
+#### P0-03. CheckPublicationReadinessTask exists but joins no tier until S5
 - Where: new, KitePlayer buildSrc.
 - Problem: the draft installed it in Tier 1 while designing it to be red for twenty-four
   sub-phases, which section 9 forbids twice over.
 - Fix: build the task now (POM completeness, sibling-coordinate publishability), run it as a
-  NAMED STEP inside P5's sub-phases only. It enters no tier block before P5, and when it enters
+  NAMED STEP inside S5's sub-phases only. It enters no tier block before S5, and when it enters
   it must be green the same commit.
-- Sub-phase: P0.3. Test: task unit tests; proved able to fail on a module lacking a POM.
+- Sub-phase: S1.a.3. Test: task unit tests; proved able to fail on a module lacking a POM.
 
 #### P0-04. The KitePlayer coupling baseline starts at its MEASURED number
 - Where: new coupling-baseline at KitePlayer root; the draft claimed zero.
 - Problem: the claim "measured at zero" was false: eight committed files name kitert cinterop
   types (measured 2026-08-10 by grep, recorded in the session log). A ratchet born on a false
   number is the exact defect class the interlude repaired.
-- Fix: measure at P0.4 execution time, write the real number with the producing command beside
+- Fix: measure at S1.a.4 execution time, write the real number with the producing command beside
   it, ratchet from there; kiteplayer-output is excluded by design (it owns the C sink pointer).
-- Sub-phase: P0.4. Test: the check task fails on a planted new naming site; passes at baseline.
+- Sub-phase: S1.a.4. Test: the check task fails on a planted new naming site; passes at baseline.
 
 #### P0-05. The plugin's two known-failing tests get a named exclusion mechanism
 - Where: ../KiteCodec/kitecodec-gradle-plugin test task; contract rule 5.
@@ -7421,7 +7438,7 @@ NOW because it is next; P1 to P7 expand at entry per 17.2's rule.
   checkout makes that tier permanently red; "ignored" named no mechanism.
 - Fix: test-task filter excluding exactly the two named tests, comment citing contract rule 5,
   tracked by a register row so the exclusion cannot silently grow.
-- Sub-phase: P0.5. Test: the suite passes with the filter; removing the filter reproduces the
+- Sub-phase: S1.a.5. Test: the suite passes with the filter; removing the filter reproduces the
   two known failures and nothing else.
 
 #### P0-06. The phantom helper sentence in coupling-baseline.txt is corrected
@@ -7430,21 +7447,21 @@ NOW because it is next; P1 to P7 expand at entry per 17.2's rule.
   exists; a planner consumed it as fact within hours. Zero hits in the headers: it never existed.
 - Fix: reword to name it as a hypothetical mutation vector; add the sentence "no such helper
   exists" so it can never be harvested as an API again.
-- Sub-phase: P0.6. Test: tier 1 reread; grep for the name finds only the corrected prose.
+- Sub-phase: S1.a.6. Test: tier 1 reread; grep for the name finds only the corrected prose.
 
 #### P0-07. The opaque handle migration completes (B1-25 paid)
 - Where: ../KiteCodec def with 36 FFmpeg headers; ten Kotlin files on CPointer<AVFrame> and
   siblings; fourteen raw libav call sites; five AVMEDIA_TYPE_* enum constants
   (MediaSource.native.kt:553 to :557, the verifier's catch the draft missed).
 - Problem: publication freezes FFmpeg struct layout as public API forever (draft C-43); the JNI
-  bridge of P2 needs the opaque C ABI as its boundary; sixteen exported entry points still crash
+  bridge of S1.c needs the opaque C ABI as its boundary; sixteen exported entry points still crash
   on NULL at that exact boundary (R-B2-guards).
 - Fix: the draft's C-43/C-44/C-45 design as corrected by the verifiers: pure-addition half first
   (new helpers, including the five media-type constant accessors and the fourteen wrapping
   helpers, none of which exist today), then the def loses FFmpeg headers, Kotlin migrates, the
   sixteen guards land, the C ABI version ratchet moves with a NEW signature baseline file (a
   names-only baseline cannot see shape changes: verifier M4).
-- Sub-phase: P0.7 and P0.8, the reversible half gated before the irreversible half, exactly as
+- Sub-phase: S1.a.7 and S1.a.8, the reversible half gated before the irreversible half, exactly as
   B1.3's lift was. Test: metadata differential proves the addition half changes nothing existing;
   the migration half re-proves every suite; guards reproduction-first like I-12's two.
 
@@ -7454,7 +7471,7 @@ NOW because it is next; P1 to P7 expand at entry per 17.2's rule.
 - Problem: the record must match the tree before a new horizon builds on it; the interlude's
   whole I.2 exists because it once did not.
 - Fix: correct each in place with the measurement beside it, per the established style.
-- Sub-phase: P0.9. Test: tier 1; reread of every corrected sentence.
+- Sub-phase: S1.a.9. Test: tier 1; reread of every corrected sentence.
 
 ### 17.5 The format conformance matrix
 
@@ -7470,7 +7487,7 @@ THIS matrix, so "plays all formats" is one measured claim, not a per-platform mo
 - **standard**: lean plus vp8, vp9, av1, opus, vorbis, mpeg4, images. The current playback
   profile.
 - **full**: consumer-built via the plugin, which remains for exactly this and GPL opt-ins.
-Exit numbers are MEASURED per target at P5 and written in the log; no size is promised before it
+Exit numbers are MEASURED per target at S5 and written in the log; no size is promised before it
 is measured.
 
 ### 17.7 What this section does not change
@@ -7534,7 +7551,7 @@ its one lock.
    plan; both times the process, not luck, caught them.
 3. **Register discipline.** Work exists as register items: Where (file:line), Problem, Fix
    (decided, never options), Sub-phase, Test (named, and proved able to fail). Sub-phases name
-   files, steps, gate, commit first lines. A phase without its expansion does not start (17.2).
+   files, steps, gate, commit first lines. A stage without its expansion does not start (17.2).
 4. **Gates are tiered and mechanical (section 9).** Tier 1 (fourteen seconds) every phase, no
    exceptions; Tier 2 by changed path; Tier 3 (device soak) only for the render path, callback,
    teardown ordering, tier promotion or release. The tier is selected by paths, never confidence.

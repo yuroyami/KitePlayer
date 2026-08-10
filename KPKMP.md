@@ -4743,6 +4743,18 @@ is no other.
   stated per 18.3 rule 8: the adversarial pass was a single-threaded hostile reread by the same
   model (Fable 5 may not spawn agents, owner rule); mitigation is S1.a.0, a mandatory mechanical
   re-verification of every located fact by the executor before S1.a.1, with any mismatch a stop.
+
+- 2026-08-11, S1.a.0 fired on its first run and the expansion was corrected before S1.a.1.
+  Prose only, Tier 1 gate (selected by rule). The external executor measured the P0-04
+  pre-exclusion count as seven committed Kotlin files against the expansion's "eight-file
+  figure" and stopped, as 17.4.1 requires. Both measurements are true and the wording was the
+  defect: the 2026-08-10 grep matched eight FILES of any type, seven Kotlin (three in
+  kiteplayer-core, three in kiteplayer-output, one in kiteplayer-rt) plus kitert.def itself,
+  whose text names its own types. S1.a.4's calibration sentence now carries the decomposition,
+  and P0-04's problem line names it beside the original measurement. The in-scope figure of
+  three kiteplayer-core files was confirmed by both sides. No product file changed; the
+  executor made no edits and both repositories stayed clean, which is the fence behaving as
+  written.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7491,8 +7503,9 @@ stages expand at entry per 17.2's rule.
 #### P0-04. The KitePlayer coupling baseline starts at its MEASURED number
 - Where: new coupling-baseline at KitePlayer root; the draft claimed zero.
 - Problem: the claim "measured at zero" was false: eight committed files name kitert cinterop
-  types (measured 2026-08-10 by grep, recorded in the session log). A ratchet born on a false
-  number is the exact defect class the interlude repaired.
+  types (measured 2026-08-10 by grep, recorded in the session log; decomposed 2026-08-11 by
+  S1.a.0 as seven Kotlin files plus kitert.def itself, whose text names its own types). A
+  ratchet born on a false number is the exact defect class the interlude repaired.
 - Fix: measure at S1.a.4 execution time, write the real number with the producing command beside
   it, ratchet from there; kiteplayer-output is excluded by design (it owns the C sink pointer).
 - Sub-phase: S1.a.4. Test: the check task fails on a planted new naming site; passes at baseline.
@@ -7649,8 +7662,13 @@ Steps.
 2. MEASURE at execution time with the exact command, write the number and the command into the
    baseline header, ratchet from there. For calibration only, not to be trusted over the fresh
    run: the 2026-08-11 planning measurement of that scope found three files in kiteplayer-core
-   (NativeAudioRing.kt, NativeRingAudioSink.kt, AudioRingDifferentialTest.kt). The full
-   eight-file figure in P0-04 was measured over ALL modules, before the two exclusions.
+   (NativeAudioRing.kt, NativeRingAudioSink.kt, AudioRingDifferentialTest.kt). P0-04's
+   eight-match figure counted files of ANY type over all modules: seven Kotlin files (three in
+   kiteplayer-core, three in kiteplayer-output, one in kiteplayer-rt) plus kitert.def itself,
+   whose text names its own types. Restricted to committed Kotlin, the pre-exclusion count is
+   SEVEN. The first wording here said "eight-file figure" without that decomposition; S1.a.0's
+   first run caught it on 2026-08-11 and this sentence was corrected before S1.a.1 began, which
+   is precisely the job S1.a.0 exists to do.
 3. Task fails when a NEW file names the cinterop (by name, allowlist style, like KiteCodec's
    allowed_struct_type lines); test plants a fixture file and watches the task fail, then passes
    at baseline; falsifiability by reverting the plant.

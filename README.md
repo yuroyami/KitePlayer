@@ -71,9 +71,33 @@ macOS arm64 is still the only candidate above T1, and it is still a candidate ra
 platform here has real-device qualification, a performance budget, or a packaged consumer build, and
 those are what T4 and T5 mean.
 
-**What changed in this run.** Rotation, the most visible thing a container could say that this player
-ignored. A display matrix now travels from the container to the stream, from the stream to every frame of
-it, and the Core Graphics renderer draws the quarter turn, so a recording made in portrait is shown the
+**What changed in this run.** The audio device's real-time callback left managed Kotlin. It is now a
+`static` C function in `kiteplayer-rt`, installed by C, reading a C ring, with no `StableRef` and no
+garbage-collected object anywhere on the device's thread. Alongside it, KiteCodec's 176 FFmpeg helpers
+became a compiled and symbol-audited C library with its own tests, sanitizer runs and fuzz targets, and
+it now refuses an FFmpeg runtime that does not match the headers it was compiled against.
+
+**No tier moved, and that is deliberate.** This run added no target, no backend and no playback
+capability. macOS arm64 is still an experimental T3-Full candidate on one development machine and
+everything else is still T1. What changed is how much of the audio path is provable, not what it can
+play. Seventeen native targets compile the real-time C into an architecture-verified archive, which is
+compilation and nothing more: the device implementation exists for macOS only, and every other target's
+audio entry points refuse loudly rather than claiming to work.
+
+**Which audio ring the shipped path uses.** On macOS it is the C one, and the eighteen
+`AudioRingTest` cases in `commonTest` no longer cover it. Sixteen of them are the ones register item
+B1-20 was written about; the two added with the C ring test the same portable implementation. Both
+rings exist permanently, because `kiteplayer-core`'s `commonMain` targets js and wasmJs, which can
+never contain C, and because the Kotlin ring is the only oracle the C ring can be checked against. What covers the shipped path is the
+eight C suites and a differential oracle that drives one scripted sequence through both rings and
+compares the samples bit for bit and the published clock anchor to the microsecond. Reading
+"AudioRingTest passes" as coverage of what a macOS listener hears would be exactly the substitution this
+project's evidence rules forbid.
+
+**What the run before this one changed.** Rotation, the most visible thing a container could say
+that this player ignored. A display matrix now travels from the container to the stream, from the
+stream to every frame of it, and the Core Graphics renderer draws the quarter turn, so a recording
+made in portrait is shown the
 right way up instead of on its side. Other container metadata is still dropped, and the list is short but
 real: chapters, mastering display and content light levels, and any display matrix that is not one of the
 four quarter turns. Nothing else about the tiers moved: the same platform has the same backends, and the
@@ -118,9 +142,29 @@ enough to call any platform supported.
   nothing from a superseded seek is ever shown or heard, timestamps never go backwards, every frame and
   packet is closed exactly once, every command completes exactly once, and every session reaches a
   terminal state. Twenty seeks in one virtual millisecond cost exactly one flush cycle.
-- 414 test executions pass across 5 suites, with nothing skipped: 178 engine tests on the JVM in
-  under a second, 179 compiled for macOS arm64, 20 against the real audio device and the renderer,
-  29 that decode and seek in real media, and 8 for the SubRip parser.
+- The audio device's callback, measured on a real device for ten minutes while the garbage collector
+  was deliberately made to run 88,302 times: the slowest single callback body out of 51,679 was
+  9,208 nanoseconds against a budget of 5,333,333, which is under two tenths of one percent of it,
+  with nothing over budget, no starvation, no degraded clock reading and no missing ring. Real media
+  through the whole shipped path for ten minutes, sixty times through a container with a real
+  decoder and the engine's own feeder, played 598.23 seconds of audio in 600 seconds of wall clock
+  with zero starvations, on a ring less than half the size. The same ten minutes against a Kotlin
+  callback, which is the arrangement this run removed, was outside the budget on 1,482 of 51,533
+  callbacks with a worst body of 57.1 milliseconds; removing the manufactured collector pressure
+  from that control left it outside the budget 159 times with a worst body of 81.4 milliseconds,
+  which is worse rather than better, so what fails is a managed callback and not a collector pause.
+  An earlier ten minute run of the same positive case measured 9,083 nanoseconds and 21
+  starvations, and those starvations belong to that test's own managed feeder rather than to the
+  callback, which is why the starvation count there is bounded and the callback's own numbers are
+  asserted exactly. Separately, a symbol and instruction audit of the shipped object shows it has no
+  allocator, lock, log or framework symbol to call at all, and five million synthetic callbacks with
+  the allocator interposed performed zero allocations of any kind.
+- 454 test executions pass across 6 suites, with nothing skipped: 181 engine tests on the JVM in
+  under a second, 189 compiled for macOS arm64, 28 against the real audio device and the renderer,
+  36 that decode and seek in real media, 8 for the SubRip parser and 12 over the real-time C
+  bindings. Four of the 454 open the audio device and take ten minutes each, so they are gated on an
+  environment variable and were run separately rather than in the ordinary suite. Beside them sit
+  121 C test cases in 8 suites, each run in four modes, and 11 unit tests over the build logic.
 
 ## What does not exist yet
 
@@ -142,6 +186,10 @@ enough to call any platform supported.
 - **No tone mapping.** PQ, HLG and BT.2020 constant luminance are converted with the matrix alone, so
   they play and they look wrong. Each says so once per stream through a typed warning.
 - **No network path, no live or adaptive streaming, no DRM.**
+- **The real-time audio core is C on macOS and nowhere else.** Every audio entry point exists on the
+  other sixteen native targets and refuses with an unsupported-platform verdict, because iOS, tvOS and
+  watchOS need a different audio unit and an activated audio session, and neither can be tested here.
+  A refusal is deliberate: claiming support that nothing measured would be worse than saying no.
 - **No qualification of any kind.** Every number above comes from a debug binary on one machine. There
   is no release-mode benchmark, no real-device run and no performance budget in this evidence. The two
   long runs are that same debug binary watched with `ps`, so they say the engine holds together for half
@@ -263,6 +311,7 @@ public interface MonotonicClock {
 | Module | Holds | Targets |
 |---|---|---|
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
+| `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; the device implementation is macOS only |
 | `kiteplayer-output` | the CoreAudio sink, the AppKit window and the Core Graphics renderer | macOS arm64 |
 | `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64 |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |

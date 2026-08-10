@@ -636,6 +636,23 @@ corrected by that audit; the corrected text below is authoritative.
 8. `PlaybackStats.avDrift` sign contradiction (D33, A0).
 9. Truth ledger seed (A0): every public configuration member that nothing implements
    gains the explicit KDoc marker. The A5 gate walks the list again.
+10. `CoreAudioSink` KDoc, the comment calling the duplicated silence fill deliberate: it stopped
+    being true the moment the callback became C, because there is no absent callback to cover.
+    Corrected with B1-19 in B1.8, in that file and in `AudioSink.kt`, and the obligation the
+    collapse removed from the Kotlin path is now stated on `AudioRenderCallback` instead of being
+    owned by nobody (found by the B1.8 verification).
+11. `AudioRenderCallback` KDoc, the try-lock claim: it said the ring is read "with a try-lock, and
+    on contention writes silence", which was never true of any ring here. Corrected in B1.8 with
+    what is true instead, which is register item B1-16.
+12. B1-20, in three places, in B1.9: the KitePlayer README, `AudioRingTest`'s class KDoc and the
+    Execution log. On macOS the sixteen Kotlin ring tests do not cover the shipped path, and the C
+    suites plus the differential oracle are what do.
+13. KiteCodec's own documents, in B1.9, because that repository is public and its documents were
+    behind its code: the README said 72 tests when 85 pass and said nothing catches an accidental
+    signature change when `apiCheck` now does; `docs/about.md` described the helpers as `static
+    inline` text in the def; `CHANGELOG.md` recorded none of B1; and `native/kitecodec-c/README.md`
+    still listed B1.7 and B1.8 as not yet done. All corrected, and the C README now carries the
+    instrument table with what each instrument cannot prove.
 
 ---
 
@@ -3447,6 +3464,566 @@ is no other.
   The one line guard and the one line assertion it unlocks are written out in that target's file
   header and in `fuzz/README.md`.
 
+- 2026-08-09 into 2026-08-10, Horizon B item B1, sub-phases B1.7, B1.8 and B1.9, gate passed, B1
+  CLOSED. Two dates because the work was written on the first and the closing gate, including fifty
+  minutes of supervised device runs that make sound, ran on the second. Every other entry here is
+  one day and this one is not, which is worth a clause rather than a rounded date. Three sub-phases
+  in one entry because one gate covered them: B1.7 built the C audio ring and proved it against the
+  Kotlin one without shipping it, B1.8 moved the shipped macOS device callback into C, and B1.9
+  wrote the words and this entry. An independent verifier attacked B1.7 and B1.8 before this gate
+  and returned NOT SAFE TO COMMIT with one blocking finding; that finding and eleven others are
+  fixed here. Every number below was measured by this gate run. Where a sub-phase report's number
+  did not reproduce, the gate's measurement won and the difference is named.
+
+  **What landed, per sub-phase.**
+
+  1. B1.7. A new module, `kiteplayer-rt`, symbol prefix `kprt_`, in KitePlayer and not in
+     `kitecodec-c`, because a lock-free audio ring has nothing to do with FFmpeg and putting it
+     there would make KitePlayer's real-time core a transitive consequence of a codec dependency.
+     One allocation at create and one free at destroy, the header hand aligned to 64 bytes inside
+     that one block, every contended counter on its own cache line. The commit order of plan step 3
+     implemented literally: segment payload, then the slot's own sequence with a release store, then
+     `segments_appended`, then `written` with release, and the render side loads `written` with
+     acquire first, so one release publishes both the samples and the segment that dates them.
+     Register item B1-16 fixed by inverting the seqlock: the real-time thread is the anchor WRITER
+     and never waits, the non-real-time reader retries a bounded 64 times and then keeps its
+     previous reading, and segment resolution walks live slots newest first with one sequence read
+     per slot, dating from a consumer-private cache and counting a give-up rather than spinning.
+     Register item B1-18 fixed in BOTH rings with the same split rescale, so the differential oracle
+     compares two correct implementations rather than two matching ones. `AudioRingHandle` extracted
+     in `commonMain` with exactly the eight members `AudioPlayback` uses and no `render`; `AudioRing`
+     renamed to `KotlinAudioRing`; `AudioRing` deliberately NOT an `expect class`, refused
+     permanently for the reason in 15.5 and restated at the end of this entry.
+  2. B1.8, the one time in B1 that the shipped real-time audio path changes. `kprt_render_cb` is a
+     `static` C function in `kite_rt_coreaudio.c`, installed by `kprt_sink_create`, casting its
+     `refCon` to a plain struct pointer with no `StableRef` and no reference counting, converting
+     host ticks through a `mach_timebase_info` cached at create, and calling the render body straight
+     over the device's own buffer. The whole device glue moved to C, so no Kotlin touches an
+     `AudioUnit`, and `kprt_sink_destroy` stops, uninitialises, disposes and only then releases the
+     ring. `CoreAudioSink` became a thin owner of two opaque handles, 506 lines to 472, with
+     `DeviceBuffer`, `fillDeviceBuffer`, `renderFromDevice` and the `StableRef` all gone. B1.8's own
+     report said 427 lines, which was true when it was written; this gate added the lock and the
+     threading note that the blocking finding required, and a line count is only worth quoting if it
+     is the count in the tree being committed. Register item B1-19 collapsed: silence and the
+     underrun counter exist in `kprt_ring_render` and nowhere else. The choice of arrangement is the
+     sink's and not the platform's, through `NativeRingAudioSink` and one `internal expect fun
+     openAudioPath`, so every line of policy, backpressure, clock anchoring and flush ordering stays
+     in `commonMain`.
+  3. B1.9. The words, the evidence and the deferral record. B1-20 said plainly in the three places
+     the plan names: the KitePlayer README, `AudioRingTest`'s class KDoc and this entry. No tier
+     promoted. KiteCodec's public documents brought up to date with its code, which is the part that
+     mattered most because that repository is public: its README said 72 tests when 85 pass and said
+     nothing catches an accidental signature change when `apiCheck` now does, `CHANGELOG.md`
+     recorded not one line of B1, `docs/about.md` still described the helpers as `static inline` text
+     inside the def, and `native/kitecodec-c/README.md` still listed B1.7 and B1.8 as not yet done.
+     `kiteplayer-rt/README.md` carries the instrument table with what each instrument cannot prove.
+
+  **The verifier's twelve findings, and the experiment behind each fix.** The verdict was NOT SAFE
+  TO COMMIT. Two of the twelve are corrections to reports rather than to code, and they are listed
+  with the rest because a wrong number in a report is a defect in the evidence.
+
+  1. BLOCKING. `AudioPlayback.close()` freed the C ring with no lock while `position()`,
+     `anchorClock()`, `buffered` and `underruns`, all four documented safe from any thread, read it.
+     Before B1.8 the ring was a managed object and the interleaving was harmless; after it, it is a
+     use-after-free. Reproduced rather than taken on trust: the two C calls in that order under
+     AddressSanitizer give `heap-use-after-free ... READ of size 8 ... in kprt_ring_anchor
+     kite_rt_ring.c:303 ... freed by ... kprt_sink_destroy kite_rt_coreaudio.c:363 ... previously
+     allocated by ... kprt_ring_create kite_rt_ring.c:70`. Fixed by clearing the reference inside the
+     lock every cross-thread reader takes, and by putting `buffered`, `underruns` and the `speed`
+     setter's null test under it, so the rule is one sentence instead of a case analysis: a member
+     that may be called from another thread touches that field only under the lock. `CoreAudioSink`
+     got the same treatment: `close`, `latencyNanos`, `retainedResources` and the counter reads share
+     one lock, the destroy runs outside it so nothing waits behind the audio device, and
+     `kiteplayer-output` gained the atomicfu LIBRARY dependency to have a lock at all. Not the
+     plugin: contract item 6. A new `AudioPlaybackTest` case pins the half a test can observe, and it
+     was proved falsifiable by moving the clear after `sink.close()`, which fails it.
+  2. The differential oracle was blind to the discontinuity tolerance boundary. The verifier planted
+     `<` becoming `<=` in the C ring alone and all seven oracle tests passed, at four rates, at one,
+     six and eight channels, and through the pseudo-random session, because random sessions do not
+     find boundaries. Six explicit rows added at drift 999, 1000 and 1001 microseconds on both signs,
+     plus two C cases. Re-planted to prove the instrument: 5 of 7 oracle tests then fail at
+     `AudioRingDifferentialTest.kt:260` and `test_ring_basic` fails at case 19.
+  3. The negative control of assertion 3 failed for a reason nobody had isolated. The verifier
+     decomposed it on this machine at 0.4 minutes per arm: allocating and pressured 11,613,208 ns
+     worst against a 5,333,333 ns budget over 76 callbacks, allocating and unpressured 10,541,834
+     over 2, non-allocating and pressured 18,691,250 over 80, non-allocating and unpressured
+     10,467,500 over 11. So the managed callback misses the deadline with the collector pressure
+     removed AND with the per-call allocation removed, and the pressure changes how often rather than
+     whether. The plan's own stop-the-world figures, 63 to 256 microseconds, are 40 to 160 times too
+     small to explain a 10 millisecond outlier. `RealTimeSoakTest` now runs the control twice, with
+     and without the pressure, prints both, and asserts on the over-budget COUNT of the pressured
+     arm; the unpressured arm is reported and deliberately not asserted, because that file may not
+     assert a mechanism it has not isolated. This gate ran both arms at the full ten minutes and the
+     numbers are below.
+  4. `render-audit.sh`'s 27-name forbidden scan could not fail the audit. It ran on the right-hand
+     side of a pipe, so the shell put it in a subshell and every increment of `CHECKS` and `FAILURES`
+     was discarded; the script printed 15 result lines and reported "12 checks, all passed". It was
+     also blind to a forbidden name DEFINED inside the audited unit, because an intra-section direct
+     branch emits no relocation. Both fixed, and a fourth negative control added that only that scan
+     can catch: a `void objc_msgSend(void)` with external linkage called from `kprt_ring_render`.
+     Measured at this gate, it passes the undefined-set check and the escape check and is rejected by
+     the forbidden scan with `refers to forbidden symbols: _objc_msgSend _objc_`. The summary now
+     reads 15 checks for 15 lines, and 19 with the controls.
+  5 and 6. Nothing in the gate covered the memory ordering or the teardown order, and the verifier
+           proved it by planting both: `release` downgraded to `relaxed` on the store of `written`
+           and `acquire` to `relaxed` on the matching load passed all eight suites under TSan, with
+           TSan proved live by a control; and `kprt_sink_destroy` freeing the ring before it stops
+           and disposes the audio unit passed all eight suites, the interposer mode, the render audit
+           and 43 real device teardowns under ASan. Both are one line and neither had an instrument.
+           New: `native/scripts/source-discipline.sh`, five checks, which states in its own header
+           that it is LEVEL 4 and why a text check is the right shape for a decision that was
+           reversed rather than for a property. Its three negative controls, one per planted defect,
+           are each rejected, quoted at this gate as `kprt_sink_destroy is out of order: stop 373,
+           uninitialise 375, dispose 376, ring release 386, ring destroy 369, free 391`. TSan catches
+           missing atomicity and does not grade ordering strength; that sentence is in the script and
+           in `kiteplayer-rt/README.md`'s instrument table. No report may read this script as proof
+           that the ordering is correct: what it proves is that the ordering decisions the design
+           took are still written where the design put them.
+  7. A zero-frame write with a discontinuous timestamp spent a segment slot in the Kotlin ring and
+     not in the C ring, because the Kotlin ring recorded the timestamp before it looked at the frame
+     count. Unreachable from `AudioPlayback.submit`, which never asks for fewer than one frame, and a
+     real divergence in a contract the oracle claims to pin. The Kotlin ring now refuses a
+     non-positive frame count first, exactly as `kprt_ring_begin_write` does, and an oracle row
+     drives four of them. Proved falsifiable: removing that one line fails 5 of 7 oracle tests.
+  8. `record_timestamp`'s `predicted - pts_us` and its negation were signed overflow, which is
+     undefined behaviour; UBSan named it `-9223372036854774474 - 9223372036854775807 cannot be
+     represented in type 'int64_t'`. Both operations are now checked with `__builtin_*_overflow`, an
+     unrepresentable distance is treated as a discontinuity, and `INT64_MIN` is its own case because
+     negating it is undefined too. The sibling site in `publish_anchor` was fixed with a saturating
+     add at the same time, because the oracle's two new rows at the ends of the range would otherwise
+     have driven it. `KotlinAudioRing` mirrors both decisions including the `Long.MIN_VALUE` case,
+     since Kotlin's `abs(Long.MIN_VALUE)` is negative and would read as a distance inside every
+     tolerance.
+  9 and 10. Two documentation defects. `AudioRingHandle.kt` still said `kprt_frames_to_micros` lives
+            in `kite_rt_ring.c` when B1.8 moved it to `kite_rt_render.c`, and that move is the whole
+            basis of assertion 1. `AudioPath.kt` relied on a sink filling silence, an obligation
+            B1-19 removed from every documented contract; it now belongs to `AudioRenderCallback` in
+            writing, which is where the only remaining callers of that path are.
+  11. The B1.8 report's C suite table put `test_ring_alloc`'s six partial cases under `plain`.
+      Measured at this gate across all four modes they are under `asan` and `tsan`, and `plain` and
+      `interpose` have none, which is the direction that matters: a partial under `plain` would mean
+      the interposer was dead in the only variant that carries the allocation evidence. The table
+      below is the corrected one.
+  12. `kprt_render_cb` trusted `mNumberBuffers` and never read `mDataByteSize`, so a device answering
+      with non-interleaved buffers or a short byte size would have been a heap overflow on the
+      real-time thread. Pre-existing in shape, since the Kotlin callback assumed the same, and not
+      reproduced. Now two loads and two compares: exactly one buffer or nothing is written, and a
+      short byte size clamps the frame count. No call was added, so the audited call set of that
+      function is still exactly `[_kprt_render_into _kprt_sink_note_span _mach_absolute_time]`.
+
+  **The gate, with the numbers it measured.** Rerun for real with `--rerun-tasks`, both
+  repositories, nothing carried from a sub-phase report.
+
+  KitePlayer C suites in `kiteplayer-rt/native`: eight suites, 121 cases per mode, four modes, 0
+  failures.
+
+  | suite | cases | plain | asan | tsan | interpose |
+  |---|---|---|---|---|---|
+  | test_ring_rescale | 20 | pass | pass | pass | pass |
+  | test_ring_basic | 55 | pass | pass | pass | pass |
+  | test_ring_silence | 16 | pass | pass | pass | pass |
+  | test_ring_bounded | 6 | pass | pass | pass | pass |
+  | test_ring_threads | 4 | pass | pass | pass | pass |
+  | test_ring_alloc | 6 | pass | pass, 6 partial | pass, 6 partial | pass |
+  | test_sink_callback | 8 | pass | pass, 2 partial | pass, 2 partial | pass |
+  | test_sink_timebase | 6 | pass | pass | pass | pass |
+
+  The partials are the two sanitizer runtimes owning the allocator. `interpose` mode makes "the
+  interposer is not effective" a hard failure rather than a recorded partial, which is the whole
+  reason that mode exists: without it, "the instrument was dead" and "nothing allocated" read
+  identically.
+
+  Ring lifecycle from the same suite under `interpose`: `kprt_ring_create performs exactly one
+  allocation [new=1 freed=0]`, `kprt_ring_destroy performs exactly one free [new=0 freed=1]`, `a
+  thousand create and destroy cycles are exactly balanced [new=1000 freed=1000 live=0]`, `every
+  operation between create and destroy allocates nothing, single threaded [new=0 freed=0 mmap=0]`, `a
+  refused create allocates nothing [new=0 freed=0 mmap=0]`, and 50000 renders against a live feeder
+  moved 25,600,000 frames with `starved=0 of 50000` and `new=0 freed=0 mmap=0`.
+
+  KitePlayer Kotlin suites, every task executed: `kiteplayer-core` jvm 181, `kiteplayer-core`
+  macosArm64 189, `kiteplayer-output` macosArm64 28, `kiteplayer-ffmpeg` macosArm64 36,
+  `kiteplayer-subtitles` jvm 8, `kiteplayer-rt` macosArm64 12, which is 454 test executions with 0
+  failures, 0 errors and 0 skipped, plus 11 `buildSrc` unit tests. Four of the 454 are the device
+  gated soak cases, which print a skip line and return early without `KPRT_DEVICE_SOAK`, so 450
+  assert something in the ordinary gate and all four were separately run for real below. The count
+  was 414 at the end of Horizon A and 452 when B1.8 was written; the 2 since are the oracle boundary
+  rows and the finding 1 case.
+
+  Cross-target: `compileKotlinJs`, `compileKotlinWasmJs` and `assembleAndroidMain` all green, 17
+  tasks executed. All 17 `compileKiteRtCFor*` tasks executed and each produced an
+  architecture-verified archive: macos_arm64 10264 bytes over 4 objects, ios_arm64 7840 over 4,
+  ios_simulator_arm64 7728 over 4, ios_x64 8776 over 4, tvos_arm64 7840 over 4,
+  tvos_simulator_arm64 7728 over 4, watchos_arm32 8664 over 4, watchos_arm64 7128 over 4,
+  watchos_device_arm64 7728 over 4, watchos_simulator_arm64 7728 over 4, android_arm32 10548 over 5,
+  android_arm64 10380 over 5, android_x64 10628 over 5, android_x86 11408 over 5, linux_x64 10924
+  over 5, linux_arm64 10276 over 5, mingw_x64 10688 over 6. Only macos_arm64's archive carries the
+  device implementation; the other sixteen carry the refusing stubs, which is why the Apple ones are
+  smaller, and it is visible evidence rather than a promise that the implementation is macOS only.
+  That is level 7 evidence, compilation, and says nothing about behaviour anywhere but here.
+
+  The stale-embedded-archive hazard B1.3 measured was checked again in this module and holds: the
+  archive the klib embeds and the archive the C task built are the same bytes, sha256
+  `13306f4e1cc7a3335400beea206b7d68657509fa1a902a221f9e7cd72cfc8d84` for both.
+
+  Public ABI: `updateKotlinAbi` across all four KitePlayer modules produced a byte identical dump,
+  `git diff --exit-code -- '*/api'` is clean, and `checkKotlinAbi` passes with all 129 tasks
+  executed. So the api dumps committed here are exactly what the build produces.
+
+  The sample plays every media case, which is the C callback playing them: `sync1080p30.mp4` 300
+  decoded, 300 submitted, 0 dropped, 0 repeated, 0 underruns, 0 rebuffers, 0 warnings, worst schedule
+  3 ms, master clock Audio, played to 0:10.005 of 0:10.000; `truevfr720.mp4` 240 and 240 with the
+  same zeroes, worst schedule 4 ms, played to 0:08.010 of 0:08.000; `hevc4k10.mp4` 180 and 180,
+  master clock Video because it has no audio track, worst schedule 3 ms, played to 0:05.966 of
+  0:06.000; and `/nonexistent.mp4` printed `cannot play /nonexistent.mp4` then `No such file or
+  directory (code=-2)` with no stack trace.
+
+  KiteCodec, whose only changes in these three sub-phases are documents, was gated in full anyway:
+  six C suites, 250 cases per variant, three variants, 0 failures (`test_ownership` 39,
+  `test_buffers` 32, `test_rescale` 114, `test_strerror_thread` 24, `test_convert` 25,
+  `test_identity` 16); the fuzz corpus replayed under ASan and UBSan, 6 targets passed, 105 corpus
+  files; `symbol-audit.sh` PASS; `verify-lift.sh` MATCH, the nine units concatenated and the def body
+  at `5364329` both sha256 `e63a7b56e4fe61a8f804d65b6066478dfa5e7eebcf5485685c327081391726ea` over
+  909 lines; `check-deleted-surface.sh` PASS; `apiCheck` green; `checkCinteropCoupling` at baseline
+  with `cinterop_import_lines` 246, `ffkmp_call_sites` 273, `direct_libav_call_sites` 14 and
+  `ffmpeg_struct_types_named_in_kotlin` 11; `:kitecodec-core:macosArm64Test` 85 tests, 0 failures;
+  and the sample e2e ran and reported its runtime, `libavutil 60.8.100 libavcodec 62.11.100
+  libavformat 62.3.100 libavfilter 11.4.100 libswscale 9.1.100 libswresample 6.1.100`, with nine
+  encoders and seven filters present, which is also the identity gate of B1-02 accepting a matching
+  runtime on the path a consumer takes.
+
+  The widened em dash scan over both repositories prints nothing and exits 1.
+
+  **The four assertions of B1.8, in the order of authority the plan fixes.**
+
+  Assertion 1, the render audit, level 2, deterministic, and the strongest of the four. 15 checks,
+  all passed, run with konan's own clang 21.1.6 and the shipped flag set, over the freshly compiled
+  real-time unit AND over the object extracted from the archive the klib embeds. The unit's undefined
+  set is exactly `[_bzero _memcpy]` against an allowlist of `[_memcpy _memset _bzero]`; it calls
+  nothing outside itself but the allowlist; neither its relocations nor its own definitions contain
+  any of the 27 forbidden names; `kprt_render_cb` is a local symbol, so Kotlin can neither install
+  nor call it, and it calls exactly `[_kprt_render_into _kprt_sink_note_span _mach_absolute_time]`.
+  With `--prove-it-can-fail`, 19 checks and all four poisoned controls rejected: a `malloc` stored
+  through a volatile, the one framework call the plan names, a variable length array which only the
+  compiler can see, and a forbidden name defined inside the unit which only the forbidden scan can
+  see. `source-discipline.sh` ran beside it, 5 checks and 8 with its three controls, all rejected,
+  and it is level 4 and says so.
+
+  Assertion 2, the interposed C test, level 2. Five million synthetic callbacks of pseudo-random
+  frame counts against a live feeder thread, driving the same render body the device drives, with the
+  allocator interposed and accounting REQUIRED rather than merely enabled. Quoted from the
+  `interpose` run: `5000000 synthetic callbacks against a live feeder allocate nothing and lose no
+  sample [new=0 freed=0 mmap=0 requested=1282530486 real=320186507 starved=4159330
+  underruns=+4159330 giveups=0/0]`. Zero allocations of every kind, the underrun count exactly equal
+  to the induced starvations, and both give-up counters zero. The same case measured
+  `real=337639444` under `plain` and reports a partial under `asan` and `tsan`, because those two
+  runtimes own the allocator.
+
+  Assertion 3, the supervised device run, level 1 for macOS arm64 in a debug binary, on one machine,
+  with one operator, and not release-mode qualification, which is B10's. Two commands, ten minutes
+  each as the plan asks, with the negative control at ten minutes per arm, so fifty minutes of real
+  sound in total. Run at this gate and quoted from its own output.
+
+  The positive case, quoted from its own output: `C callback, 10.0 minutes: callbacks=51679
+  worstCallbackNanos=9208 budget=5333333 worstAsPercentOfBudget=0.17265 underruns=0
+  segmentGiveups=0 zeroFilled=0 estimatedAnchors=0 framesFed=28823060 collections=88302
+  allocations=3125966000`. The worst callback BODY over ten minutes was 9,208 nanoseconds against
+  the 5,333,333 nanosecond budget, which is 0.17 percent of it, while the collector ran 88,302 times
+  and the pressure worker allocated 3.13 billion objects with `GC.autotune` off and the target heap
+  pinned at 1 MiB. Underruns zero, segment give-ups zero, zero-filled callbacks zero, estimated
+  anchors zero, so the anchor came from the device's own timestamp on all 51,679 callbacks and the
+  clock was never degraded. 28,823,060 frames at 48 kHz is 600.48 seconds of audio fed in 600
+  seconds of wall clock.
+
+  The negative control, ten minutes per arm, and it fails as it must:
+
+  | arm | callbacks | worst ns | over budget | collections | allocations |
+  |---|---|---|---|---|---|
+  | under collector pressure | 51,533 | 57,051,458 | 1,482 | 101,674 | 3,522,668,000 |
+  | with no collector pressure | 51,675 | 81,357,584 | 159 | 624 | 0 |
+
+  Read against the positive case that is a factor of 6,196 on the worst body with the pressure, and
+  8,836 with it removed. And it settles the attribution the verification asked about, in the
+  strongest direction available: with the collector pressure gone, 99.4 percent of the collections
+  gone and the per-call allocation gone, the managed arrangement was still outside the budget on 159
+  callbacks and its worst body was 81.4 milliseconds, which is WORSE than the pressured arm and more
+  than seven whole device periods. The collector pause was never the mechanism. What fails is the
+  arrangement, and that is why B1.8 replaced the arrangement rather than tuning the collector. The
+  test asserts on the over-budget count of the pressured arm and prints the unpressured arm without
+  asserting a mechanism it has not isolated.
+
+  The other half of assertion 3, the whole shipped path with real media, and this is the result that
+  carries the zero-underrun promise: `10.0 minutes of sync1080p30.mp4 audio: loops=60
+  framesDecoded=28715008 underruns=0 position=7693446 buffered=199.395ms collections=96860
+  allocations=2910894000`. Sixty times through a real container, a real decoder and
+  `AudioPlayback.submitDecoded` with its real backpressure and conversion stage, into the C ring and
+  out through the C callback, with the collector running 96,860 times. 28,715,008 frames at 48 kHz is
+  598.23 seconds of audio in 600 seconds of wall clock, the deficit being the sixty seams where a
+  fresh source and decoder open while the ring drains. ZERO underruns across all sixty, on a 200
+  millisecond ring rather than the synthetic test's larger one.
+
+  That zero is also what settles the one number in this assertion that has varied between runs. An
+  earlier ten minute positive run measured 21 underruns with the same worst body to within a
+  microsecond, and this one measured none. An underrun is not a fact about the callback: it says the
+  ring was empty when the device asked, which says the FEEDER was late, and the feeder in the
+  synthetic test is managed Kotlin deliberately arranged to be stopped hundreds of times a second.
+  The media run has the SMALLER ring, the same manufactured pressure and the engine's own feeder, and
+  it starved not once in sixty loops, so the ring, the callback and the collector cannot be what
+  starved the synthetic run. That reading is level 4, source level, because nobody swapped one feeder
+  for the other and re-measured. So the three numbers that do describe the callback are asserted
+  exactly and the synthetic underrun count is bounded rather than fixed at zero, with that reasoning
+  written beside the assertion.
+
+  Assertion 4, corroboration only and level 5, quoted from this gate's own run: `heap drift over 10.0
+  minutes: before=11796480 after=5636096 delta=-6160384 callbacks=51679 (level 5 corroboration
+  only)`. The heap ended 6.2 MB SMALLER than it started, because the pressure worker's own graph was
+  collected. That is not evidence that the callback allocates nothing. It cannot attribute growth or
+  its absence to the callback rather than to anything else alive in the process, and a flat or
+  shrinking heap is equally consistent with a callback that allocates nothing and with one that
+  allocates and is collected. It is in the suite so that a gross leak would show, and for nothing
+  else, and the test prints "level 5 corroboration only" on its own output line so a reader quoting it
+  cannot quote it as more.
+
+  Refused as evidence, as 15.2 requires this entry to say: a malloc interposer as proof about Kotlin
+  allocation, because Kotlin/Native takes pages by `mmap` and hands objects out of them, measured at
+  229 mallocs before and 230 after one million Kotlin objects; sampling, because the callback runs
+  about 94 times a second for tens of microseconds and a clean profile would be evidence of nothing
+  being sampled presented as evidence of nothing happening; and any claim that a release-mode
+  callback allocates zero on the strength of escape analysis. None of the three is made anywhere in
+  these sub-phases.
+
+  **One test failure this gate found, and what was done about it.** The first full-suite run failed
+  `RealMediaSeekTest.twenty precise seeks in real media each land within one frame of their target`
+  with `every seek completed exactly once and said where it landed: 19 of 20`. All twenty landing
+  assertions passed; only the event count was short. Triaged rather than retried: the file's last
+  commit is `fc166e1`, phase A5, and B1 did not touch it, so the defect predates this work. The test
+  collected `PlayerEvent.SeekCompleted` into a plain `MutableList` from a coroutine on
+  `Dispatchers.Default` and read its `size` from the test thread with nothing ordering the two, so it
+  was both an unsynchronised cross-thread access and a race against delivery. Measured: 1 failure in
+  a full-suite run under 51 concurrent tasks, and 0 failures in 8 runs of the test alone, which is
+  the signature of a delivery race rather than a lost event. Fixed by counting the events in an
+  `AtomicLong` and waiting for them with a five second bound before asserting. The assertion is not
+  weakened by one bit and that was proved rather than claimed: poisoned to expect 21 completions, the
+  wait times out and the assertion fails with `every seek completed exactly once and said where it
+  landed: 20 of 20. Expected <21>, actual <20>`, so a player that really emitted nineteen still
+  fails. After the fix the full suite is green and the test passes in isolation. It is committed on
+  its own, because it belongs to none of the three sub-phases' first lines.
+
+  **Deviations from 15.2, each with the evidence that forced it.** The nineteen the two executing
+  sub-phases recorded stand as written; these are the ones this gate added or had to settle.
+
+  1. `buildSrc/` did not exist in KitePlayer at all, although B1.7's file list named a file inside
+     it. Created, with its own `settings.gradle.kts`, because Gradle otherwise warns that type-safe
+     project accessors depend on the checkout directory name, and this checkout's name contains a
+     `#`.
+  2. `kprt_ring_stats` cannot be both a struct and a function in C: clang answers `redefinition of
+     'kprt_ring_stats' as different kind of symbol`. The reader is `kprt_ring_read_stats` and the
+     struct keeps the plan-shaped name.
+  3. `kiteplayer-rt` registers all seventeen native targets of `kiteplayer-core` rather than macOS
+     arm64 alone, because `NativeAudioRing` lives in the shared `nativeMain` and a dependency that
+     resolved for one target would fail at whichever target nobody compiled. Two real defects were
+     found only because of that decision, and the plan's own gate would have caught neither: `size_t`
+     is `UInt` on four of the seventeen, so `memcpy(..., n.toULong())` compiled on macOS and failed on
+     watchosArm32, watchosArm64, androidNativeArm32 and androidNativeX86; and `kite_rt_coreaudio.c`
+     used `NULL` in its non-macOS branch while `kite_rt.h` includes only `<stdint.h>`, which failed on
+     seven Apple targets with nine `use of undeclared identifier 'NULL'` errors while the macOS branch
+     got `NULL` free from AudioToolbox.
+  4. `NativeRingAudioSink` and `NativeRingHandoff` are public, not `internal` as B1.8 step 4 says. An
+     internal interface cannot be implemented from another module and `CoreAudioSink` lives in
+     `kiteplayer-output`; written `internal` first and compiled, which is the evidence: six errors,
+     including `Cannot access 'interface NativeRingAudioSink : AudioSink': it is internal in file`.
+     Everything else in `spi` is public for exactly this reason. The cost is recorded rather than
+     hidden: the api dumps moved, which 15.4 expected only B1.6 to do, with zero declarations removed.
+  5. A third C translation unit, `kite_rt_render.c`. B1.8's assertion 1 requires `nm -u` on the render
+     unit to yield nothing outside the allowlist, and a unit holding `kprt_ring_create` has `_malloc`
+     in its undefined set, so the assertion would have been unsatisfiable and would have had to be
+     argued away with "but only in create". Splitting the render path out makes it a fact a script
+     checks with no runtime at all.
+  6. The allowlist grew by `_bzero`, exactly as B1.7's own gate warning predicted: Apple clang and
+     konan's clang both lower `memset(dst, 0, n)` to `_bzero` on arm64, and an allowlist without it
+     fails a correct build.
+  7. `mach_absolute_time` instead of the `AudioGetCurrentHostTime` the plan names, so the render
+     unit's undefined set stays at libc and the CoreAudio framework is off that path entirely.
+     Justified by measurement rather than by documentation: 1000 interleaved readings, all ordered.
+  8. `CoreAudioSink.open(request, render)` throws instead of quietly ignoring the callback it was
+     handed, because a device whose C callback ignored the lambda would play correctly while the
+     caller believed its callback was being called. No production code calls it.
+  9. The device implementation is macOS only, with every entry point present elsewhere and answering
+     `KPRT_SINK_UNSUPPORTED_PLATFORM`. iOS, tvOS and watchOS need `kAudioUnitSubType_RemoteIO` and an
+     activated `AVAudioSession`, which cannot be tested on this machine; writing it blind would be a
+     support claim with no evidence, which section 2 forbids, and a refusal beats a link error because
+     `nativeMain` is shared across seventeen targets.
+  10. Assertion 3 is two files and two commands, and after this gate the first of them is two arms.
+      The sink's counters are `internal` to `kiteplayer-output` and `kiteplayer-ffmpeg` cannot see
+      them across the module boundary, so the callback's own instruments live where the internals are
+      visible and the real media lives where FFmpeg, the engine and a device all meet. Both halves are
+      needed and both were run.
+  11. `interpose` is a run mode and not a build variant, because ASan and TSan replace the allocator
+      before dyld reaches the interpose section. `KPRT_REQUIRE_ALLOC_ACCOUNTING=1` turns "the
+      interposer is not effective" into a hard failure, which is the distinction that matters.
+  12. One plan claim was not fully delivered and is stated plainly rather than glossed. B1.7 step 5
+      says the reservation shape removes one full copy of every sample and the per-call `Pinned`
+      object that `usePinned` allocates. It removes the copy. The pin remains, because the samples
+      arrive from `AudioPlayback.submit` in a Kotlin `FloatArray`; removing it needs `AudioPipeline`'s
+      output buffer in native memory, which is not in these sub-phases. `NativeAudioRing`'s KDoc says
+      so rather than claiming otherwise.
+  13. `AudioRingHandle` deliberately omits `freeFrames`, because B1.7 step 7 says exactly the members
+      `AudioPlayback` already uses and `AudioPlayback` never reads it. It stays on both concrete
+      classes, where the oracle holds it.
+  14. `AudioRingTest` is 18 cases and not the plan's 16. The two additions are required by the
+      sub-phase itself: 192 kHz sample exactness, and B1-18's overflow table. The original sixteen are
+      unchanged in behaviour and only retargeted to `KotlinAudioRing`.
+  15. Three of the six test files B1.8's list names needed no change, and that is the design working
+      rather than an omission: `ScriptedBackend.kt`, `AudioPlaybackTest.kt` and `ReferencePcmTest.kt`
+      use their own fake sinks, none of which implements `NativeRingAudioSink`, so they keep the Kotlin
+      ring and keep their subject. `AudioPlaybackTest.kt` did gain one case at this gate, for finding
+      1.
+  16. This gate added two instruments the plan did not ask for, and both exist because a planted defect
+      passed everything the plan did ask for: `source-discipline.sh`, and the fourth negative control
+      in `render-audit.sh`. Adding an instrument is a tightening, and neither is presented above its
+      level.
+  17. KiteCodec's `docs/about.md` was edited although B1.9's file list does not name it, because it
+      described the C helpers as `static inline` text inside the def, which B1.3 made false. Contract
+      item 10 forbids a claim the code cannot support and that repository is public.
+  18. `kiteplayer-output` gained the atomicfu library dependency, which no earlier sub-phase needed
+      there. The library only; the plugin is applied nowhere, per contract item 6.
+  19. Assertion 3's underrun figure in the synthetic soak is a bound rather than the plan's equality,
+      because two ten minute runs of the same test disagreed about it. The reasoning is with the
+      assertion above. The point is not that zero is unreachable, since the media soak reached it with
+      a smaller ring: it is that an underrun measures that test's managed feeder rather than the
+      callback, so asserting an equality on it makes a flaky gate out of a number that describes the
+      wrong thing. The three numbers that do describe the callback are asserted exactly.
+  20. One number in an earlier supervised run was reported wrongly and the test was corrected rather
+      than only the sentence. `GC.lastGCInfo.epoch` is cumulative for the process, so three ten minute
+      cases in one process printed cumulative totals and the later ones read as though the arm with no
+      collector pressure had collected six figures of times. Both soak suites now measure the delta
+      across their own run and print that. One test in a process gets away with the cumulative value
+      and three do not.
+  21. The KitePlayer commits are split by file ownership rather than by chronology, because both audio
+      sub-phases arrived at this gate as one uncommitted tree written by two agents. The split is
+      chosen so that 15.4's rollback story is real: the B1.7 commit is a tree in which `kiteplayer-rt`
+      exists with all of its C, the engine has the ring seam, and NO sink implements the capability
+      that would hand a device a C ring, so `openAudioPath` returns a Kotlin ring and the shipped
+      device path is still the Kotlin callback. That was verified and not asserted: with the remaining
+      work stashed, that tree compiles and its own suites pass. Reverting the B1.8 commit therefore
+      returns to a state that builds and that this gate proved green. The B1.7 commit does contain C
+      that B1.8 authored, `kite_rt_render.c` and `kite_rt_coreaudio.c`, because the render split and
+      the sink header cannot be separated from the ring without leaving a tree that does not compile;
+      that is said in the commit body rather than left for a reader of the diff to work out.
+  22. A fourth KitePlayer commit exists for the `RealMediaSeekTest` race described above. It belongs to
+      none of the three sub-phases' first lines, it is an A5 test rather than B1 work, and folding it
+      into the B1.9 words commit would have hidden a behavioural change inside a documentation commit.
+      Its own commit is revertible on its own.
+  23. The closing gate was run more than once. An earlier attempt stopped part way through the
+      KitePlayer half, and the numbers in this entry are from the complete run that followed, not
+      stitched together from both. Where the two disagree the later one is quoted, and the two
+      differences worth naming are the test count, which rose by 2 when findings 2 and 7 added their
+      rows, and `test_ring_basic`, which rose from 51 cases to 55 for the same reason.
+  24. Two more stale numbers were found by running the gate rather than by reading, and both were
+      corrected in the documents this sub-phase owns. `native/kitecodec-c/README.md` said "234 cases
+      per variant, 702 case runs across the three" in the prose above a table whose own rows sum to
+      250, because B1.6 added the `test_identity.c` row and left the sentence at its B1.4 value; the
+      measured figure is 250 per variant across six suites, and the corrected line records the whole
+      history so the disagreement cannot be read as a regression. KitePlayer's `README.md` still said
+      "414 test executions across 5 suites" with the A6 breakdown, and now says the 454 across 6 that
+      this gate measured, with the four device-gated cases named as gated. The README's device
+      numbers were also replaced with this gate's own run rather than the earlier one they were
+      written from, because a README that quotes a run the committed gate did not perform is the
+      weaker kind of true.
+
+  **B1 exit criteria, clause by clause.**
+
+  1. "One C implementation serves cinterop." MET. The 176 def-body helpers are nine compiled
+     translation units plus a generated identity unit, embedded per konan target in the klib, and
+     `verify-lift.sh` proves the extracted C is byte for byte the def body it came from. No Kotlin
+     call site changed and the public API dump did not move.
+  2. "A mismatched FFmpeg runtime is rejected with a report." MET. `kc_init` runs first in fifteen
+     entry points, the policy is major equality, runtime minor at or above header minor and
+     configuration agreement, micro is never fatal, and one case per verdict is tested against
+     doctored header trees rather than argued. KitePlayer surfaces the rejection as an ordinary typed
+     playback error. The diagnostic bypass exists, is opt-in on one exact value, warns once and is
+     recorded in the report.
+  3. "Callback allocation instrumentation reads zero." MET as replaced, and the replacement is the
+     honest part. It CANNOT be met as written on this platform, and that was measured rather than
+     assumed: Kotlin/Native has no allocation hook, LeakSanitizer does not exist here, and a malloc
+     interposer is a false negative for managed allocation. So the clause is carried by four graded
+     instruments in the order of authority the plan fixes, and the limit of each is stated in this
+     entry's own words. The render audit is level 2 and deterministic, proves the shipped object has
+     no allocator, lock, log or framework symbol to call on any run, and cannot see an allocation the
+     optimiser deleted. The interposed C test is level 2, proves zero C allocations across five
+     million callbacks driving the shipped body, and says nothing whatever about Kotlin allocation.
+     The supervised device run is level 1 on one machine in a debug binary with one operator and is
+     not release-mode qualification. The heap drift check is level 5 corroboration that cannot
+     attribute growth or its absence to the callback rather than to anything else alive in the
+     process. No report in these three sub-phases presents any of the four above its level.
+
+  **What remains open, with its owning item.** B1-12, the def's iOS link flags, added in B1.3 and
+  unverifiable here because no iOS FFmpeg tree exists on this machine: level 8 evidence, open until
+  B7 or B9. B1-21, the licence flavour contradiction, made visible in every identity report and
+  resolved in B7. B1-22's four hot libav call sites and its three `find_*_by_name` queries, and
+  B1-23's per-call `SwsContext`, both B2's. B1-24, KitePlayer has no CI: every number in this entry
+  is one machine, one debug binary, one operator, and B1.8's gate cost fifty minutes of supervised
+  sound per attempt exactly as that item predicted. B1-25, the opaque handle migration, B2 for the
+  signatures and B7 for the deadline, held by B1-06's ratchet meanwhile. And one new row for the
+  register from the verification: the callback's contract with the device is checked for size now,
+  but nothing tests a device that answers with a layout it did not negotiate, because nothing here
+  can make one. It is two compares and a comment today, and a real test needs a mock AudioUnit, which
+  is B8's kind of work.
+
+  **The deferral record, so this entry stands alone.** Copied from 15.5 with its consequences,
+  because a deferral whose cost is only written in a plan section is a deferral nobody will weigh
+  again.
+
+  1. Opaque handles across the 176 legacy helpers, and removing the FFmpeg headers from the def. To
+     B2 for the signatures, because B2 redesigns them anyway for typed send and receive outcomes,
+     pooled plane views with negative strides, the full channel layout and the side data model, and
+     doing an opaque rename in B1 and a semantic redesign in B2 pays twice. To B7 for the completion
+     deadline, because the Android AAR over JNI is the first consumer that genuinely benefits. If it
+     never happens: the published klib keeps the FFmpeg struct layout classes, a future Kotlin author
+     can write `frame.pointed.sample_rate` and reintroduce a coupling the ratchet does not cover, and
+     no non-Kotlin consumer has a supported API, so B7's AAR would carry the FFmpeg include tree into
+     its NDK build. What does not break: correctness against a mismatched runtime, which the identity
+     gate covers, and the practical layout coupling, which is zero call sites today and measured.
+  2. Explicit ownership annotations in the compiler-attribute sense. Delivered instead as documented
+     contracts in the header plus exact pairing tests over all 39 ownership helpers under the
+     interposer, because `__attribute__((ownership_returns))` is honoured only by clang's static
+     analyzer and is therefore level 8 evidence while the test is level 2. If it never happens:
+     nothing. This one should not be restored later.
+  3. An error record replacing `ffkmp_strerror`, and the Kotlin `AVERROR_*` tag algebra. To B2 with
+     the signatures. B1 documented and tested the thread affinity instead. If it never happens:
+     `Errors.kt` keeps reimplementing FFmpeg's tag arithmetic in Kotlin, which can drift from the
+     headers, and every error message crosses a thread-affine pointer.
+  4. Exhaustive fuzzing of every C entry point that accepts bytes. B8's stated remit. B1 delivered
+     the harness, the replay driver, the committed corpus and six targets over the string entry
+     points. If it never happens: the demuxer and decoder byte paths stay unfuzzed, which is a real
+     security gap and is B8's gap; B1's contribution is the infrastructure without which B8 cannot
+     start.
+  5. Coverage-guided fuzzing on this machine. Impossible here, because no clang present has a fuzzer
+     runtime. True fuzzing runs in the Linux CI job and locally the corpus replays as a sanitized
+     regression. If it never happens locally: a new crash is found one CI cycle later instead of
+     immediately. Installing Homebrew LLVM fixes it and is not a prerequisite.
+  6. The six speculative handle families, `kc_swr`, `kc_sws`, `kc_hwdevice`, `kc_hwframes`, `kc_io`
+     and `kc_cancel`. To B2 for swresample, swscale caching and the interruptible open, and to B5 for
+     the hardware ones. If it never happens: nothing regresses; B2 simply cannot be finished, since
+     these are its named contents.
+  7. Per-target verification of the C library, in both repositories. Ten of KiteCodec's eleven
+     targets have no FFmpeg tree here, and sixteen of KitePlayer's seventeen have no device
+     implementation. To B7 and B9. If it never happens: the cross-target claims stay at level 7 or 8
+     forever, which both READMEs must keep saying, and they do.
+
+  Refused permanently and not deferred: making `AudioRing` an `expect class`. js and wasmJs cannot
+  contain C, eighteen `commonTest` cases and the whole A5 virtual-time simulation campaign drive the
+  Kotlin ring, and deleting the portable implementation on native would destroy the only oracle the C
+  ring can be checked against. This gate is the second time that oracle earned its place, since it is
+  what caught findings 2 and 7, so the refusal is now backed by two measurements rather than by an
+  argument.
+
+  **Tier table: no promotion, and that is the finding rather than a shortfall.** B1 added no target,
+  no backend and no playback capability. macOS arm64 stays an experimental T3-Full candidate on one
+  development machine and everything else stays T1. Seventeen native targets compile the real-time C
+  into an architecture-verified archive and exactly one of them has a device implementation, so
+  sixteen of the seventeen are level 7 evidence and their audio entry points refuse loudly rather
+  than claiming to work. What changed in B1 is how much of the audio path is provable, not what it
+  can play.
 ---
 
 ## 15. Horizon B execution: B1

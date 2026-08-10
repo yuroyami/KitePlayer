@@ -24,10 +24,20 @@
 # it proves is that the ordering decisions the design took are still written where the design put
 # them.
 #
+# EIGHTEEN ordering decisions are pinned below, and eighteen is the total the design took, so the
+# check count can be read as coverage of the ordering front for the first time: five checks landed
+# at B1.9 and thirteen more at the interlude (I-11), after the whole-B1 review planted three
+# mutants on then-unpinned decisions and every one passed the full gate, including TSan, which
+# grades atomicity and not ordering strength. Two of those three were worse than untested: the
+# `consumed` release/acquire pair is the only happens-before edge that stops the feeder
+# overwriting ring storage the consumer is still copying out of, and the `sink->ring`
+# release/acquire pair is the edge whose own comment says a callback could otherwise read
+# whatever malloc last held in the sample block.
+#
 # Usage:
 #   ./scripts/source-discipline.sh                     check, and fail on any violation
-#   ./scripts/source-discipline.sh --prove-it-can-fail  plant the three defects in copies and require
-#                                                      each one to be rejected
+#   ./scripts/source-discipline.sh --prove-it-can-fail  plant the sixteen defects in copies and
+#                                                      require each one to be rejected
 #
 set -uo pipefail
 
@@ -167,12 +177,107 @@ check_publication_order() {
     return $rc
 }
 
+
+# ---- Rules 3 to 15. Every remaining load bearing ordering decision, pinned one by one ----
+#
+# One check per decision, in the shape of rule 2: the function is extracted, the exact operation
+# with its exact memory order must be present. A downgrade to relaxed, a deleted fence, or a moved
+# operation makes the pattern miss and the check fail. The five checks above pin the teardown
+# order and the written/segment publication edge; these thirteen pin the rest of the eighteen.
+check_pinned_decisions() {
+    # check_pinned_decisions <src dir>
+    local dir="$1"
+    local rc=0
+
+    pin() {
+        # pin <file> <function> <pattern> <what>
+        local file="$1" fn="$2" pattern="$3" what="$4"
+        local body
+        body="$(function_body "$dir/$file" "$fn")"
+        if [ -z "$body" ]; then
+            bad "$fn was not found in $dir/$file, so '$what' was not checked"
+            rc=1
+            return
+        fi
+        if printf '%s\n' "$body" | grep -qE -- "$pattern"; then
+            ok "$fn: $what"
+        else
+            bad "$fn does not hold: $what"
+            rc=1
+        fi
+    }
+
+    # The retirement scan: consumed acquire, so retirement never trails a stale consumer position,
+    # and the retired count released, so the producer that reads it sees the slots really free.
+    pin kite_rt_ring.c retire_consumed_segments \
+        'atomic_load_explicit\(&ring->consumed,[^;]*memory_order_acquire' \
+        "loads consumed with acquire"
+    pin kite_rt_ring.c retire_consumed_segments \
+        'atomic_store_explicit\(&ring->segments_retired,[^;]*memory_order_release' \
+        "stores segments_retired with release"
+
+    # The segment seqlock, producer side: the OPENING store is deliberately relaxed and the
+    # release fence after it is what publishes the odd sequence before the payload stores; the
+    # closing release store is rule 2's. Both halves of that decision are pinned.
+    pin kite_rt_ring.c append_segment \
+        'atomic_store_explicit\(&ring->segments\[slot\]\.seq, seq \+ 1, memory_order_relaxed' \
+        "opens the slot sequence with the deliberate relaxed store"
+    pin kite_rt_ring.c append_segment \
+        'atomic_thread_fence\(memory_order_release\)' \
+        "keeps the release fence between the sequence opening and the payload"
+    pin kite_rt_ring.c append_segment \
+        'atomic_store_explicit\(&ring->segments_appended,[^;]*memory_order_release' \
+        "publishes segments_appended with release"
+
+    # The feeder-overwrite edge, producer end: begin_write must ACQUIRE consumed, or the room
+    # computation can license writing over storage the consumer is still copying out of. One of
+    # the two edges whose relaxed mutant survived TSan and the whole gate at the review.
+    pin kite_rt_ring.c kprt_ring_begin_write \
+        'atomic_load_explicit\(&ring->consumed,[^;]*memory_order_acquire' \
+        "loads consumed with acquire, the feeder-overwrite edge's producer end"
+
+    # The anchor seqlock, reader side: acquire on the opening read, acquire fence before the
+    # closing re-read. Payload loads between them are deliberately relaxed.
+    pin kite_rt_ring.c kprt_ring_anchor \
+        'atomic_load_explicit\(&ring->anchor_seq,[^;]*memory_order_acquire' \
+        "opens the anchor read with acquire"
+    pin kite_rt_ring.c kprt_ring_anchor \
+        'atomic_thread_fence\(memory_order_acquire\)' \
+        "keeps the acquire fence before the closing sequence re-read"
+
+    # The segment seqlock, consumer side, inside the anchor publisher's scan.
+    pin kite_rt_render.c publish_anchor \
+        'atomic_load_explicit\(&ring->segments\[slot\]\.seq,[^;]*memory_order_acquire' \
+        "opens the segment slot read with acquire"
+    pin kite_rt_render.c publish_anchor \
+        'atomic_thread_fence\(memory_order_acquire\)' \
+        "keeps the acquire fence before the slot's closing re-read"
+
+    # The feeder-overwrite edge, consumer end: render must RELEASE consumed after the copy-out,
+    # or begin_write's acquire has nothing to synchronise with. The other real race.
+    pin kite_rt_render.c kprt_ring_render \
+        'atomic_store_explicit\(&ring->consumed,[^;]*memory_order_release' \
+        "stores consumed with release, the feeder-overwrite edge's consumer end"
+
+    # The ring handoff: the device path acquires the pointer, attach releases it, so a callback
+    # that sees the pointer sees a fully constructed ring rather than what malloc last held.
+    pin kite_rt_render.c kprt_render_into \
+        'atomic_load_explicit\(&sink->ring,[^;]*memory_order_acquire' \
+        "loads sink->ring with acquire on the device path"
+    pin kite_rt_coreaudio.c kprt_sink_attach_ring \
+        'atomic_store_explicit\(&sink->ring, ring, memory_order_release' \
+        "publishes sink->ring with release at attach"
+
+    return $rc
+}
+
 # ---- The checks, against the real sources ----
 
 say "source-discipline.sh: level 4 source checks over $ROOT/src"
 say ""
 check_teardown_order "$ROOT/src"
 check_publication_order "$ROOT/src"
+check_pinned_decisions "$ROOT/src"
 
 # ---- The negative controls, which are the only thing that makes the above evidence ----
 
@@ -202,6 +307,8 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
         local rejected=0
         if [ "$rule" = teardown ]; then
             check_teardown_order "$dir" > "$log" 2>&1 || rejected=1
+        elif [ "$rule" = pinned ]; then
+            check_pinned_decisions "$dir" > "$log" 2>&1 || rejected=1
         else
             check_publication_order "$dir" > "$log" 2>&1 || rejected=1
         fi
@@ -225,6 +332,38 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     # 3. The publication edge, consumer end.
     plant_and_check "written-load-relaxed" publication kite_rt_render.c \
         's|written = atomic_load_explicit(&ring->written, memory_order_acquire)|written = atomic_load_explicit(\&ring->written, memory_order_relaxed)|'
+
+    # 4 to 16. One planted mutant per interlude-pinned decision (I-11), line-targeted so the
+    # identical fence text in another function is not touched. The three mutants the review
+    # planted are among them: begin_write's consumed acquire, render's consumed release, and
+    # attach's sink->ring release, each of which passed the WHOLE gate including TSan before
+    # these checks existed.
+    plant_and_check "retire-consumed-acquire-relaxed" pinned kite_rt_ring.c \
+        '117s/memory_order_acquire/memory_order_relaxed/'
+    plant_and_check "segments-retired-release-relaxed" pinned kite_rt_ring.c \
+        '131s/memory_order_release/memory_order_relaxed/'
+    plant_and_check "seq-opening-store-hoisted" pinned kite_rt_ring.c \
+        '158s/memory_order_relaxed/memory_order_seq_cst/'
+    plant_and_check "append-release-fence-deleted" pinned kite_rt_ring.c \
+        '159d'
+    plant_and_check "segments-appended-release-relaxed" pinned kite_rt_ring.c \
+        '164s/memory_order_release/memory_order_relaxed/'
+    plant_and_check "begin-write-consumed-acquire-relaxed" pinned kite_rt_ring.c \
+        '251s/memory_order_acquire/memory_order_relaxed/'
+    plant_and_check "anchor-opening-acquire-relaxed" pinned kite_rt_ring.c \
+        '332s/memory_order_acquire/memory_order_relaxed/'
+    plant_and_check "anchor-acquire-fence-deleted" pinned kite_rt_ring.c \
+        '343d'
+    plant_and_check "segment-scan-opening-acquire-relaxed" pinned kite_rt_render.c \
+        '110s/memory_order_acquire/memory_order_relaxed/'
+    plant_and_check "segment-scan-acquire-fence-deleted" pinned kite_rt_render.c \
+        '121d'
+    plant_and_check "render-consumed-release-relaxed" pinned kite_rt_render.c \
+        '206s/memory_order_release/memory_order_relaxed/'
+    plant_and_check "render-ring-acquire-relaxed" pinned kite_rt_render.c \
+        '288s/memory_order_acquire/memory_order_relaxed/'
+    plant_and_check "attach-ring-release-relaxed" pinned kite_rt_coreaudio.c \
+        '299s/memory_order_release/memory_order_relaxed/'
 fi
 
 say ""

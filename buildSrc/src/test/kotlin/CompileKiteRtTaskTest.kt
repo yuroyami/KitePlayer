@@ -193,6 +193,107 @@ class CompileKiteRtTaskTest {
         }
     }
 
+    // ---- The three guard cases the interlude added (I-10), mirroring CompileKiteCodecCTaskTest
+    // so the two near-twin tasks are covered identically. These run the REAL compile() with the
+    // real konan clang over a trivial fixture source, because the review measured that a suite
+    // which only exercises the predicates stays green when a guard's call site is deleted.
+
+    @Test
+    fun `compile itself refuses an object whose description is wrong`() {
+        val fixture = fixture()
+        val project = org.gradle.testfixtures.ProjectBuilder.builder().build()
+        val task = project.tasks
+            .register("compileWithLyingDescribe", LyingDescribeTask::class.java)
+            .get()
+        task.konanTargetName.set("macos_arm64")
+        task.sourceDir.set(fixture.sourceDir)
+        task.includeDir.set(fixture.includeDir)
+        task.konanDataDir.set(konanDataDir)
+        task.outputDir.set(fixture.outputRoot.resolve("macos_arm64"))
+
+        val message = kotlin.test.assertFails { task.compile() }.message ?: ""
+        assertContains(message, "macos_arm64")
+        assertContains(message, LyingDescribeTask.WRONG_DESCRIPTION)
+        assertContains(message, CompileKiteRtTask.expectedObjectDescription("macos_arm64"))
+    }
+
+    /** A task whose `file -b` answer is always wrong, for the call-site case above. */
+    abstract class LyingDescribeTask @javax.inject.Inject constructor(
+        execOperations: org.gradle.process.ExecOperations,
+    ) : CompileKiteRtTask(execOperations) {
+        override fun describeFile(file: File): String = WRONG_DESCRIPTION
+        companion object {
+            const val WRONG_DESCRIPTION: String = "Mach-O 64-bit object x86_64 (a lie, planted by the call-site test)"
+        }
+    }
+
+    @Test
+    fun `a stale object from a previous run is cleared`() {
+        val fixture = fixture()
+        val task = newRealTask("macos_arm64", fixture)
+        val stale = fixture.outputRoot.resolve("macos_arm64/obj/stale.o")
+        stale.parentFile.mkdirs()
+        stale.writeText("not an object at all")
+
+        task.compile()
+
+        assertTrue(!stale.exists(), "the stale object survived the compile")
+        val objects = fixture.outputRoot.resolve("macos_arm64/obj").listFiles().orEmpty().map { it.name }
+        assertEquals(listOf("probe.o"), objects, "obj/ must hold exactly the objects of this run")
+    }
+
+    @Test
+    fun `an output directory not named after its target is refused`() {
+        val fixture = fixture()
+        val task = newRealTask("macos_arm64", fixture)
+        task.outputDir.set(fixture.outputRoot.resolve("shared"))
+
+        val message = kotlin.test.assertFails { task.compile() }.message ?: ""
+        assertContains(message, "B1-11")
+        assertContains(message, "macos_arm64")
+        assertContains(message, "shared")
+    }
+
+    private class Fixture(val sourceDir: File, val includeDir: File, val outputRoot: File)
+
+    private fun fixture(): Fixture {
+        val root = createTempDirectory()
+        val sourceDir = root.resolve("src").also { it.mkdirs() }
+        val includeDir = root.resolve("include").also { it.mkdirs() }
+        sourceDir.resolve("probe.c").writeText("int kprt_probe(void) { return 0; }\n")
+        return Fixture(sourceDir, includeDir, root.resolve("out"))
+    }
+
+    private fun newRealTask(konanTarget: String, fixture: Fixture): CompileKiteRtTask {
+        val project = org.gradle.testfixtures.ProjectBuilder.builder().build()
+        val task = project.tasks
+            .register("compileKiteRtCFor$konanTarget", CompileKiteRtTask::class.java)
+            .get()
+        task.konanTargetName.set(konanTarget)
+        task.sourceDir.set(fixture.sourceDir)
+        task.includeDir.set(fixture.includeDir)
+        task.konanDataDir.set(konanDataDir)
+        task.outputDir.set(fixture.outputRoot.resolve(konanTarget))
+        return task
+    }
+
+    /** `~/.konan`, or whatever `KONAN_DATA_DIR` points at, the same resolution the build uses. */
+    private val konanDataDir: File
+        get() {
+            val fromEnv = System.getenv("KONAN_DATA_DIR")
+            val dir = if (fromEnv.isNullOrBlank()) {
+                File(System.getProperty("user.home"), ".konan")
+            } else {
+                File(fromEnv)
+            }
+            assertTrue(
+                dir.resolve("dependencies").isDirectory,
+                "No konan dependencies under ${dir.absolutePath}; they arrive with the " +
+                    "Kotlin/Native distribution.",
+            )
+            return dir
+        }
+
     private fun createTempDirectory(): File {
         val directory = File.createTempFile("kiteplayer-rt-buildsrc", "")
         assertTrue(directory.delete())

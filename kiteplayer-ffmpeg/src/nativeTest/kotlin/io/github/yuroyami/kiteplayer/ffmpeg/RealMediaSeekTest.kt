@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.concurrent.AtomicLong
 import kotlin.math.abs
 import kotlin.random.Random
 import kotlin.test.Test
@@ -68,10 +69,15 @@ class RealMediaSeekTest {
     @Test
     fun `twenty precise seeks in real media each land within one frame of their target`() = runBlocking {
         val player = player()
-        val completions = mutableListOf<PlayerEvent.SeekCompleted>()
+        // Counted rather than collected into a list, and counted atomically, because the watcher below
+        // runs on another thread. A plain `MutableList` appended from `Dispatchers.Default` and read from
+        // this thread is an unsynchronised cross-thread access, and its `size` is exactly the value this
+        // test asserts on, so the assertion was reading a field nothing published to it. Nothing is lost
+        // by counting: the assertion only ever used the number.
+        val completions = AtomicLong(0)
         val watcher = CoroutineScope(Dispatchers.Default + SupervisorJob())
         watcher.launch(start = CoroutineStart.UNDISPATCHED) {
-            player.events.collect { if (it is PlayerEvent.SeekCompleted) completions += it }
+            player.events.collect { if (it is PlayerEvent.SeekCompleted) completions.incrementAndGet() }
         }
         try {
             player.open(MediaItem("$mediaDir/sync1080p30.mp4"))
@@ -103,10 +109,22 @@ class RealMediaSeekTest {
                     "seek $attempt left the player somewhere other than paused on its landing frame",
                 )
             }
+            // Waited for with a bound, and this is the whole correction. `seek` returning does not mean
+            // the event announcing it has reached a collector on another dispatcher, so the twentieth
+            // completion can still be in flight when the last `seek` returns. Measured during the B1
+            // closing gate: this assertion failed once with "19 of 20" in a full-suite run under load,
+            // and passed eight out of eight times when the test ran alone, which is the signature of a
+            // delivery race and not of a lost event. The wait does not weaken the assertion by one bit:
+            // it still requires exactly SEEKS completions, and a player that really emitted nineteen
+            // fails the same way five seconds later. The file itself is untouched by B1; the race dates
+            // from A5, and a faster seek return only makes it easier to see.
+            withTimeoutOrNull(5.seconds) {
+                while (completions.value < SEEKS) delay(5.milliseconds)
+            }
             assertEquals(
-                SEEKS,
-                completions.size,
-                "every seek completed exactly once and said where it landed: ${completions.size} of $SEEKS",
+                SEEKS.toLong(),
+                completions.value,
+                "every seek completed exactly once and said where it landed: ${completions.value} of $SEEKS",
             )
             assertNull(player.state.value.error, "and none of them failed")
         } finally {

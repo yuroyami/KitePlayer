@@ -4703,6 +4703,19 @@ is no other.
   public artifacts and size tiers; S6 web behind its spike; S7 qualification and 1.0. The P0
   register keeps its item IDs and is S1.a. Yesterday's log entry describing the P-shape stands
   unedited as history, per append-only.
+
+- 2026-08-11, D-6 and section 17.9 added: KiteVideo, the Compose-true renderer. Prose only,
+  Tier 1 gate (selected by rule: no product path changed). The owner asked what would be
+  revolutionary about the Compose story, judged the interop wrapper alone ordinary, and directed
+  the flagship into the plan. D-6: two Compose paths forever, the wrapper as baseline (hardware
+  overlay battery for sustained fullscreen), KiteVideo as flagship (video as true Compose
+  content, and the only Compose route on desktop and web), reachable only because D-1 leaves
+  this project owning the decoded pixels. 17.9 carries the three per-frame laws (draw-phase-only
+  invalidation, YUV until the GPU, zero-copy where the platform allows), the physics marked
+  ASSUMED level 8 with their S2 measurement exit, and slices KV-1 to KV-7 homed in S2, S3 and S6,
+  with Android zero-copy parked as research at KV-7. 17.1 gains the rider refinement so a
+  cross-stage package may appear in a stage exit explicitly. Estimates moved: S2 120 to 165, S3
+  75 to 115, whole road 660 to 945. S1 untouched at 225 to 315: usable beats beautiful stands.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7275,6 +7288,15 @@ The owner set nine goals on 2026-08-11, recorded here verbatim in substance:
   resolution is published profile tiers (17.6): a lean default artifact and opt-in fuller ones,
   with measured per-target sizes as exit criteria, using the profile machinery KiteCodec's plugin
   already has.
+- **D-6, two Compose paths forever: interop baseline, Compose-true flagship.** Decided by the
+  owner 2026-08-11. The S1.d Composable wraps AndroidView/UIKitView and stays as the BASELINE,
+  because an embedded platform view keeps the hardware overlay path (best battery and HDR for
+  sustained fullscreen). The FLAGSHIP is KiteVideo (17.9): decoded frames drawn through Compose's
+  own rendering pipeline, so video is true Compose content, every Modifier applies to the video
+  itself, and Compose on Desktop and Web becomes possible at all (no interop view exists there).
+  D-1 is what makes this reachable: FFmpeg decoding means this project owns the decoded pixels; a
+  MediaCodec-into-Surface player never sees them. Neither path replaces the other; the wrapper
+  ships in S1, KiteVideo lands in slices per 17.9.
 
 ### 17.1 The stage law, and the reading order
 
@@ -7283,7 +7305,9 @@ work by engineering dependency and left the owner's primary outcome, a library U
 smeared across three phases. The law now: **every stage is named by the user-visible outcome its
 completion delivers, and a stage is done when that outcome is demonstrable, not when its code
 merges.** Prerequisites live INSIDE the stage that needs them. Engineering order still rules
-inside a stage; it never defines a stage.
+inside a stage; it never defines a stage. One refinement: a stage exit may carry an explicitly
+listed RIDER from a cross-stage package (today only KiteVideo, 17.9); the stage name follows the
+bulk of its outcome, and a rider is never implicit.
 
 Reading order for a NEW executor (this is how to onboard, not what to build first): section 18,
 then sections 1, 2 and 9, then the register of the stage being executed, and nothing else until
@@ -7330,18 +7354,28 @@ dependency order inside the stage:
   - **S1.d The pluggable views**: KitePlayerView (plain Android View, and the iOS counterpart),
     plus the SEPARATE optional :kiteplayer-compose module exposing one Composable that wraps
     AndroidView on Android and UIKitView on iOS, so a non-Compose consumer never pulls Compose.
+    This wrapper is the BASELINE Compose path per D-6; the Compose-true flagship (KiteVideo,
+    17.9) is deliberately NOT in S1: usable beats beautiful.
   - **S1.e Stage exit**: the two demo apps, the matrix run on both platforms, the log entry with
     every measured number, owner device session.
 
 **S2. IT PLAYS BEAUTIFULLY ON APPLE.** Exit: Metal renderer on macOS and iOS, VideoToolbox inside
 FFmpeg per D-2 with measured software fallback, colour instrument, vsync-snapped scheduling,
 sustained 4K runs with committed thresholds. Absorbs draft items C-09 to C-31, C-33, C-48 to
-C-50 with their verifier corrections.
+C-50 with their verifier corrections. Also KiteVideo's first landing (17.9, KV-1 to KV-3): the
+Compose-true core with draw-phase-only invalidation, the YUV image path, and the Apple zero-copy
+handoff (CVPixelBuffer through CVMetalTextureCache onto Skiko's Metal context), riding the
+VideoToolbox work already here. Exit gains: KiteVideo plays 1080p on iOS and macOS with Compose
+modifiers applied (clip, alpha, rotation), per-frame cost and dropped frames measured.
 
 **S3. IT PLAYS ON EVERY DESKTOP.** Exit: format matrix on named Windows and Linux machines.
 WASAPI and ALSA/Pulse sinks in C inside kiteplayer-rt, same ring and audit discipline; desktop
 rendering through the JVM path for Compose Desktop and native paths for K/N consumers; the mingw
-and linux FFmpeg triples become consumable artifacts.
+and linux FFmpeg triples become consumable artifacts. KiteVideo rides here (17.9, KV-4 and KV-5):
+the desktop per-frame upload path IS the Compose Desktop rendering named above, and the Android
+software path lands as an explicit exit rider (one copy per frame over the S1.c converter, days
+of work once KV-1/KV-2 exist; this is the stage where the JVM rendering paths mature). Exit rider:
+the KiteVideo modifier demo runs on the S1 Android device.
 
 **S4. IT EXPLAINS ITSELF.** Exit: subtitles per old B3, the debuggability register (diagnostics
 dump API, logging policy, typed warning audit, SPI cookbook with a worked custom backend), facade
@@ -7355,6 +7389,8 @@ publication PREPARED by the executor, EXECUTED by the owner per D-3. Absorbs dra
 throughput, threads and SIMD, the JS interop shape over the same C ABI); build only if the spike
 clears its bar; exit criteria carry the physics honestly (software decode, 1080p target, 4K a
 stated non-goal of v1). If the spike fails, web ships engine-only and the register says so.
+KiteVideo (KV-6) is the ONLY Compose rendering story here: no interop view exists on wasm, so the
+spike measures its per-frame draw cost alongside decode throughput.
 
 **S7. IT IS 1.0.** Per-platform soak matrix, conformance suite everywhere, CI actually running
 (level 8 until then), fuzz jobs executed, tier promotions per section 3, the parked security
@@ -7373,16 +7409,18 @@ binding) if the spike passes.
 | S1.b | 35 to 50 | the appleMain split and the iOS audio qualification |
 | S1.c | 140 to 190 | JNI actuals with a shared differential suite across JVM and native |
 | S1.d + S1.e | 25 to 40 | two view surfaces, two demo apps, the matrix runs |
-| S2 | 90 to 120 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync |
-| S3 | 60 to 90 | two C audio sinks with their instruments |
+| S2 | 120 to 165 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync; KiteVideo KV-1 to KV-3 at 30 to 45 |
+| S3 | 75 to 115 | two C audio sinks with their instruments; KiteVideo KV-4 and KV-5 at 15 to 25 |
 | S4 | 60 to 80 | subtitle rendering correctness |
 | S5 | 40 to 60 | cheap in hours, irreversible in consequence |
 | S6 | 80 to 120 | the spike bounds it; failure path is cheap |
 | S7 | 60 to 90 | soak time and owner device sessions |
 
-**S1 in total: 225 to 315 hours to the owner's first outcome.** Whole road: 615 to 875 focused
+**S1 in total: 225 to 315 hours to the owner's first outcome.** Whole road: 660 to 945 focused
 hours, network excluded. The earlier phase-shaped totals reconcile: the same work moved between
-containers, plus the iOS-usable slice pulled forward out of the old P1.
+containers, plus the iOS-usable slice pulled forward out of the old P1. The growth over the first
+staging (45 to 70 hours across S2 and S3) is KiteVideo (17.9), added by owner decision D-6 on
+2026-08-11; its web slice sits inside S6's existing spike bound.
 
 ### 17.4 The S1.a register, decision complete
 
@@ -7502,6 +7540,69 @@ happens: KitePlayer plays files, not streams; the engine's undocumented URL path
 unhardened (no interrupt callback, no timeout bounds: draft C-52 to C-54 record the exact holes)
 and must not be advertised. First network work re-opens those three items before anything else.
 
+### 17.9 KiteVideo, the Compose-true renderer (D-6)
+
+Decided 2026-08-11 after the owner asked what would be revolutionary about the Compose story.
+The interop wrapper (S1.d) is what every player offers; KiteVideo is what none of them can offer:
+video as a true Compose primitive.
+
+**Why this project can and a MediaCodec player cannot.** D-1 means FFmpeg decodes into buffers
+this project owns. A MediaCodec player decodes into a Surface it can never look inside (and DRM
+keeps it that way), so it MUST punch a platform-view hole in the UI. Owning the pixels means a
+frame can become a Skia image and draw through Compose's own pipeline (Skiko on iOS, desktop and
+web; HWUI on Android). Then `KiteVideo(state, modifier)` is real Compose content: clip, rounded
+corners, alpha, rotation, scale animation, shared-element transitions and runtime shader effects
+apply to the video itself. On Compose Desktop and Compose for Web there is no AndroidView or
+UIKitView, so there KiteVideo is not a luxury: it is the only route to goals 3 and 4 inside
+Compose, and no player on the market has it.
+
+**The three per-frame laws.** Violating any one is the difference between smooth and slideshow:
+
+1. **Never recompose per frame.** The frame holder is read ONLY inside the draw phase, so a new
+   frame invalidates drawing alone, never composition or layout. Per frame, the UI tree does
+   nothing and one drawImage runs.
+2. **YUV until the GPU.** Decoded video is YUV420 at 1.5 bytes per pixel (about 3 MB per 1080p
+   frame, against 8 MB as RGBA). Planes upload as they are; conversion to RGB happens inside the
+   GPU draw (a Skia YUV image where Skiko exposes it, a runtime-effect shader where it does not).
+   Full-frame CPU conversion to RGBA is a last-resort fallback, never the design.
+3. **Zero-copy where the platform allows.** Apple: VideoToolbox produces a CVPixelBuffer;
+   CVMetalTextureCache wraps it as a Metal texture with no copy; Skiko's Metal context draws it
+   directly. Where no zero-copy path exists, one upload per frame is paid and measured.
+
+**Physics, stated honestly (ASSUMED, level 8, until S2 measures them).** Naive 1080p30 RGBA is
+about 250 MB/s of copying against roughly 50 GB/s of phone memory bandwidth; the YUV path is
+about 94 MB/s; the zero-copy path is one GPU quad per frame. Precedent: Chrome draws every video
+element through Skia, the same library under Compose, at 4K60 on billions of devices. The exit
+numbers that replace these assumptions are measured at S2: per-frame CPU milliseconds and dropped
+frames at 1080p30 with modifiers applied, on named devices.
+
+**The honest cost, and why D-6 keeps both paths.** A SurfaceView/CALayer overlay lets the display
+controller present video while the GPU idles; KiteVideo keeps the GPU lightly awake. Sustained
+fullscreen playback therefore belongs to the baseline wrapper. Video embedded inside UI (cards,
+feeds, mini players) loses nothing, because Compose was compositing those pixels anyway.
+
+**The slices and their homes** (each expands into register items at its home stage's entry, per
+17.2's ritual; nothing here starts earlier):
+
+- **KV-1, the core** (S2): `KiteVideo(state, modifier)` in :kiteplayer-compose; a frame holder
+  obeying law 1; fed by a VideoRenderer SPI implementation. The engine does not change: this is
+  one more SPI consumer and a further proof the SPI is sufficient.
+- **KV-2, the YUV image path** (S2): law 2 end to end, with the shader fallback.
+- **KV-3, Apple zero-copy** (S2): law 3 on iOS and macOS, riding S2's VideoToolbox work
+  (KiteCodec window 3 already sits there).
+- **KV-4, Android software path** (S3, exit rider): frames over the S1.c converter into
+  ImageBitmap, one copy per frame; days of work once KV-1 and KV-2 exist. It rides S3 because
+  that is where the JVM rendering paths mature; S3's exit carries it as an explicit rider per
+  17.1's refinement.
+- **KV-5, desktop upload path** (S3): one upload per frame; desktop bandwidth makes this cheap;
+  measured anyway.
+- **KV-6, web** (S6): the only Compose rendering story on wasm; measured inside the S6 spike.
+- **KV-7, Android zero-copy: PARKED as research.** FFmpeg's mediacodec decoder in buffer mode
+  outputs CPU NV12 frames, so one copy is already paid inside the decoder; its opaque surface
+  mode renders only to a Surface and exposes no HardwareBuffer handle. A true zero-copy route
+  needs AImageReader plumbing behind FFmpeg or upstream FFmpeg work. Costs ASSUMED; decided at S3
+  entry whether to research it or keep the one-copy path, using KV-4's measurements as the judge.
+
 ## 18. The skeleton, for any executor
 
 Written so a capable implementer with NO context, human or model, can work on this project
@@ -7529,7 +7630,9 @@ Layers, inside out:
    for targets C cannot serve (js, wasm, JVM) and is the C ring's differential oracle.
 5. **kiteplayer-ffmpeg**: the KiteCodec-backed MediaBackend (the only real backend today).
 6. **kiteplayer-output**: platform sinks/renderers glue (macOS today; iOS, desktop next).
-7. **Apps/views**: sample player; later KitePlayerView and the optional Compose module.
+7. **Apps/views**: sample player; later KitePlayerView and the optional Compose module with its
+   two paths per D-6: the interop wrapper (baseline) and KiteVideo, the Compose-true renderer
+   (17.9), which is just another VideoRenderer SPI consumer.
 
 Data flow: source file -> KiteCodec demux -> packet queues -> KiteCodec decoders -> decoded
 queues -> (audio) AudioPlayback -> ring -> device callback pulls; (video) VideoPlayback scheduler

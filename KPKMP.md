@@ -5684,6 +5684,53 @@ is no other.
   own PASS output; it did not change an exit or measurement. Nothing was pushed, published,
   released or staged.
 
+- 2026-08-11, S1.b.1 execution-fence correction completed before the frozen product diff resumed,
+  against Player `dd7e042` and Codec `c2447c8`. Prose only, Tier 1 selected by the rule that every
+  change, including prose, receives Tier 1. The owner's mechanical S1 correction exception applies:
+  the correction has one conservative tree-backed answer, its own local Player commit, and a full
+  S1.b.0/S1.b.1 re-sweep before product work. The uncommitted Codec implementation and ignored
+  generated Apple FFmpeg trees were read as evidence and not edited during this correction.
+
+  The first exact mismatch was the archive assertion. Apple's archive index
+  `__.SYMDEF SORTED` appears in `ar -t` but has no `LC_BUILD_VERSION`, so the old member/platform
+  equality could never pass. The corrected command excludes only `__.SYMDEF` and
+  `__.SYMDEF SORTED`. All 18 generated archives then pass arm64 and platform 1/2/7 exactly. In
+  avformat/avcodec/avfilter/avutil/swscale/swresample order the measured object/platform counts are
+  104/307/48/102/30/13 for macOS and 104/235/46/94/20/9 for both iOS trees.
+
+  Transactional scratch builds also removed the build-root configure log that the packaging script
+  expected. A dirty local package would silently record a stale pre-scratch line, while a clean
+  runner would accept `(unavailable)`. The corrected fence makes the builder install one exact,
+  nonblank, newline-terminated configure record under `lib/kitecodec`, makes install validation
+  require it, and makes packaging hard-fail without it. The gate checks all three final trees,
+  packages ios-arm64 once, compares BUILD-INFO byte-for-byte at the Configure field and removes the
+  exact generated dist pair.
+
+  The correction also closes every adjacent false owner: general `FFmpegPaths` and the
+  Apple-phone selector reject iOS GPL before resolution; complete argument lists and both refusal
+  layers have named tests; Local's non-Apple branch gets a real Linux functional fixture; the
+  fixed S1.b scratch consumer now has literal settings, build and source bytes plus a persistent
+  cross-shell path; expected-failure gates invert success, check stable diagnostics and dry-run the
+  remote publication task. CI, release and symbol-audit comments now describe locally buildable
+  LGPL phone trees without inventing CI, iosX64, GPL or public-release claims.
+
+  Two independent final sweeps find zero blocking findings. The shell blocks parse under `bash -n`,
+  `git diff --check` is clean and the added-line em dash scan is empty. Descriptive execution facts
+  remain explicit: CoreSimulator and the user Gradle cache need host-authorized runs; provenance,
+  GPL tests, Linux Local coverage, workflow comments, Maven-local Apple variants and the scratch
+  consumer remain product execution work rather than completed evidence. No product file changed
+  during this correction, and nothing was pushed, published, released or staged.
+
+  Tier 1 is GREEN. Codec coupling is zero direct imports and zero typed crossings with 292 opaque
+  helper sites reported; deleted surface is 15 of 15; and the seven plain C suites pass all 274
+  cases. Player coupling scans 87 Kotlin files with three allowlisted matches; all five ABI checks
+  pass; the forced uncached JVM run passes 184 core and eight subtitle tests; the eight rt suites
+  pass 127 cases; render audit passes 15 checks; and source discipline passes 18. Both tracked em
+  dash scans print nothing and return the specified passing exit 1. The verbatim JVM command was
+  cached and therefore reran with all ten tasks forced. Two Codec scripts printed the known
+  sandboxed RVM `ps` warning before their own PASS output; no command failed. Nothing was pushed,
+  published, released or staged.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -9279,17 +9326,24 @@ Commit first line. KitePlayer: `Expand the iOS phone stage against the current t
 
 #### S1.b.1 Build and consume the mobile Apple Codec locally
 
+Execution-fence correction commit first line. KitePlayer:
+`Correct the Apple phone proof against generated archives`.
+
 Files, KiteCodec: `buildSrc/src/main/kotlin/BuildFFmpegTask.kt`;
-`buildSrc/src/main/kotlin/StaticLinkFlags.kt`; new
-`buildSrc/src/test/kotlin/BuildFFmpegTaskTest.kt`; `kitecodec-core/build.gradle.kts`;
+`buildSrc/src/main/kotlin/StaticLinkFlags.kt`; `buildSrc/src/main/kotlin/FFmpegPaths.kt`; new
+`buildSrc/src/test/kotlin/BuildFFmpegTaskTest.kt` and `FFmpegPathsTest.kt`;
+`kitecodec-core/build.gradle.kts`;
 `kitecodec-gradle-plugin/src/main/kotlin/io/github/yuroyami/kitecodec/gradle/FFmpegLicense.kt`,
 `KiteCodecExtension.kt`, `KiteCodecPlugin.kt`, `PrebuiltLinkFlags.kt`;
 `kitecodec-gradle-plugin/src/test/kotlin/io/github/yuroyami/kitecodec/gradle/KiteCodecPluginFunctionalTest.kt`;
 `kitecodec-gradle-plugin/README.md`;
 `README.md`, `CHANGELOG.md`, `native/kitecodec-c/README.md`, `docs/about.md`,
 `docs/getting-started.md`, `docs/gradle-plugin.md`, `docs/platforms.md` and
-`docs/troubleshooting.md`. Player: KPKMP execution log only. Generated `native-libs` trees and
-Maven-local files are evidence, never committed files.
+`docs/troubleshooting.md`; `.github/scripts/package-ffmpeg.sh`; `.github/workflows/ci.yml` and
+`.github/workflows/release-binaries.yml`; and
+`native/kitecodec-c/scripts/symbol-audit.sh`. Player: KPKMP execution log only. Generated
+`native-libs` trees, `dist` packages, scratch consumers and Maven-local files are evidence, never
+committed files.
 
 Steps.
 1. Preserve the captured pre-change nonzero `#`-path run. Copy FFmpeg source into a unique
@@ -9299,15 +9353,31 @@ Steps.
    six libav archives and headers in scratch, copy with Java/NIO to a sibling staging directory
    beside the declared output, verify the copy, then replace the final tree. Delete scratch in a
    success `finally`; on failure retain it and print its path. A failed build never replaces a
-   previously good final tree.
+   previously good final tree. After successful `make install` but before verification/replacement,
+   read the first line of scratch `build/ffbuild/config.log`, strip only its leading `# `, require a
+   nonblank result and write it as exactly one UTF-8 newline-terminated line at
+   `scratchInstall/lib/kitecodec/ffmpeg-configure.txt`. `verifyInstall` requires that record, so a
+   build lacking provenance never replaces a good tree. `.github/scripts/package-ffmpeg.sh` reads
+   only `native-libs/<license>/<triple>/lib/kitecodec/ffmpeg-configure.txt`, hard-fails when it is
+   missing/empty/multiline, and uses that exact line for `BUILD-INFO.txt`'s `Configure:` field. It
+   no longer reads a stale vendor build log or treats `(unavailable)` as success. Tests pin the
+   log normalization, stable path, missing-log refusal and rollback preservation.
 2. For IosArm64 and IosSimulatorArm64 use the current STANDARD playback profile:
    `sharedCoreArgs()`, `--disable-autodetect`, `--enable-zlib` and the target SDK/cross flags.
    The PNG decoder makes zlib load-bearing. Do not add `desktopBaseArgs()`, GPL flags, desktop
    third-party archive bundling, `appleHardwareArgs()` or VideoToolbox. Lean remains deferred to
    S5. Reject GPL for iOS and stop registering iOS GPL tasks. Make
    `StaticLinkFlags.thirdPartyArchives(iOS, LGPL)` and host fallback search flags empty, and make
-   the iOS static target flags exactly `-lz`. Tests compare the exact argument and link sets and
-   prove a path containing `#` is staged rather than refused.
+   the iOS static target flags exactly `-lz`. `BuildFFmpegTask` and `FFmpegPaths.resolve` both
+   reject GPL for every iOS target before looking for a vendored/system tree; the latter's KDoc and
+   error no longer advertise nonexistent `[Gpl]` tasks or VideoToolbox on iOS. The Apple-phone
+   selector also rejects `-Pkitecodec.ffmpeg.license=gpl` during configuration before resolution.
+   The selector and `FFmpegPaths` diagnostics contain the exact stable prefix
+   `iOS GPL refusal: FFmpegLicense.GPL is unsupported for iOS; use LGPL.`
+   `BuildFFmpegTaskTest` compares the complete ordered device and simulator argument lists, not a
+   tail/contains subset, and pins LGPL acceptance plus GPL refusal. `FFmpegPathsTest` pins the
+   general iOS GPL refusal. Link tests compare the exact sets and prove a path containing `#` is
+   staged rather than refused.
 3. Add `-Pkitecodec.applePhoneTargetsOnly=true`, mutually exclusive with the existing target-set
    properties, registering exactly macosArm64, iosArm64 and iosSimulatorArm64 on this arm64 Mac.
    Accept it only for Maven-local publication. Every remote publish continues to require the
@@ -9319,7 +9389,10 @@ Steps.
    either iOS target. For Local macosArm64 put `-L<local>/lib` first, the host fallback `-L`
    second, and reuse `PrebuiltLinkFlags.extraLinkerOpts(target, license)` for the desktop static
    stack. For Local iOS use only `-L<local>/lib` plus `-lz`, with none of the desktop archives,
-   C++ runtime or VideoToolbox frameworks. Pin every branch in functional tests.
+   C++ runtime or VideoToolbox frameworks. Pin every branch in functional tests, including a fake
+   complete Local linuxX64 tree that receives the local `-L` plus the desktop link set, no macOS
+   host fallback `-L`, and no fetch task. This is the non-Apple Local branch; leaving it untested is
+   not "every branch".
 5. Producer and consumer are separate invocations because `FFmpegPaths.resolve()` runs during
    Gradle configuration and cannot see a tree produced later in the same invocation. Run:
 
@@ -9350,11 +9423,13 @@ Steps.
    the committed KiteCodec API dump remains the macOS baseline and the public Kotlin surface does
    not change.
 6. Inspect every one of the six archives in every tree, not a representative member. The gate
-   asserts rather than merely prints: `lipo` must report exactly arm64, `ar -t` must name the same
-   number of members as `otool` reports platform records, and the only platform value must match
-   the tree:
+   asserts rather than merely prints: `lipo` must report exactly arm64, the real object-member
+   count from `ar -t` must equal the number of `otool` platform records after excluding only the
+   Apple archive index `__.SYMDEF` or `__.SYMDEF SORTED`, and the only platform value must match the
+   tree:
 
    ```bash
+   set -euo pipefail
    for t in macos-arm64 ios-arm64 ios-simulator-arm64; do
      case "$t" in
        macos-arm64) S1B_PLATFORM=1 ;;
@@ -9365,7 +9440,8 @@ Steps.
      for a in avformat avcodec avfilter avutil swscale swresample; do
        S1B_ARCHIVE="native-libs/lgpl/$t/lib/lib$a.a"
        test "$(xcrun lipo -archs "$S1B_ARCHIVE")" = arm64 || exit 1
-       S1B_MEMBERS="$(/usr/bin/ar -t "$S1B_ARCHIVE" | wc -l | tr -d ' ')"
+       S1B_MEMBERS="$(/usr/bin/ar -t "$S1B_ARCHIVE" | \
+         awk '$0 !~ /^__[.]SYMDEF( SORTED)?$/' | wc -l | tr -d ' ')"
        S1B_RECORDS="$(xcrun otool -l "$S1B_ARCHIVE" | \
          awk '/platform / {print $2}' | wc -l | tr -d ' ')"
        test "$S1B_RECORDS" = "$S1B_MEMBERS" || exit 1
@@ -9377,37 +9453,168 @@ Steps.
    ```
 
    Architecture is `arm64` throughout; the unique `LC_BUILD_VERSION` platform is 1 for macOS, 2
-   for iOS and 7 for iOS Simulator. Run the export, signature and metadata audits unchanged; none
-   of their committed baselines moves.
-7. Prove the local-only selector cannot escape before using it:
+   for iOS and 7 for iOS Simulator. The correction-time generated trees measured object/platform
+   counts, in avformat/avcodec/avfilter/avutil/swscale/swresample order, of
+   `104/307/48/102/30/13` for macOS and `104/235/46/94/20/9` for each iOS tree. Re-measure rather
+   than hard-coding those counts as a future ceiling. Run the export, signature and metadata audits
+   unchanged; none of their committed baselines moves.
+   Prove stable configure provenance in all three final trees and one packaged phone asset:
 
    ```bash
-   ./gradlew :kitecodec-core:publish \
-     -Pkitecodec.applePhoneTargetsOnly=true
+   set -euo pipefail
+   for t in macos-arm64 ios-arm64 ios-simulator-arm64; do
+     S1B_CONFIG="native-libs/lgpl/$t/lib/kitecodec/ffmpeg-configure.txt"
+     test -s "$S1B_CONFIG"
+     test "$(wc -l < "$S1B_CONFIG" | tr -d ' ')" = 1
+     grep -q '[^[:space:]]' "$S1B_CONFIG"
+   done
+   S1B_CONFIG=native-libs/lgpl/ios-arm64/lib/kitecodec/ffmpeg-configure.txt
+   S1B_EXPECTED_CONFIGURE="$(cat "$S1B_CONFIG")"
+   S1B_ASSET=dist/ffmpeg-n8.0-lgpl-ios-arm64.zip
+   trap 'rm -f "$S1B_ASSET" "$S1B_ASSET.sha256"' EXIT
+   bash .github/scripts/package-ffmpeg.sh n8.0 lgpl ios-arm64 vendor/ffmpeg
+   test -f "$S1B_ASSET"
+   unzip -p "$S1B_ASSET" BUILD-INFO.txt | \
+     grep -Fx "Configure:        $S1B_EXPECTED_CONFIGURE"
+   rm -f "$S1B_ASSET" "$S1B_ASSET.sha256"
+   trap - EXIT
    ```
 
-   Expect nonzero during configuration, before repository or network work, with an explicit
-   experimental-phone-selector refusal. Then run exactly one local publication:
-   `./gradlew publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true`. Create a temporary
-   consumer outside both repositories with Gradle/KMP 2.4.10, `mavenLocal()` dependency
-   resolution, plugin management through mavenLocal plus the portal, the plugin at 0.0.1,
-   `FFmpegSource.Local`, LGPL and the absolute `native-libs` root. Its macosArm64, iosArm64 and
-   iosSimulatorArm64 targets each declare a static framework, and common code calls
-   `FFmpeg.hasDecoder("h264")` so dead-code elimination cannot make the link vacuous. Prove the
-   three Maven-local variants offline:
+   The generated dist pair is test evidence only and is removed by exact path after inspection.
+   A missing provenance record or stale `(unavailable)` fallback must fail before packaging.
+7. Prove GPL iOS and the local-only selector cannot escape before using it:
 
    ```bash
+   set -euo pipefail
+   S1B_NEGATIVE="$(mktemp)"
+   trap 'rm -f "$S1B_NEGATIVE"' EXIT
+   if ./gradlew help \
+     -Pkitecodec.applePhoneTargetsOnly=true \
+     -Pkitecodec.ffmpeg.license=gpl >"$S1B_NEGATIVE" 2>&1; then
+     echo "expected iOS GPL configuration refusal" >&2
+     exit 1
+   fi
+   grep -F 'iOS GPL refusal: FFmpegLicense.GPL is unsupported for iOS; use LGPL.' \
+     "$S1B_NEGATIVE"
+   if ./gradlew :kitecodec-core:publish \
+     -Pkitecodec.applePhoneTargetsOnly=true --dry-run >"$S1B_NEGATIVE" 2>&1; then
+     echo "expected remote publication refusal" >&2
+     exit 1
+   fi
+   grep -F 'Experimental phone selector refusal: -Pkitecodec.applePhoneTargetsOnly=true may only' \
+     "$S1B_NEGATIVE"
+   rm -f "$S1B_NEGATIVE"
+   trap - EXIT
+   ```
+
+   Expect the first command nonzero during configuration with an explicit no-iOS-GPL refusal, and
+   the second nonzero during configuration, before repository or network work, with an explicit
+   experimental-phone-selector refusal. Then run exactly one local publication:
+   `./gradlew publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true`. Create a temporary
+   consumer outside both repositories at the fixed cross-shell path
+   `/private/tmp/kitecodec-s1b-phone-consumer` and preserve it through S1.c.2. Its exact files are
+   `settings.gradle.kts`, `build.gradle.kts` and
+   `src/commonMain/kotlin/Smoke.kt`. Settings use plugin management `mavenLocal()` plus the plugin
+   portal, dependency resolution `mavenLocal()` plus Maven Central, and one root project. The build
+   applies KMP 2.4.10 and `io.github.yuroyami.kitecodec` 0.0.1, declares macosArm64, iosArm64 and
+   iosSimulatorArm64 with one static framework each, and configures `FFmpegSource.Local`, LGPL and
+   the absolute `/Users/macbook/StudioProjects/#Kite/KiteCodec/native-libs` root. Common source
+   exposes one function that calls `FFmpeg.hasDecoder("h264")`, so dead-code elimination cannot
+   make the link vacuous. Recreate those three files exactly if the scratch directory is absent;
+   no later shell relies on an inherited variable. Materialize them with `apply_patch`, preserving
+   these exact bytes.
+
+   `settings.gradle.kts`:
+
+   ```kotlin
+   pluginManagement {
+       repositories {
+           mavenLocal()
+           google()
+           gradlePluginPortal()
+           mavenCentral()
+       }
+   }
+
+   dependencyResolutionManagement {
+       repositories {
+           mavenLocal()
+           google()
+           mavenCentral()
+       }
+   }
+
+   rootProject.name = "kitecodec-s1b-phone-consumer"
+   ```
+
+   `build.gradle.kts`:
+
+   ```kotlin
+   import io.github.yuroyami.kitecodec.gradle.FFmpegLicense
+   import io.github.yuroyami.kitecodec.gradle.FFmpegSource
+
+   plugins {
+       kotlin("multiplatform") version "2.4.10"
+       id("io.github.yuroyami.kitecodec") version "0.0.1"
+   }
+
+   kotlin {
+       macosArm64 {
+           binaries.framework { baseName = "Smoke"; isStatic = true }
+       }
+       iosArm64 {
+           binaries.framework { baseName = "Smoke"; isStatic = true }
+       }
+       iosSimulatorArm64 {
+           binaries.framework { baseName = "Smoke"; isStatic = true }
+       }
+       sourceSets.commonMain.dependencies {
+           implementation("io.github.yuroyami:kitecodec-core:0.0.1")
+       }
+   }
+
+   kitecodec {
+       ffmpeg {
+           source = FFmpegSource.Local
+           license = FFmpegLicense.LGPL
+           localRoot.set(file("/Users/macbook/StudioProjects/#Kite/KiteCodec/native-libs"))
+       }
+   }
+   ```
+
+   `src/commonMain/kotlin/Smoke.kt`:
+
+   ```kotlin
+   package smoke
+
+   import io.github.yuroyami.kitecodec.FFmpeg
+
+   public fun hasH264Decoder(): Boolean = FFmpeg.hasDecoder("h264")
+   ```
+
+   Prove the three Maven-local variants offline:
+
+   ```bash
+   set -euo pipefail
+   S1B_CODEC_SMOKE=/private/tmp/kitecodec-s1b-phone-consumer
+   test -f "$S1B_CODEC_SMOKE/settings.gradle.kts"
+   test -f "$S1B_CODEC_SMOKE/build.gradle.kts"
+   test -f "$S1B_CODEC_SMOKE/src/commonMain/kotlin/Smoke.kt"
    ./gradlew -p "$S1B_CODEC_SMOKE" \
      linkDebugFrameworkMacosArm64 \
      linkDebugFrameworkIosArm64 \
      linkDebugFrameworkIosSimulatorArm64 \
      --offline --refresh-dependencies --rerun-tasks
    ```
-8. Update every named current-state guide. In particular, the native README must no longer say
+8. Update every named current-state guide and executable comment. In particular, the native README must no longer say
    that BuildFFmpegTask merely refuses `#Kite`; the task now keeps configure and make in the
    hash-free scratch tree. The getting-started and plugin guides distinguish System, repository
    builds, and a no-network Local consumer tree, and the iOS pages state the measured standard
-   software profile without claiming public artifacts or CI.
+   software profile without claiming public artifacts or CI. CI comments say iosArm64 and
+   iosSimulatorArm64 LGPL are locally buildable but not CI-covered; iosX64 remains unqualified and
+   there are no iOS GPL tasks. Release-workflow comments make the same distinction without adding
+   a job or release claim. The symbol-audit header acknowledges the three Apple FFmpeg trees and
+   archives while leaving its logic and baselines unchanged.
 
 Gate. Tier 2, selected by buildSrc, plugin source and build scripts. The one local publish above
 replaces Tier 2's host-only publish for this sub-phase; do not publish twice. Run every other

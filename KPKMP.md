@@ -4770,6 +4770,30 @@ is no other.
   block contents, the B1-25 row, the 15.5 deferral anchor, both README claims, every file and
   symbol anchor already logged) and found no further mismatch. 18.3 rule 5 unchanged for
   contradictions during a sub-phase.
+
+- 2026-08-11, S1.a.0's third sweep: fifteen blocking and seven descriptive findings, all
+  verified against the tree and all correct, folded into 17.4.1 in one pass. Prose only, Tier 1
+  gate (selected by rule). The recalibrated protocol did its job: twenty-two findings cost one
+  relay instead of twenty-two. The planner re-derived every finding before accepting it; none
+  was rejected. The substantive corrections: the opt-in set is six files, propagated through
+  openWithRing's return type, not two; S1.a.3's cross-check is now a defined manual run with an
+  expected green; kiteplayer-sample enters S1.a.4's scope explicitly; S1.a.6's gate is Tier 2 by
+  the mechanical path rule this expansion itself violated by judging "prose only"; the opaque
+  handle set is eleven (AVDictionaryEntry in three public signatures at kitecodec_helpers.h:136
+  to :138, invisible to the Kotlin-derived allowlist); the wrapper returns are decided from
+  measured call sites (four int forwards, two const kc_codec* lookups, ffkmp_filter_exists as
+  int); the sixteen guards are named by function with fresh anchors and the two I-12-guarded
+  functions excluded as unable to reproduce; the metadata expectation is class-based (additions,
+  the one minor-version constant line, tag-preserving respellings, nothing removed); the stale
+  53-versus-85 core test count and the two-versus-four functional test phrasing move to
+  S1.a.9's corrections; the migration set is six files plus four compile-proof files whose
+  imports are all surviving ffkmp_ helpers; the signature baseline covers kitecodec_handles.h
+  so an alias retarget cannot pass unseen; the metadata evidence order is check, update, check
+  because --update exits before any differential exists; the push-history correction rests on
+  local refs with only the live remote snapshot ever ASSUMED; the network sentence claims one
+  measured loopback case, not every protocol; and KiteCodec README:314's http advice is
+  reviewed rather than denied, disproving this expansion's earlier "no network claim" sentence.
+  Both repositories stayed clean throughout; the executor still awaits a clean S1.a.0.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7632,9 +7656,15 @@ Steps.
    the kitert def itself as the module's ABI witnesses instead. Do not fake a dump.
 3. Add a `@RequiresOptIn` annotation (name it `RawRingApi`, in kiteplayer-core's nativeMain
    beside the SPI) and mark `NativeRingHandoff`, whose `ring: CPointer<cnames.structs/kprt_ring>`
-   is the exposure 16.4 item 9 measured. Opt in at the two existing sites (NativeRingAudioSink.kt
-   and CoreAudioSink.kt). Update kiteplayer-core's committed api dump; the log entry states the
-   dump moved because the annotation is now part of the surface.
+   is the exposure 16.4 item 9 measured. The marker propagates through
+   `NativeRingAudioSink.openWithRing`, which returns the marked type, so the affected set is
+   SIX files, not two (S1.a.0's third sweep caught the two-file claim): NativeRingAudioSink.kt
+   (declaration), CoreAudioSink.kt, AudioPath.native.kt (the openWithRing caller at :28 to :36),
+   and the three output tests CoreAudioSinkTest.kt, RealTimeSoakTest.kt and
+   CoreAudioSinkRealTimeTest.kt. The COMPILER is the final enumerator: opt in wherever it
+   demands, and paste the final opted-in file list into the log. Update kiteplayer-core's
+   committed api dump; the log entry states the dump moved because the annotation is now part
+   of the surface.
 4. Correct the inverted comment in kiteplayer-core/build.gradle.kts ("Nothing public leaks by
    doing so"): the generated bindings ARE the surface; publishing makes them public; the opt-in
    is what marks them deliberate.
@@ -7667,6 +7697,11 @@ Steps.
 3. Tests, reproduction-first where a red case is claimed: a fully configured fixture passes; a
    fixture missing a POM field fails naming the field; a fixture whose publishing module depends
    on a non-publishing sibling fails naming both modules; the failure messages name the fix.
+4. The final cross-check, defined (S1.a.0's third sweep found it undefined): after S1.a.2 and
+   this task both exist, run `./gradlew checkPublicationReadiness` once, by hand. Expected
+   result: GREEN with zero findings, and in particular kiteplayer-rt is no longer reportable as
+   an unpublishable sibling (P0-02's exit). Paste the run's output into the log. The task still
+   joins no tier; this one manual run is the whole cross-check.
 
 Gate. Tier 2 (rule: buildSrc changed), which includes `:buildSrc:test`.
 
@@ -7682,11 +7717,17 @@ Files: `buildSrc/src/main/kotlin/CheckKitertCouplingTask.kt` (new); its test (ne
 `KPKMP.md` section 9 (Tier 1 block gains the task; the ratchet move table gains a row).
 
 Steps.
-1. Scope, decided: all committed Kotlin under `kiteplayer-core`, `kiteplayer-ffmpeg` and
-   `kiteplayer-subtitles` (and any future module by default). EXCLUDED by design and said so in
-   the baseline header: `kiteplayer-output` (it owns the C sink pointer) and `kiteplayer-rt`
-   (it IS the binding). Patterns: `cnames.structs.kprt_` and `kiteplayer.rt.cinterop`. Counting
-   is over comment-stripped Kotlin, mirroring KiteCodec's I-13 rework.
+1. Scope, decided: all committed Kotlin under `src/` of every module in settings.gradle.kts
+   EXCEPT the two excluded by design and said so in the baseline header: `kiteplayer-output`
+   (it owns the C sink pointer) and `kiteplayer-rt` (it IS the binding). Today that means
+   kiteplayer-core, kiteplayer-ffmpeg, kiteplayer-subtitles and kiteplayer-sample are in scope
+   (the sample was named explicitly after S1.a.0's third sweep flagged it ambiguous: an app
+   consumes the facade and must never name the rt cinterop), and any future module is in scope
+   the moment it is included. Patterns: `cnames.structs.kprt_` and `kiteplayer.rt.cinterop`.
+   Counting is over comment-stripped Kotlin under `src/` only; generated api dumps are not
+   sources (kiteplayer-core's committed dump names kprt_ring because the surface does, which is
+   what S1.a.2's opt-in governs), and kitert.def's own match is its package declaration line,
+   not a type naming site.
 2. MEASURE at execution time with the exact command, write the number and the command into the
    baseline header, ratchet from there. For calibration only, not to be trusted over the fresh
    run: the 2026-08-11 planning measurement of that scope found three files in kiteplayer-core
@@ -7745,11 +7786,15 @@ Steps.
 1. Reword so the experiment reads as the hypothetical mutation it was, and add the sentence: "No
    helper named ffkmp_codecctx_send_packet exists in this library today; S1.a.7 is what creates
    it." (This sub-phase runs before S1.a.7; if order changes, change the tense.)
-2. Prove: `grep -rn ffkmp_codecctx_send_packet` over both repositories finds only prose, no
-   declaration, until S1.a.7 lands.
+2. Prove: `grep -rn ffkmp_codecctx_send_packet` over both repositories finds only prose plus
+   ONE test fixture (CheckCinteropCouplingTaskTest.kt:138 uses the name as a synthetic mutation
+   string, which is executable test code and sound), and no declaration, until S1.a.7 lands.
 
-Gate. Tier 1 (rule: prose only), and `checkCinteropCoupling` must not move: counting is
-comment-stripped, so a comment edit that moved a count would indict the task, not the edit.
+Gate. Tier 2, because the changed file lives under `native/` and section 9's selector is
+mechanical (S1.a.0's third sweep caught this expansion selecting Tier 1 by "prose only", which
+is judgment, exactly what contract item 2 forbids). Within it, `checkCinteropCoupling` must not
+move: counting is comment-stripped, so a comment edit that moved a count would indict the task,
+not the edit.
 
 Commit first line. KiteCodec: `Say the ratchet experiment helper never existed`.
 
@@ -7775,45 +7820,73 @@ lists gain test_args); `exported-symbols-baseline.txt`; `include/kitecodec_abi.h
 version); `KPKMP.md` (contract rule 5's core-test count, if it moves).
 
 Steps.
-1. `kitecodec_handles.h`: forward struct declarations plus one opaque typedef per allowlisted
-   struct type, exactly the ten in coupling-baseline.txt (`kc_codec` for AVCodec, `kc_codec_ctx`,
-   `kc_codec_par`, `kc_dict`, `kc_filter_ctx`, `kc_filter_graph`, `kc_fmt_ctx`, `kc_frame`,
-   `kc_packet`, `kc_stream`), in the form `struct AVFrame; typedef struct AVFrame kc_frame;`. The
-   header includes NO FFmpeg header. Tag-aliasing keeps every existing Kotlin call site compiling
-   unchanged while the def still carries FFmpeg headers.
+1. `kitecodec_handles.h`: forward struct declarations plus one opaque typedef per FFmpeg struct
+   type that appears in `kitecodec_helpers.h` SIGNATURES, which is ELEVEN: the ten
+   allowlisted in coupling-baseline.txt (`kc_codec` for AVCodec, `kc_codec_ctx`, `kc_codec_par`,
+   `kc_dict`, `kc_filter_ctx`, `kc_filter_graph`, `kc_fmt_ctx`, `kc_frame`, `kc_packet`,
+   `kc_stream`) plus `kc_dict_entry` for AVDictionaryEntry, which S1.a.0's third sweep found in
+   three public signatures at kitecodec_helpers.h:136 to :138 and which Kotlin never names (so
+   the allowlist could not see it). SwsContext and AVFMT appear in comments only, measured, and
+   get no handle. Form: `struct AVFrame; typedef struct AVFrame kc_frame;`. The header includes
+   NO FFmpeg header. Tag-aliasing keeps every existing Kotlin call site compiling unchanged
+   while the def still carries FFmpeg headers.
 2. `kitecodec_helpers.h` parameter and return types move to the opaque names; each `.c` body
    compiles against its own header with `-Werror`, gaining at most a boundary cast; behaviour
    untouched.
-3. The SEVEN wrappers, new, raw int return forwarded, no new outcome type, one header sentence
-   each saying the typed outcome model comes later and the wrapper exists because the def's
-   header removal forces it: `ffkmp_codecctx_send_packet`, `ffkmp_codecctx_receive_frame`,
-   `ffkmp_codecctx_send_frame`, `ffkmp_codecctx_receive_packet`, `ffkmp_find_encoder_by_name`,
-   `ffkmp_find_decoder_by_name`, `ffkmp_filter_by_name`. They cover the fourteen sites the
-   baseline lists at lines 55 to 65.
+3. The SEVEN wrappers, new, one header sentence each saying the typed outcome model comes later
+   and the wrapper exists because the def's header removal forces it. Return types, decided
+   from the measured call sites (S1.a.0's third sweep caught "raw int forwarded" contradicting
+   the lookups): the four hot send/receive wrappers forward the raw int
+   (`ffkmp_codecctx_send_packet`, `ffkmp_codecctx_receive_frame`, `ffkmp_codecctx_send_frame`,
+   `ffkmp_codecctx_receive_packet`); the two codec lookups return `const kc_codec*`
+   (`ffkmp_find_encoder_by_name`, `ffkmp_find_decoder_by_name`), because Frame.native.kt:191
+   and MediaSink.native.kt:210 pass the found encoder straight into `ffkmp_codecctx_alloc` and
+   need the pointer; the filter lookup becomes `ffkmp_filter_exists` returning int 0 or 1,
+   because its only caller (FFmpeg.native.kt:65, `hasFilter`) null-checks and discards, and
+   AVFilter earns no opaque handle for one boolean. They cover the fourteen sites the baseline
+   lists at lines 55 to 65.
 4. The FIVE media-type accessors for MediaSource.native.kt:553 to :557: `ffkmp_media_type_video`,
    `_audio`, `_subtitle`, `_data`, `_attachment`, each returning the AVMediaType value as int.
-5. The SIXTEEN guards, at the exact locations register row R-B2-guards lists (helpers_frame.c:30;
-   helpers_codecpar.c:25, :30; helpers_format.c:12, :21, :22, :27, :49, :56, :86;
-   helpers_codec.c:14, :15; helpers_filter.c:39, :85, and the listed filter builder/accessor
-   ranges), each a leading NULL or range refusal returning the documented failure value, each
-   with one header contract sentence in the shape `ffkmp_fmt_set_opt` already uses.
-   REPRODUCTION-FIRST: `tests/test_args.c` drives each entry point with NULL against the
-   UNGUARDED build first and the log records the crash class, then the guard lands, then the same
-   case passes, then falsifiability by reverting one guard.
+5. The SIXTEEN guards, identified by FUNCTION NAME because line anchors drift and this very
+   sub-phase moves them (S1.a.0's third sweep found the register row's anchors stale; anchors
+   below are as of a78dffc and are re-derived at execution): `ffkmp_frame_get_buffer`
+   (helpers_frame.c:32); `ffkmp_codecpar_from_context` (:27) and `ffkmp_codecpar_copy_for_mux`
+   (:32); `ffkmp_fmt_open_input` (:14), `ffkmp_fmt_find_stream_info` (:23),
+   `ffkmp_fmt_read_frame` (:33), `ffkmp_fmt_alloc_output2` (:55) and `ffkmp_fmt_write_frame`
+   (:94); `ffkmp_codecctx_open` (:16) and `ffkmp_codecctx_from_par` (:17); and the six filter
+   entry points `ffkmp_graph_build_video` (:35), `ffkmp_graph_build_audio` (:77),
+   `ffkmp_graph_build_video_multi` (:190), `ffkmp_graph_build_audio_multi` (:230),
+   `ffkmp_graph_send` (:310) and `ffkmp_graph_receive` (:313). EXCLUDED, already guarded at
+   I-12 and unable to reproduce a crash: `ffkmp_fmt_seek_micros` (:24) and `ffkmp_fmt_set_opt`
+   (:62); the register row's eighteen minus these two is this sixteen. Each guard is a leading
+   NULL or range refusal returning the documented failure value, with one header contract
+   sentence in the shape `ffkmp_fmt_set_opt` already uses. REPRODUCTION-FIRST: `tests/
+   test_args.c` drives each entry point with NULL against the UNGUARDED build first and the log
+   records the crash class, then the guard lands, then the same case passes, then
+   falsifiability by reverting one guard.
 6. `exported-symbols-baseline.txt` refreshed by the section 9 move procedure, naming all twelve
    added symbols (seven wrappers, five accessors).
 7. `KITECODEC_C_ABI_MINOR` moves to 1 in the same commit, decided here: twelve new exports are a
    consumer-visible compatible addition. The identity gate suite re-baselines accordingly.
 8. Suite lists in run-c-tests.sh and build-host.sh gain test_args, keeping their stated
-   agreement; update contract rule 5's test count sentence if it moves.
+   agreement (the plain C suite count moves from six to seven and section 15.3's "six suites"
+   sentences gain a correction note where touched). Contract rule 5's stale KOTLIN test count
+   is a separate defect and is fixed at S1.a.9, not here: a C suite cannot move a Kotlin count.
 
 Gate. KiteCodec Tier 2 (rule: native/ changed): full C suites in plain, asan and tsan including
 the new test_args; `symbol-audit.sh` (check 6 against the refreshed baseline);
-`klib-metadata-diff.sh` showing ADDITIONS ONLY with the SUMMARY block pasted into the log;
-`checkCinteropCoupling` (comment-stripped counts must not rise; new helper MENTIONS in Kotlin do
-not exist yet, so the crossing number must be exactly unmoved); `apiCheck`, with `apiDump`
-refreshed only if typealias spelling shifts the dump, recorded as the addition it is. KitePlayer
-is NOT re-consumed here; that happens once, at S1.a.8.
+`klib-metadata-diff.sh --check` with its full diff pasted into the log, judged by CLASS
+(S1.a.0's third sweep caught the earlier "additions only" phrase contradicting step 7, and the
+class rule replaces it): ADDED lines are expected (the eleven typealiases, the twelve new
+functions); the `KITECODEC_C_ABI_MINOR` constant line changes 0 to 1, expected; existing
+signature lines MAY respell a parameter or return type to its new typealias, and each such line
+must normalise back to the identical underlying struct tag (kc_frame to AVFrame and so on),
+proved by a normalise-and-compare over the diff; any REMOVED line, and any changed line outside
+those two classes, fails the sub-phase. `checkCinteropCoupling` (comment-stripped counts must
+not rise; new helper MENTIONS in Kotlin do not exist yet, so the crossing number must be
+exactly unmoved); `apiCheck`, with `apiDump` refreshed only if typealias spelling shifts the
+dump, recorded as the addition it is. KitePlayer is NOT re-consumed here; that happens once, at
+S1.a.8.
 
 Commit first line. KiteCodec: `Add the opaque surface: handles, wrappers, accessors, guards`.
 
@@ -7823,42 +7896,56 @@ Items: P0-07 second half (draft C-43 second half). Closes section 15.1's B1-25 r
 section 15.5 deferral 1.
 
 Files: `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def` (lines 8 and 9);
-the TEN Kotlin files measured 2026-08-11 as importing FFmpeg-typed cinterop names
-(FFmpeg.native.kt, FilterGraph.native.kt, Frame.native.kt, Internals.kt, MediaSink.native.kt,
-MediaSource.native.kt, Playback.native.kt, Remuxer.native.kt, Transcoder.native.kt,
-PlayerSurfaceTest.kt; FFmpegIdentityTest.kt imports only kc_/KC_ names and does not migrate);
-`native/kitecodec-c/coupling-baseline.txt` (rewritten); `include/kitecodec_abi.h` (version);
-`native/kitecodec-c/signature-baseline.txt` (new) and its checking step in `symbol-audit.sh`;
-KiteCodec's committed api dumps; `KPKMP.md` rows named above.
+the SIX Kotlin files carrying the migrating material (FFmpeg.native.kt, FilterGraph.native.kt,
+Frame.native.kt, MediaSink.native.kt, MediaSource.native.kt, Playback.native.kt) and the FOUR
+compile-proof files (Internals.kt, Remuxer.native.kt, Transcoder.native.kt,
+PlayerSurfaceTest.kt; S1.a.0's third sweep caught the earlier "ten files migrate": these four
+import ONLY ffkmp_ helper names, all of which survive the def reduction, so their whole step is
+proving they compile unchanged; FFmpegIdentityTest.kt imports only kc_/KC_ names and is not
+touched at all); `native/kitecodec-c/coupling-baseline.txt` (rewritten);
+`include/kitecodec_abi.h` (version); `native/kitecodec-c/signature-baseline.txt` (new) and its
+checking step in `symbol-audit.sh`; KiteCodec's committed api dump (one file,
+kitecodec-core.klib.api); `KPKMP.md` rows named above.
 
 Steps.
-1. Bake and record the metadata BEFORE, per the two-bakings assertion.
+1. Evidence order for the metadata, measured against the script (S1.a.0's third sweep caught
+   the old order: `--update` copies the baseline and exits before any differential exists, so
+   an update-first run destroys the evidence): FIRST `klib-metadata-diff.sh --check` against
+   the OLD baseline, expected to FAIL, its full differential pasted into the log as the
+   before-picture; THEN `--update`; THEN `--check` again, green, which also re-proves the
+   two-bakings assertion.
 2. `ffmpeg.def` `headers` and `headerFilter` reduce to `kitecodec_helpers.h kitecodec_handles.h
    kitecodec_abi.h`.
-3. The ten files migrate: FFmpeg-typed CPointer parameters move to the opaque typealiases; the
-   fourteen raw call sites move to the seven wrappers; the five AVMEDIA_TYPE_* constants at
-   MediaSource.native.kt:553 to :557 move to the five accessors; unresolvable imports are
-   deleted. File-by-file compile; falsifiability: reverting any one migrated file must fail
-   compilation, which is the proof the headers are really gone.
+3. The six files migrate: FFmpeg-typed CPointer parameters move to the opaque typealiases; the
+   fourteen raw call sites move to the seven wrappers (six ffkmp_ names plus ffkmp_filter_exists
+   per S1.a.7's decided returns); the five AVMEDIA_TYPE_* constants at MediaSource.native.kt:553
+   to :557 move to the five accessors; unresolvable imports are deleted. The four compile-proof
+   files are rebuilt untouched, and if the compiler flags one (a typealias respelling reaching a
+   signature they use), the mechanical fix is recorded in the log. File-by-file compile;
+   falsifiability: reverting any one migrated file must fail compilation, which is the proof
+   the headers are really gone.
 4. `coupling-baseline.txt` is REWRITTEN: re-measure both ratchet numbers with the commands in the
    file's own header, delete every `allowed_struct_type` line (no FFmpeg struct type is nameable
    any longer), and record the rewrite in the log with old and new numbers.
 5. `KITECODEC_C_ABI_MAJOR` moves to 2 and `KITECODEC_C_ABI_MINOR` resets to 0 (S1.a.7 set it to
-   1), because every declaration in `kitecodec_helpers.h` changed shape for a C consumer. The
-   identity gate tests updated accordingly.
+   1), because the 134 of 157 helper declarations that name FFmpeg types changed shape for a C
+   consumer (the other 23 carry none, executor-measured 2026-08-11). The identity gate tests
+   updated accordingly.
 6. The NEW signature baseline (verifier M4: a names-only baseline cannot see a shape change):
-   generate one line per exported declaration from `kitecodec_helpers.h` and `kitecodec_abi.h`
-   (full declaration text, normalised whitespace) into `signature-baseline.txt`; extend
-   `symbol-audit.sh` with a check comparing it; add its row to section 9's ratchet move table.
+   generate one line per exported declaration from `kitecodec_helpers.h`, `kitecodec_handles.h`
+   AND `kitecodec_abi.h` (full declaration text, normalised whitespace; handles.h is included
+   precisely so a silent retarget of an opaque alias cannot pass unseen, S1.a.0's third sweep)
+   into `signature-baseline.txt`; extend `symbol-audit.sh` with a check comparing it; add its
+   row to section 9's ratchet move table.
 7. KitePlayer re-consumes ONCE: rebuild against the republished klib, then the full KitePlayer
    Tier 2 block. This is KiteCodec window 1 closing.
 8. Close the KPKMP rows: 15.1 B1-25, 15.5 deferral 1; mark 16.4 items 1 and 9 closed with their
    closing sub-phases named (S1.a.7 and S1.a.2).
 
 Gate. KiteCodec Tier 2 in full, then KitePlayer Tier 2 in full after the re-consume, then the
-Tier 1 blocks of both repositories verbatim as the closing check. `klib-metadata-diff.sh
---update` SUMMARY pasted into the log (this half is the deliberate breaking change, nothing is
-published, and the log entry says exactly that).
+Tier 1 blocks of both repositories verbatim as the closing check. The metadata evidence is the
+step 1 triple (failing check pasted, update, green check); this half is the deliberate breaking
+change, nothing is published, and the log entry says exactly that.
 
 Commit first lines. KiteCodec: `Drop the FFmpeg headers from the def and finish the opaque
 migration`. KitePlayer: `Re-consume KiteCodec over the opaque surface`.
@@ -7868,26 +7955,46 @@ migration`. KitePlayer: `Re-consume KiteCodec over the opaque surface`.
 Items: P0-08 (draft C-07 and C-08; the section 11 supersession note was verified already in
 place on 2026-08-11 and needs only the reread).
 
-Files: `KPKMP.md` section 13 decision 2 ("local commits, nothing pushed"); `README.md` line 192
-("No network path, no live or adaptive streaming, no DRM").
+Files: `KPKMP.md` section 13 decision 2 ("local commits, nothing pushed") and section 1
+contract rule 5 (two stale counts); `README.md` line 192 ("No network path, no live or adaptive
+streaming, no DRM"); `../KiteCodec/README.md` line 314 (the https troubleshooting row).
 
 Steps.
-1. MEASURE the remote state in both repositories: `git rev-list --count origin/main..main`,
-   `git ls-remote --heads origin`, `git ls-remote --tags origin`. Paste outputs into the log. If
-   a remote is unreachable, the sentence stays and the log says ASSUMED with the failed command.
+1. Correct the push history from LOCAL evidence first, which is sufficient on its own (S1.a.0's
+   third sweep caught the old fallback preserving a known-false sentence when the remote is
+   unreachable): `origin/main` in both repositories already proves pushes happened (KitePlayer
+   origin/main at abc00c6, KiteCodec origin/main at a086b49, plus the reflog). Then ATTEMPT the
+   remote snapshot: `git rev-list --count origin/main..main`, `git ls-remote --heads origin`,
+   `git ls-remote --tags origin`; paste what succeeds into the log, and mark ONLY the current
+   remote snapshot ASSUMED if lookup fails (measured 2026-08-11: lookup does fail from the
+   executor's environment, and KitePlayer sits several local commits ahead of origin/main). The
+   "nothing pushed" sentence is corrected regardless.
 2. Correct section 13 decision 2 to the D-3 reality: both repositories were pushed on
    2026-08-10; commits since then are local by design; the owner pushes; publication is the
    irreversible act and it belongs to S5.
-3. Correct README.md line 192 to the truth C-08 measured: any scheme the linked FFmpeg carries
-   will open because the URI passes through unchanged; there is no allowlist, deadline or
-   redaction over it yet; network hardening is parked at 17.8. Do not advertise the path; state
-   it.
+3. Correct README.md line 192 to what C-08 actually measured (S1.a.0's third sweep caught the
+   earlier "any scheme will open" as an extrapolation): the URI is passed to FFmpeg unchanged,
+   so whatever protocols the linked build carries are reachable through it; MEASURED, one
+   loopback http case played to completion; there is no allowlist, deadline or redaction over
+   the path yet; network hardening is parked at 17.8. Do not advertise the path; state it.
+4. Correct contract rule 5's two stale counts, measured 2026-08-11: "53 core tests" is really
+   85 `@Test` cases in kitecodec-core (write the number with the counting command beside it),
+   and the plugin sentence reads as if the class holds two functional tests when it holds four,
+   of which the two NAMED ones fail; reword to say exactly that.
+5. Review `../KiteCodec/README.md:314` (the row advising `http`, a local file, or a system
+   FFmpeg when vendored https fails): the http advice is TRUE as measured (the loopback run)
+   and the row is a build-limitation note, not a feature promise, so the expected outcome is
+   that it STANDS; correct it only if its wording claims more than the measurement, and record
+   the read in the log either way. This replaces the earlier claim here that KiteCodec's README
+   makes no network statement, which S1.a.0's third sweep disproved.
 
-Gate. Tier 1 (rule: prose only). Reread of each corrected sentence in place.
+Gate. Tier 1 (rule: every touched file here is a README or KPKMP.md, none of which appears in
+the Tier 2 selector list; S1.a.6's lesson is why the rule is spelled out rather than judged).
+Reread of each corrected sentence in place.
 
 Commit first lines. KitePlayer: `Correct the record: remote state measured, the network sentence
-made true`. KiteCodec: none. Checked 2026-08-11: KiteCodec's README makes no network claim (its
-only network-adjacent sentences describe stream copy and a release download URL).
+made true`. KiteCodec: `Say only what the https row measured` (ONLY if step 5 changes it;
+otherwise no KiteCodec commit).
 
 ### 17.5 The format conformance matrix
 

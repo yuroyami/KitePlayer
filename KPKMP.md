@@ -5184,6 +5184,31 @@ is no other.
   tracked-file em dash scans printed nothing and exited 1. No product file changed and nothing
   was pushed, published or released.
 
+- 2026-08-11, S1.a.6, P0-06 completed. Tier 2 gate (selected mechanically because the changed
+  Codec baseline lives under `native/`). The coupling-baseline history now says explicitly that
+  the old interlude experiment was a hypothetical mutation and that S1.a.7, not the current
+  library, creates the proposed helper. Before the product edit, the corrected fixed-string proof
+  had 11 matching lines: ten prose lines and the one synthetic-mutation fixture. After the exact
+  sentence was added, it had 12 matching lines: eleven prose lines and the same one fixture. No
+  declaration or definition existed in either run. `checkCinteropCoupling` remained 246 imports,
+  287 typed crossings, 273 helper calls, 14 direct calls and 10 of 10 allowed struct types; prose
+  is stripped from source measurement and `#` baseline text is parser-ignored, so no ratchet moved.
+
+  The full expanded Tier 2 gate is GREEN. Tier 1 retained those Codec counts, six plain Codec
+  suites, Player coupling 87/3, clean ABI and JVM checks, eight plain rt suites, render audit 15
+  and source discipline 18; both tracked-file em dash scans printed nothing and exited 1. Codec
+  cinterop, API, buildSrc and the 14-test filtered plugin suite passed; ASan, TSan and live
+  interposition each passed six suites; corpus replay passed six targets and 105 files; symbol
+  audit matched 163 exports; metadata diff was zero; and macosArm64Test passed. Player buildSrc,
+  combined native tests, ASan, TSan, live interposition, Android, JS, Wasm and sample linking
+  passed. The real-media controls submitted 300 of 300 sync, 240 of 240 true-VFR and 180 of 180
+  HEVC frames with zero drops and underruns; the missing-file arm printed two concise lines, no
+  stack trace and exited 1. DEVIATION: the first focused coupling invocation was accidentally
+  issued from the Player root after the search, so Gradle correctly reported that the Codec task
+  did not exist there. No tracked file changed; rerunning from the Codec root passed immediately,
+  and the complete Tier 2 invocation later passed it again. Nothing was pushed, publicly
+  published or released.
+
 ---
 
 ## 15. Horizon B execution: B1

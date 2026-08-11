@@ -900,7 +900,7 @@ cd ../KiteCodec
 ./native/kitecodec-c/scripts/run-c-tests.sh plain
 
 cd ../KitePlayer
-./gradlew checkKotlinAbi                              # the four committed api dumps
+./gradlew checkKotlinAbi                              # committed dumps across five library modules
 ./gradlew :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest
 kiteplayer-rt/native/scripts/run-c-tests.sh plain
 kiteplayer-rt/native/scripts/render-audit.sh
@@ -1021,7 +1021,7 @@ say which sub-phase.
 | Baseline | Fires when | The move | The log entry must say |
 |---|---|---|---|
 | `../KiteCodec/kitecodec-core/api/kitecodec-core.klib.api` | `:kitecodec-core:apiCheck`, on any public API change in kitecodec-core's own klib | `./gradlew :kitecodec-core:apiDump -Pkitecodec.hostTargetsOnly=true`, commit the dump with the change | every declaration added or removed, and why |
-| the four KitePlayer api dumps under `*/api/` | `checkKotlinAbi`, on any public API change in the four modules | `./gradlew updateKotlinAbi`, commit the dumps with the change | every declaration added or removed, and why |
+| the KitePlayer api dumps under `*/api/` across five library modules | `checkKotlinAbi`, on any public API change in those five modules | `./gradlew updateKotlinAbi`, commit the dumps with the change | every declaration added or removed, and why |
 | `../KiteCodec/native/kitecodec-c/coupling-baseline.txt` | `checkCinteropCoupling`, when a ratcheted count rises | edit the number by hand to the value re-measured with the command written beside it in the file | the old and new number, and the change that moved it |
 | `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` | `klib-metadata-diff.sh --check`, on any cinterop metadata difference | `./scripts/klib-metadata-diff.sh --update`, in the same commit as the deliberate surface change | the script's whole SUMMARY block, pasted, so the record carries the reviewed numbers and not a pointer to a 19,000 line diff |
 | `../KiteCodec/native/kitecodec-c/deleted-surface.txt` (installed by I.3) | `check-deleted-surface.sh`, on any use of a name whose status is `deleted` | change that name's status to `resurrected-in-<item>` in the same commit that resurrects it | one sentence naming the item and the reason |
@@ -4845,6 +4845,27 @@ is no other.
   executed, eight rt C suites PASS, render audit 15 PASS and source discipline 18 PASS; both
   tracked-file em dash scans printed nothing and exited 1, the passing outcome. No deviation and
   nothing was pushed.
+
+- 2026-08-11, S1.a.2 execution-fence correction completed before product work continued. Prose
+  only, Tier 1 gate (selected by rule: every change, including prose). The first local publication
+  proof found a real cinterop-only-module defect: all native main compilations were `NO-SOURCE`,
+  yet generated module metadata still required an unclassified main klib, so four Android metadata
+  tasks failed on missing `*Main-0.0.1.klib` files. A focused reproduction proved the conservative
+  answer: a package-only `PublicationAnchor.kt` with no declaration materialises the empty main
+  klib alongside the separately published `kitert` cinterop klib. The androidNativeArm64 main-klib
+  and metadata tasks then passed, and generated module metadata named both sibling artifacts.
+  Inspection of the Kotlin Gradle plugin's registered native artifacts found no safer supported
+  build-file-only alternative. The S1.a.2 file list and steps now name this carrier, its exact
+  documentation and its declaration-free ABI dump; section 9 now tracks committed dumps across
+  five library modules. An independent final reread reported CLEAN. Tier 1: KiteCodec coupling
+  246/287, deleted-surface PASS and six plain C suites PASS; KitePlayer ABI check 148 tasks
+  executed, core/subtitles JVM tests 13 tasks executed, eight rt C suites PASS, render audit 15
+  PASS and source discipline 18 PASS; both tracked-file em dash scans printed nothing and exited
+  1, the passing outcome. DEVIATION: the first full ABI check correctly found that the just-proved
+  anchor made the zero-byte draft rt dump stale; the dump update and check had to run in separate
+  Gradle invocations because Gradle rejects their shared output in one task graph. The refreshed
+  dump is declaration-free and the uncached full check passed. No product commit was made by this
+  correction and nothing was pushed.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7710,11 +7731,12 @@ Files: `kiteplayer-rt/build.gradle.kts`; `kiteplayer-core/build.gradle.kts` (the
 comment around lines 85 to 101); `kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/
 kiteplayer/spi/NativeRingAudioSink.kt` (holds `NativeRingHandoff`); `kiteplayer-core/src/
 nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/AudioPath.native.kt`;
+`kiteplayer-rt/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/rt/PublicationAnchor.kt` (new,
+package and explanatory comment only, no declaration);
 `kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/CoreAudioSink.kt`;
 `kiteplayer-output/src/appleTest/kotlin/io/github/yuroyami/kiteplayer/output/
 CoreAudioSinkTest.kt`; `RealTimeSoakTest.kt` and `CoreAudioSinkRealTimeTest.kt` beside it; the
-committed kiteplayer-core api dump; a new committed api dump for kiteplayer-rt if the tooling can
-produce one.
+committed kiteplayer-core api dump; the new declaration-free committed kiteplayer-rt api dump.
 
 Steps.
 1. Apply `alias(libs.plugins.vanniktech.publish)` to kiteplayer-rt exactly as the four siblings
@@ -7724,12 +7746,23 @@ Steps.
    leave them untouched, and do not "unify" the two mechanisms here (S1.a.0's second run caught
    this expansion claiming the properties were the source; the block is). Publication remains
    LOCAL: nothing in this sub-phase pushes or releases anything, per D-3.
-2. Declare `abiValidation {}` as the siblings do and run the dump task. If the tool cannot dump a
-   module with no main Kotlin sources of its own (kiteplayer-rt has one nativeTest source and
-   publishes exactly one cinterop klib), record that as a deviation in the log and name
-   `render-audit.sh`, `source-discipline.sh` and the kitert def itself as the module's ABI
-   witnesses instead. Do not fake a dump.
-3. Add a `@RequiresOptIn` annotation (name it `RawRingApi`, in kiteplayer-core's nativeMain
+2. Add `PublicationAnchor.kt` to nativeMain with only its package declaration and an explanatory
+   comment, and no Kotlin declaration or callable API. This is the empty main-klib carrier the
+   Kotlin publication model requires around the separately published cinterop klib. Measured on
+   the first execution: without a main source, `compileKotlinAndroidNativeArm64` was `NO-SOURCE`
+   and `generateMetadataFileForAndroidNativeArm64Publication` failed because its expected main
+   klib did not exist; with this API-free anchor, both the main-klib task and metadata task pass.
+   Do not invent a marker object or expose a Kotlin symbol just to make the artifact exist. Update
+   the kiteplayer-rt build-file module note from "no Kotlin sources" to the exact state: no Kotlin
+   declarations or callable API, with one package-only publication carrier. Replace "publishes
+   exactly one thing" with the exact two-artifact statement: the module exposes one callable
+   surface, the `kitert` cinterop klib, beside the declaration-free main publication klib.
+3. Declare `abiValidation {}` as the siblings do and run the dump task. Commit the generated
+   `kiteplayer-rt/api/kiteplayer-rt.klib.api`; it is declaration-free, proving that the carrier
+   introduced no Kotlin API while the separately published `kitert` klib remains the
+   module's callable surface. Keep `render-audit.sh`, `source-discipline.sh` and the kitert def as
+   the generated binding's additional ABI witnesses.
+4. Add a `@RequiresOptIn` annotation (name it `RawRingApi`, in kiteplayer-core's nativeMain
    beside the SPI) and mark `NativeRingHandoff`, whose `ring: CPointer<cnames.structs/kprt_ring>`
    is the exposure 16.4 item 9 measured. The marker propagates through
    `NativeRingAudioSink.openWithRing`, which returns the marked type, so the affected set is
@@ -7740,10 +7773,10 @@ Steps.
    demands, and paste the final opted-in file list into the log. Update kiteplayer-core's
    committed api dump; the log entry states the dump moved because the annotation is now part
    of the surface.
-4. Correct the inverted comment in kiteplayer-core/build.gradle.kts ("Nothing public leaks by
+5. Correct the inverted comment in kiteplayer-core/build.gradle.kts ("Nothing public leaks by
    doing so"): the generated bindings ARE the surface; publishing makes them public; the opt-in
    is what marks them deliberate.
-5. Scratch consumer proof: publish kiteplayer-rt and kiteplayer-core to mavenLocal, then build a
+6. Scratch consumer proof: publish kiteplayer-rt and kiteplayer-core to mavenLocal, then build a
    scratch macosArm64 consumer (outside both repositories) whose only dependency is
    `io.github.yuroyami:kiteplayer-core:0.0.1` from mavenLocal. It must resolve with no
    unresolvable coordinate and compile a trivial use of the facade.

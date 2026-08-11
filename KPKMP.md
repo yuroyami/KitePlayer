@@ -5767,6 +5767,46 @@ is no other.
   Gradle started. The identical host-authorized rerun passed and is the gate result. No product
   file changed during this correction, and nothing was pushed, published, released or staged.
 
+- 2026-08-11, S1.b.1 third execution-fence correction completed before the simulator gate rerun,
+  against Player `a3131b2` and Codec `c2447c8`. Prose only, Tier 1 selected by the rule that every
+  change, including prose, receives Tier 1. The owner's mechanical S1 correction exception
+  applies. The 24-path Codec diff remained frozen while the failing test transcript was reduced
+  to its exact pre-existing cause.
+
+  The three FFmpeg producers and their immediate proof were already GREEN. All 18 archives are
+  arm64 with exact platform values 1, 2 and 7; their object/platform counts remain the recorded
+  macOS and iOS values; all three installed configure records are one nonblank line; the one iOS
+  package matched its record byte for byte and its exact dist pair was removed. Both the iOS GPL
+  and remote-publication negative controls failed at configuration with their required messages.
+  The corrected three-target compile and device/simulator final-link command then passed with all
+  23 tasks executed.
+
+  The first real iOS simulator test run executed 85 tests: 66 passed, 19 failed, none skipped.
+  EncoderRestampTest failed its one file-writing case, PipelineRoundTripTest failed 11 of 17 and
+  PlayerSurfaceTest failed seven of ten. Every failure was `avio_open` with ENOENT. Those three
+  suites independently construct `build/kitecodec-test-*`; an installed simulator test app has no
+  such relative directory. Every path-free FFmpeg, identity, filter, frame and rational test was
+  green, and history places the relative helpers before S1.b.1. This is a test-path portability
+  defect exposed by the new target gate, not a Codec or FFmpeg regression.
+
+  The corrected fence names exactly those three existing tests. Each resolves the first nonblank
+  POSIX environment value from `TMPDIR`, `TEMP` and `TMP`, converts it with `toKString()`, trims a
+  trailing separator and appends the unchanged test filename. Absence of all three variables is a
+  loud test error. This stays portable across the shared nativeTest target set; an Apple-only
+  Foundation call and a fourth helper file are both forbidden. The simulator must return 85 of 85
+  and macosArm64Test must remain green before the ordinary Tier 2 continues.
+
+  A complete S1.b.0/S1.b.1 re-sweep found no second mismatch. Tier 1 is GREEN. Codec coupling is
+  zero direct imports and zero typed crossings with 292 opaque helper sites reported; deleted
+  surface is 15 of 15; and the seven plain C suites pass 274 cases. Player coupling scans 87
+  Kotlin files with three allowlisted matches; all five ABI checks pass; the forced JVM run passes
+  184 core and eight subtitle tests; the eight rt suites pass 127 cases; render audit passes 15
+  checks; and source discipline passes 18. Both tracked em dash scans print nothing and return the
+  specified passing exit 1. DEVIATIONS: the first Codec Gradle launch could not acquire the user
+  Gradle cache lock under the sandbox and the verbatim JVM tasks were cached. The authorized Codec
+  rerun and forced ten-task JVM rerun passed without changing source or scope. No product file
+  changed during this correction, and nothing was pushed, published, released or staged.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -9368,10 +9408,15 @@ Execution-fence correction commit first line. KitePlayer:
 Second execution-fence correction commit first line. KitePlayer:
 `Scope the Apple phone proof to the core project`.
 
+Third execution-fence correction commit first line. KitePlayer:
+`Make native media tests use writable paths`.
+
 Files, KiteCodec: `buildSrc/src/main/kotlin/BuildFFmpegTask.kt`;
 `buildSrc/src/main/kotlin/StaticLinkFlags.kt`; `buildSrc/src/main/kotlin/FFmpegPaths.kt`; new
 `buildSrc/src/test/kotlin/BuildFFmpegTaskTest.kt` and `FFmpegPathsTest.kt`;
 `kitecodec-core/build.gradle.kts`;
+`kitecodec-core/src/nativeTest/kotlin/io/github/yuroyami/kitecodec/EncoderRestampTest.kt`,
+`PipelineRoundTripTest.kt` and `PlayerSurfaceTest.kt` in that same directory;
 `kitecodec-gradle-plugin/src/main/kotlin/io/github/yuroyami/kitecodec/gradle/FFmpegLicense.kt`,
 `KiteCodecExtension.kt`, `KiteCodecPlugin.kt`, `PrebuiltLinkFlags.kt`;
 `kitecodec-gradle-plugin/src/test/kotlin/io/github/yuroyami/kitecodec/gradle/KiteCodecPluginFunctionalTest.kt`;
@@ -9464,7 +9509,16 @@ Steps.
    match this corrected form. Verify all generated task names during S1.b.0. Keep the standing
    host-only `apiCheck`, because
    the committed KiteCodec API dump remains the macOS baseline and the public Kotlin surface does
-   not change.
+   not change. The first real simulator run exposed a pre-existing native-test path defect: 19 of
+   85 tests failed because the three named file-writing suites use relative `build/` outputs, and
+   that directory does not exist inside the simulator app sandbox. Preserve that red transcript.
+   In each of those three test files, replace the duplicated relative root with the first nonblank
+   value from POSIX `TMPDIR`, `TEMP` and `TMP`, converted with `toKString()`. Fail explicitly if no
+   writable temporary root is advertised; trim a trailing slash or backslash, append the same
+   `kitecodec-test-<name>` filename and retain the existing cleanup list. Do not use Foundation in
+   shared `nativeTest`, and do not add a fourth helper file. Rerun the exact simulator command and
+   require all 85 tests green, then run macosArm64Test to prove the portable path preserves the
+   host suite.
 6. Inspect every one of the six archives in every tree, not a representative member. The gate
    asserts rather than merely prints: `lipo` must report exactly arm64, the real object-member
    count from `ar -t` must equal the number of `otool` platform records after excluding only the

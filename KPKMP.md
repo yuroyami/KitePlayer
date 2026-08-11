@@ -6088,6 +6088,45 @@ is no other.
   fenced paths, four of them R100 moves, with SHA-256
   `a2f1baa9c12a3bec82ca5a5e181659f89e7b5466d13dba5038d9233120afcfb6`.
 
+- 2026-08-11, S1.b.3 truth-fence correction completed before product work began, against Player
+  `60da62d` and Codec `23b8bf4`. Prose only, Tier 1 selected by the rule that every change,
+  including prose, receives Tier 1. The owner's mechanical S1 correction exception applies.
+
+  The complete S1.b.3 preflight first found that the root README was outside the file fence while
+  its current-state text says the device is macOS-only, every iOS audio entry point refuses and the
+  output and FFmpeg modules are macOS-only. S1.b.2 already added the iOS module targets, and S1.b.3
+  creates the local RemoteIO substrate, so leaving those statements until the final sample would
+  make two intervening product commits knowingly false. The correction adds the README to S1.b.3
+  for the local software-codec and RemoteIO truth, and to S1.b.4 for the caller-owned layer renderer
+  truth; S1.b.5 already owns the runnable sample update. Each checkpoint explicitly remains local,
+  private and T1, without an end-to-end, physical-device, iosX64, public-artifact or later-stage
+  claim.
+
+  One hostile sweep also proposed editing the macOS-only sentence in `gradle.properties`. The
+  independent owner-order audit correctly classified that action as BLOCKING: S1.a.2 makes the
+  root build script the coordinate authority and requires `gradle.properties` to remain unread as
+  authority and untouched, and S1.c.0 rechecks that exact invariant. The final correction therefore
+  excludes the file and says explicitly that it does not override the earlier owner constraint.
+
+  The remaining reconnaissance is DESCRIPTIVE and already inside the product fence. The rt README
+  still records 121 C cases while the current eight suites pass 127, so S1.b.3 remeasures and updates
+  it. One source-discipline mutation is line-pinned to the current CoreAudio source and must be
+  retargeted after the guarded body moves. The first sandboxed CoreSimulator inventory query was
+  denied; the required host-access retry found the exact shutdown `Test iPhone 17` simulator at
+  `5DBA149A-E990-4197-8A7D-31E97658B568`. The complete corrected sweep found no other BLOCKING or
+  DESCRIPTIVE mismatch.
+
+  Tier 1 is GREEN. Codec coupling remains zero imports and zero typed crossings with 292 opaque
+  helper sites reported; deleted surface is 15 of 15; and seven plain C suites pass 274 cases.
+  Player coupling scans 87 files with three matches, all allowlisted; all five ABI checks pass; a
+  forced ten-task JVM run passes 184 core and eight subtitle tests with zero skip, failure or error;
+  eight rt suites pass 127 cases; render audit passes 15 checks; and source discipline passes 18.
+  Both tracked em dash scans print nothing and return the specified passing exit 1. Accepted command
+  time was about 54.92 seconds. DEVIATIONS: the first Codec Gradle launch was sandbox-denied on the
+  user-home distribution lock before task execution, and the authorized retry passed; the verbatim
+  JVM pair was cached and rejected, so the forced rerun supplies the evidence. No product file
+  changed, nothing was staged, and nothing was pushed, published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10105,7 +10144,10 @@ Commit first line. KitePlayer: `Split AppKit from the shared Apple output target
 
 #### S1.b.3 Qualify the real-time sink on iOS
 
-Files: `kiteplayer-rt/native/src/kite_rt_coreaudio.c`;
+Execution-fence correction commit first line. KitePlayer:
+`Correct the iOS sink truth fence`.
+
+Files: `README.md`; `kiteplayer-rt/native/src/kite_rt_coreaudio.c`;
 `kiteplayer-rt/native/include/kite_rt.h`;
 `kiteplayer-rt/src/nativeInterop/cinterop/kitert.def`; `kiteplayer-rt/build.gradle.kts`;
 `kiteplayer-rt/README.md`; `kiteplayer-rt/native/scripts/build-host.sh`;
@@ -10190,6 +10232,16 @@ Steps.
    ```
 
    Update the output ABI dump for additions only and run its update/check pair.
+6. Keep the root repository's current-state guide true at every remaining S1.b product commit
+   rather than waiting for the final sample. State narrowly that macOS remains the only end-to-end
+   candidate above T1, while the local/private iOS arm64 and simulator substrate now has the
+   software-codec backend plus RemoteIO audio but still has no renderer, runnable consumer,
+   physical-device result or tier promotion. Correct the affected macOS-only/refusal sentences,
+   current test counts and module target rows, including the already-landed S1.b.2 output and
+   FFmpeg target expansion. Do not claim iosX64 qualification, public artifacts, end-to-end iOS
+   playback or anything owned by S1.b.4/S1.b.5. `gradle.properties` remains unread and untouched
+   under S1.a.2 and is rechecked as
+   such at S1.c.0; this correction does not override that explicit owner constraint.
 
 Gate. Tier 3, selected conservatively because this promotes a new platform through the same
 `kprt_render_cb` and changes its compilation guard. Run full Tier 2, the existing supervised macOS
@@ -10201,7 +10253,8 @@ Commit first line. KitePlayer: `Run the real-time sink through RemoteIO on iOS`.
 
 #### S1.b.4 Render converted frames into a caller-owned iOS layer
 
-Files: new `kiteplayer-output/src/iosMain/kotlin/io/github/yuroyami/kiteplayer/output/UIKitVideoRenderer.kt`;
+Files: `README.md`; new
+`kiteplayer-output/src/iosMain/kotlin/io/github/yuroyami/kiteplayer/output/UIKitVideoRenderer.kt`;
 new `kiteplayer-output/src/iosTest/kotlin/io/github/yuroyami/kiteplayer/output/UIKitVideoRendererTest.kt`;
 `kiteplayer-output/api/kiteplayer-output.klib.api`; KPKMP log.
 
@@ -10236,7 +10289,10 @@ Steps.
    release every image still owned by the renderer, then close the worker dispatcher. A queued
    delivery after close observes an empty slot and owns nothing. CALayer's already retained last
    contents remains owned by the caller's layer until that caller clears or replaces it. Update
-   the dump with only this class and its counters.
+   the dump with only this class and its counters. Update only the root README's affected renderer
+   and current test-count truth: the local/private iOS substrate now has a caller-owned layer
+   renderer, but still has no runnable consumer, end-to-end result, physical-device qualification,
+   public artifact or tier move. Leave the final sample/run wording to S1.b.5.
 3. Run:
 
    ```bash

@@ -5898,6 +5898,40 @@ is no other.
   `Make the mobile Apple FFmpeg build local and reproducible` in Codec and
   `Record the local mobile Apple Codec proof` in Player.
 
+- 2026-08-11, S1.b.2 execution-fence correction completed before product work began, against
+  Player `568a9dd` and Codec `23b8bf4`. Prose only, Tier 1 selected by the rule that every change,
+  including prose, receives Tier 1. The owner's mechanical S1 correction exception applies. The
+  complete S1.b.2 sweep produced one BLOCKING finding and one DESCRIPTIVE finding in one
+  consolidated report.
+
+  The exact isolated iosSimulatorArm64 registration and compile reproduced the planned unresolved
+  `platform.AppKit` boundary, but also proved that shared `AppleHostClock` names the macOS-only
+  `AudioConvertHostTimeToNanos` and `AudioGetCurrentHostTime` bindings. The planned device and
+  simulator test links would then fail on the same direct call in `CoreAudioSinkTest`. Moving only
+  the four named AppKit files therefore could not make the written gate green. The temporary
+  registration was restored without a product diff.
+
+  The corrected fence adds exactly those two existing files. AppleHostClock keeps its public
+  object and functions and instead reads Darwin host ticks with `mach_absolute_time()` and one
+  cached, validated `mach_timebase_info`. Its conversion uses the same divide-first quotient and
+  remainder arithmetic as the shipped C sink, and the test reads its comparison tick from the
+  same Darwin source. This adds no dependency or public declaration and leaves the four AppKit
+  files move-only. The earlier S1B-02 synopsis still summarizes only the AppKit leak; this is
+  DESCRIPTIVE because the detailed execution fence owns the complete file set, actions and gate,
+  so it is recorded and left rather than broadening another summary.
+
+  The post-correction complete sweep found no remaining BLOCKING mismatch. Tier 1 is GREEN. Codec
+  coupling is zero direct imports and zero typed crossings with 292 opaque helper sites reported;
+  deleted surface is 15 of 15; and seven plain C suites pass 274 cases. Player coupling scans 87
+  Kotlin files with three matches, all allowlisted; all five ABI checks pass; a forced ten-task JVM
+  run passes 184 core and eight subtitle tests with zero skip, failure or error; eight rt suites
+  pass 127 cases; render audit passes 15 checks; and source discipline passes 18. Both tracked em
+  dash scans print nothing and return the specified passing exit 1. Accepted serial command time
+  was 55.51 seconds. DEVIATIONS: the verbatim JVM invocation was cached and rejected, so the
+  required forced rerun supplies the evidence; a login-shell RVM warning preceded the first Codec
+  hygiene scan, so both scans reran without login startup and produced exactly empty output. No
+  product file changed, and nothing was staged, pushed, published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -9817,28 +9851,43 @@ KitePlayer: `Record the local mobile Apple Codec proof`.
 
 #### S1.b.2 Split the Apple targets at their real platform boundary
 
+Execution-fence correction commit first line. KitePlayer:
+`Correct the Apple clock boundary for iOS`.
+
 Files: `settings.gradle.kts`; `kiteplayer-output/build.gradle.kts`; move
 `kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/AppKitVideoRenderer.kt`
 and `AppKitWindow.kt` to the same package under `src/macosArm64Main`; move
 `kiteplayer-output/src/appleTest/kotlin/io/github/yuroyami/kiteplayer/output/AppKitVideoRendererTest.kt`
 and `RealTimeSoakTest.kt` to the same package under `src/macosArm64Test`, all four without other
-edits; `kiteplayer-ffmpeg/build.gradle.kts`;
+edits; `kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/AppleHostClock.kt`;
+`kiteplayer-output/src/appleTest/kotlin/io/github/yuroyami/kiteplayer/output/CoreAudioSinkTest.kt`;
+`kiteplayer-ffmpeg/build.gradle.kts`;
 `kiteplayer-output/api/kiteplayer-output.klib.api`;
 `kiteplayer-ffmpeg/api/kiteplayer-ffmpeg.klib.api`; KPKMP log.
 
 Steps.
 1. Temporarily register iosSimulatorArm64 in output before the moves and retain the exact failure
    from `./gradlew :kiteplayer-output:compileKotlinIosSimulatorArm64 --rerun-tasks`: unresolved
-   `platform.AppKit`. Restore, perform only the four moves, then register iosArm64 and
-   iosSimulatorArm64 in output and FFmpeg. Keep macosArm64 and its tests. Do not add sample
-   targets yet.
-2. Only `kiteplayer-ffmpeg` applies the KiteCodec plugin and carries FFmpeg. Configure it from the
+   `platform.AppKit`, plus unavailable `AudioConvertHostTimeToNanos` and
+   `AudioGetCurrentHostTime` in AppleHostClock. The later test link would also fail on the direct
+   AudioGetCurrentHostTime call in CoreAudioSinkTest. Restore, perform only the four moves, then
+   register iosArm64 and iosSimulatorArm64 in output and FFmpeg. Keep macosArm64 and its tests. Do
+   not add sample targets yet.
+2. Keep AppleHostClock in shared appleMain and preserve its public object and functions exactly.
+   Replace the macOS-only CoreAudio host-time calls with `mach_absolute_time()` plus one cached,
+   validated `mach_timebase_info`. Convert ticks with the same overflow-safe quotient/remainder
+   formula already used by `kprt_sink_ticks_to_nanos`: divide by denom first, then add the scaled
+   remainder; reject a zero numerator or denominator rather than manufacturing a timebase. In
+   CoreAudioSinkTest, read the comparison host tick with `mach_absolute_time()`. This is the same
+   host-time domain CoreAudio timestamps carry on both Apple platforms and adds no API or
+   dependency. The macOS clock tests and both iOS final test links must pass.
+3. Only `kiteplayer-ffmpeg` applies the KiteCodec plugin and carries FFmpeg. Configure it from the
    provider `kitecodec.ffmpeg.localRoot`: when present, select `FFmpegSource.Local`, LGPL and that
    absolute root for phone links; when absent, preserve `FFmpegSource.System` for the standing
    host-only gate. `kiteplayer-output` remains FFmpeg-free and receives no plugin or Local block.
    Update the settings build note with the new local-only Apple publication and consumption
    command.
-3. Prove the shared Apple sets have no AppKit imports and compile and final-link all three target
+4. Prove the shared Apple sets have no AppKit imports and compile and final-link all three target
    families from a fresh local dependency resolution:
 
    ```bash
@@ -9862,7 +9911,7 @@ Steps.
 
    The `rg` command must print nothing and return 1. The link command must consume the S1.b.1
    Maven-local variants and generated standard FFmpeg trees, not stale Gradle cache entries.
-4. Target addition necessarily changes ABI dump metadata. Run:
+5. Target addition necessarily changes ABI dump metadata. Run:
 
    ```bash
    ./gradlew :kiteplayer-output:updateKotlinAbi :kiteplayer-ffmpeg:updateKotlinAbi

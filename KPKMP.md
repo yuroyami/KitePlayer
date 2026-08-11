@@ -937,8 +937,10 @@ Selected by ANY of these, mechanically, by changed path:
 - any file under `buildSrc/` in either repository
 - any file under `kitecodec-gradle-plugin/src/`
 - any `*.def`, any `build.gradle.kts`, any `gradle/libs.versions.toml`
-- any Kotlin under `nativeMain`, `nativeTest`, `appleMain`, `appleTest`, `macos*Main`,
-  `macos*Test`, `ios*Main` or `ios*Test` (the wildcard includes shared iosMain/iosTest)
+- any Kotlin under `nativeMain`, `nativeTest`, `jvmMain`, `jvmTest`, `jvmAndAndroidMain`,
+  `jvmAndAndroidTest`, `androidMain`, `androidHostTest`, `androidDeviceTest`, `appleMain`,
+  `appleTest`, `macos*Main`, `macos*Test`, `ios*Main` or `ios*Test` (the wildcard includes
+  shared iosMain/iosTest)
 - the completion of any Horizon item, unconditionally, whatever it changed
 
 ```bash
@@ -1006,7 +1008,7 @@ Selected by ANY of these:
   `kite_rt_coreaudio.c`
 - any change to the ordering of `AudioPlayback`'s `submit`, `flush` or `close`, or to
   `PlaybackCore`'s `teardownSession`
-- any proposed support-tier promotion under section 3
+- any proposed support-tier promotion under section 2
 - before publishing a release artifact
 
 Tier 2, plus the supervised device run and its negative control: two ten-minute commands with the
@@ -1015,10 +1017,11 @@ one machine in a debug binary with one operator, and its authority rests on `ren
 the interposed C suites, which are level 2. Never present it as level 1; section 2 forbids it and
 the interlude corrected exactly that overclaim (I-16).
 
-**Deliberately not gated by Tier 3.** A phase that changes no line of the render path, the
-callback, or the teardown ordering does not run it, even when it touches audio elsewhere: the
-render audit proves the shipped object has no allocator, lock, log or framework symbol to call on
-any run, and that proof does not weaken because a resampler changed.
+**Deliberately not gated by Tier 3.** Except for the explicit support-promotion and release-artifact
+selectors above, a phase that changes no line of the render path, callback or teardown ordering
+does not run it, even when it touches audio elsewhere: the render audit proves the shipped object
+has no allocator, lock, log or framework symbol to call on any run, and that proof does not weaken
+because a resampler changed.
 
 ### How every ratchet moves
 
@@ -1029,14 +1032,14 @@ say which sub-phase.
 
 | Baseline | Fires when | The move | The log entry must say |
 |---|---|---|---|
-| `../KiteCodec/kitecodec-core/api/kitecodec-core.klib.api` | `:kitecodec-core:apiCheck`, on any public API change in kitecodec-core's own klib | `./gradlew :kitecodec-core:apiDump -Pkitecodec.hostTargetsOnly=true`, commit the dump with the change | every declaration added or removed, and why |
+| the KiteCodec API dumps under `../KiteCodec/kitecodec-core/api/`: `kitecodec-core.klib.api`, plus the JVM dump installed by S1.c.2 | `:kitecodec-core:apiCheck`, on any public API change in kitecodec-core | before S1.c.2 run `./gradlew :kitecodec-core:apiDump -Pkitecodec.hostTargetsOnly=true`; from S1.c.2 run `./gradlew :kitecodec-core:apiDump -Pkitecodec.phoneTargetsOnly=true -Pkitecodec.requireAllTargets=true`, and commit every changed dump with the declaration | every declaration added or removed, which dump moved, and why |
 | the KitePlayer api dumps under `*/api/` across five library modules | `checkKotlinAbi`, on any public API change in those five modules | `./gradlew updateKotlinAbi`, commit the dumps with the change | every declaration added or removed, and why |
 | `kitert-coupling-baseline.txt` (installed by S1.a.4) | `checkKitertCoupling`, when a previously unlisted Kotlin source file in any active non-excluded module names `cnames.structs.kprt_` or `kiteplayer.rt.cinterop` after comment stripping | remove the direct cinterop name, or add or remove the exact `allowed_kitert_file` line and update the measured count in the baseline header in the same commit | the old and new file count, every path added or removed, why the facade could not avoid the naming site, and whether either module exclusion changed |
 | `../KiteCodec/native/kitecodec-c/coupling-baseline.txt` | `checkCinteropCoupling`, when a ratcheted count rises | edit the number by hand to the value re-measured with the command written beside it in the file | the old and new number, and the change that moved it |
 | `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` | `klib-metadata-diff.sh --check`, on any cinterop metadata difference | `./scripts/klib-metadata-diff.sh --update`, in the same commit as the deliberate surface change | the script's whole SUMMARY block, pasted, so the record carries the reviewed numbers and not a pointer to a 19,000 line diff |
 | `../KiteCodec/native/kitecodec-c/deleted-surface.txt` (installed by I.3) | `check-deleted-surface.sh`, on any use of a name whose status is `deleted` | change that name's status to `resurrected-in-<item>` in the same commit that resurrects it | one sentence naming the item and the reason |
 | `../KiteCodec/native/kitecodec-c/exported-symbols-baseline.txt` (installed by I.4) | `symbol-audit.sh` check 6, when the archive's exported name set differs from the baseline | regenerate with the command the baseline's own header names, in the same commit as the deliberate export change | every symbol added or removed, and why |
-| `../KiteCodec/native/kitecodec-c/signature-baseline.txt` (installed by S1.a.8) | `symbol-audit.sh` check 7, when any of the 189 normalized public C declaration records differs | from `native/kitecodec-c`, run `./scripts/symbol-audit.sh --write-signature-baseline` after reviewing the exact diff, in the same commit as the deliberate declaration change | every declaration class added, removed or changed, the old and new normalized records, and why the ABI move is intentional |
+| `../KiteCodec/native/kitecodec-c/signature-baseline.txt` (installed by S1.a.8) | `symbol-audit.sh` check 7, when any committed normalized public C declaration record differs: 189 before S1.c.1 and 192 after its compatible ABI addition | from `native/kitecodec-c`, run `./scripts/symbol-audit.sh --write-signature-baseline` after reviewing the exact diff, in the same commit as the deliberate declaration change | every declaration class added, removed or changed, the old and new normalized records, and why the ABI move is intentional |
 | `ALLOWED_UNDEFINED` in `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh` | `symbol-audit.sh` check 4, when an archive references an undefined symbol outside the list | add the symbol to the list in the same commit as the code that needs it | the symbol and the helper that pulls it in |
 
 Multi-pass rule, owner-mandated: after each phase's code is written, re-read every changed
@@ -1188,8 +1191,9 @@ dependency-driven. Each item ends with its exit truth.
   default composition; KiteCodec runtime artifacts published so ordinary consumption is
   ONE dependency line with no plugin (static-library-in-klib or runtime-variant strategy
   per target; the plugin remains for custom profiles, system FFmpeg and GPL opt-ins that
-  never arrive transitively); Android AAR over the JNI bridge (16 KiB page alignment,
-  extractNativeLibs=false, per-ABI jniLibs); JVM desktop runtime jars; iOS/tvOS
+  never arrive transitively); Android AAR over the JNI bridge (16 KiB ELF load segments,
+  extractNativeLibs=false, per-ABI jniLibs, with consuming APKs storing and page-aligning the
+  entries); JVM desktop runtime jars; iOS/tvOS
   frameworks; content-addressed plugin cache with digest and provenance validation,
   bounded extraction, and profile-aware identity; licensing bundles (notices, exact
   corresponding source, relink material) with no categorical legal claims about static
@@ -5619,6 +5623,67 @@ is no other.
   was written and remained GREEN at the same counts, with no new deviation. No product file
   changed and nothing was pushed, published or released.
 
+- 2026-08-11, S1.c Android phone execution expansion authorship and preflight completed against
+  Player `798f875` and Codec `c2447c8`. Prose only, Tier 1 gate, selected by the rule that every
+  change, including prose, receives Tier 1. S1.b's clean product exit remains the explicit entry
+  prerequisite; S1.c.0 itself remains pending until that exit and must reverify the resulting
+  landed tree. The current uncommitted Codec S1.b.1 implementation was frozen and audited
+  separately rather than mistaken for landed S1.c substrate. No S1.c product file moved.
+
+  The expansion divides Android delivery into six numbered product sub-phases yielding eight local
+  commits: two Codec commits and six Player commits. S1.c.1 adds the opaque JNI bridge and the
+  compatible C ABI 2.1 move; S1.c.2 supplies complete JVM and Android actuals,
+  publishes one Apple-preserving phone-superset coordinate to Maven local, and proves ordinary
+  debug and minified-release consumers; S1.c.3 moves the generic FFmpeg backend and implements
+  FFmpeg-owned MediaCodec selection with software fallback; S1.c.4 adds AudioTrack output; S1.c.5
+  adds the caller-owned Surface renderer; S1.c.6 assembles both APK variants and promotes Android
+  honestly from T1 API to T2 Codec. Audio and Surface evidence remains provisional below T3-Full
+  because subtitles and the complete lifecycle/format qualification do not exist. That promotion
+  selects the standing Tier 3 gate once at S1.c.6. One local window-2b publication preserves the
+  S1.b Apple variants; no Android-only metadata overwrite is allowed.
+
+  Mechanical audit corrected every located execution contradiction before product work. The
+  Android profile already inherited `--enable-pic`. AAR ZIP compression is not APK packaging, so
+  the AAR proves exact JNI paths, consumer rules and 16 KiB ELF load segments while both final APK
+  classes prove Stored entries and ZIP alignment. Every multiline entry assertion became an exact
+  count plus two exact paths. Scratch consumers now have fixed cross-shell locations, complete file
+  recipes, bounded device/oracle polls, local release signing, real R8 execution and identical
+  debug/release decode oracles. Generated JNI source directories are rooted above each ABI, JVM
+  tests consume the macOS JNI output by provider, and the KMP consumer-rule publication opt-in is
+  explicit.
+
+  Runtime fallback now uses a delivered-output ordinal instead of PTS, so duplicate and missing
+  timestamps remain correct. A pending keyframe keeps the prior replay boundary until the decoded
+  keyframe confirms handover; delayed B-frames and the full old-plus-candidate byte cap have named
+  tests. The complete low-level API inventory and opt-in annotations are preserved. Contract media
+  has one expect materializer with JVM, macosArm64 and Android-device actuals. JVM and macosArm64
+  backend transcripts use their real system-property and Kotlin/Native environment seams and are
+  compared byte for byte. Android media scans cover wildcard imports, fully qualified platform
+  calls, NDK codec/extractor tokens and direct libav names rather than imports alone.
+
+  File-fence audit also added every live documentation owner, the 192-record C symbol audit, exact
+  JNI task outputs, the shared JVM/Android converter source set and the test materializers. It
+  corrected the standing Tier 3 section reference from section 3 to section 2 and made the
+  no-render-path exemption explicitly subordinate to support-promotion and release selectors. Two
+  independent final sweeps found zero blocking and zero descriptive findings. All S1.c shell
+  blocks pass `bash -n`; `git diff --check` is clean and the added-line em dash scan is empty.
+
+  The first Tier 1 run is GREEN. Codec coupling is zero direct imports and zero typed crossings
+  with 292 opaque helper sites reported; deleted surface is 15 of 15; and all seven plain C suites
+  pass 274 cases. Player coupling scans 87 Kotlin files with three matches, all allowlisted; all
+  five ABI checks pass; the forced uncached JVM run passes 184 core and eight subtitle tests; the
+  eight rt suites pass 127 cases; render audit passes 15 checks; and source discipline passes 18.
+  Both tracked em dash scans print nothing and return the specified passing exit 1. DEVIATION: the
+  first restricted Codec Gradle invocation could not acquire the user Gradle cache lock. The
+  identical host-authorized run passed, and no source or gate step changed. Nothing was pushed,
+  locally or publicly published, released, staged or committed by this gate.
+
+  The complete Tier 1 reran after this record was written and remained GREEN at the same counts.
+  The verbatim JVM command was cached, so all ten JVM tasks were forced and all 192 tests passed.
+  No command failed. Two Codec shell scripts printed the sandboxed RVM `ps` warning before their
+  own PASS output; it did not change an exit or measurement. Nothing was pushed, published,
+  released or staged.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -8274,19 +8339,24 @@ dependency order inside the stage:
     cross-compiled for iOS since B1); AVAudioSession policy; a straightforward CPU-converter
     renderer into a caller-owned CALayer (the reusable view is S1.d; Metal is S2, deliberately:
     usable beats beautiful); an iOS sample.
-  - **S1.c Android backend over the JNI bridge**: the engine runs as JVM bytecode (already proven
-    by jvmTest and assembleAndroidMain); KiteCodec gains a JVM actual implemented as JNI over the
-    kc_/ffkmp_ C ABI that S1.a finishes; FFmpeg built per Android ABI by the existing android
-    profile with mediacodec decoders inside FFmpeg per D-2; AudioTrack sink in JVM Kotlin over
-    KotlinAudioRing; video onto a Surface via the CPU converter first; AAR packaging (per-ABI
-    jniLibs, 16 KiB alignment, extractNativeLibs=false).
-  - **S1.d The pluggable views**: KitePlayerView (plain Android View, and the iOS counterpart),
-    plus the SEPARATE optional :kiteplayer-compose module exposing one Composable that wraps
-    AndroidView on Android and UIKitView on iOS, so a non-Compose consumer never pulls Compose.
-    This wrapper is the BASELINE Compose path per D-6; the Compose-true flagship (KiteVideo,
-    17.9) is deliberately NOT in S1: usable beats beautiful.
-  - **S1.e Stage exit**: the two demo apps, the matrix run on both platforms, the log entry with
-    every measured number, owner device session.
+  - **S1.c Android backend over the JNI bridge**: the already-portable engine stays JVM bytecode;
+    KiteCodec gains complete JVM and Android actuals implemented by one dynamically registered JNI
+    library over the kc_/ffkmp_ opaque C ABI; the existing LGPL Android FFmpeg profile produces
+    arm64-v8a and x86_64, with MediaCodec selected inside FFmpeg per D-2 and decoded in buffer mode
+    to CPU frames; AudioTrack pulls through the engine's KotlinAudioRing path; a caller-owned Surface
+    receives the CPU converter output; the AAR carries exactly those two ABI libraries with 16 KiB
+    ELF load segments, while the consuming APK stores and zip-aligns them and preserves
+    extractNativeLibs=false. The complete execution expansion is 17.4.3.
+  - **S1.d The pluggable views**: a new optional `:kiteplayer-phone` aggregate API-depends on
+    `:kiteplayer-ffmpeg` and `:kiteplayer-output` and owns KitePlayerView for Android plus the iOS
+    counterpart. That keeps output FFmpeg-free while giving a plain phone consumer one coordinate.
+    The SEPARATE optional `:kiteplayer-compose` module depends on phone and exposes one Composable
+    that wraps AndroidView on Android and UIKitView on iOS, so a non-Compose consumer never pulls
+    Compose. This wrapper is the BASELINE Compose path per D-6; the Compose-true flagship
+    (KiteVideo, 17.9) is deliberately NOT in S1: usable beats beautiful.
+  - **S1.e Stage exit**: re-consume the provisional S1.b iOS host and S1.c Android application
+    through the S1.d phone coordinate, run the matrix on both platforms, write every measured
+    number, and complete the owner device session.
 
 **S2. IT PLAYS BEAUTIFULLY ON APPLE.** Exit: Metal renderer on macOS and iOS, VideoToolbox inside
 FFmpeg per D-2 with measured software fallback, colour instrument, vsync-snapped scheduling,
@@ -8330,15 +8400,17 @@ rows. 1.0 is declared here and nowhere earlier.
 KiteCodec changes are batched so KitePlayer re-consumes as few times as possible: window 1 inside
 S1.a (opaque migration and guards); window 2a inside S1.b (the iOS standard software-playback
 FFmpeg build, local-only Apple target publication and Local consumer wiring); window 2b inside
-S1.c (JVM actuals and JNI); window 3 inside S2 (VideoToolbox device context); window 4 inside S5
-(runtime artifacts); and window 5 inside S6 (wasm binding) if the spike passes.
+S1.c (the C/JNI bridge and complete JVM/Android actuals, followed by one local-only phone-superset
+publication that preserves the window-2a Apple variants); window 3 inside S2 (VideoToolbox device
+context); window 4 inside S5 (runtime artifacts); and window 5 inside S6 (wasm binding) if the spike
+passes.
 
 | Stage | Hours, honest range | Dominated by |
 |---|---|---|
 | S1.a | 25 to 35 | four check tasks, opaque migration completion, corrections |
 | S1.b | 55 to 75 | mobile FFmpeg provisioning, the appleMain split, iOS audio and the Xcode host |
 | S1.c | 140 to 190 | JNI actuals with a shared differential suite across JVM and native |
-| S1.d + S1.e | 25 to 40 | two view surfaces, two demo apps, the matrix runs |
+| S1.d + S1.e | 25 to 40 | the phone aggregate, two view surfaces, two app re-consumptions, the matrix runs |
 | S2 | 120 to 165 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync; KiteVideo KV-1 to KV-3 at 30 to 45 |
 | S3 | 75 to 115 | two C audio sinks with their instruments; KiteVideo KV-4 and KV-5 at 15 to 25 |
 | S4 | 60 to 80 | subtitle rendering correctness |
@@ -9674,6 +9746,1384 @@ Commit first line. KitePlayer: `Add the runnable iOS phone sample`.
 S1.b exits only when all five product commits exist locally, both trees are clean, the named
 simulator plays and seeks through FFmpeg with RemoteIO and CALayer output, and every deviation is
 in section 14. Nothing is pushed, publicly published or released.
+
+### 17.4.3 The S1.c register and sub-phases, decision complete
+
+Authored 2026-08-11 against clean KitePlayer `798f875` and KiteCodec `c2447c8`, after the S1.a
+exit and against the committed S1.b expansion. S1.b product work had not landed at authorship, so
+S1.b's clean exit is the one current BLOCKING entry condition. S1.c.0 runs only after that exit and
+must verify this expansion against the resulting tree before any product edit. A contradiction is
+handled by S1.c.0's classification rule, not silently adapted by an executor.
+
+Expansion-authorship commit first line. KitePlayer:
+`Expand the Android phone stage against the planned iOS substrate`.
+
+The located substrate is exact at authorship. KiteCodec has ten common `expect` declarations and
+nine native implementation files totalling 3,108 lines. Its opaque C boundary has 189 normalized
+declaration records: 169 helper prototypes, eleven opaque typedefs, six ABI prototypes, two enums
+and the report typedef. The Android FFmpeg tasks are
+`:kitecodec-core:buildFFmpegForAndroidArm64`,
+`:kitecodec-core:buildFFmpegForAndroidArm32` and
+`:kitecodec-core:buildFFmpegForAndroidX64`. S1.c deliberately uses the first and third only. The
+current LGPL Android profile is API 24, static, zlib-enabled, and contains both software playback
+decoders and FFmpeg's H.264/HEVC MediaCodec decoders with `--enable-jni` and
+`--enable-mediacodec`. No Android FFmpeg output exists yet, which is expected producer work in
+S1.c.1 rather than a blocker.
+
+The machine has SDK 36 and NDK 27, 28c and 29 under
+`/Users/macbook/WORKSTATION/AndroidSDK`. Every S1.c command pins
+`ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865` and uses JDK 21.
+`Pixelu16KB` is the one named Android device: an Android 36.1 arm64-v8a Google APIs 16 KiB AVD.
+There is no x86_64 AVD or image, so x86_64 is compile, link and package qualified in S1.c but never
+reported as runtime qualified. There is no attached physical Android device. That is BLOCKING for
+S1.e's owner-device exit only; it does not block S1.c's named 16 KiB emulator proof.
+
+Execution order is S1.c.0 through S1.c.6. KiteCodec window 2b closes once, after S1.c.2: build the
+C/JNI layer and complete Kotlin actuals, publish one phone-superset coordinate locally, then prove
+that the S1.b Apple consumer still links and an ordinary Android consumer resolves, shrinks, loads
+and decodes from the same coordinate. Publishing an Android-only `0.0.1` is forbidden because it
+would replace the root Gradle metadata written in window 2a and silently remove the iOS variants.
+No later S1.c phase changes KiteCodec. Nothing from S1.d, S2 or KiteVideo enters these commits.
+
+#### S1C-01. The JNI library is a narrow adapter over the opaque C boundary
+
+- Where: KiteCodec's `native/kitecodec-c` headers, helper sources and audits; new
+  `native/kitecodec-jni`; `BuildFFmpegTask`; a new JNI link task; the two selected Android FFmpeg
+  trees.
+- Problem: a normal Android or JVM application cannot consume an `androidNative*` klib. Directly
+  binding libav from JNI would create a second FFmpeg surface, defeat S1.a's opaque migration and
+  make D-1 unenforceable.
+- Fix: add exactly two compatible C exports: `kc_jvm_attach(void *java_vm)` and
+  `ffkmp_packet_clone(const kc_packet *packet)`, plus `enum kc_jvm_status`. The C ABI moves from
+  2.0 to 2.1, the normalized signature baseline from 189 to 192 records and the export baseline by
+  exactly those two names. Build one dynamically registered JNI adapter that includes only JNI and
+  KiteCodec's opaque headers, exports only `JNI_OnLoad`, and carries no `Java_*` symbol. JNI handle
+  values are generation-tagged table tokens, never native pointers.
+- Test: C ownership and identity tests cover the two exports; buildSrc tests pin both ABI link
+  recipes; source audit rejects any libav include or call in the JNI tree; symbol audit sees exactly
+  `JNI_OnLoad`; ELF program headers are 16 KiB aligned. The controls deliberately add one direct
+  `av_*` call, one `Java_*` export, one 4 KiB link setting and one descriptor mismatch, and each
+  named audit must fail before the control is reverted.
+
+#### S1C-02. KiteCodec becomes a complete JVM and Android library
+
+- Where: KiteCodec's root and core builds, version catalog, ten common `expect` declarations, the
+  low-level packet/decoder API, nine native implementation files, new shared JVM/Android actuals,
+  leaf load bootstraps, shared contract tests, API dumps and AAR metadata.
+- Problem: the public API is Native-only. Its player-critical `Packet`, `PacketReader`,
+  `StreamDecoder` and `SeekDirection` are concrete native declarations, and a generated Android AAR
+  has neither JNI libraries nor a keep rule for dynamic registration.
+- Fix: add JVM and AGP 9.2.1 Kotlin Multiplatform Android targets at compileSdk 36 and minSdk 24;
+  make all ten expects and all low-level playback declarations real on both through the JNI bridge;
+  add O(1) `Packet.copy()` and named-decoder selection to
+  `MediaSource.openDecoder(..., decoder: CodecId? = null)`; restore `@JvmInline` on
+  `PixelFormat`, `SampleFormat` and `CodecId`; generate exactly arm64-v8a and x86_64 JNI inputs for
+  the AAR and carry `extractNativeLibs=false` in its manifest. Each consuming APK, not the AAR ZIP,
+  owns nonlegacy stored-entry packaging and 16 KiB ZIP alignment. No public operation may be an
+  unsupported placeholder.
+- Test: one `codecContractTest` source set drives the same full API transcript on macosArm64, JVM
+  and Android device, with JVM and macOS transcripts compared byte for byte. Host tests cover handle
+  misuse, typed identity rejection and dynamic registration. The AAR contains exactly two
+  `libkitecodec_jni.so` entries, no arm32 entry, no loose libav shared object, valid consumer rules
+  and 16 KiB ELF load segments. Compression and ZIP alignment are asserted on each final consuming
+  APK, because AGP's AAR bundle is an ordinary ZIP and does not inherit APK JNI packaging policy.
+
+#### S1C-03. The FFmpeg backend runs on Android and honours D-2
+
+- Where: Player's `kiteplayer-ffmpeg` targets; five platform-neutral implementation files; the
+  software converter; player hardware-policy KDoc; new platform decoder selection and retained-GOP
+  fallback driver; shared, host and device tests.
+- Problem: every backend implementation currently lives in `nativeMain`. Hardware policy is honest
+  only because `Require` refuses everything. Opening MediaCodec and then failing later cannot fall
+  back correctly without replaying packets from a keyframe.
+- Fix: move the generic backend to commonMain; keep the zero-copy pointer converter native and add a
+  JVM converter over the safe copied-plane surface. Android `Auto` and `Prefer` try FFmpeg's named
+  H.264/HEVC MediaCodec decoders and fall back to software; `Off` is software; `Require` refuses
+  ineligible or failed hardware. FFmpeg runs MediaCodec in buffer mode with no decoder Surface, so
+  CPU YUV/NV12 frames report `HardwareWithDownload(MediaCodec)`. Retain O(1) packet clones from the
+  latest accepted keyframe, bounded to 16 MiB, and on open/send/receive failure reopen software,
+  replay and discard exactly the number of outputs already delivered from the retained window. A
+  delivered-output ordinal, rather than PTS, handles duplicate and missing timestamps. A pending
+  keyframe does not replace the old replay boundary until its decoded keyframe is observed, so
+  delayed B-frames remain recoverable. A cap hit demotes proactively while the complete handover
+  window is still valid.
+- Test: a driver seam proves open fallback, mid-GOP send and receive fallback, no duplicate output,
+  cap demotion, flush/close ownership and strict `Require`. The named emulator proves FFmpeg's
+  `h264_mediacodec` selection and CPU-readable output, while controls remove the retained keyframe
+  or select a platform decoder directly and fail.
+
+#### S1C-04. Android audio uses AudioTrack through the existing pull contract
+
+- Where: Player's `kiteplayer-output` target graph; new Android clock, AudioTrack driver/sink/factory
+  and output backend; host-driver tests, device tests and the output API dump.
+- Problem: Android has no output backend. `AudioTrack` is a push API while the engine and
+  `KotlinAudioRing` expose the pull callback that owns the audio clock anchor.
+- Fix: add `AndroidMonotonicClock`, `AudioTrackSink`, `AudioTrackSinkFactory` and
+  `AndroidOutputBackend`. A dedicated priority-audio writer owns one MODE_STREAM PCM-float
+  AudioTrack, calls the engine callback into a preallocated buffer, silences a short tail and loops
+  short writes. It accepts mono or stereo only; mixing and resampling remain in the engine.
+  `AudioTimestamp` plus a 64-bit submitted-frame counter computes the callback deadline, with an
+  extended playback-head fallback. Lifecycle calls stop the writer and join it before release.
+- Test: an injected driver pins format negotiation, short callback silence, partial writes,
+  timestamp and wrap calculations, pause/stop/drain/close order, failed open rollback, idempotence
+  and no write after release. A real AudioTrack on `Pixelu16KB` advances its playback head and closes
+  cleanly. A control that releases before join makes the fake report a post-release write.
+
+#### S1C-05. Android video presents converted frames to a caller-owned Surface
+
+- Where: one new Android renderer and its host/device tests in `kiteplayer-output`, plus that
+  module's API dump. `kiteplayer-ffmpeg` remains a dependency of the caller, never output.
+- Problem: decoded Android frames have no presentation consumer, and putting
+  `SoftwareConverter` inside output would reverse the module boundary and make every output
+  consumer depend on FFmpeg.
+- Fix: add exactly
+
+  ```kotlin
+  public class AndroidSurfaceVideoRenderer(
+      surface: android.view.Surface,
+      convert: (VideoFrame) -> ByteArray,
+  ) : VideoRenderer
+  ```
+
+  The caller retains and releases the Surface. A newest-frame worker converts to tightly packed
+  RGBA, swizzles into ARGB_8888, draws aspect-fit through `Surface.lockCanvas` and always calls
+  `unlockCanvasAndPost` after a successful lock. It applies 0/90/180/270 degree rotation, closes
+  every frame exactly once, bounds work to one waiting frame and reports presented, superseded and
+  failed counters. It owns no SurfaceHolder, View or FFmpeg dependency.
+- Test: host seams pin geometry, channel order, newest-wins, exact close counts, lock/post pairing,
+  conversion failure and close during conversion. A device test draws a red/blue asymmetric frame
+  through a real Surface, observes it with PixelCopy, repeats at 90 degrees, then destroys the
+  surface and sees a refusal plus `SurfaceLost` without stopping audio.
+
+#### S1C-06. A regular Android application proves the backend as assembled
+
+- Where: a new `:kiteplayer-sample-android` application, one media-preparation buildSrc task, root
+  settings and plugin catalog, generated assets and sample documentation.
+- Problem: module tests do not prove Gradle variant resolution, transitive JNI packaging, R8,
+  Activity/Surface lifecycle, audio, seek and teardown in one ordinary application.
+- Fix: add a plain Android application at compile/target SDK 36 and minSdk 24, ABI-filtered to
+  arm64-v8a and x86_64 with nonlegacy native packaging and `extractNativeLibs=false`. It uses project
+  dependencies on core, FFmpeg and output, assembles `KiteCodecMediaBackend`,
+  `AndroidOutputBackend` and `AndroidSurfaceVideoRenderer` in a private SurfaceView host, and embeds
+  the generated sync clip. It adds no reusable view, Compose, ExoPlayer or platform media API.
+- Test: debug and minified release package exactly the two aligned JNI libraries. A
+  `s1c_smoke` intent on `Pixelu16KB` opens the bundled clip, plays, lands a precise five-second
+  seek, reaches Ended, presents a Surface frame, advances audio, closes and atomically writes a
+  bounded JSON oracle. D-1/D-2 scans reject platform demux/decode imports. Physical Android
+  playback remains S1.e and is not inferred.
+
+#### S1.c.0 Mechanical expansion sweep
+
+Files: read-only across every file named in S1.c.1 to S1.c.6; both Gradle target graphs; the
+window-2a Maven-local module metadata and scratch consumer; Android SDK, NDK, AVD and device
+inventories. Product files do not move in this sub-phase.
+
+Steps.
+1. Start only after S1.b's five product commits, clean exits and log entries exist. Record the two
+   resulting heads. Verify every path, declaration, target, task, profile flag, count, artifact
+   path, device fact, command and expected outcome in this expansion against those heads and the
+   machine. Run the whole sweep before reporting.
+2. Recount common expects, native implementation files and lines, normalized C declarations,
+   exports, selected FFmpeg configure flags, installed SDK/NDK versions, AVD ABIs/page size and
+   attached devices. Confirm `gradle.properties` remains unread and untouched; the coordinate still
+   comes from the root `allprojects` block.
+3. Ask Gradle for the authoritative task names under JDK 21 and confirm the existing names plus the
+   names this expansion will register. Confirm AGP 9.2.1 is already available through Player and is
+   the exact version added to Codec. Confirm the S1.b Apple scratch consumer can still resolve the
+   current window-2a publication offline before window 2b starts.
+4. Classify a mismatch BLOCKING when it changes a file fence, symbol, API, command, expected result,
+   publication order, gate or commit first line. Classify it DESCRIPTIVE only when every action
+   remains unchanged. Report one consolidated sweep. Under the owner's S1 correction exception, a
+   BLOCKING mechanical contradiction with one conservative tree-backed correction gets its own
+   KPKMP-only Tier 1 commit, then this entire sweep reruns. Stop for an irreversible, scope-expanding
+   or product-policy choice.
+5. Record the external classification exactly: S1.b not landed is BLOCKING at authorship; absent
+   Android outputs, the explicit NDK environment, no x86_64 emulator and no physical device are
+   DESCRIPTIVE for S1.c. The physical-device absence is carried forward as an S1.e blocker.
+
+Gate. Tier 1, because S1.c.0 changes KPKMP only. A clean consolidated report authorises S1.c.1.
+
+Commit first line. KitePlayer: `Verify the Android phone stage against the landed iOS substrate`.
+
+#### S1.c.1 Build the opaque JNI and Android native substrate
+
+Files, KiteCodec: `native/kitecodec-c/include/kitecodec_abi.h` and
+`kitecodec_helpers.h`; `native/kitecodec-c/src/kitecodec_abi.c` and
+`helpers_packet.c`; `native/kitecodec-c/tests/test_identity.c` and
+`test_ownership.c`; `native/kitecodec-c/signature-baseline.txt` and
+`exported-symbols-baseline.txt`; `native/kitecodec-c/scripts/symbol-audit.sh`;
+`native/kitecodec-c/README.md`;
+`buildSrc/src/main/kotlin/BuildFFmpegTask.kt`; new
+`buildSrc/src/main/kotlin/LinkKiteCodecJniTask.kt`; `kitecodec-core/build.gradle.kts`;
+`buildSrc/src/test/kotlin/BuildFFmpegTaskTest.kt` and new
+`LinkKiteCodecJniTaskTest.kt`. New `native/kitecodec-jni` files are exactly
+`methods.def`, `exports.map`, `kj_internal.h`, `kj_handles.c`, `kj_util.c`,
+`kj_registration.c`, `kj_abi.c`, `kj_format.c`, `kj_packet.c`, `kj_codec.c`,
+`kj_frame.c`, `kj_filter.c`, `scripts/source-discipline.sh`,
+`scripts/symbol-audit.sh` and `README.md`. Generated JNI libraries and Android FFmpeg trees are
+evidence, not committed files. Player: KPKMP execution log only.
+
+Steps.
+1. Add this stable C surface, with the enum in `kitecodec_abi.h`, the attach implementation in
+   `kitecodec_abi.c` and the clone in the packet helper pair:
+
+   ```c
+   enum kc_jvm_status {
+       KC_JVM_OK = 0,
+       KC_JVM_BAD_ARGUMENT = -1,
+       KC_JVM_UNSUPPORTED = -2,
+       KC_JVM_FFMPEG_REFUSED = -3
+   };
+
+   KC_API int kc_jvm_attach(void *java_vm);
+   KC_API kc_packet *ffkmp_packet_clone(const kc_packet *packet);
+   ```
+
+   `kc_jvm_attach(NULL)` returns `KC_JVM_BAD_ARGUMENT`. On Android it runs the existing identity
+   gate and calls `av_jni_set_java_vm` inside the C archive, returning `KC_JVM_OK` or
+   `KC_JVM_FFMPEG_REFUSED`. On every non-Android build it returns `KC_JVM_UNSUPPORTED` without
+   referencing the FFmpeg JNI symbol. `ffkmp_packet_clone` rejects null, allocates one packet and
+   uses `av_packet_ref`; allocation or ref failure frees everything and returns null. It is O(1)
+   over the compressed payload. Raise `KITECODEC_C_ABI_MINOR` from 0 to 1, never the major.
+2. Write the failing C assertions first. Host identity expects null to be bad-argument and a
+   non-null sentinel to be unsupported. Ownership expects clone metadata equality, independent
+   close in both orders and an allocation-accounting balance. Temporarily return the input packet
+   from the clone and watch the second close arm fail under ASan before implementing it. Regenerate
+   the signature baseline only after reviewing its three additions: the enum and two prototypes.
+   Regenerate the export baseline only after reviewing its two added names. The final counts are
+   192 normalized declaration records and the old export set plus exactly `kc_jvm_attach` and
+   `ffkmp_packet_clone`. Update `symbol-audit.sh`'s count assertion, write refusal, baseline prose
+   and success text from 189 to 192 in this same commit; the declaration categories remain the
+   existing 189 plus exactly this enum and two prototypes.
+3. Preserve the existing `--enable-pic` from `sharedCoreArgs()` in both Android FFmpeg argument
+   sets and pin its inclusion in the existing exact-argument test. Preserve API 24, static-only
+   LGPL, zlib, the current software formats and
+   `--enable-mediacodec --enable-jni`. Do not build arm32. Producer and JNI-link invocations remain
+   separate because target trees are resolved during configuration:
+
+   ```bash
+   export ANDROID_SDK_ROOT=/Users/macbook/WORKSTATION/AndroidSDK
+   export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865
+   cd ../KiteCodec
+   ./gradlew :kitecodec-core:buildFFmpegForAndroidArm64 \
+     :kitecodec-core:buildFFmpegForAndroidX64 --rerun-tasks
+   ```
+
+   Assert each output has six archives and the public headers. The transactional install tree does
+   not contain build-root `config.h`, so prove the feature selection twice: the full-list
+   `BuildFFmpegTaskTest` expectation contains `--enable-mediacodec` and `--enable-jni`, and each
+   installed tree's S1.b provenance file `lib/kitecodec/ffmpeg-configure.txt` contains both exact
+   options. `AndroidArm32` must have no generated output.
+4. Make `methods.def` the single registration manifest. Each non-comment record contains the
+   binary class name, Kotlin external-method name, JVM descriptor, C function and handle/result
+   category. `kj_registration.c` includes the manifest to create the exact `JNINativeMethod`
+   tables. No hand-copied second list is allowed. `JNI_OnLoad` gets `JNIEnv`, finds the declared
+   bridge classes and calls `RegisterNatives`, then returns `JNI_VERSION_1_6`. It does not call
+   `kc_init`, does not call `kc_jvm_attach` and does not convert an identity rejection into an
+   uninspectable library-load failure.
+5. Pass every C object through a generation-tagged handle table in `kj_handles.c`. A `jlong`
+   encodes a slot and generation, never a pointer. Every lookup checks nonzero, live generation and
+   the exact one of the eleven opaque handle kinds before returning a pointer; close invalidates
+   once and is idempotent. Stale, zero and wrong-kind tokens throw a typed JVM exception before a
+   helper call. JNI string, array and exception conversion lives only in `kj_util.c`. The category
+   source files call `kc_*` and `ffkmp_*` only. They may call JNI and the C runtime, and may not
+   include a libav header, spell an `av_*` call or reproduce an FFmpeg struct.
+6. `LinkKiteCodecJniTask` compiles the opaque C archive and JNI sources, then links one shared
+   library. It registers exactly:
+
+   - `:kitecodec-core:linkKiteCodecJniMacosArm64` to
+     `kitecodec-core/build/kitecodec-jni/macos-arm64/libkitecodec_jni.dylib`
+   - `:kitecodec-core:linkKiteCodecJniAndroidArm64` to
+     `kitecodec-core/build/kitecodec-jni/android-arm64/arm64-v8a/libkitecodec_jni.so`
+   - `:kitecodec-core:linkKiteCodecJniAndroidX64` to
+     `kitecodec-core/build/kitecodec-jni/android-x64/x86_64/libkitecodec_jni.so`
+
+   The two Android arms use NDK r29 clang, `-shared -fPIC -fvisibility=hidden` and
+   `-Wl,-z,defs -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -Wl,--gc-sections`,
+   `-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384`,
+   `-Wl,--exclude-libs,ALL` and `--version-script=exports.map`. Link the opaque helper archive and
+   six FFmpeg static archives with `mediandk`, `android`, `log`, `z`, `dl` and `m`. The output has
+   no dependency on a `libav*.so`. The macOS dylib is test-only and may dynamically link the S1.b
+   Local macOS FFmpeg tree; S5 owns desktop runtime distribution.
+7. Run the link tasks in one consumer invocation after the FFmpeg producer finishes:
+
+   ```bash
+   export ANDROID_SDK_ROOT=/Users/macbook/WORKSTATION/AndroidSDK
+   export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865
+   cd '/Users/macbook/StudioProjects/#Kite/KiteCodec'
+   ./gradlew :buildSrc:test \
+     :kitecodec-core:linkKiteCodecJniMacosArm64 \
+     :kitecodec-core:linkKiteCodecJniAndroidArm64 \
+     :kitecodec-core:linkKiteCodecJniAndroidX64 \
+     -Pkitecodec.applePhoneTargetsOnly=true \
+     -Pkitecodec.requireAllTargets=true --rerun-tasks
+   ```
+
+   Then run `native/kitecodec-jni/scripts/source-discipline.sh` and
+   `native/kitecodec-jni/scripts/symbol-audit.sh` on all three outputs. The source audit prints zero
+   forbidden includes/calls. Dynamic defined-symbol output contains exactly `JNI_OnLoad` after
+   normal platform decoration, never `Java_*`, `kc_*`, `ffkmp_*` or `av_*`.
+8. Assert both Android ELF arms rather than sampling one:
+
+   ```bash
+   export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865
+   cd '/Users/macbook/StudioProjects/#Kite/KiteCodec'
+   S1C_READELF="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-readelf"
+   S1C_NM="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-nm"
+   for so in \
+     kitecodec-core/build/kitecodec-jni/android-arm64/arm64-v8a/libkitecodec_jni.so \
+     kitecodec-core/build/kitecodec-jni/android-x64/x86_64/libkitecodec_jni.so; do
+     test "$("$S1C_NM" -D --defined-only "$so" | awk '{print $3}')" = JNI_OnLoad
+     ! "$S1C_NM" -D "$so" | grep -E 'Java_| (kc_|ffkmp_|av_)'
+     S1C_LOAD_ALIGN="$("$S1C_READELF" -lW "$so" | \
+       awk '$1 == "LOAD" {print $NF}' | sort -u)"
+     test "$S1C_LOAD_ALIGN" = 0x4000
+     ! "$S1C_READELF" -dW "$so" | grep -E 'NEEDED.*lib(av|sw)'
+   done
+   ```
+
+   The assertion sees at least one PT_LOAD line because an empty value differs from `0x4000`, and
+   every PT_LOAD segment must carry exactly that 16 KiB alignment.
+9. Run four falsifiability arms separately and restore after each: introduce a direct
+   `avcodec_version()` call and see source discipline fail; export a `Java_fake` symbol and see
+   the symbol audit fail; set max/common page size to 4096 and see the ELF assertion fail; corrupt
+   one `methods.def` descriptor and see the manifest parser test fail. A control that does not fail
+   is BLOCKING.
+
+Gate. Tier 2, selected by native C, buildSrc and build-script changes and by completion of a Horizon
+sub-phase. Run both C sanitizer arms, interpose, corpus replay, C export/signature/metadata audits,
+buildSrc tests and the three JNI audits. The optional host-only Maven publication in Tier 2 is
+omitted here because window 2b must publish exactly once after S1.c.2. Run Player's Tier 2 and both
+Tier 1 blocks after the execution-log entry. Close with `git diff --check` and prove no product
+file outside the fence changed.
+
+Commit first line. KiteCodec: `Build the Android JNI bridge on the opaque boundary`.
+KitePlayer: `Record the Android JNI boundary proof`.
+
+#### S1.c.2 Make every KiteCodec operation real on JVM and Android, then close window 2b
+
+Files, KiteCodec: `gradle/libs.versions.toml`; root `build.gradle.kts`;
+`kitecodec-core/build.gradle.kts`; `kitecodec-core/src/commonMain/.../FFmpeg.kt`,
+`FilterGraph.kt`, `Frame.kt`, `MediaSink.kt`, `MediaSource.kt`, `Remuxer.kt`,
+`Transcoder.kt`, `MediaType.kt` and `LowLevelApi.kt`; new common `Playback.kt`;
+all nine existing `kitecodec-core/src/nativeMain` implementation files. New
+`kitecodec-core/src/jvmAndAndroidMain/kotlin/io/github/yuroyami/kitecodec` files are
+`Internals.jvm.kt`, `FFmpeg.jvm.kt`, `FilterGraph.jvm.kt`, `Frame.jvm.kt`,
+`MediaSink.jvm.kt`, `MediaSource.jvm.kt`, `Playback.jvm.kt`, `Remuxer.jvm.kt` and
+`Transcoder.jvm.kt`. New leaf files are
+`jvmMain/.../JniLibrary.jvm.kt` and `androidMain/.../JniLibrary.android.kt`. Android packaging
+files are `src/androidMain/AndroidManifest.xml` and `consumer-rules.pro`.
+
+Test files are new under
+`src/codecContractTest/kotlin/io/github/yuroyami/kitecodec/`: `CodecContractTest.kt`,
+`CodecContractTranscript.kt`, `ContractMedia.kt` and `ContractMediaMaterializer.kt`; new under
+`src/jvmTest/kotlin/io/github/yuroyami/kitecodec/`: `JniBoundaryTest.kt`, `JniIdentityTest.kt` and
+`ContractMediaMaterializer.jvm.kt`; new
+`src/macosArm64Test/kotlin/io/github/yuroyami/kitecodec/ContractMediaMaterializer.macos.kt`; new
+`src/androidHostTest/kotlin/io/github/yuroyami/kitecodec/JniPackagingModelTest.kt`; new under
+`src/androidDeviceTest/kotlin/io/github/yuroyami/kitecodec/`: `CodecAndroidDeviceTest.kt` and
+`ContractMediaMaterializer.android.kt`; and `src/androidDeviceTest/AndroidManifest.xml`. Build
+support adds
+`buildSrc/src/main/kotlin/CompareCodecContractTask.kt` and
+`buildSrc/src/test/kotlin/CompareCodecContractTaskTest.kt`. Also in the fence:
+`kitecodec-core/api/`; root `README.md` and `CHANGELOG.md`; `kitecodec-core/Module.md`;
+`docs/about.md`, `docs/index.md`, `docs/decoding.md`, `docs/transcoding.md`,
+`docs/gradle-plugin.md`, `docs/platforms.md`, `docs/getting-started.md` and
+`docs/troubleshooting.md`; and both JNI audits from S1.c.1. Remove every live "Kotlin/Native
+only", "no JVM", "no JNI", "no Android AAR" and "upcoming Android substrate" claim from those
+named documents without rewriting historical evidence. The S1.b Apple scratch consumer and the
+new Android scratch consumer are ignored evidence only. Player: KPKMP execution log only.
+
+Steps.
+1. Add AGP 9.2.1 and `com.android.kotlin.multiplatform.library` to Codec's catalog and root with
+   `apply(false)`. Add AndroidX test core/runner 1.7.0 and ext-junit 1.3.0 for device tests. Keep
+   `jvmToolchain(21)`. In core register `jvm()` and an Android KMP library named `android` with
+   namespace `io.github.yuroyami.kitecodec`, compileSdk 36, minSdk 24, host tests and device tests
+   using `androidx.test.runner.AndroidJUnitRunner`. Do not add `androidNative*` to the S1.c
+   selector: those klibs are a different platform and cannot satisfy a normal Android app.
+2. Add `-Pkitecodec.phoneTargetsOnly=true`. It is mutually exclusive with
+   `stableTargetsOnly`, `hostTargetsOnly` and `applePhoneTargetsOnly` and registers exactly
+   macosArm64, iosArm64, iosSimulatorArm64, jvm and the Android JVM target on this machine. It is
+   accepted only by Maven-local publication; every remote publish rejects it during configuration.
+   It requires all three S1.b Local FFmpeg trees and both S1.c Android trees. Preserve the old
+   selectors and their exact behavior.
+3. Restore `@JvmInline` on `PixelFormat`, `SampleFormat` and `CodecId`, as the existing source
+   comment already directs when a JVM target arrives. Move `Packet`, `PacketReader`,
+   `StreamDecoder` and `SeekDirection` declarations into common `Playback.kt`, make the native
+   file their actual implementation without behavior drift, and add the two members shown below.
+   This block is deliberately an excerpt, not a replacement class declaration:
+
+   ```kotlin
+   @KiteCodecLowLevelApi
+   public expect class Packet : AutoCloseable {
+       @KiteCodecLowLevelApi
+       public fun copy(): Packet
+   }
+
+   public expect class MediaSource : AutoCloseable {
+       @KiteCodecLowLevelApi
+       public fun openDecoder(
+           stream: StreamInfo,
+           threadCount: Int = 0,
+           lowDelay: Boolean = false,
+           decoder: CodecId? = null,
+       ): StreamDecoder
+   }
+   ```
+
+   Preserve the complete current low-level surface and its opt-in annotations: `Packet.timeBase`,
+   `streamIndex`, `pts`, `dts`, `duration`, `isKeyframe`, `sizeBytes`, `bytePosition`, `hasPts`,
+   `ptsMicros`, `dtsMicros`, `durationMicros` and `close`; `SeekDirection.Backward`, `Forward` and
+   `Any`; `PacketReader.read`, `seek(micros, direction = Backward, notEarlierThan = null)` and
+   `close`; `StreamDecoder.stream`, read-only externally `isDrained`, `send`, `receive`, `flush`
+   and `close`; and `MediaSource.openPacketReader(streams)` plus the extended `openDecoder` above.
+   Keep `@KiteCodecLowLevelApi` on the four low-level declarations and both MediaSource entry
+   points, keep every default, and preserve all existing ownership/use-after-close KDoc. The copy
+   is an owned O(1) packet ref through `ffkmp_packet_clone`. A non-null decoder selects that exact
+   FFmpeg decoder by name and verifies it can decode the stream codec before open; null preserves
+   the existing by-id default. Close, use-after-close, seek and drain behavior remains identical
+   on native and JVM.
+4. Implement all ten common expects and the four low-level declarations in the shared
+   JVM/Android source set. `Internals.jvm.kt` owns only private external methods matching
+   `methods.def`, typed handle wrappers, identity-report conversion and error mapping. Each public
+   owner has one nonzero token, checks open before every operation and closes idempotently. JNI
+   errors become the same `FFmpegError` and `FFmpegException` subclasses native uses. Lambda
+   callbacks receive an owned or callback-scoped object under the existing KDoc, never a raw token.
+   Arrays and strings are copied at the declared API boundary; no direct ByteBuffer or native
+   pointer becomes public.
+5. Leaf loading is explicit. JVM reads a test-only absolute library override
+   `kitecodec.jni.path` before falling back to `System.loadLibrary("kitecodec_jni")`; the dylib is
+   not added to the published JVM jar. Android always uses `System.loadLibrary`. After load, a
+   private `attachCurrentVm` native method calls `GetJavaVM` and then `kc_jvm_attach`. Android
+   requires `KC_JVM_OK`; JVM accepts `KC_JVM_UNSUPPORTED`. Only then call `kc_init`, copy the full
+   identity report and throw `FFmpegError.IncompatibleFFmpegRuntime` with the same typed fields as
+   native on rejection. This is why `JNI_OnLoad` itself did not run the gate.
+   Wire `jvmTest` to `linkKiteCodecJniMacosArm64` with a `TaskProvider`, and set the
+   `kitecodec.jni.path` test system property from that task's output-file provider. No test command
+   relies on a caller exporting the property or on a stale dylib.
+6. Keep `codecContractTest` out of `commonTest` and attach it directly to macosArm64Test, jvmTest
+   and androidDeviceTest. Android host tests use no native library and test only pure handle,
+   descriptor and packaging models. The contract fixture is a bounded byte fixture in
+   `ContractMedia.kt`; `ContractMediaMaterializer.kt` declares an internal expect function that
+   accepts those bytes and their committed SHA-256 and returns a path only after materializing and
+   verifying them. Its JVM actual uses `Files.createTempFile`, its macosArm64 actual uses a private
+   `mkstemp` file, and its Android device actual uses the instrumentation target context's
+   `cacheDir`. Each registers cleanup in the test owner. This gives the path-only
+   `MediaSource.open` API a real private file without a cross-repository test dependency. The
+   contract transcript covers:
+
+   - FFmpeg identity, capability lookup and error typing
+   - MediaSource metadata, stream selection, packet read/copy/close, seek and exact decoder choice
+   - frame info, plane copy, frame copy, raw video/audio construction and image encode
+   - decoder send/receive/drain/flush and wrong-state guards
+   - video and audio filter construction, feed, flush and output ownership
+   - MediaSink video/audio/copy streams, metadata, header/write/trailer and rollback
+   - Remuxer and Transcoder success, refusal and cancellation cleanup
+
+   Each arm writes stable scalar values and hashes, never pointer values or platform paths.
+   `compareJvmNativeContract` fails on the first byte difference between the JVM and macosArm64
+   transcripts. Android device runs the same assertions and additionally requires VM attachment.
+7. Give each S1.c.1 Android link task an annotated `DirectoryProperty` output rooted one level
+   above its ABI directory: the arm task outputs `.../android-arm64/`, containing
+   `arm64-v8a/libkitecodec_jni.so`, and the x64 task outputs `.../android-x64/`, containing
+   `x86_64/libkitecodec_jni.so`. Configure `androidComponents.onVariants` so each variant's
+   `variant.sources.jniLibs.addGeneratedSourceDirectory(taskProvider, outputDirectory)` consumes
+   both exact task providers. Passing either leaf ABI directory is forbidden because it would
+   package the library under the wrong path. Nothing is copied into `src/androidMain/jniLibs`.
+   The library manifest carries `android:extractNativeLibs="false"`; APK-side nonlegacy packaging
+   is owned by each consuming application, not inferred from the AAR ZIP. AGP 9.2.1 KMP does not
+   publish consumer rules by default, so configure
+   `optimization { consumerKeepRules { publish = true; file("consumer-rules.pro") } }` explicitly.
+   That file keeps the internal bridge class and all registered native method names/descriptors
+   while allowing the public Kotlin API to shrink normally. The generated AAR contains only
+   `arm64-v8a/libkitecodec_jni.so` and `x86_64/libkitecodec_jni.so`, and its `proguard.txt` contains
+   the pinned native-method rule from this exact input.
+8. Write reproduction-first tests. Before actuals, `compileKotlinJvm` fails on missing actuals.
+   Before JNI packaging, the device test fails with `UnsatisfiedLinkError`. A zero, stale and
+   wrong-kind token must each fail at the JNI table rather than crash. Load a host test library
+   built against the existing mismatched fake identity headers and require a typed
+   `IncompatibleFFmpegRuntime` containing all six libraries and provisioning text. Change one
+   `methods.def` descriptor while leaving Kotlin intact and require library load to fail; restore
+   it and require all registrations to succeed.
+9. Build and test under the superset selector:
+
+   ```bash
+   export ANDROID_SDK_ROOT=/Users/macbook/WORKSTATION/AndroidSDK
+   export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865
+   cd ../KiteCodec
+   ./gradlew :buildSrc:test \
+     :kitecodec-core:compileKotlinJvm \
+     :kitecodec-core:jvmTest \
+     :kitecodec-core:compileAndroidMain \
+     :kitecodec-core:testAndroidHostTest \
+     :kitecodec-core:assembleAndroidMain \
+     :kitecodec-core:bundleAndroidMainAar \
+     :kitecodec-core:macosArm64Test \
+     :kitecodec-core:compareJvmNativeContract \
+     -Pkitecodec.phoneTargetsOnly=true \
+     -Pkitecodec.requireAllTargets=true --rerun-tasks
+   ```
+
+   Start the one named emulator at a fixed serial and keep it running through S1.c.6:
+
+   ```bash
+   adb -s emulator-5554 emu kill >/dev/null 2>&1 || :
+   S1C_STOP_TRIES=0
+   while adb devices | awk '$1 == "emulator-5554" {found=1} END {exit !found}'; do
+     S1C_STOP_TRIES=$((S1C_STOP_TRIES + 1))
+     if [ "$S1C_STOP_TRIES" -ge 60 ]; then
+       echo "old emulator-5554 did not disappear within 60 seconds" >&2
+       exit 1
+     fi
+     sleep 1
+   done
+   "$ANDROID_SDK_ROOT/emulator/emulator" \
+     -avd Pixelu16KB -port 5554 \
+     -no-snapshot-load -no-snapshot-save -no-boot-anim \
+     > /private/tmp/s1c-Pixelu16KB.log 2>&1 &
+   S1C_DEVICE_TRIES=0
+   until adb devices | awk '$1 == "emulator-5554" && $2 == "device" {found=1} END {exit !found}'; do
+     S1C_DEVICE_TRIES=$((S1C_DEVICE_TRIES + 1))
+     if [ "$S1C_DEVICE_TRIES" -ge 180 ]; then
+       echo "emulator-5554 did not become an adb device within 180 seconds" >&2
+       exit 1
+     fi
+     sleep 1
+   done
+   S1C_BOOT_TRIES=0
+   until [ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do
+     S1C_BOOT_TRIES=$((S1C_BOOT_TRIES + 1))
+     if [ "$S1C_BOOT_TRIES" -ge 180 ]; then
+       echo "Pixelu16KB did not complete boot within 180 seconds" >&2
+       exit 1
+     fi
+     sleep 1
+   done
+   test "$(adb -s emulator-5554 shell getprop ro.boot.qemu.avd_name | tr -d '\r')" = Pixelu16KB
+   test "$(adb -s emulator-5554 shell getconf PAGE_SIZE | tr -d '\r')" = 16384
+
+   ANDROID_SERIAL=emulator-5554 ./gradlew \
+     :kitecodec-core:connectedAndroidDeviceTest \
+     -Pkitecodec.phoneTargetsOnly=true \
+     -Pkitecodec.requireAllTargets=true --rerun-tasks
+   ```
+
+   No x86_64 runtime result is written. Its link and package assertions are its evidence.
+10. Update the API dumps deliberately:
+
+    ```bash
+    ./gradlew :kitecodec-core:apiDump \
+      -Pkitecodec.phoneTargetsOnly=true \
+      -Pkitecodec.requireAllTargets=true
+    ./gradlew :kitecodec-core:apiCheck \
+      -Pkitecodec.phoneTargetsOnly=true \
+      -Pkitecodec.requireAllTargets=true
+    ```
+
+    Review the KLIB additions `Packet.copy` and the optional named decoder parameter, the common
+    location of the low-level types, and the newly installed JVM dump. The JNI bridge remains
+    absent because it is internal. Record every declaration in the ratchet log.
+11. Inspect `kitecodec-core/build/outputs/aar/kitecodec-core.aar` exactly:
+
+    ```bash
+    S1C_AAR=kitecodec-core/build/outputs/aar/kitecodec-core.aar
+    test -f "$S1C_AAR"
+    test "$(zipinfo -1 "$S1C_AAR" | \
+      awk '/^jni\/.*[.]so$/ {count++} END {print count + 0}')" = 2
+    zipinfo -1 "$S1C_AAR" | grep -Fx 'jni/arm64-v8a/libkitecodec_jni.so'
+    zipinfo -1 "$S1C_AAR" | grep -Fx 'jni/x86_64/libkitecodec_jni.so'
+    ! zipinfo -1 "$S1C_AAR" | grep -E 'armeabi|arm32|lib(av|sw).*[.]so'
+    unzip -p "$S1C_AAR" AndroidManifest.xml | \
+      grep -F 'android:extractNativeLibs="false"'
+    unzip -p "$S1C_AAR" proguard.txt | grep -F 'native <methods>'
+    ```
+
+    Extract both SOs to a temporary directory and rerun S1.c.1's symbol, dependency and PT_LOAD
+    assertions on the packaged bytes. Do not assert AAR entry compression or run `zipalign` on the
+    AAR: AGP 9.2.1's `BundleAar` is an ordinary Gradle ZIP and APK JNI packaging policy does not
+    govern it. The `0x1000` control must still fail the packaged ELF arm. Stored-entry and ZIP
+    alignment controls run against the final scratch/sample APKs that actually load the library.
+12. Prove remote refusal, then publish once:
+
+    ```bash
+    ./gradlew :kitecodec-core:publish \
+      -Pkitecodec.phoneTargetsOnly=true \
+      -Pkitecodec.requireAllTargets=true
+    ```
+
+    Expect nonzero during configuration with the explicit local-only selector refusal. Then run
+    exactly one window-2b publication:
+
+    ```bash
+    ./gradlew :kitecodec-core:publishToMavenLocal \
+      -Pkitecodec.phoneTargetsOnly=true \
+      -Pkitecodec.requireAllTargets=true
+    ```
+
+    Do not run host-only, Apple-only or Android-only publication afterwards.
+13. Re-consume in preservation order. The cross-shell paths are fixed, never implicit shell state:
+    `S1B_CODEC_SMOKE=/private/tmp/kitecodec-s1b-phone-consumer` and
+    `S1C_CODEC_SMOKE=/private/tmp/kitecodec-s1c-android-consumer`. The first directory contains the
+    exact settings, build and common source files installed by S1.b.1; if it is absent, reconstruct
+    those named files from S1.b.1 before continuing. Set the variable and rerun its three framework
+    links with the recorded absolute Local FFmpeg root:
+
+    ```bash
+    cd '/Users/macbook/StudioProjects/#Kite/KiteCodec'
+    S1B_CODEC_SMOKE=/private/tmp/kitecodec-s1b-phone-consumer
+    S1C_AAR="$PWD/kitecodec-core/build/outputs/aar/kitecodec-core.aar"
+    test -f "$S1C_AAR"
+    test -f "$S1B_CODEC_SMOKE/settings.gradle.kts"
+    test -f "$S1B_CODEC_SMOKE/build.gradle.kts"
+    test -f "$S1B_CODEC_SMOKE/src/commonMain/kotlin/Smoke.kt"
+    ./gradlew -p "$S1B_CODEC_SMOKE" \
+      linkDebugFrameworkMacosArm64 \
+      linkDebugFrameworkIosArm64 \
+      linkDebugFrameworkIosSimulatorArm64 \
+      --offline --refresh-dependencies --rerun-tasks
+    ```
+
+    Then create the Android consumer at the fixed second path with exactly these files:
+    `settings.gradle.kts`, root `build.gradle.kts`, `app/build.gradle.kts`,
+    `app/proguard-rules.pro`, `app/src/main/AndroidManifest.xml`,
+    `app/src/main/kotlin/io/github/yuroyami/kitecodec/smoke/MainActivity.kt` and
+    `ContractMedia.kt`. Settings give plugin management `google()`, `mavenLocal()`, the plugin
+    portal and Maven Central, dependency resolution `mavenLocal()`, `google()` and Maven Central,
+    and include only `:app`. The root declares Android application 9.2.1 and Kotlin Android 2.4.10
+    with `apply false`. The app uses namespace/application id
+    `io.github.yuroyami.kitecodec.smoke`, compileSdk 36, minSdk 24 and JDK 21. Debug is debuggable;
+    release is minified with the default optimized rules, uses the otherwise empty
+    `proguard-rules.pro`, and is debuggable and signed by the debug signing configuration solely
+    for this local `run-as` proof. Both use
+    `packaging.jniLibs.useLegacyPackaging = false`, and the scratch manifest preserves
+    `android:extractNativeLibs="false"`. It applies only the Android application and Kotlin plugins,
+    uses no app keep rule and has exactly one library dependency:
+
+    ```kotlin
+    implementation("io.github.yuroyami:kitecodec-core:0.0.1")
+    ```
+
+    It does not apply `io.github.yuroyami.kitecodec`. `ContractMedia.kt` contains the same bounded
+    byte fixture and SHA-256 used by the shared contract test. Its plain `android.app.Activity`
+    writes that fixture to app-private storage, calls `FFmpeg.hasDecoder("h264")`, opens it, reads
+    and decodes a frame, closes every owner, then atomically writes the one-line oracle `PASS` to
+    `files/result.txt`. Any exception writes `FAIL: <type>: <message>`. Prove metadata, consumer
+    rules, JNI loading and real decode in both debug and minified release:
+
+    ```bash
+    S1C_CODEC_SMOKE=/private/tmp/kitecodec-s1c-android-consumer
+    S1C_AAR='/Users/macbook/StudioProjects/#Kite/KiteCodec/kitecodec-core/build/outputs/aar/kitecodec-core.aar'
+    test -f "$S1C_AAR"
+    ./gradlew -p "$S1C_CODEC_SMOKE" \
+      assembleDebug assembleRelease \
+      --offline --refresh-dependencies --rerun-tasks
+    for S1C_VARIANT in debug release; do
+      S1C_SMOKE_APK="$S1C_CODEC_SMOKE/app/build/outputs/apk/$S1C_VARIANT/app-$S1C_VARIANT.apk"
+      adb -s emulator-5554 install -r "$S1C_SMOKE_APK"
+      adb -s emulator-5554 shell am force-stop io.github.yuroyami.kitecodec.smoke
+      adb -s emulator-5554 shell run-as io.github.yuroyami.kitecodec.smoke \
+        rm -f files/result.txt files/result.txt.tmp
+      adb -s emulator-5554 shell am start -W \
+        -n io.github.yuroyami.kitecodec.smoke/.MainActivity
+      S1C_RESULT_TRIES=0
+      until adb -s emulator-5554 shell run-as io.github.yuroyami.kitecodec.smoke \
+        test -s files/result.txt; do
+        S1C_RESULT_TRIES=$((S1C_RESULT_TRIES + 1))
+        if [ "$S1C_RESULT_TRIES" -ge 120 ]; then
+          echo "$S1C_VARIANT consumer produced no oracle within 120 seconds" >&2
+          exit 1
+        fi
+        sleep 1
+      done
+      adb -s emulator-5554 shell run-as io.github.yuroyami.kitecodec.smoke \
+        cat files/result.txt | grep -Fx PASS
+    done
+    test -s "$S1C_CODEC_SMOKE/app/build/outputs/mapping/release/mapping.txt"
+    for S1C_VARIANT in debug release; do
+      S1C_SMOKE_APK="$S1C_CODEC_SMOKE/app/build/outputs/apk/$S1C_VARIANT/app-$S1C_VARIANT.apk"
+      test "$(zipinfo -1 "$S1C_SMOKE_APK" | \
+        awk '/^lib\/.*[.]so$/ {count++} END {print count + 0}')" = 2
+      zipinfo -1 "$S1C_SMOKE_APK" | grep -Fx 'lib/arm64-v8a/libkitecodec_jni.so'
+      zipinfo -1 "$S1C_SMOKE_APK" | grep -Fx 'lib/x86_64/libkitecodec_jni.so'
+      test "$(unzip -lv "$S1C_SMOKE_APK" 'lib/*/libkitecodec_jni.so' | \
+        awk '/libkitecodec_jni[.]so$/ {print $2}' | sort -u)" = Stored
+      /Users/macbook/WORKSTATION/AndroidSDK/build-tools/36.1.0/zipalign \
+        -c -P 16 -v 4 "$S1C_SMOKE_APK"
+      for S1C_ABI in arm64-v8a x86_64; do
+        test "$(unzip -p "$S1C_AAR" "jni/$S1C_ABI/libkitecodec_jni.so" | \
+          shasum -a 256 | awk '{print $1}')" = \
+          "$(unzip -p "$S1C_SMOKE_APK" "lib/$S1C_ABI/libkitecodec_jni.so" | \
+          shasum -a 256 | awk '{print $1}')"
+      done
+    done
+    ```
+
+    Inspect both APKs by counting every `lib/**/*.so` entry, requiring exactly the two named ABI
+    paths and no other native library; require both entries Stored and run `zipalign -c -P 16 -v 4`.
+    A successful debug-only load is insufficient. Both must decode, release must actually run R8,
+    and each packaged `libkitecodec_jni.so` must be byte-identical to its AAR input.
+14. Update Codec documentation to say JVM actuals exist, the macOS dylib is test-only, Android is
+    minSdk 24 with arm64-v8a/x86_64 and 16 KiB packaging, MediaCodec is exposed only through FFmpeg,
+    and public artifacts still do not exist. Do not claim x86_64 runtime qualification, physical
+    Android, desktop runtime jars, Compose, views or T3-Full.
+
+Gate. Tier 2 plus the named JVM/native transcript comparison, AAR inspection, 16 KiB emulator
+contract run, one superset local publication and both offline consumers. The publication above
+replaces Tier 2's host-only publish. Run every other Tier 2 command with the selector this sub-phase
+names, then both Tier 1 blocks. Source scans reject any libav include in JNI, `Java_*` export, and
+the tokens `android.media.MediaCodec`, `android.media.MediaExtractor`, `AMediaCodec` or
+`AMediaExtractor` anywhere in Kotlin/native sources; an import-only pattern is insufficient. The
+Codec version catalog change is limited to AGP and the three AndroidX test coordinates named here.
+
+Commit first line. KiteCodec: `Make KiteCodec real on JVM and Android`.
+KitePlayer: `Record the JVM and Android Codec proof`.
+
+#### S1.c.3 Run the FFmpeg backend on Android, including runtime hardware fallback
+
+Files, KitePlayer: `gradle/libs.versions.toml`; `kiteplayer-ffmpeg/build.gradle.kts`; move
+`Conversions.kt`, `FFmpegRuntimeCheck.kt`, `KiteCodecMediaBackend.kt`,
+`KiteCodecSource.kt` and `Probe.kt` from nativeMain to commonMain; rename the existing converter
+to `SoftwareConverter.native.kt` and add
+`kiteplayer-ffmpeg/src/jvmAndAndroidMain/kotlin/io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter.jvm.kt`.
+New common files are `DecoderFallback.kt` and `PlatformDecoderSelection.kt`; actuals are
+`PlatformDecoderSelection.native.kt`, `PlatformDecoderSelection.jvm.kt` and
+`PlatformDecoderSelection.android.kt` in their matching source sets. Public truth corrections are
+limited to `kiteplayer-core/.../PlayerConfig.kt`, `PlayerState.kt`,
+`PlaybackError.kt` and `spi/VideoFrame.kt`. Test files are new common
+`DecoderFallbackTest.kt`, `PlatformDecoderSelectionTest.kt` and `BackendContractTranscript.kt`;
+JVM `JvmBackendContractTest.kt`; macosArm64 `MacosBackendContractTest.kt`; Android host
+`AndroidDecoderSelectionHostTest.kt`; and Android device
+`AndroidMediaCodecDeviceTest.kt` plus `AndroidMedia.kt` and the device-test manifest. Existing
+native backend tests remain and are moved to the narrowest shared source set that compiles without
+changing assertions. Also in the fence: the core and FFmpeg API dumps, root `README.md`, the
+already named FFmpeg build-file comments and source KDoc, and KPKMP execution log. There is no
+module README in this tree.
+
+Steps.
+1. Add AndroidX test core/runner 1.7.0 and ext-junit 1.3.0 to Player's catalog once for all S1.c
+   device tests. Register `jvm()` and an Android KMP target in `kiteplayer-ffmpeg` with namespace
+   `io.github.yuroyami.kiteplayer.ffmpeg`, compileSdk 36, minSdk 24, host tests and device tests.
+   Create `jvmAndAndroidMain` from `commonMain` and make both `jvmMain` and `androidMain` depend on
+   it; the exact shared converter path named in the file fence lives there. Native targets keep
+   `SoftwareConverter.native.kt` in nativeMain.
+   The Android target consumes the published KiteCodec AAR transitively; it neither declares
+   jniLibs nor rebuilds Codec. JVM tests map
+   `-Pkitecodec.jni.localPath=<absolute dylib>` to the test JVM system property
+   `kitecodec.jni.path`. No desktop native library is packaged or published here.
+2. Move only Kotlin-platform-neutral code to commonMain. Remove
+   `ExperimentalForeignApi` and cinterop imports from those files. Native
+   `SoftwareConverter` keeps `Frame.withPlanes` and its no-copy reads. JVM/Android
+   `SoftwareConverter` calls `Frame.copyPlanesToByteArray()` once, derives tightly packed plane
+   offsets and strides from the declared pixel format and uses the same coefficient, range,
+   ten-bit alignment and chroma rules. Both public objects keep the same `toRgba` signature and
+   golden bytes. A shared golden test covers YUV420P, NV12, P010, RGBA/BGRA, BT.601/709/2020,
+   full/studio range and red-blue channel order.
+3. Make platform selection an internal expect/actual plan, never a platform decoder call.
+   Native and ordinary JVM return software only. Android maps H.264 to
+   `CodecId("h264_mediacodec")` and HEVC to `CodecId("hevc_mediacodec")`, then uses the new
+   named-decoder argument on KiteCodec's `MediaSource.openDecoder`. The table is:
+
+   | Policy | Eligible Android H.264/HEVC | Other codec or failed MediaCodec open |
+   |---|---|---|
+   | `Off` | software only | software only |
+   | `Auto` | MediaCodec, then software with one warning | software |
+   | `Prefer` | try `MediaCodec` only when it appears in the supplied order, then software | software |
+   | `Require` | MediaCodec or refuse | refuse |
+
+   A `Prefer` list containing other kinds does not call those platform APIs. `Require` never
+   silently opens software. Update the four stale public KDocs that say hardware has no effect.
+4. Report the actual data path. FFmpeg n8.0's MediaCodec decoder, when opened without an output
+   Surface, maps codec output to CPU YUV420P/NV12 frames and copies it into AVFrame storage.
+   `AV_PIX_FMT_MEDIACODEC` is used only when a Surface is supplied. S1.c supplies none. Therefore
+   the decoder's `hardware` getter is `HardwareWithDownload(HwdecKind.MediaCodec)` while each
+   delivered frame is software-readable with `hardwareSurface == null`. Do not claim zero copy or
+   create a Surface in the decoder. D-2 is satisfied because selection remains FFmpeg's named
+   decoder.
+5. Put open and runtime fallback in `DecoderFallback.kt` behind a small internal decoder-driver
+   seam. For `Auto` and `Prefer`, a hardware open refusal emits one
+   `HardwareDecodeUnavailable` warning and opens software. For `Require` it returns no decoder.
+   `Off` never probes hardware. The seam exposes only open, send, receive, flush, drained and close,
+   so tests can schedule failures without a codec process.
+6. Retain an O(1) copy of every packet the hardware decoder accepts, starting with the newest
+   confirmed replay keyframe. Represent keyframe handover as one retained sequence plus a pending
+   boundary index: accepting a newer keyframe marks the candidate boundary but does not close the
+   older prefix. FFmpeg may still emit delayed B-frames from the preceding GOP. Only a decoded
+   `FrameInfo.isKeyframe` observed after that candidate was accepted confirms handover; then close
+   clones before the candidate boundary and make the just-delivered keyframe output ordinal one in
+   the new window. Track retained bytes across the complete old-plus-candidate sequence and cap one
+   decoder at exactly 16 MiB. Before accepting a packet that would cross the cap, open software and
+   replay while that complete window is still valid. This is a proactive demotion and emits the
+   same one warning. Never retain audio packets.
+7. Track the exact count of outputs delivered since the confirmed replay boundary, independent of
+   PTS. On hardware send or receive failure under `Auto`/`Prefer`, close the failed decoder, open
+   the by-id software decoder and replay every retained packet in order through the normal
+   send/receive backpressure loop. Discard and close exactly that many replay outputs, then deliver
+   the next one and continue on software. PTS, when present, is only a validation diagnostic; it
+   never decides how many frames to suppress because consecutive frames may share a PTS and output
+   may carry `NOPTS`. If failure occurs after a candidate keyframe packet was accepted but before
+   its decoded keyframe confirmed handover, replay still starts at the older confirmed keyframe.
+   Close every retained packet after replay. A failure before any confirmed retained keyframe is a
+   typed decoder failure because replay would be corrupt; it is never presented as successful
+   fallback. `Require` reports the original failure and never reopens software.
+8. `flush(newGeneration)` closes the full retained sequence, flushes the active decoder, resets the
+   delivered-output ordinal and pending keyframe boundary, and starts the new epoch. Drain packets
+   participate in the same recovery rule. `close` closes the active decoder and every retained
+   packet exactly once. The public `hardware` getter changes from HardwareWithDownload to Software
+   immediately after a demotion, so stats do not preserve a stale claim.
+9. Write the failing seam tests first. Exact arms: hardware-open refusal; send failure on the third
+   packet of a two-frame GOP; receive failure after one delivered frame; replay backpressure;
+   legitimate consecutive outputs with duplicate PTS; replay output with `NOPTS`; a new keyframe
+   packet accepted followed by a delayed old-GOP B-frame and failure before the new decoded
+   keyframe; confirmed handover resetting the ordinal to the delivered keyframe; 16 MiB proactive
+   demotion counting both handover windows; failure without keyframe; strict `Require`; `Off` no
+   probe; flush during retained GOP; close during failed reopen. The ownership ledger ends at zero
+   in every arm. Remove the retained keyframe in the receive-failure test and require the expected
+   frame/hash sequence to fail before restoring it.
+10. Build the JVM, Android and native arms against the single window-2b publication:
+
+    ```bash
+    export ANDROID_SDK_ROOT=/Users/macbook/WORKSTATION/AndroidSDK
+    export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865
+    cd ../KitePlayer
+    ./scripts/testmedia.sh
+    ./gradlew :kiteplayer-ffmpeg:jvmTest \
+      :kiteplayer-ffmpeg:testAndroidHostTest \
+      :kiteplayer-ffmpeg:assembleAndroidMain \
+      :kiteplayer-ffmpeg:macosArm64Test \
+      -Pkitecodec.jni.localPath="$PWD/../KiteCodec/kitecodec-core/build/kitecodec-jni/macos-arm64/libkitecodec_jni.dylib" \
+      --offline --rerun-tasks
+    test -s kiteplayer-ffmpeg/build/s1c-transcripts/jvm.txt
+    test -s kiteplayer-ffmpeg/build/s1c-transcripts/macosArm64.txt
+    cmp -s kiteplayer-ffmpeg/build/s1c-transcripts/jvm.txt \
+      kiteplayer-ffmpeg/build/s1c-transcripts/macosArm64.txt || {
+      diff -u kiteplayer-ffmpeg/build/s1c-transcripts/macosArm64.txt \
+        kiteplayer-ffmpeg/build/s1c-transcripts/jvm.txt
+      exit 1
+    }
+    ```
+
+    `BackendContractTranscript.kt` returns the same sorted, path-free scalar transcript to both
+    wrappers. `kiteplayer-ffmpeg/build.gradle.kts` passes the JVM output path as the tracked
+    `s1c.transcript.path` system property, while its `KotlinNativeTest` configuration passes the
+    macosArm64 path through the tracked `S1C_TRANSCRIPT_PATH` environment variable. The native
+    wrapper reads it with `platform.posix.getenv`, following the repository's existing
+    `KITEPLAYER_TESTMEDIA` pattern; it does not call a nonexistent Kotlin/Native
+    `System.getProperty`. Each wrapper writes atomically. The exact `cmp` above is the comparison
+    gate, and `diff` makes the first mismatch visible. The JVM real-media hashes, seek landing and
+    runtime-identity transcript equal macosArm64. The Android host arm uses only fake drivers and
+    does not pretend mockable `android.jar` is a device.
+11. In `AndroidMedia.kt` embed bounded H.264 and MPEG-4 MP4 fixtures generated from the repository's
+    sync source and record each SHA-256 beside its bytes. The device test writes them to app-private storage,
+    requires `FFmpeg.hasDecoder("h264_mediacodec")`, opens under `Auto`, receives a CPU-readable
+    frame, compares it to the software decode at least 40 dB luma PSNR and observes
+    `HardwareWithDownload(MediaCodec)`. It then runs `Off` and sees Software, and runs
+    `Require` after substituting an ineligible MPEG-4 stream and sees refusal:
+
+    ```bash
+    ANDROID_SERIAL=emulator-5554 ./gradlew \
+      :kiteplayer-ffmpeg:connectedAndroidDeviceTest \
+      --offline --rerun-tasks
+    ```
+
+    Capture `adb -s emulator-5554 logcat -d` only as diagnostic evidence. The test result, not a
+    codec-name log line, is the gate. No x86_64 runtime claim follows.
+12. Update and check API dumps:
+
+    ```bash
+    ./gradlew :kiteplayer-core:updateKotlinAbi \
+      :kiteplayer-ffmpeg:updateKotlinAbi
+    ./gradlew :kiteplayer-core:checkKotlinAbi \
+      :kiteplayer-ffmpeg:checkKotlinAbi
+    ```
+
+    Core declaration signatures do not move; only stale KDoc truth changes. FFmpeg gains JVM and
+    Android target metadata but no new public declaration. Any other API difference is BLOCKING.
+13. Run source controls over the complete S1.c.3 diff:
+
+    ```bash
+    test -d kiteplayer-core/src
+    test -d kiteplayer-ffmpeg/src/commonMain
+    test -d kiteplayer-ffmpeg/src/jvmMain
+    test -d kiteplayer-ffmpeg/src/androidMain
+    ! rg -n \
+      'android[.]media[.](MediaCodec|MediaExtractor|[*])|AMedia(Codec|Extractor)|androidx[.]media3|ExoPlayer' \
+      -g '*.kt' kiteplayer-core/src kiteplayer-ffmpeg/src
+    ! rg -n \
+      '(^|[^A-Za-z0-9_])(ffmpeg[.]|libav(codec|format|filter|util)|cnames[.]structs[.]AV|av(codec|format|filter|util)_[A-Za-z0-9_]+|sw(scale|resample)_[A-Za-z0-9_]+|AV[A-Z][A-Za-z0-9_]+)' \
+      -g '*.kt' \
+      kiteplayer-ffmpeg/src/commonMain \
+      kiteplayer-ffmpeg/src/jvmMain \
+      kiteplayer-ffmpeg/src/androidMain
+    ```
+
+    Strings `h264_mediacodec` and `hevc_mediacodec` are required and do not fail the first scan.
+    Temporarily add a wildcard `import android.media.*`, a fully qualified
+    `android.media.MediaCodec` use, an `AMediaCodec` token and one direct `avcodec_send_packet`
+    token in separate controls and prove the matching scan fails each time. D-1 forbids
+    MediaExtractor or another demuxer even as a fallback.
+
+Gate. Tier 2, selected by JVM/Android/native Kotlin, build script and catalog changes and by Horizon
+completion. Add the JVM/Android tests and named 16 KiB device run above. Do not republish
+KiteCodec: the one window-2b coordinate is immutable for the rest of S1.c. Tier 3 is not selected;
+no real-time C callback or core teardown ordering changed. Finish with both Tier 1 blocks and the
+D-1/D-2 scans.
+
+Commit first line. KitePlayer: `Run the FFmpeg backend on Android`.
+
+#### S1.c.4 Play Android audio through AudioTrack
+
+Files: `kiteplayer-output/build.gradle.kts`; new
+`kiteplayer-output/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/output/AndroidMonotonicClock.kt`,
+`AudioTrackDriver.kt`, `AudioTrackSink.kt` and `AndroidOutputBackend.kt`; new
+`src/androidHostTest/.../AudioTrackSinkTest.kt` and `AndroidAudioClockTest.kt`; new
+`src/androidDeviceTest/.../AudioTrackSinkDeviceTest.kt` and device-test manifest;
+`kiteplayer-output/api/`, root `README.md`, the already named output build-file comments and source
+KDoc, and KPKMP execution log. There is no output module README. No core engine file is in this
+fence.
+
+Steps.
+1. Register the Android KMP target in output with namespace
+   `io.github.yuroyami.kiteplayer.output`, compileSdk 36, minSdk 24, host tests and device tests.
+   Output depends only on core and its existing portable libraries. It does not depend on
+   KiteCodec, FFmpeg, the NDK, an Android media support library or the future phone aggregate.
+2. Add these public declarations and no Android audio policy surface beyond them:
+
+   ```kotlin
+   public object AndroidMonotonicClock : MonotonicClock
+
+   public class AudioTrackSink() : AudioSink
+
+   public class AudioTrackSinkFactory() : AudioSinkFactory
+
+   public object AndroidOutputBackend : OutputBackend
+   ```
+
+   `AndroidMonotonicClock.nanos()` calls `SystemClock.elapsedRealtimeNanos()`.
+   `AndroidOutputBackend` pairs that exact object with `AudioTrackSinkFactory` and returns null for
+   video. Public constructors use that same clock. An internal sink constructor accepts a driver
+   factory and clock for tests, so production cannot accidentally pair AudioTimestamp with another
+   time base.
+3. Keep Android calls in one internal `AudioTrackDriver`. Production creates
+   `AudioTrack` with `AudioAttributes.USAGE_MEDIA`, `CONTENT_TYPE_MOVIE`, MODE_STREAM and
+   ENCODING_PCM_FLOAT. The accepted format is requested sample rate with one channel when requested
+   mono and stereo otherwise. Requests with no channels or invalid sample rate fail before device
+   creation. Surround downmix and resampling remain in `AudioPipeline` because the sink returns its
+   accepted format and never converts.
+4. Allocate the AudioTrack buffer at least `getMinBufferSize` and expose
+   `bufferSizeInFrames` as `deviceBufferFrames`. The writer callback block is exactly
+   `min(deviceBufferFrames, 512)` frames. Allocate one FloatArray sized for 512 stereo frames and
+   one `AudioSinkBuffer` adapter during open, never in the loop. `writeInterleaved` copies into that
+   array, `writeSilence` zeroes the requested tail and `writePlane` is rejected because AudioTrack
+   is interleaved.
+5. On start, one dedicated Java thread calls
+   `Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)`, then repeats: compute the deadline
+   for the last frame of the requested block, invoke the engine's `AudioRenderCallback`, silence
+   every frame after a short return, and loop `AudioTrack.write(..., WRITE_BLOCKING)` until all
+   frames or a lifecycle signal. A zero/negative platform write is a device failure, not a busy
+   loop. The thread owns all writes; lifecycle methods never write.
+6. Maintain `submittedFrames: Long`. Prefer a valid, monotonic `AudioTimestamp`:
+
+   `deadline = timestamp.nanoTime + duration(submittedFrames + requestedFrames -
+   timestamp.framePosition)`.
+
+   Reject a timestamp ahead of submitted data or behind the prior timestamp. Fallback extends the
+   unsigned 32-bit `playbackHeadPosition` across wraps and computes the same queued-frame deadline
+   from `clock.nanos()`. `latencyNanos()` uses submitted minus the newest valid played position and
+   clamps at zero. Report `LatencyQuality.Estimated` because the fallback is an estimate even when
+   timestamps are usually present.
+7. Make lifecycle ordering explicit:
+
+   - `stop` signals the writer, pauses/stops the driver to unblock a blocking write, joins, flushes,
+     and resets submitted/timestamp extension state.
+   - `setPaused(true)` signals, pauses the driver to unblock a write, then joins without flushing;
+     `setPaused(false)` plays and starts one new writer. It returns true.
+   - `drain` marks the writer draining. The writer keeps pulling and writing until the callback's
+     first short return, silences and submits that final tail, then exits. The owner joins, waits
+     with a bounded poll until the extended playback head reaches submitted frames, then stops
+     without flushing.
+   - `close` performs the stop ordering, joins any writer and only then releases AudioTrack. It is
+     idempotent. Failed open releases a partially created driver and leaves no writer.
+
+   No release can race a write. No lifecycle call enters AudioTrack after release.
+8. Write fake-driver tests before production calls. Pin exact open attributes/format, mono/stereo
+   negotiation, preallocated callback buffer identity across 10,000 loops, short callback tail
+   silence, three partial writes, zero-write failure, timestamp deadline arithmetic, rejected
+   timestamp fallback, 32-bit playback-head wrap, latency clamp, pause/resume, stop flush, drain
+   without flush, open rollback, double close and close while blocked. The fake records any write
+   after release as a hard failure. The negative control moves release before join and must make
+   that test fail.
+9. On `Pixelu16KB`, open 48 kHz stereo float, render a bounded sine wave, start, and require the
+   playback head to advance by at least 256 frames within five seconds. Require monotonically
+   increasing callback deadlines, stop, close twice, reopen and repeat once. The test accepts the
+   documented playback-head fallback when AudioTimestamp is unavailable, but records which source
+   it observed. It does not claim a human heard the emulator:
+
+   ```bash
+   export ANDROID_SDK_ROOT=/Users/macbook/WORKSTATION/AndroidSDK
+   cd ../KitePlayer
+   ./gradlew :kiteplayer-output:testAndroidHostTest \
+     :kiteplayer-output:assembleAndroidMain --rerun-tasks
+   ANDROID_SERIAL=emulator-5554 ./gradlew \
+     :kiteplayer-output:connectedAndroidDeviceTest --rerun-tasks
+   ```
+10. Update and inspect the output API dump. The four declarations above and Android target metadata
+    are the only public change:
+
+    ```bash
+    ./gradlew :kiteplayer-output:updateKotlinAbi \
+      :kiteplayer-output:checkKotlinAbi
+    ```
+
+11. Scan the phase diff. `android.media.AudioTrack`, `AudioTimestamp`, `AudioAttributes` and
+    `android.os` occur only in output's Android source set. `AAudio`, `Oboe`, AudioFocus,
+    `MediaSession`, `MediaCodec`, `MediaExtractor`, Compose and the ffmpeg package are absent.
+
+Gate. Tier 2, selected by Android Kotlin, build script and Horizon completion. Add the fake-driver
+suite and named emulator AudioTrack run. This is deliberately not Tier 3: it changes neither
+`kite_rt_render.c`, a C device callback nor core teardown ordering. The Android writer is tested by
+its driver ordering and device head advance, not promoted to the native real-time claim. Do not
+republish either repository. Finish with both Tier 1 blocks.
+
+Commit first line. KitePlayer: `Play Android audio through AudioTrack`.
+
+#### S1.c.5 Present converted frames on a caller-owned Android Surface
+
+Files: `kiteplayer-output/build.gradle.kts`; new
+`kiteplayer-output/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/output/AndroidSurfaceVideoRenderer.kt`;
+new `src/androidHostTest/.../AndroidSurfaceVideoRendererTest.kt` and
+`AndroidSurfaceGeometryTest.kt`; new
+`src/androidDeviceTest/.../AndroidSurfaceVideoRendererDeviceTest.kt`,
+`RendererTestActivity.kt` and device-test manifest; `kiteplayer-output/api/`, root `README.md`, the
+already named output build-file comments and source KDoc, and KPKMP execution log. There is no
+output module README. No ffmpeg, core, sample or reusable-view file is in this fence.
+
+Steps.
+1. Add exactly this public renderer and the same three counters as the Apple CPU fallback:
+
+   ```kotlin
+   public class AndroidSurfaceVideoRenderer(
+       surface: android.view.Surface,
+       convert: (VideoFrame) -> ByteArray,
+   ) : VideoRenderer {
+       public val presentedFrames: Long
+       public val supersededFrames: Long
+       public val failedFrames: Long
+   }
+   ```
+
+   The constructor stores the caller's Surface but never calls `release()`. The caller must close
+   the renderer before releasing or replacing that Surface. There is no SurfaceHolder constructor,
+   View, Activity, lifecycle observer, backend factory or FFmpeg type. S1.d's phone aggregate owns
+   the reusable host and supplies `SoftwareConverter::toRgba`.
+2. Mirror the proven AppKit ownership shape: one atomic pending-frame slot, one signal and one
+   single-thread conversion worker. `present` returns false and closes immediately after close or
+   while the Surface is invalid. Otherwise it swaps the pending slot, closes/counts any displaced
+   frame, signals once and returns true. The worker takes the newest frame, calls `convert` and
+   closes the frame in `finally`. Conversion failure increments failed and emits
+   `RendererEvent.Failed` without killing the worker.
+3. Validate that converted bytes are exactly `width * height * 4` tightly packed RGBA. Swizzle into
+   a reusable ARGB IntArray and reuse an ARGB_8888 Bitmap while dimensions match; a size change
+   replaces the two buffers after the prior draw completes. Red stays red and blue stays blue on
+   little-endian Android. A short or oversized converter result is a typed conversion failure,
+   never a partial draw.
+4. Put Android graphics calls behind an internal canvas-target seam. Production checks
+   `surface.isValid`, calls `lockCanvas(null)` on the worker, clears to opaque black, computes an
+   aspect-fit destination from frame width, height and pixel-aspect ratio, applies exactly
+   0/90/180/270 clockwise rotation about the destination centre and draws the bitmap. A successful
+   lock always reaches `unlockCanvasAndPost(canvas)` in `finally`, including when drawing throws.
+   A lock failure or invalid Surface emits one `SurfaceLost` transition and increments failed; the
+   first later successful post emits `SurfaceAvailable`. It does not stop playback or call the
+   player.
+5. `supportedHardwareSurfaces()` is empty, `supports` rejects only Opaque,
+   `vsyncIntervalNanos()` returns null, and `setViewport`/`setOverlay` remain no-ops like the
+   existing tier-0 Apple fallback. This phase does not add subtitle drawing or Choreographer timing.
+   Target-time scheduling remains the engine's responsibility.
+6. `close` first blocks acceptance, wakes and joins the worker, then drains and closes the pending
+   slot and releases reusable Bitmap storage. It waits for an in-progress lock/post to finish before
+   returning, but never waits on the UI thread: Canvas operations already run on the private worker.
+   A queued present racing close is owned by exactly one of the swap or drain paths.
+7. Write host-seam tests first. Pin: newest of 100 frames wins with 99 exact closes; conversion
+   exception; short/long RGBA; red/blue channel order; 4:3 into 16:9 and 16:9 into 4:3 rectangles;
+   non-square pixels; every quarter-turn; invalid Surface refusal; lock exception; draw exception
+   still posts; one lost/available event per transition; close before worker take; close during
+   conversion; present racing close; double close. Every frame ledger ends at zero and pending work
+   never exceeds one. Remove the slot swap and watch the 100-frame bound fail before restoring it.
+8. Device-test a real SurfaceView hosted only by `RendererTestActivity`. Wait for
+   `surfaceCreated`, present an asymmetric red-left/blue-right frame, use PixelCopy to assert centre
+   pixels and black letterbox, repeat at 90 degrees and assert the axes swap, then destroy the
+   Surface and require the next present to return false plus `SurfaceLost`. Close the renderer
+   before the Activity releases the Surface:
+
+   ```bash
+   export ANDROID_SDK_ROOT=/Users/macbook/WORKSTATION/AndroidSDK
+   cd ../KitePlayer
+   ./gradlew :kiteplayer-output:testAndroidHostTest \
+     :kiteplayer-output:assembleAndroidMain --rerun-tasks
+   ANDROID_SERIAL=emulator-5554 ./gradlew \
+     :kiteplayer-output:connectedAndroidDeviceTest --rerun-tasks
+   ```
+
+9. Update and inspect the output dump:
+
+   ```bash
+   ./gradlew :kiteplayer-output:updateKotlinAbi \
+     :kiteplayer-output:checkKotlinAbi
+   ```
+
+   The renderer, constructor and three counters are the only new declarations in this sub-phase.
+   No core or FFmpeg dump moves.
+10. Run boundary scans:
+
+    ```bash
+    ! rg -n \
+      'kiteplayer[.]ffmpeg|kitecodec|SoftwareConverter|MediaCodec|MediaExtractor|ExoPlayer' \
+      kiteplayer-output/src
+    ! rg -n \
+      'SurfaceHolder|AndroidView|KitePlayerView|Compose|OpenGL|GLES|Vulkan' \
+      kiteplayer-output/src/androidMain
+    ```
+
+    The sample and later phone module may spell `SoftwareConverter`; output may not. Temporarily
+    import it into the renderer and prove the first scan fails.
+
+Gate. Tier 2, selected by Android Kotlin and Horizon completion. Add host geometry/ownership tests
+and the real Surface device test. Tier 3 is not selected because this is not the C audio render
+path, callback or core teardown order. No publication occurs. Finish with both Tier 1 blocks and
+the module-boundary scans.
+
+Commit first line. KitePlayer: `Present converted frames on an Android Surface`.
+
+#### S1.c.6 Add and run the provisional Android phone application
+
+Files: `gradle/libs.versions.toml`; root `build.gradle.kts` and `settings.gradle.kts`; new
+`buildSrc/src/main/kotlin/PrepareAndroidSampleMediaTask.kt` and
+`buildSrc/src/test/kotlin/PrepareAndroidSampleMediaTaskTest.kt`. New module files are
+`kiteplayer-sample-android/build.gradle.kts`, `proguard-rules.pro`,
+`src/main/AndroidManifest.xml`,
+`src/main/kotlin/io/github/yuroyami/kiteplayer/sample/android/MainActivity.kt`,
+`SampleController.kt` and `SmokeResult.kt`, `src/main/res/values/strings.xml` and
+`README.md`. Generated `build/generated/s1cAssets/sync1080p30.mp4`, APKs, smoke JSON and adb logs
+are evidence only. Root README support/run sections and KPKMP execution log are also in the fence.
+No existing macOS/iOS sample source moves.
+
+Steps.
+1. Add the `com.android.application` alias at the existing AGP 9.2.1 version and declare it
+   `apply(false)` at the root. Include exactly `:kiteplayer-sample-android`. This is a regular
+   application, not a KMP library, and applies no KiteCodec plugin. Configure namespace/application
+   id `io.github.yuroyami.kiteplayer.sample.android`, compile/target SDK 36, minSdk 24 and JDK 21.
+   Filter ABIs to arm64-v8a and x86_64, set
+   `packaging.jniLibs.useLegacyPackaging = false` and put
+   `android:extractNativeLibs="false"` on the application. Debug is ordinary; release enables R8,
+   uses the default optimized rules plus the empty sample rule file, and is locally debuggable and
+   signed with the debug key only so the same `run-as` oracle can inspect it after installation.
+   R8 still runs. No distributed release or publication consumes either local-only choice.
+2. The app has exactly these three project dependencies:
+
+   ```kotlin
+   implementation(project(":kiteplayer-core"))
+   implementation(project(":kiteplayer-ffmpeg"))
+   implementation(project(":kiteplayer-output"))
+   ```
+
+   It does not add Compose, AndroidX media, ExoPlayer, a platform codec or another playback
+   dependency. This is the provisional assembly proof. S1.d creates `:kiteplayer-phone`, moves the
+   reusable host there and re-consumes this app through one coordinate.
+3. `PrepareAndroidSampleMediaTask` takes `testmedia/sync1080p30.mp4` as an input file, verifies it
+   is nonempty, copies it transactionally to
+   `build/generated/s1cAssets/sync1080p30.mp4` and writes its SHA-256 beside the task log. Wire the
+   output through `androidComponents.onVariants` and
+   `variant.sources.assets.addGeneratedSourceDirectory`; do not commit a 20 MB media file. Its unit
+   test pins missing input, byte equality, SHA output, rerun after content change and no partial
+   destination after injected failure. The Gradle task never invokes ffmpeg or a network; the
+   producer remains the explicit first command:
+
+   ```bash
+   cd ../KitePlayer
+   ./scripts/testmedia.sh
+   ./gradlew :buildSrc:test
+   ```
+4. `MainActivity` is sample-private glue. It creates a SurfaceView and play, pause and seek buttons
+   programmatically, with no XML layout and no reusable public View. `SampleController` creates
+   `KiteCodecMediaBackend()` and `AndroidOutputBackend`, constructs
+   `AndroidSurfaceVideoRenderer(holder.surface)` with a conversion lambda that accepts only
+   `KiteCodecVideoFrame` and calls `SoftwareConverter.toRgba`, creates the player and attaches the
+   renderer. On `surfaceDestroyed` it detaches, closes the renderer and only then returns the
+   Surface to the framework. Activity teardown closes player then any renderer once. Backgrounding
+   pauses rather than inventing audio-focus policy.
+5. The ordinary controls open the copied private path, play/pause and seek to five seconds. No
+   sample class enters a library API dump. Do not move this host into output: output must remain
+   FFmpeg-free, and S1.d owns the reusable phone abstraction.
+6. Add boolean intent extra `s1c_smoke`. In smoke mode, wait for a valid Surface, copy the bundled
+   asset to app-private storage, open and play, request one precise seek to 5,000 milliseconds, wait
+   for at least one later renderer presentation and public position in the inclusive range 5,000 to
+   5,034 milliseconds, then wait for Ended. Close player and renderer before setting
+   `teardownCompleted`. Write `s1c-smoke.json.tmp`, flush and `fd.sync()`, then atomically rename it
+   over `files/s1c-smoke.json`. The exact eleven-key schema is:
+
+   - `pageSize`
+   - `seekRequested`
+   - `seekLanded`
+   - `terminalState`
+   - `decodedFrames`
+   - `submittedFrames`
+   - `presentedFrames`
+   - `surfaceFrame`
+   - `audioUnderruns`
+   - `hardwareDecode`
+   - `teardownCompleted`
+
+   `pageSize` comes from `Os.sysconf(_SC_PAGESIZE)`. `hardwareDecode` maps the public sealed stats
+   value to the stable labels `Software`, `HardwareWithDownload(MediaCodec)` or the corresponding
+   named alternative; it never uses a data class's default `toString()` or a codec-name log.
+   `surfaceFrame` becomes true only after the renderer's presented counter rises. Positive
+   AudioTrack head movement belongs to S1.c.4's device test rather than inaccessible sample
+   internals.
+7. Build both variants offline from the immutable Codec publication:
+
+   ```bash
+   export ANDROID_SDK_ROOT=/Users/macbook/WORKSTATION/AndroidSDK
+   export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865
+   cd ../KitePlayer
+   ./gradlew :kiteplayer-sample-android:assembleDebug \
+     :kiteplayer-sample-android:assembleRelease \
+     --offline --rerun-tasks
+   ```
+
+   Inspect both APKs:
+
+   ```bash
+   for apk in \
+     kiteplayer-sample-android/build/outputs/apk/debug/kiteplayer-sample-android-debug.apk \
+     kiteplayer-sample-android/build/outputs/apk/release/kiteplayer-sample-android-release.apk; do
+     test -f "$apk"
+     test "$(zipinfo -1 "$apk" | \
+       awk '/^lib\/.*[.]so$/ {count++} END {print count + 0}')" = 2
+     zipinfo -1 "$apk" | grep -Fx 'lib/arm64-v8a/libkitecodec_jni.so'
+     zipinfo -1 "$apk" | grep -Fx 'lib/x86_64/libkitecodec_jni.so'
+     ! zipinfo -1 "$apk" | grep -E 'armeabi|arm32|lib(av|sw).*[.]so'
+     test "$(unzip -lv "$apk" 'lib/*/libkitecodec_jni.so' | \
+       awk '/libkitecodec_jni[.]so$/ {print $2}' | sort -u)" = Stored
+     /Users/macbook/WORKSTATION/AndroidSDK/build-tools/36.1.0/zipalign \
+       -c -P 16 -v 4 "$apk"
+   done
+   ```
+
+   Extract both ABI entries from both APKs and rerun the `JNI_OnLoad`-only, no-libav-NEEDED and
+   `0x4000` PT_LOAD checks. The release APK must contain the registered bridge after R8 with no
+   app-specific keep rule.
+8. Run the complete smoke on debug, save its result, then replace it with minified release and run
+   the same smoke again:
+
+   ```bash
+   S1C_PACKAGE=io.github.yuroyami.kiteplayer.sample.android
+   S1C_COMPONENT="$S1C_PACKAGE/.MainActivity"
+   for S1C_VARIANT in debug release; do
+     S1C_APK="kiteplayer-sample-android/build/outputs/apk/$S1C_VARIANT/kiteplayer-sample-android-$S1C_VARIANT.apk"
+     adb -s emulator-5554 install -r "$S1C_APK"
+     adb -s emulator-5554 shell run-as "$S1C_PACKAGE" \
+       rm -f files/s1c-smoke.json files/s1c-smoke.json.tmp
+     adb -s emulator-5554 shell am start -W \
+       -n "$S1C_COMPONENT" --ez s1c_smoke true
+     S1C_TRIES=0
+     until adb -s emulator-5554 shell run-as "$S1C_PACKAGE" \
+       test -s files/s1c-smoke.json; do
+       S1C_TRIES=$((S1C_TRIES + 1))
+       if [ "$S1C_TRIES" -ge 120 ]; then
+         echo "$S1C_VARIANT sample produced no oracle within 120 seconds" >&2
+         exit 1
+       fi
+       sleep 1
+     done
+     adb -s emulator-5554 exec-out run-as "$S1C_PACKAGE" \
+       cat files/s1c-smoke.json > "/private/tmp/s1c-$S1C_VARIANT.json"
+   done
+   ```
+
+   Apply the same exact oracle to both files:
+
+   ```bash
+   for result in /private/tmp/s1c-debug.json /private/tmp/s1c-release.json; do
+     /usr/bin/jq -e '
+       (keys | sort) == [
+         "audioUnderruns", "decodedFrames", "hardwareDecode", "pageSize",
+         "presentedFrames", "seekLanded", "seekRequested", "submittedFrames",
+         "surfaceFrame", "teardownCompleted", "terminalState"
+       ] and
+       .pageSize == 16384 and
+       .seekRequested == true and .seekLanded == true and
+       .terminalState == "Ended" and
+       (.decodedFrames | type) == "number" and .decodedFrames > 0 and
+       (.submittedFrames | type) == "number" and .submittedFrames > 0 and
+       (.presentedFrames | type) == "number" and .presentedFrames > 0 and
+       .surfaceFrame == true and
+       (.audioUnderruns | type) == "number" and .audioUnderruns >= 0 and
+       .hardwareDecode == "HardwareWithDownload(MediaCodec)" and
+       .teardownCompleted == true
+     ' "$result"
+   done
+   ```
+
+   A successful debug run cannot excuse a release failure. The two JSON objects may differ in
+   measured counts and underruns; both must satisfy the same typed predicates. Save logcat only when
+   a predicate fails.
+9. Close with D-1/D-2 and scope scans:
+
+   ```bash
+   test -d kiteplayer-sample-android/src
+   test -d kiteplayer-core/src
+   test -d kiteplayer-ffmpeg/src
+   test -d kiteplayer-output/src
+   ! rg -n \
+     'android[.]media[.](MediaCodec|MediaExtractor|[*])|AMedia(Codec|Extractor)|androidx[.]media3|ExoPlayer' \
+     -g '*.kt' kiteplayer-sample-android/src kiteplayer-core/src kiteplayer-ffmpeg/src kiteplayer-output/src
+   ! rg -n \
+     'Compose|AndroidView|KitePlayerView|OpenGL|GLES|Vulkan' \
+     -g '*.kt' kiteplayer-sample-android/src
+   ! rg -n \
+     '(^|[^A-Za-z0-9_])(ffmpeg[.]|libav(codec|format|filter|util)|cnames[.]structs[.]AV|av(codec|format|filter|util)_[A-Za-z0-9_]+|sw(scale|resample)_[A-Za-z0-9_]+|AV[A-Z][A-Za-z0-9_]+)' \
+     -g '*.kt' kiteplayer-sample-android/src
+   ```
+
+   `AudioTrack` and `Surface` remain confined to output. The sample sees them only through
+   `AndroidOutputBackend`, its caller-owned Surface and renderer constructor. The first scan's
+   negative controls use a wildcard `import android.media.*`, a fully qualified
+   `android.media.MediaCodec` reference and an `AMediaExtractor` token; the second adds one
+   forbidden view import. Observe each failure, then revert it.
+10. Update root and sample docs to the measured state: Android debug and minified release run on
+    `Pixelu16KB` at 16 KiB, arm64-v8a is runtime-qualified, x86_64 is package-qualified, Codec is
+    Maven-local/private only, and this app uses three project dependencies until S1.d. Promote the
+    official Android support label from T1 API to T2 Codec. Record the separately measured
+    AudioTrack and Surface output as provisional stage evidence, not T3-Full: subtitles and the
+    full lifecycle/format qualification required by that tier do not exist yet. Do not claim
+    physical Android, the full 17.5 matrix, reusable views, Compose, one Player coordinate, public
+    publication or zero-copy Android video.
+
+Gate. Tier 3, selected by the explicit T1-to-T2 Android support-tier promotion. Run Tier 2, both
+APK inspections and both application smoke runs, then the standing supervised macOS negative and
+media soaks exactly once:
+
+```bash
+KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
+  ./gradlew :kiteplayer-output:macosArm64Test \
+  --tests '*RealTimeSoakTest*' --rerun-tasks -i
+KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
+  ./gradlew :kiteplayer-ffmpeg:macosArm64Test \
+  --tests '*RealTimeMediaSoakTest*' --rerun-tasks -i
+```
+
+Do not republish KiteCodec or Player. Run both Tier 1 blocks last, then reread every changed file
+against this fence. The Tier 3 run satisfies the standing promotion trigger; it does not elevate
+Android past T2 Codec or turn emulator/device-soak evidence into T3-Full.
+
+Commit first line. KitePlayer: `Add the runnable Android phone sample`.
+
+S1.c exits only when all six product sub-phases have their named local commits and log entries,
+both trees are clean, the one window-2b publication still links the Apple scratch consumer, the
+ordinary Codec Android consumer and both sample APKs pass, `Pixelu16KB` reports 16 KiB and runs
+decode/audio/Surface/seek/teardown, Android is labelled T2 Codec with provisional output evidence
+below T3-Full, the promotion-triggered Tier 3 gate passes, and every deviation is in section 14.
+x86_64 remains compile/link/package only. The absent physical Android remains an explicit S1.e
+blocker. Nothing is pushed, publicly published or released.
 
 ### 17.5 The format conformance matrix
 

@@ -4794,6 +4794,27 @@ is no other.
   measured loopback case, not every protocol; and KiteCodec README:314's http advice is
   reviewed rather than denied, disproving this expansion's earlier "no network claim" sentence.
   Both repositories stayed clean throughout; the executor still awaits a clean S1.a.0.
+
+- 2026-08-11, S1.a.0 completed under the owner's uninterrupted-execution direction. Prose only,
+  Tier 1 gate (selected by rule: every change, including prose). The executor reran the complete
+  expansion sweep against ff56e77 and, under the owner's explicit authority to take conservative
+  tree-backed judgement calls without a relay, folded twelve execution blockers and six pieces
+  of descriptive drift into 17.4.1. The load-bearing decisions are now explicit: the six-file
+  ring opt-in set; the deliberately red pre-S5 readiness result with sibling findings at zero;
+  a missing-baseline measurement emitted by the coupling task itself; an ABI-compatible S1.a.7
+  followed by the breaking S1.a.8 respelling; fail-review-update-green metadata evidence in both
+  halves; direct-only coupling metrics after migration; all nullable C contracts pinned as
+  positive controls; the handles header present in the def; direct FFmpeg includes owned by each
+  production and test translation unit after the public header drops them; and the native README
+  moving with both facts. Three independent final rereads reported zero blocking and zero
+  descriptive findings. Tier 1: KiteCodec coupling 246/287, deleted-surface PASS, six plain C
+  suites PASS; KitePlayer ABI check 129 tasks executed, core/subtitles JVM tests 10 tasks executed,
+  eight rt C suites PASS, render audit 15 PASS, source discipline 18 PASS; both tracked-file em
+  dash scans printed nothing and exited 1, the passing outcome. DEVIATION: the first Gradle calls
+  were refused by the workspace sandbox at the existing user Gradle lock; they were rerun with
+  approved cache access. Two uncached Gradle verifications briefly contended for one Kotlin cache,
+  invoked the compiler's non-daemon fallback, and both completed BUILD SUCCESSFUL in 53 to 54
+  seconds. No product file changed and nothing was pushed.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7541,10 +7562,11 @@ stages expand at entry per 17.2's rule.
 
 #### P0-04. The KitePlayer coupling baseline starts at its MEASURED number
 - Where: new coupling-baseline at KitePlayer root; the draft claimed zero.
-- Problem: the claim "measured at zero" was false: eight committed files name kitert cinterop
-  types (measured 2026-08-10 by grep, recorded in the session log; decomposed 2026-08-11 by
-  S1.a.0 as seven Kotlin files plus kitert.def itself, whose text names its own types). A
-  ratchet born on a false number is the exact defect class the interlude repaired.
+- Problem: the claim "measured at zero" was false. The historical extension-limited grep
+  reported eight files; a literal tracked-module scan on 2026-08-11 found nine: seven Kotlin
+  files, kitert.def matching its package declaration, and kiteplayer-core's committed api dump.
+  Neither is the scoped, comment-stripped Kotlin measurement this task needs. A ratchet born on
+  a false number is the exact defect class the interlude repaired.
 - Fix: measure at S1.a.4 execution time, write the real number with the producing command beside
   it, ratchet from there; kiteplayer-output is excluded by design (it owns the C sink pointer).
 - Sub-phase: S1.a.4. Test: the check task fails on a planted new naming site; passes at baseline.
@@ -7564,7 +7586,8 @@ stages expand at entry per 17.2's rule.
   exists; a planner consumed it as fact within hours. Zero hits in the headers: it never existed.
 - Fix: reword to name it as a hypothetical mutation vector; add the sentence "no such helper
   exists" so it can never be harvested as an API again.
-- Sub-phase: S1.a.6. Test: tier 1 reread; grep for the name finds only the corrected prose.
+- Sub-phase: S1.a.6. Test: tier 1 reread; grep for the name finds the corrected prose and one
+  synthetic mutation string in CheckCinteropCouplingTaskTest, but no declaration or definition.
 
 #### P0-07. The opaque handle migration completes (B1-25 paid)
 - Where: ../KiteCodec def with 36 FFmpeg headers; ten Kotlin files on CPointer<AVFrame> and
@@ -7573,14 +7596,16 @@ stages expand at entry per 17.2's rule.
 - Problem: publication freezes FFmpeg struct layout as public API forever (draft C-43); the JNI
   bridge of S1.c needs the opaque C ABI as its boundary; sixteen exported entry points still crash
   on NULL at that exact boundary (R-B2-guards).
-- Fix: the draft's C-43/C-44/C-45 design as corrected by the verifiers: pure-addition half first
-  (new helpers, including the five media-type constant accessors and the fourteen wrapping
-  helpers, none of which exist today), then the def loses FFmpeg headers, Kotlin migrates, the
-  sixteen guards land, the C ABI version ratchet moves with a NEW signature baseline file (a
-  names-only baseline cannot see shape changes: verifier M4).
+- Fix: the draft's C-43/C-44/C-45 design as corrected by the verifiers: compatible-addition half
+  first (eleven opaque aliases, seven wrappers over fourteen call sites, five media-type
+  accessors and the sixteen guards), then the def and public helper header lose FFmpeg headers,
+  existing signatures respell to the opaque aliases, Kotlin migrates, and the C ABI major ratchet
+  moves with a NEW signature baseline file (a names-only baseline cannot see shape changes:
+  verifier M4).
 - Sub-phase: S1.a.7 and S1.a.8, the reversible half gated before the irreversible half, exactly as
-  B1.3's lift was. Test: metadata differential proves the addition half changes nothing existing;
-  the migration half re-proves every suite; guards reproduction-first like I-12's two.
+  B1.3's lift was. Test: metadata differential proves the first half contains only compatible
+  additions plus the declared minor-version replacement; the migration half re-proves every
+  suite; guards reproduction-first like I-12's two.
 
 #### P0-08. Record corrections
 - Where: KPKMP section 14 stale remote-state sentences (draft C-07); README network sentence
@@ -7612,6 +7637,12 @@ finding apiece, costing the owner a relay round-trip per defect; sweep-then-clas
 catch and caps the cost at one relay per sweep. 18.3 rule 5 is untouched and still governs
 contradictions met DURING a sub-phase: those stop immediately.
 
+Owner direction for the execution begun 2026-08-11: the executor may resolve a mechanical
+S1 planning contradiction without a relay when the tree and the existing decisions leave one
+conservative answer. It must record the correction, run Tier 1, commit it separately, and rerun
+the complete S1.a.0 sweep before product work. This authority does not widen product scope,
+permit external publication or pushing, or permit guessing through an irreversible choice.
+
 Execution order is numbered order. Hard ordering constraints: S1.a.7 strictly before S1.a.8 (the
 reversible half gates the irreversible one, B1.3's lift precedent); S1.a.2 before S1.a.3's final
 cross-check run. S1.a.1, S1.a.6 and S1.a.9 are prose-only and may interleave anywhere.
@@ -7637,10 +7668,13 @@ Items: P0-02. Closes section 16.4 item 9.
 
 Files: `kiteplayer-rt/build.gradle.kts`; `kiteplayer-core/build.gradle.kts` (the dependency
 comment around lines 85 to 101); `kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/
-kiteplayer/spi/NativeRingAudioSink.kt` (holds `NativeRingHandoff`); `kiteplayer-output/src/
-appleMain/kotlin/io/github/yuroyami/kiteplayer/output/CoreAudioSink.kt` (the other
-`NativeRingHandoff` site); a new committed api dump for kiteplayer-rt if the tooling can produce
-one.
+kiteplayer/spi/NativeRingAudioSink.kt` (holds `NativeRingHandoff`); `kiteplayer-core/src/
+nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/AudioPath.native.kt`;
+`kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/CoreAudioSink.kt`;
+`kiteplayer-output/src/appleTest/kotlin/io/github/yuroyami/kiteplayer/output/
+CoreAudioSinkTest.kt`; `RealTimeSoakTest.kt` and `CoreAudioSinkRealTimeTest.kt` beside it; the
+committed kiteplayer-core api dump; a new committed api dump for kiteplayer-rt if the tooling can
+produce one.
 
 Steps.
 1. Apply `alias(libs.plugins.vanniktech.publish)` to kiteplayer-rt exactly as the four siblings
@@ -7651,9 +7685,10 @@ Steps.
    this expansion claiming the properties were the source; the block is). Publication remains
    LOCAL: nothing in this sub-phase pushes or releases anything, per D-3.
 2. Declare `abiValidation {}` as the siblings do and run the dump task. If the tool cannot dump a
-   module with no Kotlin sources of its own (kiteplayer-rt publishes exactly one cinterop klib),
-   record that as a deviation in the log and name `render-audit.sh`, `source-discipline.sh` and
-   the kitert def itself as the module's ABI witnesses instead. Do not fake a dump.
+   module with no main Kotlin sources of its own (kiteplayer-rt has one nativeTest source and
+   publishes exactly one cinterop klib), record that as a deviation in the log and name
+   `render-audit.sh`, `source-discipline.sh` and the kitert def itself as the module's ABI
+   witnesses instead. Do not fake a dump.
 3. Add a `@RequiresOptIn` annotation (name it `RawRingApi`, in kiteplayer-core's nativeMain
    beside the SPI) and mark `NativeRingHandoff`, whose `ring: CPointer<cnames.structs/kprt_ring>`
    is the exposure 16.4 item 9 measured. The marker propagates through
@@ -7697,11 +7732,12 @@ Steps.
 3. Tests, reproduction-first where a red case is claimed: a fully configured fixture passes; a
    fixture missing a POM field fails naming the field; a fixture whose publishing module depends
    on a non-publishing sibling fails naming both modules; the failure messages name the fix.
-4. The final cross-check, defined (S1.a.0's third sweep found it undefined): after S1.a.2 and
-   this task both exist, run `./gradlew checkPublicationReadiness` once, by hand. Expected
-   result: GREEN with zero findings, and in particular kiteplayer-rt is no longer reportable as
-   an unpublishable sibling (P0-02's exit). Paste the run's output into the log. The task still
-   joins no tier; this one manual run is the whole cross-check.
+4. The final cross-check, defined against P0-03's deliberate pre-S5 red state: after S1.a.2 and
+   this task both exist, run `./gradlew checkPublicationReadiness` once, by hand. Expected result:
+   NONZERO for the incomplete POM fields that S5 owns, with every finding printed, but ZERO
+   sibling-publishability findings; in particular kiteplayer-rt must not be reported as an
+   unpublishable sibling (P0-02's exit). Paste the exit and complete finding set into the log.
+   The task still joins no tier; this one manual run is the whole cross-check.
 
 Gate. Tier 2 (rule: buildSrc changed), which includes `:buildSrc:test`.
 
@@ -7728,19 +7764,20 @@ Steps.
    sources (kiteplayer-core's committed dump names kprt_ring because the surface does, which is
    what S1.a.2's opt-in governs), and kitert.def's own match is its package declaration line,
    not a type naming site.
-2. MEASURE at execution time with the exact command, write the number and the command into the
-   baseline header, ratchet from there. For calibration only, not to be trusted over the fresh
-   run: the 2026-08-11 planning measurement of that scope found three files in kiteplayer-core
-   (NativeAudioRing.kt, NativeRingAudioSink.kt, AudioRingDifferentialTest.kt). P0-04's
-   eight-match figure counted files of ANY type over all modules: seven Kotlin files (three in
-   kiteplayer-core, three in kiteplayer-output, one in kiteplayer-rt) plus kitert.def itself,
-   whose text names its own types. Restricted to committed Kotlin, the pre-exclusion count is
-   SEVEN. The first wording here said "eight-file figure" without that decomposition; S1.a.0's
-   first run caught it on 2026-08-11 and this sentence was corrected before S1.a.1 began, which
-   is precisely the job S1.a.0 exists to do.
+2. MEASURE at execution time with the task itself, before the baseline exists: run exactly
+   `./gradlew checkKitertCoupling`. The task measures before reading its baseline and, when the
+   file is absent, fails after printing `baseline missing` plus the measured file count and the
+   exact baseline stanza to create. Paste that first failing output into the log, write its number
+   and this command into the baseline header, then rerun the same command green. For calibration
+   only, not to be trusted over the fresh run: the 2026-08-11 planning measurement found three
+   in-scope files in kiteplayer-core (NativeAudioRing.kt, NativeRingAudioSink.kt,
+   AudioRingDifferentialTest.kt). A literal all-module scan finds nine matching files: seven
+   Kotlin files (three core, three output, one rt), kitert.def matching its package declaration,
+   and kiteplayer-core's api dump. The live action counts only scoped, comment-stripped Kotlin.
 3. Task fails when a NEW file names the cinterop (by name, allowlist style, like KiteCodec's
    allowed_struct_type lines); test plants a fixture file and watches the task fail, then passes
-   at baseline; falsifiability by reverting the plant.
+   at baseline; falsifiability by reverting the plant. A separate test proves the missing-baseline
+   run prints the measured number and creation stanza before it fails.
 4. Add the task to section 9's Tier 1 block (it is a source-text read, no build) and a row to the
    ratchet move table.
 
@@ -7798,7 +7835,7 @@ not the edit.
 
 Commit first line. KiteCodec: `Say the ratchet experiment helper never existed`.
 
-#### S1.a.7 The opaque surface, pure addition: handles, wrappers, accessors, guards
+#### S1.a.7 The opaque surface, compatible addition: handles, wrappers, accessors, guards
 
 Items: P0-07 first half (draft C-43 first half, C-44, C-45, as corrected below). Closes section
 16.4 item 1; closes register row R-B2-guards.
@@ -7809,15 +7846,18 @@ zero declarations), so all SEVEN wrappers below are new. (b) P0-07's phrase "fou
 helpers" is imprecise: FOURTEEN call sites are wrapped by SEVEN helpers. (c) C-43's claim that
 the first half leaves the klib "bit identical" over-promises: `kitecodec_helpers.h` is in the
 def, so new typealiases and twelve new functions WILL appear in the metadata; the honest
-expected outcome is ADDITIONS ONLY, verified as such.
+expected outcome is compatible declaration additions plus the declared minor-version constant
+replacement, verified before re-baselining.
 
 Files: `../KiteCodec/native/kitecodec-c/include/kitecodec_handles.h` (new);
 `include/kitecodec_helpers.h`; the nine helper units under `src/` (helpers_codec.c,
 helpers_codecpar.c, helpers_error.c, helpers_filter.c, helpers_format.c, helpers_frame.c,
 helpers_packet.c, helpers_playback.c, helpers_stream.c); `tests/test_args.c` (new suite);
-`tests/test_ownership.c`; `scripts/run-c-tests.sh` and `scripts/build-host.sh` (the agreed suite
-lists gain test_args); `exported-symbols-baseline.txt`; `include/kitecodec_abi.h` (minor
-version); `KPKMP.md` (contract rule 5's core-test count, if it moves).
+`scripts/run-c-tests.sh` and `scripts/build-host.sh` (the agreed suite lists gain test_args);
+`exported-symbols-baseline.txt`; `klib-metadata-baseline.txt`; `include/kitecodec_abi.h` (minor
+version); `kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`;
+`native/kitecodec-c/README.md`; the committed `kitecodec-core/api/kitecodec-core.klib.api` if
+`apiDump` moves it; `KPKMP.md` (log and the section 15.3 suite-count correction).
 
 Steps.
 1. `kitecodec_handles.h`: forward struct declarations plus one opaque typedef per FFmpeg struct
@@ -7830,9 +7870,13 @@ Steps.
    get no handle. Form: `struct AVFrame; typedef struct AVFrame kc_frame;`. The header includes
    NO FFmpeg header. Tag-aliasing keeps every existing Kotlin call site compiling unchanged
    while the def still carries FFmpeg headers.
-2. `kitecodec_helpers.h` parameter and return types move to the opaque names; each `.c` body
-   compiles against its own header with `-Werror`, gaining at most a boundary cast; behaviour
-   untouched.
+2. `kitecodec_helpers.h` includes `kitecodec_handles.h`, but its EXISTING parameter and return
+   types and its transitive FFmpeg includes remain unchanged in this half. Only the new wrappers
+   and accessors use the opaque names. This is what keeps 1.0 to 1.1 source-compatible; S1.a.8
+   owns the breaking respelling and include removal. Each `.c` body compiles against its own
+   header with `-Werror`; behaviour is untouched. Add `kitecodec_handles.h` to BOTH the existing
+   `headers` and `headerFilter` lists in `ffmpeg.def`, without removing any existing entry, so
+   cinterop emits all eleven aliases during this compatible-addition half.
 3. The SEVEN wrappers, new, one header sentence each saying the typed outcome model comes later
    and the wrapper exists because the def's header removal forces it. Return types, decided
    from the measured call sites (S1.a.0's third sweep caught "raw int forwarded" contradicting
@@ -7861,31 +7905,36 @@ Steps.
    (:62); the register row's eighteen minus these two is this sixteen. Each guard is a leading
    NULL or range refusal returning the documented failure value, with one header contract
    sentence in the shape `ffkmp_fmt_set_opt` already uses. REPRODUCTION-FIRST: `tests/
-   test_args.c` drives each entry point with NULL against the UNGUARDED build first and the log
-   records the crash class, then the guard lands, then the same case passes, then
-   falsifiability by reverting one guard.
+   test_args.c` nulls each REQUIRED pointer or violates each required range one at a time against
+   the UNGUARDED build first and the log records the crash class, then the guard lands, then the
+   same case passes, then falsifiability by reverting one guard. Preserve the existing nullable
+   contracts: an audio-filter description may be NULL to select `anull`, a graph-send frame may
+   be NULL to signal EOF, a mux packet may be NULL to flush, and an output-format name may be
+   NULL for inference. The codec argument to `ffkmp_codecctx_open` may be NULL when the context
+   already remembers its codec, and the path argument to `ffkmp_fmt_alloc_output2` may be NULL
+   when a nonempty format name is supplied. Pin all six as passing positive controls in
+   `test_args.c`; those positions never become blanket errors.
 6. `exported-symbols-baseline.txt` refreshed by the section 9 move procedure, naming all twelve
    added symbols (seven wrappers, five accessors).
 7. `KITECODEC_C_ABI_MINOR` moves to 1 in the same commit, decided here: twelve new exports are a
    consumer-visible compatible addition. The identity gate suite re-baselines accordingly.
 8. Suite lists in run-c-tests.sh and build-host.sh gain test_args, keeping their stated
    agreement (the plain C suite count moves from six to seven and section 15.3's "six suites"
-   sentences gain a correction note where touched). Contract rule 5's stale KOTLIN test count
-   is a separate defect and is fixed at S1.a.9, not here: a C suite cannot move a Kotlin count.
+   sentences gain a correction note where touched). Update the native README's runner and test
+   rows from six to seven and add the new handles header to its layout. Contract rule 5's stale
+   KOTLIN test count is a separate defect and is fixed at S1.a.9, not here: a C suite cannot
+   move a Kotlin count.
 
 Gate. KiteCodec Tier 2 (rule: native/ changed): full C suites in plain, asan and tsan including
-the new test_args; `symbol-audit.sh` (check 6 against the refreshed baseline);
-`klib-metadata-diff.sh --check` with its full diff pasted into the log, judged by CLASS
-(S1.a.0's third sweep caught the earlier "additions only" phrase contradicting step 7, and the
-class rule replaces it): ADDED lines are expected (the eleven typealiases, the twelve new
-functions); the `KITECODEC_C_ABI_MINOR` constant line changes 0 to 1, expected; existing
-signature lines MAY respell a parameter or return type to its new typealias, and each such line
-must normalise back to the identical underlying struct tag (kc_frame to AVFrame and so on),
-proved by a normalise-and-compare over the diff; any REMOVED line, and any changed line outside
-those two classes, fails the sub-phase. `checkCinteropCoupling` (comment-stripped counts must
-not rise; new helper MENTIONS in Kotlin do not exist yet, so the crossing number must be
-exactly unmoved); `apiCheck`, with `apiDump` refreshed only if typealias spelling shifts the
-dump, recorded as the addition it is. KitePlayer is NOT re-consumed here; that happens once, at
+the new test_args; `symbol-audit.sh` (check 6 against the refreshed baseline). Metadata evidence
+is ordered: FIRST run `klib-metadata-diff.sh --check` against the pre-S1.a.7 baseline, expect
+NONZERO, and paste its complete report into the log; review by CLASS, accepting only the eleven
+typealiases, twelve new functions, and the paired `KITECODEC_C_ABI_MINOR` replacement from 0 to
+1. A removed old minor line is allowed only with its added value-1 mate; any other removed line
+or changed declaration fails. THEN run `klib-metadata-diff.sh --update`; THEN run `--check`
+green, including the two-bakings assertion. Run `checkCinteropCoupling` (counts exactly unmoved,
+because Kotlin does not use the new helpers yet) and `apiCheck`, refreshing the named api dump
+only if `apiDump` proves it moved. KitePlayer is NOT re-consumed here; that happens once, at
 S1.a.8.
 
 Commit first line. KiteCodec: `Add the opaque surface: handles, wrappers, accessors, guards`.
@@ -7896,27 +7945,39 @@ Items: P0-07 second half (draft C-43 second half). Closes section 15.1's B1-25 r
 section 15.5 deferral 1.
 
 Files: `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def` (lines 8 and 9);
+`native/kitecodec-c/include/kitecodec_helpers.h`; the nine helper units under
+`native/kitecodec-c/src/`; `native/kitecodec-c/klib-metadata-baseline.txt`;
+`native/kitecodec-c/tests/test_buffers.c`, `test_convert.c`, `test_ownership.c`,
+`test_rescale.c`, `test_strerror_thread.c` and the S1.a.7 `test_args.c`;
+`native/kitecodec-c/README.md`;
 the SIX Kotlin files carrying the migrating material (FFmpeg.native.kt, FilterGraph.native.kt,
 Frame.native.kt, MediaSink.native.kt, MediaSource.native.kt, Playback.native.kt) and the FOUR
 compile-proof files (Internals.kt, Remuxer.native.kt, Transcoder.native.kt,
 PlayerSurfaceTest.kt; S1.a.0's third sweep caught the earlier "ten files migrate": these four
 import ONLY ffkmp_ helper names, all of which survive the def reduction, so their whole step is
 proving they compile unchanged; FFmpegIdentityTest.kt imports only kc_/KC_ names and is not
-touched at all); `native/kitecodec-c/coupling-baseline.txt` (rewritten);
+touched at all); `buildSrc/src/main/kotlin/CheckCinteropCouplingTask.kt` and its test;
+`native/kitecodec-c/coupling-baseline.txt` (rewritten);
 `include/kitecodec_abi.h` (version); `native/kitecodec-c/signature-baseline.txt` (new) and its
 checking step in `symbol-audit.sh`; KiteCodec's committed api dump (one file,
 kitecodec-core.klib.api); `KPKMP.md` rows named above.
 
 Steps.
-1. Evidence order for the metadata, measured against the script (S1.a.0's third sweep caught
-   the old order: `--update` copies the baseline and exits before any differential exists, so
-   an update-first run destroys the evidence): FIRST `klib-metadata-diff.sh --check` against
-   the OLD baseline, expected to FAIL, its full differential pasted into the log as the
-   before-picture; THEN `--update`; THEN `--check` again, green, which also re-proves the
-   two-bakings assertion.
-2. `ffmpeg.def` `headers` and `headerFilter` reduce to `kitecodec_helpers.h kitecodec_handles.h
-   kitecodec_abi.h`.
-3. The six files migrate: FFmpeg-typed CPointer parameters move to the opaque typealiases; the
+1. This is the breaking header half deliberately deferred from S1.a.7: respell the 134 existing
+   AV-typed public helper declarations to their `kc_*` aliases; remove every FFmpeg include from
+   `kitecodec_helpers.h`, leaving the standard headers it uses plus `kitecodec_handles.h`; and
+   add the exact FFmpeg includes each of the nine `.c` units needs. Replace the C suites'
+   transitive dependencies explicitly: test_buffers gets buffersink, channel-layout, error,
+   frame, imgutils, pixdesc, pixfmt and samplefmt headers; test_convert gets frame, log, pixdesc,
+   pixfmt and swscale; test_ownership gets avformat, avcodec, avfilter, buffersrc, channel-layout,
+   mem, opt and swscale; test_rescale gets avformat, avcodec, avfilter, common, error, imgutils,
+   pixdesc, pixfmt and rational; test_strerror_thread gets error. `test_args` stays an opaque
+   consumer using only `kc_*` handles, helper calls and standard errno. Then reduce `ffmpeg.def`
+   `headers` and `headerFilter` to `kitecodec_helpers.h kitecodec_handles.h kitecodec_abi.h`.
+   Update the native README's layout and historical include paragraph: the twenty FFmpeg includes
+   lived in the public helper header from B1.3 through S1.a.7 and now live directly in the
+   production/test translation units that use them.
+2. The six files migrate: FFmpeg-typed CPointer parameters move to the opaque typealiases; the
    fourteen raw call sites move to the seven wrappers (six ffkmp_ names plus ffkmp_filter_exists
    per S1.a.7's decided returns); the five AVMEDIA_TYPE_* constants at MediaSource.native.kt:553
    to :557 move to the five accessors; unresolvable imports are deleted. The four compile-proof
@@ -7924,19 +7985,29 @@ Steps.
    signature they use), the mechanical fix is recorded in the log. File-by-file compile;
    falsifiability: reverting any one migrated file must fail compilation, which is the proof
    the headers are really gone.
-4. `coupling-baseline.txt` is REWRITTEN: re-measure both ratchet numbers with the commands in the
-   file's own header, delete every `allowed_struct_type` line (no FFmpeg struct type is nameable
-   any longer), and record the rewrite in the log with old and new numbers.
-5. `KITECODEC_C_ABI_MAJOR` moves to 2 and `KITECODEC_C_ABI_MINOR` resets to 0 (S1.a.7 set it to
+3. Rewrite the coupling task, its tests and `coupling-baseline.txt` around the boundary that now
+   exists. `cinterop_import_lines` excludes `ffkmp_` as well as `kc_` and `KC_`, so it counts only
+   direct FFmpeg imports and must fall from 246 to zero. `ffmpeg_typed_crossings` counts direct
+   libav calls only and must fall from 287 to zero. `ffkmp_call_sites` remains reported-only as
+   opaque-boundary traffic and may grow; `direct_libav_call_sites` remains reported and must be
+   zero. Delete every `allowed_struct_type` line: no raw FFmpeg struct type may be imported or
+   named directly in Kotlin source, though cinterop still has private forward-declared C tags.
+   Tests prove a new raw import, raw call or raw struct name fails while a new `ffkmp_`, `kc_` or
+   `KC_` use does not. Record the old and new measurements and semantic rewrite in the log.
+4. `KITECODEC_C_ABI_MAJOR` moves to 2 and `KITECODEC_C_ABI_MINOR` resets to 0 (S1.a.7 set it to
    1), because the 134 of 157 helper declarations that name FFmpeg types changed shape for a C
    consumer (the other 23 carry none, executor-measured 2026-08-11). The identity gate tests
    updated accordingly.
-6. The NEW signature baseline (verifier M4: a names-only baseline cannot see a shape change):
+5. The NEW signature baseline (verifier M4: a names-only baseline cannot see a shape change):
    generate one line per exported declaration from `kitecodec_helpers.h`, `kitecodec_handles.h`
    AND `kitecodec_abi.h` (full declaration text, normalised whitespace; handles.h is included
    precisely so a silent retarget of an opaque alias cannot pass unseen, S1.a.0's third sweep)
    into `signature-baseline.txt`; extend `symbol-audit.sh` with a check comparing it; add its
    row to section 9's ratchet move table.
+6. Capture and accept the metadata only AFTER steps 1 to 5 created the difference. FIRST run
+   `klib-metadata-diff.sh --check` against the post-S1.a.7 baseline, expect NONZERO, and paste its
+   full differential into the log as the before-picture; THEN review the exact breaking surface;
+   THEN `--update`; THEN `--check` again green, which also re-proves the two-bakings assertion.
 7. KitePlayer re-consumes ONCE: rebuild against the republished klib, then the full KitePlayer
    Tier 2 block. This is KiteCodec window 1 closing.
 8. Close the KPKMP rows: 15.1 B1-25, 15.5 deferral 1; mark 16.4 items 1 and 9 closed with their
@@ -7944,7 +8015,7 @@ Steps.
 
 Gate. KiteCodec Tier 2 in full, then KitePlayer Tier 2 in full after the re-consume, then the
 Tier 1 blocks of both repositories verbatim as the closing check. The metadata evidence is the
-step 1 triple (failing check pasted, update, green check); this half is the deliberate breaking
+step 6 triple (failing check pasted, update, green check); this half is the deliberate breaking
 change, nothing is published, and the log entry says exactly that.
 
 Commit first lines. KiteCodec: `Drop the FFmpeg headers from the def and finish the opaque
@@ -7963,7 +8034,7 @@ Steps.
 1. Correct the push history from LOCAL evidence first, which is sufficient on its own (S1.a.0's
    third sweep caught the old fallback preserving a known-false sentence when the remote is
    unreachable): `origin/main` in both repositories already proves pushes happened (KitePlayer
-   origin/main at abc00c6, KiteCodec origin/main at a086b49, plus the reflog). Then ATTEMPT the
+   origin/main at 5b0e066, KiteCodec origin/main at a086b49, plus the reflog). Then ATTEMPT the
    remote snapshot: `git rev-list --count origin/main..main`, `git ls-remote --heads origin`,
    `git ls-remote --tags origin`; paste what succeeds into the log, and mark ONLY the current
    remote snapshot ASSUMED if lookup fails (measured 2026-08-11: lookup does fail from the

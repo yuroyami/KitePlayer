@@ -4755,6 +4755,21 @@ is no other.
   three kiteplayer-core files was confirmed by both sides. No product file changed; the
   executor made no edits and both repositories stayed clean, which is the fence behaving as
   written.
+
+- 2026-08-11, S1.a.0's second catch, and the protocol recalibrated. Prose only, Tier 1 gate
+  (selected by rule). The executor found the expansion claiming publish coordinates come from
+  gradle.properties GROUP and VERSION; measured truth is the root build.gradle.kts allprojects
+  block at lines 13 to 16, hardcoding the same values, while the properties exist unread.
+  S1.a.2 step 1 now states the real mechanism and forbids unifying the two mid-sub-phase. The
+  finding is the second serial stop on a descriptive defect (the action was never wrong, both
+  mechanisms yield io.github.yuroyami:kiteplayer-rt:0.0.1), each stop costing the owner one
+  relay round-trip, so S1.a.0's protocol changed from stop-at-first-mismatch to one full sweep
+  with a consolidated report, findings classified BLOCKING (any mismatch a step acts on: stop
+  and wait) or DESCRIPTIVE (explanation wrong, actions stand: report and proceed to S1.a.1).
+  The planner also re-swept every remaining located fact in 17.4.1 after this catch (Tier 2
+  block contents, the B1-25 row, the 15.5 deferral anchor, both README claims, every file and
+  symbol anchor already logged) and found no further mismatch. 18.3 rule 5 unchanged for
+  contradictions during a sub-phase.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7559,9 +7574,19 @@ expansion was a single-threaded hostile reread by the same model that authored i
 owner's standing rule forbids Fable 5 from spawning agents; it re-derived every file, line and
 count below from the tree and corrected three upstream claims (named inline where they occur).
 That is weaker independence than the 2026-08-10 three-verifier ritual. Mitigation, binding on the
-executor: **your first act is S1.a.0, mechanical verification.** Check every file path, line
-number, symbol name and count in this expansion against the tree. On any mismatch, stop and
-report per 18.3 rule 5. Only a fully clean S1.a.0 authorises S1.a.1.
+executor: **your first act is S1.a.0, mechanical verification, run as ONE FULL SWEEP.** Check
+every file path, line number, symbol name and count in this expansion against the tree. Complete
+the WHOLE sweep even after finding a mismatch, then deliver ONE consolidated report classifying
+every finding: BLOCKING when the mismatch changes anything a step acts on (a file set, a line
+target, a symbol, a gate, a commit line, a number a step would write), DESCRIPTIVE when only the
+surrounding explanation is wrong and every action stands as written. Any BLOCKING finding: stop
+after the report and wait for the corrected plan. All findings DESCRIPTIVE: report them and
+PROCEED to S1.a.1 without waiting; the planner folds the corrections into this section at its
+next pass, and the executor never edits the plan. Zero findings: proceed. This calibration was
+added 2026-08-11 after the first two S1.a.0 runs each stopped serially on one descriptive
+finding apiece, costing the owner a relay round-trip per defect; sweep-then-classify keeps every
+catch and caps the cost at one relay per sweep. 18.3 rule 5 is untouched and still governs
+contradictions met DURING a sub-phase: those stop immediately.
 
 Execution order is numbered order. Hard ordering constraints: S1.a.7 strictly before S1.a.8 (the
 reversible half gates the irreversible one, B1.3's lift precedent); S1.a.2 before S1.a.3's final
@@ -7595,9 +7620,12 @@ one.
 
 Steps.
 1. Apply `alias(libs.plugins.vanniktech.publish)` to kiteplayer-rt exactly as the four siblings
-   do (coordinates come from `gradle.properties` GROUP and VERSION, giving
-   `io.github.yuroyami:kiteplayer-rt:0.0.1`). Publication remains LOCAL: nothing in this
-   sub-phase pushes or releases anything, per D-3.
+   do. Coordinates come from the root build.gradle.kts allprojects block at lines 13 to 16
+   (group io.github.yuroyami, version 0.0.1), giving `io.github.yuroyami:kiteplayer-rt:0.0.1`.
+   gradle.properties carries matching GROUP and VERSION values that the build never reads;
+   leave them untouched, and do not "unify" the two mechanisms here (S1.a.0's second run caught
+   this expansion claiming the properties were the source; the block is). Publication remains
+   LOCAL: nothing in this sub-phase pushes or releases anything, per D-3.
 2. Declare `abiValidation {}` as the siblings do and run the dump task. If the tool cannot dump a
    module with no Kotlin sources of its own (kiteplayer-rt publishes exactly one cinterop klib),
    record that as a deviation in the log and name `render-audit.sh`, `source-discipline.sh` and

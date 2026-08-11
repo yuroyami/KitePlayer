@@ -1,5 +1,6 @@
 import io.github.yuroyami.kitecodec.gradle.FFmpegLicense
 import io.github.yuroyami.kitecodec.gradle.FFmpegSource
+import java.io.File
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -24,6 +25,10 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
 
+val ffmpegLocalRoot = providers.gradleProperty("kitecodec.ffmpeg.localRoot").map { path ->
+    File(path).absoluteFile.normalize()
+}
+
 kotlin {
     explicitApi()
     jvmToolchain(21)
@@ -36,6 +41,8 @@ kotlin {
     }
 
     macosArm64()
+    iosArm64()
+    iosSimulatorArm64()
 
     sourceSets {
         commonMain.dependencies {
@@ -54,10 +61,10 @@ kotlin {
 
 kitecodec {
     ffmpeg {
-        // The development machine has FFmpeg 8.0 from Homebrew, which is the route KiteCodec's own
-        // CI uses for a consumer project. Prebuilt is the plugin's default and cannot work yet: the
-        // release assets it downloads do not exist.
-        source.set(FFmpegSource.System)
+        // The standing host gate uses Homebrew. Phone links pass a complete local tree explicitly;
+        // this provider branch stays lazy and Local registers no network work.
+        source.set(ffmpegLocalRoot.map { FFmpegSource.Local }.orElse(FFmpegSource.System))
+        localRoot.fileProvider(ffmpegLocalRoot)
         license.set(FFmpegLicense.LGPL)
     }
 }

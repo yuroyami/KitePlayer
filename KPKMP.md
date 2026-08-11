@@ -6011,6 +6011,83 @@ is no other.
   Accepted gate time was about 49.52 seconds. No additional product delta remains from the
   correction, and nothing was pushed, published or released.
 
+- 2026-08-11, S1.b.2 completed against Player `f0cd7f0` and Codec `23b8bf4`. Tier 2 was selected
+  by the output and FFmpeg build scripts, the Apple source-set moves and the exact fresh local
+  phone-link rule. The three execution-fence corrections above were committed and completely
+  re-swept before product work resumed. Nothing was pushed, publicly published or released, and
+  S1.b.2 performed no additional Maven-local publication.
+
+  The pre-move iosSimulatorArm64 compile failed at the predicted `platform.AppKit` boundary and
+  also exposed the shared CoreAudio-clock bindings recorded by the first correction. The four
+  AppKit files then moved byte-for-byte to macosArm64 source sets. Their SHA-256 values stayed
+  `1a1180deb060d91e68aa6a0e02d2d289687ac2d1c064c0b6ae50ce4c3fc82e04`,
+  `1a59dce34dc20cec61e1c9ddc083ae07f350fb06c70d90a9ec680c3d0779bdc0`,
+  `fd777728820450d72beacc8cf0291d9fa856e74327243df93015839bbd779d72` and
+  `9f8d3df3f774ab0152ed66ba251d359f42edddb7ff4f16243c0c0781bb308a2c`. The shared appleMain and
+  appleTest AppKit scan prints nothing and returns the required exit 1.
+
+  Output and FFmpeg now register macosArm64, iosArm64 and iosSimulatorArm64. Output remains
+  KiteCodec- and FFmpeg-free. FFmpeg's lazy provider selects System when the local-root property
+  is absent and Local LGPL when it is present; the settings note gives concrete local publication
+  and device/simulator consumption commands. The exact offline refresh-and-rerun command compiled
+  both modules for all three targets and final-linked output and FFmpeg tests for iOS device and
+  simulator with 57 of 57 tasks executed. No network fetch or stale dependency result supplied
+  that proof.
+
+  AppleHostClock keeps its public object and functions. It caches the measured integral
+  24,000,000-Hz CoreVideo frequency once and converts current and CoreAudio host ticks through the
+  same checked whole-seconds and remainder quotient. The success path is scalar and allocation-free;
+  it neither multiplies the complete tick count by one billion nor converts the absolute count
+  through Double. Production and test compilation passed all 33 tasks across the three Apple
+  targets. CoreAudioSinkTest passed 12 of 12 and the previously persistent RealMediaSeekTest passed
+  three of three. Independent review proved the frequency, product and final-addition bounds and
+  found no product mismatch.
+
+  The ABI move followed the ratchet procedure. The output dump moved from 82 to 84 lines because
+  its target header now names all three targets and its two unchanged AppKit classes receive
+  macosArm64-only markers. The FFmpeg dump remains 94 lines with only its target header expanded.
+  Removing target metadata leaves both complete declaration multisets byte-for-byte unchanged.
+  Update and check both passed; the final dump blobs are `b747b473f02ef6b28b1df1a154bbb7b86b7d200e`
+  and `a25c594e03321bc66c1324d1bd522815b48ee5bf`.
+
+  Complete Player Tier 2 is GREEN on the frozen product diff. Testmedia regenerated 27 files and
+  buildSrc passed 40 tests. The forced combined macOS native run passed 193 core, 28 output and 36
+  FFmpeg tests, 257 total, with zero skips, failures or errors. Fresh ASan and TSan runs and the
+  required live interposition run each passed eight suites and 127 rt cases; interposition observed
+  the required allocator accounting and zero hot-callback allocations. Forced JS, Wasm and Android
+  spots executed 17 tasks, and the sample relink executed 30. Sync submitted 300 frames and true
+  VFR 240 with zero drops, repeats, underruns, rebuffers or warnings. HEVC completed on the Video
+  master with 179 of 180 submitted and one late drop, zero repeats, underruns, rebuffers or warnings;
+  this is retained as a load observation and was not rerun because completion is its written oracle.
+  The timestamp-offset clip submitted 300 cleanly, surround audio exercised 6-to-2 channels cleanly,
+  the rotated clip submitted 25 of 25, and the nonexistent input returned the required two-line
+  diagnostic and exit 1 without a stack trace.
+
+  The unchanged Codec Tier 2 evidence remains GREEN at `23b8bf4`: its cinterop and public API
+  checks, 42 build-tool tests, 19 plugin tests, 274-case ASan, TSan and interposition runs, 105-file
+  corpus replay, 175-export and 189-signature audit, 974-line metadata boundary and 85 macOS tests
+  all pass. Re-publishing it here would overwrite the S1.b.1 phone publication and was correctly
+  omitted.
+
+  Closing Tier 1 is GREEN. Codec coupling remains zero imports and zero typed crossings with 292
+  opaque helper sites reported; deleted surface is 15 of 15; and seven plain C suites pass 274
+  cases. Player coupling scans 87 files with three matches, all allowlisted; all five ABI checks
+  pass; a forced ten-task JVM run passes 184 core and eight subtitle tests; eight rt suites pass
+  127 cases; render audit passes 15 checks; and source discipline passes 18. Both tracked em dash
+  scans print nothing and return the specified passing exit 1. The accepted closing command time
+  was about 42.7 seconds.
+
+  DEVIATIONS: the first sandboxed buildSrc launch could not open the Gradle user-home lock and made
+  no assertion; the identical authorized forced run passed. The verbatim closing JVM invocation
+  was cached and rejected, so the forced run supplies the evidence. A login-shell RVM warning
+  preceded one passing deleted-surface run, so a clean non-login rerun supplies that evidence.
+  DESCRIPTIVE: the step's literal claim that only FFmpeg applies the KiteCodec plugin is true for
+  the two changed library modules, while the unchanged macOS sample also applies it for its final
+  link. The sample stayed outside the fence and byte-for-byte unchanged. No dependency, version,
+  version-catalog or later-stage feature changed. The final staged product diff is exactly the 11
+  fenced paths, four of them R100 moves, with SHA-256
+  `a2f1baa9c12a3bec82ca5a5e181659f89e7b5466d13dba5038d9233120afcfb6`.
+
 ---
 
 ## 15. Horizon B execution: B1

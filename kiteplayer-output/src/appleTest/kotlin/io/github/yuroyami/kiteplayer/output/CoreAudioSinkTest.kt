@@ -11,6 +11,7 @@ import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import platform.CoreVideo.CVGetCurrentHostTime
 import kotlin.experimental.ExperimentalNativeApi
 import kotlin.math.abs
 import kotlin.native.ref.WeakReference
@@ -56,7 +57,7 @@ class CoreAudioSinkTest {
     @Test
     fun `the host clock and CoreAudio agree on a time base`() {
         val before = AppleHostClock.nanos()
-        val hostNow = AppleHostClock.hostTimeToNanos(platform.CoreAudio.AudioGetCurrentHostTime())
+        val hostNow = AppleHostClock.hostTimeToNanos(CVGetCurrentHostTime())
         val after = AppleHostClock.nanos()
 
         assertTrue(

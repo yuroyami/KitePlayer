@@ -3,8 +3,16 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 pluginManagement {
     repositories {
         // KiteCodec and its Gradle plugin are not on Maven Central yet, so the FFmpeg backend
-        // resolves them from a local publication. Run this in the KiteCodec checkout first:
-        //   ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
+        // resolves them from a local publication. Host-only macOS work uses:
+        //   cd ../KiteCodec && ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
+        // Mobile Apple work publishes the three local variants, then points phone links at the
+        // generated no-network FFmpeg trees:
+        //   cd ../KiteCodec && ./gradlew publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true
+        //   cd ../KitePlayer && ./gradlew \
+        //     :kiteplayer-ffmpeg:linkDebugTestIosArm64 \
+        //     :kiteplayer-ffmpeg:linkDebugTestIosSimulatorArm64 \
+        //     -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs" \
+        //     --offline --refresh-dependencies --rerun-tasks
         mavenLocal()
         mavenCentral()
         gradlePluginPortal()

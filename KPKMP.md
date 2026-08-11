@@ -34,8 +34,10 @@ Read this section twice.
    imperative sentence describing the outcome, like the existing history ("Play video and
    audio in sync, and check the colours against FFmpeg"). Body is short prose. Never add a
    Co-Authored-By trailer or any other trailer.
-3. Never create a git branch. Both repositories work on `main`, local commits only, never
-   push anywhere.
+3. Never create a git branch. Both repositories work on `main`. The executor commits locally and
+   never pushes; the owner pushes. External or public publication and release steps are prepared
+   by the executor and executed by the owner. `publishToMavenLocal` remains an executor-run build
+   and consumption step.
 4. No em dashes in any file: no code comment, no Markdown, no commit message. After every
    phase run the em dash scan in section 9 and fix anything it finds.
 5. Editing `../KiteCodec` is allowed and expected. Its 53 core tests must pass after every
@@ -4833,6 +4835,16 @@ is no other.
   tasks executed, eight rt C suites PASS, render audit 15 PASS and source discipline 18 PASS;
   both tracked-file em dash scans printed nothing and exited 1, the passing outcome. No product
   file changed, no gate deviation remained and nothing was pushed.
+
+- 2026-08-11, S1.a.1, P0-01 completed. Prose only, Tier 1 gate (selected by rule: every
+  change, including prose). Contract item 3 now reads through D-3: the executor commits locally
+  and never pushes, the owner pushes, external/public publication and release remain owner-run,
+  and `publishToMavenLocal` remains an executor-run build and consumption proof. Section 1 was
+  reread twice as required. Tier 1: KiteCodec coupling 246/287, deleted-surface PASS and six
+  plain C suites PASS; KitePlayer ABI check 129 tasks executed, core/subtitles JVM tests ten tasks
+  executed, eight rt C suites PASS, render audit 15 PASS and source discipline 18 PASS; both
+  tracked-file em dash scans printed nothing and exited 1, the passing outcome. No deviation and
+  nothing was pushed.
 ---
 
 ## 15. Horizon B execution: B1

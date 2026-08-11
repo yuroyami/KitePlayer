@@ -4815,6 +4815,24 @@ is no other.
   approved cache access. Two uncached Gradle verifications briefly contended for one Kotlin cache,
   invoked the compiler's non-daemon fallback, and both completed BUILD SUCCESSFUL in 53 to 54
   seconds. No product file changed and nothing was pushed.
+
+- 2026-08-11, S1.a.0 post-commit audit follow-up completed. Prose only, Tier 1 gate (selected by
+  rule: every change, including prose). Adversarial rereads of the committed expansion exposed
+  the remaining mechanical gaps, which the owner's uninterrupted-execution direction authorised
+  the executor to resolve conservatively before product work. The correction reconciles that
+  owner exception with the default stop rule; reserves only external/public publication and
+  release for the owner while keeping `publishToMavenLocal` in the executor build loop; names the
+  complete production, test and fuzz include ownership after header de-transitivisation; fences
+  every affected root, native, architecture and fuzz document; distinguishes the twenty original
+  include lines as four standard plus sixteen FFmpeg and the later handles include as the
+  twenty-first; and pins the measured counts at 140 FFmpeg-typed declarations of 157, seventeen
+  primitive-only declarations, seven suites, 272 cases per variant, 816 runs, 169 `ffkmp_`
+  exports and 175 total exports. Three independent final rereads then reported CLEAN with no
+  blocking or descriptive finding. Tier 1: KiteCodec coupling 246/287, deleted-surface PASS and
+  six plain C suites PASS; KitePlayer ABI check 129 tasks executed, core/subtitles JVM tests ten
+  tasks executed, eight rt C suites PASS, render audit 15 PASS and source discipline 18 PASS;
+  both tracked-file em dash scans printed nothing and exited 1, the passing outcome. No product
+  file changed, no gate deviation remained and nothing was pushed.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7378,9 +7396,10 @@ The owner set nine goals on 2026-08-11, recorded here verbatim in substance:
   paths, selected at open, refused at runtime on misbehaviour, falling back to the same software
   pipeline with identical semantics. This is mpv's own design and is how goal 9's consistency is
   achieved without goal-9-violating shortcuts.
-- **D-3, push rule.** The executor never pushes. Local commits only; the owner pushes. Publication
-  steps are prepared by the executor and executed by the owner. This amends the working reading of
-  contract item 3: the branch ban, the trailer ban and the em dash ban stand unchanged.
+- **D-3, push rule.** The executor never pushes. Local commits only; the owner pushes. External or
+  public publication and release steps are prepared by the executor and executed by the owner;
+  `publishToMavenLocal` remains an executor-run build and consumption proof. This amends the
+  working reading of contract item 3: the branch ban, trailer ban and em dash ban stand unchanged.
 - **D-4, network is parked.** Goal scope is local file playback. The old B6 (network, live, adaptive) moves to a parked register at 17.8 with its costs stated. The engine's existing
   URL-open path stays undocumented rather than removed.
 - **D-5, size is a policy, not a wish.** "All formats" and "smallest stub" oppose each other. The
@@ -7534,8 +7553,10 @@ stages expand at entry per 17.2's rule.
 - Problem: item 3 says local commits only and never push, written when pushing was deferred; both
   repositories are now pushed and publication is on the road. Three verifiers flagged the plan
   amending every rule except this one.
-- Fix: append the D-3 reading to item 3: executor never pushes, owner pushes, publication steps
-  are prepared-not-executed by the executor. Branch, trailer and em dash bans unchanged.
+- Fix: append the D-3 reading to item 3: executor never pushes, owner pushes, external/public
+  publication and release steps are prepared-not-executed by the executor, while
+  `publishToMavenLocal` remains an executor-run build step. Branch, trailer and em dash bans
+  unchanged.
 - Sub-phase: S1.a.1. Test: prose only; the tier 1 scan and a reread.
 
 #### P0-02. The kiteplayer-rt coordinate question is decided: it publishes
@@ -7590,8 +7611,10 @@ stages expand at entry per 17.2's rule.
   synthetic mutation string in CheckCinteropCouplingTaskTest, but no declaration or definition.
 
 #### P0-07. The opaque handle migration completes (B1-25 paid)
-- Where: ../KiteCodec def with 36 FFmpeg headers; ten Kotlin files on CPointer<AVFrame> and
-  siblings; fourteen raw libav call sites; five AVMEDIA_TYPE_* enum constants
+- Where: ../KiteCodec def with 36 FFmpeg headers; ten Kotlin files in the import census, split
+  into six carrying migration material and four compile-proof-only (raw FFmpeg pointer types are
+  in five, with FFmpeg.native.kt carrying the sixth file's raw lookups); fourteen raw libav call
+  sites; five AVMEDIA_TYPE_* enum constants
   (MediaSource.native.kt:553 to :557, the verifier's catch the draft missed).
 - Problem: publication freezes FFmpeg struct layout as public API forever (draft C-43); the JNI
   bridge of S1.c needs the opaque C ABI as its boundary; sixteen exported entry points still crash
@@ -7608,7 +7631,7 @@ stages expand at entry per 17.2's rule.
   suite; guards reproduction-first like I-12's two.
 
 #### P0-08. Record corrections
-- Where: KPKMP section 14 stale remote-state sentences (draft C-07); README network sentence
+- Where: KPKMP section 13 stale remote-state sentence (draft C-07); README network sentence
   (draft C-08); section 11 supersession note.
 - Problem: the record must match the tree before a new horizon builds on it; the interlude's
   whole I.2 exists because it once did not.
@@ -7629,19 +7652,23 @@ the WHOLE sweep even after finding a mismatch, then deliver ONE consolidated rep
 every finding: BLOCKING when the mismatch changes anything a step acts on (a file set, a line
 target, a symbol, a gate, a commit line, a number a step would write), DESCRIPTIVE when only the
 surrounding explanation is wrong and every action stands as written. Any BLOCKING finding: stop
-after the report and wait for the corrected plan. All findings DESCRIPTIVE: report them and
-PROCEED to S1.a.1 without waiting; the planner folds the corrections into this section at its
-next pass, and the executor never edits the plan. Zero findings: proceed. This calibration was
+after the report and wait for the corrected plan UNLESS the run-specific owner-direction
+exception below applies. All findings DESCRIPTIVE: report them and PROCEED to S1.a.1 without
+waiting; the planner folds the corrections into this section at its next pass, and the executor
+never edits the plan except under that same explicit exception. Zero findings: proceed. This
+calibration was
 added 2026-08-11 after the first two S1.a.0 runs each stopped serially on one descriptive
 finding apiece, costing the owner a relay round-trip per defect; sweep-then-classify keeps every
-catch and caps the cost at one relay per sweep. 18.3 rule 5 is untouched and still governs
-contradictions met DURING a sub-phase: those stop immediately.
+catch and caps the cost at one relay per sweep. Outside the run-specific exception immediately
+below, 18.3 rule 5 is untouched and contradictions met DURING a sub-phase stop immediately.
 
 Owner direction for the execution begun 2026-08-11: the executor may resolve a mechanical
 S1 planning contradiction without a relay when the tree and the existing decisions leave one
 conservative answer. It must record the correction, run Tier 1, commit it separately, and rerun
-the complete S1.a.0 sweep before product work. This authority does not widen product scope,
-permit external publication or pushing, or permit guessing through an irreversible choice.
+the complete applicable sweep before product work continues. This exception applies both to an
+S1.a.0 finding and to a mechanical contradiction found during an S1 sub-phase. It does not widen
+product scope, permit external publication or pushing, or permit guessing through an irreversible
+choice; any such decision still stops for the owner.
 
 Execution order is numbered order. Hard ordering constraints: S1.a.7 strictly before S1.a.8 (the
 reversible half gates the irreversible one, B1.3's lift precedent); S1.a.2 before S1.a.3's final
@@ -7654,9 +7681,10 @@ Items: P0-01.
 Files: `KPKMP.md` section 1 item 3 (the two lines beginning "Never create a git branch").
 
 Steps.
-1. Append to item 3: the D-3 reading. The executor never pushes; the owner pushes; publication
-   steps are prepared by the executor and executed by the owner. The branch ban, the trailer ban
-   and the em dash ban stand unchanged.
+1. Append to item 3: the D-3 reading. The executor never pushes; the owner pushes; external or
+   public publication and release steps are prepared by the executor and executed by the owner.
+   `publishToMavenLocal` remains an executor-run build and consumption step. The branch ban, the
+   trailer ban and the em dash ban stand unchanged.
 
 Gate. Tier 1 (rule: prose only). Reread of section 1 as a whole.
 
@@ -7856,8 +7884,10 @@ helpers_packet.c, helpers_playback.c, helpers_stream.c); `tests/test_args.c` (ne
 `scripts/run-c-tests.sh` and `scripts/build-host.sh` (the agreed suite lists gain test_args);
 `exported-symbols-baseline.txt`; `klib-metadata-baseline.txt`; `include/kitecodec_abi.h` (minor
 version); `kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`;
-`native/kitecodec-c/README.md`; the committed `kitecodec-core/api/kitecodec-core.klib.api` if
-`apiDump` moves it; `KPKMP.md` (log and the section 15.3 suite-count correction).
+`native/kitecodec-c/README.md`; `../KiteCodec/README.md`; `../KiteCodec/CHANGELOG.md`;
+`../KiteCodec/docs/about.md`; `../KiteCodec/native/kitecodec-c/fuzz/README.md`; the
+committed `kitecodec-core/api/kitecodec-core.klib.api` if `apiDump` moves it; `KPKMP.md` (log and
+the section 15.3 suite-count correction).
 
 Steps.
 1. `kitecodec_handles.h`: forward struct declarations plus one opaque typedef per FFmpeg struct
@@ -7905,25 +7935,39 @@ Steps.
    (:62); the register row's eighteen minus these two is this sixteen. Each guard is a leading
    NULL or range refusal returning the documented failure value, with one header contract
    sentence in the shape `ffkmp_fmt_set_opt` already uses. REPRODUCTION-FIRST: `tests/
-   test_args.c` nulls each REQUIRED pointer or violates each required range one at a time against
-   the UNGUARDED build first and the log records the crash class, then the guard lands, then the
-   same case passes, then falsifiability by reverting one guard. Preserve the existing nullable
-   contracts: an audio-filter description may be NULL to select `anull`, a graph-send frame may
-   be NULL to signal EOF, a mux packet may be NULL to flush, and an output-format name may be
-   NULL for inference. The codec argument to `ffkmp_codecctx_open` may be NULL when the context
-   already remembers its codec, and the path argument to `ffkmp_fmt_alloc_output2` may be NULL
+   test_args.c` carries exactly one registered invalid vector for each of the sixteen entry
+   points against the UNGUARDED build first and the log records its crash class, then the guard
+   lands, then the same case passes, then falsifiability by reverting one guard. Preserve the
+   existing nullable contracts: an audio-filter description may be NULL to select `anull`, a
+   graph-send frame may be NULL to signal EOF, a mux packet may be NULL to flush, and an
+   output-format name may be NULL for inference. The codec argument to `ffkmp_codecctx_open` may
+   be NULL when the context already remembers its codec, and the path argument to
+   `ffkmp_fmt_alloc_output2` may be NULL
    when a nonempty format name is supplied. Pin all six as passing positive controls in
-   `test_args.c`; those positions never become blanket errors.
+   `test_args.c`; those positions never become blanket errors. Give every vector exactly one
+   `kc_case`, so the suite has exactly twenty-two cases: sixteen invalid vectors and six nullable
+   positive controls.
 6. `exported-symbols-baseline.txt` refreshed by the section 9 move procedure, naming all twelve
    added symbols (seven wrappers, five accessors).
 7. `KITECODEC_C_ABI_MINOR` moves to 1 in the same commit, decided here: twelve new exports are a
    consumer-visible compatible addition. The identity gate suite re-baselines accordingly.
 8. Suite lists in run-c-tests.sh and build-host.sh gain test_args, keeping their stated
-   agreement (the plain C suite count moves from six to seven and section 15.3's "six suites"
-   sentences gain a correction note where touched). Update the native README's runner and test
-   rows from six to seven and add the new handles header to its layout. Contract rule 5's stale
-   KOTLIN test count is a separate defect and is fixed at S1.a.9, not here: a C suite cannot
-   move a Kotlin count.
+   agreement. Update every CURRENT count while leaving explicitly historical counts historical:
+   seven suites; 272 cases per variant and 816 across plain/asan/tsan; 169 `ffkmp_` exports (157
+   already consumed plus twelve additions), six `kc_` exports, 175 total. The native README gains
+   the handles-header row, runner/test rows at seven, the seven-suite heading and the 22-case
+   `test_args.c` row, while its historical six-suite and 240/234/250 statements remain explicitly
+   historical. KiteCodec's root README says seven C suites. Its CHANGELOG records all eleven
+   alias names, the seven wrapper names, five accessor names, exports 163 to 175, ABI 1.0 to 1.1,
+   the sixteen guards and six nullable controls; it narrows "opaque migration deferred" to the
+   breaking header/def/Kotlin half, changes only the current suite count to seven, and preserves
+   the six-fuzz-target facts. `docs/about.md` distinguishes the 157 legacy helpers Kotlin already
+   consumes from twelve dormant compatible additions and says seven C suites. The fuzz README
+   marks its "other 151 helpers" arithmetic explicitly historical to B1.5's 157-helper surface;
+   it makes no unproved coverage claim for the twelve additions. Section 15.3's current "six
+   suites" statements gain the same correction.
+   Contract rule 5's stale KOTLIN test count is a separate defect and is fixed at S1.a.9, not
+   here: a C suite cannot move a Kotlin count.
 
 Gate. KiteCodec Tier 2 (rule: native/ changed): full C suites in plain, asan and tsan including
 the new test_args; `symbol-audit.sh` (check 6 against the refreshed baseline). Metadata evidence
@@ -7949,7 +7993,10 @@ Files: `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def` (line
 `native/kitecodec-c/src/`; `native/kitecodec-c/klib-metadata-baseline.txt`;
 `native/kitecodec-c/tests/test_buffers.c`, `test_convert.c`, `test_ownership.c`,
 `test_rescale.c`, `test_strerror_thread.c` and the S1.a.7 `test_args.c`;
-`native/kitecodec-c/README.md`;
+`native/kitecodec-c/fuzz/kc_fuzz.c`, `fuzz_codec_option.c`, `fuzz_filter_audio.c`,
+`fuzz_filter_video.c`, `fuzz_format_name.c`, `fuzz_format_option.c` and `fuzz_metadata.c`;
+`native/kitecodec-c/README.md`; `../KiteCodec/CHANGELOG.md`; `../KiteCodec/docs/about.md`;
+`../KiteCodec/docs/platforms.md`; `../KiteCodec/docs/getting-started.md`;
 the SIX Kotlin files carrying the migrating material (FFmpeg.native.kt, FilterGraph.native.kt,
 Frame.native.kt, MediaSink.native.kt, MediaSource.native.kt, Playback.native.kt) and the FOUR
 compile-proof files (Internals.kt, Remuxer.native.kt, Transcoder.native.kt,
@@ -7963,20 +8010,50 @@ checking step in `symbol-audit.sh`; KiteCodec's committed api dump (one file,
 kitecodec-core.klib.api); `KPKMP.md` rows named above.
 
 Steps.
-1. This is the breaking header half deliberately deferred from S1.a.7: respell the 134 existing
+1. This is the breaking header half deliberately deferred from S1.a.7: respell the 140 existing
    AV-typed public helper declarations to their `kc_*` aliases; remove every FFmpeg include from
    `kitecodec_helpers.h`, leaving the standard headers it uses plus `kitecodec_handles.h`; and
-   add the exact FFmpeg includes each of the nine `.c` units needs. Replace the C suites'
-   transitive dependencies explicitly: test_buffers gets buffersink, channel-layout, error,
-   frame, imgutils, pixdesc, pixfmt and samplefmt headers; test_convert gets frame, log, pixdesc,
-   pixfmt and swscale; test_ownership gets avformat, avcodec, avfilter, buffersrc, channel-layout,
-   mem, opt and swscale; test_rescale gets avformat, avcodec, avfilter, common, error, imgutils,
-   pixdesc, pixfmt and rational; test_strerror_thread gets error. `test_args` stays an opaque
-   consumer using only `kc_*` handles, helper calls and standard errno. Then reduce `ffmpeg.def`
+   add this syntax-checked direct-owner include map (names below omit the `lib` prefix and `.h`):
+   helpers_codec gets avcodec/avcodec, avutil/error, avutil/opt; codecpar gets
+   avcodec/avcodec; error gets avutil/error and avutil/mathematics; filter gets
+   avfilter/avfilter, avfilter/buffersrc, avfilter/buffersink, avutil/channel_layout,
+   avutil/error, avutil/mem, avutil/pixdesc and avutil/samplefmt; format gets
+   avformat/avformat, avutil/error and avutil/opt; frame gets avutil/frame,
+   avutil/channel_layout, avutil/dict, avutil/error, avutil/imgutils, avutil/pixdesc,
+   avutil/samplefmt and swscale/swscale; packet gets avcodec/packet and avutil/avutil;
+   playback gets avcodec/avcodec, avcodec/packet, avformat/avformat, avformat/avio,
+   avutil/channel_layout, avutil/common, avutil/display, avutil/error, avutil/frame,
+   avutil/pixdesc and avutil/samplefmt; stream gets avformat/avformat, avutil/avutil and
+   avutil/mathematics.
+
+   Replace the C suites' transitive dependencies with the same rule: test_buffers gets
+   avfilter/buffersink, avutil/channel_layout, avutil/error, avutil/frame, avutil/pixdesc,
+   avutil/pixfmt and avutil/samplefmt; test_convert gets avutil/frame, avutil/log and
+   avutil/pixfmt; test_ownership gets avcodec/avcodec, avfilter/avfilter, avformat/avformat,
+   avutil/channel_layout, avutil/dict, avutil/error, avutil/frame, avutil/mem, avutil/pixfmt
+   and avutil/samplefmt; test_rescale gets avcodec/avcodec, avfilter/avfilter,
+   avformat/avformat, avutil/error, avutil/frame, avutil/pixdesc and avutil/pixfmt;
+   test_strerror_thread gets avutil/error. `test_args` gets no FFmpeg header: only the helper,
+   handles, standard errno and stddef when it spells NULL.
+
+   Fuzz support is explicit too: kc_fuzz.c gets avutil/log; fuzz_codec_option gets
+   avcodec/avcodec and avutil/error; fuzz_filter_audio gets avfilter/avfilter and
+   avutil/samplefmt; fuzz_filter_video gets avfilter/avfilter and avutil/pixfmt;
+   fuzz_format_name gets avutil/pixfmt and avutil/samplefmt; fuzz_format_option gets
+   avformat/avformat and avutil/error; fuzz_metadata gets avformat/avformat, avutil/dict and
+   avutil/error. `kc_fuzz.h` and replay_main.c remain FFmpeg-header-free compile proofs;
+   harness.c already owns avutil/log directly and needs no change.
+
+   Then reduce `ffmpeg.def`
    `headers` and `headerFilter` to `kitecodec_helpers.h kitecodec_handles.h kitecodec_abi.h`.
-   Update the native README's layout and historical include paragraph: the twenty FFmpeg includes
-   lived in the public helper header from B1.3 through S1.a.7 and now live directly in the
-   production/test translation units that use them.
+   Update the native README's layout without rewriting extraction history: B1.3 installed twenty
+   include lines (four standard, sixteen FFmpeg), and S1.a.7 added the handles include as the
+   twenty-first. The four standard-library includes and handles include remain as needed, while
+   the sixteen FFmpeg includes move directly into the production/test/fuzz translation units that
+   use them. Update the three architecture guides in the same change: cinterop now consumes only
+   helpers, handles and ABI headers; FFmpeg include paths feed the compiled C archive instead of
+   cinterop; the handle header is part of the layout; the helper sources are ordinary maintained
+   files and no retired extraction/lift script is described as live.
 2. The six files migrate: FFmpeg-typed CPointer parameters move to the opaque typealiases; the
    fourteen raw call sites move to the seven wrappers (six ffkmp_ names plus ffkmp_filter_exists
    per S1.a.7's decided returns); the five AVMEDIA_TYPE_* constants at MediaSource.native.kt:553
@@ -7995,8 +8072,9 @@ Steps.
    Tests prove a new raw import, raw call or raw struct name fails while a new `ffkmp_`, `kc_` or
    `KC_` use does not. Record the old and new measurements and semantic rewrite in the log.
 4. `KITECODEC_C_ABI_MAJOR` moves to 2 and `KITECODEC_C_ABI_MINOR` resets to 0 (S1.a.7 set it to
-   1), because the 134 of 157 helper declarations that name FFmpeg types changed shape for a C
-   consumer (the other 23 carry none, executor-measured 2026-08-11). The identity gate tests
+   1), because the 140 of 157 helper declarations that name FFmpeg types changed shape for a C
+   consumer (the other 17 carry none, counting complete multiline declarations on 2026-08-11).
+   The identity gate tests
    updated accordingly.
 5. The NEW signature baseline (verifier M4: a names-only baseline cannot see a shape change):
    generate one line per exported declaration from `kitecodec_helpers.h`, `kitecodec_handles.h`
@@ -8011,7 +8089,12 @@ Steps.
 7. KitePlayer re-consumes ONCE: rebuild against the republished klib, then the full KitePlayer
    Tier 2 block. This is KiteCodec window 1 closing.
 8. Close the KPKMP rows: 15.1 B1-25, 15.5 deferral 1; mark 16.4 items 1 and 9 closed with their
-   closing sub-phases named (S1.a.7 and S1.a.2).
+   closing sub-phases named (S1.a.7 and S1.a.2). Update KiteCodec's Unreleased changelog from
+   "breaking half deferred" to the measured result and call out the 0.x source/cinterop break:
+   140 of the original 157 declarations respell, the public helper header stops transitively
+   supplying FFmpeg typedefs/layouts, raw libav declarations leave the klib, and native consumers
+   must use the `kc_*`/`ffkmp_*` boundary. Six Kotlin files migrate, coupling ceilings become
+   zero, C ABI becomes 2.0, Kotlin's public API stays unchanged, and nothing is published.
 
 Gate. KiteCodec Tier 2 in full, then KitePlayer Tier 2 in full after the re-consume, then the
 Tier 1 blocks of both repositories verbatim as the closing check. The metadata evidence is the

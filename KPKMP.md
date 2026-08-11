@@ -4884,6 +4884,19 @@ is no other.
   loaded the host; the same binary passed immediately in isolation and the complete eight-suite
   serial rerun passed. No source or test was changed for that load observation. No product commit
   was made by this correction and nothing was pushed.
+
+- 2026-08-11, S1.a.2 third execution-fence correction completed before the final gate resumed.
+  Prose only, Tier 1 gate (selected by rule: every change, including prose). Adversarial product
+  review found the last stale architecture sentence in settings.gradle.kts: it still claimed that
+  kiteplayer-rt published exactly one artifact after the generated module metadata proved an empty
+  main klib and the callable cinterop klib are siblings. The S1.a.2 file list and publication-carrier
+  step now own that comment and require the same exact two-artifact wording as the module build
+  file. The rest of the implementation and ABI review was CLEAN. Tier 1: KiteCodec coupling
+  246/287, deleted-surface PASS and six plain C suites PASS; KitePlayer ABI check 148 tasks
+  executed, core/subtitles JVM tests ten tasks executed, eight rt C suites PASS, render audit 15
+  PASS and source discipline 18 PASS; both tracked-file em dash scans printed nothing and exited
+  1, the passing outcome. No deviation, no product commit by this correction and nothing was
+  pushed.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7745,7 +7758,8 @@ Commit first line. KitePlayer: `Read contract item three through decision D-3`.
 
 Items: P0-02. Closes section 16.4 item 9.
 
-Files: `kiteplayer-rt/build.gradle.kts`; `kiteplayer-core/build.gradle.kts` (the dependency
+Files: `kiteplayer-rt/build.gradle.kts`; `settings.gradle.kts` (the kiteplayer-rt module note);
+`kiteplayer-core/build.gradle.kts` (the dependency
 comment around lines 85 to 101); `kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/
 kiteplayer/spi/NativeRingAudioSink.kt` (holds `NativeRingHandoff`); `kiteplayer-core/src/
 nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/AudioPath.native.kt`;
@@ -7774,9 +7788,10 @@ Steps.
    klib did not exist; with this API-free anchor, both the main-klib task and metadata task pass.
    Do not invent a marker object or expose a Kotlin symbol just to make the artifact exist. Update
    the kiteplayer-rt build-file module note from "no Kotlin sources" to the exact state: no Kotlin
-   declarations or callable API, with one package-only publication carrier. Replace "publishes
-   exactly one thing" with the exact two-artifact statement: the module exposes one callable
-   surface, the `kitert` cinterop klib, beside the declaration-free main publication klib.
+   declarations or callable API, with one package-only publication carrier. In both that note and
+   the kiteplayer-rt module note in settings.gradle.kts, replace "publishes exactly one thing" with
+   the exact two-artifact statement: the module exposes one callable surface, the `kitert` cinterop
+   klib, beside the declaration-free main publication klib.
 3. Declare `abiValidation {}` as the siblings do and run the dump task. Commit the generated
    `kiteplayer-rt/api/kiteplayer-rt.klib.api`; it is declaration-free, proving that the carrier
    introduced no Kotlin API while the separately published `kitert` klib remains the

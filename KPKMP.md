@@ -5320,6 +5320,44 @@ is no other.
   weakened to make a fixture pass. Final independent review reported no blocking or descriptive
   S1.a.7 finding. Nothing was pushed, publicly published or released.
 
+- 2026-08-11, S1.a.8 execution-fence correction completed before product work began. Prose only,
+  Tier 1 gate (selected by rule: every change, including prose). Three independent read-only
+  sweeps verified the post-S1.a.7 trees at Player efee093 and Codec 2ff0308 and found three
+  blocking execution facts plus one descriptive drift. First, `test_args.c` cannot become
+  FFmpeg-header-free by keeping only errno and stddef: its S1.a.7 child harness directly owns
+  signal, pipe, wait, selection and diagnostic operations, and still spells six AV pointer types,
+  three format constants, AVERROR and one raw decoder lookup. Step 1 now preserves that machinery,
+  names every actual POSIX/C header and mechanically replaces only the transitive FFmpeg
+  vocabulary with `kc_*`, `-EINVAL` and existing `ffkmp_*` lookups. The exact proposed rewrite
+  syntax-checks with no FFmpeg header. Second, the Codec coupling task has the same Kotlin-template
+  lexer defect already proved and fixed in Player: comments inside `${...}` remain visible. Step 3
+  now owns the proven context-stack lexer and its live/commented/escaped/nested template tests.
+  Third, CHANGELOG.md still describes the retired lift generator and verifier as live; step 8 now
+  retires that present-tense claim while preserving its historical proof. The descriptive drift
+  is resolved by stating the identity tests rebuild unchanged from the ABI macros at 2.0.
+
+  The same sweep made the signature verifier executable rather than interpretive: its 189 records
+  are the 169 helper prototypes, eleven aliases, six ABI function prototypes, two ABI enums and
+  the report typedef, with header-specific selection, brace-depth-aware accumulation, a separate
+  write option and two falsifiability mutations. A final adversarial read caught and corrected one
+  architecture sentence too: the reduced def parses no FFmpeg header and the archive consumes the
+  FFmpeg include path, while the untouched module build still supplies that path redundantly to
+  cinterop. Every other S1.a.8 fact remained clean: nine production units, 140 of the original 157 declarations typed,
+  seventeen original primitive-only declarations, twelve S1.a.7 additions, fourteen raw Kotlin
+  calls, six migration files, four unchanged compile proofs, five media constants, all production,
+  legacy-test and fuzz include maps, metadata order, local re-consumption, gates and both product
+  commit subjects. DESCRIPTIVE plan debt, outside this phase's file fence: the Codec module build
+  still passes an unused FFmpeg include directory to cinterop and calls the old arrangement a
+  single libav cinterop. The reduced def no longer parses a libav header, so this does not change
+  the boundary; it is recorded for a later named build-file change rather than smuggled into S1.a.8.
+
+  Tier 1 is GREEN: Codec coupling 246/287 with 273 helper and fourteen direct calls and ten of ten
+  types, deleted surface clean, seven plain Codec suites and 274 cases; Player coupling 87/3,
+  clean ABI and JVM checks, eight plain rt suites, render audit 15 and source discipline 18; both
+  tracked em dash scans empty with exit 1. The separate correction commit first line is
+  `Correct the opaque migration's executable facts`. No product file changed and nothing was
+  pushed, publicly published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -8561,8 +8599,16 @@ Steps.
    avutil/channel_layout, avutil/dict, avutil/error, avutil/frame, avutil/mem, avutil/pixfmt
    and avutil/samplefmt; test_rescale gets avcodec/avcodec, avfilter/avfilter,
    avformat/avformat, avutil/error, avutil/frame, avutil/pixdesc and avutil/pixfmt;
-   test_strerror_thread gets avutil/error. `test_args` gets no FFmpeg header: only the helper,
-   handles, standard errno and stddef when it spells NULL.
+   test_strerror_thread gets avutil/error. `test_args` gets no FFmpeg header, but it retains the
+   S1.a.7 child-process reproduction machinery it actually owns. Respell `AVFilterGraph`,
+   `AVFilterContext`, `AVFrame`, `AVFormatContext`, `AVCodecContext` and `AVCodec` to their
+   `kc_*` aliases; replace `AVERROR(EINVAL)` with `-EINVAL`; resolve `yuv420p`, `fltp` and `s16`
+   through `ffkmp_pix_fmt_from_name` and `ffkmp_sample_fmt_from_name`; and replace
+   `avcodec_find_decoder(AV_CODEC_ID_PCM_S16LE)` with
+   `ffkmp_find_decoder_by_name("pcm_s16le")`. Its exact direct headers are `harness.h`,
+   `kitecodec_helpers.h`, `kitecodec_handles.h`, errno, signal, stddef, stdio, string, sys/types,
+   sys/wait and unistd. Remove the unused stdlib include. This keeps all 22 cases and their
+   focused reproduction selector while proving the suite itself consumes only the opaque surface.
 
    Fuzz support is explicit too: kc_fuzz.c gets avutil/log; fuzz_codec_option gets
    avcodec/avcodec and avutil/error; fuzz_filter_audio gets avfilter/avfilter and
@@ -8578,10 +8624,12 @@ Steps.
    include lines (four standard, sixteen FFmpeg), and S1.a.7 added the handles include as the
    twenty-first. The four standard-library includes and handles include remain as needed, while
    the sixteen FFmpeg includes move directly into the production/test/fuzz translation units that
-   use them. Update the three architecture guides in the same change: cinterop now consumes only
-   helpers, handles and ABI headers; FFmpeg include paths feed the compiled C archive instead of
-   cinterop; the handle header is part of the layout; the helper sources are ordinary maintained
-   files and no retired extraction/lift script is described as live.
+   use them. Update the three architecture guides in the same change: the reduced def parses only
+   helpers, handles and ABI headers and no FFmpeg header; the compiled C archive consumes the
+   FFmpeg include path; the untouched module build still supplies that path redundantly to
+   cinterop, recorded as out-of-fence plan debt rather than misdescribed as removed; the handle
+   header is part of the layout; the helper sources are ordinary maintained files and no retired
+   extraction/lift script is described as live.
 2. The six files migrate: FFmpeg-typed CPointer parameters move to the opaque typealiases; the
    fourteen raw call sites move to the seven wrappers (six ffkmp_ names plus ffkmp_filter_exists
    per S1.a.7's decided returns); the five AVMEDIA_TYPE_* constants at MediaSource.native.kt:553
@@ -8599,17 +8647,35 @@ Steps.
    named directly in Kotlin source, though cinterop still has private forward-declared C tags.
    Tests prove a new raw import, raw call or raw struct name fails while a new `ffkmp_`, `kc_` or
    `KC_` use does not. Record the old and new measurements and semantic rewrite in the log.
+   The task's current string-state comment stripper is not correct for Kotlin template code: it
+   preserves comments inside `${...}` and can therefore count a commented raw call or type. Port
+   the already-proved context-stack lexer from KitePlayer's `CheckKitertCouplingTask`: unescaped
+   ordinary and raw `${...}` re-enter code mode; nested braces, strings, raw strings, chars,
+   backtick identifiers and nested templates are tracked; line and nested block comments are
+   stripped inside template expressions; escaped `\${...}` stays literal. Tests prove a
+   comment-only template expression does not count, a live raw call or type inside one does count,
+   nested raw templates work and an escaped template remains string content.
 4. `KITECODEC_C_ABI_MAJOR` moves to 2 and `KITECODEC_C_ABI_MINOR` resets to 0 (S1.a.7 set it to
    1), because the 140 of 157 helper declarations that name FFmpeg types changed shape for a C
    consumer (the other 17 carry none, counting complete multiline declarations on 2026-08-11).
-   The identity gate tests
-   updated accordingly.
+   Rebuild and run the unchanged macro-derived C and Kotlin identity tests at 2.0; neither test
+   hardcodes the old version and neither file needs an edit.
 5. The NEW signature baseline (verifier M4: a names-only baseline cannot see a shape change):
    generate one line per exported declaration from `kitecodec_helpers.h`, `kitecodec_handles.h`
    AND `kitecodec_abi.h` (full declaration text, normalised whitespace; handles.h is included
    precisely so a silent retarget of an opaque alias cannot pass unseen, S1.a.0's third sweep)
-   into `signature-baseline.txt`; extend `symbol-audit.sh` with a check comparing it; add its
-   row to section 9's ratchet move table.
+   into `signature-baseline.txt`. The installed scope is exactly 189 normalised records: 169
+   helper `KC_API` prototypes, eleven handle typedefs, six ABI `KC_API` prototypes, two ABI enum
+   definitions and the full `kc_ffmpeg_report` typedef. Select those classes per header: helper
+   `KC_API` prototypes from helpers, typedefs from handles, and ABI `KC_API` prototypes, enums and
+   report typedef from ABI. Ignore standalone forward struct declarations and extern-C braces.
+   Strip comments and preprocessor lines, accumulate complete multiline declarations, and treat a
+   semicolon as a terminator only at brace depth zero so enum fields and report fields cannot split
+   into false records; then normalise whitespace and sort without deduplicating. Extend
+   `symbol-audit.sh` with check 7 and a distinct
+   `--write-signature-baseline` move path; do not overload the export baseline's
+   `--write-baseline`. Prove check 7 fails once on a temporary function-parameter change and once
+   on a handle retarget, then restore both. Add its row to section 9's ratchet move table.
 6. Capture and accept the metadata only AFTER steps 1 to 5 created the difference. FIRST run
    `klib-metadata-diff.sh --check` against the post-S1.a.7 baseline, expect NONZERO, and paste its
    full differential into the log as the before-picture; THEN review the exact breaking surface;
@@ -8623,6 +8689,10 @@ Steps.
    supplying FFmpeg typedefs/layouts, raw libav declarations leave the klib, and native consumers
    must use the `kc_*`/`ffkmp_*` boundary. Six Kotlin files migrate, coupling ceilings become
    zero, C ABI becomes 2.0, Kotlin's public API stays unchanged, and nothing is published.
+   The same changelog edit must retire its stale present-tense extraction claim: the helper files
+   are ordinary maintained sources now, `verify-lift.sh` is retired with its final proof retained
+   in the execution record, and the old sentence saying the def and Kotlin call sites remain
+   unchanged is replaced by this measured opaque migration result.
 
 Gate. KiteCodec Tier 2 in full, then KitePlayer Tier 2 in full after the re-consume, then the
 Tier 1 blocks of both repositories verbatim as the closing check. The metadata evidence is the

@@ -5932,6 +5932,40 @@ is no other.
   hygiene scan, so both scans reran without login startup and produced exactly empty output. No
   product file changed, and nothing was staged, pushed, published or released.
 
+- 2026-08-11, S1.b.2 second execution-fence correction completed before product work began,
+  against Player `04f86e3` and Codec `23b8bf4`. Prose only, Tier 1 selected by the rule that every
+  change, including prose, receives Tier 1. The owner's mechanical S1 correction exception applies.
+  The mandatory post-commit complete S1.b.2 sweep produced one BLOCKING finding and no new
+  DESCRIPTIVE finding; the earlier AppKit-only synopsis drift remains recorded above.
+
+  Kotlin/Native 2.4.10 scratch compilation for macosArm64, iosArm64 and iosSimulatorArm64 proved
+  that its generated Darwin platform libraries do not expose `mach_absolute_time`,
+  `mach_timebase_info` or `mach_timebase_info_data_t`. Those functions exist in the Apple C SDK,
+  but the first correction's named Kotlin action was therefore impossible. No product file had
+  changed when the sweep stopped.
+
+  The conservative replacement uses only Kotlin/Native's bound CoreMedia host clock. Exact scratch
+  klibs using `CMClockGetHostTimeClock`, `CMClockGetTime`,
+  `CMClockConvertHostTimeToSystemUnits`, `CMClockMakeHostTimeFromSystemUnits` and
+  `CMTimeConvertScale` compiled for all three targets with five of five tasks executed. A macOS
+  executable final-linked through the generated CoreMedia platform binding and ran. The corrected
+  action caches the non-null host clock once and converts both current readings and raw CoreAudio
+  host units to a one-billion timescale with RoundTowardZero before reading `CMTime.value`. This
+  preserves the two public AppleHostClock functions, handles non-integer native timescales, matches
+  the C sink's truncation, requires no explicit Gradle dependency and leaves the file fence
+  unchanged. The complete sweep found no other mismatch.
+
+  Tier 1 is GREEN. Codec coupling is zero direct imports and zero typed crossings with 292 opaque
+  helper sites reported; deleted surface is 15 of 15; and seven plain C suites pass 274 cases.
+  Player coupling scans 87 Kotlin files with three matches, all allowlisted; all five ABI checks
+  pass; a forced ten-task JVM run passes 184 core and eight subtitle tests with zero skip, failure
+  or error; eight rt suites pass 127 cases; render audit passes 15 checks; and source discipline
+  passes 18. Both tracked em dash scans print nothing and return the specified passing exit 1.
+  Accepted gate time was 48.84 seconds. DEVIATIONS: one sandboxed Codec Gradle launch could not
+  open the user distribution lock and made no assertion before the identical authorized command
+  passed; the prescribed JVM invocation was cached and rejected, so the forced rerun supplies the
+  evidence. No product file changed, and nothing was staged, pushed, published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -9854,6 +9888,9 @@ KitePlayer: `Record the local mobile Apple Codec proof`.
 Execution-fence correction commit first line. KitePlayer:
 `Correct the Apple clock boundary for iOS`.
 
+Second execution-fence correction commit first line. KitePlayer:
+`Use CoreMedia for the shared Apple host clock`.
+
 Files: `settings.gradle.kts`; `kiteplayer-output/build.gradle.kts`; move
 `kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/AppKitVideoRenderer.kt`
 and `AppKitWindow.kt` to the same package under `src/macosArm64Main`; move
@@ -9874,13 +9911,20 @@ Steps.
    register iosArm64 and iosSimulatorArm64 in output and FFmpeg. Keep macosArm64 and its tests. Do
    not add sample targets yet.
 2. Keep AppleHostClock in shared appleMain and preserve its public object and functions exactly.
-   Replace the macOS-only CoreAudio host-time calls with `mach_absolute_time()` plus one cached,
-   validated `mach_timebase_info`. Convert ticks with the same overflow-safe quotient/remainder
-   formula already used by `kprt_sink_ticks_to_nanos`: divide by denom first, then add the scaled
-   remainder; reject a zero numerator or denominator rather than manufacturing a timebase. In
-   CoreAudioSinkTest, read the comparison host tick with `mach_absolute_time()`. This is the same
-   host-time domain CoreAudio timestamps carry on both Apple platforms and adds no API or
-   dependency. The macOS clock tests and both iOS final test links must pass.
+   Kotlin/Native 2.4.10 does not expose `mach_absolute_time` or `mach_timebase_info`, even though
+   those APIs exist in the Apple SDK. Use its bound CoreMedia host-clock surface instead. Cache
+   `requireNotNull(CMClockGetHostTimeClock())` once. Implement `nanos()` by converting
+   `CMClockGetTime(clock)` with
+   `CMTimeConvertScale(time, 1_000_000_000, kCMTimeRoundingMethod_RoundTowardZero)` and reading the
+   resulting `CMTime.value`. Implement `hostTimeToNanos(raw)` by applying the same conversion to
+   `CMClockMakeHostTimeFromSystemUnits(raw)`. In CoreAudioSinkTest, obtain a non-null host clock,
+   read it with `CMClockGetTime`, then pass that value to
+   `CMClockConvertHostTimeToSystemUnits` for the comparison raw tick. CoreMedia defines these as the
+   system host-clock units and handles non-integer native timescales; rounding toward zero matches
+   the shipped C conversion's integer truncation. The three target klibs must compile, the final
+   links must gain CoreMedia through the generated platform binding without an explicit Gradle
+   dependency, and the macOS clock tests and both iOS final test links must pass. This adds no
+   public API or dependency.
 3. Only `kiteplayer-ffmpeg` applies the KiteCodec plugin and carries FFmpeg. Configure it from the
    provider `kitecodec.ffmpeg.localRoot`: when present, select `FFmpegSource.Local`, LGPL and that
    absolute root for phone links; when absent, preserve `FFmpegSource.System` for the standing

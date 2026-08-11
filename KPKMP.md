@@ -934,6 +934,7 @@ Selected by ANY of these, mechanically, by changed path:
 
 - any file under `native/` in either repository (C sources, headers, scripts, corpus)
 - any file under `buildSrc/` in either repository
+- any file under `kitecodec-gradle-plugin/src/`
 - any `*.def`, any `build.gradle.kts`, any `gradle/libs.versions.toml`
 - any Kotlin under a `nativeMain`, `appleMain`, `macosArm64Main` or `nativeTest` source set
 - the completion of any Horizon item, unconditionally, whatever it changed
@@ -945,6 +946,7 @@ cd ../KiteCodec
 ./gradlew :kitecodec-core:cinteropFfmpegMacosArm64 -Pkitecodec.hostTargetsOnly=true
 ./gradlew :kitecodec-core:apiCheck -Pkitecodec.hostTargetsOnly=true
 ./gradlew :buildSrc:test
+./gradlew :kitecodec-gradle-plugin:test
 ./native/kitecodec-c/scripts/build-host.sh asan  && ./native/kitecodec-c/scripts/run-c-tests.sh asan
 ./native/kitecodec-c/scripts/build-host.sh tsan  && ./native/kitecodec-c/scripts/run-c-tests.sh tsan
 ./native/kitecodec-c/scripts/run-c-tests.sh interpose   # plain binaries, accounting REQUIRED (I-08)
@@ -5132,6 +5134,39 @@ is no other.
   S1.a.4's named section-9 edit fence; that is descriptive plan debt, not a second gate number.
   Final adversarial review reported the implementation CLEAN. Nothing was pushed, publicly
   published or released.
+
+- 2026-08-11, S1.a.5, P0-05 and draft C-06 completed. Tier 2 gate (selected mechanically because
+  KiteCodec's `kitecodec-gradle-plugin/build.gradle.kts` changed). Before the product edit, the
+  last S1.a.4 evidence audit temporarily restored its exact old boolean lexer with apply_patch:
+  all 15 focused tests ran and exactly the three predicted string-template regressions failed.
+  Restoring the committed context-stack lexer made the same 15 tests pass, left HEAD unchanged
+  and returned the Player tree to clean. That closes the prior evidence question without changing
+  the S1.a.4 commit.
+
+  The unfiltered `./gradlew :kitecodec-gradle-plugin:test --rerun-tasks` control executed 17
+  Gradle tasks, ran 16 tests and exited 1 with exactly two failures and no errors or skips:
+  `KiteCodecPluginFunctionalTest.kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks` at line 113
+  and `KiteCodecPluginFunctionalTest.missingLicenseChoiceFailsConfigurationWithInstructions` at
+  line 262. Its other two functional tests and all 12 FFmpeg expectation tests passed. The
+  `tasks.test` filter now excludes only those two methods by fully qualified class and method name,
+  with the required executor-contract-rule-5 comment. The same rerun then executed 17 tasks and
+  passed the remaining 14 tests. No assertion or production source changed.
+
+  Section 9 now mechanically selects Tier 2 for any file under
+  `kitecodec-gradle-plugin/src/`, and its Codec block runs
+  `./gradlew :kitecodec-gradle-plugin:test` beside `:buildSrc:test`. The full expanded Tier 2 gate
+  is GREEN. Tier 1 stayed at Codec coupling 246/287, 273 helper and 14 direct calls, 10 of 10
+  allowed types, six plain Codec suites, Player coupling 87/3, clean ABI and JVM checks, eight
+  plain rt suites, render audit 15 and source discipline 18; both tracked-file em dash scans
+  printed nothing and exited 1. The Codec cinterop, API, buildSrc and newly wired 14-test plugin
+  suite passed; ASan, TSan and live interposition each passed six suites; corpus replay passed six
+  targets and 105 files; symbol audit matched 163 exports; metadata diff was zero; and
+  macosArm64Test passed. Player buildSrc, the combined core/output/ffmpeg native tests, ASan, TSan,
+  live interposition, Android, JS, Wasm and sample linking passed. The samples submitted 300 of
+  300 sync frames, 240 of 240 true-VFR frames and 180 of 180 HEVC frames, all with zero drops and
+  underruns; their worst schedules were 3, 6 and 3 ms. The missing-file control printed two
+  concise lines, no stack trace and exited 1 as required. No deviation, push, public publication
+  or release.
 
 ---
 

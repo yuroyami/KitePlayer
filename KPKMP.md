@@ -5807,6 +5807,97 @@ is no other.
   rerun and forced ten-task JVM rerun passed without changing source or scope. No product file
   changed during this correction, and nothing was pushed, published, released or staged.
 
+- 2026-08-11, S1.b.1 completed against Player `28d7c1f` and Codec `c2447c8`. Tier 2 ran, selected
+  mechanically by changes under Codec buildSrc, plugin source, native tests, build scripts and
+  executable scripts, and by completion of the numbered sub-phase. The final Codec fence is exact:
+  25 tracked modifications plus two new test files, 27 paths total, with no staged or extra path.
+  The final independent review found zero blocking findings. Both repository diffs pass
+  `git diff --check`; both edited shell scripts pass `bash -n`.
+
+  The pre-change producer failure was preserved: `buildFFmpegForIosSimulatorArm64` rejected the
+  repository's `#Kite` source path before it could build. BuildFFmpegTask now copies source, without
+  `.git` or any `build` subtree and with executability preserved, to a unique hash-free temporary
+  tree. Configure, make and install run only there. A verified Java/NIO sibling copy replaces the
+  final tree transactionally; failure retains scratch and cannot replace a good output. The first
+  configure line is normalized into `lib/kitecodec/ffmpeg-configure.txt`, and both install
+  verification and packaging require its exact one-line nonblank shape.
+
+  The exact device and simulator argument lists are the shared STANDARD playback profile plus
+  `--disable-autodetect`, SDK zlib and target cross flags. They contain no desktop third-party
+  profile, GPL or mobile VideoToolbox. BuildFFmpegTask, FFmpegPaths, the Apple selector and the
+  consumer plugin refuse every iOS GPL route before tree resolution with the stable message. No
+  iOS GPL task is registered. FFmpegSource.Local validates the header and all six archives for
+  every wired target, performs no fetch, gives macOS its local path then host fallback and desktop
+  link set, gives mobile Apple only its local path plus zlib, and gives Linux Local its exact
+  desktop set with no macOS fallback. Focused tests pass six of six BuildFFmpegTask cases, one of
+  one FFmpegPaths case and five of five Local plugin cases. The full gate later passes 42 buildSrc
+  and 19 plugin tests, with no skips, failures or errors.
+
+  The three producers then executed successfully in 94.69 seconds. Every one of the 18 archives
+  is arm64. macOS object/platform counts are 104/307/48/102/30/13 with platform 1; both iOS trees
+  are 104/235/46/94/20/9, with device platform 2 and simulator platform 7. Every real object count
+  equals its platform-record count after excluding only Apple's archive index. Provenance records
+  are one nonblank line with SHA-256 values `cba179dda345704e05d2d1b3b8c66678e2a84a058f6117d796c41d14910aa1b7`
+  for macOS, `9c0066c39251859547e8c71aad1e83ab5b370295a0061560774e9c2aa963878f`
+  for device and `abb403ff6fed0805c146296c8749be83002aa816187857d00da6a94d24b1f033`
+  for simulator. The one iOS package copied its Configure field byte for byte, produced matching
+  asset and sidecar digest `4aed6f9440df34a083eebb062b56465d0c7796d4d65d124b47a40406f0c91b9a`,
+  and the exact generated pair was removed. All scratch trees were removed after success. The GPL
+  and remote dry-run probes both exited nonzero with only their intended stable refusal class.
+
+  The corrected three-target compile and device/simulator final-link command passed with 23 of 23
+  tasks executed. The first simulator run exposed the native-test path defect recorded in the
+  preceding correction. After the exact three-file fix, iOS Simulator and macosArm64 each pass 85
+  of 85 tests, with no skip, failure or error. Each suite chooses the first nonblank TMPDIR, TEMP or
+  TMP environment value and retains its prior filename and cleanup behavior; no Foundation or
+  product API entered.
+
+  Codec Tier 1 is GREEN at zero direct imports, zero typed crossings, 292 opaque helper sites,
+  zero direct/raw FFmpeg sites, 15 of 15 deleted names and seven plain C suites with 274 cases.
+  The remaining Codec Tier 2 is GREEN: host cinterop and API checks; ASan, TSan and allocation-live
+  interpose at seven suites and 274 cases each; ASan corpus replay at six targets and 105 files;
+  all seven symbol checks at 175 exports and 189 signature records; an exact 974-line metadata
+  baseline with zero delta; and macosArm64Test at 85 of 85. No API, export, signature, coupling or
+  metadata baseline moved.
+
+  Exactly one local publication ran:
+  `publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true`. It completed 74 tasks, 54 executed
+  and 20 up-to-date, and published macOS, iPhone-device and iPhone-simulator variants plus the
+  local plugin. No remote task ran. The fixed scratch consumer then resolved the locally published
+  KiteCodec plugin and core variants from Maven local while Gradle ran offline, and linked all
+  three static frameworks with eight of eight tasks executed. The scratch directory remains
+  private evidence for S1.c.2.
+
+  Player Tier 2 is GREEN after that reconsumption. Test media regenerated 27 files. buildSrc passes
+  40 tests. The terminal-grade forced core, output and FFmpeg native command is BUILD SUCCESSFUL
+  with 38 tasks executed and 193/28/36 tests, 257 total, with no skip, failure or error. The first
+  ASan run preserved one load observation: ring_threads case 5 saw zero feeder begins while the
+  flusher completed 20,000 iterations, without a sanitizer report; the other 126 cases passed.
+  The immediate complete rerun passed 127 of 127 with 391 feeder begins. TSan passes 127 of 127.
+  Interpose passes 127 of 127 with accounting required and live, balanced create/destroy and
+  1000/1000 allocations, and zero allocator activity across five million callbacks. JS, WasmJS and
+  Android compile checks execute 20 tasks; the sample link executes 33.
+
+  Sample evidence is GREEN. sync submits 300 of 300 frames with zero drops, repeats or underruns,
+  3 ms drift and Audio master. True VFR submits 240 of 240 with zero drops, repeats or underruns,
+  3 ms drift and Audio master. HEVC submits 180 of 180 with zero drops, repeats or underruns, zero
+  drift and Video master. The nonexistent path returns the expected exit 1 with exactly the concise
+  two-line diagnostic and no stack. DEVIATIONS: sandboxed Gradle cache access was refused before
+  Gradle started and identical authorized commands passed; the first sandboxed sync launch could
+  not open the default CoreAudio component and the identical host-authorized run produced the
+  recorded result; one first native-wrapper session handle was lost after fresh green XML, so the
+  complete forced command reran and its terminal exit was retained. The ASan load observation is
+  recorded above rather than silently discarded.
+
+  Final source scans find zero added AVPlayer, AVAssetReader, AVSampleBufferDisplayLayer,
+  VTDecompressionSession, Metal, CVPixelBuffer, Compose, UIKitView or KitePlayerView token. The 14
+  added VideoToolbox mentions are only negative mobile statements, macOS-desktop documentation or
+  the exact existing desktop linker fixture; both generated mobile configure records contain none.
+  Neither version catalog changed, and no production dependency was added. Nothing was pushed or
+  publicly published, and no release was created. Commit first lines remain exactly
+  `Make the mobile Apple FFmpeg build local and reproducible` in Codec and
+  `Record the local mobile Apple Codec proof` in Player.
+
 ---
 
 ## 15. Horizon B execution: B1

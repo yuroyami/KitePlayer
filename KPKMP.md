@@ -6321,6 +6321,43 @@ is no other.
   `7e648ffeeb53246770052d3f0ac6be6cce15e897796b1e22f5625099d2c03dab`. All 22 product
   paths remain inside the S1.b.3 fence. Nothing is staged, pushed, publicly published or released.
 
+- 2026-08-11, S1.b.4 ownership-fence correction completed before product work began, against
+  Player `1ca7066` and Codec `23b8bf4`. Prose only, Tier 1 selected by the rule that every change,
+  including prose, receives Tier 1. The owner's mechanical S1 correction exception applies. The
+  exact correction subject is `Keep the caller-owned iOS layer contents intact`.
+
+  Complete preflight found one BLOCKING ownership contradiction. Step 1 said
+  `deliverImage(null)` clears production delivery state, while Step 2 required close to leave the
+  caller-owned `CALayer.contents` intact until the caller clears or replaces it. The corrected
+  boundary makes null clear deterministic test bookkeeping only; production treats it as a no-op.
+  A Create/Copy image carries the renderer's +1 through the pending and last-delivered slots.
+  Supersession before delivery releases it immediately. In production, successful assignment lets
+  CALayer retain the image before the renderer moves its +1 into the last-delivered slot and
+  releases the displaced renderer ownership. Close releases the final renderer +1 without clearing
+  the layer.
+
+  The pending slot, queued flag, delivery callback, last-delivered ownership and close share one
+  critical section so delivery cannot occur after close returns or strand a reference.
+  `enqueueOnMain` is invoked only after releasing that section because the deterministic seam may
+  run inline. Kotlin/Native 2.4.10 scratch probes compiled the required CALayer, CATransaction,
+  aspect-gravity and CGImage retain/release bindings. A standalone simulator probe confirmed that
+  CALayer retained its contents after both renderer-owned references were released, and a second
+  probe delivered through the main queue while pumping its run loop. S1.b.4 therefore needs no
+  application-host correction. Both independent correction audits found no remaining BLOCKING or
+  DESCRIPTIVE mismatch; the five-file product fence, Tier 2 gate and product subject remain
+  unchanged.
+
+  Tier 1 is GREEN with no deviation. Codec coupling remains zero imports and zero typed crossings
+  with 292 opaque helper sites reported, zero direct libav calls and zero raw structs; deleted
+  surface is 15 of 15; and seven plain C suites pass 274 cases. Player coupling scans 87 files with
+  three matches, all allowlisted; all five ABI checks pass; a forced ten-task JVM run passes 184
+  core and eight subtitle tests with no skip, failure or error; eight rt suites pass 132 cases;
+  render audit passes 43 and source discipline passes 18. Both exact tracked dash scans print
+  nothing and return the required passing exit 1. Full pre/post Player state was identical at
+  SHA-256 `3d5543e423037b4faa265148d8e20f3d89849f3b92f9cbc98be25df100b0bac0`; Codec remained
+  clean at its empty-diff hash. Only KPKMP changed, nothing was staged, and nothing was pushed,
+  published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10497,6 +10534,9 @@ Commit first line. KitePlayer: `Run the real-time sink through RemoteIO on iOS`.
 
 #### S1.b.4 Render converted frames into a caller-owned iOS layer
 
+Ownership-fence correction commit first line. KitePlayer:
+`Keep the caller-owned iOS layer contents intact`.
+
 Files: `README.md`; new
 `kiteplayer-output/src/iosMain/kotlin/io/github/yuroyami/kiteplayer/output/UIKitVideoRenderer.kt`;
 new `kiteplayer-output/src/iosTest/kotlin/io/github/yuroyami/kiteplayer/output/UIKitVideoRendererTest.kt`;
@@ -10518,15 +10558,23 @@ Steps.
    `(convert: (VideoFrame) -> ByteArray, enqueueOnMain: (block: () -> Unit) -> Unit,
    deliverImage: (CGImageRef?) -> Unit)`. The delivery callback receives a borrowed image for the
    duration of the call; the renderer retains and releases its own reference. The nullable call
-   clears test/production delivery state without inventing a second public surface.
+   clears deterministic test-seam bookkeeping without inventing a second public surface. The
+   production callback treats null as a no-op and never clears the caller-owned layer.
    Implement the bounded two-slot renderer without changing the AppKit renderer or extracting a
    shared abstraction at only the second use. Output remains FFmpeg-free and does not depend on
    `SoftwareConverter`; the caller injects conversion.
 2. Pin newest-frame wins, exact-once close on delivery, failure, supersession and renderer close,
    bounded queued deliveries, dimensions, quarter-turn rotation and opaque-frame refusal. Set
    aspect-fit gravity, disable implicit CALayer animations and define CGImage retain/release
-   ownership: CALayer retains the assigned image, and the renderer releases its displaced or
-   closed ownership exactly once. Test non-null real `CALayer.contents` on the named simulator.
+   ownership. A Create/Copy image in the pending delivery slot is the renderer's +1; superseding it
+   before delivery releases it immediately because CALayer never retained it. In production, a
+   successful callback assigns the image so CALayer retains it, then moves the renderer's +1 into a
+   last-delivered slot and releases the displaced last-delivered +1. Close releases the renderer's
+   final +1 without clearing CALayer. The pending slot, queued-delivery flag, delivery callback,
+   last-delivered ownership and close use one critical section, so no queued block can deliver after
+   close returns or strand an in-flight reference. Invoke `enqueueOnMain` only after releasing that
+   section because the deterministic seam may run its block inline. Test non-null real
+   `CALayer.contents` on the named simulator.
    `supportedHardwareSurfaces()` is empty, `supports(format)` is exactly `format != Opaque`,
    vsync is null, viewport and overlay are no-ops, and `events` is an empty flow. `close()` is
    idempotent: stop acceptance, stop and join the conversion worker, drain and close both slots,

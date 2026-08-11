@@ -5247,6 +5247,79 @@ is no other.
   render audit 15 and source discipline 18; both tracked em dash scans empty with exit 1. No
   baseline moved and nothing was pushed, publicly published or released.
 
+- 2026-08-11, S1.a.7, P0-07 compatible-addition half and R-B2-guards completed. Tier 2 gate
+  (selected mechanically by native headers, sources, scripts, tests, def and ABI metadata). The
+  new FFmpeg-free `kitecodec_handles.h` forward-declares the eleven signature tags and aliases
+  them as `kc_codec`, `kc_codec_ctx`, `kc_codec_par`, `kc_dict`, `kc_dict_entry`,
+  `kc_filter_ctx`, `kc_filter_graph`, `kc_fmt_ctx`, `kc_frame`, `kc_packet` and `kc_stream`.
+  The existing 157 helper declarations and sixteen transitive FFmpeg includes remain unchanged
+  for source compatibility. Seven opaque wrappers cover the fourteen measured send, receive,
+  lookup and filter-existence sites, and five accessors expose the media-type constants. ABI
+  version 1.0 became 1.1. Kotlin still consumes the legacy declarations in this half; S1.a.8
+  owns their breaking respelling and the def's removal of raw FFmpeg headers.
+
+  Reproduction preceded every guard. Without the new leading checks, each of the sixteen named
+  invalid vectors terminated its child with SIGSEGV: `ffkmp_frame_get_buffer`,
+  `ffkmp_codecpar_from_context`, `ffkmp_codecpar_copy_for_mux`, `ffkmp_fmt_open_input`,
+  `ffkmp_fmt_find_stream_info`, `ffkmp_fmt_read_frame`, `ffkmp_fmt_alloc_output2`,
+  `ffkmp_fmt_write_frame`, `ffkmp_codecctx_open`, `ffkmp_codecctx_from_par`,
+  `ffkmp_graph_build_video`, `ffkmp_graph_build_audio`, `ffkmp_graph_build_video_multi`,
+  `ffkmp_graph_build_audio_multi`, `ffkmp_graph_send` and `ffkmp_graph_receive`. With the checks,
+  all sixteen returned `AVERROR(EINVAL)`. Temporarily removing only the frame-buffer guard made
+  its focused case signal again; restoring the guard returned it to green. Six positive controls
+  preserve intentional NULL meanings: the audio description selects `anull` in both the single
+  and one-input multi builders within one case, graph send treats a NULL frame as EOF, mux write
+  treats a NULL packet as flush, output format can be inferred, codec open can use the codec held
+  by its context, and an explicit output format permits a NULL path. Reproduction also exposed
+  that bare `anull` cannot satisfy the multi builder's named topology. The narrow measured repair
+  starts one input at `[in0]anull`, appends any requested `aformat` pins, then closes `[out]`;
+  two or more inputs still require an explicit graph rather than inventing an `amix` policy. The
+  nullable case drives deliberately different output pins and reads them back from a pulled frame.
+  `test_args` therefore has exactly 22 cases. The
+  seven-suite total is 274 per variant and 822 across plain, ASan and TSan.
+
+  Both ratchets moved only by the declared compatible additions. The first host symbol audit
+  failed against 163 names with exactly twelve additions and no removal:
+  `ffkmp_codecctx_send_packet`, `ffkmp_codecctx_receive_frame`,
+  `ffkmp_codecctx_send_frame`, `ffkmp_codecctx_receive_packet`,
+  `ffkmp_find_encoder_by_name`, `ffkmp_find_decoder_by_name`, `ffkmp_filter_exists`, and the
+  five `ffkmp_media_type_*` accessors. After review and update, the audit passed at 175 exports,
+  comprising 169 `ffkmp_` functions and the existing six `kc_` identity functions. The initial
+  metadata check failed against the 19,024-line baseline and measured 19,105 current lines:
+  declarations added 24, declarations removed one, direct bindings added twelve and removed
+  zero, declarations lost zero, declarations gained 23, declarations relocated one, structural
+  lines added and removed 85 each, other lines added 47 and removed one, for 201 total additions
+  and 120 removals. The old and current SHA-256 values were
+  `0380e7a1eb13504218a54cc1e1a194fc3fcbaf0e666a8b3003350f3e53d37f5b` and
+  `05888b4bc7512ce250fa035632ad8ecee1a9ef30882679126366e84f5d93ab92`.
+  Review confirmed twelve functions, eleven type aliases and the ABI minor constant replacement;
+  the updated check then reported zero in every category and both independent bakings measured
+  3,934,308. The committed Kotlin API dump did not move. `checkCinteropCoupling` also remained
+  246 imports, 287 typed crossings, 273 legacy helper calls, fourteen direct calls and ten of ten
+  allowed struct types, as required before S1.a.8 migrates consumers.
+
+  The final expanded gate is GREEN. Tier 1 passed seven plain Codec suites at 274 cases, the
+  deleted-surface check, unchanged coupling, Player coupling 87/3, ABI and JVM checks, eight
+  plain rt suites, render audit 15 and source discipline 18; both tracked-file em dash scans
+  printed nothing and exited 1. Codec cinterop and API checks, buildSrc and the filtered plugin
+  suite passed. ASan, TSan and live allocation interposition each passed all seven suites and 274
+  cases. ASan corpus replay passed six targets and 105 files. The shipped archive matched all 175
+  symbols, the metadata differential was empty with its two-bakings assertion, and
+  macosArm64Test passed twelve Gradle tasks. Per the S1.a.7 fence, KitePlayer was not republished
+  or re-consumed; that proof belongs to S1.a.8.
+
+  DEVIATIONS: an early unscoped `apiCheck` tried unprovisioned cross targets and failed on their
+  unavailable FFmpeg bindings; the exact host-only command passed and left the API dump unchanged.
+  The first nullable mux control flushed a streamless context and signalled, the first nullable
+  codec-open control omitted mandatory audio fields and returned EINVAL, and the multi-audio
+  control exposed the unusable bare-`anull` topology. Adversarial review then proved that the
+  first named fallback closed `[out]` before the requested pins and therefore preserved the input
+  format, rate and channels. The composer and the existing nullable case were strengthened as
+  recorded above, and the complete selected gate reran green. Each fixture was corrected to
+  establish a valid FFmpeg state before testing NULL pass-through; no production path was
+  weakened to make a fixture pass. Final independent review reported no blocking or descriptive
+  S1.a.7 finding. Nothing was pushed, publicly published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -6408,14 +6481,19 @@ allocation, which does not; 15.2 B1.8 records that refusal.
 **C test suites and what each targets.** Every suite is table driven, prints one line per case, and
 returns non-zero on the first failure.
 
+The S1.a.7 tree has seven suites and 274 cases per variant, 822 across plain, ASan and TSan.
+`test_ownership.c` has 41 cases over 39 ownership helpers: B1.6's historical 39-case suite gained
+the NULL option-key and out-of-range stream-index guard cases at I-12. `test_args.c` adds 22.
+
 | Suite | Targets | What it asserts |
 |---|---|---|
-| `test_ownership.c` | the 29 ownership helpers | exact alloc and free pairing under the interposer, including the parent-owned result of `ffkmp_fmt_new_stream`, the per-call `SwsContext` in `ffkmp_frame_convert_pixfmt`, and the conditional `ctx->pb` close in `ffkmp_fmt_free_output` |
+| `test_ownership.c` | the 39 ownership helpers | exact alloc and free pairing under the interposer, including the parent-owned result of `ffkmp_fmt_new_stream`, the per-call `SwsContext` in `ffkmp_frame_convert_pixfmt`, and the conditional `ctx->pb` close in `ffkmp_fmt_free_output` |
 | `test_buffers.c` | 9 stack buffers, 4 size-taking copy helpers | limit and limit plus one for each buffer; a destination one byte short for each copy helper; no write past the declared size, under ASan |
 | `test_rescale.c` | the 10 macro, 128 bit and by-value helpers | exact results at the D9 overflow vectors; `AV_CEIL_RSHIFT` plane heights for subsampled formats |
 | `test_strerror_thread.c` | `ffkmp_strerror` | two threads, interleaved calls, each sees only its own message |
 | `test_convert.c` | `ffkmp_frame_convert_pixfmt` | correct conversion and leak-free operation, as B2's caching baseline |
-| `test_identity.c` | `kc_init`, the report | five cases, one per verdict, against a doctored header shim tree |
+| `test_identity.c` | `kc_init`, the report | five verdict paths against doctored header shim trees, plus the report, accessor and bypass contracts |
+| `test_args.c` | 16 required-argument guards, 6 nullable contracts | every old invalid call is refused with `AVERROR(EINVAL)`; NULL retains its six intentional meanings, including both audio graph builders in one case |
 | `kiteplayer-rt` suites | the ring and the callback | the four assertions of B1.8, plus the bounded-reader, exact-silence and overflow cases |
 
 **Fuzzing.** Six targets, one per string entry point, listed in B1.5. One source per target
@@ -6427,7 +6505,8 @@ B8's, by its own wording, and the fuzz directory's README says so.
 
 **The audit scripts, which are tests and not documentation.**
 - `symbol-audit.sh` over the helper archive: undefined symbols resolve only to `libav*`, `libsw*`
-  and a five name allowlist; exported names are exactly the 157 the Kotlin side imports.
+  and its measured allowlist; exports are exactly 169 `ffkmp_` helpers, comprising 157 legacy
+  helpers Kotlin consumes plus twelve compatible S1.a.7 additions, and six `kc_` identity functions.
 - `render-audit.sh` over the render translation unit: the allowlist and forbidden-call scan of
   B1.8, plus `-Werror=vla` and the `alloca` grep.
 - `klib-metadata-diff.sh` over the cinterop klib: the compatibility instrument for the cinterop

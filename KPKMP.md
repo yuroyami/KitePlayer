@@ -1034,6 +1034,7 @@ say which sub-phase.
 | `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` | `klib-metadata-diff.sh --check`, on any cinterop metadata difference | `./scripts/klib-metadata-diff.sh --update`, in the same commit as the deliberate surface change | the script's whole SUMMARY block, pasted, so the record carries the reviewed numbers and not a pointer to a 19,000 line diff |
 | `../KiteCodec/native/kitecodec-c/deleted-surface.txt` (installed by I.3) | `check-deleted-surface.sh`, on any use of a name whose status is `deleted` | change that name's status to `resurrected-in-<item>` in the same commit that resurrects it | one sentence naming the item and the reason |
 | `../KiteCodec/native/kitecodec-c/exported-symbols-baseline.txt` (installed by I.4) | `symbol-audit.sh` check 6, when the archive's exported name set differs from the baseline | regenerate with the command the baseline's own header names, in the same commit as the deliberate export change | every symbol added or removed, and why |
+| `../KiteCodec/native/kitecodec-c/signature-baseline.txt` (installed by S1.a.8) | `symbol-audit.sh` check 7, when any of the 189 normalized public C declaration records differs | from `native/kitecodec-c`, run `./scripts/symbol-audit.sh --write-signature-baseline` after reviewing the exact diff, in the same commit as the deliberate declaration change | every declaration class added, removed or changed, the old and new normalized records, and why the ABI move is intentional |
 | `ALLOWED_UNDEFINED` in `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh` | `symbol-audit.sh` check 4, when an archive references an undefined symbol outside the list | add the symbol to the list in the same commit as the code that needs it | the symbol and the helper that pulls it in |
 
 Multi-pass rule, owner-mandated: after each phase's code is written, re-read every changed
@@ -5358,6 +5359,41 @@ is no other.
   `Correct the opaque migration's executable facts`. No product file changed and nothing was
   pushed, publicly published or released.
 
+- 2026-08-11, S1.a.8 metadata-gate execution-fence correction completed before baseline
+  acceptance. Prose only, Tier 1 gate (selected by rule: every change, including prose). Product
+  steps 1 to 5 built the intended opaque cinterop, then the required first metadata check measured
+  the complete breaking differential against S1.a.7: 19105 lines at
+  `05888b4bc7512ce250fa035632ad8ecee1a9ef30882679126366e84f5d93ab92` became 974 lines at
+  `5bb1adcac7a108c14cc39cc7786e4275329748a17ded7b6d0d88e55e51e56b02`. Independent review found
+  the current dump semantically exact: 169 `ffkmp_` plus six `kc_` direct bindings, eleven handle
+  aliases and the ABI report surface, with no raw libav function, constant or layout declaration.
+  The old instrument nevertheless stopped on its own pre-opaque requirement that
+  `LIBAVUTIL_VERSION_INT` remain in cinterop metadata. That macro is correctly absent once the def
+  parses no FFmpeg header, so the promised green post-update check and two-bakings assertion were
+  mechanically impossible.
+
+  The conservative correction adds the already-used metadata script to S1.a.8's file fence and
+  replaces the obsolete assertion with the boundary that now exists: none of the six former
+  `LIBAVUTIL_VERSION_INT`, `LIBAVFORMAT_VERSION_INT`, `LIBAVCODEC_VERSION_INT`,
+  `LIBAVFILTER_VERSION_INT`, `LIBSWSCALE_VERSION_INT` or `LIBSWRESAMPLE_VERSION_INT` constants,
+  and no direct binding outside `_ffkmp_` or `_kc_`, may appear in the opaque metadata. The archive's
+  frozen FFmpeg expectation remains proved by the identity gate; there is deliberately no second
+  cinterop-header baking to compare after this phase. Baseline update remains paused until the
+  script itself enforces that absence and the failing-check, update, green-check triple completes.
+  The same adversarial pass found a separate zero-ratchet bypass before it became load bearing:
+  accepting whitespace before a raw call's opening parenthesis correctly catches legal Kotlin, but
+  the comment-stripped view also preserves diagnostic string text and therefore misclassifies
+  eleven error labels as calls. Step 3 now requires a code-only lexer view for both call counters:
+  literal string, raw-string and character content is blanked, while live `${...}` template
+  expressions and backtick identifiers remain code. Imports and raw type tokens use that same code
+  view, including optional backticks and initialism-bearing names such as `AVIOContext`.
+  Tier 1 is GREEN: Codec coupling zero/zero with 292 opaque helper sites, zero direct libav calls
+  and zero raw struct names, deleted surface clean, seven plain suites and 274 cases; Player
+  coupling 87/3, clean ABI and JVM checks, eight plain rt suites, render audit 15 and source
+  discipline 18; both tracked em dash scans empty with exit 1. The separate correction commit
+  first line is `Correct the opaque metadata gate after header removal`. No baseline was accepted,
+  and nothing was pushed, publicly published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -8561,7 +8597,8 @@ Files: `../KiteCodec/kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def` (line
 `test_rescale.c`, `test_strerror_thread.c` and the S1.a.7 `test_args.c`;
 `native/kitecodec-c/fuzz/kc_fuzz.c`, `fuzz_codec_option.c`, `fuzz_filter_audio.c`,
 `fuzz_filter_video.c`, `fuzz_format_name.c`, `fuzz_format_option.c` and `fuzz_metadata.c`;
-`native/kitecodec-c/README.md`; `../KiteCodec/CHANGELOG.md`; `../KiteCodec/docs/about.md`;
+`native/kitecodec-c/README.md`; `native/kitecodec-c/scripts/klib-metadata-diff.sh`;
+`../KiteCodec/CHANGELOG.md`; `../KiteCodec/docs/about.md`;
 `../KiteCodec/docs/platforms.md`; `../KiteCodec/docs/getting-started.md`;
 the SIX Kotlin files carrying the migrating material (FFmpeg.native.kt, FilterGraph.native.kt,
 Frame.native.kt, MediaSink.native.kt, MediaSource.native.kt, Playback.native.kt) and the FOUR
@@ -8655,6 +8692,15 @@ Steps.
    stripped inside template expressions; escaped `\${...}` stays literal. Tests prove a
    comment-only template expression does not count, a live raw call or type inside one does count,
    nested raw templates work and an escaped template remains string content.
+   Both call counters measure executable syntax, not diagnostic prose: derive a code-only view from
+   the same lexer by blanking ordinary-string, raw-string and character content while retaining
+   whitespace/newlines, live `${...}` template expressions and backtick identifiers. Use that view
+   for imports, raw struct names, `ffkmp_` calls and direct libav calls. Accept horizontal whitespace
+   before a call's opening parenthesis; include the `avio_` family; tolerate optional backticks
+   around raw function names; and let the raw-type candidate matcher cover initialism-bearing names
+   such as `AVIOContext` and `AVHWFramesContext`. Tests prove an indented raw import, a spaced raw
+   call, a backticked raw call, a fully qualified `ffmpeg.avio_open(...)` and an initialism-bearing
+   raw type fail, while identical text in a diagnostic string does not count.
 4. `KITECODEC_C_ABI_MAJOR` moves to 2 and `KITECODEC_C_ABI_MINOR` resets to 0 (S1.a.7 set it to
    1), because the 140 of 157 helper declarations that name FFmpeg types changed shape for a C
    consumer (the other 17 carry none, counting complete multiline declarations on 2026-08-11).
@@ -8679,7 +8725,17 @@ Steps.
 6. Capture and accept the metadata only AFTER steps 1 to 5 created the difference. FIRST run
    `klib-metadata-diff.sh --check` against the post-S1.a.7 baseline, expect NONZERO, and paste its
    full differential into the log as the before-picture; THEN review the exact breaking surface;
-   THEN `--update`; THEN `--check` again green, which also re-proves the two-bakings assertion.
+   the first run must also show that the old instrument can no longer find
+   `LIBAVUTIL_VERSION_INT`, because the reduced def correctly parses no FFmpeg header. Before
+   accepting the baseline, rewrite that obsolete two-bakings assertion in the named script into
+   an opaque-boundary assertion over every target: the metadata contains none of
+   `LIBAVUTIL_VERSION_INT`, `LIBAVFORMAT_VERSION_INT`, `LIBAVCODEC_VERSION_INT`,
+   `LIBAVFILTER_VERSION_INT`, `LIBSWSCALE_VERSION_INT` or `LIBSWRESAMPLE_VERSION_INT`, and every
+   direct binding is `_ffkmp_` or `_kc_`. Run this invariant before every mode, including
+   `--update`, so the write path cannot accept forbidden metadata. The archive identity gate
+   remains the one intentional FFmpeg header baking; cinterop no longer has a second one to
+   compare. THEN `--update`; THEN `--check` again green, which must prove the new absence/prefix
+   assertion as well as baseline equality.
 7. KitePlayer re-consumes ONCE: rebuild against the republished klib, then the full KitePlayer
    Tier 2 block. This is KiteCodec window 1 closing.
 8. Close the KPKMP rows: 15.1 B1-25, 15.5 deferral 1; mark 16.4 items 1 and 9 closed with their

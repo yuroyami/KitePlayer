@@ -1,7 +1,7 @@
 // The cinterop bindings are all `@ExperimentalForeignApi`. Opted in at file scope rather than
 // through the build file, so the boundary between managed Kotlin and the C ring is visible in the
 // one file that crosses it instead of being a compiler flag nobody reads.
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, UnsafeNumber::class)
 
 package io.github.yuroyami.kiteplayer.internal
 
@@ -33,6 +33,7 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_written_frames
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.UnsafeNumber
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert

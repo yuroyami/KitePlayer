@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, RawRingApi::class)
 
 package io.github.yuroyami.kiteplayer.output
 
@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
+import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.delay

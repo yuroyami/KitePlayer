@@ -1,11 +1,12 @@
 // The handoff carries a C pointer, so this file crosses into cinterop and says so at the top.
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, RawRingApi::class)
 
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSink
 import io.github.yuroyami.kiteplayer.spi.NativeRingAudioSink
+import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import kotlinx.cinterop.ExperimentalForeignApi
 
 /**

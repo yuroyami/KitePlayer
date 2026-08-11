@@ -87,8 +87,9 @@ kotlin {
          *
          * `api` and not `implementation`: what this dependency really carries is a cinterop klib, and
          * `nativeTest` is a different compilation from `nativeMain`, so the bindings have to be
-         * exposed rather than hidden. Nothing public leaks by doing so, because `kiteplayer-rt` has no
-         * Kotlin sources of its own; its whole surface is the generated `kitert` bindings.
+         * exposed rather than hidden. The generated `kitert` bindings are the public surface of
+         * `kiteplayer-rt`, and publishing the module makes that cinterop klib consumable. The raw C
+         * ring handed across the engine seam is marked `RawRingApi`, so callers cross it deliberately.
          *
          * In B1.7 nothing on the shipped path constructed a `NativeAudioRing`: `AudioPlayback.open`
          * built a `KotlinAudioRing` and the device callback was still a Kotlin closure. B1.8 changed

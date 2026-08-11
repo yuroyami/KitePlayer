@@ -2169,6 +2169,11 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
 }
 
 // Targets: [native]
+open annotation class io.github.yuroyami.kiteplayer.spi/RawRingApi : kotlin/Annotation { // io.github.yuroyami.kiteplayer.spi/RawRingApi|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.spi/RawRingApi.<init>|<init>(){}[0]
+}
+
+// Targets: [native]
 abstract interface io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink { // io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink|null[0]
     abstract suspend fun openWithRing(io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Int>): io.github.yuroyami.kiteplayer.spi/NativeRingHandoff // io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink.openWithRing|openWithRing(io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.AudioFormat,kotlin.Int>){}[0]
 }

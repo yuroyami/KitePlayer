@@ -1,7 +1,7 @@
 // Two opaque C handles and the calls that make them. Opted in at file scope rather than through the
 // build file, so the boundary between managed Kotlin and the real-time core is visible in the file
 // that crosses it instead of being a compiler flag nobody reads.
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, RawRingApi::class)
 
 package io.github.yuroyami.kiteplayer.output
 
@@ -28,6 +28,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.ChannelLayout
 import io.github.yuroyami.kiteplayer.spi.NativeRingAudioSink
 import io.github.yuroyami.kiteplayer.spi.NativeRingHandoff
+import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized

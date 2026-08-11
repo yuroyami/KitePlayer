@@ -7,6 +7,7 @@ import java.io.File
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.vanniktech.publish)
 }
 
 /*
@@ -25,12 +26,13 @@ plugins {
  * implementation is macOS only and every other target's entry points refuse with
  * `KPRT_SINK_UNSUPPORTED_PLATFORM`.
  *
- * NO KOTLIN SOURCES OF ITS OWN, ON PURPOSE. The Kotlin wrapper, `NativeAudioRing`, lives in
- * `kiteplayer-core`'s `nativeMain`, because it implements `internal interface AudioRingHandle` and an
- * internal interface cannot be implemented from another module. So this module publishes exactly one
- * thing: the `kitert` cinterop klib. Its own `macosArm64Test` source set holds the binding-level
- * tests, which are the ones that would catch a def or archive wiring mistake before the engine ever
- * sees it.
+ * NO KOTLIN DECLARATIONS OR CALLABLE API OF ITS OWN, ON PURPOSE. The Kotlin wrapper,
+ * `NativeAudioRing`, lives in `kiteplayer-core`'s `nativeMain`, because it implements
+ * `internal interface AudioRingHandle` and an internal interface cannot be implemented from another
+ * module. A package-only source makes publication carry the declaration-free main klib required by
+ * the Kotlin publication model. This module exposes exactly one callable surface beside it: the
+ * `kitert` cinterop klib. Its own `macosArm64Test` source set holds the binding-level tests, which are
+ * the ones that would catch a def or archive wiring mistake before the engine ever sees it.
  *
  * EVERY NATIVE TARGET kiteplayer-core DECLARES. Seventeen of them, because `NativeAudioRing` sits in
  * a shared `nativeMain` source set and a Gradle dependency that resolves for only some targets is a
@@ -41,6 +43,11 @@ plugins {
 kotlin {
     explicitApi()
     jvmToolchain(21)
+
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation {
+        // Declaring the block is what switches tracking on.
+    }
 
     val nativeTargets: List<KotlinNativeTarget> = listOf(
         iosSimulatorArm64(), iosArm64(), iosX64(),

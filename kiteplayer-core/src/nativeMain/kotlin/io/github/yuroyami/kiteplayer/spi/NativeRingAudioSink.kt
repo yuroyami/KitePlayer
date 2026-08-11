@@ -1,12 +1,27 @@
 // The seam between a Kotlin engine and a C real-time core is a C pointer, so this file crosses into
 // cinterop and says so at the top rather than through a compiler flag nobody reads.
-@file:OptIn(ExperimentalForeignApi::class)
+@file:OptIn(ExperimentalForeignApi::class, RawRingApi::class)
 
 package io.github.yuroyami.kiteplayer.spi
 
 import cnames.structs.kprt_ring
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+
+/**
+ * Marks the native ring handoff that exposes the real-time core's raw C pointer.
+ *
+ * Opting in means the caller accepts that the sink owns the pointer, that it stays valid only until
+ * the sink closes, and that no Kotlin code may free it.
+ */
+@RequiresOptIn(
+    level = RequiresOptIn.Level.ERROR,
+    message = "Raw ring API: the sink owns this C pointer and releases it on close. " +
+        "Opt in only at the native audio handoff boundary.",
+)
+@Retention(AnnotationRetention.BINARY)
+@Target(AnnotationTarget.CLASS)
+public annotation class RawRingApi
 
 /**
  * A sink that owns its device callback in C, and therefore owns the ring that callback reads.
@@ -72,6 +87,7 @@ public interface NativeRingAudioSink : AudioSink {
  * its sample rate and its channel count, but not the channel layout, and a layout guessed from a
  * channel count is exactly the kind of fabrication defect D30 is about.
  */
+@RawRingApi
 public class NativeRingHandoff(
     public val format: AudioFormat,
     public val ring: CPointer<kprt_ring>,

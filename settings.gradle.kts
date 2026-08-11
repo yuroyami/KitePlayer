@@ -39,9 +39,10 @@ include(":kiteplayer-core")
 include(":kiteplayer-subtitles")
 
 // :kiteplayer-rt is KitePlayer's real-time audio core, in C, with the symbol prefix `kprt_`. It
-// publishes exactly one thing, the `kitert` cinterop klib over `native/include/kite_rt.h`, plus the
-// static archive that cinterop embeds per Kotlin/Native target. Its Kotlin wrapper lives in
-// :kiteplayer-core, because that wrapper implements an internal interface of that module.
+// publishes a declaration-free main klib required by the Kotlin publication model beside one
+// callable surface: the `kitert` cinterop klib over `native/include/kite_rt.h`, plus the static
+// archive that cinterop embeds per Kotlin/Native target. Its Kotlin wrapper lives in :kiteplayer-core,
+// because that wrapper implements an internal interface of that module.
 //
 // It exists as its own module rather than inside KiteCodec because a lock-free audio ring has
 // nothing to do with FFmpeg, and putting it there would make this player's real-time core a

@@ -1,5 +1,6 @@
 @file:OptIn(
     ExperimentalForeignApi::class,
+    RawRingApi::class,
     NativeRuntimeApi::class,
     ObsoleteWorkersApi::class,
     ExperimentalStdlibApi::class,
@@ -8,6 +9,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi

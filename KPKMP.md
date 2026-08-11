@@ -4897,6 +4897,46 @@ is no other.
   PASS and source discipline 18 PASS; both tracked-file em dash scans printed nothing and exited
   1, the passing outcome. No deviation, no product commit by this correction and nothing was
   pushed.
+
+- 2026-08-11, S1.a.2, P0-02 completed. Tier 2 gate (selected mechanically by changes to
+  build.gradle.kts and nativeMain Kotlin). `kiteplayer-rt` now publishes locally at
+  `io.github.yuroyami:kiteplayer-rt:0.0.1`; its package-only carrier produces a declaration-free
+  main klib beside the separately published `kitert` cinterop klib, and its new committed API dump
+  contains no declaration. `RawRingApi` marks `NativeRingHandoff` at ERROR level and is present in
+  exactly the six compiler-required files: NativeRingAudioSink.kt, AudioPath.native.kt,
+  CoreAudioSink.kt, CoreAudioSinkTest.kt, RealTimeSoakTest.kt and
+  CoreAudioSinkRealTimeTest.kt. The core API dump moved only for that marker. The inverted public
+  dependency comment now states that generated bindings are surface, and NativeAudioRing.kt's
+  file-level `UnsafeNumber` opt-in makes its two existing width-aware `memcpy` calls legal in
+  shared native metadata without changing a declaration or signature. Local publication passed
+  for rt (212 actionable tasks) and then core (333 actionable tasks). The isolated macosArm64
+  scratch consumer at `/private/tmp/kiteplayer-s1a2-consumer.kU62sg`, with
+  `io.github.yuroyami:kiteplayer-core:0.0.1` as its sole library dependency, resolved from
+  mavenLocal and compiled three executed tasks GREEN.
+
+  The full Tier 2 evidence is GREEN. KiteCodec: cinterop and API checks passed; buildSrc tests
+  passed six executed tasks; ASan, TSan and allocation-interposed runs each passed all six C
+  suites; corpus replay passed six targets and 105 files; the symbol audit matched 163 of 163;
+  the 19,024-line metadata baseline was identical across both bakings; and macosArm64Test passed
+  15 executed tasks. KitePlayer: test media regenerated; buildSrc tests passed six executed tasks;
+  core, output and ffmpeg macosArm64 tests passed 41 executed tasks; ASan, TSan and live
+  interposition each passed all eight rt suites; and JS, Wasm and Android spot checks passed 20
+  executed tasks. The macOS sample linked in 33 executed tasks. `sync1080p30.mp4` decoded and
+  submitted 300 of 300 frames with zero drops and zero underruns; `truevfr720.mp4` submitted 240
+  of 240 with zero drops and zero underruns; `hevc4k10.mp4` completed on the video master with 180
+  of 180 frames and zero drops; the missing-file arm printed one concise sentence plus the system
+  error detail and no stack trace.
+
+  The final Tier 1 rerun is GREEN: KiteCodec coupling remained 246/287 with 273 helper calls, 14
+  direct calls and 10 of 10 allowed struct types; deleted-surface passed; six plain C suites
+  passed. KitePlayer ABI passed 151 executed tasks across five library modules; core/subtitles JVM
+  tests passed 13 executed tasks; eight plain rt suites passed; render audit passed 15 checks; and
+  source discipline passed 18 checks. The three separately committed execution-fence corrections
+  record the only deviations found during the phase: the declaration-free publication carrier,
+  shared-metadata UnsafeNumber opt-in, and stale settings architecture sentence. Their corrected
+  steps were followed here. Section 16.4 item 9's unsafe handoff exposure is now opt-in guarded;
+  its row will receive the planned formal closure annotation in S1.a.8 beside the final opaque
+  boundary decision. Nothing was pushed or released.
 ---
 
 ## 15. Horizon B execution: B1

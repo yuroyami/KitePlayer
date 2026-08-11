@@ -189,7 +189,11 @@ enough to call any platform supported.
   picture rather than the exact transform.
 - **No tone mapping.** PQ, HLG and BT.2020 constant luminance are converted with the matrix alone, so
   they play and they look wrong. Each says so once per stream through a typed warning.
-- **No network path, no live or adaptive streaming, no DRM.**
+- **Network input is FFmpeg passthrough, not an application network layer.** The media URI reaches
+  FFmpeg unchanged, so only protocols carried by the linked build are reachable. One loopback HTTP
+  case has played to completion. There is no protocol allowlist, open or read deadline, or secret
+  redaction over that path yet; network hardening is parked in KPKMP section 17.8. Live or adaptive
+  streaming and DRM remain unsupported.
 - **The real-time audio core is C on macOS and nowhere else.** Every audio entry point exists on the
   other sixteen native targets and refuses with an unsupported-platform verdict, because iOS, tvOS and
   watchOS need a different audio unit and an activated audio session, and neither can be tested here.

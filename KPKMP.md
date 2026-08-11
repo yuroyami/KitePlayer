@@ -40,8 +40,9 @@ Read this section twice.
    and consumption step.
 4. No em dashes in any file: no code comment, no Markdown, no commit message. After every
    phase run the em dash scan in section 9 and fix anything it finds.
-5. Editing `../KiteCodec` is allowed and expected. Its 53 core tests must pass after every
-   KiteCodec change. Its 2 Gradle plugin functional tests
+5. Editing `../KiteCodec` is allowed and expected. Its 85 core `@Test` cases, counted with
+   `rg -n '@Test' kitecodec-core/src | wc -l`, must pass after every KiteCodec change. Its
+   Gradle plugin functional class holds four tests; the two named tests
    (`kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks`,
    `missingLicenseChoiceFailsConfigurationWithInstructions`) fail on a clean checkout
    already, from before any of this work. Ignore those two, fix nothing about them, do not
@@ -1254,8 +1255,10 @@ Standing decisions:
 
 1. Clean-room legality per contract rule 9; a file that reads like a transliteration is a
    defect to rewrite.
-2. Both repositories on `main`, local commits, nothing pushed; `vendor/` and `testmedia/`
-   untracked.
+2. Both repositories stay on `main`. Both were pushed on 2026-08-10, proved by their
+   `origin/main` reflogs and the 2026-08-11 remote snapshot; commits since then are local by
+   design. The executor commits locally and the owner pushes. External or public publication is
+   the S5 decision and owner action. `vendor/` and `testmedia/` stay untracked.
 3. macOS arm64 is the proving ground; the engine stays free of macOS assumptions, and
    platform-neutral APIs are checked against the Horizon B platform set before they
    freeze (the A5 gate includes that review for the facade surface).
@@ -5498,6 +5501,61 @@ is no other.
   Both tracked em dash scans printed nothing and returned the specified passing exit 1. Final
   adversarial review found zero blocking or descriptive in-fence findings. Nothing was pushed,
   remotely published or released.
+
+- 2026-08-11, S1.a.9, P0-08 completed. Tier 1 gate, selected mechanically because the
+  changed files are `KPKMP.md` and the Player README and neither path selects Tier 2. The
+  section 11 supersession note was reread in place and already says section 17 owns the current
+  build order. The record now separates three facts that the old wording collapsed: both
+  repositories were pushed on 2026-08-10, every executor commit in this run remains local by
+  design, and the owner controls pushes plus the S5 public publication decision.
+
+  Local evidence is conclusive without a network: Player `origin/main` is `5b0e066` and Codec
+  `origin/main` is `a086b49`; both reflogs say `update by push` on 2026-08-10. Before this
+  phase's commit, `git rev-list --count origin/main..main` returned 27 in Player and four in
+  Codec. The first restricted remote attempts returned `Could not resolve host: github.com`.
+  The required read-only host retry then succeeded, so none of the current snapshot is assumed.
+  Successful ref output, with the command's tab separators rendered as spaces:
+
+  ```text
+  KitePlayer $ git ls-remote --heads origin
+  5b0e066e7f9b551e6a5b39da3c77f12d64174bef refs/heads/main
+  KitePlayer $ git ls-remote --tags origin
+  <empty>
+  KiteCodec $ git ls-remote --heads origin
+  9188292475abb1b75fa419a25e7ffe6675f9d292 refs/heads/dependabot/github_actions/actions/checkout-7
+  3d0e6014d1f305b82b5e863752a11f94bac8e480 refs/heads/dependabot/github_actions/actions/download-artifact-8
+  905c965e13691803460ce92d26dcfca38bd84fa8 refs/heads/dependabot/github_actions/actions/setup-python-7
+  40d44633f5d2c6c31dfd096dbeb82c05658825eb refs/heads/dependabot/github_actions/actions/upload-artifact-7
+  24cc5298fb7a4cebb0d9ceb0d32cd275fb6938d7 refs/heads/dependabot/github_actions/actions/upload-pages-artifact-5
+  552c27b4bb4199a53dcca821abeecbaad551a19f refs/heads/dependabot/github_actions/softprops/action-gh-release-3.0.2
+  c239105a12ae3c312d43c0c9cfebe38929d0f2e5 refs/heads/dependabot/gradle/atomicfu-0.33.0
+  71710bd3b2fa8d8a8e1d0da29345ca82f854db09 refs/heads/dependabot/gradle/gradle-wrapper-9.6.1
+  077f7390c049a19a192d6bfcd759c9365443b34f refs/heads/dependabot/pip/docs/mkdocs-material-9.7.7
+  a086b49b7145a7f7b025a578028099fe108674a4 refs/heads/main
+  KiteCodec $ git ls-remote --tags origin
+  <empty>
+  ```
+
+  Contract rule 5 now records 85 core `@Test` cases beside the exact
+  `rg -n '@Test' kitecodec-core/src | wc -l` command. It also says the plugin functional class
+  holds four tests, of which the two exact named tests are the pre-existing failures excluded
+  by rule 5; it no longer misreads the class as having only two tests. The installed filter still
+  excludes exactly those two, and the S1.a.5 record retains the unfiltered 16-test reproduction.
+
+  The Player README now states the path that exists without advertising more: `media.uri` reaches
+  KiteCodec unchanged, then `ffkmp_fmt_open_input` passes it to `avformat_open_input`; reachable
+  protocols therefore depend on the linked FFmpeg. The earlier measured loopback HTTP case played
+  to completion. No protocol allowlist, open or read deadline, or secret-redaction layer exists
+  above that path, and hardening remains parked at 17.8. The Codec README https row was reread and
+  stands unchanged: its `http`, local-file or system-FFmpeg advice matches the measured loopback
+  path and the vendored profile's explicit `file,pipe,data,http,tcp` protocol set without TLS.
+  No Codec file or commit was needed.
+
+  Tier 1 is GREEN: Codec coupling zero/zero with 292 opaque sites, deleted surface 15 of 15 and
+  274 plain cases; Player coupling 87 scanned and three allowlisted, all five ABI checks, 192
+  uncached JVM tests, 127 plain rt cases, render audit 15 and source discipline 18. Both tracked
+  em dash scans printed nothing and returned the specified passing exit 1. Each corrected sentence
+  was reread in place. Nothing was pushed, remotely published or released.
 
 ---
 

@@ -6,18 +6,18 @@
  * <stdint.h>, so it compiles for every Kotlin/Native target KitePlayer declares. Second, added in
  * B1.8, the audio device itself: the render callback and the whole AudioUnit lifecycle, so that no
  * Kotlin code is on the device's real-time thread and no Kotlin code touches an `AudioUnit`. The
- * device half is declared unconditionally and IMPLEMENTED ON macOS ONLY; everywhere else its
- * entry points answer KPRT_SINK_UNSUPPORTED_PLATFORM rather than failing to link, and a
- * declaration that answers "not here" is not a support claim.
+ * device half is declared unconditionally and implemented on macOS and iOS; everywhere else its
+ * entry points answer KPRT_SINK_UNSUPPORTED_PLATFORM rather than failing to link, and a declaration
+ * that answers "not here" is not a support claim.
  *
  * WHY THIS EXISTS AT ALL. `kiteplayer-core` already has a correct ring, in Kotlin, at
  * `internal/KotlinAudioRing.kt`. The problem it cannot solve is that on macOS the device's
- * real-time thread enters managed Kotlin on its first instruction, so it becomes a mutator the
- * garbage collector has to stop at a safepoint (register item B1-17). The fix is a callback that
- * never leaves C, and a callback that never leaves C needs a ring that lives in C. In B1.7 this
+ * real-time thread entered managed Kotlin on its first instruction, so it became a mutator the
+ * garbage collector had to stop at a safepoint (register item B1-17). The fix is a callback that
+ * never leaves C on either supported Apple target, and that callback needs a ring that lives in C. In B1.7 this
  * library was built, tested and proved against the Kotlin ring while deliberately NOT on the
- * device path; B1.8 puts it there, which is the one and only time the shipped real-time audio path
- * changes.
+ * device path. B1.8 moved the shipped macOS path onto it; S1.b.3 carries that same C callback and
+ * lifecycle to iOS without putting managed code back on the device thread.
  *
  * WHAT REPLACES THE KOTLIN RING, AND WHAT NEVER WILL. Nothing deletes `KotlinAudioRing`.
  * `kiteplayer-core`'s `commonMain` targets js and wasmJs, which can never contain C, and the
@@ -324,9 +324,11 @@ KPRT_API int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate);
  * `kprt_ring_render`, and only the code that stops the device can promise that, so the code that
  * stops the device is the code that releases the ring.
  *
- * PLATFORM. Implemented for macOS. On every other target these functions are present and answer
- * KPRT_SINK_UNSUPPORTED_PLATFORM, so a caller gets a verdict instead of a link error and no
- * reader can mistake "the symbol exists" for "the device works there".
+ * PLATFORM. Implemented with DefaultOutput on macOS and RemoteIO on iOS. The iOS owner activates
+ * AVAudioSession before opening the sink; no Objective-C session work occurs here or on the callback
+ * thread. On every other target these functions are present and answer
+ * KPRT_SINK_UNSUPPORTED_PLATFORM, so a caller gets a verdict instead of a link error and no reader
+ * can mistake "the symbol exists" for "the device works there".
  *
  * THREADING. `kprt_sink_create`, `kprt_sink_attach_ring`, `kprt_sink_start`, `kprt_sink_stop`,
  * `kprt_sink_set_paused` and `kprt_sink_destroy` belong to one owner thread, which in KitePlayer is
@@ -341,6 +343,32 @@ KPRT_API int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate);
 
 /* Opaque. The layout lives in src/kite_rt_sink_internal.h, for the same reason the ring's does. */
 typedef struct kprt_sink kprt_sink;
+
+/* Host-test-only shape for driving the actual AudioUnit callback without an audio device.
+ *
+ * KPRT_TESTING is defined only by native/scripts/build-host.sh. CompileKiteRtTask never defines it,
+ * so neither this declaration nor its implementation exists in any shipped archive or cinterop
+ * surface. Keeping CoreAudio's AudioBufferList out of this header preserves the public boundary's
+ * platform-neutral, <stdint.h>-only contract. */
+#if defined(KPRT_TESTING)
+#define KPRT_TEST_MAX_AUDIO_BUFFERS 4u
+#define KPRT_TEST_OUTPUT_IS_SILENCE (1u << 4)
+
+typedef struct {
+    void *data;
+    uint32_t byte_size;
+    uint32_t channels;
+} kprt_test_audio_buffer;
+
+KPRT_API int32_t kprt_test_invoke_render_callback(
+    kprt_sink *sink,
+    uint32_t requested_frames,
+    uint32_t buffer_count,
+    const kprt_test_audio_buffer *buffers,
+    int32_t host_time_valid,
+    uint64_t host_ticks,
+    uint32_t *action_flags);
+#endif
 
 /* Verdicts. Every one of them names the step that refused, because "the device would not open" with
  * no further detail is the least useful diagnostic in audio. The CoreAudio `OSStatus` behind a
@@ -383,9 +411,9 @@ typedef struct {
     /* Callbacks whose timestamp did not carry a valid host time, so the anchor was taken from the
      * clock instead. Counted rather than logged, because a real-time thread may not log. */
     int64_t estimated_anchors;
-    /* Callbacks that found no ring and zeroed the whole buffer. After B1.8 that is teardown and
-     * nothing else: register item B1-19 collapsed every other silence case into
-     * `kprt_ring_render`. */
+    /* Callbacks that found no ring and zeroed the whole buffer. This remains the missing-ring or
+     * teardown counter. Ordinary silence is produced by `kprt_ring_render`; malformed device buffer
+     * layouts are silenced defensively in `kprt_render_cb` and are not counted here. */
     int64_t zero_filled_callbacks;
     int64_t worst_callback_nanos;
     /* When the last frame of the most recently filled buffer becomes audible, on the same

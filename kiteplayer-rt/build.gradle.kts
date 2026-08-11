@@ -21,9 +21,9 @@ plugins {
  *
  * WHAT IT CONTAINS. B1.7 put the ring here, built and proved against the Kotlin ring and deliberately
  * off the device path. B1.8 added the CoreAudio device callback and the device glue beside it, which
- * was the one time in B1 that the shipped real-time audio path changed, and since then this module IS
- * the macOS audio path: the ring holds the samples and a `static` C function renders them. The device
- * implementation is macOS only and every other target's entry points refuse with
+ * was the one time in B1 that the shipped real-time audio path changed. S1.b.3 carries the same ring,
+ * callback and lifecycle onto iOS: DefaultOutput on macOS, RemoteIO on iOS, and a `static` C function
+ * rendering on both. Every other target's entry points refuse with
  * `KPRT_SINK_UNSUPPORTED_PLATFORM`.
  *
  * NO KOTLIN DECLARATIONS OR CALLABLE API OF ITS OWN, ON PURPOSE. The Kotlin wrapper,
@@ -38,7 +38,8 @@ plugins {
  * a shared `nativeMain` source set and a Gradle dependency that resolves for only some targets is a
  * dependency that fails at whichever target nobody compiled. All 17 were measured compiling the real
  * ring source on this machine; that is level 7 evidence in the terms of plan section 2 and says
- * nothing at all about behaviour on any target other than macOS arm64.
+ * nothing at all about behaviour. Device evidence is recorded separately for macOS arm64 and the
+ * named iOS simulator, and an iosArm64 link is not a physical-device result.
  */
 kotlin {
     explicitApi()

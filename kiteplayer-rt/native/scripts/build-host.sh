@@ -75,9 +75,11 @@ INTERPOSE_LIB="$LIB/libkprt_interpose_alloc.dylib"
 # The suites. Keep this list and run-c-tests.sh in agreement.
 #
 # B1.7 built the first six, over the ring. B1.8 adds the two that cover the device callback:
-# test_sink_callback drives the shipped callback body five million times with no device at all, and
-# test_sink_timebase checks this library's host tick arithmetic against CoreAudio's own conversion
-# rather than trusting either.
+# test_sink_callback drives the shipped callback body five million times with no device at all and
+# also compiles a host-only seam around the actual CoreAudio entry point for malformed buffer-list
+# fixtures. KPRT_TESTING is never set by CompileKiteRtTask, so that seam cannot enter a shipped
+# archive. test_sink_timebase checks this library's host tick arithmetic against CoreAudio's own
+# conversion rather than trusting either.
 TESTS="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_sink_callback test_sink_timebase"
 
 # Frameworks for the link.
@@ -119,7 +121,7 @@ RING_SOURCES="$(find "$ROOT/src" -maxdepth 1 -name '*.c' | sort)"
 RING_OBJECTS=""
 for source in $RING_SOURCES; do
     object="$OBJ/$(basename "${source%.c}").o"
-    compile "$source" "$object" -fvisibility=hidden
+    compile "$source" "$object" -fvisibility=hidden -DKPRT_TESTING
     RING_OBJECTS="$RING_OBJECTS $object"
 done
 rm -f "$RING_LIB"
@@ -145,7 +147,7 @@ compile "$ROOT/tests/harness.c" "$OBJ/harness.o"
 for test in $TESTS; do
     source="$ROOT/tests/$test.c"
     [ -f "$source" ] || { echo "build-host.sh: missing test source $source" >&2; exit 1; }
-    compile "$source" "$OBJ/$test.o"
+    compile "$source" "$OBJ/$test.o" -DKPRT_TESTING
     echo "  ld  $test"
     # shellcheck disable=SC2086
     "$CC" $BASE_FLAGS $VARIANT_FLAGS -o "$BIN/$test" \

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# The two rules in this library that no runtime instrument covers, checked against the source text.
+# The ordering decisions in this library that no runtime instrument fully covers, checked against
+# the source text.
 #
 # WHAT THIS IS AND WHAT IT IS NOT. This is a level 4 instrument under plan section 2: a source level
 # check with the ownership and ordering invariant written out. It is deliberately weaker than
@@ -339,31 +340,31 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     # attach's sink->ring release, each of which passed the WHOLE gate including TSan before
     # these checks existed.
     plant_and_check "retire-consumed-acquire-relaxed" pinned kite_rt_ring.c \
-        '117s/memory_order_acquire/memory_order_relaxed/'
+        '144s/memory_order_acquire/memory_order_relaxed/'
     plant_and_check "segments-retired-release-relaxed" pinned kite_rt_ring.c \
-        '131s/memory_order_release/memory_order_relaxed/'
+        '158s/memory_order_release/memory_order_relaxed/'
     plant_and_check "seq-opening-store-hoisted" pinned kite_rt_ring.c \
-        '158s/memory_order_relaxed/memory_order_seq_cst/'
+        '185s/memory_order_relaxed/memory_order_seq_cst/'
     plant_and_check "append-release-fence-deleted" pinned kite_rt_ring.c \
-        '159d'
+        '186d'
     plant_and_check "segments-appended-release-relaxed" pinned kite_rt_ring.c \
-        '164s/memory_order_release/memory_order_relaxed/'
+        '191s/memory_order_release/memory_order_relaxed/'
     plant_and_check "begin-write-consumed-acquire-relaxed" pinned kite_rt_ring.c \
-        '251s/memory_order_acquire/memory_order_relaxed/'
+        '286s/memory_order_acquire/memory_order_relaxed/'
     plant_and_check "anchor-opening-acquire-relaxed" pinned kite_rt_ring.c \
-        '332s/memory_order_acquire/memory_order_relaxed/'
+        '368s/memory_order_acquire/memory_order_relaxed/'
     plant_and_check "anchor-acquire-fence-deleted" pinned kite_rt_ring.c \
-        '343d'
+        '379d'
     plant_and_check "segment-scan-opening-acquire-relaxed" pinned kite_rt_render.c \
-        '110s/memory_order_acquire/memory_order_relaxed/'
+        '132s/memory_order_acquire/memory_order_relaxed/'
     plant_and_check "segment-scan-acquire-fence-deleted" pinned kite_rt_render.c \
-        '121d'
+        '143d'
     plant_and_check "render-consumed-release-relaxed" pinned kite_rt_render.c \
-        '206s/memory_order_release/memory_order_relaxed/'
+        '228s/memory_order_release/memory_order_relaxed/'
     plant_and_check "render-ring-acquire-relaxed" pinned kite_rt_render.c \
-        '288s/memory_order_acquire/memory_order_relaxed/'
+        '310s/memory_order_acquire/memory_order_relaxed/'
     plant_and_check "attach-ring-release-relaxed" pinned kite_rt_coreaudio.c \
-        '299s/memory_order_release/memory_order_relaxed/'
+        '403s/memory_order_release/memory_order_relaxed/'
 fi
 
 say ""

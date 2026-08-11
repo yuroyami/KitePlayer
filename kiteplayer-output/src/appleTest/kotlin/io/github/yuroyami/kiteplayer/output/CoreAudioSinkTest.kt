@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.MonotonicClock
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_destroy
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioRenderCallback
 import io.github.yuroyami.kiteplayer.spi.RawRingApi
@@ -25,11 +26,11 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Drives the real audio device.
+ * Drives the platform's native output unit.
  *
- * These tests make sound, briefly and quietly. That is the point. The reason the audio clock is anchored
- * to the device's own timestamps instead of to a guess is something only real hardware can confirm, and
- * one of the assertions here is the one the whole design rests on: the instant the device says a buffer
+ * On macOS these tests make sound, briefly and quietly. On iosSimulatorArm64 they exercise RemoteIO's
+ * simulator route, which is a native callback/lifecycle proof but explicitly not a physical-iPhone
+ * result. The assertion the design rests on is common to both: the instant the output unit says a buffer
  * will be heard must land slightly ahead of now on the engine's own clock.
  *
  * ### What B1.8 changed about this file
@@ -38,7 +39,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * feeds the C ring the sink owns, through the same three C calls the engine's feeder uses (see
  * `CRingSupport.kt`). The sink has no Kotlin callback to hand anything to any more: its render callback
  * is a `static` C function it installs itself, which is register item B1-17. Keeping a Kotlin ring here
- * would have left these tests exercising a path no macOS user runs, which is exactly the substitution
+ * would have left these tests exercising a path no Apple-backend user runs, which is exactly the substitution
  * plan section 2 forbids.
  *
  * Two cases moved out of Kotlin rather than being rewritten, because their subject moved: the
@@ -290,6 +291,122 @@ class CoreAudioSinkTest {
     }
 
     @Test
+    fun `the managed session lease surrounds successful and failed C ownership`() = runBlocking {
+        val createController = RecordingAppleAudioSessionController()
+        val createManager = AppleAudioSessionLeaseManager(createController)
+        val createFailure = CoreAudioSink(AppleAudioSessionPolicy.ManagedPlayback, createManager)
+        assertFailsWith<IllegalStateException> {
+            createFailure.openWithRing(
+                AudioFormat(sampleRate = -1, channels = 2, sampleFormat = SampleFormat.F32),
+            ) { 4_800 }
+        }
+        assertEquals(0, createFailure.retainedResources())
+        assertEquals(0, createManager.activeLeaseCount)
+        assertEquals(sessionRoundTrip, createController.calls)
+
+        val capacityOrder = mutableListOf<String>()
+        val capacityController = RecordingAppleAudioSessionController(observe = capacityOrder::add)
+        val capacityManager = AppleAudioSessionLeaseManager(capacityController)
+        val capacityFailure = CoreAudioSink(
+            policy = AppleAudioSessionPolicy.ManagedPlayback,
+            leaseManager = capacityManager,
+            destroyer = CoreAudioSinkDestroyer { sink ->
+                kprt_sink_destroy(sink)
+                capacityOrder += "destroy"
+            },
+        )
+        assertFailsWith<PlannedCapacityFailure> {
+            capacityFailure.openWithRing(format) { throw PlannedCapacityFailure() }
+        }
+        assertEquals(0, capacityFailure.retainedResources())
+        assertEquals(0, capacityManager.activeLeaseCount)
+        assertEquals(sessionRoundTrip, capacityController.calls)
+        assertEquals(sessionRoundTrip.dropLast(1) + "destroy" + sessionRoundTrip.last(), capacityOrder)
+
+        val attachController = RecordingAppleAudioSessionController()
+        val attachManager = AppleAudioSessionLeaseManager(attachController)
+        val attachFailure = CoreAudioSink(AppleAudioSessionPolicy.ManagedPlayback, attachManager)
+        assertFailsWith<IllegalStateException> { attachFailure.openWithRing(format) { 0 } }
+        assertEquals(0, attachFailure.retainedResources())
+        assertEquals(0, attachManager.activeLeaseCount)
+        assertEquals(sessionRoundTrip, attachController.calls)
+
+        val successOrder = mutableListOf<String>()
+        val successController = RecordingAppleAudioSessionController(observe = successOrder::add)
+        val successManager = AppleAudioSessionLeaseManager(successController)
+        val success = CoreAudioSink(
+            policy = AppleAudioSessionPolicy.ManagedPlayback,
+            leaseManager = successManager,
+            destroyer = CoreAudioSinkDestroyer { sink ->
+                kprt_sink_destroy(sink)
+                successOrder += "destroy"
+            },
+        )
+        success.openWithRing(format) { 4_800 }
+        assertEquals(sessionRoundTrip.dropLast(1), successController.calls)
+        assertEquals(1, successManager.activeLeaseCount)
+        success.close()
+        success.close()
+        assertEquals(0, success.retainedResources())
+        assertEquals(0, successManager.activeLeaseCount)
+        assertEquals(sessionRoundTrip, successController.calls)
+        assertEquals(sessionRoundTrip.dropLast(1) + "destroy" + sessionRoundTrip.last(), successOrder)
+
+        val uncertainController = RecordingAppleAudioSessionController()
+        val uncertainManager = AppleAudioSessionLeaseManager(uncertainController)
+        val uncertainDestroy = CoreAudioSink(
+            policy = AppleAudioSessionPolicy.ManagedPlayback,
+            leaseManager = uncertainManager,
+            destroyer = CoreAudioSinkDestroyer { sink ->
+                kprt_sink_destroy(sink)
+                throw PlannedDestroyReportFailure()
+            },
+        )
+        val uncertainFailure = assertFailsWith<PlannedCapacityFailure> {
+            uncertainDestroy.openWithRing(format) { throw PlannedCapacityFailure() }
+        }
+        assertTrue(
+            uncertainFailure.suppressedExceptions.any { it is PlannedDestroyReportFailure },
+            "the original open failure must retain the uncertain destroy report",
+        )
+        assertEquals(
+            sessionRoundTrip.dropLast(1),
+            uncertainController.calls,
+            "an unconfirmed destroy must strand the managed lease rather than deactivate under a possibly live unit",
+        )
+        assertEquals(1, uncertainManager.activeLeaseCount)
+    }
+
+    @Test
+    fun `session activation precedes C creation and application-managed makes no call`() = runBlocking {
+        val refusingController = RecordingAppleAudioSessionController(failActivationCount = 1)
+        val refusingManager = AppleAudioSessionLeaseManager(refusingController)
+        val refusing = CoreAudioSink(AppleAudioSessionPolicy.ManagedPlayback, refusingManager)
+        var capacityWasAsked = false
+
+        assertFailsWith<PlannedAppleAudioSessionFailure> {
+            refusing.openWithRing(format) {
+                capacityWasAsked = true
+                4_800
+            }
+        }
+        assertEquals(false, capacityWasAsked, "C creation must not begin after session activation refused")
+        assertEquals(0, refusing.retainedResources())
+        assertEquals(0, refusingManager.activeLeaseCount)
+
+        val applicationController = RecordingAppleAudioSessionController()
+        val applicationManager = AppleAudioSessionLeaseManager(applicationController)
+        val applicationManaged = CoreAudioSink(
+            AppleAudioSessionPolicy.ApplicationManaged,
+            applicationManager,
+        )
+        applicationManaged.openWithRing(format) { 4_800 }
+        applicationManaged.close()
+        assertEquals(emptyList(), applicationController.calls)
+        assertEquals(0, applicationManager.activeLeaseCount)
+    }
+
+    @Test
     fun `opening through the Kotlin callback entry point is refused loudly`() = runBlocking {
         // A device whose C callback ignored the lambda it was handed would play correctly while the
         // caller believed its callback was being called. Silent disagreement is worse than a loud
@@ -359,4 +476,16 @@ class CoreAudioSinkTest {
             assertTrue(message.contains("host time"), "the message must explain the shared time base: $message")
         }
     }
+
+    private companion object {
+        val sessionRoundTrip = listOf(
+            "category:playback:moviePlayback:none",
+            "active:true:none",
+            "active:false:notifyOthers",
+        )
+    }
+
+    private class PlannedCapacityFailure : IllegalStateException("planned capacity failure")
+
+    private class PlannedDestroyReportFailure : IllegalStateException("planned destroy report failure")
 }

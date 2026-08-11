@@ -7,9 +7,9 @@
  * stop-the-world pauses on the development machine were 63 to 256 microseconds against a 10.67
  * millisecond period. The claim being fixed is not "audio glitches"; it is "the deadline depends on a
  * pause nobody has bounded". After this file, the callback is a `static` C function, its `ref` is a
- * plain struct pointer with no reference counting of any kind, and the only calls it makes are
- * `memcpy`, `memset` and one `mach_absolute_time` pair. `scripts/render-audit.sh` proves that from
- * the object's own symbol table rather than from this paragraph.
+ * plain struct pointer with no reference counting of any kind, and its exact external call set is
+ * `mach_absolute_time`, `kprt_render_into` and `kprt_sink_note_span`. `scripts/render-audit.sh`
+ * proves that from the object's own symbol table rather than from this paragraph.
  *
  * WHY THE WHOLE DEVICE LIFECYCLE MOVED AND NOT JUST THE CALLBACK. Because a Kotlin object that owned
  * the `AudioUnit` would still have to be reachable from the callback to be of any use, and the moment
@@ -17,11 +17,11 @@
  * callback, initialise, start, stop, pause and dispose are all here, and `CoreAudioSink` in
  * `kiteplayer-output` is a thin owner of two opaque handles that never touches an `AudioUnit`.
  *
- * PLATFORM. macOS only, and deliberately explicit about it. iOS, tvOS and watchOS need
- * `kAudioUnitSubType_RemoteIO` and, on iOS, an activated `AVAudioSession`, which is Objective-C and
- * has no test on this machine; writing it blind would be a support claim with no evidence behind it
- * (plan section 2 forbids exactly that). On every non-macOS target the entry points below compile to
- * a refusal, so the failure is a verdict at runtime rather than a missing symbol at link time.
+ * PLATFORM. macOS uses DefaultOutput and iOS uses RemoteIO; both install this same callback body.
+ * The iOS owner acquires an activated AVAudioSession before it creates this sink, so session policy
+ * stays off the callback thread and outside this C boundary. tvOS, watchOS and every non-Apple target
+ * still compile the entry points below as refusals, so an unsupported target gets a runtime verdict
+ * rather than a missing symbol at link time.
  *
  * TRANSACTIONAL OPEN, which is defect D23 moved into C. Every failure path in `kprt_sink_create`
  * disposes precisely what it had created and returns a verdict, so a refused open leaves nothing
@@ -30,17 +30,19 @@
 
 #include "kite_rt.h"
 
-/* Needed by BOTH branches below, which is why it is here rather than inside the macOS one. Measured:
- * with this include inside the guard, the seven non-macOS Apple targets failed with nine
- * "use of undeclared identifier 'NULL'" errors, because `kite_rt.h` includes only <stdint.h> and the
- * macOS branch got NULL for free from AudioToolbox. Compiling one target would never have shown it. */
+/* Needed by BOTH branches below, which is why it is here rather than inside the supported-Apple
+ * one. Measured: with this include inside the guard, unsupported targets failed with nine "use of
+ * undeclared identifier 'NULL'" errors, because `kite_rt.h` includes only <stdint.h> and the active
+ * branch got NULL for free from AudioToolbox. Compiling one target would never have shown it. */
 #include <stddef.h>
 
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif
 
-#if defined(__APPLE__) && defined(TARGET_OS_OSX) && TARGET_OS_OSX
+#if defined(__APPLE__) && \
+    ((defined(TARGET_OS_OSX) && TARGET_OS_OSX) || \
+     (defined(TARGET_OS_IOS) && TARGET_OS_IOS))
 
 #include "kite_rt_sink_internal.h"
 
@@ -62,10 +64,10 @@
  * surface than the number is worth. */
 #define KPRT_DEFAULT_DEVICE_BUFFER_FRAMES 512
 
-/* Channels this sink will accept. CoreAudio's default output takes interleaved 32 bit float at any
- * common rate, so the engine's own internal format passes through unchanged and neither side
- * converts anything; the channel count is clamped because everything above the mono and stereo case
- * needs a real channel map, which is defect D30's business and not this file's. */
+/* Channels this sink will accept. Both Apple output units take interleaved 32 bit float at common
+ * rates, so the engine's own internal format passes through unchanged and neither side converts
+ * anything; the channel count is clamped because everything above the mono and stereo case needs a
+ * real channel map, which is defect D30's business and not this file's. */
 #define KPRT_MIN_CHANNELS 1
 #define KPRT_MAX_CHANNELS 2
 
@@ -80,9 +82,10 @@ static void report_status(int32_t *out_os_status, OSStatus status)
  * `static`, so it is not in the archive's exported set, is not named by `include/kite_rt.h`, is not
  * in the cinterop bindings and cannot be installed or called by Kotlin. That is the point of it.
  *
- * It does exactly four things: take the entry tick, decide which host time is meaningful, hand the
- * device's own buffer to `kprt_render_into`, and close the tick pair. Everything that touches a
- * sample is in `kite_rt_render.c`, which is the unit the audit reads. */
+ * It validates and bounds the device-owned buffers, takes the entry tick, decides which host time is
+ * meaningful, hands the accepted span to `kprt_render_into`, and closes the tick pair. Malformed
+ * layouts are made deterministic silence in place. The object audit reads both this unit and
+ * `kite_rt_render.c`; validation adds stores and bounded loops, never another callable symbol. */
 static OSStatus kprt_render_cb(void *ref,
                                AudioUnitRenderActionFlags *action_flags,
                                const AudioTimeStamp *stamp,
@@ -94,43 +97,79 @@ static OSStatus kprt_render_cb(void *ref,
     uint64_t entered;
     uint64_t host_ticks;
     int32_t estimated;
+    int32_t rendered;
     float *destination;
+    volatile unsigned char *byte_destination;
+    UInt32 buffer_index;
+    UInt32 byte_index;
     UInt32 usable_frames;
     UInt32 bytes_per_frame;
 
-    (void)action_flags;
     (void)bus;
 
     /* No StableRef, no reference counting, no null-safe chain through managed objects: a plain cast
      * of the pointer `kprt_sink_create` handed to CoreAudio. The sink outlives every callback
      * because `kprt_sink_destroy` disposes the unit before it frees the sink. */
-    if (sink == NULL || data == NULL)
+    if (data == NULL) {
+        if (action_flags != NULL)
+            *action_flags |= kAudioUnitRenderAction_OutputIsSilence;
         return noErr;
+    }
 
-    /* Exactly one buffer, and it must be big enough for what the unit asked for. Both are checked
-     * rather than trusted, and that is a correction the independent verification of B1.8 asked for:
-     * this function writes `frames * channels` floats, so a device that answered with non
-     * interleaved buffers, or with a byte size shorter than the frame count it passed, would be a
-     * heap overflow on the real-time thread. The pre-B1.8 Kotlin callback made the same assumption,
-     * so the checks close a hazard that predates this file rather than one it introduced.
-     *
-     * `mNumberBuffers != 1` cannot happen with the stream format `kprt_sink_create` sets, which is
-     * packed interleaved float; nothing is written in that case because nothing here can know what
-     * the layout would be, and guessing is what the check exists to stop. A short byte size clamps
-     * instead of refusing, because writing the device's whole buffer and no more is both safe and
-     * the right sound. Two loads and two compares, no call, so the audited call set of this
-     * function is unchanged. */
-    if (data->mNumberBuffers != 1)
+    /* The negotiated stream is exactly one packed interleaved buffer. If CoreAudio supplies another
+     * layout, every non-null span is still safe to silence up to the byte size CoreAudio supplied.
+     * Volatile byte stores keep the compiler from replacing this real-time fallback with a new
+     * memset call; the shipped callback's audited call set therefore stays exact. */
+    if (data->mNumberBuffers != 1) {
+        if (action_flags != NULL)
+            *action_flags |= kAudioUnitRenderAction_OutputIsSilence;
+        for (buffer_index = 0; buffer_index < data->mNumberBuffers; buffer_index++) {
+            byte_destination =
+                (volatile unsigned char *)data->mBuffers[buffer_index].mData;
+            if (byte_destination == NULL)
+                continue;
+            for (byte_index = 0;
+                 byte_index < data->mBuffers[buffer_index].mDataByteSize;
+                 byte_index++)
+                byte_destination[byte_index] = 0;
+        }
         return noErr;
+    }
+
     destination = (float *)data->mBuffers[0].mData;
-    if (destination == NULL || frames == 0)
+    if (destination == NULL || data->mBuffers[0].mDataByteSize == 0 || frames == 0) {
+        if (action_flags != NULL)
+            *action_flags |= kAudioUnitRenderAction_OutputIsSilence;
         return noErr;
+    }
+
+    /* A null or malformed refCon cannot be rendered, but it must not return the device's previous
+     * contents as noise. This path is unreachable for an installed unit and remains deterministic
+     * for the host seam and for defensive callers. */
+    if (sink == NULL || sink->channels <= 0) {
+        if (action_flags != NULL)
+            *action_flags |= kAudioUnitRenderAction_OutputIsSilence;
+        byte_destination = (volatile unsigned char *)data->mBuffers[0].mData;
+        for (byte_index = 0; byte_index < data->mBuffers[0].mDataByteSize; byte_index++)
+            byte_destination[byte_index] = 0;
+        return noErr;
+    }
+
+    /* A short byte size clamps the request to complete interleaved frames. If it cannot hold even
+     * one frame, silence every byte that is safe to write and tell CoreAudio the result is silent.
+     * No write can cross mDataByteSize. */
     bytes_per_frame = (UInt32)sink->channels * (UInt32)sizeof(float);
     usable_frames = data->mBuffers[0].mDataByteSize / bytes_per_frame;
     if (frames > usable_frames)
         frames = usable_frames;
-    if (frames == 0)
+    if (frames == 0) {
+        if (action_flags != NULL)
+            *action_flags |= kAudioUnitRenderAction_OutputIsSilence;
+        byte_destination = (volatile unsigned char *)data->mBuffers[0].mData;
+        for (byte_index = 0; byte_index < data->mBuffers[0].mDataByteSize; byte_index++)
+            byte_destination[byte_index] = 0;
         return noErr;
+    }
 
     entered = mach_absolute_time();
 
@@ -138,9 +177,9 @@ static OSStatus kprt_render_cb(void *ref,
      * flag valid would anchor the audio clock to a number with no meaning, so the fallback is the
      * same clock read a moment earlier, and the substitution is counted.
      *
-     * `mach_absolute_time` and not `AudioGetCurrentHostTime`: on macOS the second is documented to
-     * return the first, `tests/test_sink_timebase.c` measures that they interleave, and keeping the
-     * framework off this path leaves the render unit's undefined symbol list at libc plus one. */
+     * `mach_absolute_time` and not `AudioGetCurrentHostTime`: the former is the direct monotonic
+     * clock on both supported targets. `tests/test_sink_timebase.c` measures the macOS conversion,
+     * and keeping CoreAudio.framework off this path preserves the exact audited call set. */
     if (stamp != NULL && (stamp->mFlags & kAudioTimeStampHostTimeValid) != 0) {
         host_ticks = stamp->mHostTime;
         estimated = 0;
@@ -149,11 +188,72 @@ static OSStatus kprt_render_cb(void *ref,
         estimated = 1;
     }
 
-    (void)kprt_render_into(sink, destination, (int32_t)frames, host_ticks, estimated);
+    rendered = kprt_render_into(sink, destination, (int32_t)frames, host_ticks, estimated);
+    if (rendered == 0 && action_flags != NULL)
+        *action_flags |= kAudioUnitRenderAction_OutputIsSilence;
 
     kprt_sink_note_span(sink, entered, mach_absolute_time());
     return noErr;
 }
+
+#if defined(KPRT_TESTING)
+/* Compile-only host seam for malformed AudioBufferList fixtures.
+ *
+ * The allocation and structure translation live outside kprt_render_cb and outside every shipped
+ * build. The callback still receives the real CoreAudio types and the host suite therefore tests
+ * its actual guards, flag writes and byte bounds rather than a second rendering implementation. */
+int32_t kprt_test_invoke_render_callback(kprt_sink *sink,
+                                         uint32_t requested_frames,
+                                         uint32_t buffer_count,
+                                         const kprt_test_audio_buffer *buffers,
+                                         int32_t host_time_valid,
+                                         uint64_t host_ticks,
+                                         uint32_t *action_flags)
+{
+    AudioBufferList *list;
+    AudioTimeStamp stamp;
+    AudioUnitRenderActionFlags native_flags = 0;
+    size_t list_bytes;
+    uint32_t i;
+    OSStatus status;
+
+    _Static_assert(KPRT_TEST_OUTPUT_IS_SILENCE == kAudioUnitRenderAction_OutputIsSilence,
+                   "the host fixture's silence bit must be CoreAudio's silence bit");
+
+    if (buffer_count > KPRT_TEST_MAX_AUDIO_BUFFERS ||
+        (buffer_count != 0 && buffers == NULL))
+        return -1;
+
+    list_bytes = sizeof(AudioBufferList);
+    if (buffer_count > 1)
+        list_bytes += ((size_t)buffer_count - 1u) * sizeof(AudioBuffer);
+    list = (AudioBufferList *)calloc(1, list_bytes);
+    if (list == NULL)
+        return -2;
+
+    list->mNumberBuffers = (UInt32)buffer_count;
+    for (i = 0; i < buffer_count; i++) {
+        list->mBuffers[i].mData = buffers[i].data;
+        list->mBuffers[i].mDataByteSize = (UInt32)buffers[i].byte_size;
+        list->mBuffers[i].mNumberChannels = (UInt32)buffers[i].channels;
+    }
+
+    memset(&stamp, 0, sizeof(stamp));
+    if (host_time_valid) {
+        stamp.mFlags = kAudioTimeStampHostTimeValid;
+        stamp.mHostTime = host_ticks;
+    }
+    if (action_flags != NULL)
+        native_flags = (AudioUnitRenderActionFlags)*action_flags;
+
+    status = kprt_render_cb(sink, action_flags != NULL ? &native_flags : NULL,
+                            &stamp, KPRT_OUTPUT_BUS, (UInt32)requested_frames, list);
+    if (action_flags != NULL)
+        *action_flags = (uint32_t)native_flags;
+    free(list);
+    return (int32_t)status;
+}
+#endif
 
 /* ---- Lifecycle ---- */
 
@@ -190,7 +290,11 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
 
     memset(&description, 0, sizeof(description));
     description.componentType = kAudioUnitType_Output;
+#if defined(TARGET_OS_IOS) && TARGET_OS_IOS
+    description.componentSubType = kAudioUnitSubType_RemoteIO;
+#else
     description.componentSubType = kAudioUnitSubType_DefaultOutput;
+#endif
     description.componentManufacturer = kAudioUnitManufacturer_Apple;
     component = AudioComponentFindNext(NULL, &description);
     if (component == NULL)
@@ -409,7 +513,7 @@ void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)
     out->has_ring = atomic_load_explicit(&sink->ring, memory_order_acquire) != NULL ? 1 : 0;
 }
 
-#else /* not macOS */
+#else /* neither macOS nor iOS */
 
 /* Every entry point, present and refusing.
  *
@@ -493,4 +597,4 @@ void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)
     }
 }
 
-#endif /* macOS */
+#endif /* macOS or iOS */

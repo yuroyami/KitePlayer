@@ -47,6 +47,21 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 /**
+ * Test seam around C's void teardown call. Production implementations must not throw and return only
+ * after the output unit is stopped, uninitialised and disposed; an injected throw is nevertheless
+ * treated as uncertain teardown and therefore never followed by session deactivation.
+ */
+internal fun interface CoreAudioSinkDestroyer {
+    fun destroy(sink: CPointer<kprt_sink>)
+}
+
+private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
+    override fun destroy(sink: CPointer<kprt_sink>) {
+        kprt_sink_destroy(sink)
+    }
+}
+
+/**
  * Audio output through CoreAudio, owned in C.
  *
  * The device pulls. Its render callback runs on a real-time thread CoreAudio owns, and that thread must
@@ -84,15 +99,15 @@ import kotlinx.coroutines.flow.asSharedFlow
  * exactly two buffer periods, and that assumption is the largest single source of fixed A/V offset in
  * it.
  *
- * ### Silence, which is now written in exactly one place
+ * ### Silence, which is now owned entirely in C
  *
  * Register item B1-19. This class used to fill the tail of a short read with silence and count an
  * underrun, and the ring did the same thing one level down; the old comment called that duplication
  * deliberate, on the grounds that the render callback could be absent. There is no absent callback now:
- * the callback is a C function installed for the life of the sink. So silence and the underrun counter
- * live in `kprt_ring_render` and nowhere else, and the only case the callback still handles itself is
- * teardown, where it finds no ring and zeroes the whole buffer because an unwritten device buffer plays
- * whatever was left in it.
+ * the callback is a C function installed for the life of the sink. Normal starvation and end-of-stream
+ * silence, plus the underrun counter, live in `kprt_ring_render`. The callback itself zeroes only cases
+ * the ring renderer cannot address safely: a missing ring during teardown or a malformed device buffer
+ * list. Kotlin writes no silence on the device path.
  *
  * ### [open] is not the entry point
  *
@@ -118,9 +133,34 @@ import kotlinx.coroutines.flow.asSharedFlow
  * read are C pointers that [close] frees, and the lock is what orders the free after the read. See the
  * note on the lock itself for the AddressSanitizer report that made this necessary rather than tidy.
  */
-public class CoreAudioSink(
-    private val clock: MonotonicClock = AppleHostClock,
+public class CoreAudioSink private constructor(
+    private val policy: AppleAudioSessionPolicy,
+    private val clock: MonotonicClock,
+    private val leaseManager: AppleAudioSessionLeaseManager,
+    private val destroyer: CoreAudioSinkDestroyer,
 ) : AudioSink, NativeRingAudioSink {
+
+    /** Preserves the original clock-first API and uses KitePlayer's managed playback policy. */
+    public constructor(clock: MonotonicClock = AppleHostClock) : this(
+        AppleAudioSessionPolicy.ManagedPlayback,
+        clock,
+        sharedAppleAudioSessionLeaseManager,
+        PlatformCoreAudioSinkDestroyer,
+    )
+
+    /** Selects who owns the process-wide iOS audio session while retaining the Apple host clock. */
+    public constructor(
+        policy: AppleAudioSessionPolicy,
+        clock: MonotonicClock = AppleHostClock,
+    ) : this(policy, clock, sharedAppleAudioSessionLeaseManager, PlatformCoreAudioSinkDestroyer)
+
+    /** Test seam for proving session ownership around every C lifecycle exit. */
+    internal constructor(
+        policy: AppleAudioSessionPolicy,
+        leaseManager: AppleAudioSessionLeaseManager,
+        clock: MonotonicClock = AppleHostClock,
+        destroyer: CoreAudioSinkDestroyer = PlatformCoreAudioSinkDestroyer,
+    ) : this(policy, clock, leaseManager, destroyer)
 
     init {
         require(clock === AppleHostClock) {
@@ -156,6 +196,9 @@ public class CoreAudioSink(
     private var ring: CPointer<kprt_ring>? = null
 
     private var negotiated: AudioFormat? = null
+
+    /** Acquired before C creates the device and released only after C destroys it. */
+    private var sessionLease: AppleAudioSessionLease? = null
 
     private val eventFlow = MutableSharedFlow<AudioSinkEvent>(
         replay = 0,
@@ -205,77 +248,102 @@ public class CoreAudioSink(
         request: AudioFormat,
         capacityFrames: (AudioFormat) -> Int,
     ): NativeRingHandoff {
-        check(handle == null) { "this sink is already open" }
+        check(handle == null && sessionLease == null) { "this sink is already open" }
 
-        // Step one: the device. C negotiates, applies the format, installs the callback and initialises
-        // the unit, or disposes everything it made and reports which step refused.
-        val created = memScoped {
-            val out = allocPointerTo<kprt_sink>()
-            val accepted = alloc<kprt_sink_format>()
-            val status = alloc<IntVar>()
-            val verdict = kprt_sink_create(
-                request.sampleRate,
-                request.channels,
-                out.ptr,
-                accepted.ptr,
-                status.ptr,
-            )
-            if (verdict != KPRT_SINK_OK.toInt()) {
-                error(
-                    "opening the audio device failed at ${verdictName(verdict)}" +
-                        if (status.value != 0) " with CoreAudio status ${status.value}" else "",
+        // On iOS the process audio session must be active before RemoteIO is created. Acquiring is the
+        // first step in the same transaction as the C device and ring. A later failure hands the lease
+        // back only after C destruction is confirmed; uncertain destruction retains it fail-closed.
+        val acquiredLease = leaseManager.acquire(policy)
+        var ownedSink: CPointer<kprt_sink>? = null
+
+        try {
+            // Step one: the device. C negotiates, applies the format, installs the callback and
+            // initialises the unit, or disposes everything it made and reports which step refused.
+            val created = memScoped {
+                val out = allocPointerTo<kprt_sink>()
+                val accepted = alloc<kprt_sink_format>()
+                val status = alloc<IntVar>()
+                val verdict = kprt_sink_create(
+                    request.sampleRate,
+                    request.channels,
+                    out.ptr,
+                    accepted.ptr,
+                    status.ptr,
+                )
+                if (verdict != KPRT_SINK_OK.toInt()) {
+                    error(
+                        "opening the audio device failed at ${verdictName(verdict)}" +
+                            if (status.value != 0) " with CoreAudio status ${status.value}" else "",
+                    )
+                }
+                val sink = out.value ?: error("kprt_sink_create reported success and produced no sink")
+                ownedSink = sink
+                Opened(
+                    sink = sink,
+                    format = AudioFormat(
+                        sampleRate = accepted.sample_rate,
+                        channels = accepted.channels,
+                        // Both Apple output units take interleaved 32 bit float, so the engine's own
+                        // internal format passes through unchanged and neither side converts anything.
+                        sampleFormat = SampleFormat.F32,
+                        channelLayout = ChannelLayout.forChannelCount(accepted.channels),
+                    ),
+                    deviceBufferFrames = accepted.device_buffer_frames,
                 )
             }
-            val sink = out.value ?: error("kprt_sink_create reported success and produced no sink")
-            Opened(
-                sink = sink,
-                format = AudioFormat(
-                    sampleRate = accepted.sample_rate,
-                    channels = accepted.channels,
-                    // CoreAudio's default output takes interleaved 32 bit float, so the engine's own
-                    // internal format passes through unchanged and neither side converts anything.
-                    sampleFormat = SampleFormat.F32,
-                    channelLayout = ChannelLayout.forChannelCount(accepted.channels),
-                ),
-                deviceBufferFrames = accepted.device_buffer_frames,
-            )
-        }
 
-        // Step two: the ring, at the format the device accepted and the capacity the engine asked for.
-        // A failure here disposes the device too, because a sink with no ring would play silence for
-        // the rest of its life and report nothing.
-        //
-        // The device's period is published BEFORE the capacity is computed, because the engine's
-        // capacity function reads it: `AudioPlayback` sizes the ring at the larger of a multiple of
-        // this and its own buffer duration. Both numbers happen to be 512 today, so the order makes no
-        // measurable difference now and would silently make one the moment C reported anything else.
-        deviceBufferFramesOrDefault = created.deviceBufferFrames
-        val capacity = capacityFrames(created.format)
-        val attached = kprt_sink_attach_ring(created.sink, capacity)
-        if (attached != KPRT_SINK_OK.toInt()) {
-            kprt_sink_destroy(created.sink)
-            deviceBufferFramesOrDefault = DEFAULT_DEVICE_BUFFER_FRAMES
-            error(
-                "the audio device opened but its ring did not: ${verdictName(attached)} for " +
-                    "$capacity frames of ${created.format.channels} channels at " +
-                    "${created.format.sampleRate} Hz",
-            )
-        }
-        val attachedRing = kprt_sink_ring(created.sink)
-            ?: run {
-                kprt_sink_destroy(created.sink)
-                deviceBufferFramesOrDefault = DEFAULT_DEVICE_BUFFER_FRAMES
-                error("kprt_sink_attach_ring reported success and produced no ring")
+            // Step two: the ring, at the format the device accepted and the capacity the engine asked
+            // for. A failure here disposes the device too, because a sink with no ring would play
+            // silence for the rest of its life and report nothing.
+            //
+            // The device's period is published BEFORE the capacity is computed, because the engine's
+            // capacity function reads it: `AudioPlayback` sizes the ring at the larger of a multiple of
+            // this and its own buffer duration.
+            deviceBufferFramesOrDefault = created.deviceBufferFrames
+            val capacity = capacityFrames(created.format)
+            val attached = kprt_sink_attach_ring(created.sink, capacity)
+            if (attached != KPRT_SINK_OK.toInt()) {
+                error(
+                    "the audio device opened but its ring did not: ${verdictName(attached)} for " +
+                        "$capacity frames of ${created.format.channels} channels at " +
+                        "${created.format.sampleRate} Hz",
+                )
             }
+            val attachedRing = kprt_sink_ring(created.sink)
+                ?: error("kprt_sink_attach_ring reported success and produced no ring")
+            val handoff = NativeRingHandoff(format = created.format, ring = attachedRing)
 
-        // Published inside the lock, so a diagnostic read from another thread sees either nothing or
-        // all three. Opening itself belongs to the session owner; the lock is here for the readers.
-        synchronized(lock) {
-            handle = created.sink
-            ring = attachedRing
-            negotiated = created.format
+            // Published inside the lock, so a diagnostic read from another thread sees either nothing
+            // or the complete device/ring/session transaction. Opening itself belongs to the session
+            // owner; the lock is here for the readers.
+            synchronized(lock) {
+                handle = created.sink
+                ring = attachedRing
+                negotiated = created.format
+                sessionLease = acquiredLease
+            }
+            ownedSink = null
+            return handoff
+        } catch (failure: Throwable) {
+            var destroyCompleted = ownedSink == null
+            try {
+                ownedSink?.let { sink ->
+                    destroyer.destroy(sink)
+                    destroyCompleted = true
+                }
+            } catch (destroyFailure: Throwable) {
+                failure.addSuppressed(destroyFailure)
+            }
+            deviceBufferFramesOrDefault = DEFAULT_DEVICE_BUFFER_FRAMES
+            if (destroyCompleted) {
+                try {
+                    acquiredLease.close()
+                } catch (releaseFailure: Throwable) {
+                    failure.addSuppressed(releaseFailure)
+                }
+            }
+            throw failure
         }
-        return NativeRingHandoff(format = created.format, ring = attachedRing)
     }
 
     private class Opened(
@@ -321,7 +389,8 @@ public class CoreAudioSink(
     }
 
     /**
-     * Stops, uninitialises, disposes, and only then releases the ring, in C and in that order.
+     * Stops, uninitialises, disposes, and only then releases the ring, in C and in that order. On iOS,
+     * the audio-session lease is released after that complete C teardown, never before RemoteIO stops.
      *
      * The order is the reason the ring belongs to the sink rather than to the engine: after the dispose
      * no callback can be running, so freeing the ring cannot race a render. Idempotent.
@@ -333,15 +402,24 @@ public class CoreAudioSink(
      * out and nothing else should wait behind the audio device.
      */
     override fun close() {
-        val sink = synchronized(lock) {
-            val current = handle ?: return
+        val owned = synchronized(lock) {
+            if (handle == null && sessionLease == null) return
+            val currentSink = handle
+            val currentLease = sessionLease
             handle = null
             ring = null
             negotiated = null
-            current
+            sessionLease = null
+            OwnedLifecycle(currentSink, currentLease)
         }
-        kprt_sink_destroy(sink)
+        owned.sink?.let { sink -> destroyer.destroy(sink) }
+        owned.lease?.close()
     }
+
+    private class OwnedLifecycle(
+        val sink: CPointer<kprt_sink>?,
+        val lease: AppleAudioSessionLease?,
+    )
 
     /**
      * How many anchors had to be estimated because CoreAudio said its host time was not valid.
@@ -441,8 +519,8 @@ public class CoreAudioSink(
         fun verdictName(verdict: Int): String = when (verdict) {
             0 -> "no failure"
             1 -> "a bad argument"
-            2 -> "an unsupported platform: kiteplayer-rt implements its device glue for macOS only"
-            3 -> "finding the default output component"
+            2 -> "an unsupported platform: kiteplayer-rt implements its device glue for macOS and iOS only"
+            3 -> "finding the Apple output component"
             4 -> "creating the audio unit"
             5 -> "setting the stream format, which is how a device refuses a rate or a channel count"
             6 -> "installing the render callback"
@@ -465,9 +543,25 @@ public class CoreAudioSink(
  * one directly is for a test or a custom assembly, and the clock still has to be [AppleHostClock]; see
  * the check in [CoreAudioSink].
  */
-public class CoreAudioSinkFactory(
-    private val clock: MonotonicClock = AppleHostClock,
+public class CoreAudioSinkFactory private constructor(
+    private val policy: AppleAudioSessionPolicy,
+    private val clock: MonotonicClock,
+    @Suppress("UNUSED_PARAMETER") marker: Unit,
 ) : AudioSinkFactory {
+
+    /** Preserves the original clock-first API and uses KitePlayer's managed playback policy. */
+    public constructor(clock: MonotonicClock = AppleHostClock) : this(
+        AppleAudioSessionPolicy.ManagedPlayback,
+        clock,
+        Unit,
+    )
+
+    /** Selects who owns the iOS audio session for every sink this factory creates. */
+    public constructor(
+        policy: AppleAudioSessionPolicy,
+        clock: MonotonicClock = AppleHostClock,
+    ) : this(policy, clock, Unit)
+
     override val name: String = "CoreAudio"
-    override suspend fun create(): AudioSink = CoreAudioSink(clock)
+    override suspend fun create(): AudioSink = CoreAudioSink(policy, clock)
 }

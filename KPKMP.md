@@ -6172,6 +6172,155 @@ is no other.
   no accepted assertion; the complete direct isolated run supplies the evidence. No product byte
   enters the correction commit, and nothing was pushed, publicly published or released.
 
+- 2026-08-11, S1.b.3 completed against Player `a0038ba` and Codec `23b8bf4`. Tier 3 ran,
+  selected conservatively because this phase promotes iOS through the shared `kprt_render_cb`,
+  widens its compilation guard and changes sink teardown ordering. The intended product commit
+  first line is `Run the real-time sink through RemoteIO on iOS`.
+
+  The callback red failed at the predicted boundary: the wrong-buffer-count branch cleared
+  writable bytes but did not set the silence flag. The final callback zeroes a wrong layout and
+  marks it silent; null and zero-sized destinations mark silence; a short size clamps to complete
+  writable frames without crossing its canary; and the correct single interleaved layout renders.
+  DefaultOutput remains the macOS component and RemoteIO is selected for both iOS targets. The
+  callback body is common, the test seam is absent from all
+  shipped objects and each archive's callback has exactly `_kprt_render_into`,
+  `_kprt_sink_note_span` and `_mach_absolute_time` as its relocation set.
+
+  The policy red also failed before the fix: the naive manager deactivated on the first close while
+  another sink was live, and concurrent leases did not retain one process-wide activation. The
+  final public API is exactly `AppleAudioSessionPolicy.ManagedPlayback` and
+  `ApplicationManaged`. The first managed lease sets Playback with MoviePlayback and no category
+  options, then activates; later leases make no session call; only the final release deactivates
+  with NotifyOthersOnDeactivation. ApplicationManaged performs no session work and macOS uses a
+  no-op lease. Acquisition precedes C creation; every failed open, and every failed attach after
+  confirmed C destruction, releases. An uncertain destroy fails closed by retaining the lease.
+  Normal stop plus real C destruction completes before deactivation. The real-destroy ordering
+  oracle and the fail-closed uncertain-destroy case both pass. `AppleOutputBackend` selects
+  ManagedPlayback.
+
+  The additions-only ABI ratchet is GREEN. The output dump moved from 84 to 97 lines at SHA-256
+  `3258e360303ae268d99827e1db55fab6526aa5b14d0bc640b3b765960ae8443b`. It adds only the
+  two-entry policy enum and policy-first constructors for `CoreAudioSink` and
+  `CoreAudioSinkFactory`; both original clock-first constructors remain and no declaration was
+  removed. Sequential update and check both pass.
+
+  The C lane is GREEN in plain, ASan/UBSan, TSan and live interposition: eight suites and 132 cases
+  in every variant. The callback suite passes 13 of 13, and five million interposed callbacks report
+  `new=0 freed=0 mmap=0`. The macOS, iOS device and iOS simulator archives are respectively 10,696,
+  10,824 and 10,696 bytes, each with exactly three objects. The macOS component FourCC is
+  `64656620`; both iOS archives contain RemoteIO `72696f63`. Render audit passes 43 positive checks
+  and 50 of 50 including seven negative controls. Source discipline passes 18 positive checks and
+  34 of 34 including 16 negative controls. `bash -n` and ShellCheck at warning severity are clean;
+  the two informational SC2086 findings are unchanged baseline lines.
+
+  iOS evidence is recorded separately from macOS. `kiteplayer-rt` passes 12 of 12 simulator tests.
+  The freshly linked output test program, copied byte-for-byte into the application host before the
+  required ad-hoc signature, passes 28 of 28 tests from four cases: four policy, nine real-time, 14
+  sink and one RemoteIO fixture. The first final fixture took 73 ms. The named SDK DefaultOutput
+  symbol was unavailable to the iOS compilation, so the negative control used its exact raw FourCC.
+  That app-hosted mutant passed nine and failed the required 19 device-dependent tests. Restoration
+  returned `kite_rt_coreaudio.c` to SHA-256
+  `dcd5e10ffc7d828a29b047916293841a345ce3371092f6194e111ec51bd79c9a`; the relink
+  executed 23 tasks and the restored app-hosted suite passed 28 of 28 again, with its fixture at
+  80 ms. The ordinary bare-kexe runner remains the expected host-boundary red: Kotlin Gradle plugin
+  2.4.10 launches it through `simctl spawn --standalone`, where valid RemoteIO opens fail
+  `AudioUnitInitialize` with -10851. That is not a product failure. No simulator result is a
+  physical-iPhone result.
+
+  The supervised macOS output command is GREEN in 40 minutes 12 seconds with 27 of 27 tasks
+  executed. The C callback reports `callbacks=51680 worstCallbackNanos=21875 budget=5333333
+  worstAsPercentOfBudget=0.41015627563476725 underruns=0 segmentGiveups=0 zeroFilled=0
+  estimatedAnchors=0
+  framesFed=28824175 collections=665281 allocations=19903382000`. It stayed inside budget on every
+  call with no underrun, give-up, zero fill or estimated anchor.
+
+  The managed-callback negative control bit as required. Under collector pressure it reports
+  `callbacks=51656 worstCallbackNanos=8460708 overBudget=2 collections=647465
+  allocations=19256870000`, exceeding the 5,333,333 ns budget twice. Without manufactured pressure
+  it reports `callbacks=51681 worstCallbackNanos=3601875 overBudget=0 collections=624 allocations=0`;
+  the test recorded that this arm stayed inside budget on this run and made no causal inference.
+  Heap corroboration reports `before=5636096 after=5636096 delta=0 callbacks=51680` and remains
+  level 5 evidence only.
+
+  The real-media command is GREEN in 10 minutes 13 seconds with 31 of 31 tasks executed. It reports
+  `loops=60 framesDecoded=28795904 underruns=14 position=9379703 buffered=196.062ms
+  collections=832173 allocations=21900194000`. Fourteen underruns remain inside the asserted
+  loop-seam bound of 60. The decoded frames equal 599.915 seconds at 48 kHz in 600 seconds of wall
+  time, inside the required 20 percent bound. Both macOS commands are level 6 manual observations
+  from one debug macOS arm64 run with saved metrics, not release qualification.
+
+  Complete Player Tier 2 retained its first red. The first forced combined Native run ended in
+  `RealThreadStressTest.seeks and a close hammered through a real thread pipeline hold every
+  invariant` after a timeout continuation attempted to dispatch onto the closed `stress-session`
+  dispatcher. Fresh XML was core 185 with one failure, output 34 of 34 and FFmpeg 36 of 36; all 41
+  tasks executed. A bounded isolated control then passed that exact test one of one in 11.07
+  seconds. A later complete forced trio finished `BUILD SUCCESSFUL` in 36 seconds with 38 of 38
+  tasks executed and fresh XML at core 193, output 34 and FFmpeg 36, with no skip, failure or error.
+  The first red remains a scheduler-teardown observation and is not attributed to this output/rt
+  phase.
+
+  Test media were not regenerated because `scripts/testmedia.sh` is byte-identical to HEAD at
+  SHA-256 `c332b82c778b689e4124b53987075b99580c751a5363079ab8c77d5aafbaf319`; all 27
+  fixtures are present and nonempty. `buildSrc` passes 40 tests with six tasks executed. Forced JS,
+  WasmJS and Android spots pass 20 executed tasks, and the forced sample link passes 33 executed
+  tasks. Sync submits
+  300 of 300 and true VFR 240 of 240 with zero drops, repeats, underruns, rebuffers or warnings. HEVC
+  completes 180 of 180 on the Video master with the same zeroes; its 33 ms worst schedule and
+  transient -52 ms clock remain a retained load observation. Timestamp-offset submits 300 of 300
+  and plays to `0:10.026` of `0:10.021`; surround exercises the 6-to-2 pipeline with zero underruns;
+  rotated submits 25 of 25; and the P010 golden passes mean-under-2 and worst-under-40. The missing
+  input prints exactly two diagnostic lines, exits 1 and has no stack trace.
+
+  The unchanged Codec Tier 2 evidence at `23b8bf4` remains GREEN: cinterop and public API checks,
+  42 build-tool tests, 19 plugin tests, 274-case sanitizer and interposition variants, 105 corpus
+  files, 175 exports, 189 normalized signatures, the 974-line metadata boundary and 85 macOS tests.
+  Nothing was republished.
+
+  Closing Tier 1 is GREEN. Codec coupling is zero imports and zero typed crossings with 292 opaque
+  helper sites reported, zero direct libav calls and zero raw structs; deleted surface is 15 of 15; and
+  seven plain C suites pass 274 cases. Player coupling scans 87 files with three matches, all
+  allowlisted; all five ABI checks pass; a forced 13-task JVM run passes 184 core and eight subtitle
+  tests with no skip, failure or error; eight rt suites pass 132 cases; render audit passes 43 and
+  source discipline passes 18. Both exact tracked em-dash scans print nothing and return the
+  specified passing exit 1. During the initial closing run the owner corrected only README
+  timing/count wording; no source or API changed, and the final README SHA-256 is
+  `2ae2ff838e2898d35839ab822413ac5450c4c8bbcebb778e04dc93690cb71411`. After the log
+  precision corrections, the complete frozen logged-state rerun passed the same counts with all
+  ten forced JVM tasks executed. Full pre/post Player state was identical at SHA-256
+  `c7ad4c57eea8e6f92db271da38920685ea5971337753e784580b9c652aab1b64`; Codec remained
+  clean at its empty-diff hash. Only authorized access to existing Gradle user-cache locks was
+  needed; no test red, edit, stage, publication or push occurred during that run.
+
+  The final hostile review corrected four fenced current-state comments: lease release now depends
+  on confirmed C destruction, the B1 callback claim is scoped to macOS before this iOS promotion,
+  malformed-layout silence is distinct from the missing-ring counter, and the NSWindow renderer is
+  macOS-only while iOS still has none. No behavior or API changed. The forced macOS, iOS device and
+  iOS simulator C and output production compiles then executed 30 of 30 tasks without a C or Kotlin
+  compiler warning. Archive sizes and object counts remained 10,696/3, 10,824/3 and 10,696/3.
+  Render audit again passed 43 positive and 50 of 50 including seven negative controls; source
+  discipline passed 18 of 18; and diff check remained clean. The subsequent full Tier 1 seal
+  retained the same counts and held the complete Player state byte-for-byte at SHA-256
+  `83f4eed26d63068826b239d0d02df70ee2544b4b511dbbb39c35f1683aa1b7e9`. DEVIATIONS:
+  the first ABI invocation lost its terminal handle after substantial rebuilding, so its result was
+  discarded and the exact aggregate rerun supplied the accepted exit 0. One combined dash wrapper
+  used Codec paths from the Player directory and a direct Codec login shell printed the standing
+  RVM warning; both were discarded, and exact non-login commands from each repository supplied the
+  required silent exit 1. No product test was red.
+
+  Final additions contain none of AVPlayer, AVAssetReader, AVSampleBufferDisplayLayer,
+  VideoToolbox, VTDecompressionSession, Metal, CVPixelBuffer, MediaCodec, ExoPlayer, Compose,
+  UIKitView or KitePlayerView. macOS remains the only end-to-end candidate above T1. The
+  local/private iOS arm64 and simulator substrate has the software-codec backend plus RemoteIO
+  audio, but no renderer, runnable consumer, physical-device result, public artifact or tier
+  promotion. `gradle.properties` and both version catalogs remain untouched. The final tracked
+  product diff has SHA-256 `15ddf6016d7659866e9b351aa95f98d3e0d0ed219ee292c3cc5d10e555f8f7d6`.
+  The five new-file hashes are `c98f9a55016f325dab5b3759594769d1682331e01170a7f3123c7d70a678bfdd`,
+  `c5b036eb502474d2a41a9ea6e96dc90a89802ed5da3137376e84fc518d4edda0`,
+  `0a978b180c4bc0d96b451eae6a2cb3b497b3072c6337b6ffefa3141c1e52e279`,
+  `30758748b17a996c9e8f15034ed288e3fb9b6362670f4c06ab6a82b99bd51ee9` and
+  `7e648ffeeb53246770052d3f0ac6be6cce15e897796b1e22f5625099d2c03dab`. All 22 product
+  paths remain inside the S1.b.3 fence. Nothing is staged, pushed, publicly published or released.
+
 ---
 
 ## 15. Horizon B execution: B1

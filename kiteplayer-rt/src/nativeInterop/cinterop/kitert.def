@@ -14,10 +14,11 @@
 # against the def, and there is one archive directory per konan target, so `build.gradle.kts` passes
 # it as `extraOpts("-libraryPath", ...)` per target instead.
 #
-# One linkerOpts line, and only for macOS. The ring needs libc and nothing else, and libc is already in
-# every link Kotlin/Native performs. B1.8 added the audio device, whose AudioUnit entry points live in
-# AudioToolbox, so the macOS link needs that framework and no other link needs anything: the device unit
-# compiles to a set of refusals on every non-macOS target and references no framework there.
+# One linkerOpts line for each supported Apple device target. The ring needs libc and nothing else,
+# and libc is already in every link Kotlin/Native performs. The audio device's AudioUnit entry points
+# live in AudioToolbox, so both the DefaultOutput implementation on macOS and the RemoteIO
+# implementation on iOS link that framework. Unsupported targets compile the device unit to refusals
+# and reference no framework.
 #
 # `mach_absolute_time` and `mach_timebase_info` are in libSystem and need no flag. There is no
 # `-framework CoreAudio` because nothing in the shipped library calls it; the one place
@@ -25,10 +26,11 @@
 # `native/tests/test_sink_timebase.c`, which is a host test binary and links its own frameworks.
 #
 # The lesson of register item B1-12, which was iOS flags missing from KiteCodec's def, is not "declare
-# every platform": it is "declare exactly what the code on that platform needs". Naming AudioToolbox for
-# iOS here would be a flag for an implementation that does not exist.
+# every platform": it is "declare exactly what the code on that platform needs". These two flags map
+# exactly to the two active implementation arms.
 package = io.github.yuroyami.kiteplayer.rt.cinterop
 headers = kite_rt.h
 headerFilter = kite_rt.h
 staticLibraries = libkiteplayerrt.a
 linkerOpts.osx = -framework AudioToolbox
+linkerOpts.ios = -framework AudioToolbox

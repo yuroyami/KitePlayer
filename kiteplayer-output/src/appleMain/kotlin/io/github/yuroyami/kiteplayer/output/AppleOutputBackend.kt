@@ -13,16 +13,19 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
  * instant, so both sides have to read the same time base. Handing the engine one object rather than a
  * clock and a factory separately makes the mismatch unassemblable instead of merely checked.
  *
- * [videoRenderer] is null, and honestly so. The renderer this platform has draws into an `NSWindow`
- * that only the application can own, so there is nothing for a factory to create without one. An
- * application that wants a picture builds its renderer and attaches it, which is legal at any time,
- * including while playing.
+ * [videoRenderer] is null, and honestly so. On macOS the available renderer draws into an `NSWindow`
+ * that only the application can own, so there is nothing for a factory to create without one. iOS has
+ * no renderer yet. An application that has a caller-owned renderer builds and attaches it directly,
+ * which is legal at any time, including while playing.
  */
 public object AppleOutputBackend : OutputBackend {
 
     override val clock: MonotonicClock = AppleHostClock
 
-    override val audioSink: AudioSinkFactory = CoreAudioSinkFactory(AppleHostClock)
+    override val audioSink: AudioSinkFactory = CoreAudioSinkFactory(
+        policy = AppleAudioSessionPolicy.ManagedPlayback,
+        clock = AppleHostClock,
+    )
 
     override val videoRenderer: VideoRendererFactory? = null
 }

@@ -10,21 +10,23 @@
 # happen, on any run. Plan section 15.3 grades it level 2 and says it is stronger than a runtime test
 # for what it covers.
 #
-# WHAT IS AUDITED, and why the render path is its own translation unit. `src/kite_rt_render.c` holds
-# every instruction the device's thread executes inside this library: `kprt_ring_render`, the anchor
-# it publishes, and `kprt_render_into`, which is the callback's whole body. It deliberately does NOT
-# hold `kprt_ring_create`, because a unit that can allocate has `_malloc` in its undefined set and the
-# audit of it would have to be argued away with "but only in create". Here there is nothing to argue:
-# the object has no allocator symbol to call.
+# WHAT IS AUDITED, and why the ring renderer has its own translation unit. `src/kite_rt_render.c`
+# holds everything executed after the callback enters `kprt_render_into`: `kprt_ring_render`, the
+# anchor it publishes, and the buffer-writing body. It deliberately does NOT hold `kprt_ring_create`,
+# because a unit that can allocate has `_malloc` in its undefined set and the audit of it would have
+# to be argued away with "but only in create". Here there is nothing to argue: the object has no
+# allocator symbol to call.
 #
 # The callback itself, `kprt_render_cb`, is `static` inside `src/kite_rt_coreaudio.c`, which does have
 # a large undefined set because it is the file that opens and disposes the audio unit. So that
-# function is audited by name instead: every relocation inside its own address range must be one of
-# three symbols.
+# function is audited by name instead: every relocation inside its own address range must equal the
+# fixed three-symbol call set. The gated macOS, iOS device and iOS simulator archives are then opened
+# and both objects are audited again. Their compiled AudioComponentDescription literals pin
+# DefaultOutput on macOS and RemoteIO on both iOS targets.
 #
 # Usage:
 #   ./scripts/render-audit.sh                     audit, and fail on any violation
-#   ./scripts/render-audit.sh --prove-it-can-fail  build three poisoned units and require rejection
+#   ./scripts/render-audit.sh --prove-it-can-fail  run seven negative controls and require rejection
 #
 # The second mode exists because an assertion that has never rejected anything is not evidence. It
 # compiles copies of the render unit with a malloc call, with a variable length array and with the one
@@ -39,6 +41,7 @@ MODULE="$(cd "$ROOT/.." && pwd)"
 NM="${KPRT_NM:-/usr/bin/nm}"
 OBJDUMP="${KPRT_OBJDUMP:-/usr/bin/objdump}"
 AR="${KPRT_AR:-/usr/bin/ar}"
+OTOOL="${KPRT_OTOOL:-/usr/bin/otool}"
 
 # The flag set the shipped archive is built with, copied from
 # buildSrc/src/main/kotlin/CompileKiteRtTask.kt. Checked against that file below rather than trusted,
@@ -57,6 +60,12 @@ ALLOWED_UNDEFINED="_memcpy _memset _bzero"
 # Everything `kprt_render_cb` may call. Three symbols: the clock it reads twice, the body it forwards
 # to, and the counter update that closes the pair.
 RENDER_CB_ALLOWED="_mach_absolute_time _kprt_render_into _kprt_sink_note_span"
+
+# AudioComponentDescription stores these four-character subtypes in the device object's
+# __TEXT,__literal8 section. Pinning the values in the object catches the dangerous direction a
+# source-only audit cannot: the branch reads correctly while the wrong target archive was embedded.
+DEFAULT_OUTPUT_FOURCC="64656620"
+REMOTE_IO_FOURCC="72696f63"
 
 # The named scan of plan section 15.2 B1.8, applied to every symbol either unit's real-time code
 # refers to. The undefined-set check above already forbids all of these in the render unit by
@@ -144,8 +153,10 @@ defined_symbols() {
 in_list() {
     local needle="$1"
     shift
-    local item
-    for item in $*; do
+    local item items="$*"
+    # The callers pass one or more deliberately space-separated symbol sets.
+    # shellcheck disable=SC2086
+    for item in $items; do
         [ "$needle" = "$item" ] && return 0
     done
     return 1
@@ -181,7 +192,10 @@ scan_forbidden() {
         bad "$label refers to forbidden symbols:$hits"
         return 1
     fi
-    ok "$label refers to none of the $(echo $FORBIDDEN_EXACT $FORBIDDEN_PREFIX | wc -w | tr -d ' ') forbidden names"
+    local forbidden_count
+    forbidden_count="$(printf '%s %s\n' "$FORBIDDEN_EXACT" "$FORBIDDEN_PREFIX" |
+        wc -w | tr -d ' ')"
+    ok "$label refers to none of the $forbidden_count forbidden names"
     return 0
 }
 
@@ -200,7 +214,9 @@ audit_render_object() {
     if [ -n "$outside" ]; then
         bad "$label has undefined symbols outside the allowlist:$outside"
     else
-        ok "$label undefined set is [$(echo $undefined)] and the allowlist is [$ALLOWED_UNDEFINED]"
+        local undefined_inline
+        undefined_inline="$(printf '%s\n' "$undefined" | tr '\n' ' ' | sed 's/ $//')"
+        ok "$label undefined set is [$undefined_inline] and the allowlist is [$ALLOWED_UNDEFINED]"
     fi
 
     local defined
@@ -231,6 +247,98 @@ audit_render_object() {
         text_relocations "$object"
         defined_symbols "$object"
     )
+
+    [ "$FAILURES" = "$before" ]
+}
+
+# Audits the `static` callback inside one device object. The call set is equality, not an allowlist:
+# a callback which silently stopped rendering would otherwise pass because the empty set is a subset
+# of every allowlist.
+audit_callback_object() {
+    local label="$1" object="$2"
+    local before="$FAILURES"
+
+    if ! "$NM" "$object" | grep -q ' _kprt_render_cb$'; then
+        bad "$label has no kprt_render_cb, so no callback was audited"
+        return 1
+    fi
+    if "$NM" -g "$object" | awk '$2 == "T" { print $3 }' | grep -qx '_kprt_render_cb'; then
+        bad "$label exports kprt_render_cb, so Kotlin could install or call it"
+    else
+        ok "$label keeps kprt_render_cb local: not exported, not in the header, not in the bindings"
+    fi
+
+    local symbols expected
+    symbols="$("$OBJDUMP" -d -r "$object" |
+        awk '/^[0-9a-f]+ <_kprt_render_cb>:/ { inside = 1; next }
+             /^[0-9a-f]+ <.*>:/ { inside = 0 }
+             inside && /ARM64_RELOC|X86_64_RELOC/ { print $NF }' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+    expected="$(printf '%s\n' "$RENDER_CB_ALLOWED" | tr ' ' '\n' |
+        sed '/^$/d' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+    if [ "$symbols" = "$expected" ]; then
+        ok "$label callback call set is exactly [$symbols]"
+    else
+        bad "$label callback call set is [$symbols], expected exactly [$expected]"
+    fi
+    scan_forbidden "$label callback" <<< "$(printf '%s\n' "$symbols" | tr ' ' '\n' | sed '/^$/d')"
+
+    [ "$FAILURES" = "$before" ]
+}
+
+# Pins the AudioUnit subtype from the compiled object. Both the expected presence and the opposite
+# absence matter: checking only for RemoteIO would accept an object which selected both branches.
+audit_device_subtype() {
+    local label="$1" object="$2" expected="$3" forbidden="$4"
+    local before="$FAILURES"
+    local literals
+    literals="$("$OTOOL" -s __TEXT __literal8 "$object" 2>/dev/null)"
+    if printf '%s\n' "$literals" | grep -Eq "61756f75[[:space:]]+$expected"; then
+        ok "$label embeds the expected AudioUnit subtype 0x$expected"
+    else
+        bad "$label does not embed type Output followed by expected subtype 0x$expected"
+    fi
+    if printf '%s\n' "$literals" | grep -Eq "[[:space:]]$forbidden([[:space:]]|$)"; then
+        bad "$label also embeds the opposite AudioUnit subtype 0x$forbidden"
+    else
+        ok "$label does not embed the opposite AudioUnit subtype 0x$forbidden"
+    fi
+
+    [ "$FAILURES" = "$before" ]
+}
+
+# Pins the source selection separately from the object check. The outer guard must compile the real
+# device unit for exactly macOS and iOS, and the inner branch must select RemoteIO only for iOS.
+audit_source_platform_selection() {
+    local label="$1" source="$2"
+    local before="$FAILURES"
+    local outer_osx outer_ios branch remote otherwise default finish
+
+    outer_osx="$(grep -nF "((defined(TARGET_OS_OSX) && TARGET_OS_OSX) || \\" "$source" |
+        head -1 | cut -d: -f1)"
+    outer_ios="$(grep -nF '(defined(TARGET_OS_IOS) && TARGET_OS_IOS))' "$source" |
+        head -1 | cut -d: -f1)"
+    if [ -n "$outer_osx" ] && [ -n "$outer_ios" ] && [ "$outer_osx" -lt "$outer_ios" ]; then
+        ok "$label enables the common device unit for macOS and iOS"
+    else
+        bad "$label does not keep the exact macOS-or-iOS implementation guard"
+    fi
+
+    branch="$(grep -nF '#if defined(TARGET_OS_IOS) && TARGET_OS_IOS' "$source" |
+        head -1 | cut -d: -f1)"
+    remote="$(grep -nF 'description.componentSubType = kAudioUnitSubType_RemoteIO;' "$source" |
+        head -1 | cut -d: -f1)"
+    otherwise="$(awk -v start="${branch:-0}" 'start > 0 && FNR > start && /^#else$/ { print FNR; exit }' "$source")"
+    default="$(grep -nF 'description.componentSubType = kAudioUnitSubType_DefaultOutput;' "$source" |
+        head -1 | cut -d: -f1)"
+    finish="$(awk -v start="${otherwise:-0}" 'start > 0 && FNR > start && /^#endif$/ { print FNR; exit }' "$source")"
+    if [ -n "$branch" ] && [ -n "$remote" ] && [ -n "$otherwise" ] &&
+        [ -n "$default" ] && [ -n "$finish" ] &&
+        [ "$branch" -lt "$remote" ] && [ "$remote" -lt "$otherwise" ] &&
+        [ "$otherwise" -lt "$default" ] && [ "$default" -lt "$finish" ]; then
+        ok "$label selects RemoteIO in the iOS branch and DefaultOutput otherwise"
+    else
+        bad "$label does not keep RemoteIO in the iOS branch and DefaultOutput in the macOS branch"
+    fi
 
     [ "$FAILURES" = "$before" ]
 }
@@ -279,6 +387,8 @@ else
     ok "no source in include/ or src/ mentions alloca"
 fi
 
+audit_source_platform_selection "kite_rt_coreaudio.c" "$ROOT/src/kite_rt_coreaudio.c"
+
 # ---- 3. The real-time unit, compiled with the shipped flags ----
 
 say ""
@@ -308,55 +418,70 @@ if ! "$CC" $SHIPPED_FLAGS $SYSROOT_ARGS -I "$ROOT/include" -I "$ROOT/src" \
     cat "$WORK/device.log"
 else
     ok "the device unit compiles with the shipped flag set"
-
-    if ! "$NM" "$DEVICE_OBJ" | grep -q ' _kprt_render_cb$'; then
-        bad "kprt_render_cb is not in the device object at all, so nothing was audited"
-    else
-        # The callback must not be an exported symbol: Kotlin must have no way to reach or install it.
-        if "$NM" -g "$DEVICE_OBJ" | awk '$2 == "T" { print $3 }' | grep -qx '_kprt_render_cb'; then
-            bad "kprt_render_cb is externally visible, so Kotlin could install or call it"
-        else
-            ok "kprt_render_cb is a local symbol: not exported, not in the header, not in the bindings"
-        fi
-
-        CB_SYMBOLS="$("$OBJDUMP" -d -r "$DEVICE_OBJ" |
-            awk '/^[0-9a-f]+ <_kprt_render_cb>:/ { inside = 1; next }
-                 /^[0-9a-f]+ <.*>:/ { inside = 0 }
-                 inside && /ARM64_RELOC|X86_64_RELOC/ { print $NF }' | sort -u)"
-        outside=""
-        for symbol in $CB_SYMBOLS; do
-            in_list "$symbol" "$RENDER_CB_ALLOWED" || outside="$outside $symbol"
-        done
-        if [ -n "$outside" ]; then
-            bad "kprt_render_cb calls symbols outside its allowlist:$outside"
-        else
-            ok "kprt_render_cb calls exactly [$(echo $CB_SYMBOLS)], allowlist [$RENDER_CB_ALLOWED]"
-        fi
-        scan_forbidden "kprt_render_cb" <<< "$CB_SYMBOLS"
-    fi
+    audit_callback_object "freshly compiled macOS device object" "$DEVICE_OBJ"
+    audit_device_subtype "freshly compiled macOS device object" "$DEVICE_OBJ" \
+        "$DEFAULT_OUTPUT_FOURCC" "$REMOTE_IO_FOURCC"
 fi
 
-# ---- 5. The object that actually ships, when Gradle has built it ----
+# ---- 5. The objects that actually ship, when Gradle has built them ----
 #
 # Everything above compiles the sources again. This step audits the archive the cinterop klib
-# embeds, which is the only object a consumer ever runs. It is skipped rather than failed when the
-# Gradle build has not run, and the skip is printed, because an audit that silently checks nothing is
-# worse than one that says so.
+# embeds, which is the only object a consumer ever runs. A clean clone may have none of the three
+# optional archives and says so. Once any one exists, all three are required: that makes the S1.b.3
+# gate incapable of silently auditing macOS while skipping either phone archive.
 
-SHIPPED_ARCHIVE="$MODULE/build/kiteplayer-rt-c/macos_arm64/libkiteplayerrt.a"
-if [ -f "$SHIPPED_ARCHIVE" ]; then
-    EXTRACT="$WORK/shipped"
-    mkdir -p "$EXTRACT"
-    (cd "$EXTRACT" && "$AR" x "$SHIPPED_ARCHIVE")
-    if [ -f "$EXTRACT/kite_rt_render.o" ]; then
-        audit_render_object "shipped kite_rt_render.o (from $(basename "$SHIPPED_ARCHIVE"))" \
-            "$EXTRACT/kite_rt_render.o"
+SHIPPED_ROOT="$MODULE/build/kiteplayer-rt-c"
+MACOS_ARCHIVE="$SHIPPED_ROOT/macos_arm64/libkiteplayerrt.a"
+IOS_DEVICE_ARCHIVE="$SHIPPED_ROOT/ios_arm64/libkiteplayerrt.a"
+IOS_SIM_ARCHIVE="$SHIPPED_ROOT/ios_simulator_arm64/libkiteplayerrt.a"
+SHIPPED_FOUND=0
+SHIPPED_MISSING=""
+for archive in "$MACOS_ARCHIVE" "$IOS_DEVICE_ARCHIVE" "$IOS_SIM_ARCHIVE"; do
+    if [ -f "$archive" ]; then
+        SHIPPED_FOUND=$((SHIPPED_FOUND + 1))
     else
-        bad "the shipped archive has no kite_rt_render.o member"
+        SHIPPED_MISSING="$SHIPPED_MISSING $archive"
     fi
+done
+
+audit_shipped_archive() {
+    # audit_shipped_archive <label> <archive> <expected subtype> <forbidden subtype>
+    local label="$1" archive="$2" expected="$3" forbidden="$4"
+    local extract="$WORK/shipped-$label"
+    mkdir -p "$extract"
+    (cd "$extract" && "$AR" x "$archive")
+
+    if [ -f "$extract/kite_rt_render.o" ]; then
+        audit_render_object "$label shipped kite_rt_render.o" "$extract/kite_rt_render.o"
+    else
+        bad "$label shipped archive has no kite_rt_render.o member"
+    fi
+    if [ -f "$extract/kite_rt_coreaudio.o" ]; then
+        if "$NM" "$extract/kite_rt_coreaudio.o" | grep -q '_kprt_test_invoke_render_callback$'; then
+            bad "$label shipped device object contains the host-only callback fixture seam"
+        else
+            ok "$label shipped device object excludes the host-only callback fixture seam"
+        fi
+        audit_callback_object "$label shipped kite_rt_coreaudio.o" "$extract/kite_rt_coreaudio.o"
+        audit_device_subtype "$label shipped kite_rt_coreaudio.o" \
+            "$extract/kite_rt_coreaudio.o" "$expected" "$forbidden"
+    else
+        bad "$label shipped archive has no kite_rt_coreaudio.o member"
+    fi
+}
+
+if [ "$SHIPPED_FOUND" -eq 0 ]; then
+    say "skip  no gated Apple archive is built yet, so only freshly compiled macOS objects were audited"
+    say "      build macosArm64, iosArm64 and iosSimulatorArm64 before the S1.b.3 gate"
+elif [ -n "$SHIPPED_MISSING" ]; then
+    bad "only $SHIPPED_FOUND of 3 gated Apple archives exist; refusing partial audit. Missing:$SHIPPED_MISSING"
 else
-    say "skip  the shipped archive is not built yet, so only freshly compiled objects were audited"
-    say "      build it with: ./gradlew :kiteplayer-rt:compileKiteRtCForMacosArm64"
+    audit_shipped_archive macos-arm64 "$MACOS_ARCHIVE" \
+        "$DEFAULT_OUTPUT_FOURCC" "$REMOTE_IO_FOURCC"
+    audit_shipped_archive ios-arm64 "$IOS_DEVICE_ARCHIVE" \
+        "$REMOTE_IO_FOURCC" "$DEFAULT_OUTPUT_FOURCC"
+    audit_shipped_archive ios-simulator-arm64 "$IOS_SIM_ARCHIVE" \
+        "$REMOTE_IO_FOURCC" "$DEFAULT_OUTPUT_FOURCC"
 fi
 
 # ---- 6. The negative control, which is the only thing that makes any of the above evidence ----
@@ -396,6 +521,24 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
         local before_failures="$FAILURES" before_checks="$CHECKS"
         local rejected=0
         audit_render_object "negative control $name" "$object" > "$log" 2>&1 || rejected=1
+        FAILURES="$before_failures"
+        CHECKS="$before_checks"
+        if [ "$rejected" = 1 ]; then
+            ok "negative control $name was rejected by the audit"
+        else
+            bad "negative control $name PASSED the audit, so the audit proves nothing"
+        fi
+        sed 's/^/      /' "$log"
+    }
+
+    run_negative_audit() {
+        # run_negative_audit <name> <audit function> [arguments...]
+        local name="$1"
+        shift
+        local log="$POISON_DIR/$name.audit"
+        local before_failures="$FAILURES" before_checks="$CHECKS"
+        local rejected=0
+        "$@" > "$log" 2>&1 || rejected=1
         FAILURES="$before_failures"
         CHECKS="$before_checks"
         if [ "$rejected" = 1 ]; then
@@ -446,6 +589,63 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     #    drafts of the malloc control did.
     poison_and_audit "objc-defined-in-render" \
         's|^int32_t kprt_ring_render|void objc_msgSend(void) { } int32_t kprt_ring_render|; s|int32_t channels;|int32_t channels; objc_msgSend();|'
+
+    # 5. Swap the two platform subtypes and require the branch-order source check to reject it.
+    SWAPPED_DEVICE_SOURCE="$POISON_DIR/subtypes-swapped.c"
+    sed -e 's/kAudioUnitSubType_RemoteIO/kAudioUnitSubType_SWAP_TMP/g' \
+        -e 's/kAudioUnitSubType_DefaultOutput/kAudioUnitSubType_RemoteIO/g' \
+        -e 's/kAudioUnitSubType_SWAP_TMP/kAudioUnitSubType_DefaultOutput/g' \
+        "$ROOT/src/kite_rt_coreaudio.c" > "$SWAPPED_DEVICE_SOURCE"
+    if cmp -s "$SWAPPED_DEVICE_SOURCE" "$ROOT/src/kite_rt_coreaudio.c"; then
+        bad "negative control subtypes-swapped did not change the device source"
+    else
+        run_negative_audit "subtypes-swapped-in-source" \
+            audit_source_platform_selection "negative control subtype source" "$SWAPPED_DEVICE_SOURCE"
+    fi
+
+    # 6. Compile a macOS object whose DefaultOutput arm contains RemoteIO's FourCC. The numeric poison
+    # is deliberate: the macOS SDK does not declare the RemoteIO name, and a compiler rejection would
+    # test the SDK rather than the object audit.
+    SWAPPED_DEVICE_OBJECT_SOURCE="$POISON_DIR/subtype-object-swapped.c"
+    SWAPPED_DEVICE_OBJECT="$POISON_DIR/subtype-object-swapped.o"
+    MACOS_SUBTYPE='description.componentSubType = kAudioUnitSubType_DefaultOutput;'
+    IOS_FOURCC_SUBTYPE='description.componentSubType = (OSType)0x72696f63u;'
+    sed "s|$MACOS_SUBTYPE|$IOS_FOURCC_SUBTYPE|" \
+        "$ROOT/src/kite_rt_coreaudio.c" > "$SWAPPED_DEVICE_OBJECT_SOURCE"
+    # shellcheck disable=SC2086
+    if cmp -s "$SWAPPED_DEVICE_OBJECT_SOURCE" "$ROOT/src/kite_rt_coreaudio.c"; then
+        bad "negative control subtype-object-swapped did not change the device source"
+    elif ! "$CC" $SHIPPED_FLAGS $SYSROOT_ARGS -I "$ROOT/include" -I "$ROOT/src" \
+            -c "$SWAPPED_DEVICE_OBJECT_SOURCE" -o "$SWAPPED_DEVICE_OBJECT" \
+            2>"$POISON_DIR/subtype-object-swapped.log"; then
+        bad "negative control subtype-object-swapped did not compile, so the object audit was not tested"
+        sed 's/^/      /' "$POISON_DIR/subtype-object-swapped.log"
+    else
+        run_negative_audit "subtypes-swapped-in-object" audit_device_subtype \
+            "negative control subtype object" "$SWAPPED_DEVICE_OBJECT" \
+            "$DEFAULT_OUTPUT_FOURCC" "$REMOTE_IO_FOURCC"
+    fi
+
+    # 7. Add one allocator call directly to the static callback. The volatile store keeps the call in
+    # the object, and the exact call-set check must reject it even without the forbidden-name scan.
+    CALLBACK_CALL_SOURCE="$POISON_DIR/callback-extra-call.c"
+    CALLBACK_CALL_OBJECT="$POISON_DIR/callback-extra-call.o"
+    CALLBACK_POISON='(void)bus; static void *volatile callback_poison; callback_poison = malloc(1);'
+    CALLBACK_POISON="$CALLBACK_POISON if (callback_poison == (void *)data) return noErr;"
+    sed "s|(void)bus;|$CALLBACK_POISON|" \
+        "$ROOT/src/kite_rt_coreaudio.c" > "$CALLBACK_CALL_SOURCE"
+    # shellcheck disable=SC2086
+    if cmp -s "$CALLBACK_CALL_SOURCE" "$ROOT/src/kite_rt_coreaudio.c"; then
+        bad "negative control callback-extra-call did not change the device source"
+    elif ! "$CC" $SHIPPED_FLAGS $SYSROOT_ARGS -I "$ROOT/include" -I "$ROOT/src" \
+            -c "$CALLBACK_CALL_SOURCE" -o "$CALLBACK_CALL_OBJECT" \
+            2>"$POISON_DIR/callback-extra-call.log"; then
+        bad "negative control callback-extra-call did not compile, so the callback audit was not tested"
+        sed 's/^/      /' "$POISON_DIR/callback-extra-call.log"
+    else
+        run_negative_audit "callback-extra-call" audit_callback_object \
+            "negative control callback object" "$CALLBACK_CALL_OBJECT"
+    fi
 fi
 
 say ""

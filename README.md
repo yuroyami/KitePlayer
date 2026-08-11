@@ -8,11 +8,11 @@ device, the video surface and the decoder are per platform.
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-> **KitePlayer is early and cannot be used as a dependency.** Nothing is published to any repository,
-> there is no install path, and macOS arm64 is the only target with backends. This file states what has
-> been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) in this repository is the full plan, the
-> defect register, and the running execution log: every phase, every measured number, and every decision
-> taken along the way.
+> **KitePlayer is early and cannot be used as a dependency.** Nothing is publicly published,
+> there is no install path, and macOS arm64 is the only end-to-end candidate above T1. This file states
+> what has been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) in this repository is the full
+> plan, the defect register, and the running execution log: every phase, every measured number, and
+> every decision taken along the way.
 
 ## Playing a file
 
@@ -64,12 +64,21 @@ Today, honestly:
 | Platform | Tier | What that means here |
 |---|---|---|
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
-| JVM, Android, iOS, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no audio device, no renderer and no decoder for it, so there is no playback. |
+| iOS arm64 and simulator arm64 | T1 | A local, private substrate compiles and links the software-codec backend and drives RemoteIO audio in an app-hosted native test on one named simulator. There is no renderer, runnable consumer, end-to-end result, physical-device result, public artifact or tier promotion. |
+| JVM, Android, iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
 
 macOS arm64 is still the only candidate above T1, and it is still a candidate rather than a tier: no
 platform here has real-device qualification, a performance budget, or a packaged consumer build, and
 those are what T4 and T5 mean.
+
+**The local iOS substrate.** `kiteplayer-output` and `kiteplayer-ffmpeg` now declare iosArm64 and
+iosSimulatorArm64 alongside macosArm64. The private S1.b.1 software-codec trees feed the FFmpeg backend,
+and the same pure-C render callback and lifecycle use RemoteIO while an explicit policy decides whether
+KitePlayer or the application owns `AVAudioSession`. An app-hosted native test on one named simulator
+proves callback activity, ring movement, clock anchoring and teardown. Its scratch launcher is test
+infrastructure, not a playable application: there is no iOS renderer or runnable consumer, nothing was
+run on a physical iPhone, iosX64 was not qualified, and no public artifact or support tier moved.
 
 **What changed in this run.** The audio device's real-time callback left managed Kotlin. It is now a
 `static` C function in `kiteplayer-rt`, installed by C, reading a C ring, with no `StableRef` and no
@@ -77,14 +86,14 @@ garbage-collected object anywhere on the device's thread. Alongside it, KiteCode
 became a compiled and symbol-audited C library with its own tests, sanitizer runs and fuzz targets, and
 it now refuses an FFmpeg runtime that does not match the headers it was compiled against.
 
-**No tier moved, and that is deliberate.** This run added no target, no backend and no playback
-capability. macOS arm64 is still an experimental T3-Full candidate on one development machine and
-everything else is still T1. What changed is how much of the audio path is provable, not what it can
-play. Seventeen native targets compile the real-time C into an architecture-verified archive, which is
-compilation and nothing more: the device implementation exists for macOS only, and every other target's
-audio entry points refuse loudly rather than claiming to work.
+**No tier moved, and that is deliberate.** macOS arm64 is still an experimental T3-Full candidate on
+one development machine and everything else is still T1. The new iOS targets and backends are local
+substrate, not a playback claim. Seventeen native targets compile the real-time C into an
+architecture-verified archive; the device implementation uses DefaultOutput on macOS and RemoteIO on
+iOS, while targets without device glue refuse loudly rather than claiming to work.
 
-**Which audio ring the shipped path uses.** On macOS it is the C one, and the eighteen
+**Which audio ring the shipped Apple path uses.** On macOS and the local iOS substrate it is the C one,
+and the eighteen
 `AudioRingTest` cases in `commonTest` no longer cover it. Sixteen of them are the ones register item
 B1-20 was written about; the two added with the C ring test the same portable implementation. Both
 rings exist permanently, because `kiteplayer-core`'s `commonMain` targets js and wasmJs, which can
@@ -163,12 +172,16 @@ enough to call any platform supported.
   asserted exactly. Separately, a symbol and instruction audit of the shipped object shows it has no
   allocator, lock, log or framework symbol to call at all, and five million synthetic callbacks with
   the allocator interposed performed zero allocations of any kind.
-- 454 test executions pass across 6 suites, with nothing skipped: 181 engine tests on the JVM in
-  under a second, 189 compiled for macOS arm64, 28 against the real audio device and the renderer,
+- 467 test executions pass across 6 suites, with nothing skipped: 184 engine tests on the JVM,
+  193 compiled for macOS arm64, 34 against the real audio device and the renderer,
   36 that decode and seek in real media, 8 for the SubRip parser and 12 over the real-time C
-  bindings. Four of the 454 open the audio device and take ten minutes each, so they are gated on an
-  environment variable and were run separately rather than in the ordinary suite. Beside them sit
-  121 C test cases in 8 suites, each run in four modes, and 11 unit tests over the build logic.
+  bindings. Four of the 467 open the audio device and contain supervised ten-minute arms; one
+  negative-control case contains two such arms, so they are gated on an environment variable and
+  were run separately rather than in the ordinary suite. Beside them sit
+  132 C test cases in 8 suites, each run in four modes, and 40 unit tests over the build logic.
+  Separately, the app-hosted iOS simulator program passes 28 native tests: 4 session-policy, 9
+  real-time sink, 14 sink-lifecycle and 1 RemoteIO fixture. That is named-simulator evidence, not a
+  physical-device result or an addition to the six host-suite total.
 
 ## What does not exist yet
 
@@ -194,16 +207,18 @@ enough to call any platform supported.
   case has played to completion. There is no protocol allowlist, open or read deadline, or secret
   redaction over that path yet; network hardening is parked in KPKMP section 17.8. Live or adaptive
   streaming and DRM remain unsupported.
-- **The real-time audio core is C on macOS and nowhere else.** Every audio entry point exists on the
-  other sixteen native targets and refuses with an unsupported-platform verdict, because iOS, tvOS and
-  watchOS need a different audio unit and an activated audio session, and neither can be tested here.
-  A refusal is deliberate: claiming support that nothing measured would be worse than saying no.
+- **The real-time audio core is C on macOS and the local iOS substrate.** It uses DefaultOutput on
+  macOS and RemoteIO on iOS; managed iOS sinks acquire an explicit process-wide playback-session lease,
+  while application-managed sinks make no session call. tvOS, watchOS and the remaining native targets
+  still return an unsupported-platform verdict. The iOS proof comes only from an app-hosted native test
+  on one named simulator: there is no renderer, runnable consumer, end-to-end playback or physical-device
+  qualification.
 - **No qualification of any kind.** Every number above comes from a debug binary on one machine. There
   is no release-mode benchmark, no real-device run and no performance budget in this evidence. The two
   long runs are that same debug binary watched with `ps`, so they say the engine holds together for half
   an hour and nothing more, and no platform here is above the experimental candidate in the table.
-- **Nothing is published.** Building this needs a local KiteCodec publication and an FFmpeg on the
-  machine, both set up by hand.
+- **Nothing is publicly published.** Building this needs a Maven Local KiteCodec publication and an
+  FFmpeg on the machine, both set up by hand.
 
 The public API says the same thing about itself: a member that nothing implements carries a marker in
 its own documentation, pointing at where it is planned.
@@ -224,7 +239,7 @@ capability.
 This is a development loop, not an installation.
 
 ```bash
-# 1. KiteCodec is not published anywhere, so publish it into the local Maven repository first.
+# 1. KiteCodec has no public publication, so publish it into the local Maven repository first.
 cd ../KiteCodec && ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
 
 # 2. Generate the test clips. Needs ffmpeg on PATH; no media is committed to the repository.
@@ -301,8 +316,9 @@ target-free source set can build. Three things follow:
 
 1. It compiles for all 21 targets its build file declares, including `js` and `wasmJs`. That is a
    compile claim only, which is tier T1 above.
-2. Its whole behaviour is testable with a clock the test controls. The 178 engine tests run in
-   milliseconds, and they run identically on the JVM and on Kotlin/Native.
+2. Its whole behaviour is testable with a clock the test controls. The 184 common engine tests run
+   in milliseconds and run identically on the JVM and Kotlin/Native; the macOS suite adds nine
+   platform and real-thread cases.
 3. A new platform is reached by implementing four interfaces, not by adding an `actual` to the engine.
 
 Time enters through one interface, which is what makes the second point possible:
@@ -319,9 +335,9 @@ public interface MonotonicClock {
 | Module | Holds | Targets |
 |---|---|---|
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
-| `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; the device implementation is macOS only |
-| `kiteplayer-output` | the CoreAudio sink, the AppKit window and the Core Graphics renderer | macOS arm64 |
-| `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64 |
+| `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; DefaultOutput is exercised on macOS and RemoteIO by an app-hosted native test on one named iOS simulator |
+| `kiteplayer-output` | the Apple audio sink and policy, plus the macOS-only AppKit window and Core Graphics renderer | macOS arm64, iOS arm64 and iOS simulator arm64; no iOS renderer yet |
+| `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64 and iOS simulator arm64; the iOS variants consume private local codec trees |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
 | `kiteplayer-sample` | a CLI that creates a player, plays a file and reports what the player says happened | macOS arm64 |
 
@@ -336,16 +352,19 @@ sample has neither because an executable has no public API to keep.
 ## Build and test it here
 
 ```bash
-./gradlew :kiteplayer-core:jvmTest            # 178 tests, the engine in virtual time
-./gradlew :kiteplayer-core:macosArm64Test     # 179: the same, plus a real-thread stress test
-./gradlew :kiteplayer-output:macosArm64Test   # 20 tests against the real audio device and the renderer
-./gradlew :kiteplayer-ffmpeg:macosArm64Test   # 29: real decode, real seeking, colour against a reference
+./gradlew :kiteplayer-core:jvmTest            # 184 tests, the engine in virtual time
+./gradlew :kiteplayer-core:macosArm64Test     # 193: common, platform and real-thread cases
+./gradlew :kiteplayer-output:macosArm64Test   # 34 tests against the real audio device and the renderer
+./gradlew :kiteplayer-ffmpeg:macosArm64Test   # 36: real decode, real seeking, colour against a reference
 ./gradlew :kiteplayer-subtitles:jvmTest       # 8 tests, the SubRip parser
+./gradlew :kiteplayer-rt:macosArm64Test       # 12 checks over the C binding
 ./gradlew checkKotlinAbi                      # the public API against its committed dumps
 ```
 
 The device tests open the default output and play a short quiet tone. They exist because the one thing
-a mock cannot confirm is that the engine's clock and the audio device share a time base.
+a mock cannot confirm is that the engine's clock and the audio device share a time base. The separate
+28-test iOS proof uses the exact freshly linked Kotlin/Native program inside the minimal simulator app
+host recorded in `KPKMP.md`; the ordinary bare-kexe simulator runner has no application audio context.
 
 ## License
 

@@ -1,4 +1,4 @@
-/* The device callback's body, five million times, with no device.
+/* The device callback, including malformed CoreAudio buffers, with no device.
  *
  * This suite is the second of the four assertions of plan section 15.2 B1.8, in the order of
  * authority the plan fixes: the render audit is first because it needs no runtime at all, this is
@@ -9,11 +9,12 @@
  * managed allocation is the GC-pressure differential in `kiteplayer-ffmpeg`'s device soak, and this
  * suite is the C half and only the C half.
  *
- * WHY IT CAN DRIVE THE REAL BODY. `kprt_render_into` in `src/kite_rt_render.c` is the whole callback
- * body, and it is a named function rather than an inline block precisely so that this file can call
- * it. What `kprt_render_cb` adds on top, in `src/kite_rt_coreaudio.c`, is the `mach_absolute_time`
- * pair and the unpacking of two CoreAudio structures; that part needs a device to exercise and is
- * covered by the appleTest suites and by the supervised soak.
+ * WHY IT CAN DRIVE THE REAL BODY. The ordinary and long cases call `kprt_render_into`, the named
+ * sample-moving body of the callback. Malformed AudioBufferList cases call the static
+ * `kprt_render_cb` through `kprt_test_invoke_render_callback`, a seam compiled only when
+ * build-host.sh defines KPRT_TESTING. CompileKiteRtTask never defines that macro, so the seam is
+ * absent from shipped archives and cinterop while these cases still exercise the actual callback
+ * guards rather than a test reimplementation.
  *
  * The struct comes from `src/kite_rt_sink_internal.h`, so a sink can be built here field by field
  * with no audio unit behind it. That is the same choice `test_ring_bounded.c` made for the ring, and
@@ -38,6 +39,10 @@
 #define SAMPLE_RATE 48000
 #define CAPACITY_FRAMES 8192
 #define MAX_RENDER_FRAMES 512
+
+#if !defined(KPRT_TESTING)
+#error "test_sink_callback requires the compile-only callback seam"
+#endif
 
 /* How many synthetic callbacks the long case makes.
  *
@@ -197,6 +202,129 @@ int main(void)
 
     ring = kprt_ring_create(SAMPLE_RATE, CHANNELS, CAPACITY_FRAMES);
     KT_NOT_NULL(ring);
+
+    /* ---- the CoreAudio structure boundary itself ---- */
+    kt_case("a wrong buffer count zeroes every declared byte and marks output silent");
+    {
+        enum { FIRST_BYTES = 11, SECOND_BYTES = 7 };
+        unsigned char first[FIRST_BYTES + 1];
+        unsigned char second[SECOND_BYTES + 1];
+        kprt_test_audio_buffer buffers[2];
+        uint32_t flags = 0;
+        int32_t i;
+
+        memset(first, 0x5a, sizeof(first));
+        memset(second, 0x6b, sizeof(second));
+        buffers[0].data = first;
+        buffers[0].byte_size = FIRST_BYTES;
+        buffers[0].channels = 1;
+        buffers[1].data = second;
+        buffers[1].byte_size = SECOND_BYTES;
+        buffers[1].channels = 1;
+        reset_sink(NULL);
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      &sink, 8, 2, buffers, 1, 1000, &flags), 0);
+        KT_CHECK((flags & KPRT_TEST_OUTPUT_IS_SILENCE) != 0);
+        for (i = 0; i < FIRST_BYTES; i++)
+            KT_EQ_INT(first[i], 0);
+        for (i = 0; i < SECOND_BYTES; i++)
+            KT_EQ_INT(second[i], 0);
+        KT_EQ_INT(first[FIRST_BYTES], 0x5a);
+        KT_EQ_INT(second[SECOND_BYTES], 0x6b);
+        kt_detail("buffers=2 zeroed=%d+%d canaries=intact silence=1",
+                  FIRST_BYTES, SECOND_BYTES);
+    }
+
+    kt_case("a null destination is refused and marked silent");
+    {
+        kprt_test_audio_buffer buffer;
+        uint32_t flags = 0;
+
+        buffer.data = NULL;
+        buffer.byte_size = 8u * CHANNELS * (uint32_t)sizeof(float);
+        buffer.channels = CHANNELS;
+        reset_sink(NULL);
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      &sink, 8, 1, &buffer, 1, 2000, &flags), 0);
+        KT_CHECK((flags & KPRT_TEST_OUTPUT_IS_SILENCE) != 0);
+        kt_detail("destination=null silence=1");
+    }
+
+    kt_case("a zero-sized destination is untouched and marked silent");
+    {
+        unsigned char canary = 0x7c;
+        kprt_test_audio_buffer buffer;
+        uint32_t flags = 0;
+
+        buffer.data = &canary;
+        buffer.byte_size = 0;
+        buffer.channels = CHANNELS;
+        reset_sink(NULL);
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      &sink, 8, 1, &buffer, 1, 3000, &flags), 0);
+        KT_CHECK((flags & KPRT_TEST_OUTPUT_IS_SILENCE) != 0);
+        KT_EQ_INT(canary, 0x7c);
+        kt_detail("bytes=0 canary=intact silence=1");
+    }
+
+    kt_case("a short destination clamps frames without crossing its byte canary");
+    {
+        enum { WRITABLE_FRAMES = 3, REQUESTED_FRAMES = 8 };
+        float samples[WRITABLE_FRAMES * CHANNELS + 2];
+        kprt_test_audio_buffer buffer;
+        uint32_t flags = 0;
+        int32_t i;
+
+        for (i = 0; i < WRITABLE_FRAMES * CHANNELS; i++)
+            samples[i] = 1.0f;
+        samples[WRITABLE_FRAMES * CHANNELS] = 91.0f;
+        samples[WRITABLE_FRAMES * CHANNELS + 1] = 92.0f;
+        buffer.data = samples;
+        buffer.byte_size = WRITABLE_FRAMES * CHANNELS * (uint32_t)sizeof(float);
+        buffer.channels = CHANNELS;
+        reset_sink(NULL);
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      &sink, REQUESTED_FRAMES, 1, &buffer, 1, 4000, &flags), 0);
+        KT_ALL_ZERO_F32(samples, WRITABLE_FRAMES * CHANNELS);
+        KT_EQ_F32(samples[WRITABLE_FRAMES * CHANNELS], 91.0f);
+        KT_EQ_F32(samples[WRITABLE_FRAMES * CHANNELS + 1], 92.0f);
+        KT_EQ_I64(atomic_load(&sink.callbacks), 1);
+        kt_detail("requested=%d rendered=%d canary=91,92",
+                  REQUESTED_FRAMES, WRITABLE_FRAMES);
+    }
+
+    kt_case("the callback still renders a correct single interleaved buffer");
+    {
+        enum { FRAMES = 4 };
+        float samples[FRAMES * CHANNELS];
+        kprt_test_audio_buffer buffer;
+        uint32_t flags = 0;
+        int32_t i;
+
+        kprt_ring_flush(ring);
+        reset_sink(ring);
+        KT_EQ_INT(kprt_test_feed(ring, FRAMES, 0, 1, 0), FRAMES);
+        for (i = 0; i < FRAMES * CHANNELS; i++)
+            samples[i] = -1.0f;
+        buffer.data = samples;
+        buffer.byte_size = (uint32_t)sizeof(samples);
+        buffer.channels = CHANNELS;
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      &sink, FRAMES, 1, &buffer, 1, 5000, &flags), 0);
+        for (i = 0; i < FRAMES; i++) {
+            KT_EQ_F32(samples[(size_t)i * CHANNELS], kprt_test_frame_value(i));
+            KT_EQ_F32(samples[(size_t)i * CHANNELS + 1], kprt_test_frame_value(i));
+        }
+        KT_CHECK((flags & KPRT_TEST_OUTPUT_IS_SILENCE) == 0);
+        KT_EQ_I64(atomic_load(&sink.callbacks), 1);
+        kt_detail("buffers=1 frames=%d interleaved=stereo", FRAMES);
+        kprt_ring_flush(ring);
+    }
 
     /* ---- teardown: the one silence case left outside the ring (register item B1-19) ---- */
     kt_case("a callback that finds no ring zeroes the whole buffer and counts it");

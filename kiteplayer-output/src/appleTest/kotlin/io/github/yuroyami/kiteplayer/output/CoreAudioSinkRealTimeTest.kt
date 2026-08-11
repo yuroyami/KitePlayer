@@ -51,9 +51,10 @@ import kotlin.test.assertTrue
  *
  * ### What is left here
  *
- * The observations that need a real device and can only be made from outside it: that the device really
- * enters the C callback, that the sink's counters describe what happened, and that teardown while the
- * device is running is safe in the order the C code claims.
+ * The observations that need a running native output unit and can only be made from outside it: that the
+ * unit really enters the C callback, that the sink's counters describe what happened, and that teardown
+ * while it is running is safe in the order the C code claims. macosArm64 supplies the hardware result;
+ * iosSimulatorArm64 supplies a separate RemoteIO simulator result, never a physical-iPhone claim.
  */
 class CoreAudioSinkRealTimeTest {
 
@@ -212,7 +213,7 @@ class CoreAudioSinkRealTimeTest {
 
     @Test
     fun `a mono request is accepted and a nine channel request is clamped`() = runBlocking {
-        // The C negotiation clamps to what CoreAudio's default output takes here, and reports what it
+        // The C negotiation clamps to what the target's Apple output unit takes here, and reports what it
         // settled on rather than what it was asked for. A sink that silently kept the request would have
         // the engine resample into a layout the device never agreed to.
         val mono = CoreAudioSink()

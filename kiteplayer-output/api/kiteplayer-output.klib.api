@@ -6,7 +6,19 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-output>
+final enum class io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy : kotlin/Enum<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> { // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy|null[0]
+    enum entry ApplicationManaged // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.ApplicationManaged|null[0]
+    enum entry ManagedPlayback // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.ManagedPlayback|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.values|values#static(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink { // io.github.yuroyami.kiteplayer.output/CoreAudioSink|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy, io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppleAudioSessionPolicy;io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
 
     final val deviceBufferFrames // io.github.yuroyami.kiteplayer.output/CoreAudioSink.deviceBufferFrames|{}deviceBufferFrames[0]
@@ -27,6 +39,7 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroy
 }
 
 final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.github.yuroyami.kiteplayer.spi/AudioSinkFactory { // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy, io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppleAudioSessionPolicy;io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
 
     final val name // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.name|{}name[0]

@@ -5731,6 +5731,42 @@ is no other.
   sandboxed RVM `ps` warning before their own PASS output; no command failed. Nothing was pushed,
   published, released or staged.
 
+- 2026-08-11, S1.b.1 second execution-fence correction completed before generated-tree proof,
+  against Player `8a0367c` and Codec `c2447c8`. Prose only, Tier 1 selected by the rule that every
+  change, including prose, receives Tier 1. The owner's mechanical S1 correction exception
+  applies. The frozen Codec implementation remained the same 24 named S1.b.1 paths while this
+  correction was found, audited and gated.
+
+  The exact combined core command failed during configuration before any requested core task ran.
+  Its global `kitecodec.requireAllTargets` property also configured `kitecodec-sample`, whose five
+  desktop targets include the deliberately absent macosX64 tree. The failure named that missing
+  tree at `kitecodec-sample/build.gradle.kts`; it was unrelated to the three selected Apple phone
+  targets. The corrected core compile, link and simulator commands omit the global property. They
+  remain fail-closed because every selected target task is named explicitly, the preceding gate
+  inspects every archive and provenance record in all three trees, and the one later Maven-local
+  publication implies the core require-all check internally. The named platform guide must carry
+  the same corrected command in the product commit.
+
+  Independent review of the complete frozen product diff found no product-code blocker and no
+  second plan contradiction. All 24 dirty Codec paths are in the exact S1.b.1 fence; none is
+  staged. The transactional source staging, installed configure provenance, rollback, exact iOS
+  arguments, every iOS GPL refusal, Apple target selector, local-publication guard, Local tree
+  validation and the macOS, iOS and Linux linker branches match the expansion. Focused tests are
+  GREEN: six BuildFFmpegTask tests, one FFmpegPaths test and five Local plugin tests, with zero
+  skips, failures or errors. The generated trees still predate installed provenance and therefore
+  correctly fail packaging until the required producer rerun; that is pending execution evidence,
+  not a source defect.
+
+  Tier 1 is GREEN. Codec coupling is zero direct imports and zero typed crossings with 292 opaque
+  helper sites reported; deleted surface is 15 of 15; and the seven plain C suites pass 274 cases.
+  Player coupling scans 87 Kotlin files with three matches, all allowlisted; all five ABI checks
+  pass; the forced uncached JVM run passes 184 core and eight subtitle tests; the eight rt suites
+  pass 127 cases; render audit passes 15 checks; and source discipline passes 18. Both tracked em
+  dash scans print nothing and return the specified passing exit 1. DEVIATION: the first Codec
+  Gradle launch could not acquire the user Gradle cache lock under the sandbox and exited before
+  Gradle started. The identical host-authorized rerun passed and is the gate result. No product
+  file changed during this correction, and nothing was pushed, published, released or staged.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -9329,6 +9365,9 @@ Commit first line. KitePlayer: `Expand the iOS phone stage against the current t
 Execution-fence correction commit first line. KitePlayer:
 `Correct the Apple phone proof against generated archives`.
 
+Second execution-fence correction commit first line. KitePlayer:
+`Scope the Apple phone proof to the core project`.
+
 Files, KiteCodec: `buildSrc/src/main/kotlin/BuildFFmpegTask.kt`;
 `buildSrc/src/main/kotlin/StaticLinkFlags.kt`; `buildSrc/src/main/kotlin/FFmpegPaths.kt`; new
 `buildSrc/src/test/kotlin/BuildFFmpegTaskTest.kt` and `FFmpegPathsTest.kt`;
@@ -9407,19 +9446,23 @@ Steps.
      :kitecodec-core:compileKotlinIosSimulatorArm64 \
      :kitecodec-core:linkDebugTestIosArm64 \
      :kitecodec-core:linkDebugTestIosSimulatorArm64 \
-     -Pkitecodec.applePhoneTargetsOnly=true \
-     -Pkitecodec.requireAllTargets=true --rerun-tasks
+     -Pkitecodec.applePhoneTargetsOnly=true --rerun-tasks
 
    S1B_SIM=5DBA149A-E990-4197-8A7D-31E97658B568
    xcrun simctl boot "$S1B_SIM" 2>/dev/null || :
    xcrun simctl bootstatus "$S1B_SIM" -b
    ./gradlew :kitecodec-core:iosSimulatorArm64Test \
      -Pkitecodec.applePhoneTargetsOnly=true \
-     -Pkitecodec.requireAllTargets=true \
      --device "Test iPhone 17" --rerun-tasks
    ```
 
-   Verify all generated task names during S1.b.0. Keep the standing host-only `apiCheck`, because
+   Do not pass the global `kitecodec.requireAllTargets` property to these explicit core-only
+   commands. It also configures the unrelated sample's five desktop targets and fails on the
+   deliberately absent macosX64 tree before a requested core task can run. The three named target
+   tasks, the preceding complete archive/provenance inspection and the later publication-implied
+   core require-all check keep this proof fail-closed. Make the command in `docs/platforms.md`
+   match this corrected form. Verify all generated task names during S1.b.0. Keep the standing
+   host-only `apiCheck`, because
    the committed KiteCodec API dump remains the macOS baseline and the public Kotlin surface does
    not change.
 6. Inspect every one of the six archives in every tree, not a representative member. The gate

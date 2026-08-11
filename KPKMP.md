@@ -5966,6 +5966,51 @@ is no other.
   passed; the prescribed JVM invocation was cached and rejected, so the forced rerun supplies the
   evidence. No product file changed, and nothing was staged, pushed, published or released.
 
+- 2026-08-11, S1.b.2 third execution-fence correction completed before product work resumed,
+  against Player `db35e6d` and Codec `23b8bf4`. Prose only, Tier 1 selected by the rule that every
+  change, including prose, receives Tier 1. The owner's mechanical S1 correction exception applies.
+  The staged S1.b.2 product diff remained frozen on the rejected CoreMedia route while this
+  correction was audited and gated; no product byte enters the correction commit.
+
+  The product diff had passed the exact fresh three-target compile and final-link proof, the two
+  ABI checks and a complete static review. Player Tier 2 then made the CoreMedia cost load-bearing.
+  The first forced combined native run passed 193 core and 28 output tests but one of 36 FFmpeg
+  tests failed. Three forced or direct isolated FFmpeg runs then passed 34 of 36, and five bounded
+  repetitions of the two assertions passed zero of ten. Both failures sampled `Buffering`: one
+  immediately after a precise seek expected `Paused`, and one immediately after resumed progress
+  expected `Playing`. This was persistent on a quiet host and therefore BLOCKING, not a load
+  observation to rerun away.
+
+  A controlled one-file A/B made the cause exact. The old macOS-only CoreAudio clock passed all
+  three RealMediaSeekTest cases; the staged CoreMedia clock reproduced the two failures; and the
+  scalar CoreVideo candidate passed all three seek cases plus all 11 CoreAudioSink tests. A
+  ten-million-read Kotlin/Native benchmark measured 50.61 ns per read and 50 GC epochs for
+  CoreAudio, 312.72 ns and 405 epochs for CoreMedia's CValue conversion, and 30.35 ns and 50 epochs
+  for the checked CoreVideo quotient. CoreVideo compiled and final-linked on macosArm64, iosArm64
+  and iosSimulatorArm64 through its generated platform binding. The measured frequency is exactly
+  24,000,000 ticks per second; one million same-raw conversions matched
+  `AudioConvertHostTimeToNanos` with a zero-nanosecond maximum difference.
+
+  The corrected action caches and validates the scalar frequency, converts absolute ticks with a
+  checked whole-seconds and remainder quotient, and uses that identical conversion for current
+  reads and CoreAudio host timestamps. It never multiplies the complete raw count by one billion
+  or converts that absolute count through Double. No public API, dependency, file-fence member,
+  final gate or product subject changes. DESCRIPTIVE: source review confirms the two status tests
+  have pre-existing ordering sensitivity because the seek reply completes before Paused is
+  published and the playing assertion samples immediately after progress; earlier KPKMP entries
+  record both failures before S1.b.2. This phase does not widen into core or test changes. The SDK
+  wording was also tightened to distinguish the explicit macOS interchangeability statement from
+  the separate iOS API and `mHostTime` facts. The complete sweep found no other mismatch.
+
+  Tier 1 is GREEN. Codec coupling is zero direct imports and zero typed crossings with 292 opaque
+  helper sites reported; deleted surface is 15 of 15; and seven plain C suites pass 274 cases.
+  Player coupling scans 87 Kotlin files with three matches, all allowlisted; all five ABI checks
+  pass; a forced ten-task JVM run passes 184 core and eight subtitle tests with zero skip, failure
+  or error; eight rt suites pass 127 cases; render audit passes 15 checks; and source discipline
+  passes 18. Both tracked em dash scans print nothing and return the specified passing exit 1.
+  Accepted gate time was about 49.52 seconds. No additional product delta remains from the
+  correction, and nothing was pushed, published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -9891,6 +9936,9 @@ Execution-fence correction commit first line. KitePlayer:
 Second execution-fence correction commit first line. KitePlayer:
 `Use CoreMedia for the shared Apple host clock`.
 
+Third execution-fence correction commit first line. KitePlayer:
+`Use CoreVideo for the shared Apple host clock`.
+
 Files: `settings.gradle.kts`; `kiteplayer-output/build.gradle.kts`; move
 `kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/AppKitVideoRenderer.kt`
 and `AppKitWindow.kt` to the same package under `src/macosArm64Main`; move
@@ -9912,19 +9960,26 @@ Steps.
    not add sample targets yet.
 2. Keep AppleHostClock in shared appleMain and preserve its public object and functions exactly.
    Kotlin/Native 2.4.10 does not expose `mach_absolute_time` or `mach_timebase_info`, even though
-   those APIs exist in the Apple SDK. Use its bound CoreMedia host-clock surface instead. Cache
-   `requireNotNull(CMClockGetHostTimeClock())` once. Implement `nanos()` by converting
-   `CMClockGetTime(clock)` with
-   `CMTimeConvertScale(time, 1_000_000_000, kCMTimeRoundingMethod_RoundTowardZero)` and reading the
-   resulting `CMTime.value`. Implement `hostTimeToNanos(raw)` by applying the same conversion to
-   `CMClockMakeHostTimeFromSystemUnits(raw)`. In CoreAudioSinkTest, obtain a non-null host clock,
-   read it with `CMClockGetTime`, then pass that value to
-   `CMClockConvertHostTimeToSystemUnits` for the comparison raw tick. CoreMedia defines these as the
-   system host-clock units and handles non-integer native timescales; rounding toward zero matches
-   the shipped C conversion's integer truncation. The three target klibs must compile, the final
-   links must gain CoreMedia through the generated platform binding without an explicit Gradle
-   dependency, and the macOS clock tests and both iOS final test links must pass. This adds no
-   public API or dependency.
+   those APIs exist in the Apple SDK. Use Kotlin/Native's bound scalar CoreVideo host-time surface.
+   Cache `CVGetHostClockFrequency()` once. Require it to be finite, positive, exactly representable
+   as an integral ULong, and no larger than `ULong.MAX_VALUE / 1_000_000_000`. Convert raw ticks by
+   splitting them into whole seconds and a remainder: check the whole-seconds product against
+   `Long.MAX_VALUE`, multiply the remainder only after the frequency bound makes that safe, divide
+   it by the frequency and check the final addition. Round toward zero. Never multiply the complete
+   raw tick count by one billion and never convert that absolute count through Double. Implement
+   `nanos()` by converting `CVGetCurrentHostTime()` and make `hostTimeToNanos(raw)` use the identical
+   converter. CoreAudioSinkTest reads its comparison raw tick with `CVGetCurrentHostTime()`.
+
+   Apple documents CoreVideo and CoreAudio host-time interchangeability on macOS; the iOS SDK
+   exposes the same CoreVideo host-time APIs and defines CoreAudio `mHostTime` as mach absolute
+   time. On this machine the cached frequency is exactly 24,000,000 ticks per second, and one
+   million same-raw comparisons against `AudioConvertHostTimeToNanos` have a maximum difference of
+   zero nanoseconds. A ten-million read Kotlin/Native benchmark measured this checked quotient at
+   30.35 ns per read and 50 GC epochs, against 50.61 ns and 50 epochs for the old macOS-only
+   CoreAudio route and 312.72 ns and 405 epochs for the rejected CoreMedia CValue route. The three
+   target klibs and final links must gain CoreVideo through the generated platform binding without
+   an explicit Gradle dependency. The macOS clock tests, RealMediaSeekTest and both iOS final test
+   links must pass. This adds no public API or dependency.
 3. Only `kiteplayer-ffmpeg` applies the KiteCodec plugin and carries FFmpeg. Configure it from the
    provider `kitecodec.ffmpeg.localRoot`: when present, select `FFmpegSource.Local`, LGPL and that
    absolute root for phone links; when absent, preserve `FFmpegSource.System` for the standing

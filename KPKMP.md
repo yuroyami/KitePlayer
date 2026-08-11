@@ -5209,6 +5209,33 @@ is no other.
   and the complete Tier 2 invocation later passed it again. Nothing was pushed, publicly
   published or released.
 
+- 2026-08-11, S1.a.7 execution-fence correction completed before either ratchet baseline moved.
+  Prose only, Tier 1 gate (selected by rule: every change, including prose). The reproduction run
+  and its fresh C rebuild exposed two mechanical contradictions in the expansion. First,
+  `symbol-audit.sh` had been omitted from the file set even though step 8 requires every current
+  count to move and its live comment still described exactly 157 helper exports plus six identity
+  exports. The conservative answer names that file and updates only the comment to distinguish
+  the 157 legacy helpers Kotlin consumes, twelve compatible additions and six `kc_` functions;
+  the derived checks do not change. Second, the written 272/816 suite arithmetic used the
+  historical 250-case B1.6 tree as its current base. A fresh build ran 41 ownership cases, and
+  source history pins the two later cases to I-12: the NULL option-key refusal and out-of-range
+  stream-index refusal. The current six-suite base is therefore 252, and `test_args` adds 22 for
+  274 cases per variant and 822 across plain, ASan and TSan. Historical 250-at-B1.6 text remains
+  historical. The complete corrected S1.a.7 sweep found no other blocking or descriptive
+  mismatch.
+
+  Tier 1 is GREEN. Codec coupling stayed 246 imports, 287 typed crossings, 273 helper calls, 14
+  direct calls and 10 of 10 allowed struct types; the deleted-surface check passed; seven freshly
+  built plain C suites passed 274 cases. Player coupling stayed 87 files scanned and three
+  matches; ABI and JVM checks passed; eight plain rt suites passed; render audit stayed 15 and
+  source discipline stayed 18. Both tracked-file em dash scans printed nothing and exited 1.
+  DEVIATIONS: invoking the saved Tier 1 script directly first returned permission denied because
+  the temporary file was not executable; invoking it through zsh then hit the sandbox's Gradle
+  cache lock. The same zsh invocation with the existing cache permission completed green. Product
+  implementation was already present as an uncommitted diff when the fresh build exposed the
+  count, so work paused immediately; no baseline moved and no product commit, push, public
+  publication or release occurred before this separate correction.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -8285,6 +8312,7 @@ Files: `../KiteCodec/native/kitecodec-c/include/kitecodec_handles.h` (new);
 helpers_codecpar.c, helpers_error.c, helpers_filter.c, helpers_format.c, helpers_frame.c,
 helpers_packet.c, helpers_playback.c, helpers_stream.c); `tests/test_args.c` (new suite);
 `scripts/run-c-tests.sh` and `scripts/build-host.sh` (the agreed suite lists gain test_args);
+`scripts/symbol-audit.sh` (its live export-count comment follows the same measured move);
 `exported-symbols-baseline.txt`; `klib-metadata-baseline.txt`; `include/kitecodec_abi.h` (minor
 version); `kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`;
 `native/kitecodec-c/README.md`; `../KiteCodec/README.md`; `../KiteCodec/CHANGELOG.md`;
@@ -8356,8 +8384,11 @@ Steps.
    consumer-visible compatible addition. The identity gate suite re-baselines accordingly.
 8. Suite lists in run-c-tests.sh and build-host.sh gain test_args, keeping their stated
    agreement. Update every CURRENT count while leaving explicitly historical counts historical:
-   seven suites; 272 cases per variant and 816 across plain/asan/tsan; 169 `ffkmp_` exports (157
-   already consumed plus twelve additions), six `kc_` exports, 175 total. The native README gains
+   seven suites; 274 cases per variant and 822 across plain/asan/tsan; 169 `ffkmp_` exports (157
+   already consumed plus twelve additions), six `kc_` exports, 175 total. The count starts from
+   252 in the current six-suite tree: B1.6's historical 250 gained the two guard cases in I-12
+   (`fmt_set_opt` NULL key and `fmt_seek_micros` out-of-range stream), then `test_args` adds 22.
+   The native README gains
    the handles-header row, runner/test rows at seven, the seven-suite heading and the 22-case
    `test_args.c` row, while its historical six-suite and 240/234/250 statements remain explicitly
    historical. KiteCodec's root README says seven C suites. Its CHANGELOG records all eleven
@@ -8369,6 +8400,9 @@ Steps.
    marks its "other 151 helpers" arithmetic explicitly historical to B1.5's 157-helper surface;
    it makes no unproved coverage claim for the twelve additions. Section 15.3's current "six
    suites" statements gain the same correction.
+   `symbol-audit.sh`'s live export comment becomes 157 legacy helpers consumed by Kotlin plus the
+   twelve compatible additions and the six `kc_` identity functions; its derived checks do not
+   change.
    Contract rule 5's stale KOTLIN test count is a separate defect and is fixed at S1.a.9, not
    here: a C suite cannot move a Kotlin count.
 

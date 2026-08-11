@@ -5037,6 +5037,23 @@ is no other.
   plus its system error detail with no stack trace. Two independent adversarial reviews found the
   implementation CLEAN and identified this completed log as the only prior procedural blocker.
   Nothing was pushed, published or released.
+
+- 2026-08-11, S1.a.4 execution-fence correction completed before product work began. Prose only,
+  Tier 1 gate (selected by rule: every change, including prose). Read-only implementation
+  reconnaissance found one mechanical contradiction: S1.a.4 said "committed Kotlin" while its
+  required planted-file negative control must make a newly present source file fire before it can
+  be committed. The conservative tree-backed answer changes the scope to every present
+  `src/**/*.kt` file in each active Gradle subproject, including untracked files;
+  kiteplayer-output and kiteplayer-rt remain the only exclusions. The post-S1.a.3 tree has 87
+  present and tracked Kotlin files in the four included source trees and exactly three matches:
+  NativeAudioRing.kt, NativeRingAudioSink.kt and AudioRingDifferentialTest.kt. The all-module
+  cross-check remains seven Kotlin files plus kitert.def and the core API dump, nine files total.
+  The complete S1.a.4 sweep found no other blocking or descriptive mismatch. Tier 1: KiteCodec
+  coupling stayed 246/287 with 273 helper calls, 14 direct calls and 10 of 10 allowed struct types;
+  deleted-surface and six plain C suites passed. KitePlayer ABI passed 148 executed tasks;
+  core/subtitles JVM tests passed ten executed tasks; eight plain rt suites, render audit 15 and
+  source discipline 18 passed. Both tracked-file em dash scans printed nothing and exited 1, the
+  passing outcome. No product file changed and nothing was pushed, published or released.
 ---
 
 ## 15. Horizon B execution: B1
@@ -8009,8 +8026,9 @@ Files: `buildSrc/src/main/kotlin/CheckKitertCouplingTask.kt` (new); its test (ne
 `KPKMP.md` section 9 (Tier 1 block gains the task; the ratchet move table gains a row).
 
 Steps.
-1. Scope, decided: all committed Kotlin under `src/` of every module in settings.gradle.kts
-   EXCEPT the two excluded by design and said so in the baseline header: `kiteplayer-output`
+1. Scope, decided: all Kotlin files present under `src/` of every Gradle subproject actually
+   included by `settings.gradle.kts` when the task runs, including untracked files, EXCEPT the two
+   excluded by design and said so in the baseline header: `kiteplayer-output`
    (it owns the C sink pointer) and `kiteplayer-rt` (it IS the binding). Today that means
    kiteplayer-core, kiteplayer-ffmpeg, kiteplayer-subtitles and kiteplayer-sample are in scope
    (the sample was named explicitly after S1.a.0's third sweep flagged it ambiguous: an app

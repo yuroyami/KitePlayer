@@ -5394,6 +5394,111 @@ is no other.
   first line is `Correct the opaque metadata gate after header removal`. No baseline was accepted,
   and nothing was pushed, publicly published or released.
 
+- 2026-08-11, S1.a.8, P0-07 breaking half, B1-25 and deferral 1 completed. Tier 2
+  gate, selected mechanically by changes under `native/`, `buildSrc/`, the cinterop def and
+  `nativeMain`, and independently required by completion of the Horizon item. This is the
+  deliberate 0.x C and cinterop source break. It changes no public Kotlin API and nothing was
+  remotely published, pushed or released.
+
+  The def now parses only `kitecodec_helpers.h`, `kitecodec_handles.h` and
+  `kitecodec_abi.h`. The helper header has 169 `KC_API` declarations: 140 original
+  FFmpeg-typed declarations now use the eleven `kc_*` aliases, seventeen original declarations
+  were already primitive-only, and the twelve S1.a.7 additions remain compatible by name. Its
+  sixteen FFmpeg includes moved to the nine production units, the five affected legacy suites
+  and the seven affected fuzz units that own them. `test_args` consumes only the opaque
+  boundary and retains all 22 cases. The C ABI moved from 1.1 to 2.0; the export set stayed
+  exactly 175, comprising 169 `ffkmp_*` and six `kc_*` symbols. Seven C suites passed all
+  274 cases under plain, ASan, TSan and the allocation-required interposer. Six fuzz targets
+  replayed 103 committed seeds plus the two generated one-megabyte length vectors, 105 files
+  total, under ASan and UBSan.
+
+  The six Kotlin implementation files migrated fourteen raw libav call sites to the seven
+  wrappers and five media constants to the accessors. The four compile-proof files rebuilt
+  unchanged at SHA-256 `97850a12516bf70a1bfcfecf45d013414c67671bf5bf9d0ca92bc3d4adbafb89`,
+  `26ed1de4706053323f7e9e6f4fe69b2854e4c1aba3a7a389bf4a8b2ae271f15d`,
+  `7230ac46553c109468d53f26bcfcdd55672d0d46baad2220bd47e8fbc79c458a`
+  and `43f605422fc1c0602d4b6592531a21459317c1884ca3497b751877cead9cf984`
+  for Internals, Remuxer.native, Transcoder.native and PlayerSurfaceTest respectively. A
+  temporary restoration of one raw encoder import and call failed native compilation with the
+  expected unresolved references; restoring the opaque call compiled green. The one committed
+  Kotlin API dump remained byte-identical at 1082 lines and SHA-256
+  `8227f21d907209176a1a2854f66db7f5e53af29705f7c9dbf1c9015abf78f148`.
+
+  The coupling instrument moved from 246 direct imports and 287 typed crossings, made from 273
+  helper sites plus fourteen raw calls with ten allowed raw types, to zero imports, zero direct
+  calls and zero named raw types. It reports 292 opaque `ffkmp_*` sites without ratcheting that
+  traffic. Fourteen focused lexer and boundary tests prove indented imports, spaced, backticked
+  and `avio_` calls, initialism-bearing types, live templates and diagnostic-string exclusions.
+  The new signature baseline has 200 physical lines and exactly 189 normalized records at
+  SHA-256 `58c403d74691153f03676c6b21ad096175cf00514bf9d2e9dc0afd423d7cf5ea`.
+  A temporary function-parameter change and a separate handle retarget each failed check 7;
+  both restorations passed all seven symbol checks.
+
+  Metadata acceptance followed the required fail, review, update, green sequence. The old
+  S1.a.7 baseline was 19105 lines at
+  `05888b4bc7512ce250fa035632ad8ecee1a9ef30882679126366e84f5d93ab92`;
+  the opaque dump is 974 lines at
+  `5bb1adcac7a108c14cc39cc7786e4275329748a17ded7b6d0d88e55e51e56b02`.
+  The nonzero report measured `+928/-19059` lines, declarations `+226/-3941`, 3407 lost
+  declarations, zero gained declarations and 226 relocations; direct binding lines were
+  `+175/-830`, with 169 `ffkmp_*` records on the added or relocated side. Name-set review showed
+  all 175 current names retained, zero gained and 655 raw binding names lost. Structural records
+  were `+13/-339`, and other records were `+505/-13269`. Review reduced that surface to the
+  intended 169 `ffkmp_*` plus six `kc_*`
+  direct bindings, eleven aliases and the ABI report, with no raw libav function, constant or
+  layout declaration. The corrected invariant runs before every mode and on every target: all
+  six former LIB version constants are absent, all 175 direct bindings have the `_ffkmp_` or
+  `_kc_` prefix, and none is outside the boundary. The update installed the 974-line baseline;
+  the final check reported a zero differential.
+
+  DEVIATION, evidence rendering only: the first tool rendering was about 329981 output tokens.
+  It was reviewed completely but was not pasted verbatim into this roadmap, because doing so
+  would multiply the plan's size while adding no information beyond the exact input snapshots.
+  The hashes, complete summary categories and semantic decomposition are recorded above. The
+  exact raw baseline pair remains reproducible from Codec commit `2ff0308` and the accepted
+  baseline with `git diff 2ff0308 -- native/kitecodec-c/klib-metadata-baseline.txt`.
+  No product or acceptance step was skipped.
+
+  KiteCodec Tier 2 is GREEN. Its first full run preceded exactly one
+  `publishToMavenLocal -Pkitecodec.hostTargetsOnly=true`, which completed before Player
+  re-consumed it. After the final in-fence wording corrections, the complete Tier 2 reran:
+  cinterop rebuilt ten C units; API check passed; 35 buildSrc and fourteen filtered plugin
+  tests passed; ASan, TSan and interpose each passed 274 cases; corpus replay passed 105 files;
+  all seven symbol checks held 175 exports and 189 signatures; metadata held 974 lines with
+  zero differential; and eleven macOS suites passed 85 tests. The rebuild emitted only existing
+  expect/actual annotation, compiler-flag and nullability warnings. The built and Maven-local
+  macosArm64 cinterop klibs remained byte-identical at SHA-256
+  `25bdb4575708a2a61ff2520ac1b9fc2087b4d62d6e61157174887754f9d9d494`.
+
+  KitePlayer re-consumed that same-version local artifact with forced native recompilation.
+  Forty buildSrc tests, 192 JVM tests and 257 native tests passed. The rt suites passed all
+  127 cases under plain, ASan, TSan and the live required interposer; JS, WasmJS and Android
+  compiles and the macOS sample link passed. The sync clip submitted 300 of 300 frames with
+  zero drops and underruns; true VFR submitted 240 of 240 with zero drops and underruns; HEVC
+  completed in video-master mode with 180 decoded, 179 submitted and one late drop. That one
+  late drop is retained as a load observation, not erased by retry. The nonexistent path returned
+  the concise two-line refusal with code -2 and no stack trace. DEVIATION: the first sandboxed
+  sync launch could not discover the default CoreAudio component and stopped before decode; the
+  same binary with host audio access produced the measured green run. Initial cached JVM and
+  buildSrc commands were immediately rerun with `--rerun-tasks`, so no cached result was accepted.
+
+  The four named roadmap rows are closed and the changed architecture documentation now states
+  the opaque boundary and the retired lift tooling truthfully. Five unchanged out-of-fence debt
+  groups remain named: the two coupling-count sentences in root
+  `build.gradle.kts`; the raw-cinterop prose and redundant include configuration in
+  `kitecodec-core/build.gradle.kts`; the
+  two-bakings and generated-source prose in
+  `CompileKiteCodecCTask.kt`; generated-source prose in `build-host.sh`; and the retired
+  verifier prose in `kitecodec_abi.c`. They do not change the measured boundary and were not
+  smuggled into this phase.
+
+  The closing Tier 1 blocks are GREEN: Codec coupling zero/zero with 292 opaque sites, deleted
+  surface 15 of 15 and 274 plain cases; Player coupling 87 scanned and three allowlisted, all
+  five ABI checks, 192 JVM tests, 127 plain rt cases, render audit 15 and source discipline 18.
+  Both tracked em dash scans printed nothing and returned the specified passing exit 1. Final
+  adversarial review found zero blocking or descriptive in-fence findings. Nothing was pushed,
+  remotely published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -5860,6 +5965,10 @@ are carried here only so nobody rediscovers them. 25 items.
   ratchet of B1-06 holds the line in between. The migration happens inside the one existing
   `ffmpeg` cinterop module, never in a second one.
 - Phase: B2 and B7. Test: the ratchet, and B7's exit criterion.
+- Closed by S1.a.8. The one existing cinterop now parses only helpers, opaque handles and ABI;
+  Kotlin source names no raw FFmpeg import, call or struct type; both direct-coupling ceilings are
+  zero; and the public C ABI is 2.0. The historical measurements above describe the deferred
+  state that S1.a.8 removed.
 
 ### 15.2 Sub-phases
 
@@ -6672,6 +6781,11 @@ author can write `frame.pointed.sample_rate` and reintroduce a coupling the gate
 non-Kotlin consumer has a supported API, which means B7's AAR carries the FFmpeg include tree into
 its NDK build. *What does not break:* correctness against a mismatched runtime, which the gate
 covers, and the practical layout coupling, which is zero today.
+
+**Closed by S1.a.8.** The existing cinterop parses no FFmpeg header, all 140 FFmpeg-typed helper
+declarations use the eleven opaque aliases, the six Kotlin consumers cross only the `kc_*` and
+`ffkmp_*` boundary, and the source-level direct-coupling ceilings are both zero. The private
+forward tags behind the aliases remain implementation identities rather than Kotlin source names.
 
 **Deferral 2, explicit ownership annotations in the compiler-attribute sense.** Delivered instead
 as documented ownership contracts in the header plus exact pairing tests over all 29 ownership
@@ -7851,6 +7965,9 @@ reason it waits. A deferral whose cost is written nowhere is a deferral nobody w
    exclusion machinery, now unblocked by I-12. Recorded as a register row by I-19. *If it never
    happens:* eighteen exported entry points of a public library keep crashing on a NULL, and B7's
    JNI bridge inherits them.
+   **Closed by S1.a.7.** All sixteen remaining guards now reject their invalid arguments with
+   `EINVAL`, while the six intentional nullable contracts remain positive controls in the
+   22-case argument suite.
 2. **A gate call in the C library itself.** B2. The identity gate is enforced by fifteen Kotlin
    call sites and the C library never calls `kc_init`, measured as zero references from any of the
    nine units. The cheap form is a gate call in the ten or so constructor helpers and not in all
@@ -7890,6 +8007,10 @@ reason it waits. A deferral whose cost is written nowhere is a deferral nobody w
    surface. Nothing is published from KitePlayer, verified, so the decision is free. Correct the
    comment whenever that file is next touched. *If it never happens:* B7 publishes a consumer's
    ability to destroy a ring under a running device.
+   **Closed by S1.a.2.** The generated `kprt_` cinterop remains a deliberately public callable
+   surface; `NativeRingHandoff` is marked with the error-level `RawRingApi` and all six
+   compiler-required use sites opt in. The corrected build comment records that publication
+   exposes the bindings; nothing was publicly published in S1.
 10. **The Kotlin and C write asymmetry, the documented retry that is not the shipped retry, the
     two dead accessors, the `AudioRenderCallback` sentence the Kotlin ring contradicts, and the
     misattached KDoc block in `KotlinAudioRing`.** B2 or B4, all small, all recorded here so they

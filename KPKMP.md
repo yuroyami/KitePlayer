@@ -6127,6 +6127,51 @@ is no other.
   JVM pair was cached and rejected, so the forced rerun supplies the evidence. No product file
   changed, nothing was staged, and nothing was pushed, published or released.
 
+- 2026-08-11, S1.b.3 simulator-host execution-fence correction completed against Player `1e3cde3`
+  and Codec `23b8bf4`, before the in-progress product diff resumed. Prose only, Tier 1 selected by
+  the rule that every change, including prose, receives Tier 1. The owner's mechanical S1
+  correction exception applies. The exact correction subject is `Run iOS native tests inside an
+  app host`.
+
+  The installed Kotlin Gradle plugin 2.4.10 source and the generated task command prove that the
+  ordinary `iosSimulatorArm64Test` runner starts a bare kexe through `simctl spawn --standalone`.
+  Every valid RemoteIO open in that host reached the real C implementation and failed
+  `AudioUnitInitialize` with status -10851; a minimal RemoteIO unit with its untouched defaults
+  failed identically. The activated session reported Playback, MoviePlayback, 48,000 Hz and two
+  output channels, while a disposable UIKit application on the same simulator initialized
+  RemoteIO successfully.
+
+  The decisive control copied the freshly linked Kotlin/Native test program byte-for-byte before
+  signing into a minimal simulator application, applied only the required ad-hoc signature, and
+  launched it through SpringBoard. The unchanged test implementation passed 28 tests in four test
+  cases: four policy, nine real-time, 14 sink and one iOS RemoteIO fixture; the fixture completed in
+  73 ms and no failure line appeared. The correction therefore makes that self-contained app-host
+  recipe authoritative, retains the standalone result as a red host-boundary control, and runs the
+  DefaultOutput negative control through the same app host. It changes no product file fence,
+  source, test, public API, final product subject or later-stage claim.
+
+  Tier 1 is GREEN on an isolated Player `1e3cde3` checkout carrying only this KPKMP diff, paired
+  with the clean Codec `23b8bf4` checkout. Codec coupling remains zero imports and zero typed
+  crossings with 292 opaque helper sites reported; deleted surface is 15 of 15; and seven plain C
+  suites pass 274 cases. Player coupling scans 87 files with three matches, all allowlisted; all
+  five ABI checks pass; a forced 13-task JVM run passes 184 core and eight subtitle tests with zero
+  skip, failure or error; eight rt suites pass 127 cases; render audit passes 15 checks; and source
+  discipline passes 18. Both tracked em dash scans print nothing and return the specified passing
+  exit 1. The isolated clone needed one plain C build because it intentionally contained no build
+  outputs.
+
+  The live worktree was deliberately not used to grade the prose correction: its in-progress
+  S1.b.3 product adds the public session policy and two constructors, so the unregenerated output
+  ABI dump makes the live `checkKotlinAbi` fail with exactly those intended additions. That product
+  ABI remains owned by the product gate after this correction commit. The 16 tracked product
+  modifications stayed frozen with SHA-256
+  `d662e8ff7b795eb2809d6b50a774eddc5072be27a196cb5f346b43ec25fc356a`, alongside the same five
+  new product files, and the index stayed empty. DEVIATIONS: the first live Player Gradle launch
+  was sandbox-denied on the user-home distribution lock before task execution; the authorized
+  retry passed its coupling task. A delegated Tier 1 command lost its terminal boundary and made
+  no accepted assertion; the complete direct isolated run supplies the evidence. No product byte
+  enters the correction commit, and nothing was pushed, publicly published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10147,6 +10192,9 @@ Commit first line. KitePlayer: `Split AppKit from the shared Apple output target
 Execution-fence correction commit first line. KitePlayer:
 `Correct the iOS sink truth fence`.
 
+Simulator-host correction commit first line. KitePlayer:
+`Run iOS native tests inside an app host`.
+
 Files: `README.md`; `kiteplayer-rt/native/src/kite_rt_coreaudio.c`;
 `kiteplayer-rt/native/include/kite_rt.h`;
 `kiteplayer-rt/src/nativeInterop/cinterop/kitert.def`; `kiteplayer-rt/build.gradle.kts`;
@@ -10206,20 +10254,67 @@ Steps.
      :kiteplayer-rt:compileKiteRtCForIosSimulatorArm64
    ./gradlew :kiteplayer-rt:iosSimulatorArm64Test \
      --device "Test iPhone 17" --rerun-tasks
-   ./gradlew :kiteplayer-output:iosSimulatorArm64Test \
-     --device "Test iPhone 17" --rerun-tasks
+   ./gradlew :kiteplayer-output:linkDebugTestIosSimulatorArm64 \
+     --rerun-tasks
    ./gradlew :kiteplayer-output:linkDebugTestIosArm64 --rerun-tasks
    kiteplayer-rt/native/scripts/render-audit.sh
    kiteplayer-rt/native/scripts/render-audit.sh --prove-it-can-fail
    kiteplayer-rt/native/scripts/source-discipline.sh
    ```
 
+   Kotlin Gradle plugin 2.4.10 launches `KotlinNativeSimulatorTest` as `simctl spawn --standalone`
+   around a bare kexe. RemoteIO cannot initialise in that command-line host even though the same
+   linked program succeeds when SpringBoard launches it as an application. Copy the exact freshly
+   linked `test.kexe` byte for byte, without recompilation or a second test implementation, into a
+   minimal ad-hoc-signed simulator app and run it with the following self-contained recipe:
+
+   ```bash
+   set -euo pipefail
+   cd '/Users/macbook/StudioProjects/#Kite/KitePlayer'
+   S1B_SIM=5DBA149A-E990-4197-8A7D-31E97658B568
+   S1B3_ROOT="$(mktemp -d /private/tmp/kiteplayer-s1b3-output-tests.XXXXXX)"
+   S1B3_APP="$S1B3_ROOT/KitePlayerOutputTests.app"
+   S1B3_EXECUTABLE="$S1B3_APP/KitePlayerOutputTests"
+   S1B3_KEXE="$PWD/kiteplayer-output/build/bin/iosSimulatorArm64/debugTest/test.kexe"
+   S1B3_TRANSCRIPT="$S1B3_ROOT/launch.txt"
+   test -f "$S1B3_KEXE"
+   mkdir -p "$S1B3_APP"
+   cp -f "$S1B3_KEXE" "$S1B3_EXECUTABLE"
+   cmp -s "$S1B3_KEXE" "$S1B3_EXECUTABLE"
+   plutil -create xml1 "$S1B3_APP/Info.plist"
+   plutil -insert CFBundleDevelopmentRegion -string en "$S1B3_APP/Info.plist"
+   plutil -insert CFBundleExecutable -string KitePlayerOutputTests "$S1B3_APP/Info.plist"
+   plutil -insert CFBundleIdentifier -string io.github.yuroyami.kiteplayer.output-tests \
+     "$S1B3_APP/Info.plist"
+   plutil -insert CFBundleInfoDictionaryVersion -string 6.0 "$S1B3_APP/Info.plist"
+   plutil -insert CFBundleName -string KitePlayerOutputTests "$S1B3_APP/Info.plist"
+   plutil -insert CFBundlePackageType -string APPL "$S1B3_APP/Info.plist"
+   plutil -insert CFBundleShortVersionString -string 1.0 "$S1B3_APP/Info.plist"
+   plutil -insert CFBundleVersion -string 1 "$S1B3_APP/Info.plist"
+   plutil -insert LSRequiresIPhoneOS -bool YES "$S1B3_APP/Info.plist"
+   plutil -insert MinimumOSVersion -string 14.0 "$S1B3_APP/Info.plist"
+   plutil -insert UIDeviceFamily -json '[1]' "$S1B3_APP/Info.plist"
+   codesign --force --sign - "$S1B3_APP"
+   codesign --verify --strict "$S1B3_APP"
+   xcrun simctl uninstall "$S1B_SIM" io.github.yuroyami.kiteplayer.output-tests \
+     >/dev/null 2>&1 || :
+   xcrun simctl install "$S1B_SIM" "$S1B3_APP"
+   xcrun simctl launch --console --terminate-running-process \
+     "$S1B_SIM" io.github.yuroyami.kiteplayer.output-tests 2>&1 | tee "$S1B3_TRANSCRIPT"
+   grep -Fqx '[==========] Running 28 tests from 4 test cases.' "$S1B3_TRANSCRIPT"
+   grep -Fqx '[  PASSED  ] 28 tests.' "$S1B3_TRANSCRIPT"
+   grep -Fq '[       OK ] io.github.yuroyami.kiteplayer.output.CoreAudioSinkIosTest.RemoteIO consumes the C ring publishes an anchor and tears down completely' \
+     "$S1B3_TRANSCRIPT"
+   test "$(grep -Fc '[  FAILED  ]' "$S1B3_TRANSCRIPT")" -eq 0
+   ```
+
    The simulator test observes a positive callback count, consumed ring, near-future anchor,
    idempotent close, zero retained C handles and a fresh second sink open/start/stop/close. It does
    not claim an externally observable running AudioUnit after termination. Temporarily select
-   DefaultOutput in the iOS arm; the simulator test must fail, then restoration passes. Any
-   sandbox CoreSimulator denial is retried with required host access and recorded, never reported
-   as a simulator result.
+   DefaultOutput in the iOS arm; the app-hosted simulator test must fail, then restoration passes.
+   The ordinary standalone task is retained only as the red host-boundary control and is never
+   reported as a product failure. Any sandbox CoreSimulator denial is retried with required host
+   access and recorded, never reported as a simulator result.
 5. Run the existing supervised macOS device pair exactly:
 
    ```bash

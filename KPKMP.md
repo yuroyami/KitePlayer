@@ -4866,6 +4866,24 @@ is no other.
   Gradle invocations because Gradle rejects their shared output in one task graph. The refreshed
   dump is declaration-free and the uncached full check passed. No product commit was made by this
   correction and nothing was pushed.
+
+- 2026-08-11, S1.a.2 second execution-fence correction completed before the local consumer proof
+  resumed. Prose only, Tier 1 gate (selected by rule: every change, including prose). The rt
+  publication passed, then core publication reached a shared native metadata compilation that the
+  ordinary target builds never schedule. Kotlin/Native rejected the two existing
+  `platform.posix.memcpy` calls because their `size_t` argument is `UInt` on four declared targets
+  and `ULong` on thirteen. The narrow correction names `NativeAudioRing.kt` and opts the file into
+  Kotlin/Native's own error-level `UnsafeNumber` marker beside `ExperimentalForeignApi`; the two
+  width-aware `.convert()` calls and every signature remain unchanged. The focused
+  `compileNativeMainKotlinMetadata --rerun-tasks` reproduction then passed, and an independent
+  reread reported CLEAN. Tier 1: KiteCodec coupling 246/287, deleted-surface PASS and six plain C
+  suites PASS; KitePlayer ABI check 151 tasks executed, core/subtitles JVM tests 13 tasks executed,
+  eight rt C suites PASS on the final serial run, render audit 15 PASS and source discipline 18
+  PASS; both tracked-file em dash scans printed nothing and exited 1, the passing outcome.
+  DEVIATION: one parallel Tier 1 run made `test_ring_threads` fail while five other gate processes
+  loaded the host; the same binary passed immediately in isolation and the complete eight-suite
+  serial rerun passed. No source or test was changed for that load observation. No product commit
+  was made by this correction and nothing was pushed.
 ---
 
 ## 15. Horizon B execution: B1
@@ -7731,6 +7749,8 @@ Files: `kiteplayer-rt/build.gradle.kts`; `kiteplayer-core/build.gradle.kts` (the
 comment around lines 85 to 101); `kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/
 kiteplayer/spi/NativeRingAudioSink.kt` (holds `NativeRingHandoff`); `kiteplayer-core/src/
 nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/AudioPath.native.kt`;
+`kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/NativeAudioRing.kt`
+(the file-level cinterop opt-in over its two `memcpy` calls);
 `kiteplayer-rt/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/rt/PublicationAnchor.kt` (new,
 package and explanatory comment only, no declaration);
 `kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/CoreAudioSink.kt`;
@@ -7776,7 +7796,15 @@ Steps.
 5. Correct the inverted comment in kiteplayer-core/build.gradle.kts ("Nothing public leaks by
    doing so"): the generated bindings ARE the surface; publishing makes them public; the opt-in
    is what marks them deliberate.
-6. Scratch consumer proof: publish kiteplayer-rt and kiteplayer-core to mavenLocal, then build a
+6. Opt `NativeAudioRing.kt` into Kotlin/Native's error-level `kotlinx.cinterop.UnsafeNumber` marker
+   at file scope beside `ExperimentalForeignApi`. Local publication runs the shared
+   `compileNativeMainKotlinMetadata` task that ordinary per-target compilation did not; its first
+   run rejected both `platform.posix.memcpy` calls because `size_t` is `UInt` on four declared
+   targets and `ULong` on the other thirteen. The explicit platform-number opt-in is the narrow
+   fix: it preserves the existing `.convert()` calls and every target-specific signature. Prove it
+   with `./gradlew :kiteplayer-core:compileNativeMainKotlinMetadata --rerun-tasks` before retrying
+   publication; no copy loop, C helper, declaration or public signature changes here.
+7. Scratch consumer proof: publish kiteplayer-rt and kiteplayer-core to mavenLocal, then build a
    scratch macosArm64 consumer (outside both repositories) whose only dependency is
    `io.github.yuroyami:kiteplayer-core:0.0.1` from mavenLocal. It must resolve with no
    unresolvable coordinate and compile a trivial use of the facade.

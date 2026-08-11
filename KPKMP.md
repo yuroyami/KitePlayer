@@ -937,7 +937,8 @@ Selected by ANY of these, mechanically, by changed path:
 - any file under `buildSrc/` in either repository
 - any file under `kitecodec-gradle-plugin/src/`
 - any `*.def`, any `build.gradle.kts`, any `gradle/libs.versions.toml`
-- any Kotlin under a `nativeMain`, `appleMain`, `macosArm64Main` or `nativeTest` source set
+- any Kotlin under `nativeMain`, `nativeTest`, `appleMain`, `appleTest`, `macos*Main`,
+  `macos*Test`, `ios*Main` or `ios*Test` (the wildcard includes shared iosMain/iosTest)
 - the completion of any Horizon item, unconditionally, whatever it changed
 
 ```bash
@@ -5557,6 +5558,67 @@ is no other.
   em dash scans printed nothing and returned the specified passing exit 1. Each corrected sentence
   was reread in place. Nothing was pushed, remotely published or released.
 
+- 2026-08-11, S1.b.0 execution expansion completed against Player `954f075` and Codec
+  `c2447c8`. Prose only, Tier 1 gate, selected by the rule that every change, including prose,
+  receives Tier 1. The expansion was written and then mechanically checked against both trees
+  before any product edit. It divides the remaining Apple work into five numbered product
+  sub-phases producing five product commits, plus S1.b.1's separate Player evidence commit, and
+  opens only the narrow Codec window 2a needed to build, consume and locally publish the Apple
+  phone variants. S1.c retains the JNI and JVM work in window 2b.
+
+  The hostile sweep found that the registered iOS targets had no usable FFmpeg archives and that
+  the existing builder could neither use the repository's `#` path nor truthfully produce the
+  named phone profile. S1.b.1 now owns a hash-safe transactional staging path, a STANDARD
+  software-playback iOS profile with zlib, exact Local-source semantics, macOS third-party link
+  reuse, a three-target local-publication selector, per-member archive platform inspection and a
+  non-vacuous offline three-framework consumer. It distinguishes the arm64 device and simulator
+  archives by `LC_BUILD_VERSION` platform 2 and 7, not by architecture alone, and keeps the one
+  allowed `publishToMavenLocal` invocation separate from every producer and consumer proof.
+
+  Tree verification also corrected the module and ABI facts. Only `kiteplayer-ffmpeg` carries
+  KiteCodec and FFmpeg; `kiteplayer-output` remains FFmpeg-free. The four AppKit production and
+  test files move from Apple-wide source sets to macOS-only source sets before iOS compilation.
+  Adding iOS targets expands both committed klib dump target sets even when declaration shapes
+  remain unchanged, so S1.b.2 names the two dump files and the update, review and check sequence.
+  Every compile and final-link command now names its real task, Local root, offline refresh and
+  rerun requirements.
+
+  S1.b.3 now owns the complete callback boundary rather than an unverifiable device claim. It
+  names the C, cinterop, build, audit, policy and test files; requires wrong-count, null, zero,
+  short-canary and correct-layout controls; audits both Apple objects in all three archives; and
+  proves callback activity, ring movement, anchors, idempotent close, zero retained handles and a
+  fresh second open on the simulator. AVAudioSession ownership is a process-wide managed lease by
+  default with an application-managed opt-out. The existing macOS output and media soaks remain
+  the supervised Tier 3 controls.
+
+  S1.b.4 freezes a complete UIKit renderer ABI with explicit counters and a test-only delivery
+  seam, while preserving the rule that output owns no decoder or software converter. S1.b.5 now
+  names a real shared Xcode scheme, PBX framework mapping, bundle identifier, bundled media and a
+  sample-only automatic smoke mode. Its bounded atomic JSON oracle proves one five-second seek
+  only after a post-seek frame and a measured player position in the declared tolerance, then
+  proves Ended, decoded and presented frames, a non-null layer image, recorded underruns and
+  completed teardown. The simulator build, install, launch, poll and unsigned generic-device
+  link commands are exact. Physical phone playback remains S1.e qualification, not an invented
+  S1.b result.
+
+  The expansion also moves R-B8 to the phase that changes callback layout, requires canary and
+  callback-silence safety tests, expands the Kotlin Tier 2 selector to the new Apple source sets,
+  names every documentation truth correction, and revises the measured estimate to 55 to 75
+  hours for S1.b and 245 to 340 hours for S1. The final independent sweep found zero blocking or
+  descriptive findings.
+
+  The first Tier 1 run is GREEN. Codec coupling is zero direct imports and zero typed crossings
+  with 292 opaque helper sites reported, deleted surface is 15 of 15 and the seven plain C suites
+  pass all 274 cases. Player coupling scans 87 Kotlin files with the same three allowlisted files;
+  all five ABI checks pass; 184 core plus eight subtitles JVM tests pass after a forced uncached
+  run; the eight plain rt suites pass all 127 cases; render audit passes 15 checks and source
+  discipline passes 18. Both tracked em dash scans print nothing and return the specified passing
+  exit 1. DEVIATION: the first restricted Codec Gradle invocation could not acquire the Gradle
+  wrapper cache lock outside the sandbox. The identical command reran with host-authorized cache
+  access and passed; no source or gate step changed. The complete Tier 1 reran after this record
+  was written and remained GREEN at the same counts, with no new deviation. No product file
+  changed and nothing was pushed, published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -7631,8 +7693,9 @@ names its test. 20 items.
   locations, owned by B2 and to be fixed as one change through the generator plus its exclusion
   machinery now that I-12 has removed the byte equality proof that made each hand edit expensive;
   two of the eighteen are fixed in the interlude under I-12 and the row says which. One row for
-  the un-negotiated device layout, owned by B8, because a real test needs a mock AudioUnit and B8
-  is where that work lives. Both rows carry the header contract sentence they need, since
+  the un-negotiated device layout, moved forward from B8 to S1.b.3 because the same callback is
+  promoted to iOS there. Its test-only callback seam and wrong-layout cases land before that
+  promotion. Both rows carry the header contract sentence they need, since
   `include/kitecodec_helpers.h` documents ownership only and says nothing about arguments, and for
   `ffkmp_fmt_set_opt` says at line 282 that "A NULL context is refused with AVERROR(EINVAL)" while
   saying nothing about the key that segfaults.
@@ -7704,14 +7767,16 @@ a register search finds them, because both were previously recorded only inside 
 - Where: the callback's contract checks in `kiteplayer-rt/native/src/kite_rt_coreaudio.c`; the
   B1 closing entry announced this row and never wrote it.
 - Problem: the callback checks its buffer's size against the negotiated layout, two compares and
-  a comment, but nothing can present a wrong layout to test the refusal, because making one needs
-  a mock AudioUnit and no such harness exists here.
-- Fix: B8, where the mock AudioUnit work lives. The header contract sentence the mock must pin:
-  a callback handed a buffer list whose shape differs from the negotiated stream format must
-  refuse the whole callback and zero what it can see, never render into a shape it did not
-  negotiate.
-- Phase: B8. Test: the mock-driven case itself, with the two compares proved load bearing by
-  deleting each.
+  a comment, but the present callback test seam cannot present the rejected shapes. Worse, the
+  early returns do not zero every safely visible buffer or set
+  `kAudioUnitRenderAction_OutputIsSilence`.
+- Fix: S1.b.3, before the same callback is promoted to iOS. Extend the existing callback seam and
+  `test_sink_callback.c`: a buffer list whose shape differs from the negotiated stream format
+  must refuse the whole callback, zero every safely writable buffer, set the silence flag and
+  never render into a shape it did not negotiate.
+- Phase: S1.b.3. Test: wrong buffer count, null or zero-sized destination, short-size canary and
+  correct-layout cases in the existing suite, with each refusal check deleted once as a negative
+  control. Keep eight suites and remeasure the case total.
 
 ### 16.2 Sub-phases
 
@@ -8207,8 +8272,8 @@ dependency order inside the stage:
   - **S1.b iOS backend**: kiteplayer-output splits AppKit-only code out of appleMain; iosArm64 and
     iosSimulatorArm64 targets; the CoreAudio sink qualified on iOS (the kiteplayer-rt C ring has
     cross-compiled for iOS since B1); AVAudioSession policy; a straightforward CPU-converter
-    renderer into a CALayer-backed view (Metal is S2, deliberately: usable beats beautiful);
-    an iOS sample.
+    renderer into a caller-owned CALayer (the reusable view is S1.d; Metal is S2, deliberately:
+    usable beats beautiful); an iOS sample.
   - **S1.c Android backend over the JNI bridge**: the engine runs as JVM bytecode (already proven
     by jvmTest and assembleAndroidMain); KiteCodec gains a JVM actual implemented as JNI over the
     kc_/ffkmp_ C ABI that S1.a finishes; FFmpeg built per Android ABI by the existing android
@@ -8263,14 +8328,15 @@ rows. 1.0 is declared here and nowhere earlier.
 ### 17.3 Stage estimates and KiteCodec windows
 
 KiteCodec changes are batched so KitePlayer re-consumes as few times as possible: window 1 inside
-S1.a (opaque migration, guards), window 2 inside S1.c (JVM actuals and JNI), window 3 inside S2
-(VideoToolbox device context), window 4 inside S5 (runtime artifacts), window 5 inside S6 (wasm
-binding) if the spike passes.
+S1.a (opaque migration and guards); window 2a inside S1.b (the iOS standard software-playback
+FFmpeg build, local-only Apple target publication and Local consumer wiring); window 2b inside
+S1.c (JVM actuals and JNI); window 3 inside S2 (VideoToolbox device context); window 4 inside S5
+(runtime artifacts); and window 5 inside S6 (wasm binding) if the spike passes.
 
 | Stage | Hours, honest range | Dominated by |
 |---|---|---|
 | S1.a | 25 to 35 | four check tasks, opaque migration completion, corrections |
-| S1.b | 35 to 50 | the appleMain split and the iOS audio qualification |
+| S1.b | 55 to 75 | mobile FFmpeg provisioning, the appleMain split, iOS audio and the Xcode host |
 | S1.c | 140 to 190 | JNI actuals with a shared differential suite across JVM and native |
 | S1.d + S1.e | 25 to 40 | two view surfaces, two demo apps, the matrix runs |
 | S2 | 120 to 165 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync; KiteVideo KV-1 to KV-3 at 30 to 45 |
@@ -8280,7 +8346,7 @@ binding) if the spike passes.
 | S6 | 80 to 120 | the spike bounds it; failure path is cheap |
 | S7 | 60 to 90 | soak time and owner device sessions |
 
-**S1 in total: 225 to 315 hours to the owner's first outcome.** Whole road: 660 to 945 focused
+**S1 in total: 245 to 340 hours to the owner's first outcome.** Whole road: 680 to 970 focused
 hours, network excluded. The earlier phase-shaped totals reconcile: the same work moved between
 containers, plus the iOS-usable slice pulled forward out of the old P1. The growth over the first
 staging (45 to 70 hours across S2 and S3) is KiteVideo (17.9), added by owner decision D-6 on
@@ -8982,6 +9048,632 @@ Reread of each corrected sentence in place.
 Commit first lines. KitePlayer: `Correct the record: remote state measured, the network sentence
 made true`. KiteCodec: `Say only what the https row measured` (ONLY if step 5 changes it;
 otherwise no KiteCodec commit).
+
+### 17.4.2 The S1.b register and sub-phases, decision complete
+
+Authored 2026-08-11 against clean KitePlayer `954f075` and KiteCodec `c2447c8`, after the
+S1.a exit and a fresh tree sweep. The owner directed the executor to finish S1 autonomously and
+to make conservative judgement calls rather than wait for relay. That direction authorises this
+entry expansion as a separate planning act. It does not authorise product work until S1.b.0 has
+adversarially checked every located fact below, this prose has passed Tier 1 and landed in its own
+local commit, and the sweep has rerun clean.
+
+The sweep found three upstream planning contradictions and resolves them here and in their standing
+sentences. First, section 17.3 put KiteCodec window 2 wholly inside S1.c, but S1.b cannot compile
+or link `kiteplayer-ffmpeg` for iOS without iOS KiteCodec variants and matching FFmpeg trees.
+Window 2 therefore has a narrow **window 2a** at S1.b.1: build and local-consumption plumbing only.
+The JVM/JNI ABI work remains window 2b in S1.c. Second, 17.2 called S1.b's renderer a view while
+S1.d owns both reusable views. S1.b supplies a caller-owned CALayer renderer and its provisional
+sample host only. Third, the existing `buildFFmpegForIos*` tasks are not usable merely because
+they exist. The exact pre-change command
+`./gradlew :kitecodec-core:buildFFmpegForIosSimulatorArm64` exits nonzero before configure because
+both source and install paths contain `#`; after that is removed, the task still applies the
+desktop encoder and text stack to iOS, whose fourteen third-party archives are not available for
+the iOS SDK on this machine. The fix below is a mobile software-playback profile, not a claim that
+the desktop profile cross-builds.
+
+Execution order is S1.b.0 through S1.b.5. Nothing from S1.c, S1.d or S2 may enter these commits.
+In particular there is no JNI, Android, reusable `KitePlayerView`, Compose, Metal, VideoToolbox
+decode or platform demuxer here. FFmpeg remains the only demuxer and decoder. The iOS profile uses
+software decode; D-2's VideoToolbox selection and fallback belong to S2.
+
+#### S1B-01. iOS needs a buildable, locally consumable KiteCodec substrate
+
+- Where: `../KiteCodec/buildSrc/src/main/kotlin/BuildFFmpegTask.kt`; `StaticLinkFlags.kt`;
+  `../KiteCodec/kitecodec-core/build.gradle.kts`; the Gradle plugin's `FFmpegSource` path; current
+  `native-libs/lgpl/`, which has one empty ignored ios-simulator-arm64 directory left by the
+  refused command and no usable iOS tree; Maven local, which has only the macosArm64 KiteCodec
+  variant.
+- Problem: the task refuses the repository's real `#Kite` path, selects desktop-only external
+  libraries for iOS, and the publication guard offers either host-only macOS or the full release
+  set. Player cannot resolve or link an iOS backend from that state. The plugin's `System` source
+  is host-desktop-only and therefore cannot supply the final iOS link either.
+- Fix: S1.b.1 adds path-safe transactional temporary staging; an LGPL-only mobile Apple profile
+  containing the current STANDARD shared software-playback set, zlib and no desktop third-party,
+  GPL, hardware-encode or VideoToolbox addition; a Local tree source in the plugin; and a local-only
+  host-plus-phone target set. Lean does not become the default until S5. Remote/public publishing
+  remains unable to select experimental targets. Generated FFmpeg trees stay untracked inputs.
+- Test: reproduce the current `#` refusal; pure buildSrc tests pin the mobile argument and staging
+  sets; plugin tests reject missing, GPL-iOS and incomplete Local trees; then real macosArm64,
+  iosArm64 and iosSimulatorArm64 trees build in one invocation, a later invocation compiles and
+  links both iOS targets, every archive's architecture and LC_BUILD_VERSION platform agree, and a
+  three-framework scratch consumer resolves and final-links the three Maven-local variants offline.
+
+#### S1B-02. AppKit stops leaking into the shared Apple source set
+
+- Where: `kiteplayer-output/src/appleMain/.../AppKitVideoRenderer.kt` and `AppKitWindow.kt`;
+  `AppKitVideoRendererTest.kt` and `RealTimeSoakTest.kt` under appleTest; the macOS-only target
+  declarations in `kiteplayer-output`, `kiteplayer-ffmpeg` and `kiteplayer-sample`.
+- Problem: adding either iOS target today asks the iOS compiler to resolve AppKit. The output and
+  FFmpeg modules also publish no iOS variant even though their core and rt dependencies do.
+- Fix: S1.b.2 moves the two AppKit production files to macosArm64Main and the two macOS-only tests
+  to macosArm64Test, keeps the clock, backend, sink and device-independent C-ring tests shared in
+  appleMain/appleTest, and registers iosArm64 plus iosSimulatorArm64 in output and FFmpeg. Only
+  kiteplayer-ffmpeg carries FFmpeg and consumes the S1.b.1 Local tree; output remains FFmpeg-free.
+  The sample target is added only in S1.b.5.
+- Test: the pre-move compile with a temporary iOS target fails on `platform.AppKit`; after the
+  move `rg -n 'platform.AppKit' kiteplayer-output/src/appleMain kiteplayer-output/src/appleTest`
+  prints nothing, both iOS test binaries link, the existing macOS tests remain green, and the two
+  ABI dumps move only in target metadata: three targets, no declaration added or removed.
+
+#### S1B-03. The C sink runs RemoteIO and AVAudioSession ownership is explicit
+
+- Where: `kiteplayer-rt/native/src/kite_rt_coreaudio.c`; `kitert.def`; the rt header, build note,
+  README and source-discipline/render audits; `CoreAudioSink.kt` and new Apple platform session
+  files in kiteplayer-output; shared Apple device tests.
+- Problem: the C file compiles a complete refusal anywhere except macOS. iOS needs
+  `kAudioUnitSubType_RemoteIO`, the iOS AudioToolbox link flag and an active playback audio
+  session. Silently taking ownership of the process-wide AVAudioSession would be an integration
+  defect.
+- Fix: S1.b.3 compiles the existing static render callback and lifecycle for macOS and iOS, with
+  DefaultOutput on macOS and RemoteIO on iOS. Add `linkerOpts.ios = -framework AudioToolbox`.
+  Pull R-B8-layout forward from B8 and make every refused CoreAudio layout write silence safely
+  and set the silence action flag. Add public `AppleAudioSessionPolicy` with exactly two policies.
+  `ManagedPlayback` uses a process-wide synchronized lease: the first lease sets Playback,
+  MoviePlayback and no category options, activates before C creates RemoteIO, later leases only
+  increment a count, every failed C open releases, and only the last release after C disposal
+  deactivates with NotifyOthersOnDeactivation. `ApplicationManaged` makes no session call. The
+  default Apple backend uses ManagedPlayback. macOS actuals are no-ops. No session call enters the
+  render callback. Route, interruption and background recovery remain out of S1.b because the
+  engine does not yet collect `AudioSink.events`.
+- Test: on named simulator `Test iPhone 17`, a test written first expects a successful open and
+  sees the current unsupported verdict; after the fix it observes callbacks, a consumed ring and
+  a near-future anchor, then closes twice and successfully opens a fresh sink. Policy fixtures pin
+  activation failure, rollback, concurrent managed leases, final-release ordering and zero calls
+  under ApplicationManaged. The existing callback suite gains wrong-count, null/zero, short-size
+  canary and correct-layout cases without adding a ninth suite. Source and object audits pin
+  RemoteIO on iOS, DefaultOutput on macOS and the callback call set in all three Apple archives.
+  Temporarily selecting DefaultOutput in the iOS arm makes the simulator test fail, then restoration
+  passes. iosArm64 compiles and links; no physical-device result is inferred.
+
+#### S1B-04. iOS gets the deliberately simple CPU layer renderer
+
+- Where: new `kiteplayer-output/src/iosMain/.../UIKitVideoRenderer.kt` and its iosTest;
+  `VideoRenderer`, `VideoFrame` and `SoftwareConverter`, which stand unchanged.
+- Problem: a decoded iOS frame has no presentation consumer. Reusing AppKit is impossible and
+  building Metal here would steal S2.
+- Fix: S1.b.4 adds `UIKitVideoRenderer`, constructed with a caller-owned `CALayer` and the same
+  `(VideoFrame) -> ByteArray` conversion seam as the macOS fallback. It converts off the main
+  thread, keeps one waiting frame and one waiting image, posts at most one main-queue delivery,
+  writes a retained CGImage to `layer.contents`, uses aspect-fit gravity with implicit animations
+  disabled, applies quarter-turn rotation, closes every frame exactly once and reports presented,
+  superseded and failed counts. The public constructor takes the layer and converter; an internal
+  constructor takes enqueue and delivery lambdas for deterministic tests. Ownership explicitly
+  releases a displaced or closed CGImage after CALayer has retained it. It creates no UIView and no
+  reusable player view; S1.d owns that surface.
+- Test: iosSimulatorArm64 tests pin newest-frame wins, exact-once close on success/failure/
+  supersession/close, bounded main-queue deliveries, width/height/rotation and no opaque-frame
+  support. The negative control removes the delivery guard and the queued-block bound test fails.
+  A real simulator layer receives a non-null CGImage. The macOS renderer and tests stay byte-for-
+  byte unchanged in this sub-phase.
+
+#### S1B-05. A runnable iOS host proves the backend is not a library-only claim
+
+- Where: `kiteplayer-sample/build.gradle.kts`; new iosMain sample controller; new
+  `kiteplayer-sample/iosApp` Swift host, Info.plist and Xcode project; sample documentation.
+- Problem: compiling libraries does not prove an application can link, open media, attach the
+  renderer, hear audio, seek and tear down under UIKit.
+- Fix: S1.b.5 adds iosArm64 and iosSimulatorArm64 static sample frameworks and a minimal UIKit
+  host. The Kotlin controller composes `KiteCodecMediaBackend`, `AppleOutputBackend` and
+  `UIKitVideoRenderer`; the Swift app only hosts that controller. The build embeds a generated
+  testmedia clip and no platform media API. It exposes play/pause and one seek action, and prints
+  the same decoded/submitted/drop/underrun summary style as the macOS sample.
+- Test: `xcodebuild` builds the simulator app, `simctl` installs and launches it on `Test iPhone
+  17`; a sample-only `--s1b-smoke` mode plays the bundled sync clip, seeks to five seconds, reaches
+  Ended, closes and writes a bounded JSON result before terminating. That result proves decoded and
+  submitted frames, renderer presentation, non-null layer contents, the seek landing, public audio
+  underruns and teardown completion. Positive callback and zero-handle teardown evidence belongs to
+  the S1.b.3 module tests, not to inaccessible sample internals. Build the iosArm64 release framework
+  and unsigned device app as link proof. Physical-iPhone playback is an S1.e owner-session item and
+  is not inferred from that build.
+
+#### S1.b.0 Mechanical expansion sweep
+
+Files: read-only across every file named in S1.b.1 to S1.b.5, both target graphs, Maven local,
+the Xcode SDK and device inventories. Product files do not move in this sub-phase.
+
+Steps.
+1. Verify all paths, declarations, task names, target names, counts and current outcomes above
+   against the tree. Run the entire sweep before classifying findings.
+2. Classify a mismatch BLOCKING if it changes a file, symbol, command, expected result, gate or
+   commit first line. Classify it DESCRIPTIVE only when every action stands unchanged.
+3. Use the owner's S1 correction exception for a mechanical contradiction with one conservative
+   tree-backed answer: record it, Tier 1, separate prose commit, then rerun this complete sweep.
+   Stop for an irreversible, scope-expanding or product-policy choice.
+
+Gate. Tier 1, because this sub-phase and the expansion commit change KPKMP only.
+
+Commit first line. KitePlayer: `Expand the iOS phone stage against the current tree`.
+
+#### S1.b.1 Build and consume the mobile Apple Codec locally
+
+Files, KiteCodec: `buildSrc/src/main/kotlin/BuildFFmpegTask.kt`;
+`buildSrc/src/main/kotlin/StaticLinkFlags.kt`; new
+`buildSrc/src/test/kotlin/BuildFFmpegTaskTest.kt`; `kitecodec-core/build.gradle.kts`;
+`kitecodec-gradle-plugin/src/main/kotlin/io/github/yuroyami/kitecodec/gradle/FFmpegLicense.kt`,
+`KiteCodecExtension.kt`, `KiteCodecPlugin.kt`, `PrebuiltLinkFlags.kt`;
+`kitecodec-gradle-plugin/src/test/kotlin/io/github/yuroyami/kitecodec/gradle/KiteCodecPluginFunctionalTest.kt`;
+`kitecodec-gradle-plugin/README.md`;
+`README.md`, `CHANGELOG.md`, `native/kitecodec-c/README.md`, `docs/about.md`,
+`docs/getting-started.md`, `docs/gradle-plugin.md`, `docs/platforms.md` and
+`docs/troubleshooting.md`. Player: KPKMP execution log only. Generated `native-libs` trees and
+Maven-local files are evidence, never committed files.
+
+Steps.
+1. Preserve the captured pre-change nonzero `#`-path run. Copy FFmpeg source into a unique
+   hash-free directory under `java.io.tmpdir`, excluding `.git` and every `build` subtree while
+   preserving executable attributes. Configure, build and install entirely there. GNU make must
+   never receive the repository source path or the final `#Kite` install path. After verifying the
+   six libav archives and headers in scratch, copy with Java/NIO to a sibling staging directory
+   beside the declared output, verify the copy, then replace the final tree. Delete scratch in a
+   success `finally`; on failure retain it and print its path. A failed build never replaces a
+   previously good final tree.
+2. For IosArm64 and IosSimulatorArm64 use the current STANDARD playback profile:
+   `sharedCoreArgs()`, `--disable-autodetect`, `--enable-zlib` and the target SDK/cross flags.
+   The PNG decoder makes zlib load-bearing. Do not add `desktopBaseArgs()`, GPL flags, desktop
+   third-party archive bundling, `appleHardwareArgs()` or VideoToolbox. Lean remains deferred to
+   S5. Reject GPL for iOS and stop registering iOS GPL tasks. Make
+   `StaticLinkFlags.thirdPartyArchives(iOS, LGPL)` and host fallback search flags empty, and make
+   the iOS static target flags exactly `-lz`. Tests compare the exact argument and link sets and
+   prove a path containing `#` is staged rather than refused.
+3. Add `-Pkitecodec.applePhoneTargetsOnly=true`, mutually exclusive with the existing target-set
+   properties, registering exactly macosArm64, iosArm64 and iosSimulatorArm64 on this arm64 Mac.
+   Accept it only for Maven-local publication. Every remote publish continues to require the
+   stable release set and rejects this property.
+4. Add `FFmpegSource.Local` plus required `FFmpegSpec.localRoot: DirectoryProperty`. Its only
+   layout is `<localRoot>/<license.id>/<target.triple>/{include,lib}`. Validate
+   `include/libavformat/avformat.h` and all six `libav*.a` files for every wired target with
+   actionable diagnostics; Local never fetches or accesses a network. Reject Local plus GPL on
+   either iOS target. For Local macosArm64 put `-L<local>/lib` first, the host fallback `-L`
+   second, and reuse `PrebuiltLinkFlags.extraLinkerOpts(target, license)` for the desktop static
+   stack. For Local iOS use only `-L<local>/lib` plus `-lz`, with none of the desktop archives,
+   C++ runtime or VideoToolbox frameworks. Pin every branch in functional tests.
+5. Producer and consumer are separate invocations because `FFmpegPaths.resolve()` runs during
+   Gradle configuration and cannot see a tree produced later in the same invocation. Run:
+
+   ```bash
+   cd ../KiteCodec
+   ./gradlew :kitecodec-core:buildFFmpegForMacosArm64 \
+     :kitecodec-core:buildFFmpegForIosArm64 \
+     :kitecodec-core:buildFFmpegForIosSimulatorArm64 --rerun-tasks
+
+   ./gradlew :kitecodec-core:compileKotlinMacosArm64 \
+     :kitecodec-core:compileKotlinIosArm64 \
+     :kitecodec-core:compileKotlinIosSimulatorArm64 \
+     :kitecodec-core:linkDebugTestIosArm64 \
+     :kitecodec-core:linkDebugTestIosSimulatorArm64 \
+     -Pkitecodec.applePhoneTargetsOnly=true \
+     -Pkitecodec.requireAllTargets=true --rerun-tasks
+
+   S1B_SIM=5DBA149A-E990-4197-8A7D-31E97658B568
+   xcrun simctl boot "$S1B_SIM" 2>/dev/null || :
+   xcrun simctl bootstatus "$S1B_SIM" -b
+   ./gradlew :kitecodec-core:iosSimulatorArm64Test \
+     -Pkitecodec.applePhoneTargetsOnly=true \
+     -Pkitecodec.requireAllTargets=true \
+     --device "Test iPhone 17" --rerun-tasks
+   ```
+
+   Verify all generated task names during S1.b.0. Keep the standing host-only `apiCheck`, because
+   the committed KiteCodec API dump remains the macOS baseline and the public Kotlin surface does
+   not change.
+6. Inspect every one of the six archives in every tree, not a representative member. The gate
+   asserts rather than merely prints: `lipo` must report exactly arm64, `ar -t` must name the same
+   number of members as `otool` reports platform records, and the only platform value must match
+   the tree:
+
+   ```bash
+   for t in macos-arm64 ios-arm64 ios-simulator-arm64; do
+     case "$t" in
+       macos-arm64) S1B_PLATFORM=1 ;;
+       ios-arm64) S1B_PLATFORM=2 ;;
+       ios-simulator-arm64) S1B_PLATFORM=7 ;;
+       *) exit 2 ;;
+     esac
+     for a in avformat avcodec avfilter avutil swscale swresample; do
+       S1B_ARCHIVE="native-libs/lgpl/$t/lib/lib$a.a"
+       test "$(xcrun lipo -archs "$S1B_ARCHIVE")" = arm64 || exit 1
+       S1B_MEMBERS="$(/usr/bin/ar -t "$S1B_ARCHIVE" | wc -l | tr -d ' ')"
+       S1B_RECORDS="$(xcrun otool -l "$S1B_ARCHIVE" | \
+         awk '/platform / {print $2}' | wc -l | tr -d ' ')"
+       test "$S1B_RECORDS" = "$S1B_MEMBERS" || exit 1
+       S1B_UNIQUE="$(xcrun otool -l "$S1B_ARCHIVE" | \
+         awk '/platform / {print $2}' | sort -u)"
+       test "$S1B_UNIQUE" = "$S1B_PLATFORM" || exit 1
+     done
+   done
+   ```
+
+   Architecture is `arm64` throughout; the unique `LC_BUILD_VERSION` platform is 1 for macOS, 2
+   for iOS and 7 for iOS Simulator. Run the export, signature and metadata audits unchanged; none
+   of their committed baselines moves.
+7. Prove the local-only selector cannot escape before using it:
+
+   ```bash
+   ./gradlew :kitecodec-core:publish \
+     -Pkitecodec.applePhoneTargetsOnly=true
+   ```
+
+   Expect nonzero during configuration, before repository or network work, with an explicit
+   experimental-phone-selector refusal. Then run exactly one local publication:
+   `./gradlew publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true`. Create a temporary
+   consumer outside both repositories with Gradle/KMP 2.4.10, `mavenLocal()` dependency
+   resolution, plugin management through mavenLocal plus the portal, the plugin at 0.0.1,
+   `FFmpegSource.Local`, LGPL and the absolute `native-libs` root. Its macosArm64, iosArm64 and
+   iosSimulatorArm64 targets each declare a static framework, and common code calls
+   `FFmpeg.hasDecoder("h264")` so dead-code elimination cannot make the link vacuous. Prove the
+   three Maven-local variants offline:
+
+   ```bash
+   ./gradlew -p "$S1B_CODEC_SMOKE" \
+     linkDebugFrameworkMacosArm64 \
+     linkDebugFrameworkIosArm64 \
+     linkDebugFrameworkIosSimulatorArm64 \
+     --offline --refresh-dependencies --rerun-tasks
+   ```
+8. Update every named current-state guide. In particular, the native README must no longer say
+   that BuildFFmpegTask merely refuses `#Kite`; the task now keeps configure and make in the
+   hash-free scratch tree. The getting-started and plugin guides distinguish System, repository
+   builds, and a no-network Local consumer tree, and the iOS pages state the measured standard
+   software profile without claiming public artifacts or CI.
+
+Gate. Tier 2, selected by buildSrc, plugin source and build scripts. The one local publish above
+replaces Tier 2's host-only publish for this sub-phase; do not publish twice. Run every other
+Tier 2 command, with its ordinary host-only target selector where written. Then both Tier 1 blocks
+close the window. Close with scans proving no AVPlayer, AVAssetReader,
+AVSampleBufferDisplayLayer, VideoToolbox, VTDecompressionSession, Metal, CVPixelBuffer, Compose,
+UIKitView or KitePlayerView entered the product diff and neither version catalog changed. Apple
+SDK frameworks and zlib are system inputs, not new Gradle dependencies.
+
+Commit first line. KiteCodec: `Make the mobile Apple FFmpeg build local and reproducible`.
+KitePlayer: `Record the local mobile Apple Codec proof`.
+
+#### S1.b.2 Split the Apple targets at their real platform boundary
+
+Files: `settings.gradle.kts`; `kiteplayer-output/build.gradle.kts`; move
+`kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/AppKitVideoRenderer.kt`
+and `AppKitWindow.kt` to the same package under `src/macosArm64Main`; move
+`kiteplayer-output/src/appleTest/kotlin/io/github/yuroyami/kiteplayer/output/AppKitVideoRendererTest.kt`
+and `RealTimeSoakTest.kt` to the same package under `src/macosArm64Test`, all four without other
+edits; `kiteplayer-ffmpeg/build.gradle.kts`;
+`kiteplayer-output/api/kiteplayer-output.klib.api`;
+`kiteplayer-ffmpeg/api/kiteplayer-ffmpeg.klib.api`; KPKMP log.
+
+Steps.
+1. Temporarily register iosSimulatorArm64 in output before the moves and retain the exact failure
+   from `./gradlew :kiteplayer-output:compileKotlinIosSimulatorArm64 --rerun-tasks`: unresolved
+   `platform.AppKit`. Restore, perform only the four moves, then register iosArm64 and
+   iosSimulatorArm64 in output and FFmpeg. Keep macosArm64 and its tests. Do not add sample
+   targets yet.
+2. Only `kiteplayer-ffmpeg` applies the KiteCodec plugin and carries FFmpeg. Configure it from the
+   provider `kitecodec.ffmpeg.localRoot`: when present, select `FFmpegSource.Local`, LGPL and that
+   absolute root for phone links; when absent, preserve `FFmpegSource.System` for the standing
+   host-only gate. `kiteplayer-output` remains FFmpeg-free and receives no plugin or Local block.
+   Update the settings build note with the new local-only Apple publication and consumption
+   command.
+3. Prove the shared Apple sets have no AppKit imports and compile and final-link all three target
+   families from a fresh local dependency resolution:
+
+   ```bash
+   rg -n 'platform\.AppKit' \
+     kiteplayer-output/src/appleMain kiteplayer-output/src/appleTest
+
+   ./gradlew \
+     :kiteplayer-output:compileKotlinMacosArm64 \
+     :kiteplayer-output:compileKotlinIosArm64 \
+     :kiteplayer-output:compileKotlinIosSimulatorArm64 \
+     :kiteplayer-output:linkDebugTestIosArm64 \
+     :kiteplayer-output:linkDebugTestIosSimulatorArm64 \
+     :kiteplayer-ffmpeg:compileKotlinMacosArm64 \
+     :kiteplayer-ffmpeg:compileKotlinIosArm64 \
+     :kiteplayer-ffmpeg:compileKotlinIosSimulatorArm64 \
+     :kiteplayer-ffmpeg:linkDebugTestIosArm64 \
+     :kiteplayer-ffmpeg:linkDebugTestIosSimulatorArm64 \
+     -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs" \
+     --offline --refresh-dependencies --rerun-tasks
+   ```
+
+   The `rg` command must print nothing and return 1. The link command must consume the S1.b.1
+   Maven-local variants and generated standard FFmpeg trees, not stale Gradle cache entries.
+4. Target addition necessarily changes ABI dump metadata. Run:
+
+   ```bash
+   ./gradlew :kiteplayer-output:updateKotlinAbi :kiteplayer-ffmpeg:updateKotlinAbi
+   ./gradlew :kiteplayer-output:checkKotlinAbi :kiteplayer-ffmpeg:checkKotlinAbi
+   ```
+
+   Review both dumps from their current macosArm64-only baselines, 82 and 94 lines. Their target
+   sets become `[iosArm64, iosSimulatorArm64, macosArm64]`; no declaration is added or removed,
+   and AppKit declarations remain macOS-only.
+
+Gate. Tier 2, selected by build scripts and source-set moves, plus the exact fresh local phone
+link proof above. No new dependency or version is allowed.
+
+Commit first line. KitePlayer: `Split AppKit from the shared Apple output target`.
+
+#### S1.b.3 Qualify the real-time sink on iOS
+
+Files: `kiteplayer-rt/native/src/kite_rt_coreaudio.c`;
+`kiteplayer-rt/native/include/kite_rt.h`;
+`kiteplayer-rt/src/nativeInterop/cinterop/kitert.def`; `kiteplayer-rt/build.gradle.kts`;
+`kiteplayer-rt/README.md`; `kiteplayer-rt/native/scripts/build-host.sh`;
+`kiteplayer-rt/native/scripts/render-audit.sh`;
+`kiteplayer-rt/native/scripts/source-discipline.sh`;
+`kiteplayer-rt/native/tests/test_sink_callback.c`;
+`kiteplayer-rt/src/nativeTest/kotlin/io/github/yuroyami/kiteplayer/rt/KiteRtBindingTest.kt`;
+`kiteplayer-output/src/appleMain/kotlin/io/github/yuroyami/kiteplayer/output/CoreAudioSink.kt`;
+`AppleOutputBackend.kt`; new `AppleAudioSessionPolicy.kt` in that package; new
+`kiteplayer-output/src/macosArm64Main/kotlin/io/github/yuroyami/kiteplayer/output/AppleAudioSession.macos.kt`;
+new `kiteplayer-output/src/iosMain/kotlin/io/github/yuroyami/kiteplayer/output/AppleAudioSession.ios.kt`;
+new `kiteplayer-output/src/appleTest/kotlin/io/github/yuroyami/kiteplayer/output/AppleAudioSessionPolicyTest.kt`;
+existing `CoreAudioSinkTest.kt`, `CoreAudioSinkRealTimeTest.kt` and `CRingSupport.kt` under
+appleTest; new
+`kiteplayer-output/src/iosTest/kotlin/io/github/yuroyami/kiteplayer/output/CoreAudioSinkIosTest.kt`;
+`kiteplayer-output/api/kiteplayer-output.klib.api`; KPKMP log.
+
+Steps.
+1. Add the simulator and policy fixtures first. Retain the exact unsupported-platform failure from
+   the former and behavioral failures from the latter. Extend the existing callback C suite through
+   a test-only wrapper compiled by `build-host.sh`, never exported by the shipped archive. Wrong
+   buffer count must zero every safely writable buffer and set the silence flag; null or zero-sized
+   destinations set silence; a short byte size clamps without crossing a canary; the correct single
+   interleaved layout still renders. Delete each relevant guard once, retain the failures, restore,
+   and keep eight suites while remeasuring the current 127-case baseline.
+2. Widen the C implementation guard to macOS or iOS, choose DefaultOutput on macOS and RemoteIO on
+   iOS, and keep the callback body common. Add `linkerOpts.ios = -framework AudioToolbox`. Update
+   every touched current-state comment. `render-audit.sh` must extract and audit both
+   `kite_rt_render.o` and `kite_rt_coreaudio.o` from all three generated archives:
+   `build/kiteplayer-rt-c/macos_arm64/libkiteplayerrt.a`,
+   `ios_arm64/libkiteplayerrt.a` and `ios_simulator_arm64/libkiteplayerrt.a`. A clean clone may
+   skip absent optional archives, but the S1.b.3 gate first builds all three and permits no skip.
+   The source and object audits reject swapped subtypes and any new callback call.
+3. Add public `AppleAudioSessionPolicy` with exactly `ManagedPlayback` and
+   `ApplicationManaged`. Preserve the existing `CoreAudioSink(clock = ...)` and
+   `CoreAudioSinkFactory(clock = ...)` signatures. Add policy-first overloads with the clock
+   defaulted; `AppleOutputBackend` continues to choose ManagedPlayback. ManagedPlayback is a
+   process-wide synchronized lease: the first lease sets Playback, MoviePlayback and no category
+   options, then activates; later leases increment a count without another session call. C
+   creation happens only after acquisition, every C open or attach failure releases, close stops
+   and destroys RemoteIO before release, and only the final release deactivates with
+   NotifyOthersOnDeactivation. ApplicationManaged performs no session call; macOS is a no-op
+   lease. All session work is off the callback thread. Use an internal fake-controller seam to pin
+   activation failure, rollback, concurrent leases and exact call order. Route, interruption and
+   background recovery remain out of S1.b because the engine does not collect `AudioSink.events`.
+4. Boot and run exact native proofs:
+
+   ```bash
+   xcrun simctl list devices available
+   S1B_SIM=5DBA149A-E990-4197-8A7D-31E97658B568
+   xcrun simctl boot "$S1B_SIM" 2>/dev/null || :
+   xcrun simctl bootstatus "$S1B_SIM" -b
+
+   ./gradlew :kiteplayer-rt:compileKiteRtCForMacosArm64 \
+     :kiteplayer-rt:compileKiteRtCForIosArm64 \
+     :kiteplayer-rt:compileKiteRtCForIosSimulatorArm64
+   ./gradlew :kiteplayer-rt:iosSimulatorArm64Test \
+     --device "Test iPhone 17" --rerun-tasks
+   ./gradlew :kiteplayer-output:iosSimulatorArm64Test \
+     --device "Test iPhone 17" --rerun-tasks
+   ./gradlew :kiteplayer-output:linkDebugTestIosArm64 --rerun-tasks
+   kiteplayer-rt/native/scripts/render-audit.sh
+   kiteplayer-rt/native/scripts/render-audit.sh --prove-it-can-fail
+   kiteplayer-rt/native/scripts/source-discipline.sh
+   ```
+
+   The simulator test observes a positive callback count, consumed ring, near-future anchor,
+   idempotent close, zero retained C handles and a fresh second sink open/start/stop/close. It does
+   not claim an externally observable running AudioUnit after termination. Temporarily select
+   DefaultOutput in the iOS arm; the simulator test must fail, then restoration passes. Any
+   sandbox CoreSimulator denial is retried with required host access and recorded, never reported
+   as a simulator result.
+5. Run the existing supervised macOS device pair exactly:
+
+   ```bash
+   KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
+     ./gradlew :kiteplayer-output:macosArm64Test \
+     --tests '*RealTimeSoakTest*' --rerun-tasks -i
+   KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
+     ./gradlew :kiteplayer-ffmpeg:macosArm64Test \
+     --tests '*RealTimeMediaSoakTest*' --rerun-tasks -i
+   ```
+
+   Update the output ABI dump for additions only and run its update/check pair.
+
+Gate. Tier 3, selected conservatively because this promotes a new platform through the same
+`kprt_render_cb` and changes its compilation guard. Run full Tier 2, the existing supervised macOS
+device pair, the iOS simulator device suite, then Tier 1. Record simulator and macOS numbers
+separately. Do not call either a physical-iPhone result. Close with scans rejecting platform
+demux/decoders, VideoToolbox, Metal, Compose and reusable view symbols from the product additions.
+
+Commit first line. KitePlayer: `Run the real-time sink through RemoteIO on iOS`.
+
+#### S1.b.4 Render converted frames into a caller-owned iOS layer
+
+Files: new `kiteplayer-output/src/iosMain/kotlin/io/github/yuroyami/kiteplayer/output/UIKitVideoRenderer.kt`;
+new `kiteplayer-output/src/iosTest/kotlin/io/github/yuroyami/kiteplayer/output/UIKitVideoRendererTest.kt`;
+`kiteplayer-output/api/kiteplayer-output.klib.api`; KPKMP log.
+
+Steps.
+1. Land the fixture tests against a deliberately unguarded delivery skeleton and retain the
+   predicted queued-block failure. The complete public production shape is:
+
+   ```kotlin
+   public class UIKitVideoRenderer(
+       layer: CALayer,
+       convert: (VideoFrame) -> ByteArray,
+   ) : VideoRenderer
+   ```
+
+   Its public counters are exactly `presentedFrames`, `supersededFrames` and `failedFrames`, all
+   `Long`. Its internal constructor is exactly
+   `(convert: (VideoFrame) -> ByteArray, enqueueOnMain: (block: () -> Unit) -> Unit,
+   deliverImage: (CGImageRef?) -> Unit)`. The delivery callback receives a borrowed image for the
+   duration of the call; the renderer retains and releases its own reference. The nullable call
+   clears test/production delivery state without inventing a second public surface.
+   Implement the bounded two-slot renderer without changing the AppKit renderer or extracting a
+   shared abstraction at only the second use. Output remains FFmpeg-free and does not depend on
+   `SoftwareConverter`; the caller injects conversion.
+2. Pin newest-frame wins, exact-once close on delivery, failure, supersession and renderer close,
+   bounded queued deliveries, dimensions, quarter-turn rotation and opaque-frame refusal. Set
+   aspect-fit gravity, disable implicit CALayer animations and define CGImage retain/release
+   ownership: CALayer retains the assigned image, and the renderer releases its displaced or
+   closed ownership exactly once. Test non-null real `CALayer.contents` on the named simulator.
+   `supportedHardwareSurfaces()` is empty, `supports(format)` is exactly `format != Opaque`,
+   vsync is null, viewport and overlay are no-ops, and `events` is an empty flow. `close()` is
+   idempotent: stop acceptance, stop and join the conversion worker, drain and close both slots,
+   release every image still owned by the renderer, then close the worker dispatcher. A queued
+   delivery after close observes an empty slot and owns nothing. CALayer's already retained last
+   contents remains owned by the caller's layer until that caller clears or replaces it. Update
+   the dump with only this class and its counters.
+3. Run:
+
+   ```bash
+   ./gradlew :kiteplayer-output:iosSimulatorArm64Test \
+     --device "Test iPhone 17" \
+     --tests '*UIKitVideoRendererTest*' --rerun-tasks
+   ./gradlew :kiteplayer-output:updateKotlinAbi \
+     :kiteplayer-output:checkKotlinAbi
+   ```
+
+Gate. Tier 2, selected because iosMain is native product code and this is a completed phone
+render-path sub-phase. The simulator renderer test is an added named step. Tier 3 is not selected:
+the C callback and teardown ordering do not change here. Scan this diff for AVPlayer,
+AVAssetReader, AVSampleBufferDisplayLayer, VideoToolbox, Metal, CVPixelBuffer, Compose,
+UIKitView and KitePlayerView; all must be absent.
+
+Commit first line. KitePlayer: `Render software frames into an iOS layer`.
+
+#### S1.b.5 Link, install and run the iOS sample
+
+Files: `kiteplayer-sample/build.gradle.kts`; new
+`kiteplayer-sample/src/iosMain/kotlin/io/github/yuroyami/kiteplayer/sample/SampleViewController.kt`;
+new `kiteplayer-sample/iosApp/KitePlayerSample/AppDelegate.swift` and `Info.plist`;
+`kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj/project.pbxproj`;
+`kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj/xcshareddata/xcschemes/KitePlayerSample.xcscheme`;
+`kiteplayer-sample/iosApp/README.md`; root `README.md`; KPKMP log.
+
+Steps.
+1. Add both iOS framework targets, static and named `KitePlayerSample`, using Local FFmpeg. Export
+   one controller factory. The Xcode build phase selects the matching Gradle framework from
+   `PLATFORM_NAME`, passes the absolute `kitecodec.ffmpeg.localRoot` property and introduces no
+   downloaded framework or CocoaPods layer. The bundle id is
+   `io.github.yuroyami.kiteplayer.sample.ios`. `scripts/testmedia.sh` generates
+   `testmedia/sync1080p30.mp4`, and the Xcode project declares it as a Copy Bundle Resources input.
+   The Kotlin controller composes FFmpeg-owned demux/decode, Apple output and
+   `UIKitVideoRenderer`; Swift owns only the UIKit host. The PBX Gradle build phase maps
+   `iphonesimulator` to `:kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64` and `iphoneos`
+   to `:kiteplayer-sample:linkReleaseFrameworkIosArm64`, and exits nonzero for every other
+   `PLATFORM_NAME`.
+2. Add sample-only launch argument `--s1b-smoke`. It auto-plays the bundled sync clip, requests one
+   precise seek to five seconds, waits for Ended, closes and writes a bounded JSON result to the
+   app Documents directory before terminating. `seekLanded` becomes true only after at least one
+   post-seek presented frame and public `KitePlayer.position()` in the inclusive range 5,000 to
+   5,034 milliseconds; a successful return from `seek()` alone cannot set it. The 34 millisecond
+   tolerance is one frame of this 30 fps fixture. `teardownCompleted` becomes true only after both
+   player and renderer close calls return. Write `s1b-smoke.json.tmp` in the same directory, flush
+   and close it, then atomically replace `s1b-smoke.json`; the observer must never see a partial
+   record. It never exposes a production diagnostics API.
+   Use the verified simulator UUID and exact commands:
+
+   ```bash
+   ./scripts/testmedia.sh
+   xcrun simctl shutdown 5DBA149A-E990-4197-8A7D-31E97658B568 >/dev/null 2>&1 || :
+   xcrun simctl boot 5DBA149A-E990-4197-8A7D-31E97658B568
+   xcrun simctl bootstatus 5DBA149A-E990-4197-8A7D-31E97658B568 -b
+   xcodebuild \
+     -project kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj \
+     -scheme KitePlayerSample -configuration Debug \
+     -destination 'platform=iOS Simulator,id=5DBA149A-E990-4197-8A7D-31E97658B568' \
+     -derivedDataPath kiteplayer-sample/iosApp/build/DerivedData \
+     CODE_SIGNING_ALLOWED=NO build
+   xcrun simctl uninstall 5DBA149A-E990-4197-8A7D-31E97658B568 \
+     io.github.yuroyami.kiteplayer.sample.ios || :
+   xcrun simctl install 5DBA149A-E990-4197-8A7D-31E97658B568 \
+     kiteplayer-sample/iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/KitePlayerSample.app
+   xcrun simctl launch --terminate-running-process \
+     5DBA149A-E990-4197-8A7D-31E97658B568 \
+     io.github.yuroyami.kiteplayer.sample.ios --s1b-smoke
+
+   S1B_DATA="$(xcrun simctl get_app_container \
+     5DBA149A-E990-4197-8A7D-31E97658B568 \
+     io.github.yuroyami.kiteplayer.sample.ios data)"
+   S1B_RESULT="$S1B_DATA/Documents/s1b-smoke.json"
+   S1B_TRIES=0
+   while [ ! -s "$S1B_RESULT" ] && [ "$S1B_TRIES" -lt 60 ]; do
+     sleep 1
+     S1B_TRIES=$((S1B_TRIES + 1))
+   done
+   test -s "$S1B_RESULT"
+   /usr/bin/jq -e '
+     (keys | sort) == [
+       "audioUnderruns", "decodedFrames", "layerImage", "presentedFrames",
+       "seekLanded", "seekRequested", "submittedFrames", "teardownCompleted", "terminalState"
+     ] and .seekRequested == true and
+     .seekLanded == true and
+     .terminalState == "Ended" and
+     (.decodedFrames | type) == "number" and .decodedFrames > 0 and
+     (.submittedFrames | type) == "number" and .submittedFrames > 0 and
+     (.presentedFrames | type) == "number" and .presentedFrames > 0 and
+     .layerImage == true and
+     (.audioUnderruns | type) == "number" and .audioUnderruns >= 0 and
+     .teardownCompleted == true
+   ' "$S1B_RESULT"
+   ```
+
+   The JSON schema is exactly the nine keys used above:
+   `seekRequested`, `seekLanded`, `terminalState`, `decodedFrames`, `submittedFrames`,
+   `presentedFrames`, `layerImage`, `audioUnderruns` and `teardownCompleted`; no missing or renamed
+   key can pass the oracle. Positive device callback and zero retained C handles are cited from
+   S1.b.3, not inferred through inaccessible sample state.
+3. Prove the device binaries link without claiming an unsigned archive or physical run:
+
+   ```bash
+   ./gradlew :kiteplayer-sample:linkReleaseFrameworkIosArm64 \
+     -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs" --rerun-tasks
+   xcodebuild \
+     -project kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj \
+     -scheme KitePlayerSample -configuration Release \
+     -destination 'generic/platform=iOS' \
+     -derivedDataPath kiteplayer-sample/iosApp/build/DeviceDerivedData \
+     CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+   ```
+
+   Record the connected physical iPhone inventory but reserve signing, audible/visual judgment
+   and physical playback for S1.e's owner session.
+4. Update the root README support, module and run sections to the measured local/private state.
+   Do not claim physical-iPhone qualification, public artifacts, VideoToolbox, reusable views,
+   Compose or T3-Full. Close with scans rejecting platform demux/decoders, VideoToolbox, Metal,
+   CVPixelBuffer, Compose, UIKitView and KitePlayerView from S1.b additions and prove neither
+   version catalog changed.
+
+Gate. Tier 2 plus the named simulator application run and iosArm64 framework/device-app link.
+Close with Tier 1.
+
+Commit first line. KitePlayer: `Add the runnable iOS phone sample`.
+
+S1.b exits only when all five product commits exist locally, both trees are clean, the named
+simulator plays and seeks through FFmpeg with RemoteIO and CALayer output, and every deviation is
+in section 14. Nothing is pushed, publicly published or released.
 
 ### 17.5 The format conformance matrix
 

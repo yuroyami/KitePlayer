@@ -5236,6 +5236,17 @@ is no other.
   count, so work paused immediately; no baseline moved and no product commit, push, public
   publication or release occurred before this separate correction.
 
+- 2026-08-11, S1.a.7 execution-fence correction follow-up completed. Prose only, Tier 1 gate
+  (selected by rule: every change, including prose). The independent commit-protocol cross-check
+  found that S1.a.7 names a Player log edit but supplied only the Codec commit first line. The
+  conservative correction adds the exact Player first line `Record the opaque surface addition
+  and its gate`; no file, implementation step or gate changes. The corrected expansion re-sweep
+  has no other finding. Tier 1 is GREEN at the same measured values: Codec coupling 246/287 with
+  273 helper and 14 direct calls and 10 of 10 types, deleted surface clean, seven plain Codec
+  suites and 274 cases; Player coupling 87/3, clean ABI and JVM checks, eight plain rt suites,
+  render audit 15 and source discipline 18; both tracked em dash scans empty with exit 1. No
+  baseline moved and nothing was pushed, publicly published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -8418,7 +8429,8 @@ because Kotlin does not use the new helpers yet) and `apiCheck`, refreshing the 
 only if `apiDump` proves it moved. KitePlayer is NOT re-consumed here; that happens once, at
 S1.a.8.
 
-Commit first line. KiteCodec: `Add the opaque surface: handles, wrappers, accessors, guards`.
+Commit first lines. KiteCodec: `Add the opaque surface: handles, wrappers, accessors, guards`.
+KitePlayer: `Record the opaque surface addition and its gate`.
 
 #### S1.a.8 The def drops FFmpeg, and Kotlin crosses only the opaque boundary
 

@@ -1,7 +1,7 @@
 // onTimeout is the select clause that makes an actor's wait cancellation free. Its alternative, a
 // timeout wrapped around a receive, can consume a message and then be cancelled, which loses a command
 // and suspends its caller for ever.
-@file:OptIn(ExperimentalCoroutinesApi::class)
+@file:OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 
 package io.github.yuroyami.kiteplayer.internal
 
@@ -46,9 +46,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -77,10 +81,14 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Every piece of playback state lives here and is touched by one coroutine on one dispatcher: the
  * status, the epoch, the track selection, the published snapshot, and the decision about what happens
- * next. Nothing outside reaches in. Every external interaction is a message with its own reply, so
- * there is no lock to forget and no field that two threads can disagree about. The workers own exactly
- * what a single thread must own, a demuxer cursor or a decoder context, and they communicate only
- * through the queues and this actor's messages.
+ * next. Accepted state-changing commands are messages: suspending calls carry one reply each, while
+ * fire-and-forget calls discard or omit theirs. Terminal close is different by design: every close route
+ * shares one result owned independently of any caller. After the actor returns, one independent finalizer
+ * receives its immutable terminal outcome, closes the owned dispatchers, and becomes the sole writer of
+ * the final snapshot and result. Those ownership periods never overlap. There is no lock to forget and no
+ * field that two threads can disagree about. The workers own exactly what a single thread must own, a
+ * demuxer cursor or a decoder context, and they communicate only through the queues and this actor's
+ * messages.
  *
  * ### Why the loop is level triggered
  *
@@ -111,6 +119,13 @@ internal class PlaybackCore(
      * between sessions, which a virtual-time test does.
      */
     private val closeDispatchers: Boolean = true,
+    /**
+     * How long teardown is allowed to run before it reports a compromised runtime.
+     *
+     * Production uses [CLOSE_DEADLINE]. A direct core test supplies zero to make the failure path
+     * deterministic; the facade never exposes this override.
+     */
+    private val closeDeadline: Duration = CLOSE_DEADLINE,
     /**
      * The job this session's coroutines hang under.
      *
@@ -145,7 +160,8 @@ internal class PlaybackCore(
     val stats: StateFlow<PlaybackStats> get() = statsState.asStateFlow()
     val events: SharedFlow<PlayerEvent> get() = eventSink.asSharedFlow()
 
-    // Actor-confined state. Nothing below is read or written from any other coroutine.
+    // Actor-confined state until the actor returns. The close finalizer then owns status, lastError and
+    // the one terminal snapshot exclusively; every other field is immutable to it.
     private var status: PlaybackStatus = PlaybackStatus.Idle
     private var media: MediaItem? = null
     private var session: OpenSession? = null
@@ -161,6 +177,12 @@ internal class PlaybackCore(
 
     /** The closed flag as the non-suspending commands see it, from whatever thread calls them. */
     private val closedNow = atomic(false)
+
+    /** One parentless terminal result shared by every close caller. */
+    private val terminalCloseResult = CompletableDeferred<Unit>(parent = null)
+
+    /** The actor's final handoff to the independent dispatcher finalizer. */
+    private val terminalCloseOutcome = atomic<TerminalCloseOutcome?>(null)
 
     private var requestedEpoch: Generation = Generation.Initial
     private var seekPhase: SeekPhase = SeekPhase.Idle
@@ -269,7 +291,13 @@ internal class PlaybackCore(
     /** The declared order, for the test that asserts it against the design. */
     val handlerOrder: List<String> = handlers.map { it.name }
 
-    private val actor: Job = scope.launch { runLoop() }
+    private val actor: Job = scope.async { runLoop() }.also { job ->
+        job.invokeOnCompletion { cause ->
+            // This hook runs only after the actor body has returned. Closing its dispatcher from inside
+            // runClose would make the native WorkerDispatcher wait on its own termination forever.
+            launchCloseFinalizer(cause)
+        }
+    }
 
     // ---------------------------------------------------------------------------------------------
     // The commands, as the facade calls them.
@@ -319,6 +347,7 @@ internal class PlaybackCore(
 
     /** Fire and forget, coalescing by contract. What a seek bar drag calls sixty times a second. */
     fun seekLater(to: Pts, mode: SeekMode) {
+        checkOpenFor("seekLater")
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(to), mode)))
     }
 
@@ -330,6 +359,7 @@ internal class PlaybackCore(
      * moment it is resolved against a position.
      */
     fun seekByLater(offset: Duration, mode: SeekMode) {
+        checkOpenFor("seekLater")
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Relative(offset), mode)))
     }
 
@@ -338,6 +368,7 @@ internal class PlaybackCore(
         require(fraction.isFinite() && fraction >= 0.0 && fraction <= 1.0) {
             "a seek bar position must be between 0 and 1, was $fraction"
         }
+        checkOpenFor("seekLater")
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Factor(fraction), mode)))
     }
 
@@ -393,22 +424,51 @@ internal class PlaybackCore(
     /** The position as of the last pass, which is never more than the wake floor old. */
     fun position(): Duration = publishedPositionMicros.value.microseconds
 
-    /** Terminal and idempotent. Returns at once; the teardown itself is bounded. */
+    /** Terminal and idempotent. Atomically requests the shared close and returns without awaiting it. */
     override fun close() {
-        commands.trySend(CoreCommand.Close(CompletableDeferred()))
+        requestClose()
     }
 
     /**
-     * Terminal and idempotent, awaited.
+     * Terminal and idempotent, awaited through the one result shared with [close].
      *
      * @throws PlaybackException with [PlaybackError.RuntimeCompromised] when teardown did not finish
-     *         inside its deadline. A wedged native call cannot be killed from inside the process, so
-     *         the honest answer is that the runtime is compromised rather than a successful close.
+     *         inside its deadline, the Close command could not be queued, the actor terminated before
+     *         handing off its outcome, an owned dispatcher did not close, or the independent finalizer
+     *         failed. The non-cancellable worker ownership join cannot be cut short by that deadline; a
+     *         wedged native call can therefore outlive it and require process termination.
      */
     suspend fun closeAndAwait() {
-        val reply = CompletableDeferred<Unit>()
-        if (commands.trySend(CoreCommand.Close(reply)).isSuccess) reply.await() else reply.complete(Unit)
+        requestClose()
+        val reportedFailure = try {
+            terminalCloseResult.await()
+            null
+        } catch (cancellation: CancellationException) {
+            // This waiter goes away; the parentless result and actor-owned teardown do not.
+            throw cancellation
+        } catch (failure: Throwable) {
+            failure
+        }
+        // Join on both non-cancelled outcomes. The result is settled only after terminal cleanup, but
+        // actor completion is the ownership proof that no tail of the loop remains.
         actor.join()
+        reportedFailure?.let { throw it }
+    }
+
+    private fun requestClose() {
+        if (!closedNow.compareAndSet(expect = false, update = true)) return
+        if (!commands.trySend(CoreCommand.Close(terminalCloseResult)).isSuccess) {
+            terminalCloseOutcome.compareAndSet(
+                expect = null,
+                update = TerminalCloseOutcome(
+                    reply = terminalCloseResult,
+                    failure = compromisedClose("the terminal Close command could not be queued"),
+                ),
+            )
+            // Make the completion hook perform the same independent dispatcher finalization as every
+            // other abort. The result is never settled early on the caller's thread.
+            actor.cancel()
+        }
     }
 
     /**
@@ -421,15 +481,26 @@ internal class PlaybackCore(
      * it is posted; a rejection that only the actor could find would have nowhere to go.
      */
     fun post(command: CoreCommand) {
-        check(!closedNow.value) { "the player is closed, so ${command.name} cannot run" }
+        checkOpenFor(command.name)
         commands.trySend(command)
     }
 
     private suspend fun send(command: CoreCommand) {
+        if (closedNow.value) {
+            command.fail(closedCommand(command.name))
+            return
+        }
         if (!commands.trySend(command).isSuccess) {
-            command.fail(IllegalStateException("the player is closed"))
+            command.fail(closedCommand(command.name))
         }
     }
+
+    private fun checkOpenFor(command: String) {
+        if (closedNow.value) throw closedCommand(command)
+    }
+
+    private fun closedCommand(command: String): IllegalStateException =
+        IllegalStateException("the player is closed, so $command cannot run")
 
     private suspend fun <T> awaitReply(reply: CompletableDeferred<T>, stopOnCancellation: Boolean = false): T {
         try {
@@ -437,7 +508,9 @@ internal class PlaybackCore(
         } catch (cancellation: CancellationException) {
             // The caller went away. Nothing half built may be left behind, and cancellation is never
             // reported as a playback failure.
-            if (stopOnCancellation) commands.trySend(CoreCommand.Stop(CompletableDeferred()))
+            if (stopOnCancellation && !closedNow.value) {
+                commands.trySend(CoreCommand.Stop(CompletableDeferred()))
+            }
             throw cancellation
         }
     }
@@ -456,8 +529,16 @@ internal class PlaybackCore(
                     if (terminated) return
                 }
             } catch (cancellation: CancellationException) {
+                if (closedNow.value) settleOutstandingForClose()
                 throw cancellation
             } catch (failure: Throwable) {
+                if (closedNow.value) {
+                    // Once close is linearized, ordinary recovery would keep the actor alive and leave
+                    // the shared terminal result pending. Reject every outstanding command, then let the
+                    // actor completion hook report the compromised close.
+                    settleOutstandingForClose()
+                    throw failure
+                }
                 // The actor must not die quietly: a loop that stops is a player that hangs with no
                 // explanation, which is the one failure mode worse than a typed error.
                 val error = PlaybackError.Internal("the session loop failed", failure)
@@ -518,7 +599,22 @@ internal class PlaybackCore(
         }
         while (true) {
             val command = heldCommands.removeFirstOrNull() ?: commands.tryReceive().getOrNull() ?: break
-            execute(command)
+            try {
+                execute(command)
+            } catch (failure: Throwable) {
+                // The command is no longer in a queue for close settlement to find. Preserve the
+                // exactly-once reply contract before the loop turns the same failure into terminal close.
+                if (command !is CoreCommand.Close) {
+                    val replyFailure = when (failure) {
+                        is CancellationException, is PlaybackException -> failure
+                        else -> PlaybackException(
+                            PlaybackError.Internal("the ${command.name} command failed", failure),
+                        )
+                    }
+                    command.fail(replyFailure)
+                }
+                throw failure
+            }
             if (terminated) return
         }
     }
@@ -984,6 +1080,13 @@ internal class PlaybackCore(
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
             change.reply.complete(Unit)
         } catch (cancellation: CancellationException) {
+            change.reply.completeExceptionally(
+                if (closedNow.value) {
+                    IllegalStateException("the player was closed before selectTrack could finish")
+                } else {
+                    cancellation
+                },
+            )
             throw cancellation
         } catch (failure: Throwable) {
             val error = classify(failure, item)
@@ -1456,41 +1559,132 @@ internal class PlaybackCore(
 
     private suspend fun runClose(reply: CompletableDeferred<Unit>) {
         if (closed) {
-            reply.complete(Unit)
             return
         }
         closed = true
-        closedNow.value = true
         playRequested = false
         pendingSeek = null
-        val finished = withTimeoutOrNull(CLOSE_DEADLINE) {
+        val finished = withTimeoutOrNull(closeDeadline) {
             teardownSession()
         } != null
+        settleOutstandingForClose()
+        val failure = if (!finished) {
+            val error = PlaybackError.RuntimeCompromised(
+                "teardown did not finish within $closeDeadline, so a worker may still hold resources",
+            )
+            PlaybackException(error)
+        } else {
+            null
+        }
+        terminalCloseOutcome.compareAndSet(
+            expect = null,
+            update = TerminalCloseOutcome(reply = reply, failure = failure),
+        )
+        terminated = true
+    }
+
+    /** Completes every command that close prevents from running, once, from the actor thread. */
+    private fun settleOutstandingForClose() {
         pendingTrackChange?.reply?.complete(Unit)
         pendingTrackChange = null
+        pendingSeek = null
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
-        // Every command that never ran is answered, so no caller is left suspended for ever.
         commands.close()
         while (true) {
             val pending = heldCommands.removeFirstOrNull() ?: commands.tryReceive().getOrNull() ?: break
-            if (pending is CoreCommand.Close) pending.reply.complete(Unit)
-            else pending.fail(IllegalStateException("the player was closed before ${pending.name} could run"))
+            if (pending !is CoreCommand.Close) {
+                pending.fail(IllegalStateException("the player was closed before ${pending.name} could run"))
+            }
         }
-        setStatus(PlaybackStatus.Idle)
-        if (!finished) {
-            val error = PlaybackError.RuntimeCompromised(
-                "teardown did not finish within $CLOSE_DEADLINE, so a worker may still hold resources",
+    }
+
+    private fun compromisedClose(detail: String): PlaybackException =
+        PlaybackException(PlaybackError.RuntimeCompromised(detail))
+
+    /**
+     * Releases the actor's owned dispatchers only after its coroutine has returned.
+     *
+     * [GlobalScope] is deliberate here: this one-shot finalizer must have no caller, actor or worker job
+     * as its parent, and [Dispatchers.Default] is not one of the six dispatchers it is about to close.
+     * The returned deferred retains any scheduling failure so the completion hook can turn it into the
+     * same typed terminal result instead of reporting an uncaught coroutine failure.
+     */
+    private fun launchCloseFinalizer(actorCause: Throwable?) {
+        val outcome = terminalCloseOutcome.value
+        if (outcome == null) {
+            // An actor that dies before Close still leaves a terminal object. Transfer ownership here,
+            // reject future commands immediately, and resolve everything the dead actor left behind.
+            closedNow.compareAndSet(expect = false, update = true)
+            settleOutstandingForClose()
+        }
+        var reportedFailure = when {
+            outcome != null -> outcome.failure
+            actorCause != null -> compromisedClose(
+                "the session actor failed before terminal close settled${causeDetail(actorCause)}",
             )
+            else -> compromisedClose("the session actor completed before terminal close settled")
+        }
+        val reply = outcome?.reply ?: terminalCloseResult
+        val finalizer = GlobalScope.async(
+            context = Dispatchers.Default + CoroutineName("kiteplayer-close-finalizer"),
+        ) {
+            try {
+                if (closeDispatchers) dispatchers.close()
+            } catch (failure: Throwable) {
+                reportedFailure = compromisedClose(
+                    "the owned playback dispatchers did not close${causeDetail(failure)}",
+                )
+            }
+            val terminalFailure = reportedFailure
+            publishTerminalCloseState(terminalFailure)
+            if (terminalFailure != null) {
+                reply.completeExceptionally(terminalFailure)
+            } else {
+                reply.complete(Unit)
+            }
+        }
+        finalizer.invokeOnCompletion { cause ->
+            if (cause != null) {
+                val failure = compromisedClose(
+                    "the independent close finalizer failed${causeDetail(cause)}",
+                )
+                runCatching { publishTerminalCloseState(failure) }
+                reply.completeExceptionally(failure)
+            }
+        }
+    }
+
+    /** Publishes the one terminal state after actor ownership ended and dispatcher shutdown resolved. */
+    private fun publishTerminalCloseState(failure: PlaybackException?) {
+        val error = failure?.error
+        if (error != null) {
             lastError = error
             eventSink.tryEmit(PlayerEvent.Failed(error))
-            reply.completeExceptionally(PlaybackException(error))
-        } else {
-            reply.complete(Unit)
         }
-        publishSnapshot()
-        terminated = true
-        if (closeDispatchers) dispatchers.close()
+        if (status != PlaybackStatus.Idle) {
+            if (!StatusMachine.isLegal(status, PlaybackStatus.Idle)) {
+                illegalTransitions += "$status to ${PlaybackStatus.Idle}"
+            }
+            status = PlaybackStatus.Idle
+            statusHistory += PlaybackStatus.Idle
+        }
+        // Do not consult the clock or any worker after their dispatchers have closed. This is the same
+        // state projection publishSnapshot would make with no live session, written once by the new owner.
+        snapshotState.value = PlayerSnapshot(
+            status = status,
+            media = media,
+            tracks = tracks,
+            speed = speed,
+            volume = volume,
+            muted = muted,
+            loop = loop,
+            error = lastError,
+            generation = requestedEpoch,
+        )
     }
+
+    private fun causeDetail(cause: Throwable): String =
+        cause.message?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
 
     /**
      * Tears the session down in the reverse of the order it was built in.
@@ -2454,7 +2648,18 @@ internal object StatusMachine {
     }
 }
 
-/** Every message the actor accepts. Each carries its own reply and completes exactly once. */
+/** The actor's immutable terminal handoff, read only by its completion finalizer. */
+private data class TerminalCloseOutcome(
+    val reply: CompletableDeferred<Unit>,
+    val failure: PlaybackException?,
+)
+
+/**
+ * Every message the actor accepts.
+ *
+ * Ordinary awaited commands carry one reply each, fire-and-forget commands omit or discard theirs, and
+ * the sole Close command carries the terminal result shared by every close route.
+ */
 internal sealed class CoreCommand(val name: String, private val deferred: CompletableDeferred<*>) {
 
     fun fail(cause: Throwable) {

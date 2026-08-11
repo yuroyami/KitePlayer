@@ -1,0 +1,334 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* AppDelegate.swift */; };
+		A10000000000000000000002 /* sync1080p30.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* sync1080p30.mp4 */; };
+		A10000000000000000000003 /* KitePlayerSample.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* KitePlayerSample.framework */; };
+		A10000000000000000000004 /* KitePlayerFrameworkDigest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* KitePlayerFrameworkDigest.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000003 /* sync1080p30.mp4 */ = {isa = PBXFileReference; lastKnownFileType = video.mp4; name = sync1080p30.mp4; path = ../../testmedia/sync1080p30.mp4; sourceTree = "<group>"; };
+		A20000000000000000000004 /* KitePlayerSample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KitePlayerSample.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000005 /* KitePlayerSample.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = KitePlayerSample.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000006 /* KitePlayerFrameworkDigest.swift */ = {isa = PBXFileReference; explicitFileType = sourcecode.swift; includeInIndex = 0; path = KitePlayerFrameworkDigest.swift; sourceTree = DERIVED_FILE_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000003 /* KitePlayerSample.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000002 /* KitePlayerSample */,
+				A40000000000000000000003 /* Resources */,
+				A40000000000000000000004 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A40000000000000000000002 /* KitePlayerSample */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000001 /* AppDelegate.swift */,
+				A20000000000000000000006 /* KitePlayerFrameworkDigest.swift */,
+				A20000000000000000000002 /* Info.plist */,
+			);
+			path = KitePlayerSample;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000003 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000003 /* sync1080p30.mp4 */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000004 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000004 /* KitePlayerSample.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* KitePlayerSample */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A90000000000000000000002 /* Build configuration list for PBXNativeTarget "KitePlayerSample" */;
+			buildPhases = (
+				A60000000000000000000001 /* Link Kotlin framework */,
+				A70000000000000000000001 /* Sources */,
+				A30000000000000000000001 /* Frameworks */,
+				A80000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = KitePlayerSample;
+			productName = KitePlayerSample;
+			productReference = A20000000000000000000004 /* KitePlayerSample.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A50000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = A90000000000000000000001 /* Build configuration list for PBXProject "KitePlayerSample" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A40000000000000000000001;
+			productRefGroup = A40000000000000000000004 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A50000000000000000000001 /* KitePlayerSample */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A80000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000002 /* sync1080p30.mp4 in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A60000000000000000000001 /* Link Kotlin framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Link Kotlin framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/KitePlayerSample.framework/KitePlayerSample",
+				"$(DERIVED_FILE_DIR)/KitePlayerFrameworkDigest.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\n\nREPO_ROOT=\"$(cd \"$SRCROOT/../..\" && pwd -P)\"\nLOCAL_FFMPEG_ROOT=\"$(cd \"$REPO_ROOT/../KiteCodec/native-libs\" && pwd -P)\"\n\ncase \"${PLATFORM_NAME:-}\" in\n  iphonesimulator)\n    GRADLE_TASK=:kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64\n    FRAMEWORK_DIR=\"$REPO_ROOT/kiteplayer-sample/build/bin/iosSimulatorArm64/debugFramework\"\n    ;;\n  iphoneos)\n    GRADLE_TASK=:kiteplayer-sample:linkReleaseFrameworkIosArm64\n    FRAMEWORK_DIR=\"$REPO_ROOT/kiteplayer-sample/build/bin/iosArm64/releaseFramework\"\n    ;;\n  *)\n    echo \"KitePlayerSample: unsupported PLATFORM_NAME '${PLATFORM_NAME:-<unset>}'\" >&2\n    exit 64\n    ;;\nesac\n\ncd \"$REPO_ROOT\"\n./gradlew \"$GRADLE_TASK\" \\\n  \"-Pkitecodec.ffmpeg.localRoot=$LOCAL_FFMPEG_ROOT\" \\\n  --offline\n\nSOURCE_FRAMEWORK=\"$FRAMEWORK_DIR/KitePlayerSample.framework\"\ntest -d \"$SOURCE_FRAMEWORK\"\n: \"${BUILT_PRODUCTS_DIR:?}\"\n: \"${DERIVED_FILE_DIR:?}\"\nSTAGED_FRAMEWORK=\"$BUILT_PRODUCTS_DIR/KitePlayerSample.framework\"\nDIGEST_SOURCE=\"$DERIVED_FILE_DIR/KitePlayerFrameworkDigest.swift\"\n\nframework_digest() {\n  (\n    cd \"$1\"\n    /usr/bin/find . -type f -exec /usr/bin/shasum -a 256 {} \\; |\n      LC_ALL=C /usr/bin/sort |\n      /usr/bin/shasum -a 256 |\n      /usr/bin/awk '{print $1}'\n  )\n}\n\nSOURCE_DIGEST=\"$(framework_digest \"$SOURCE_FRAMEWORK\")\"\nSTAGED_DIGEST=\nif test -d \"$STAGED_FRAMEWORK\"; then\n  STAGED_DIGEST=\"$(framework_digest \"$STAGED_FRAMEWORK\")\"\nfi\nif test \"$SOURCE_DIGEST\" != \"$STAGED_DIGEST\"; then\n  /bin/rm -rf \"$STAGED_FRAMEWORK\"\n  /usr/bin/ditto \"$SOURCE_FRAMEWORK\" \"$STAGED_FRAMEWORK\"\nfi\ntest -f \"$STAGED_FRAMEWORK/KitePlayerSample\"\n\n/bin/mkdir -p \"$DERIVED_FILE_DIR\"\nDIGEST_TEMP=\"$DIGEST_SOURCE.tmp.$$\"\ntrap '/bin/rm -f \"$DIGEST_TEMP\"' EXIT HUP INT TERM\n/usr/bin/printf 'internal let kitePlayerLinkedFrameworkDigest = \"%s\"\\n' \"$SOURCE_DIGEST\" > \"$DIGEST_TEMP\"\nif test -f \"$DIGEST_SOURCE\" && /usr/bin/cmp -s \"$DIGEST_TEMP\" \"$DIGEST_SOURCE\"; then\n  /bin/rm -f \"$DIGEST_TEMP\"\nelse\n  /bin/mv -f \"$DIGEST_TEMP\" \"$DIGEST_SOURCE\"\nfi\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A70000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* AppDelegate.swift in Sources */,
+				A10000000000000000000004 /* KitePlayerFrameworkDigest.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AB0000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AB0000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AB0000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../build/bin/iosArm64/releaseFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../build/bin/iosSimulatorArm64/debugFramework",
+				);
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = KitePlayerSample/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-arm64/lib",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-simulator-arm64/lib",
+				);
+				MARKETING_VERSION = 1.0;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"-ObjC",
+					"-lz",
+				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"-ObjC",
+					"-lz",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.yuroyami.kiteplayer.sample.ios;
+				PRODUCT_MODULE_NAME = KitePlayerSampleHost;
+				PRODUCT_NAME = KitePlayerSample;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AB0000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../build/bin/iosArm64/releaseFramework",
+				);
+				"FRAMEWORK_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../build/bin/iosSimulatorArm64/debugFramework",
+				);
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = KitePlayerSample/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-arm64/lib",
+				);
+				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-simulator-arm64/lib",
+				);
+				MARKETING_VERSION = 1.0;
+				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
+					"$(inherited)",
+					"-ObjC",
+					"-lz",
+				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
+					"$(inherited)",
+					"-ObjC",
+					"-lz",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.yuroyami.kiteplayer.sample.ios;
+				PRODUCT_MODULE_NAME = KitePlayerSampleHost;
+				PRODUCT_NAME = KitePlayerSample;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A90000000000000000000001 /* Build configuration list for PBXProject "KitePlayerSample" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000001 /* Debug */,
+				AB0000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A90000000000000000000002 /* Build configuration list for PBXNativeTarget "KitePlayerSample" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000003 /* Debug */,
+				AB0000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AA0000000000000000000001 /* Project object */;
+}

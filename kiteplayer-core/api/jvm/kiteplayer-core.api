@@ -215,6 +215,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public static final field Companion Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;
 	public final fun attachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public fun close ()V
+	public final fun closeAndAwait (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun detachRenderer ()V
 	public final fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
 	public final fun getProgress ()Lkotlinx/coroutines/flow/StateFlow;

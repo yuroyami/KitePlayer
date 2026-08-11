@@ -8,11 +8,11 @@ device, the video surface and the decoder are per platform.
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-> **KitePlayer is early and cannot be used as a dependency.** Nothing is publicly published,
-> there is no install path, and macOS arm64 is the only end-to-end candidate above T1. This file states
-> what has been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) in this repository is the full
-> plan, the defect register, and the running execution log: every phase, every measured number, and
-> every decision taken along the way.
+> **KitePlayer is early and cannot be used as a dependency.** Nothing is publicly published, there is
+> no public dependency installation path, and macOS arm64 is the only T3 candidate. One named iOS
+> simulator has a narrower experimental T2 Codec candidate backed by a local runnable sample, not a full
+> tier. This file states what has been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) is the
+> full plan, defect register and running execution log: every phase, measured number and decision.
 
 ## Playing a file
 
@@ -31,20 +31,21 @@ player.open(MediaItem(path))                     // suspends, and returns paused
 player.play()
 player.seek(5.seconds)                           // suspends, and completes on the position it landed on
 println("${player.state.value.status} at ${player.position()}")
-player.close()
+player.closeAndAwait()                         // suspends until teardown and its terminal state are final
 ```
 
 That is the whole playback path. Everything else, meaning the demux pump, both decoders, the audio
 feeder, the presentation schedule, the seek machine and the state it publishes, belongs to the player.
 
 Both backends are named rather than discovered. Kotlin/Native has no classpath service lookup, so the
-alternative would be a reflective search that fails differently on every platform, and a null backend on
-a target with no default is a typed configuration error instead of a surprise at the first frame.
+alternative would be a reflective search that fails differently on every platform, and a null backend is
+a typed configuration error on every target instead of a surprise at the first frame.
 
 The surface is small on purpose: `open`, `play`, `pause`, `seek`, `seekLater`, `stop`, `setSpeed`,
-`setVolume`, `setMuted`, `setLoop`, `selectTrack`, `attachRenderer`, `detachRenderer`, `close`, plus four
-flows (`state`, `progress`, `stats`, `events`) and `position()`. Anything a member cannot honour is
-refused with a typed error rather than accepted and ignored.
+`setVolume`, `setMuted`, `setLoop`, `selectTrack`, `attachRenderer`, `detachRenderer`, non-suspending
+`close` and awaited `closeAndAwait`, plus four flows (`state`, `progress`, `stats`, `events`) and
+`position()`. Anything a member cannot honour is refused with a typed error rather than accepted and
+ignored.
 
 ## Support today
 
@@ -64,23 +65,26 @@ Today, honestly:
 | Platform | Tier | What that means here |
 |---|---|---|
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
-| iOS arm64 and simulator arm64 | T1 | A local, private substrate compiles and links the software-codec backend, drives RemoteIO audio in an app-hosted native test, and renders caller-converted software frames into a caller-owned layer in a separate test on one named simulator. There is no runnable consumer, end-to-end result, physical-device result, public artifact or tier promotion. |
+| iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media, lands a precise seek, reaches Ended through RemoteIO and a caller-owned layer, and completes causally awaited teardown. Real-media cancellation and the broader matrix are absent, so this is explicitly below the full T2 Codec tier. |
+| iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
 | JVM, Android, iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
 
-macOS arm64 is still the only candidate above T1, and it is still a candidate rather than a tier: no
-platform here has real-device qualification, a performance budget, or a packaged consumer build, and
-those are what T4 and T5 mean.
+macOS arm64 remains the only T3 candidate. The named iOS simulator is now a second candidate above T1,
+but only for the narrower codec lifecycle described above; neither label grants a tier. No platform here
+has real-device qualification, a performance budget or a public installable package, which are among the
+requirements that separate these local candidates from product support.
 
 **The local iOS substrate.** `kiteplayer-output` and `kiteplayer-ffmpeg` now declare iosArm64 and
 iosSimulatorArm64 alongside macosArm64. The private S1.b.1 software-codec trees feed the FFmpeg backend,
 and the same pure-C render callback and lifecycle use RemoteIO while an explicit policy decides whether
 KitePlayer or the application owns `AVAudioSession`. An app-hosted native test on one named simulator
 proves callback activity, ring movement, clock anchoring and teardown. Its scratch launcher is test
-infrastructure, not a playable application. A separate filtered native test proves that the local
-renderer can place a caller-converted software frame in a caller-owned layer. There is still no runnable
-consumer or end-to-end iOS result, nothing was run on a physical iPhone, iosX64 was not qualified, and
-no public artifact or support tier moved.
+infrastructure rather than the product sample. A separate filtered native test proves that the local
+renderer can place a caller-converted software frame in a caller-owned layer. Those pieces now meet in a
+private UIKit sample: its normal launch opens the bundled clip paused and offers Play, Pause and Seek 5s;
+its bounded smoke launch reaches Ended and causally awaited teardown. Nothing was run on a physical
+iPhone, iosX64 was not qualified, and no public artifact or full support tier moved.
 
 **What changed in this run.** The audio device's real-time callback left managed Kotlin. It is now a
 `static` C function in `kiteplayer-rt`, installed by C, reading a C ring, with no `StableRef` and no
@@ -88,11 +92,11 @@ garbage-collected object anywhere on the device's thread. Alongside it, KiteCode
 became a compiled and symbol-audited C library with its own tests, sanitizer runs and fuzz targets, and
 it now refuses an FFmpeg runtime that does not match the headers it was compiled against.
 
-**No tier moved, and that is deliberate.** macOS arm64 is still an experimental T3-Full candidate on
-one development machine and everything else is still T1. The new iOS targets and backends are local
-substrate, not a playback claim. Seventeen native targets compile the real-time C into an
-architecture-verified archive; the device implementation uses DefaultOutput on macOS and RemoteIO on
-iOS, while targets without device glue refuse loudly rather than claiming to work.
+**What the evidence moved, and what it did not.** macOS arm64 remains an experimental T3-Full candidate
+on one development machine. The named iOS simulator gains only the partial T2 Codec candidate above;
+iosArm64 and every other target remain T1 or unqualified. Seventeen native targets compile the real-time
+C into an architecture-verified archive; the device implementation uses DefaultOutput on macOS and
+RemoteIO on iOS, while targets without device glue refuse loudly rather than claiming to work.
 
 **Which audio ring the shipped Apple path uses.** On macOS and the local iOS substrate it is the C one,
 and the eighteen
@@ -117,12 +121,13 @@ so a signature cannot change without the change being visible in a diff.
 
 ## What is proven
 
-Measured on one Apple silicon development machine, with a debug binary, on clips
+Measured on one Apple silicon development machine, with local debug binaries, on clips
 `scripts/testmedia.sh` generates. This is development evidence: enough to say the engine works, not
 enough to call any platform supported.
 
-- 1080p30 for 10 seconds: 300 frames decoded, 300 submitted to the renderer, 0 dropped, 0 repeated,
-  0 audio underruns, and a final audio to video drift inside 1 ms on every run of it.
+- 1080p30 for 10 seconds: two quiet controls each decoded and submitted all 300 frames with 0 dropped,
+  0 repeated, 0 audio underruns and final audio-to-video drift of 1 ms and 0 ms. One retained loaded
+  observation submitted 299, dropped 1 late and ended at -32 ms drift; it was not retried away.
 - Real variable frame rate 720p for 8 seconds, frame durations cycling through 16.7, 33.3, 50, 25 and
   41.7 ms: 240 frames decoded, 240 submitted, 0 dropped, 0 repeated, 0 audio underruns.
 - 4K HEVC 10-bit with no audio track: 180 frames, with video driving the clock.
@@ -174,10 +179,10 @@ enough to call any platform supported.
   asserted exactly. Separately, a symbol and instruction audit of the shipped object shows it has no
   allocator, lock, log or framework symbol to call at all, and five million synthetic callbacks with
   the allocator interposed performed zero allocations of any kind.
-- 467 test executions pass across 6 suites, with nothing skipped: 184 engine tests on the JVM,
-  193 compiled for macOS arm64, 34 against the real audio device and the renderer,
+- 483 test executions pass across 6 suites, with nothing skipped: 192 engine tests on the JVM,
+  201 compiled for macOS arm64, 34 against the real audio device and the renderer,
   36 that decode and seek in real media, 8 for the SubRip parser and 12 over the real-time C
-  bindings. Four of the 467 open the audio device and contain supervised ten-minute arms; one
+  bindings. Four of the 483 open the audio device and contain supervised ten-minute arms; one
   negative-control case contains two such arms, so they are gated on an environment variable and
   were run separately rather than in the ordinary suite. Beside them sit
   132 C test cases in 8 suites, each run in four modes, and 40 unit tests over the build logic.
@@ -186,7 +191,11 @@ enough to call any platform supported.
   physical-device result or an addition to the six host-suite total.
   Separately again, the filtered iOS simulator renderer suite passes 8 native tests, including a real
   caller-owned `CALayer` receiving non-null `contents`. Those tests are not part of the app-hosted 28
-  or the six host-suite total, and they do not establish runnable or end-to-end playback.
+  or the six host-suite total. A separate bounded run of the private UIKit sample opened the bundled
+  real-media clip, landed its precise seek, reached Ended, decoded 137 frames, submitted 118, presented
+  3 into the layer, recorded 68 audio underruns and completed causally awaited teardown. That run is
+  named-simulator lifecycle evidence, not a performance claim, additional test count or physical-device
+  result.
 
 ## What does not exist yet
 
@@ -215,14 +224,15 @@ enough to call any platform supported.
 - **The real-time audio core is C on macOS and the local iOS substrate.** It uses DefaultOutput on
   macOS and RemoteIO on iOS; managed iOS sinks acquire an explicit process-wide playback-session lease,
   while application-managed sinks make no session call. tvOS, watchOS and the remaining native targets
-  still return an unsupported-platform verdict. The audio proof comes only from an app-hosted native
-  test on one named simulator, and the caller-owned layer renderer has its own filtered simulator test.
-  Neither is a runnable consumer or an end-to-end playback result, and there is no physical-device
-  qualification.
-- **No qualification of any kind.** Every number above comes from a debug binary on one machine. There
-  is no release-mode benchmark, no real-device run and no performance budget in this evidence. The two
-  long runs are that same debug binary watched with `ps`, so they say the engine holds together for half
-  an hour and nothing more, and no platform here is above the experimental candidate in the table.
+  still return an unsupported-platform verdict. Callback activity, ring movement and clock anchoring are
+  proved specifically by an app-hosted native test on one named simulator; the caller-owned layer
+  renderer contract has its own filtered simulator test. Those separately tested pieces now meet in the
+  private UIKit sample described above. It is a bounded local end-to-end result on that named simulator,
+  not physical-device qualification or reusable UI.
+- **No product qualification.** Every runtime number above comes from debug binaries on one machine.
+  There is no release-mode benchmark, physical-iPhone run or performance budget in this evidence. The
+  long runs are those same local binaries watched with `ps`, so they establish only their measured
+  duration; no platform here is above the experimental candidate labels in the table.
 - **Nothing is publicly published.** Building this needs a Maven Local KiteCodec publication and an
   FFmpeg on the machine, both set up by hand.
 
@@ -246,22 +256,30 @@ This is a development loop, not an installation.
 
 ```bash
 # 1. KiteCodec has no public publication, so publish it into the local Maven repository first.
-cd ../KiteCodec && ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true
+cd ../KiteCodec && ./gradlew publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true
 
 # 2. Generate the test clips. Needs ffmpeg on PATH; no media is committed to the repository.
 cd ../KitePlayer && ./scripts/testmedia.sh
 
-# 3. Build the sample and play a clip in a window.
+# 3. Build the macOS sample and play a clip in a window.
 ./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64
 BIN=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
 $BIN testmedia/sync1080p30.mp4 --window
+
+# 4. Build the simulator framework, then open the private app in Xcode.
+./gradlew :kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64 \
+  -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs"
+open kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj
 ```
 
-The sample creates a player, hands it the two backends this platform has, opens a file and plays it. It
-prints the position, the video drift against the master clock and the frame accounting as it goes, all
-read from the player's own flows. Without `--window` the frames go to a counting renderer that records
-how far each one landed from its requested time, `--no-video` plays the audio track only, and
-`--seek=<seconds>` seeks once playback is under way and reports where it landed.
+The macOS sample creates a player, hands it the two backends that platform has, opens a file and plays
+it. It prints the position, video drift against the master clock and frame accounting from the player's
+own flows. Without `--window` the frames go to a counting renderer, `--no-video` plays audio only, and
+`--seek=<seconds>` seeks once playback is under way. The local Xcode scheme builds the static Kotlin
+framework first, bundles the same generated sync clip and launches a UIKit host with Play, Pause and
+Seek 5s controls. Run the shared `KitePlayerSample` scheme on the named simulator from Xcode; the exact
+command-line smoke recipe is in `kiteplayer-sample/iosApp/README.md`. It is a development proof, not an
+installable dependency or reusable view package.
 
 ## Why the position is exact
 
@@ -322,7 +340,7 @@ target-free source set can build. Three things follow:
 
 1. It compiles for all 21 targets its build file declares, including `js` and `wasmJs`. That is a
    compile claim only, which is tier T1 above.
-2. Its whole behaviour is testable with a clock the test controls. The 184 common engine tests run
+2. Its whole behaviour is testable with a clock the test controls. The 192 common engine tests run
    in milliseconds and run identically on the JVM and Kotlin/Native; the macOS suite adds nine
    platform and real-thread cases.
 3. A new platform is reached by implementing four interfaces, not by adding an `actual` to the engine.
@@ -342,10 +360,10 @@ public interface MonotonicClock {
 |---|---|---|
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; DefaultOutput is exercised on macOS and RemoteIO by an app-hosted native test on one named iOS simulator |
-| `kiteplayer-output` | the Apple audio sink and policy, the macOS AppKit window and Core Graphics renderer, and the iOS caller-owned layer renderer | macOS arm64, iOS arm64 and iOS simulator arm64; the iOS renderer remains local substrate with no runnable consumer |
+| `kiteplayer-output` | the Apple audio sink and policy, the macOS AppKit window and Core Graphics renderer, and the iOS caller-owned layer renderer | macOS arm64, iOS arm64 and iOS simulator arm64; the private simulator sample consumes the iOS path |
 | `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64 and iOS simulator arm64; the iOS variants consume private local codec trees |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
-| `kiteplayer-sample` | a CLI that creates a player, plays a file and reports what the player says happened | macOS arm64 |
+| `kiteplayer-sample` | a CLI on macOS plus a private UIKit host with Play, Pause, Seek 5s and a bounded smoke oracle | macOS arm64, iOS arm64 and iOS simulator arm64; the device app is link-only |
 
 The dependency arrow never points into `kiteplayer-core`. The core declares interfaces and the backends
 implement them, which is what allows a completely different backend, for example WebCodecs in a
@@ -358,8 +376,8 @@ sample has neither because an executable has no public API to keep.
 ## Build and test it here
 
 ```bash
-./gradlew :kiteplayer-core:jvmTest            # 184 tests, the engine in virtual time
-./gradlew :kiteplayer-core:macosArm64Test     # 193: common, platform and real-thread cases
+./gradlew :kiteplayer-core:jvmTest            # 192 tests, the engine in virtual time
+./gradlew :kiteplayer-core:macosArm64Test     # 201: common, platform and real-thread cases
 ./gradlew :kiteplayer-output:macosArm64Test   # 34 tests against the real audio device and the renderer
 ./gradlew :kiteplayer-ffmpeg:macosArm64Test   # 36: real decode, real seeking, colour against a reference
 ./gradlew :kiteplayer-subtitles:jvmTest       # 8 tests, the SubRip parser
@@ -372,7 +390,8 @@ a mock cannot confirm is that the engine's clock and the audio device share a ti
 28-test iOS audio proof uses the exact freshly linked Kotlin/Native program inside the minimal simulator
 app host recorded in `KPKMP.md`; the ordinary bare-kexe simulator runner has no application audio
 context. The filtered 8-test renderer proof runs separately on the same named simulator and needs no
-application audio context.
+application audio context. The bounded UIKit sample smoke is separate again; it is the measured local
+run behind the simulator candidate row and is not included in any of those test totals.
 
 ## License
 

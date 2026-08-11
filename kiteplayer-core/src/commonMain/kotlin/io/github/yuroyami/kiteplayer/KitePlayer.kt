@@ -20,9 +20,11 @@ import kotlin.time.Duration
  * ### What it is made of
  *
  * The state and the decisions live in one session actor on its own thread, with five workers on theirs:
- * demux, video decode, audio decode, audio feed, video schedule. This class is the outside of that. Every
- * call here is a message to the actor, so calling from any thread or any coroutine is safe and no two
- * callers can race each other into a state neither asked for.
+ * demux, video decode, audio decode, audio feed, video schedule. This class is the outside of that.
+ * Accepted state-changing commands are actor messages: awaited calls carry one reply each, while
+ * fire-and-forget calls discard or omit theirs. The two close routes instead share one terminal result. After the actor
+ * returns, its independent close finalizer alone publishes the terminal snapshot and result. Calling from
+ * any thread or coroutine is safe and no two callers can race each other into a state neither asked for.
  *
  * ### State against events
  *
@@ -130,6 +132,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @param to a finite position at or after zero.
      * @throws IllegalArgumentException when [to] is infinite or negative.
+     * @throws IllegalStateException after terminal close has been requested.
      */
     public fun seekLater(to: Duration, mode: SeekMode = SeekMode.KeyframeThenRefine) {
         core.seekLater(Pts.ofDuration(validPosition(to, "seekLater")), mode)
@@ -243,16 +246,31 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Closes the player. Terminal, idempotent, and returns at once.
+     * Requests terminal close. Idempotent, and returns at once without proving teardown completed.
      *
-     * Every outstanding call is completed, the workers are stopped, the decoders and the device are closed
-     * on the threads that own them, and those threads are released. The teardown itself is bounded: a
-     * native call that has wedged cannot be killed from inside the process, so a teardown that exceeds its
-     * deadline reports [PlaybackError.RuntimeCompromised] through [events] and [state] rather than
-     * pretending to have succeeded.
+     * The request immediately rejects later commands and starts the same close observed by
+     * [closeAndAwait]. Every outstanding call is completed, the workers are stopped, the decoders and the
+     * device are closed on their owning threads, and those threads are released, but none of that is a
+     * postcondition of this non-suspending return. Use [closeAndAwait] when completion or failure matters.
      */
     override fun close() {
         core.close()
+    }
+
+    /**
+     * Closes the player and returns only after the session actor and teardown have completed.
+     *
+     * Concurrent calls and [close] share one terminal result. Caller cancellation remains a
+     * `CancellationException` and stops only that caller's wait; it never cancels the independently owned
+     * teardown. The worker-ownership join is deliberately non-cancellable and can outlive the close
+     * deadline when native code wedges, in which case a caller may ultimately have to terminate the
+     * process.
+     *
+     * @throws PlaybackException with [PlaybackError.RuntimeCompromised] for every compromised outcome
+     *         the core can report instead of a completed close.
+     */
+    public suspend fun closeAndAwait() {
+        core.closeAndAwait()
     }
 
     private fun validPosition(to: Duration, name: String): Duration {
@@ -272,8 +290,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          * explicit pair is `KiteCodecMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from
          * `kiteplayer-output`; the engine never names either, which is what keeps it free of any platform.
          *
-         * The player owns six threads from here until [close], one for the session actor and one for each
-         * worker, because that is the confinement every contract inside the engine is written against.
+         * The player owns six threads from here until terminal close completes, one for the session actor
+         * and one for each worker, because that is the confinement every contract inside the engine is
+         * written against. [close] requests that work; [closeAndAwait] proves its completion.
          *
          * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] when no media backend or no
          *         output backend was supplied.

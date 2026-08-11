@@ -1,15 +1,29 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.PlaybackCore
+import io.github.yuroyami.kiteplayer.internal.PlaybackDispatchers
 import io.github.yuroyami.kiteplayer.internal.SeekResult
 import io.github.yuroyami.kiteplayer.internal.StatusMachine
+import io.github.yuroyami.kiteplayer.internal.platformPlaybackDispatchers
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -273,6 +287,143 @@ class PlaybackCoreTest {
 
         assertEquals(0, harness.ledger.liveCount, "closing releases every frame and packet")
         assertFailsWith<IllegalStateException> { harness.core.play() }
+    }
+
+    @Test
+    fun `non suspending close and concurrent awaited closes share one success`() = runTest {
+        val core = directCore()
+        core.close()
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) { core.closeAndAwait() }
+        val second = async(start = CoroutineStart.UNDISPATCHED) { core.closeAndAwait() }
+        first.await()
+        second.await()
+        core.closeAndAwait()
+
+        assertEquals(PlaybackStatus.Idle, core.snapshots.value.status)
+        assertNull(core.snapshots.value.error)
+    }
+
+    @Test
+    fun `concurrent and repeated awaited closes share one typed failure and stay terminal`() = runTest {
+        val core = directCore(closeDeadline = Duration.ZERO)
+        core.close()
+
+        val first = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { core.closeAndAwait() }.exceptionOrNull()
+        }
+        val second = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { core.closeAndAwait() }.exceptionOrNull()
+        }
+        val firstFailure = assertIs<PlaybackException>(first.await())
+        val secondFailure = assertIs<PlaybackException>(second.await())
+        val repeatedFailure = assertFailsWith<PlaybackException> { core.closeAndAwait() }
+
+        assertTrue(firstFailure.error is PlaybackError.RuntimeCompromised)
+        assertEquals(firstFailure.error, secondFailure.error)
+        assertEquals(firstFailure.error, repeatedFailure.error)
+        assertFailsWith<IllegalStateException> { core.play() }
+        assertFailsWith<IllegalStateException> {
+            core.seekLater(Pts(1_000_000), SeekMode.KeyframeThenRefine)
+        }
+    }
+
+    @Test
+    fun `cancelling one close waiter leaves the shared teardown for the next waiter`() = runTest {
+        val core = directCore()
+        core.close()
+        val cancelled = launch(start = CoroutineStart.UNDISPATCHED) { core.closeAndAwait() }
+
+        cancelled.cancelAndJoin()
+        core.closeAndAwait()
+
+        assertEquals(PlaybackStatus.Idle, core.snapshots.value.status)
+        assertNull(core.snapshots.value.error)
+    }
+
+    @Test
+    fun `close CAS rejects suspending and direct seek commands before the actor advances`() = runTest {
+        val core = directCore()
+        core.close()
+
+        assertFailsWith<IllegalStateException> { core.open(MediaItem("scripted://too-late")) }
+        assertFailsWith<IllegalStateException> {
+            core.seekLater(Pts(1_000_000), SeekMode.KeyframeThenRefine)
+        }
+        assertFailsWith<IllegalStateException> {
+            core.seekByLater(1.seconds, SeekMode.KeyframeThenRefine)
+        }
+        assertFailsWith<IllegalStateException> {
+            core.seekToFractionLater(0.5, SeekMode.KeyframeThenRefine)
+        }
+        core.closeAndAwait()
+    }
+
+    @Test
+    fun `actor parent cancellation settles awaited close as typed failure`() = runTest {
+        val parent = Job()
+        val core = directCore(parent = parent)
+        parent.cancel()
+
+        val failure = withContext(Dispatchers.Default) {
+            assertFailsWith<PlaybackException> {
+                withTimeout(1.seconds) { core.closeAndAwait() }
+            }
+        }
+
+        assertTrue(failure.error is PlaybackError.RuntimeCompromised)
+        assertFailsWith<IllegalStateException> { core.play() }
+        assertFailsWith<IllegalStateException> {
+            core.seekLater(Pts(1_000_000), SeekMode.KeyframeThenRefine)
+        }
+    }
+
+    @Test
+    fun `owned production dispatchers close after their session actor returns`() = runTest {
+        withContext(Dispatchers.Default) {
+            withTimeout(5.seconds) {
+                val clock = MonotonicClock.System
+                val core = PlaybackCore(
+                    config = PlayerConfig(),
+                    backend = ScriptedBackend(),
+                    output = ScriptedOutput(clock, ScriptedSink()),
+                    dispatchers = platformPlaybackDispatchers(),
+                )
+
+                core.closeAndAwait()
+
+                assertEquals(PlaybackStatus.Idle, core.snapshots.value.status)
+                assertNull(core.snapshots.value.error)
+            }
+        }
+    }
+
+    @Test
+    fun `dispatcher close failure is published before the shared terminal result fails`() = runTest {
+        val context = Dispatchers.Default
+        val refusingDispatchers = object : PlaybackDispatchers {
+            override val session = context
+            override val demux = context
+            override val videoDecode = context
+            override val audioDecode = context
+            override val audioFeed = context
+            override val videoSchedule = context
+
+            override fun close(): Nothing = error("the dispatcher set refuses to close")
+        }
+        val core = directCore(
+            parent = null,
+            dispatchers = refusingDispatchers,
+            closeDispatchers = true,
+        )
+
+        val failure = withContext(Dispatchers.Default) {
+            runCatching { withTimeout(5.seconds) { core.closeAndAwait() } }.exceptionOrNull()
+        }
+        val typed = assertIs<PlaybackException>(failure)
+        assertIs<PlaybackError.RuntimeCompromised>(typed.error)
+        assertEquals(PlaybackStatus.Idle, core.snapshots.value.status)
+        assertEquals(typed.error, core.snapshots.value.error)
     }
 
     @Test
@@ -596,6 +747,24 @@ class PlaybackCoreTest {
         assertTrue(
             harness.sink.stopCount > 0,
             "teardown stops the device before anything lets go of the ring",
+        )
+    }
+
+    private fun TestScope.directCore(
+        closeDeadline: Duration = 10.seconds,
+        parent: Job? = backgroundScope.coroutineContext[Job],
+        dispatchers: PlaybackDispatchers? = null,
+        closeDispatchers: Boolean = false,
+    ): PlaybackCore {
+        val clock = VirtualClock(testScheduler)
+        return PlaybackCore(
+            config = PlayerConfig(),
+            backend = ScriptedBackend(),
+            output = ScriptedOutput(clock, ScriptedSink()),
+            dispatchers = dispatchers ?: PlaybackDispatchers.sharing(StandardTestDispatcher(testScheduler)),
+            closeDispatchers = closeDispatchers,
+            parent = parent,
+            closeDeadline = closeDeadline,
         )
     }
 }

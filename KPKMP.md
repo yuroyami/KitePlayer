@@ -122,8 +122,12 @@ proves only that the cache is not red; gates rerun for real.
 | T4 Product | T3 plus the OS integrations (focus, background, PiP, routes) and clean packaging. |
 | T5 Supported | T4 plus real-device qualification, security, performance and release gates, documented OS range. |
 
-At this baseline no platform is above an experimental T3-Full candidate on macOS arm64.
-Everything else is T1. The READMEs must say so from A0 onward.
+At the measured S1.b.5 baseline, macOS arm64 remains an experimental T3-Full candidate. One named
+iOS simulator is a narrower experimental T2 Codec candidate: it opens, decodes and seeks real media,
+reaches Ended and completes causally awaited close in the private sample, but real-media cancellation
+and the broader qualification matrix remain absent, so it does not meet the full T2 Codec definition.
+iOS arm64 remains T1 link-only, and every other target remains T1 or unqualified. The READMEs must say
+exactly that until later evidence moves it.
 
 ---
 
@@ -681,14 +685,18 @@ The gain ramp default is 5 ms (D12).
 
 ### 8.1 PlaybackCore (built in A5)
 
-One session actor coroutine on a dedicated single-thread dispatcher owning all playback
-state, command replies, track selection, epochs and the published snapshot. Workers (demux
+One session actor coroutine on a dedicated single-thread dispatcher owns playback state,
+ordinary command replies, track selection, epochs and published snapshots until terminal close.
+After the actor has completed, one parentless finalizer on an independent dispatcher closes the owned
+dispatchers and alone publishes the final close snapshot and shared terminal result. This sequential
+ownership handoff is the only code outside the actor that may publish state. Workers (demux
 pump, audio decoder, video decoder, audio feeder, video scheduler) are coroutines on their
 own single-thread dispatchers (a decoder context is touched by exactly one thread),
-communicating only through the existing queues and typed commands. No foreign thread
-touches core state; every external interaction is a message with a `CompletableDeferred`
-reply. All worker terminal outcomes (including crashes) arrive on one channel the actor
-selects on, so a dead worker becomes a handled failure, not a hang.
+communicating only through the existing queues and typed commands. Every accepted non-terminal
+state-changing command is a message: suspending routes carry their own `CompletableDeferred` reply, while
+fire-and-forget routes omit or discard one. The two close routes instead share one parentless terminal
+result. All worker terminal outcomes (including crashes) arrive on one channel the actor selects on,
+so a dead worker becomes a handled failure, not a hang.
 
 The loop is level-triggered: handlers are small, read state, decide, and may only lower
 the shared wake-up deadline; none is a transition hook, so a condition that becomes true
@@ -711,23 +719,25 @@ publishSnapshot()
 awaitWork(wakeAt)        // select on the command channel, 50 ms floor
 ```
 
-**Command legality.** Every command has a documented legal-state rule and completes
-exactly once:
+**Command legality.** Every command has a documented legal-state rule and completes exactly once.
+Except repeated `close` and `closeAndAwait`, every command rejects once terminal close is requested;
+the rules below apply during the live lifetime:
 
 | Command | Rule |
 |---|---|
-| open | Legal from Idle and Ended. From any playing state it requires `stop()` first (an explicit replace policy is Horizon B). Cancellation of a suspended `open` leaves Idle, never a half-open graph. |
-| play / pause | Idempotent in their own state; queued during Opening and Seeking; rejected after close. Pause completes only after the sink is quiescent and clocks are frozen. |
+| open | Legal from Idle, Ended and Failed. From any playing state it requires `stop()` first (an explicit replace policy is Horizon B). Cancellation of a suspended `open` leaves Idle, never a half-open graph. |
+| play / pause | Idempotent in their own state; requests queue during Opening and Seeking and reject after close. The actor publishes Paused only after the sink is quiescent and clocks are frozen; the non-suspending facade call itself is not that completion fence. |
 | seek (suspend) | Completes with the landed position or a typed failure, exactly once. Concurrent suspend seeks queue; each completes (Applied or Superseded). |
-| seekLater | Fire-and-forget, coalescing by contract (the merge rules in `SeekRequest`). |
+| seekLater | Fire-and-forget, coalescing by contract (the merge rules in `SeekRequest`); rejects synchronously after terminal close. |
 | stop | Preempts open, seek and drain; returns to Idle after teardown of the session's workers completes. |
-| close | Idempotent terminal; resolves every outstanding command exactly once; bounded. A wedged native call cannot be force-killed in process, so close that exceeds its deadline completes with a typed `RuntimeCompromised` failure rather than pretending success (full isolation is Horizon B). |
+| close / closeAndAwait | Idempotent terminal routes sharing one result; the non-suspending route only requests close, while the awaited route proves success or rethrows the same typed `RuntimeCompromised` outcome to every non-cancelled waiter after actor termination. The one Close result and every other outstanding command resolve exactly once. Caller cancellation stops only that wait. Teardown has a ten-second request deadline, but its non-cancellable ownership join can outlive the deadline when a native call wedges and may require process termination (full isolation is Horizon B). |
 | selectTrack | Legal while open; reopens per digest 8.3. |
-| attachRenderer / detachRenderer | Legal at any time; detach fences outstanding renderer work before returning. |
+| attachRenderer / detachRenderer | Legal in every live state. The actor fences outstanding renderer work before applying detach; the non-suspending facade return is only the request boundary. |
 
-Errors: suspending commands throw a typed `PlaybackException` (wrapping the
-`PlaybackError` value); caller cancellation stays `CancellationException` and is never
-converted into a failure or an end-of-stream. A terminal failure is ALSO retained in
+Playback failures from suspending commands use `PlaybackException` (wrapping the `PlaybackError`
+value); documented argument, state and unsupported-operation refusals retain their standard exception
+types. Caller cancellation stays `CancellationException` and is never converted into a failure or an
+end-of-stream. A terminal failure is ALSO retained in
 `PlayerSnapshot.error` until replaced, because a replay-zero event stream must never be
 the only record of a fatal error.
 
@@ -806,18 +816,20 @@ setVolume(Float); setMuted(Boolean)       // real via the GainStage; validated
 setLoop(LoopMode)                         // LoopMode.All rejects: no queue exists yet
 suspend selectTrack(kind: TrackKind, track: TrackId?)   // video and audio only
 attachRenderer(renderer: VideoRenderer); detachRenderer()
-close()
+close()                                      // non-suspending terminal request
+suspend closeAndAwait()                      // shared terminal result; caller cancellation only stops its wait
 companion: create(config: PlayerConfig = PlayerConfig()): KitePlayer
 ```
 
 Not in this run (marked in the truth ledger, not stubbed): external subtitles, filter
 chains, a command escape hatch, chapters (empty list plus marker), playlist/queue,
 frame stepping, balance. `create()` resolves `config.backends`; on macOS the explicit
-defaults are the FFmpeg `MediaBackend` and the Apple `OutputBackend` (D34); a null backend
-on a target with no default is a typed configuration error, never reflection. Warnings and
+pair is the FFmpeg `MediaBackend` and the Apple `OutputBackend` (D34); a null backend is a
+typed configuration error on every target, never reflection. Warnings and
 errors flow through `events` AND the snapshot per digest 8.1. `stats` separates scheduler
-counters from renderer counters per D21. The sample shrinks to: parse args, create, open,
-play, collect progress, window wiring, summary.
+counters from renderer counters per D21. The macOS CLI sample shrinks to: parse args, create,
+open, play, collect progress, window wiring, summary. The private UIKit host owns its Play,
+Pause and Seek controls plus the bounded smoke orchestration around the same facade.
 
 ### 8.3 Track selection limitation
 
@@ -6506,6 +6518,168 @@ is no other.
   `e18ffc7c9096ad398fd57dabcd072b413e10407fa30f2ec34ffb6b32683dfbce`; its KPKMP file is SHA-256
   `52aac405c8c0cdf18c0dcb2819b353d1d3e10e4614beebadfbe63c5f210674c2`. Only KPKMP changed.
   Nothing is staged, pushed, publicly published or released, and no product completion is claimed.
+
+- 2026-08-11, S1.b.5 completed against Player `43cf779` and Codec `23b8bf4`. Tier 3 was
+  selected mechanically because the measured simulator result proposes an above-T1 candidate label.
+  The label remains below full T2 Codec and does not grant T3-Full. The exact product subject is
+  `Add the runnable iOS phone sample`.
+
+  The core close contract now has one terminal fact. Non-suspending `close()` and suspending
+  `closeAndAwait()` share one parentless result and one Close command linearized by the existing
+  `closedNow` CAS. Commands that start after that point are refused. Concurrent, repeated and later
+  awaited callers observe the same success or typed failure; cancelling one caller stops only that
+  caller's wait. The actor hands an immutable outcome to a parentless Default-dispatcher finalizer.
+  The actor close tail, or its actor-completion fallback, first settles every outstanding command
+  exactly once. The finalizer then closes the owned dispatchers away from the session worker, publishes
+  the single final Idle snapshot while retaining any typed failure, and only then settles the shared
+  close result normally or exceptionally. An actor abort, rejected sole enqueue or finalizer failure
+  has a typed `RuntimeCompromised` fallback. The recorded actor outcome is authoritative over a later
+  parent cancellation.
+
+  The tests cover facade completion, repeated and concurrent callers, shared deterministic failure,
+  cancelled waiters, post-CAS suspending and fire-and-forget refusal, zero deadline, parent cancellation,
+  dispatcher-close failure and a production Native dispatcher close. The additions-only
+  public ABI is exactly one method: the KLIB dump moves from 2,189 to 2,190 lines and the JVM dump from
+  1,746 to 1,747 lines for `closeAndAwait()`. Sequential core ABI update and check are GREEN. Final
+  measured core counts are 192 tests on JVM and 201 on macOS arm64.
+
+  The sample builds static `KitePlayerSample` frameworks for iosArm64 and iosSimulatorArm64 from the
+  private Local FFmpeg trees. Kotlin exports one controller factory; Swift owns only the UIKit host.
+  Normal launch opens the bundled clip paused and provides Play, Pause and Seek 5s controls with stage
+  summaries. Smoke launch has one 45-second workflow bound and one 12-second awaited-close bound,
+  observes Ended or Failed, closes the renderer on every path and atomically replaces an exact nine-key
+  result. `teardownCompleted` can become true only after the player close, final healthy Idle snapshot
+  and synchronous renderer close all complete.
+
+  The final named-simulator Xcode build is GREEN. Its Gradle phase completed in 41 seconds with 23 tasks,
+  11 executed and 12 up-to-date; Swift compiled the generated framework digest and the application
+  linked in the same invocation. The bounded shutdown and uninstall steps completed under their
+  documented idempotent masks; boot, bootstatus, install and launch succeeded on UUID
+  `5DBA149A-E990-4197-8A7D-31E97658B568`. The exact jq oracle accepted
+  `seekRequested=true`, `seekLanded=true`, `terminalState=Ended`, `decodedFrames=137`,
+  `submittedFrames=118`, `presentedFrames=3`, `layerImage=true`, `audioUnderruns=68` and
+  `teardownCompleted=true`. These are lifecycle measurements from one local debug simulator run, not a
+  throughput, latency or audio-quality claim.
+
+  Device binaries also link without a physical run claim. The forced iosArm64 framework link executed
+  25 of 25 tasks and the Gradle daemon recorded `BUILD SUCCESSFUL in 2m22s`. The exact unsigned generic
+  iOS Release Xcode build then reported `BUILD SUCCEEDED` in 6.06 seconds. The result is an arm64 Mach-O
+  app for platform 2 with minimum iOS 15, contains the bundled clip, contains the codec entry point and
+  controller class, embeds no sample framework and has no dynamic dependency on it. Inventory found
+  connected Evon's iPhone 18.7.9 at `00008020-0005294A3E50003A` and offline Suzy's iPhone 18.6.2 at
+  `00008030-000234EE0C82402E`. Nothing was signed, archived, installed or run on either phone, and no
+  audible or visual judgement was made.
+
+  README and current-design truth now split the phone targets. iosArm64 remains T1 link-only. The named
+  iosSimulatorArm64 result is an experimental partial T2 Codec candidate because it opens and decodes
+  real media, lands a precise seek, reaches Ended and completes causally awaited teardown. Real-media
+  cancellation and the broader matrix remain absent. The six host suites total 483 executions:
+  192 JVM core, 201 macOS core, 34 output, 36 FFmpeg, eight subtitles and 12 rt. Separately, 132 C cases
+  run in four modes, build logic has 40 tests, the iOS audio program has 28, the renderer filter has eight
+  and the smoke is not a test-count addition. Every artifact remains local and private.
+
+  Complete Player Tier 2 is GREEN. `scripts/testmedia.sh` remains byte-identical to HEAD at SHA-256
+  `c332b82c778b689e4124b53987075b99580c751a5363079ab8c77d5aafbaf319`; all 27 fixtures are
+  nonempty, so regeneration was correctly skipped. `buildSrc` passes 40 tests. The forced macOS trio
+  executes 38 tasks and passes 201 core, 34 output and 36 FFmpeg tests, 271 total with no skip, failure
+  or error. Fresh plain, ASan/UBSan, TSan and required live-interposition rt runs each pass eight suites
+  and 132 cases.
+  Forced JS, WasmJS and Android spots execute 17 tasks; the forced sample link executes 30. The forced
+  JVM pair passes 192 core and eight subtitle tests. Coupling scans 88 files with three matches, all
+  allowlisted; render audit passes 43 and source discipline passes 18.
+
+  Media evidence retains its loaded first result. Sync decoded 300 but submitted 299, dropped one late
+  frame and ended at -32 ms drift with an 18 ms worst schedule. Exactly two permitted quiet controls
+  then each submitted 300 of 300 with zero drops; their worst schedules were 11 and 8 ms and final drift
+  was 1 and 0 ms. VFR passes 240 of 240 and HEVC 180 of 180 with zero drops. Timestamp-offset submits 300,
+  surround exercises 6-to-2 with zero underruns, rotated submits 25, the missing input prints exactly two
+  lines and exits 1, and the nine-case conversion suite retains the P010 golden.
+
+  Complete Codec Tier 2 is GREEN on its unchanged tree. Coupling reports zero imports, zero typed
+  crossings, 292 opaque sites, zero direct libav calls and zero raw structs; deleted surface is 15 of 15.
+  Plain, ASan/UBSan, TSan and live interposition each pass 274 cases. Forced cinterop produces ten
+  objects in a 49,232-byte archive; public API check executes nine tasks; build logic passes 42 and the
+  plugin 19. The corpus has 105 files and 2,135,229 bytes. Symbol audit reports ten members, 105 allowed
+  undefineds, 175 exports, 189 signatures and four statics. The 974-line KLIB metadata boundary is
+  identical and 85 macOS tests pass. All 16 arms completed in 194.59 seconds. Nothing was republished.
+
+  The exact standing Tier 3 pair is GREEN. The output command completed in 40 minutes 26 seconds with
+  27 of 27 tasks. Its C arm reports `callbacks=51677 worstCallbackNanos=81791 budget=5333333
+  worstAsPercentOfBudget=1.533581345848834 underruns=0 segmentGiveups=0 zeroFilled=0 estimatedAnchors=0
+  framesFed=28822503 collections=470955 allocations=14080254000`. The managed pressure control reports
+  `callbacks=51678 worstCallbackNanos=8852334 overBudget=2 collections=541136
+  allocations=16064170000`. The no-pressure control reports `callbacks=51680
+  worstCallbackNanos=3899792 overBudget=0 collections=624 allocations=0`; it stayed inside budget on
+  this run, so no causal inference is made. Heap corroboration reports `before=13631488 after=5767168
+  delta=-7864320 callbacks=51680`.
+
+  The real-media command completed in 10 minutes 17 seconds with 31 of 31 tasks. It reports
+  `loops=60 framesDecoded=28802048 underruns=3 position=9510350 buffered=193.166ms
+  collections=742986 allocations=19678428000`. These two debug macOS arm64 observations satisfy the
+  promotion selector; they are not release qualification or evidence for a phone.
+
+  Closing pre-log Tier 1 is GREEN and byte-stable. Codec coupling repeats the zero/zero/292/zero/zero
+  boundary, deleted surface remains 15 of 15 and seven plain C suites pass 274 cases. Player coupling
+  scans 88 files with three allowlisted matches; all five ABI checks execute; the forced JVM pair passes
+  192 plus eight; rt passes 132; render audit passes 43 and source discipline passes 18. Both exact
+  tracked dash scans print nothing and return the specified passing exit 1, and both diff checks are
+  clean. Player pre/post state, all nine tracked changes and six new files were byte-identical; Codec
+  remained clean at `23b8bf4`.
+
+  After the append and hostile precision corrections, the exact logged-state Tier 1 repeated GREEN.
+  Player coupling executed one task over 88 files with three allowlisted matches; all five ABI checks
+  executed 152 of 152 tasks; the forced JVM pair passed 192 core and eight subtitle tests with zero
+  skip, failure or error; rt passed eight suites and 132 cases; render passed 43 and source discipline
+  18. The exact dash and diff scans were silent with their required exit statuses. Its 15-path full
+  content manifest was identical before and after at SHA-256
+  `f0ed24c7bea48d6b05fe94a17825ec77a560eb26682159a0330d8b11300ebc98`. Codec again passed
+  forced coupling at zero/zero/292/zero/zero, deleted surface 15 of 15 and seven plain C suites with
+  274 cases; its full nonignored tree stayed identical at SHA-256
+  `2b15bafc35dd021424f5b09b17e6657254b8526f500d082dc11674a2990476f6`.
+
+  DEVIATIONS are retained. Restricted Gradle cache-lock and CoreSimulator inventory operations needed
+  identical authorized reruns. The first core fixture compile exposed the intentionally missing facade
+  and deadline seams. The old dispatcher order self-joined its session worker: the first smoke wrote
+  false and the Native regression timed out at 5.075 seconds; the corrected regression completed in
+  0.068 seconds. One JVM fallback fixture incorrectly mixed virtual time with the real Default
+  finalizer and was corrected before the accepted run. Hostile close review then caught a root-launch
+  actor exception, transient healthy Idle before dispatcher-close failure, wrong actor-cause precedence
+  and a stranded active-command reply; the retained async actor, single post-actor publisher, outcome
+  precedence and typed active-command settlement close those four cases. Sample review caught an Idle
+  counter reset, a queued-open versus disappearing-view race and an inert normal launch; max-preserving
+  counters, the pre-allocation close guard and the three normal controls close them. A UIKit
+  frame-property compile error was changed to the generated setter.
+
+  The first Xcode app link lacked six private codec-library paths; the bounded PBX path correction made
+  the exact retry pass. The original static-framework graph could leave Xcode one build behind; a
+  generated digest-source dependency was proved with a temporary semantic edit, then the source and
+  accepted artifacts were restored byte-for-byte. The following unchanged build reran the declared
+  script phase, left the generated digest untouched and correctly skipped downstream Swift compilation
+  and application linking. One restricted simulator Xcode invocation exited 70 before the accepted
+  authorized run. Superseded device and macOS selectors were interrupted and are not evidence. The
+  final device Gradle command lost its unified terminal handle, so the terminal daemon log, not the
+  partial handle, supplies its accepted result. The first sync media observation and the under-budget
+  no-pressure arm remain recorded above rather than retried away.
+
+  During Codec gates, restricted process inventory was unavailable, initial wrapper launches could not
+  reach the existing cache lock, and several deleted-surface captures ended before their full output was
+  returned; the identical authorized and fully captured runs above are the accepted evidence. During
+  closing Tier 1 the forced Player ABI arm transitively rebuilt target archives and cinterops despite the
+  ordinary no-build note. A login-shell Codec dash scan printed unrelated RVM process-sandbox stderr;
+  the exact non-login rerun supplied the required silent exit 1. Render and source audits ran
+  concurrently but used independent exact commands and results.
+
+  The eight tracked non-log product-file diff has SHA-256
+  `4383db1dcaff9d957b74bc1d3102f4e211ab5f6f6cea63376b3ea0c17d4600bc`. The six new-file
+  hashes are controller `5eda3ef9030e6944a0af70ec4dfef329f8cc7099357eb906f5380af6bee74df1`,
+  app delegate `fddba47d968a0c0d0522acd6472552f424e85fb8d72146ac580e7ba33221e026`, plist
+  `20d2e342c869b17186c15714ec82e3c61f5c7e702e2b9b5261315d4cf7958594`, project
+  `8479a8d47d58643798c1bfc431ac83f23190ba376bd8ec6d9265e23b88f0f401`, scheme
+  `1a12a6d27287b7ff62805218639855284172ce7b458e608ec31b245d63278b4a` and iOS README
+  `88bb9556ba846b1698896d2bba6813746ec0dcca157fcf0db429e6d3c7dcf0e0`. The pre-log KPKMP
+  file was SHA-256 `98b7674befc248ec49123b04bb8ba54f9465752dc1d5dcd8e560b05f08a3bb82`.
+  All 15 paths are inside the corrected fence. Nothing is staged, pushed, publicly published or
+  released.
 
 ---
 

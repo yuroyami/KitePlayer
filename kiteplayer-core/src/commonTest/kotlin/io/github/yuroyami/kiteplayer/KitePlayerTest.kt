@@ -205,6 +205,24 @@ class KitePlayerTest {
         player.close()
     }
 
+    @Test
+    fun `awaited close returns only after teardown and publishes healthy idle`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        player.open(MediaItem("scripted://awaited-close"))
+
+        assertEquals(0, harness.session.closeCount)
+        assertTrue(!harness.sink.closed)
+
+        player.closeAndAwait()
+
+        assertEquals(1, harness.session.closeCount, "the backend session is closed before the facade returns")
+        assertTrue(harness.sink.closed, "the audio sink is closed before the facade returns")
+        assertEquals(PlaybackStatus.Idle, player.state.value.status)
+        assertNull(player.state.value.error, "a healthy close must not manufacture an error")
+        harness.close()
+    }
+
     // ---------------------------------------------------------------------------------------------
     // What the flows report, D21.
     // ---------------------------------------------------------------------------------------------

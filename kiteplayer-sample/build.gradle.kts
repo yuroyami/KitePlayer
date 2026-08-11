@@ -1,5 +1,6 @@
 import io.github.yuroyami.kitecodec.gradle.FFmpegLicense
 import io.github.yuroyami.kitecodec.gradle.FFmpegSource
+import java.io.File
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -10,9 +11,14 @@ plugins {
 }
 
 /*
- * The sample is how a claim of working playback is checked rather than asserted. It is a plain CLI:
- * point it at a file, hear the audio, watch the position advance.
+ * The sample is how a claim of working playback is checked rather than asserted. macOS keeps its
+ * command-line player; the iOS targets provide the private UIKit host used by the named simulator
+ * smoke, without turning that host into a reusable application surface.
  */
+val ffmpegLocalRoot = providers.gradleProperty("kitecodec.ffmpeg.localRoot").map { path ->
+    File(path).absoluteFile.normalize()
+}
+
 kotlin {
     jvmToolchain(21)
 
@@ -23,8 +29,22 @@ kotlin {
         }
     }
 
+    listOf(
+        iosArm64(),
+        iosSimulatorArm64(),
+    ).forEach { target ->
+        target.binaries.framework {
+            baseName = "KitePlayerSample"
+            isStatic = true
+        }
+    }
+
     sourceSets {
         macosArm64Main.dependencies {
+            implementation(project(":kiteplayer-ffmpeg"))
+            implementation(project(":kiteplayer-output"))
+        }
+        iosMain.dependencies {
             implementation(project(":kiteplayer-ffmpeg"))
             implementation(project(":kiteplayer-output"))
         }
@@ -33,7 +53,8 @@ kotlin {
 
 kitecodec {
     ffmpeg {
-        source.set(FFmpegSource.System)
+        source.set(ffmpegLocalRoot.map { FFmpegSource.Local }.orElse(FFmpegSource.System))
+        localRoot.fileProvider(ffmpegLocalRoot)
         license.set(FFmpegLicense.LGPL)
     }
 }

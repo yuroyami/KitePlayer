@@ -1,3 +1,7 @@
+import io.github.yuroyami.kiteplayer.buildtools.CheckPublicationReadinessTask
+import org.gradle.api.artifacts.ProjectDependency
+import org.gradle.api.publish.maven.tasks.GenerateMavenPom
+
 plugins {
     // Declared here with apply false so the publish plugin's shared build service is loaded by
     // one classloader for the whole build. Without this, applying it to sibling modules makes
@@ -13,6 +17,38 @@ plugins {
 allprojects {
     group = "io.github.yuroyami"
     version = "0.0.1"
+}
+
+val publicationReadiness = tasks.register<CheckPublicationReadinessTask>("checkPublicationReadiness") {
+    repositoryRoot.set(layout.projectDirectory)
+}
+
+subprojects {
+    val publishingProject = this
+    val publishingPath = path
+    val publishingDirectory = projectDir.relativeTo(rootProject.projectDir).invariantSeparatorsPath
+
+    pluginManager.withPlugin("com.vanniktech.maven.publish") {
+        val pomTasks = publishingProject.tasks.withType(GenerateMavenPom::class.java)
+        publicationReadiness.configure {
+            publishingModules.add(publishingPath)
+            publishingProjectDirectories.put(publishingPath, publishingDirectory)
+            generatedPoms.from(pomTasks)
+            generatedPoms.builtBy(pomTasks)
+        }
+        publishingProject.configurations.configureEach {
+            dependencies.withType(ProjectDependency::class.java).configureEach {
+                val siblingPath = path
+                if (siblingPath != publishingPath) {
+                    publicationReadiness.configure {
+                        projectDependencyEdges.add(
+                            CheckPublicationReadinessTask.encodeEdge(publishingPath, siblingPath),
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 dependencies {

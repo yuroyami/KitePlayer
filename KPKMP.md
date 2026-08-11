@@ -887,6 +887,9 @@ location that the gitignored `local.properties` carries in the working tree, or
 or export `ANDROID_HOME` first. Both clean-clone requirements in this paragraph were found by
 running this gate from clean clones at I.1, not deduced.
 
+`checkPublicationReadiness` is a named S5-only step; it belongs to no tier, and the commit that
+first adds it to any block must make it green.
+
 ### Tier 1, FAST. Every phase, no exception. Measured 14 seconds
 
 Selected by: every change, including a change to prose alone. Nothing is exempt.
@@ -4937,6 +4940,103 @@ is no other.
   steps were followed here. Section 16.4 item 9's unsafe handoff exposure is now opt-in guarded;
   its row will receive the planned formal closure annotation in S1.a.8 beside the final opaque
   boundary decision. Nothing was pushed or released.
+
+- 2026-08-11, S1.a.3, P0-03 completed. Tier 2 gate (selected mechanically because buildSrc and
+  root build.gradle.kts changed). `checkPublicationReadiness` now reads every canonical generated
+  Maven POM from the five modules that actually apply `com.vanniktech.maven.publish`, checks direct
+  top-level coordinates and metadata, and checks every project dependency of those publishers
+  against the same publisher set. It joins no tier and publishes nothing. The root task action reads
+  only declared scalar and file inputs; the XML parser is namespace-aware, direct-child-only and
+  refuses doctypes and external entities. The report aggregates every defect before throwing and
+  always prints both category counts and a fix for each finding.
+
+  Reproduction-first evidence: the report skeleton plus the three named fixtures compiled, the
+  configured fixture passed, and the missing-description and non-publishing-sibling fixtures both
+  failed because the skeleton returned READY: three tests, two behavioral failures. After the
+  evaluator and parser landed, all nine checker tests passed, and the complete buildSrc suite passed
+  25 tests. The live registration found five publishing modules, 66 generated POMs and these five
+  project dependency edges: `:kiteplayer-core -> :kiteplayer-rt`, `:kiteplayer-ffmpeg ->
+  :kiteplayer-core`, `:kiteplayer-ffmpeg -> :kiteplayer-output`, `:kiteplayer-output ->
+  :kiteplayer-core`, and `:kiteplayer-subtitles -> :kiteplayer-core`. Gradle also exposes one
+  generated self edge in core and one in subtitles; registration excludes them because a module is
+  not its own sibling, and the unit suite pins that case.
+
+  The named `./gradlew checkPublicationReadiness --rerun-tasks` cross-check exited 1, the expected
+  deliberate pre-S5 result, after 112 executed tasks. Group and version passed in all 66 POMs. The
+  complete 20-finding set printed by the task was:
+
+  - `:kiteplayer-core`, name, publications android, androidNativeArm32, androidNativeArm64,
+    androidNativeX64, androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, js, jvm,
+    kotlinMultiplatform, linuxArm64, linuxX64, macosArm64, mingwX64, tvosArm64,
+    tvosSimulatorArm64, wasmJs, watchosArm32, watchosArm64, watchosDeviceArm64 and
+    watchosSimulatorArm64. Fix: configure MavenPom.name or POM_NAME.
+  - `:kiteplayer-core`, description, the same 22 publications. Fix: configure
+    MavenPom.description or POM_DESCRIPTION.
+  - `:kiteplayer-core`, licence name and URL, the same 22 publications. Fix: configure
+    MavenPom.licenses or POM_LICENSE_NAME and POM_LICENSE_URL.
+  - `:kiteplayer-core`, scm connection, developerConnection and URL, the same 22 publications.
+    Fix: configure MavenPom.scm or POM_SCM_CONNECTION, POM_SCM_DEV_CONNECTION and POM_SCM_URL.
+  - `:kiteplayer-ffmpeg`, name, publications kotlinMultiplatform and macosArm64. Fix: configure
+    MavenPom.name or POM_NAME.
+  - `:kiteplayer-ffmpeg`, description, publications kotlinMultiplatform and macosArm64. Fix:
+    configure MavenPom.description or POM_DESCRIPTION.
+  - `:kiteplayer-ffmpeg`, licence name and URL, publications kotlinMultiplatform and macosArm64.
+    Fix: configure MavenPom.licenses or POM_LICENSE_NAME and POM_LICENSE_URL.
+  - `:kiteplayer-ffmpeg`, scm connection, developerConnection and URL, publications
+    kotlinMultiplatform and macosArm64. Fix: configure MavenPom.scm or POM_SCM_CONNECTION,
+    POM_SCM_DEV_CONNECTION and POM_SCM_URL.
+  - `:kiteplayer-output`, name, publications kotlinMultiplatform and macosArm64. Fix: configure
+    MavenPom.name or POM_NAME.
+  - `:kiteplayer-output`, description, publications kotlinMultiplatform and macosArm64. Fix:
+    configure MavenPom.description or POM_DESCRIPTION.
+  - `:kiteplayer-output`, licence name and URL, publications kotlinMultiplatform and macosArm64.
+    Fix: configure MavenPom.licenses or POM_LICENSE_NAME and POM_LICENSE_URL.
+  - `:kiteplayer-output`, scm connection, developerConnection and URL, publications
+    kotlinMultiplatform and macosArm64. Fix: configure MavenPom.scm or POM_SCM_CONNECTION,
+    POM_SCM_DEV_CONNECTION and POM_SCM_URL.
+  - `:kiteplayer-rt`, name, publications androidNativeArm32, androidNativeArm64, androidNativeX64,
+    androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, kotlinMultiplatform, linuxArm64,
+    linuxX64, macosArm64, mingwX64, tvosArm64, tvosSimulatorArm64, watchosArm32, watchosArm64,
+    watchosDeviceArm64 and watchosSimulatorArm64. Fix: configure MavenPom.name or POM_NAME.
+  - `:kiteplayer-rt`, description, the same 18 publications. Fix: configure MavenPom.description
+    or POM_DESCRIPTION.
+  - `:kiteplayer-rt`, licence name and URL, the same 18 publications. Fix: configure
+    MavenPom.licenses or POM_LICENSE_NAME and POM_LICENSE_URL.
+  - `:kiteplayer-rt`, scm connection, developerConnection and URL, the same 18 publications. Fix:
+    configure MavenPom.scm or POM_SCM_CONNECTION, POM_SCM_DEV_CONNECTION and POM_SCM_URL.
+  - `:kiteplayer-subtitles`, name, publications android, androidNativeArm32, androidNativeArm64,
+    androidNativeX64, androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, js, jvm,
+    kotlinMultiplatform, linuxArm64, linuxX64, macosArm64, mingwX64, tvosArm64,
+    tvosSimulatorArm64, wasmJs, watchosArm32, watchosArm64, watchosDeviceArm64 and
+    watchosSimulatorArm64. Fix: configure MavenPom.name or POM_NAME.
+  - `:kiteplayer-subtitles`, description, the same 22 publications. Fix: configure
+    MavenPom.description or POM_DESCRIPTION.
+  - `:kiteplayer-subtitles`, licence name and URL, the same 22 publications. Fix: configure
+    MavenPom.licenses or POM_LICENSE_NAME and POM_LICENSE_URL.
+  - `:kiteplayer-subtitles`, scm connection, developerConnection and URL, the same 22
+    publications. Fix: configure MavenPom.scm or POM_SCM_CONNECTION, POM_SCM_DEV_CONNECTION and
+    POM_SCM_URL.
+
+  `Sibling-publishability findings (0): none` printed after that complete set. In particular,
+  kiteplayer-rt appears only in its own four S5-owned POM findings and never as an unpublishable
+  dependency of kiteplayer-core. This is the intended exit for S1.a.3, not a gate failure; the
+  named task remains outside Tier 1, Tier 2 and Tier 3 until S5 makes its metadata arm green.
+
+  The full Tier 2 gate is GREEN. KiteCodec: coupling stayed 246/287 with 273 helper calls, 14
+  direct calls and 10 of 10 allowed struct types; deleted-surface and six plain C suites passed;
+  cinterop, API and buildSrc checks passed; ASan, TSan and live interposition each passed six C
+  suites; corpus replay passed six targets and 105 files; symbol audit matched 163 exports; the
+  19,024-line metadata baseline was identical with both bakings at 3,934,308; and macosArm64Test
+  passed 12 executed tasks. KitePlayer: ABI passed 151 executed tasks; core/subtitles JVM tests
+  passed 13 executed tasks; eight plain rt suites, render audit 15 and source discipline 18 passed;
+  media regenerated; buildSrc tests passed; the three macosArm64 suites passed 41 executed tasks;
+  ASan, TSan and live interposition each passed all eight rt suites; and JS, Wasm and Android passed
+  20 executed tasks. The sample linked in 33 executed tasks: sync submitted 300 of 300 with zero
+  drops and underruns, real VFR submitted 240 of 240 with zero drops and underruns, HEVC submitted
+  180 of 180 on the video master with zero drops, and the missing path printed one concise sentence
+  plus its system error detail with no stack trace. Two independent adversarial reviews found the
+  implementation CLEAN and identified this completed log as the only prior procedural blocker.
+  Nothing was pushed, published or released.
 ---
 
 ## 15. Horizon B execution: B1

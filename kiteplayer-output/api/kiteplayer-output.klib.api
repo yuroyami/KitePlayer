@@ -1,5 +1,6 @@
 // Klib ABI Dump
 // Targets: [iosArm64, iosSimulatorArm64, macosArm64]
+// Alias: ios => [iosArm64, iosSimulatorArm64]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
@@ -60,6 +61,28 @@ final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github
         final fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.clock.<get-clock>|<get-clock>(){}[0]
     final val videoRenderer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer|{}videoRenderer[0]
         final fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
+}
+
+// Targets: [ios]
+final class io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer|null[0]
+    constructor <init>(platform.QuartzCore/CALayer, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.<init>|<init>(platform.QuartzCore.CALayer;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>){}[0]
+
+    final val events // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.events.<get-events>|<get-events>(){}[0]
+    final val failedFrames // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val presentedFrames // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    final val supersededFrames // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.supersededFrames|{}supersededFrames[0]
+        final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.close|close(){}[0]
+    final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
+    final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
+    final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+    final fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
+    final suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
+    final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
 }
 
 // Targets: [macosArm64]

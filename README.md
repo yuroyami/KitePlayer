@@ -64,7 +64,7 @@ Today, honestly:
 | Platform | Tier | What that means here |
 |---|---|---|
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
-| iOS arm64 and simulator arm64 | T1 | A local, private substrate compiles and links the software-codec backend and drives RemoteIO audio in an app-hosted native test on one named simulator. There is no renderer, runnable consumer, end-to-end result, physical-device result, public artifact or tier promotion. |
+| iOS arm64 and simulator arm64 | T1 | A local, private substrate compiles and links the software-codec backend, drives RemoteIO audio in an app-hosted native test, and renders caller-converted software frames into a caller-owned layer in a separate test on one named simulator. There is no runnable consumer, end-to-end result, physical-device result, public artifact or tier promotion. |
 | JVM, Android, iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
 
@@ -77,8 +77,10 @@ iosSimulatorArm64 alongside macosArm64. The private S1.b.1 software-codec trees 
 and the same pure-C render callback and lifecycle use RemoteIO while an explicit policy decides whether
 KitePlayer or the application owns `AVAudioSession`. An app-hosted native test on one named simulator
 proves callback activity, ring movement, clock anchoring and teardown. Its scratch launcher is test
-infrastructure, not a playable application: there is no iOS renderer or runnable consumer, nothing was
-run on a physical iPhone, iosX64 was not qualified, and no public artifact or support tier moved.
+infrastructure, not a playable application. A separate filtered native test proves that the local
+renderer can place a caller-converted software frame in a caller-owned layer. There is still no runnable
+consumer or end-to-end iOS result, nothing was run on a physical iPhone, iosX64 was not qualified, and
+no public artifact or support tier moved.
 
 **What changed in this run.** The audio device's real-time callback left managed Kotlin. It is now a
 `static` C function in `kiteplayer-rt`, installed by C, reading a C ring, with no `StableRef` and no
@@ -182,6 +184,9 @@ enough to call any platform supported.
   Separately, the app-hosted iOS simulator program passes 28 native tests: 4 session-policy, 9
   real-time sink, 14 sink-lifecycle and 1 RemoteIO fixture. That is named-simulator evidence, not a
   physical-device result or an addition to the six host-suite total.
+  Separately again, the filtered iOS simulator renderer suite passes 8 native tests, including a real
+  caller-owned `CALayer` receiving non-null `contents`. Those tests are not part of the app-hosted 28
+  or the six host-suite total, and they do not establish runnable or end-to-end playback.
 
 ## What does not exist yet
 
@@ -210,8 +215,9 @@ enough to call any platform supported.
 - **The real-time audio core is C on macOS and the local iOS substrate.** It uses DefaultOutput on
   macOS and RemoteIO on iOS; managed iOS sinks acquire an explicit process-wide playback-session lease,
   while application-managed sinks make no session call. tvOS, watchOS and the remaining native targets
-  still return an unsupported-platform verdict. The iOS proof comes only from an app-hosted native test
-  on one named simulator: there is no renderer, runnable consumer, end-to-end playback or physical-device
+  still return an unsupported-platform verdict. The audio proof comes only from an app-hosted native
+  test on one named simulator, and the caller-owned layer renderer has its own filtered simulator test.
+  Neither is a runnable consumer or an end-to-end playback result, and there is no physical-device
   qualification.
 - **No qualification of any kind.** Every number above comes from a debug binary on one machine. There
   is no release-mode benchmark, no real-device run and no performance budget in this evidence. The two
@@ -336,7 +342,7 @@ public interface MonotonicClock {
 |---|---|---|
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; DefaultOutput is exercised on macOS and RemoteIO by an app-hosted native test on one named iOS simulator |
-| `kiteplayer-output` | the Apple audio sink and policy, plus the macOS-only AppKit window and Core Graphics renderer | macOS arm64, iOS arm64 and iOS simulator arm64; no iOS renderer yet |
+| `kiteplayer-output` | the Apple audio sink and policy, the macOS AppKit window and Core Graphics renderer, and the iOS caller-owned layer renderer | macOS arm64, iOS arm64 and iOS simulator arm64; the iOS renderer remains local substrate with no runnable consumer |
 | `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64 and iOS simulator arm64; the iOS variants consume private local codec trees |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
 | `kiteplayer-sample` | a CLI that creates a player, plays a file and reports what the player says happened | macOS arm64 |
@@ -363,8 +369,10 @@ sample has neither because an executable has no public API to keep.
 
 The device tests open the default output and play a short quiet tone. They exist because the one thing
 a mock cannot confirm is that the engine's clock and the audio device share a time base. The separate
-28-test iOS proof uses the exact freshly linked Kotlin/Native program inside the minimal simulator app
-host recorded in `KPKMP.md`; the ordinary bare-kexe simulator runner has no application audio context.
+28-test iOS audio proof uses the exact freshly linked Kotlin/Native program inside the minimal simulator
+app host recorded in `KPKMP.md`; the ordinary bare-kexe simulator runner has no application audio
+context. The filtered 8-test renderer proof runs separately on the same named simulator and needs no
+application audio context.
 
 ## License
 

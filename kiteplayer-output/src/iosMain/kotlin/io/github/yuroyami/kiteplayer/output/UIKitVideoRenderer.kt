@@ -1,0 +1,372 @@
+package io.github.yuroyami.kiteplayer.output
+
+import io.github.yuroyami.kiteplayer.VideoSize
+import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
+import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.spi.RendererEvent
+import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
+import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
+import kotlinx.cinterop.interpretObjCPointer
+import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CloseableCoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.newSingleThreadContext
+import kotlinx.coroutines.runBlocking
+import platform.CoreGraphics.CGBitmapContextCreate
+import platform.CoreGraphics.CGBitmapContextCreateImage
+import platform.CoreGraphics.CGBitmapContextGetData
+import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
+import platform.CoreGraphics.CGColorSpaceRef
+import platform.CoreGraphics.CGColorSpaceRelease
+import platform.CoreGraphics.CGContextDrawImage
+import platform.CoreGraphics.CGContextRelease
+import platform.CoreGraphics.CGContextRotateCTM
+import platform.CoreGraphics.CGContextTranslateCTM
+import platform.CoreGraphics.CGImageAlphaInfo
+import platform.CoreGraphics.CGImageRef
+import platform.CoreGraphics.CGImageRelease
+import platform.CoreGraphics.CGRectMake
+import platform.QuartzCore.CALayer
+import platform.QuartzCore.CATransaction
+import platform.QuartzCore.kCAGravityResizeAspect
+import platform.darwin.dispatch_async
+import platform.darwin.dispatch_get_main_queue
+import platform.posix.memcpy
+import kotlin.math.PI
+
+/**
+ * Converts software frames away from the caller and presents the newest finished image in [layer].
+ *
+ * The caller owns the layer. In particular, closing this renderer gives up the renderer's image
+ * references but does not clear or replace the layer's last contents.
+ */
+@OptIn(ExperimentalForeignApi::class, DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+public class UIKitVideoRenderer internal constructor(
+    private val convert: (VideoFrame) -> ByteArray,
+    private val enqueueOnMain: (block: () -> Unit) -> Unit,
+    private val deliverImage: (CGImageRef?) -> Unit,
+) : VideoRenderer {
+
+    public constructor(
+        layer: CALayer,
+        convert: (VideoFrame) -> ByteArray,
+    ) : this(
+        convert = convert,
+        enqueueOnMain = { block -> dispatch_async(dispatch_get_main_queue()) { block() } },
+        deliverImage = { image ->
+            if (image != null) {
+                CATransaction.begin()
+                try {
+                    CATransaction.setDisableActions(true)
+                    layer.contentsGravity = kCAGravityResizeAspect
+                    layer.contents = interpretObjCPointer<Any>(image.rawValue)
+                } finally {
+                    CATransaction.commit()
+                }
+            }
+        },
+    )
+
+    private val presented = atomic(0L)
+    private val superseded = atomic(0L)
+    private val failed = atomic(0L)
+    private val closed = atomic(false)
+
+    private val pendingFrame = atomic<VideoFrame?>(null)
+    private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** All image ownership and delivery state is changed while holding this one lock. */
+    private val deliveryLock = SynchronizedObject()
+    private var pendingImage: CGImageRef? = null
+    private var deliveryQueued: Boolean = false
+    private var lastDeliveredImage: CGImageRef? = null
+
+    private val dispatcher: CloseableCoroutineDispatcher = newSingleThreadContext("kiteplayer-uikit-convert")
+    private val worker = CoroutineScope(dispatcher + SupervisorJob())
+    private val workerJob: Job = worker.launch {
+        try {
+            while (!closed.value) {
+                signal.receive()
+                convertPending()
+            }
+        } catch (_: ClosedReceiveChannelException) {
+            // close() ends the worker's wait by closing the signal.
+        }
+    }
+
+    public val presentedFrames: Long get() = presented.value
+
+    public val supersededFrames: Long get() = superseded.value
+
+    public val failedFrames: Long get() = failed.value
+
+    override val events: Flow<RendererEvent> = emptyFlow()
+
+    override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
+
+    override fun supports(format: PlayerPixelFormat): Boolean = format != PlayerPixelFormat.Opaque
+
+    override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
+        if (closed.value) {
+            frame.close()
+            failed.incrementAndGet()
+            return false
+        }
+        val displaced = pendingFrame.getAndSet(frame)
+        if (displaced != null) {
+            displaced.close()
+            superseded.incrementAndGet()
+        }
+        if (closed.value) {
+            drainPendingFrame()
+            return false
+        }
+        signal.trySend(Unit)
+        return true
+    }
+
+    private fun convertPending() {
+        val frame = pendingFrame.getAndSet(null) ?: return
+        val size = frame.size
+        val rotation = quarterTurn(frame.rotationDegrees)
+        val image = try {
+            makeImage(convert(frame), size, rotation)
+        } catch (_: Throwable) {
+            null
+        } finally {
+            frame.close()
+        }
+        if (image == null) {
+            failed.incrementAndGet()
+            return
+        }
+        deliver(image)
+    }
+
+    private fun deliver(image: CGImageRef) {
+        var displaced: CGImageRef? = null
+        var rejected = false
+        var shouldEnqueue = false
+        synchronized(deliveryLock) {
+            if (closed.value) {
+                rejected = true
+                failed.incrementAndGet()
+            } else {
+                displaced = pendingImage
+                pendingImage = image
+                if (displaced != null) superseded.incrementAndGet()
+                if (!deliveryQueued) {
+                    deliveryQueued = true
+                    shouldEnqueue = true
+                }
+            }
+        }
+        displaced?.let(::CGImageRelease)
+        if (rejected) {
+            CGImageRelease(image)
+            return
+        }
+        if (!shouldEnqueue) return
+        try {
+            enqueueOnMain { drawPendingImage() }
+        } catch (_: Throwable) {
+            var stranded: CGImageRef? = null
+            synchronized(deliveryLock) {
+                deliveryQueued = false
+                stranded = pendingImage
+                pendingImage = null
+                if (stranded != null) failed.incrementAndGet()
+            }
+            stranded?.let(::CGImageRelease)
+        }
+    }
+
+    private fun drawPendingImage() {
+        synchronized(deliveryLock) {
+            deliveryQueued = false
+            val image = pendingImage
+            pendingImage = null
+            if (image == null) return@synchronized
+            if (closed.value) {
+                failed.incrementAndGet()
+                CGImageRelease(image)
+                return@synchronized
+            }
+            try {
+                deliverImage(image)
+                presented.incrementAndGet()
+                lastDeliveredImage?.let(::CGImageRelease)
+                lastDeliveredImage = image
+            } catch (_: Throwable) {
+                failed.incrementAndGet()
+                CGImageRelease(image)
+            }
+        }
+    }
+
+    private fun makeImage(rgba: ByteArray, size: VideoSize, rotationDegrees: Int): CGImageRef? {
+        val width = size.width
+        val height = size.height
+        val displayWidth = displayWidth(size)
+        if (width <= 0 || height <= 0 || displayWidth <= 0) return null
+
+        val rowBytes = width.toLong() * RGBA_BYTES
+        if (rowBytes > Int.MAX_VALUE || height.toLong() > Int.MAX_VALUE.toLong() / rowBytes) return null
+        val requiredBytes = rowBytes * height.toLong()
+        if (rgba.size.toLong() != requiredBytes) return null
+
+        val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
+        try {
+            val context = CGBitmapContextCreate(
+                data = null,
+                width = width.toULong(),
+                height = height.toULong(),
+                bitsPerComponent = 8u,
+                bytesPerRow = rowBytes.toULong(),
+                space = colorSpace,
+                bitmapInfo = CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value,
+            ) ?: return null
+            try {
+                val destination = CGBitmapContextGetData(context) ?: return null
+                rgba.usePinned { pinned ->
+                    memcpy(destination, pinned.addressOf(0), requiredBytes.convert())
+                }
+                val stored = CGBitmapContextCreateImage(context) ?: return null
+                try {
+                    return transform(stored, displayWidth, height, rotationDegrees, colorSpace)
+                } finally {
+                    CGImageRelease(stored)
+                }
+            } finally {
+                CGContextRelease(context)
+            }
+        } finally {
+            CGColorSpaceRelease(colorSpace)
+        }
+    }
+
+    private fun transform(
+        image: CGImageRef,
+        displayWidth: Int,
+        height: Int,
+        rotationDegrees: Int,
+        colorSpace: CGColorSpaceRef,
+    ): CGImageRef? {
+        val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
+        val outputWidth = if (quarterTurned) height else displayWidth
+        val outputHeight = if (quarterTurned) displayWidth else height
+        val outputRowBytes = outputWidth.toLong() * RGBA_BYTES
+        if (
+            outputRowBytes > Int.MAX_VALUE ||
+            outputHeight.toLong() > Int.MAX_VALUE.toLong() / outputRowBytes
+        ) {
+            return null
+        }
+        val context = CGBitmapContextCreate(
+            data = null,
+            width = outputWidth.toULong(),
+            height = outputHeight.toULong(),
+            bitsPerComponent = 8u,
+            bytesPerRow = outputRowBytes.toULong(),
+            space = colorSpace,
+            bitmapInfo = CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value,
+        ) ?: return null
+        try {
+            when (rotationDegrees) {
+                90 -> {
+                    CGContextTranslateCTM(context, 0.0, displayWidth.toDouble())
+                    CGContextRotateCTM(context, -PI / 2)
+                }
+                180 -> {
+                    CGContextTranslateCTM(context, displayWidth.toDouble(), height.toDouble())
+                    CGContextRotateCTM(context, PI)
+                }
+                270 -> {
+                    CGContextTranslateCTM(context, height.toDouble(), 0.0)
+                    CGContextRotateCTM(context, PI / 2)
+                }
+            }
+            CGContextDrawImage(
+                context,
+                CGRectMake(0.0, 0.0, displayWidth.toDouble(), height.toDouble()),
+                image,
+            )
+            return CGBitmapContextCreateImage(context)
+        } finally {
+            CGContextRelease(context)
+        }
+    }
+
+    private fun displayWidth(size: VideoSize): Int {
+        if (size.pixelAspectDenominator == 0) return size.width
+        val scaled = size.width.toLong() * size.pixelAspectNumerator.toLong() /
+            size.pixelAspectDenominator.toLong()
+        return if (scaled in 1..Int.MAX_VALUE.toLong()) scaled.toInt() else 0
+    }
+
+    private fun quarterTurn(rotationDegrees: Int): Int {
+        val normalised = ((rotationDegrees % 360) + 360) % 360
+        return if (normalised == 90 || normalised == 180 || normalised == 270) normalised else 0
+    }
+
+    override fun vsyncIntervalNanos(): Long? = null
+
+    override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+
+    override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
+
+    override fun close() {
+        if (!closed.compareAndSet(expect = false, update = true)) return
+        signal.close()
+        worker.cancel()
+        runBlocking { workerJob.join() }
+        drainPendingFrame()
+
+        var pending: CGImageRef? = null
+        var delivered: CGImageRef? = null
+        synchronized(deliveryLock) {
+            pending = pendingImage
+            pendingImage = null
+            if (pending != null) failed.incrementAndGet()
+            delivered = lastDeliveredImage
+            lastDeliveredImage = null
+            deliveryQueued = false
+            try {
+                deliverImage(null)
+            } catch (_: Throwable) {
+                // Teardown still releases both renderer-owned image references.
+            }
+        }
+        pending?.let(::CGImageRelease)
+        delivered?.let(::CGImageRelease)
+        dispatcher.close()
+    }
+
+    private fun drainPendingFrame() {
+        val frame = pendingFrame.getAndSet(null) ?: return
+        frame.close()
+        failed.incrementAndGet()
+    }
+
+    private companion object {
+        private const val RGBA_BYTES: Long = 4L
+    }
+}

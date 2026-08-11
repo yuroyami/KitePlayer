@@ -6358,6 +6358,103 @@ is no other.
   clean at its empty-diff hash. Only KPKMP changed, nothing was staged, and nothing was pushed,
   published or released.
 
+- 2026-08-11, S1.b.4 completed against Player `7b0d936` and Codec `23b8bf4`. Tier 2 was selected
+  mechanically because the phase adds Kotlin under `iosMain` and `iosTest` and completes a phone
+  render-path sub-phase. Tier 3 was not selected: no C callback, ring handoff, teardown order,
+  support tier or release artifact changed. The exact product subject is
+  `Render software frames into an iOS layer`.
+
+  The required red preceded the fix. The first compile-safe fixture run exposed both the predicted
+  unbounded queue and one test mistake: `emptyFlow().first()` throws rather than waiting. That run
+  was discarded as the authoritative red. After correcting only the fixture and retaining the
+  unguarded skeleton, the exact named-simulator filter ran eight tests and failed exactly one:
+  `12 images must leave exactly one queued block`, expected one and observed twelve. The other
+  seven cases were green. Adding only the queued-delivery guard under the shared delivery lock
+  made the same command pass eight of eight.
+
+  The final renderer has one atomic newest-frame slot, one conversion worker and one newest-image
+  slot. The pending image, queued flag, borrowed delivery callback, last-delivered renderer
+  reference and close are ordered by one lock; the main enqueue happens after that lock is released.
+  Every accepted frame is closed exactly once and ends in exactly one of the presented, superseded
+  or failed counters. A rejected enqueue is drained and released without killing the worker. Close
+  is idempotent, joins conversion, drains both slots, clears only the deterministic test seam and
+  releases the renderer's final image reference without clearing the caller-owned layer.
+
+  Core Graphics owns every image backing allocation. The converter bytes are length-checked with
+  overflow-safe arithmetic, copied into a `data = null` bitmap context and never retained beyond a
+  Kotlin pin. A second Core Graphics-owned context applies pixel aspect and normalised quarter-turn
+  rotation. Hostile review found one real edge case before the full gate: a valid four-byte 1 by 1
+  input with `Int.MAX_VALUE:1` pixel aspect could request a multi-gigabyte transformed context.
+  The final code checks transformed row and total area before allocation, and that exact fixture
+  fails deterministically without delivery. Production assigns a borrowed `CGImageRef` to
+  caller-owned `CALayer.contents` inside a `CATransaction` with implicit actions disabled and
+  aspect-fit gravity. The real layer fixture confirms non-null contents and confirms those contents
+  survive renderer close.
+
+  The final named `Test iPhone 17` simulator run is GREEN: 24 of 24 tasks executed in 15 seconds and
+  `UIKitVideoRendererTest` passes eight tests with zero skip, failure or error. The production and
+  test files are 372 and 458 lines at SHA-256
+  `a7e25e495b1749d5de88db0aba050a478e0df53ec3180869f4cb4685627db6b8` and
+  `21c1de8b85cdb0ff62b4a1ae699a0c2d55e460282459154522206960da86f29e`.
+  The AppKit renderer and test remain byte-identical at
+  `1a1180deb060d91e68aa6a0e02d2d289687ac2d1c064c0b6ae50ce4c3fc82e04` and
+  `fd777728820450d72beacc8cf0291d9fa856e74327243df93015839bbd779d72`.
+
+  The output ABI ratchet is additions-only. It moves from 97 to 120 lines, adds 23 and removes zero,
+  at SHA-256 `0c9081b3b412efa7d727bdfb61b4090c9464ee7af4fe9666dc4bed91e6a76c1c`.
+  The generated iOS alias and target metadata plus the one public class, its CALayer/converter
+  constructor, three counters and inherited renderer methods are the whole delta; the internal seam
+  and image state do not appear. The exact combined update/check command hit Gradle 9.6's standing
+  implicit-dependency validation because the check reads the update output without a declared task
+  edge. Sequential update and check both completed GREEN. A first restricted wrapper launch was also
+  denied access to the existing Gradle cache lock; the authorized commands supplied the accepted
+  evidence. Neither event is a product failure.
+
+  Root README truth is updated without changing support. The six host suites remain 467 executions,
+  the app-hosted iOS audio program remains 28, and the filtered renderer suite is a separate eight.
+  The local/private iOS substrate now has a caller-owned layer renderer, but still has no runnable
+  consumer, end-to-end result, physical-device qualification, public artifact or tier move. The final
+  README is SHA-256 `69225ce0ad6bcf356c7f0200a9b2572c9baea0156b9ae2d16678aed21dc97eed`.
+
+  Complete Player Tier 2 is GREEN on the frozen post-guard state. Test media were not regenerated:
+  `scripts/testmedia.sh` remains SHA-256 `c332b82c778b689e4124b53987075b99580c751a5363079ab8c77d5aafbaf319`
+  and all 27 fixtures are present and nonempty. `buildSrc` passes 40 tests. The forced macOS native
+  trio executes 38 tasks and passes core 193, output 34 and FFmpeg 36, 263 total, with zero skip,
+  failure or error. Fresh ASan, TSan and required live interposition each pass eight suites and 132
+  cases. Forced JS, WasmJS and Android spots execute 17 tasks, and the forced sample link executes
+  30. The P010 golden passes in its nine-test conversion suite with its mean-under-2 and
+  worst-under-40 assertions intact.
+
+  The restricted first sync sample could not open the Apple output component; the required host run
+  then submitted 300 of 300 with zero drops, repeats, underruns, rebuffers or warnings. The first VFR
+  host run retained one late drop at 239 of 240. Exactly two quiet controls permitted by section 9
+  then passed 240 of 240 with zero drops, worst schedules of 10 and 7 ms, and no further retry.
+  HEVC completed once on the Video master with 180 decoded, 178 submitted, two late drops, a 30 ms
+  worst schedule, zero final drift and no underrun, repeat, rebuffer or warning; its oracle is
+  completion, so the load observation is retained without a retry. Timestamp-offset submits 300 of
+  300 and plays to `0:10.026` of `0:10.021`; surround exercises 6-to-2 with zero underruns; rotated
+  submits 25 of 25 with zero drops; and the nonexistent input exits 1 with exactly two diagnostic
+  lines and no stack.
+
+  Codec is unchanged, so its complete Tier 2 evidence at `23b8bf4` is carried from S1.b.3 rather
+  than repeated or republished. Closing Tier 1 is GREEN. Codec coupling is zero imports and zero
+  typed crossings with 292 opaque helper sites reported, zero direct libav calls and zero raw
+  structs; deleted surface is 15 of 15; and seven plain C suites pass 274 cases. Player coupling
+  scans 87 files with three matches, all allowlisted; all five ABI checks execute; the forced JVM
+  pair passes 184 core and eight subtitle tests; eight rt suites pass 132 cases; render audit passes
+  43 and source discipline passes 18. Both tracked dash scans print nothing and return the required
+  passing exit 1, and both diff checks are clean. The closing Player pre/post state fingerprint is
+  identical at SHA-256 `817fb6d07c082895e09b96e60b8f6f9729dfe107ce78efa2274ed942983810de`;
+  Codec remains clean at its empty-diff hash. Only existing Gradle-cache access required host
+  authorization during the accepted closing run.
+
+  The exact required nine-symbol product-addition scan and separate three-dependency scan over the
+  new Kotlin files both print nothing and return passing exit 1. The two modified tracked product
+  files have binary-diff SHA-256
+  `5c827754a40cdddae6f76458e91fb8b3827957cf37feb2728ac8a9bc5be3d724`; the two new-file hashes
+  are the production and test hashes recorded above. All five paths are inside the S1.b.4 fence.
+  Nothing is staged, pushed, publicly published or released.
+
 ---
 
 ## 15. Horizon B execution: B1

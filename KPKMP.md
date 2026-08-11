@@ -5168,6 +5168,22 @@ is no other.
   concise lines, no stack trace and exited 1 as required. No deviation, push, public publication
   or release.
 
+- 2026-08-11, S1.a.6 execution-fence correction completed before product work began. Prose only,
+  Tier 1 gate (selected by rule: every change, including prose). The written recursive `grep`
+  proof traversed ignored build output, reported the compiled checker-test class as a binary match
+  and hit the render-audit archive member `__.SYMDEF` with permission denied. It therefore could
+  not prove the claimed source/prose set. The conservative tree-backed correction uses
+  `rg -n -F 'ffkmp_codecctx_send_packet' . ../KiteCodec` from the Player root. Repository ignore
+  rules now exclude build products while ordinary untracked source remains visible. The corrected
+  command prints exactly ten hits: nine prose locations across KPKMP and the Codec coupling
+  baseline, plus the one executable synthetic-mutation fixture in
+  CheckCinteropCouplingTaskTest.kt; no declaration or definition exists. The complete S1.a.6
+  read-only sweep found no other mismatch. Tier 1 stayed at Codec coupling 246/287, 273 helper
+  and 14 direct calls, 10 of 10 allowed types, six plain Codec suites, Player coupling 87/3,
+  clean ABI and JVM checks, eight plain rt suites, render audit 15 and source discipline 18. Both
+  tracked-file em dash scans printed nothing and exited 1. No product file changed and nothing
+  was pushed, published or released.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -8211,9 +8227,11 @@ Steps.
 1. Reword so the experiment reads as the hypothetical mutation it was, and add the sentence: "No
    helper named ffkmp_codecctx_send_packet exists in this library today; S1.a.7 is what creates
    it." (This sub-phase runs before S1.a.7; if order changes, change the tense.)
-2. Prove: `grep -rn ffkmp_codecctx_send_packet` over both repositories finds only prose plus
-   ONE test fixture (CheckCinteropCouplingTaskTest.kt:138 uses the name as a synthetic mutation
-   string, which is executable test code and sound), and no declaration, until S1.a.7 lands.
+2. Prove from the KitePlayer root:
+   `rg -n -F 'ffkmp_codecctx_send_packet' . ../KiteCodec` finds only prose plus ONE test fixture
+   (CheckCinteropCouplingTaskTest.kt:138 uses the name as a synthetic mutation string, which is
+   executable test code and sound), and no declaration, until S1.a.7 lands. Repository-aware
+   search excludes ignored build output while retaining ordinary untracked source.
 
 Gate. Tier 2, because the changed file lives under `native/` and section 9's selector is
 mechanical (S1.a.0's third sweep caught this expansion selecting Tier 1 by "prose only", which

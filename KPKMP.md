@@ -6455,6 +6455,58 @@ is no other.
   are the production and test hashes recorded above. All five paths are inside the S1.b.4 fence.
   Nothing is staged, pushed, publicly published or released.
 
+- 2026-08-11, the S1.b.5 execution fence was corrected before product work against Player
+  `8da25e0` and Codec `23b8bf4`. The first hostile preflight found two BLOCKING claims. Public
+  `KitePlayer.close()` returns immediately, so its return cannot prove teardown; the actor can also
+  publish Idle before a later `RuntimeCompromised` close result. Separately, calling a simulator an
+  above-T1 candidate selects the standing Tier 3 gate even when the evidence remains below the full
+  T2 Codec definition. Product work stayed stopped.
+
+  A deeper close audit found the shared-core defect that the correction now owns. The existing
+  awaited route creates a new reply per caller, secondary Close replies can complete before the
+  primary failure is known, and an exceptional primary reply can escape before actor join. The core's
+  ten-second timeout also cannot interrupt its non-cancellable ownership join. The corrected fence
+  therefore requires one parentless terminal result linearized by the existing `closedNow` CAS, one
+  Close command, typed enqueue and actor-completion fallbacks, final result settlement after state and
+  dispatcher cleanup, actor join for every non-cancelled success or reported failure, and caller
+  cancellation that leaves teardown running. Direct zero-deadline, concurrent, repeated, cancelled
+  waiter, actor-parent-cancel and post-CAS command tests make those claims falsifiable. Existing
+  outstanding-command exactly-once behavior remains required.
+
+  The exact correction subject is `Correct iOS sample teardown and support truth`. The product fence
+  adds `KitePlayer.kt`, `PlaybackCore.kt`, their two existing common tests, and both core API dumps.
+  It retains non-suspending `close()`, adds public suspend `closeAndAwait()`, updates public and design
+  truth only with the product, and requires additions-only KLIB and JVM ABI changes. The smoke is now
+  bounded as a whole at 45 seconds with a nested 12-second awaited-close bound, observes Ended or
+  Failed, closes the concurrency-safe renderer on every path, and atomically writes the same nine-key
+  result even on failure with `teardownCompleted=false`. A successful true value requires awaited
+  player completion, final Idle with the healthy session's null error, and synchronous renderer close.
+
+  The support action keeps iosArm64 at T1 link-only and proposes iosSimulatorArm64 only as an
+  experimental T2 Codec candidate because the named run still lacks real-media cancellation and the
+  broader matrix. Section 2 and every affected README truth surface move only after measured product
+  evidence. That proposed above-T1 label selects full Tier 2, the simulator and device-link proofs,
+  the exact standing supervised macOS command pair with every configured arm at ten minutes, and
+  closing Tier 1. It grants neither full T2 Codec nor T3-Full. Three independent final hostile passes
+  classified the corrected fence CLEAN with zero BLOCKING or DESCRIPTIVE findings.
+
+  Tier 1 ran because the live change is KPKMP prose only. Codec coupling executes with zero cinterop
+  imports, zero typed crossings, 292 opaque helper sites reported, zero direct libav calls and zero raw
+  structs. Deleted surface is 15 of 15, and seven plain C suites pass 274 cases. Player coupling executes
+  over 87 files with three matches, all allowlisted; all five ABI checks execute; the forced JVM pair
+  passes 184 core and eight subtitle tests with zero skip, failure or error; eight rt suites pass 132
+  cases; render audit passes 43 and source discipline passes 18. Both exact tracked dash scans print
+  nothing and return the required passing exit 1, and both diff checks are clean.
+
+  The first Gradle coupling launch in each repository was denied access to the existing user-cache lock
+  before any task ran; the identical authorized reruns above are the accepted evidence. A restricted
+  simulator-inventory read could not reach CoreSimulatorService; the identical authorized read confirmed
+  the named UUID in Booted state without changing it. The corrected
+  pre-log fence is 112 additions and 16 removals with binary-diff SHA-256
+  `e18ffc7c9096ad398fd57dabcd072b413e10407fa30f2ec34ffb6b32683dfbce`; its KPKMP file is SHA-256
+  `52aac405c8c0cdf18c0dcb2819b353d1d3e10e4614beebadfbe63c5f210674c2`. Only KPKMP changed.
+  Nothing is staged, pushed, publicly published or released, and no product completion is claimed.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10702,15 +10754,73 @@ Commit first line. KitePlayer: `Render software frames into an iOS layer`.
 
 #### S1.b.5 Link, install and run the iOS sample
 
-Files: `kiteplayer-sample/build.gradle.kts`; new
+Execution-fence correction commit first line. KitePlayer:
+`Correct iOS sample teardown and support truth`.
+
+Files: `kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/KitePlayer.kt`;
+`kiteplayer-core/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/internal/PlaybackCore.kt`;
+`kiteplayer-core/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/KitePlayerTest.kt`;
+`kiteplayer-core/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/PlaybackCoreTest.kt`;
+`kiteplayer-core/api/kiteplayer-core.klib.api`;
+`kiteplayer-core/api/jvm/kiteplayer-core.api`; `kiteplayer-sample/build.gradle.kts`; new
 `kiteplayer-sample/src/iosMain/kotlin/io/github/yuroyami/kiteplayer/sample/SampleViewController.kt`;
 new `kiteplayer-sample/iosApp/KitePlayerSample/AppDelegate.swift` and `Info.plist`;
 `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj/project.pbxproj`;
 `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj/xcshareddata/xcschemes/KitePlayerSample.xcscheme`;
-`kiteplayer-sample/iosApp/README.md`; root `README.md`; KPKMP log.
+`kiteplayer-sample/iosApp/README.md`; root `README.md`; `KPKMP.md` sections 2, 8.1 and 8.2 truth
+and log.
 
 Steps.
-1. Add both iOS framework targets, static and named `KitePlayerSample`, using Local FFmpeg. Export
+1. Make the core's non-suspending and awaited close routes share one parentless terminal
+   `CompletableDeferred<Unit>`. Reuse `closedNow` as the atomic request guard: its false-to-true CAS is
+   the linearization point that immediately rejects later commands, and its winner synchronously queues
+   the only Close command. `close()` triggers it, while concurrent and later awaited callers observe the
+   same terminal success or `PlaybackError.RuntimeCompromised`. Settle the shared result at the final
+   `runClose` step, after snapshot, termination state and dispatcher closure; structure that tail so an
+   exception before success settlement reaches the typed actor-completion fallback. A rejected sole
+   enqueue or actor completion before that step completes it with a typed
+   `PlaybackException(PlaybackError.RuntimeCompromised)` instead of suspending waiters; the actor
+   completion hook is the fallback and all completion paths settle the result exactly once. Await it,
+   rethrow caller `CancellationException` immediately so teardown continues independently, and for
+   success or a reported close failure join the actor before returning or rethrowing. Do not weaken the
+   existing non-cancellable worker join. Add an internal close-deadline constructor override whose
+   production default remains ten seconds and whose timeout and error detail both read the injected
+   value. `PlaybackCoreTest` constructs `PlaybackCore` directly with a zero deadline for the deterministic
+   failure fixture; do not route this override through `CoreHarness` or expand the file fence. Make
+   `send`, the three direct fire-and-forget seek enqueues and cancellation's best-effort Stop consult
+   `closedNow`, so a suspending command completes with the existing `IllegalStateException`, a direct
+   seek throws that same terminal refusal synchronously, and cancellation cleanup becomes a no-op once
+   close won the CAS. No command that starts after the CAS can enter the channel.
+
+   Expose `public suspend fun closeAndAwait()` on `KitePlayer` as a direct facade over that corrected
+   core route. Its KDoc says that a successful return means actor and teardown completion, that every
+   reported compromised outcome throws `PlaybackException`, and that caller cancellation does not
+   cancel teardown. Preserve the existing non-suspending `AutoCloseable.close()` behavior. Correct the
+   `KitePlayer` and `PlaybackCore` overview and close KDocs: ordinary interactions still use actor
+   messages, awaited ones use per-call replies, fire-and-forget ones discard or omit theirs, close routes
+   share one result, the non-suspending call provides no completion proof, and the non-cancellable
+   ownership join can outlive the request deadline and require process termination. Add
+   `@throws IllegalStateException` after close to `KitePlayer.seekLater`. In the product
+   commit, make the matching KPKMP section 8.1 message/reply description and close row retain the
+   outstanding-command exactly-once guarantee while describing the shared result, non-cancel join and
+   cancellation escape, and make its `seekLater` row name the terminal refusal. Add
+   `suspend closeAndAwait()` to section 8.2's exact facade list. Add a
+   facade success test proving the awaited call returns only after the scripted session and audio sink
+   have closed and the public state is Idle; a healthy session that starts with no error must still
+   have none. Add core tests proving `close()` followed by concurrent and repeated awaited calls share
+   one success, share one deterministic `RuntimeCompromised` failure and remain terminal, and that
+   cancelling one waiter does not cancel the shared close seen by the next waiter. Pin the CAS by calling
+   non-suspending `close()` and, before the actor advances, proving both a suspending command and a direct
+   fire-and-forget seek throw `IllegalStateException`. A directly constructed core whose parent is
+   cancelled proves the actor-completion fallback returns typed failure rather than hanging. The failure
+   fixtures use the internal zero-deadline override and do not change the production deadline. Update
+   both the KLIB and JVM core ABI dumps for the facade addition only and run
+   `./gradlew :kiteplayer-core:updateKotlinAbi` followed by
+   `./gradlew :kiteplayer-core:checkKotlinAbi`. Add the awaited alternative to the root README's
+   public-surface description, and remeasure every affected JVM, macOS and aggregate host test count
+   after the new common tests instead of assuming a delta.
+
+   Add both iOS framework targets, static and named `KitePlayerSample`, using Local FFmpeg. Export
    one controller factory. The Xcode build phase selects the matching Gradle framework from
    `PLATFORM_NAME`, passes the absolute `kitecodec.ffmpeg.localRoot` property and introduces no
    downloaded framework or CocoaPods layer. The bundle id is
@@ -10721,15 +10831,31 @@ Steps.
    `iphonesimulator` to `:kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64` and `iphoneos`
    to `:kiteplayer-sample:linkReleaseFrameworkIosArm64`, and exits nonzero for every other
    `PLATFORM_NAME`.
-2. Add sample-only launch argument `--s1b-smoke`. It auto-plays the bundled sync clip, requests one
-   precise seek to five seconds, waits for Ended, closes and writes a bounded JSON result to the
-   app Documents directory before terminating. `seekLanded` becomes true only after at least one
+2. Add sample-only launch argument `--s1b-smoke`. Run the entire smoke workflow inside one 45-second
+   application timeout. It auto-plays the bundled sync clip, requests one precise seek to five seconds,
+   waits for Ended or Failed, closes and writes a bounded JSON result to the app Documents directory
+   before terminating. `seekLanded` becomes true only after at least one
    post-seek presented frame and public `KitePlayer.position()` in the inclusive range 5,000 to
    5,034 milliseconds; a successful return from `seek()` alone cannot set it. The 34 millisecond
-   tolerance is one frame of this 30 fps fixture. `teardownCompleted` becomes true only after both
-   player and renderer close calls return. Write `s1b-smoke.json.tmp` in the same directory, flush
-   and close it, then atomically replace `s1b-smoke.json`; the observer must never see a partial
-   record. It never exposes a production diagnostics API.
+   tolerance is one frame of this 30 fps fixture. After playback reaches Ended, run
+   `player.closeAndAwait()` inside a 12 second outer timeout. This is the smoke's external bound, not
+   a promise that the core's ten-second deadline can interrupt its non-cancellable ownership join. A
+   `RuntimeCompromised` result the core reaches throws `PlaybackException`; an uninterruptible wedge
+   can instead reach the outer timeout, whose cancellation stops only the caller's wait while the
+   queued terminal close continues. Success returns only after the actor terminates. For this healthy
+   smoke, whose error is null before close, require the final public state to be Idle with error still
+   null. Watch for Ended or Failed rather than waiting only for Ended. One outer catch/finally boundary
+   covers open, decode, seek, that terminal wait and close. On any failure
+   or total timeout, request the player's idempotent non-suspending close if it exists; an already queued
+   awaited close continues. Always close the concurrency-safe renderer from `finally`. A thrown or
+   timed-out operation fails the smoke and must never set `teardownCompleted`; that key becomes true only
+   after the successful awaited player close, the Idle/no-error assertion and the renderer's synchronous
+   close all complete. The result writer is outermost: cleanup and renderer-close exceptions are captured
+   and cannot suppress it. On every path atomically write the exact nine-key result, using
+   `teardownCompleted=false` for failure or timeout, and then terminate. Write
+   `s1b-smoke.json.tmp` in the same directory, flush and close it, then atomically replace
+   `s1b-smoke.json`; the observer must never see a partial record. It never exposes a production
+   diagnostics API.
    Use the verified simulator UUID and exact commands:
 
    ```bash
@@ -10798,13 +10924,35 @@ Steps.
    Record the connected physical iPhone inventory but reserve signing, audible/visual judgment
    and physical playback for S1.e's owner session.
 4. Update the root README support, module and run sections to the measured local/private state.
-   Do not claim physical-iPhone qualification, public artifacts, VideoToolbox, reusable views,
-   Compose or T3-Full. Close with scans rejecting platform demux/decoders, VideoToolbox, Metal,
-   CVPixelBuffer, Compose, UIKitView and KitePlayerView from S1.b additions and prove neither
-   version catalog changed.
+   Split the Apple phone targets: iOS arm64 remains T1 link-only, while iOS simulator arm64 becomes
+   an experimental T2 Codec candidate because the named run opens, decodes, seeks and reaches a
+   causally awaited teardown over real media. This is a proposed above-T1 evidence label and therefore
+   selects Tier 3, but real-media cancellation and the broader qualification matrix remain absent, so
+   it does not grant the full T2 Codec tier. Update section 2's current baseline sentence to the same
+   measured split. In the README replace the top summary and public-method list, the combined iOS row,
+   the macOS-only-candidate sentences, the local-substrate and no-runnable-consumer limitations, the
+   What-does-not-exist lifecycle text, the sample module/target/run instructions and every remeasured
+   test count. Do not claim physical-iPhone qualification, public artifacts, VideoToolbox, reusable
+   views, Compose or T3-Full. Close with scans rejecting platform
+   demux/decoders, VideoToolbox, Metal, CVPixelBuffer, Compose, UIKitView and KitePlayerView from
+   S1.b additions and prove neither version catalog changed.
 
-Gate. Tier 2 plus the named simulator application run and iosArm64 framework/device-app link.
-Close with Tier 1.
+Gate. Tier 3, selected by the proposed above-T1 simulator candidate label. Run full Tier 2, the named
+simulator application run and iosArm64 framework/device-app link, then the standing supervised macOS
+pair exactly once:
+
+```bash
+KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
+  ./gradlew :kiteplayer-output:macosArm64Test \
+  --tests '*RealTimeSoakTest*' --rerun-tasks -i
+KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
+  ./gradlew :kiteplayer-ffmpeg:macosArm64Test \
+  --tests '*RealTimeMediaSoakTest*' --rerun-tasks -i
+```
+
+The candidate label remains below the full T2 Codec definition because real-media cancellation and
+the broader matrix are absent; Tier 3 satisfies the standing promotion selector without upgrading the
+claim. Close with Tier 1.
 
 Commit first line. KitePlayer: `Add the runnable iOS phone sample`.
 

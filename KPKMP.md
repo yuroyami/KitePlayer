@@ -857,13 +857,14 @@ both been observed stale while Gradle reported success.
 base gate, this section became one undivided gate, and the interlude then ran that whole gate six
 times, once per sub-phase. Sub-phase I.2 changed only prose in Markdown files, and verifying
 spelling corrections cost three real-media sample runs and a seventeen-target cross compile. That
-is measured waste, not diligence. The split below is the correction: the cheap half of the gate
-was measured at FOURTEEN SECONDS, by running the Tier 1 block below exactly as written on
-2026-08-10, so it runs every phase without exception and no schedule pressure can ever justify
-skipping it; the expensive half runs when what changed can actually break it. (The first estimate
-of this number was seven seconds, taken over a smaller subset before Tier 1's contents were
-settled. It is corrected here rather than left standing, because a gate document that rounds its
-own cost downward is how a gate starts getting skipped.)
+is measured waste, not diligence. The split below is the correction: the pre-S1.a.4 Tier 1 block
+was measured at FOURTEEN SECONDS on 2026-08-10. After S1.a.4 added the kitert coupling read, the
+complete expanded block measured 8.24 seconds on 2026-08-11. Both numbers are observed wall-clock
+runs, not budgets or guarantees, so Tier 1 runs every phase without exception and no schedule
+pressure can ever justify skipping it; the expensive half runs when what changed can actually
+break it. (The first estimate was seven seconds, taken over a smaller subset before Tier 1's
+contents were settled. It is retained as history rather than left as the current number, because
+a gate document that rounds its own cost downward is how a gate starts getting skipped.)
 
 **The three rules that stop this from becoming a loophole.**
 
@@ -874,7 +875,7 @@ own cost downward is how a gate starts getting skipped.)
 2. *Every Execution log entry names the tier that ran and the rule that selected it.* An entry
    with no tier named is an incomplete entry.
 3. *A defect must never become load-bearing.* Tier 1 every phase is what enforces this, and it is
-   why fourteen seconds is not negotiable: a later phase must never be built on an ungated one. The
+   why the fast block is not negotiable: a later phase must never be built on an ungated one. The
    interlude exists because seams BETWEEN gated sub-phases went unowned, so deferring verification
    across whole horizon items would turn the same class of defect from a fix into a redesign.
 
@@ -890,7 +891,7 @@ running this gate from clean clones at I.1, not deduced.
 `checkPublicationReadiness` is a named S5-only step; it belongs to no tier, and the commit that
 first adds it to any block must make it green.
 
-### Tier 1, FAST. Every phase, no exception. Measured 14 seconds
+### Tier 1, FAST. Every phase, no exception. Measured 8.24 seconds
 
 Selected by: every change, including a change to prose alone. Nothing is exempt.
 
@@ -903,6 +904,7 @@ cd ../KiteCodec
 ./native/kitecodec-c/scripts/run-c-tests.sh plain
 
 cd ../KitePlayer
+./gradlew checkKitertCoupling                         # present scoped Kotlin source, no product build
 ./gradlew checkKotlinAbi                              # committed dumps across five library modules
 ./gradlew :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest
 kiteplayer-rt/native/scripts/run-c-tests.sh plain
@@ -1025,6 +1027,7 @@ say which sub-phase.
 |---|---|---|---|
 | `../KiteCodec/kitecodec-core/api/kitecodec-core.klib.api` | `:kitecodec-core:apiCheck`, on any public API change in kitecodec-core's own klib | `./gradlew :kitecodec-core:apiDump -Pkitecodec.hostTargetsOnly=true`, commit the dump with the change | every declaration added or removed, and why |
 | the KitePlayer api dumps under `*/api/` across five library modules | `checkKotlinAbi`, on any public API change in those five modules | `./gradlew updateKotlinAbi`, commit the dumps with the change | every declaration added or removed, and why |
+| `kitert-coupling-baseline.txt` (installed by S1.a.4) | `checkKitertCoupling`, when a previously unlisted Kotlin source file in any active non-excluded module names `cnames.structs.kprt_` or `kiteplayer.rt.cinterop` after comment stripping | remove the direct cinterop name, or add or remove the exact `allowed_kitert_file` line and update the measured count in the baseline header in the same commit | the old and new file count, every path added or removed, why the facade could not avoid the naming site, and whether either module exclusion changed |
 | `../KiteCodec/native/kitecodec-c/coupling-baseline.txt` | `checkCinteropCoupling`, when a ratcheted count rises | edit the number by hand to the value re-measured with the command written beside it in the file | the old and new number, and the change that moved it |
 | `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` | `klib-metadata-diff.sh --check`, on any cinterop metadata difference | `./scripts/klib-metadata-diff.sh --update`, in the same commit as the deliberate surface change | the script's whole SUMMARY block, pasted, so the record carries the reviewed numbers and not a pointer to a 19,000 line diff |
 | `../KiteCodec/native/kitecodec-c/deleted-surface.txt` (installed by I.3) | `check-deleted-surface.sh`, on any use of a name whose status is `deleted` | change that name's status to `resurrected-in-<item>` in the same commit that resurrects it | one sentence naming the item and the reason |
@@ -5054,6 +5057,82 @@ is no other.
   core/subtitles JVM tests passed ten executed tasks; eight plain rt suites, render audit 15 and
   source discipline 18 passed. Both tracked-file em dash scans printed nothing and exited 1, the
   passing outcome. No product file changed and nothing was pushed, published or released.
+
+- 2026-08-11, S1.a.4, P0-04 completed. Tier 2 gate (selected mechanically because buildSrc and
+  root build.gradle.kts changed). `checkKitertCoupling` now scans every present `src/**/*.kt`
+  file, including untracked files, in the active core, ffmpeg, sample and subtitles projects. It
+  excludes only output, which owns the C sink pointer, and rt, which is the binding. It strips
+  Kotlin comments, preserves quoted source text, counts either `cnames.structs.kprt_` or
+  `kiteplayer.rt.cinterop` once per file and compares the resulting path set with a strict
+  per-file allowlist. The initial command was exactly `./gradlew checkKitertCoupling`. It exited 1
+  only because no baseline existed, after measuring first and printing this complete creation
+  payload:
+
+  ```text
+  > Task :checkKitertCoupling FAILED
+  baseline missing: /Users/macbook/StudioProjects/#Kite/KitePlayer/kitert-coupling-baseline.txt
+  Measured 87 Kotlin source file(s).
+  Measured matching Kotlin file count: 3
+  Create kitert-coupling-baseline.txt with exactly this content:
+
+  # KitePlayer kitert cinterop coupling baseline.
+  #
+  # Command: ./gradlew checkKitertCoupling
+  # Measured matching Kotlin file count: 3
+  #
+  # Scope: every present src/**/*.kt file, including untracked files, in each
+  # active Gradle subproject except the two exclusions below. Comments are stripped;
+  # string and character literals remain, and each matching file counts once.
+  # Included when this baseline was measured:
+  #   :kiteplayer-core
+  #   :kiteplayer-ffmpeg
+  #   :kiteplayer-sample
+  #   :kiteplayer-subtitles
+  # Excluded by design:
+  #   :kiteplayer-output - owns the C sink pointer
+  #   :kiteplayer-rt - is the binding
+  # Patterns: cnames.structs.kprt_ and kiteplayer.rt.cinterop
+
+  allowed_kitert_file kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/NativeAudioRing.kt
+  allowed_kitert_file kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/spi/NativeRingAudioSink.kt
+  allowed_kitert_file kiteplayer-core/src/nativeTest/kotlin/io/github/yuroyami/kiteplayer/AudioRingDifferentialTest.kt
+  ```
+
+  Installing that exact stanza made the same command green at 87 scanned and three allowed
+  matching files. An untracked `KitertCouplingProbe.kt` planted under kiteplayer-sample then made
+  the real root task fail with the repository-relative path and exact allowlist remedy; deleting
+  the plant restored the 87/3 green result. The focused checker suite passed 15 tests. During
+  adversarial review, a test proved that the first lexer kept comments inside `${...}` template
+  expressions. A context-stack lexer now strips comments in nested template code while preserving
+  strings, raw strings, characters, backtick identifiers, escaped dollar signs and live template
+  expressions. The new nested-template tests failed against the old lexer and passed after the
+  correction. The complete buildSrc suite then passed 40 tests, and a strict configuration-cache
+  reuse run scanned the same 87 files and found the same three paths.
+
+  The full Tier 2 gate is GREEN. KiteCodec coupling stayed 246/287 with 273 helper calls, 14
+  direct calls and 10 of 10 allowed struct types; deleted-surface and six plain C suites passed;
+  cinterop, API and buildSrc checks passed; ASan, TSan and live interposition each passed six C
+  suites; corpus replay passed six targets and 105 files; symbol audit matched 163 exports; the
+  metadata baseline had zero diff; and macosArm64Test passed. KitePlayer ABI, JVM tests, eight rt
+  suites, render audit 15, source discipline 18, media generation, buildSrc, native sanitizers,
+  live interposition, Android, JS, Wasm and sample linking all passed. The first two loaded
+  three-module native runs made only the two `RealMediaSeekTest` status assertions observe
+  Buffering rather than Paused or Playing. The isolated ffmpeg suite passed, and the exact combined
+  core, output and ffmpeg command then passed 38 of 38 executed tasks on a quiet host. No source,
+  threshold or assertion changed for that load observation. The real samples remained clean:
+  sync submitted 300 of 300 frames, true VFR submitted 240 of 240 and HEVC submitted 180 of 180,
+  all with zero drops and underruns; the missing-file control exited 1 after two concise lines and
+  no stack trace.
+
+  The expanded Tier 1 block then passed verbatim and measured 8.24 seconds of wall-clock time,
+  beside the pre-S1.a.4 observation of fourteen seconds. Its final result was still 246/287 and
+  10 of 10 in KiteCodec, 87/3 in the new Player ratchet, clean ABI and JVM checks, six Codec and
+  eight rt plain suites, render audit 15 and source discipline 18. Both tracked-file em dash scans
+  printed nothing and exited 1. Section 18.2 retains the older fourteen-second summary outside
+  S1.a.4's named section-9 edit fence; that is descriptive plan debt, not a second gate number.
+  Final adversarial review reported the implementation CLEAN. Nothing was pushed, publicly
+  published or released.
+
 ---
 
 ## 15. Horizon B execution: B1

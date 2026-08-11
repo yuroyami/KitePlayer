@@ -1,3 +1,4 @@
+import io.github.yuroyami.kiteplayer.buildtools.CheckKitertCouplingTask
 import io.github.yuroyami.kiteplayer.buildtools.CheckPublicationReadinessTask
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.publish.maven.tasks.GenerateMavenPom
@@ -17,6 +18,28 @@ plugins {
 allprojects {
     group = "io.github.yuroyami"
     version = "0.0.1"
+}
+
+val kitertProjects = subprojects
+    .filterNot { it.path in CheckKitertCouplingTask.EXCLUDED_MODULE_PATHS }
+    .sortedBy { it.path }
+
+tasks.register<CheckKitertCouplingTask>("checkKitertCoupling") {
+    repositoryRoot.set(layout.projectDirectory)
+    includedModulePaths.set(kitertProjects.map { it.path })
+    sourceFiles.from(
+        kitertProjects.map { project ->
+            project.fileTree("src") {
+                include("**/*.kt")
+            }
+        },
+    )
+    baselineFile.set(layout.projectDirectory.file("kitert-coupling-baseline.txt"))
+    baselineInputs.from(
+        fileTree(layout.projectDirectory) {
+            include("kitert-coupling-baseline.txt")
+        },
+    )
 }
 
 val publicationReadiness = tasks.register<CheckPublicationReadinessTask>("checkPublicationReadiness") {

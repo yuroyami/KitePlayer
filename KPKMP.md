@@ -7569,6 +7569,16 @@ is no other.
   Compose paths exist in :kiteplayer-compose, and the one consumer that measures any of it does
   so through the phone coordinate. S1.e remains: the iOS host re-consumption, the 17.5 matrix
   on both platforms, and the owner's physical devices.
+- 2026-08-12, S1.e expanded (17.4.5), planner-authored against clean 64e9ae1/52a3e5d. Five
+  sub-phases: grow the 17.5 matrix once and baseline it on the host; re-consume the iOS host
+  through the phone coordinate (one new KitePlayerUIView diagnostic, hasPicture, for the S1.b
+  oracle's layerImage key); run the matrix on the booted Test iPhone 17 (SPI-direct, no audio
+  device, so the bare spawn host suffices per the S1.b lesson); run it on Pixelu16KB through a
+  device-test wrapper reading the test package's external files dir; close the stage with every
+  number logged. AV1's verdict is measured, never assumed: the phone profile enables the av1
+  decoder but vendors no dav1d, so a typed refusal is a legal recorded outcome. The owner
+  device session is the stage's one open item by construction (physical hardware and signing
+  are the owner's) and S1 closes on named-simulator plus named-emulator evidence.
 
 ---
 
@@ -13858,6 +13868,165 @@ host re-consumption, the 17.5 matrix runs and the owner device session remain S1
 Estimates. S1.d.1 6 to 9 hours, S1.d.2 3 to 5, S1.d.3 8 to 12, S1.d.4 2 to 4: S1.d totals 19 to
 30 focused hours. The rider moves 10 to 15 of S2's KiteVideo hours into S1.d, so S2 reads 105 to
 150 and the whole-road total stays 710 to 1015: hours moved, not added.
+
+### 17.4.5 The S1.e register and sub-phases, decision complete
+
+Authored 2026-08-12 by the planner against clean KitePlayer `64e9ae1` and KiteCodec `52a3e5d`,
+immediately after the S1.d exit. S1.e is the stage exit of S1: the iOS host re-consumed through
+the phone coordinate, the 17.5 matrix grown once and run on both phone platforms, every measured
+number written, and the owner device session. The owner device session CANNOT be executed by
+this executor (physical iPhone and Android hardware plus signing are the owner's); it is
+recorded as the stage's one open item, loudly, and everything else completes around it. S1's
+public promise is then complete on the named simulator and the named emulator, with physical
+devices the last unchecked box.
+
+**Located substrate, verified at authorship.** The booted simulator is `Test iPhone 17`
+(iOS 26.0, UDID 5DBA149A-E990-4197-8A7D-31E97658B568). `Pixelu16KB` is up at 16384. The S1.b
+lesson stands: RemoteIO fails on a bare `simctl spawn --standalone` host, so anything driving an
+audio DEVICE on the simulator needs the app host; the matrix deliberately drives the MediaBackend
+SPI directly (KiteCodecSourceFactory, select, decode, seekToKeyframe, close), which needs no
+output backend and therefore runs in the bare spawn host. The phone FFmpeg profile's software
+decoder set is exactly `h264,hevc,vp8,vp9,av1,mpeg4,aac,mp3,opus,vorbis,flac,pcm_*,png,mjpeg,webp`
+(BuildFFmpegTask.kt:351); FFmpeg carries no native software AV1 decoder and no dav1d is vendored,
+so the AV1 row's verdict is MEASURED, not assumed, and a clean typed refusal is an acceptable
+recorded outcome for it. The host ffmpeg CLI has libx264, libx265, libvpx-vp9, libaom-av1,
+libsvtav1 and mpeg4 encoders, enough to grow every planned clip.
+
+Execution order is S1.e.0 through S1.e.5. No new module, no KiteCodec change, no C. The one
+public-API addition is a single diagnostic property on KitePlayerUIView (below), mirrored on
+nothing else.
+
+#### S1.e.0 One verification sweep
+
+Claims to verify before edits: the simulator and emulator states above; testmedia/ holds the
+S1.b-era clips including rotated90ccw.mp4, truevfr720.mp4, hevc4k10.mp4, tsoffset1400.ts,
+subbed.mkv, surround51.mp4; KiteCodecSourceFactory, PlayerMediaSource.seekToKeyframe and the
+decoder factories are public or same-package-visible from the module's own commonTest;
+kiteplayer-ffmpeg's androidDeviceTest tree already runs on the emulator (S1.c.3's 37 device
+tests); the sample framework builds against the local FFmpeg trees flag.
+
+#### S1.e.1 Grow the matrix once, run it on the host
+
+Files: `scripts/testmedia.sh`; new
+`kiteplayer-ffmpeg/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/ffmpeg/FormatMatrix.kt`
+(the table and the runner, plain classes, no @Test); new
+`kiteplayer-ffmpeg/src/jvmAndNativeTest/.../FormatMatrixTest.kt` (the wrapper); KPKMP log.
+
+Steps.
+1. Grow testmedia.sh by exactly the 17.5 gaps, deterministic, appended once: `multitrack.mkv`
+   (h264 + two audio languages + two SubRip tracks), `baseline.mkv` (plain h264+aac Matroska,
+   the ordered-chapters-free baseline), `vp9.webm` (libvpx-vp9 + opus), `av1.mkv` (libsvtav1 +
+   opus), `mpeg4part2.mp4` (mpeg4 part 2 + aac), `audio-aac.m4a`, `audio-mp3.mp3`,
+   `audio-flac.flac`, and two torture cases produced from bytes, not encoders:
+   `torture-truncated.mp4` (the first 40% of sync1080p30.mp4, which amputates the trailing moov)
+   and `torture-garbage.mp4` (a deterministic non-media byte pattern with a media extension).
+2. FormatMatrix.kt: one row per clip with an expected verdict. `MustPlay` means: opens, the
+   expected stream kinds are present (asserted counts for the multitrack row, rotation degrees
+   for the rotated row), N video frames decode (N small for the 4K row), an audio row decodes
+   audio buffers instead, `seekToKeyframe` to mid-file returns a position and decoding resumes,
+   close is clean. `MustSurvive` means: open and every subsequent call either succeeds or fails
+   with a typed exception, nothing crashes or hangs (bounded by withTimeout), close of whatever
+   opened is clean; AV1 and both torture rows are MustSurvive, and the ACTUAL outcome of every
+   MustSurvive row is captured and logged per platform, so capability stays a measurement.
+3. The wrapper test iterates every row and reports one line per row (clip, verdict, frames,
+   landing) so a matrix run leaves a readable transcript. Run it on macosArm64Test first: the
+   host run is the baseline that debugging happens against.
+
+Gate. Tier 2 (test Kotlin under nativeTest paths). The new clips regenerate from the script
+alone; nothing binary is committed. Tier 1 both repos.
+
+Commit first line. KitePlayer: `Grow the format matrix and run it on the host`.
+
+#### S1.e.2 Re-consume the iOS host through the phone coordinate
+
+Files: `kiteplayer-sample/build.gradle.kts` (iosMain gains :kiteplayer-phone);
+`kiteplayer-sample/src/iosMain/.../SampleViewController.kt`;
+`kiteplayer-phone/src/iosMain/.../KitePlayerUIView.kt` and the phone API dump (one addition);
+KPKMP log.
+
+Steps.
+1. Add to KitePlayerUIView the one diagnostic the S1.b oracle needs and any consumer may
+   reasonably ask: `public val hasPicture: Boolean` (true when the video layer holds contents).
+   Update the phone ABI dump by ritual.
+2. Rewire SampleViewController: the hand-built CALayer and UIKitVideoRenderer go away; the
+   controller hosts one KitePlayerUIView sized to its bounds, builds its player from
+   `phoneBackends()`, and assigns `view.player`. The smoke's counters read the view's
+   passthroughs; `layerImage` reads `hasPicture`. Oracle keys and thresholds stay EXACTLY
+   S1.b's; only the wiring under them changed.
+3. Rebuild the simulator framework against the local trees and run the smoke on the booted
+   simulator by the S1.b recipe (kiteplayer-sample/iosApp README); read s1b-smoke.json and
+   assert its keys as S1.b did: seek landed in 5000..5034, terminal Ended, decoded and presented
+   positive, layerImage true, teardown completed.
+
+Gate. Tier 2. Do not touch the macOS sample path. Tier 1 both repos.
+
+Commit first line. KitePlayer: `Consume the phone view from the iOS host`.
+
+#### S1.e.3 The matrix on the iOS simulator
+
+Files: `kiteplayer-ffmpeg/build.gradle.kts` (simulator test tasks must see the media directory:
+`simctl spawn` forwards only SIMCTL_CHILD_-prefixed variables, so the existing
+KITEPLAYER_TESTMEDIA line gains a SIMCTL_CHILD_KITEPLAYER_TESTMEDIA twin); KPKMP log.
+
+Steps.
+1. `./gradlew :kiteplayer-ffmpeg:iosSimulatorArm64Test --tests '*FormatMatrix*'` with the local
+   FFmpeg trees flag, on the booted `Test iPhone 17`. The whole nativeTest suite is NOT the
+   subject; the matrix class is (RemoteIO-hosted suites keep their S1.b app-host recipe and are
+   out of this fence).
+2. Record every row: verdict, frames decoded, seek landing, and the MEASURED outcome of the
+   three MustSurvive rows. A hang is a finding, not a retry.
+
+Gate. The matrix run itself plus Tier 1. If simctl refuses environment forwarding, the fallback
+is the documented relative-path convention run from the repository root; record which path fed
+the binary.
+
+Commit first line. KitePlayer: `Run the format matrix on the iOS simulator`.
+
+#### S1.e.4 The matrix on the Android emulator
+
+Files: new `kiteplayer-ffmpeg/src/androidDeviceTest/.../FormatMatrixDeviceTest.kt` (thin
+wrapper: media directory = the instrumentation package's external files dir); KPKMP log.
+
+Steps.
+1. Push the grown testmedia set once:
+   `adb -s emulator-5554 push testmedia/. /storage/emulated/0/Android/data/<testAppId>/files/testmedia/`
+   after the test APK is installed (the directory belongs to the test package; no permission is
+   involved). `<testAppId>` is whatever the installed instrumentation reports, verified, not
+   assumed.
+2. Run the device matrix test on Pixelu16KB and record every row exactly as S1.e.3 does. The 4K
+   HEVC row decodes its small N in software on an emulator; slow is acceptable, a hang is not
+   (the same withTimeout bounds it).
+
+Gate. The device run plus Tier 1. Do not re-run the S1.c Tier 3 soaks; no support tier moves in
+this sub-phase.
+
+Commit first line. KitePlayer: `Run the format matrix on the Android emulator`.
+
+#### S1.e.5 Stage exit
+
+Files: root `README.md`; KPKMP log; nothing else.
+
+Steps.
+1. Write the exit log entry with EVERY measured number: both platforms' matrix row results, the
+   re-run iOS smoke's numbers, and the S1.d.4 Android smoke numbers it joins.
+2. README: the support rows gain the matrix as evidence where it ran; no tier moves (the tier
+   ladder's promotion rules are untouched by S1.e); the blockquote keeps saying nothing is
+   published.
+3. Record the stage's one open item in the log and README exactly as it is: the owner device
+   session (physical iPhone and physical Android, owner signing) has not happened, S1's "IT
+   PLAYS ON PHONES" is proven on one named simulator and one named emulator, and the physical
+   half is waiting on the owner, not on code.
+
+Gate. Tier 1 both repos, final reread of every changed file against this fence.
+
+Commit first line. KitePlayer: `Close the phone stage on simulator and emulator evidence`.
+
+**S1.e exits** when the five product sub-phases have their named commits and log entries, both
+trees are clean, the matrix has one committed table and two phone-platform transcripts in the
+log, the iOS host consumes the phone coordinate with its S1.b oracle green, and the owner
+session is the stage's only open item, stated in log and README. Estimates: S1.e.1 4 to 6,
+S1.e.2 3 to 5, S1.e.3 2 to 4, S1.e.4 2 to 4, S1.e.5 1 to 2: 12 to 21 focused hours, inside the
+17.3 envelope.
 
 ### 17.5 The format conformance matrix
 

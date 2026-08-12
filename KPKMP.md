@@ -6797,6 +6797,38 @@ is no other.
   Tier 1 block is rerun over this final logged state before the correction commit; that terminal
   result is a commit-boundary seal and is not preclaimed inside the bytes it gates.
 
+- 2026-08-12, second S1.c.0 post-scaffold execution-fence correction. Starting heads were
+  KitePlayer `4f5e4e548ef07b4a1f243f7ab0caa8a717430972` and KiteCodec
+  `613cd98b4864a2bc5ce8a4eb6d142f3e14e9faa6`, both clean. The mandatory full three-lane rerun
+  found one sole BLOCKING file-fence omission and no product failure: S1.c.1 confines all JNI
+  array conversion to `kj_util.c`, while S1.c.2 must copy the input `ByteArray` values accepted by
+  `Frame.ofVideo` and `Frame.ofAudio`, but its JNI fence omitted that unit and the current unit has
+  only the opposite C-bytes-to-Java-array helper. The conservative correction adds `kj_util.c` to
+  S1.c.2 and requires one Java-byte-array-to-owned-C-bytes helper there; `kj_frame.c` consumes it
+  and does not become a second conversion unit. This changes no product policy, API, command,
+  publication order, gate, phase order or product commit subject. The Player and
+  machine/publication lanes were clean. The preserved Apple scratch consumer linked all three
+  frameworks offline, 8/8 tasks executed in eight seconds, without republishing; its selected
+  Maven-local fingerprint remained
+  `402f566ce9f0962d9f1c1b0c205ce5506a1cf7229f047d715845ad994b0cd827`.
+
+  The first fresh Tier 1 pass over this correction draft was green. Codec coupling executed and
+  reported 0 cinterop imports, 0 typed crossings, 292 opaque helper sites, 0 direct libav calls and
+  0 raw structs; deleted-surface reported 15/15 deleted with five allowlisted prose files; plain C
+  passed seven suites and 279 cases. Player coupling executed over 88 sources with all 3 matches
+  allowlisted; all five ABI checks executed in the 152-task forced arm; forced JVM XML was core
+  192 plus subtitles 8 with zero failures, errors or skips; rt plain C passed 8 suites and 132
+  cases; render audit passed 43 and source discipline 18. Both exact tracked-dash scans were silent
+  passing exit 1 and both diff checks were silent exit 0. The forced Player ABI arm again rebuilt
+  target archives and cinterops; this is a retained gate deviation, not a product red. Before this
+  entry the correction was KPKMP-only at +4/-2, its binary diff SHA-256 was
+  `53c92add126f5b508f5d4929daee5fa45aa62fd4340b3041660738f11c5d4a3c` and the KPKMP file
+  SHA-256 was `3e8e840436dff1952debbe627fb8812074561c4dbd85aa588a9867f2f89e2222`. No product file,
+  index, publication, release, remote ref, emulator or device state moved. The correction commit
+  first line is `Fence the JNI input copy in the Android plan`; the complete S1.c.0 sweep repeats
+  after that commit. The complete Tier 1 block is rerun over this final logged state before the
+  correction commit; that terminal result is a commit-boundary seal and is not preclaimed here.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -11732,7 +11764,7 @@ support adds
 `buildSrc/src/main/kotlin/CompareCodecContractTask.kt` and
 `buildSrc/src/test/kotlin/CompareCodecContractTaskTest.kt`; existing
 `buildSrc/src/test/kotlin/LinkKiteCodecJniTaskTest.kt`. Existing JNI files in this fence are
-`native/kitecodec-jni/methods.def`, `kj_internal.h`, `kj_handles.c`, `kj_abi.c`, `kj_format.c`,
+`native/kitecodec-jni/methods.def`, `kj_internal.h`, `kj_handles.c`, `kj_util.c`, `kj_abi.c`, `kj_format.c`,
 `kj_packet.c`, `kj_codec.c`, `kj_frame.c`, `kj_filter.c` and `README.md`. Also in the fence:
 `kitecodec-core/api/`; root `README.md` and `CHANGELOG.md`; `kitecodec-core/Module.md`;
 `docs/about.md`, `docs/index.md`, `docs/decoding.md`, `docs/transcoding.md`,
@@ -11809,7 +11841,9 @@ Steps.
    freed FFmpeg pointer. Lambda
    callbacks receive an owned or callback-scoped object under the existing KDoc, never a raw token.
    Arrays and strings are copied at the declared API boundary; no direct ByteBuffer or native
-   pointer becomes public.
+   pointer becomes public. Extend `kj_util.c` with the Java-byte-array-to-owned-C-bytes helper used
+   by `Frame.ofVideo` and `Frame.ofAudio`; `kj_frame.c` consumes that helper rather than becoming a
+   second JNI array-conversion unit.
 5. Leaf loading is explicit. JVM reads a test-only absolute library override
    `kitecodec.jni.path` before falling back to `System.loadLibrary("kitecodec_jni")`; the dylib is
    not added to the published JVM jar. Android always uses `System.loadLibrary`. The private

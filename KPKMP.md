@@ -6881,6 +6881,42 @@ is no other.
   seal follows before the exact commit first line
   `Verify the Android phone stage against the landed iOS substrate`.
 
+- 2026-08-12, S1.c.0 Android direct-native scan correction. Starting heads were KitePlayer
+  `a533980fa90a6d5c62d9854b59c2c0de78853028` and KiteCodec
+  `613cd98b4864a2bc5ce8a4eb6d142f3e14e9faa6`, both clean. The mandatory hostile
+  postcommit sweep invalidated the preceding entry's S1.c.1 authorization: its historical machine,
+  publication, count and gate facts remain evidence, but its zero-mismatch verdict is superseded.
+  The sole BLOCKING residual was c.6's direct-native D-2 expression. It preserved required
+  `io.github.yuroyami.kiteplayer.ffmpeg` imports by dropping the broad `ffmpeg.` term, but then
+  missed the generated top-level cinterop package, ordinary `av_`/`avio_`, real `sws_`/`swr_`,
+  libsw names and additional native types/constants. The corrected boundary-aware package arm
+  catches top-level `ffmpeg.*` without matching a preceding project-package segment; the remaining
+  arms cover the raw functions, libraries, structs, types and constants. Falsifiability controls
+  now include wildcard, helper, ABI, enum/constant, bare-function, struct and library forms, while
+  required project-package imports are explicit passing controls. A scratch matrix observed all 13
+  forbidden examples and accepted both required imports. The same defect is absent from c.3 and
+  c.5 because their module-boundary policies intentionally differ.
+
+  This correction changes no product file fence, API, command outside the scan, publication or
+  phase order, gate, support policy or product commit subject. The first fresh Tier 1 pass was
+  green. Codec coupling executed and reported 0 cinterop imports, 0 typed crossings, 292 opaque
+  helper sites, 0 direct libav calls and 0 raw structs; deleted-surface reported 15/15 deleted with
+  five allowlisted prose files; plain C passed seven suites and 279 cases. Player coupling executed
+  over 88 sources with all 3 matches allowlisted; all five ABI checks executed in the 152-task
+  forced arm; forced JVM XML was core 192 plus subtitles 8 with zero failures, errors or skips; rt
+  plain C passed 8 suites and 132 cases; render audit passed 43 and source discipline 18. Both exact
+  tracked-dash scans were silent passing exit 1 and both diff checks were silent exit 0. The forced
+  Player ABI arm again rebuilt target archives and cinterops, the retained Tier 1 deviation.
+  Before this entry the KPKMP-only correction was +7/-3, its binary diff SHA-256 was
+  `89f8bccceb0c1c5932d49b57befb1141cdf4eb33bdb5482bd45282faecea1326` and the KPKMP
+  file SHA-256 was `f253485264bb805b3d20a54e5bf097aebcce64afdd5d2d4e6f29aba644cbe065`.
+  No product file, index, publication, release, remote ref, emulator or device state moved. The
+  correction commit first line is `Repair the Android direct-native scan`. The complete three-lane
+  S1.c.0 sweep must repeat after that commit; only a new clean Section 14 entry and the still-exact
+  verification subject may authorize S1.c.1. The complete Tier 1 block is rerun over this final
+  logged state before the correction commit; that terminal result is a commit-boundary seal and is
+  not preclaimed here.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -12812,7 +12848,7 @@ Steps.
      'Compose|AndroidView|KitePlayerView|OpenGL|GLES|Vulkan' \
      -g '*.kt' kiteplayer-sample-android/src
    ! rg -n \
-     '(^|[^A-Za-z0-9_])(libav(codec|format|filter|util)|cnames[.]structs[.]AV|av(codec|format|filter|util)_[A-Za-z0-9_]+|sw(scale|resample)_[A-Za-z0-9_]+|AV[A-Z][A-Za-z0-9_]+)' \
+     '(^|[^A-Za-z0-9_.])ffmpeg[.]|(^|[^A-Za-z0-9_])(lib(av(codec|format|filter|util|device|resample)|sw(scale|resample))|cnames[.]structs[.](AV|Sws|Swr)|av(codec|format|filter|util|device|io|resample)?_[A-Za-z0-9_]+|sws_[A-Za-z0-9_]+|swr_[A-Za-z0-9_]+|(AV|Sws|Swr)[A-Z][A-Za-z0-9_]+|SW(S|R)_[A-Z0-9_]+)' \
      -g '*.kt' kiteplayer-sample-android/src
    ```
 
@@ -12821,8 +12857,12 @@ Steps.
    negative controls use a wildcard `import android.media.*`, a fully qualified
    `android.media.MediaCodec` reference and an `AMediaExtractor` token; the second adds one
    forbidden view import. The direct-native scan intentionally does not ban the required
-   `io.github.yuroyami.kiteplayer.ffmpeg` project-package imports; its remaining alternatives ban
-   direct libav/cinterop symbols. Observe each failure, then revert it.
+   `io.github.yuroyami.kiteplayer.ffmpeg` project-package imports. Its controls separately add
+   `import ffmpeg.*`, `import ffmpeg.ffkmp_packet_clone`, `ffmpeg.kc_init()`,
+   `ffmpeg.KC_JVM_OK`, `ffmpeg.KITECODEC_C_ABI_MINOR`, bare `av_frame_alloc()` and
+   `swr_convert()`, one `cnames.structs.AVFrame` reference and the `libswresample` library token;
+   every control must fail while imports of both `KiteCodecMediaBackend` and `SoftwareConverter`
+   through the required project package remain accepted. Observe each failure, then revert it.
 10. Update root and sample docs to the measured state: Android debug and minified release run on
     `Pixelu16KB` at 16 KiB, arm64-v8a is runtime-qualified, x86_64 is package-qualified, Codec is
     Maven-local/private only, and this app uses three project dependencies until S1.d. Promote the

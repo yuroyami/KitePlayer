@@ -118,6 +118,9 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
+            // The text subtitle parsers (S4.c). Pure Kotlin; the decoder below is a thin shim
+            // from packet payloads onto them.
+            implementation(project(":kiteplayer-subtitles"))
             implementation("io.github.yuroyami:kitecodec-core:0.0.3")
             implementation(libs.kotlinx.atomicfu)
         }

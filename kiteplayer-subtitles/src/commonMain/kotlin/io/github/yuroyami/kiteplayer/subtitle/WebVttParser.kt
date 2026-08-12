@@ -65,6 +65,10 @@ public object WebVttParser {
         return cues.sortedBy { it.startMicros }
     }
 
+    /** One cue's body from a container track, timing already on the packet (S4.c). */
+    public fun parseCueBody(body: String): List<StyledSpan> =
+        InlineMarkup.parse(stripVttOnlyTags(body.trim()))
+
     private class Timing(val start: Long, val end: Long, val layout: CueLayout)
 
     private fun parseTiming(line: String): Timing? {

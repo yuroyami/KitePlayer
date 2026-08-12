@@ -58,10 +58,10 @@ public class KiteCodecMediaBackend(
  * One opened container and its decoders.
  *
  * The lists come from the source itself, because a KiteCodec decoder is opened against the very
- * container context the packets are read from. There is no subtitle decoder in this build: KiteCodec
- * decodes no subtitle stream yet, so the list is empty rather than holding a factory that always
- * refuses. An empty list is how a backend says "not this kind of stream", and the engine deselects such
- * a stream instead of failing the open.
+ * container context the packets are read from. The subtitle factory decodes the TEXT formats
+ * (SubRip, WebVTT) over the packet path with no C involved (S4.c); ASS and bitmap formats are
+ * S4.f's, and a stream the factory refuses is deselected by the engine rather than failing the
+ * open.
  */
 private class KiteCodecBackendSession(private val kiteCodec: KiteCodecSource) : BackendSession {
 
@@ -71,7 +71,8 @@ private class KiteCodecBackendSession(private val kiteCodec: KiteCodecSource) : 
 
     override val audioDecoders: List<AudioDecoderFactory> = kiteCodec.audioDecoderFactories()
 
-    override val subtitleDecoders: List<SubtitleDecoderFactory> = emptyList()
+    override val subtitleDecoders: List<SubtitleDecoderFactory> =
+        listOf(KiteCodecSubtitleDecoderFactory())
 
     override fun close(): Unit = kiteCodec.close()
 }

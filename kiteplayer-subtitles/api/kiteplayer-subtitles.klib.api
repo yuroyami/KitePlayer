@@ -8,8 +8,10 @@
 // Library unique name: <io.github.yuroyami:kiteplayer-subtitles>
 final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.yuroyami.kiteplayer.subtitle/SubRipParser|null[0]
     final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parse|parse(kotlin.String){}[0]
+    final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parseCueBody|parseCueBody(kotlin.String){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer.subtitle/WebVttParser { // io.github.yuroyami.kiteplayer.subtitle/WebVttParser|null[0]
     final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/WebVttParser.parse|parse(kotlin.String){}[0]
+    final fun parseCueBody(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/StyledSpan> // io.github.yuroyami.kiteplayer.subtitle/WebVttParser.parseCueBody|parseCueBody(kotlin.String){}[0]
 }

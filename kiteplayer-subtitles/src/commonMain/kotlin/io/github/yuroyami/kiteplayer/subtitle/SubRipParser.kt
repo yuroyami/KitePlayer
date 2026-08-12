@@ -73,6 +73,12 @@ public object SubRipParser {
         return cues.sortedBy { it.startMicros }
     }
 
+    /**
+     * Parses ONE cue's body, the shape a Matroska SubRip track's packets carry: the text alone,
+     * timing already on the packet (S4.c). Same markup rules as whole-file parsing.
+     */
+    public fun parseCueBody(body: String): List<StyledSpan> = InlineMarkup.parse(body.trim())
+
     private fun looksLikeIndex(line: String): Boolean =
         line.trim().let { it.isNotEmpty() && it.all { c -> c.isDigit() } }
 

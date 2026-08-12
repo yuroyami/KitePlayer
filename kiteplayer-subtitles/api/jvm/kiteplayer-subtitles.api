@@ -1,10 +1,12 @@
 public final class io/github/yuroyami/kiteplayer/subtitle/SubRipParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/SubRipParser;
 	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+	public final fun parseCueBody (Ljava/lang/String;)Ljava/util/List;
 }
 
 public final class io/github/yuroyami/kiteplayer/subtitle/WebVttParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/WebVttParser;
 	public final fun parse (Ljava/lang/String;)Ljava/util/List;
+	public final fun parseCueBody (Ljava/lang/String;)Ljava/util/List;
 }
 

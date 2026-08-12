@@ -41,6 +41,8 @@ internal class MatrixRow(
     val expectRotation: Boolean = false,
     /** Exact chapter round-trip: (startMicros, endMicros, title) per chapter, in order. */
     val expectChapters: List<Triple<Long, Long, String>>? = null,
+    /** Decode the first subtitle stream and require at least one non-empty text cue (S4.c). */
+    val decodeSubtitleCue: Boolean = false,
 )
 
 internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
@@ -51,6 +53,7 @@ internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
         MatrixVerdict.MustPlay,
         expectAudioStreams = 2,
         expectSubtitleStreams = 2,
+        decodeSubtitleCue = true,
     ),
     MatrixRow("vp9.webm", MatrixVerdict.MustPlay),
     MatrixRow("mpeg4part2.mp4", MatrixVerdict.MustPlay),
@@ -167,10 +170,16 @@ internal object FormatMatrixRunner {
             }
 
             val wantVideo = row.hasVideo && video != null
+            val subtitle = if (row.decodeSubtitleCue) {
+                streams.firstOrNull { it.kind == TrackKind.Subtitle }
+            } else {
+                null
+            }
             val wantAudio = row.hasAudio && audio != null
             val selected = buildSet {
                 if (wantVideo) add(video!!.index)
                 if (wantAudio) add(audio!!.index)
+                subtitle?.let { add(it.index) }
             }
             if (selected.isEmpty()) {
                 // A torture row may open and expose nothing decodable; surviving open and close
@@ -196,6 +205,12 @@ internal object FormatMatrixRunner {
                 null
             }
 
+            val subtitleDecoder = subtitle?.let { stream ->
+                checkNotNull(KiteCodecSubtitleDecoderFactory().create(stream)) {
+                    "the text factory refused ${stream.codec}"
+                }
+            }
+            var decodedCueText: String? = null
             try {
                 val pass = Progress()
                 decodeUntil(
@@ -207,7 +222,13 @@ internal object FormatMatrixRunner {
                     videoQuota = if (wantVideo) row.videoFrames else 0,
                     audioQuota = if (wantAudio) row.audioBuffers else 0,
                     progress = pass,
+                    subtitleIndex = subtitle?.index,
+                    subtitleDecoder = subtitleDecoder,
+                    onCue = { text -> if (decodedCueText == null) decodedCueText = text },
                 )
+                if (row.decodeSubtitleCue) {
+                    checkNotNull(decodedCueText) { "${row.clip} decoded no subtitle cue" }
+                }
                 if (wantVideo) {
                     check(pass.video >= row.videoFrames) {
                         "${row.clip} decoded ${pass.video} of ${row.videoFrames} video frames"
@@ -242,10 +263,12 @@ internal object FormatMatrixRunner {
                     seekNote = "seek to $target resumed"
                 }
 
-                return "video ${pass.video}, audio ${pass.audio}, $seekNote"
+                val cueNote = decodedCueText?.let { text -> ", cue '$text'" } ?: ""
+            return "video ${pass.video}, audio ${pass.audio}, $seekNote$cueNote"
             } finally {
                 videoDecoder?.close()
                 audioDecoder?.close()
+                subtitleDecoder?.close()
             }
         } finally {
             source.close()
@@ -271,6 +294,9 @@ internal object FormatMatrixRunner {
         videoQuota: Int,
         audioQuota: Int,
         progress: Progress,
+        subtitleIndex: Int? = null,
+        subtitleDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null,
+        onCue: ((String) -> Unit)? = null,
     ) {
         fun done(): Boolean = progress.video >= videoQuota && progress.audio >= audioQuota
 
@@ -303,6 +329,16 @@ internal object FormatMatrixRunner {
                 break
             }
             when (packet.streamIndex) {
+                subtitleIndex -> if (subtitleDecoder != null) {
+                    subtitleDecoder.send(packet)
+                    subtitleDecoder.receive().forEach { cue ->
+                        if (cue is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text &&
+                            cue.plainText.isNotBlank() && onCue != null
+                        ) {
+                            onCue.invoke(cue.plainText)
+                        }
+                    }
+                }
                 videoIndex -> if (videoDecoder != null) {
                     // False means full and NOT consumed: drain, then offer the same packet again.
                     while (!videoDecoder.send(packet)) {

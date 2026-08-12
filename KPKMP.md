@@ -7719,6 +7719,15 @@ is no other.
   Pixelu16KB died once more mid-phase and was rebooted by the standing script (16384
   re-proved); the media push used the recorded S1.e.4 recipe, plus one addition to it: the
   captured appId carries a carriage return that must be stripped before the chown. Run OK twice.
+- 2026-08-12, the 17.4.6 Android rider EXITS. Its three sub-phases and one fence-amended defect
+  fix have their named local commits (0b2a049 instrumentation with the A1 art/-sweep incident
+  amended out, 91dea65 the image ring, 8a47d35 the replay-confirmation fix, 07f7879 the
+  measured run), the README's compose row now carries the measured emulator truth with its
+  provisional label, and S3 owns what remains of KV-4: the launchable modifier demo, the
+  device-grade numbers, and the ring-depth re-examination. The KV-7 go/no-go note now has its
+  judge: 128.3 ms average software cost per published 1080p frame on the emulated CPU is the
+  number any zero-copy or YUV path must argue against. The Android-only road the owner asked
+  for is done; everything else remaining needs Apple, desktop or cross-platform work.
 
 ---
 

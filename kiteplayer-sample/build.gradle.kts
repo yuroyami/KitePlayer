@@ -45,8 +45,9 @@ kotlin {
             implementation(project(":kiteplayer-output"))
         }
         iosMain.dependencies {
-            implementation(project(":kiteplayer-ffmpeg"))
-            implementation(project(":kiteplayer-output"))
+            // The phone aggregate carries ffmpeg and output api-transitively; since S1.e.2 the
+            // iOS host consumes the same one coordinate an ordinary consumer would.
+            implementation(project(":kiteplayer-phone"))
         }
     }
 }

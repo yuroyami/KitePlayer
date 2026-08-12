@@ -7596,6 +7596,22 @@ is no other.
   PLAYED (video 10, audio 10, seek resumed; the host build carries a software AV1 decoder), and
   both torture rows refused cleanly with the typed FFmpeg invalid-data error (-1094995529),
   nothing crashed, nothing hung. Tier 1 green.
+- 2026-08-12, S1.e.2 completed: the iOS host re-consumed through the phone coordinate. The
+  hand-built CALayer and UIKitVideoRenderer left SampleViewController; one KitePlayerUIView owns
+  the presentation, the player comes from phoneBackends(), the sample's iosMain dependency is
+  the ONE :kiteplayer-phone line, and every oracle key kept its exact S1.b meaning (layerImage
+  now reads the view's new hasPicture diagnostic, added to the phone API with its dump moved by
+  ritual). ONE REAL DEFECT found by the smoke's teardownCompleted key and fixed IN BOTH PLATFORM
+  VIEWS, one file beyond the written fence, recorded loudly per 18.3 rule 8: the ordinary
+  teardown order is close-the-player-then-clear-the-view, a closed player refuses detachRenderer
+  with a typed IllegalStateException, and the binding's detach lambda now treats that refusal as
+  already-detached (closing tears down everything). The Android view carried the same latent
+  throw, swallowed until now by the Android smoke's runCatching; both fixes carry the same
+  comment. Diagnosis used a temporary error file in the sample, removed before commit. THE
+  MEASURED RE-RUN on Test iPhone 17: decoded 133, submitted 123, presented 6 through the view's
+  counters, seek landed in 5000..5034, Ended, layerImage true, zero underruns, teardown causal
+  and completed; the S1.b jq oracle passes verbatim. Phone binding suites re-ran green on host
+  and simulator; Tier 1 green.
 
 ---
 

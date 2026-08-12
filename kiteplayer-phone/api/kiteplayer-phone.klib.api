@@ -11,6 +11,8 @@ final class io.github.yuroyami.kiteplayer.phone/KitePlayerUIView : platform.UIKi
 
     final val failedFrames // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.failedFrames|{}failedFrames[0]
         final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val hasPicture // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.hasPicture|{}hasPicture[0]
+        final fun <get-hasPicture>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.hasPicture.<get-hasPicture>|<get-hasPicture>(){}[0]
     final val presentedFrames // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.presentedFrames|{}presentedFrames[0]
         final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
     final val supersededFrames // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.supersededFrames|{}supersededFrames[0]

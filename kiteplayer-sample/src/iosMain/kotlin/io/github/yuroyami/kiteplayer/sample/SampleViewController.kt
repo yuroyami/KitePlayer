@@ -2,17 +2,13 @@
 
 package io.github.yuroyami.kiteplayer.sample
 
-import io.github.yuroyami.kiteplayer.Backends
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.SeekMode
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecMediaBackend
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
-import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
-import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
-import io.github.yuroyami.kiteplayer.output.UIKitVideoRenderer
+import io.github.yuroyami.kiteplayer.phone.KitePlayerUIView
+import io.github.yuroyami.kiteplayer.phone.phoneBackends
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
@@ -35,7 +31,6 @@ import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSSelectorFromString
 import platform.Foundation.NSUserDomainMask
-import platform.QuartzCore.CALayer
 import platform.UIKit.UIButton
 import platform.UIKit.UIButtonTypeSystem
 import platform.UIKit.UIColor
@@ -56,9 +51,14 @@ import kotlin.time.Duration.Companion.seconds
 /** The one Swift-facing entry point of the private iOS sample framework. */
 public fun sampleViewController(): UIViewController = SampleController()
 
+/**
+ * Re-consumed through the phone coordinate at S1.e.2: the hand-built CALayer and renderer are
+ * gone, one [KitePlayerUIView] owns the whole presentation lifecycle, and the smoke's oracle
+ * keys keep exactly their S1.b meanings, now read from the view's own diagnostics.
+ */
 private class SampleController : UIViewController(nibName = null, bundle = null) {
 
-    private val videoLayer = CALayer()
+    private val playerView = KitePlayerUIView()
     private val scope = MainScope()
     private val smokeMode = NSProcessInfo.processInfo.arguments.contains(SMOKE_ARGUMENT)
     private val controlButtons = mutableListOf<UIButton>()
@@ -67,19 +67,18 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
     private var sampleStarted = false
     private var sampleClosing = false
     private var samplePlayer: KitePlayer? = null
-    private var sampleRenderer: UIKitVideoRenderer? = null
     private var terminalJob: Job? = null
 
     override fun viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = UIColor.blackColor
-        view.layer.addSublayer(videoLayer)
+        view.addSubview(playerView)
         if (!smokeMode) installControls()
     }
 
     override fun viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        videoLayer.frame = view.bounds
+        playerView.setFrame(view.bounds)
         layoutControls()
     }
 
@@ -144,21 +143,11 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                 NSBundle.mainBundle.pathForResource(SMOKE_RESOURCE, ofType = SMOKE_EXTENSION),
             ) { "$SMOKE_RESOURCE.$SMOKE_EXTENSION is not in the application bundle" }
 
-            val activeRenderer = UIKitVideoRenderer(videoLayer) { frame ->
-                SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
-            }
-            sampleRenderer = activeRenderer
-
             val activePlayer = KitePlayer.create(
-                PlayerConfig(
-                    backends = Backends(
-                        backend = KiteCodecMediaBackend(),
-                        output = AppleOutputBackend,
-                    ),
-                ),
+                PlayerConfig(backends = phoneBackends()),
             )
             samplePlayer = activePlayer
-            activePlayer.attachRenderer(activeRenderer)
+            playerView.player = activePlayer
             activePlayer.open(MediaItem(mediaPath))
             if (sampleClosing) return
 
@@ -236,7 +225,8 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         terminalJob = null
 
         val activePlayer = samplePlayer
-        val activeRenderer = sampleRenderer
+        // The view closes its renderer synchronously, before detach, when the player is cleared.
+        playerView.player = null
         // Request close synchronously from the lifecycle callback. Kotlin/Native exposes no
         // overridable UIViewController deinit hook, so disappearance is this private host's boundary.
         activePlayer?.close()
@@ -244,18 +234,14 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
             val closeFailure = runCatching {
                 if (activePlayer != null) withTimeout(CLOSE_TIMEOUT) { activePlayer.closeAndAwait() }
             }.exceptionOrNull()
-            val rendererFailure = runCatching { activeRenderer?.close() }.exceptionOrNull()
             if (samplePlayer === activePlayer) samplePlayer = null
-            if (sampleRenderer === activeRenderer) sampleRenderer = null
             closeFailure?.let { println("iOS sample player close failed: ${it.message ?: it::class.simpleName}") }
-            rendererFailure?.let { println("iOS sample renderer close failed: ${it.message ?: it::class.simpleName}") }
         }
     }
 
     private suspend fun runSmoke() {
         val result = SmokeResult()
         var player: KitePlayer? = null
-        var renderer: UIKitVideoRenderer? = null
         var playerTeardownCompleted = false
 
         try {
@@ -264,30 +250,20 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                     NSBundle.mainBundle.pathForResource(SMOKE_RESOURCE, ofType = SMOKE_EXTENSION),
                 ) { "$SMOKE_RESOURCE.$SMOKE_EXTENSION is not in the application bundle" }
 
-                val activeRenderer = UIKitVideoRenderer(videoLayer) { frame ->
-                    SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
-                }
-                renderer = activeRenderer
-
                 val activePlayer = KitePlayer.create(
-                    PlayerConfig(
-                        backends = Backends(
-                            backend = KiteCodecMediaBackend(),
-                            output = AppleOutputBackend,
-                        ),
-                    ),
+                    PlayerConfig(backends = phoneBackends()),
                 )
                 player = activePlayer
-                activePlayer.attachRenderer(activeRenderer)
+                playerView.player = activePlayer
                 activePlayer.open(MediaItem(mediaPath))
 
-                awaitPresentationAfter(activeRenderer, 0L)
-                val beforeSeek = activeRenderer.presentedFrames
+                awaitPresentationAfter(0L)
+                val beforeSeek = playerView.presentedFrames
                 result.seekRequested = true
                 activePlayer.seek(SEEK_POSITION, SeekMode.Precise)
-                awaitPresentationAfter(activeRenderer, beforeSeek)
+                awaitPresentationAfter(beforeSeek)
                 val landedMillis = activePlayer.position().inWholeMilliseconds
-                result.seekLanded = activeRenderer.presentedFrames > beforeSeek &&
+                result.seekLanded = playerView.presentedFrames > beforeSeek &&
                     landedMillis in SEEK_LANDING_RANGE
                 check(result.seekLanded) {
                     "the precise seek position was $landedMillis ms"
@@ -298,7 +274,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                     snapshot.status == PlaybackStatus.Ended || snapshot.status == PlaybackStatus.Failed
                 }
                 result.terminalState = terminal.status.name
-                captureCounters(result, activePlayer, activeRenderer)
+                captureCounters(result, activePlayer, playerView)
                 check(terminal.status == PlaybackStatus.Ended) { "playback ended as ${terminal.status}" }
                 check(terminal.error == null) { "healthy playback retained ${terminal.error}" }
 
@@ -313,11 +289,9 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         } catch (_: Throwable) {
             runCatching { player?.close() }
         } finally {
-            val rendererTeardownCompleted = renderer?.let { activeRenderer ->
-                runCatching { activeRenderer.close() }.isSuccess
-            } ?: false
-            captureCounters(result, player, renderer)
-            result.layerImage = runCatching { videoLayer.contents != null }.getOrDefault(false)
+            val rendererTeardownCompleted = runCatching { playerView.player = null }.isSuccess
+            captureCounters(result, player, playerView)
+            result.layerImage = runCatching { playerView.hasPicture }.getOrDefault(false)
             result.teardownCompleted = playerTeardownCompleted && rendererTeardownCompleted
             try {
                 writeSmokeResult(result)
@@ -327,8 +301,8 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         }
     }
 
-    private suspend fun awaitPresentationAfter(renderer: UIKitVideoRenderer, previous: Long) {
-        while (renderer.presentedFrames <= previous || videoLayer.contents == null) {
+    private suspend fun awaitPresentationAfter(previous: Long) {
+        while (playerView.presentedFrames <= previous || !playerView.hasPicture) {
             delay(PRESENTATION_POLL)
         }
     }
@@ -361,7 +335,7 @@ private class SmokeResult {
 private fun captureCounters(
     result: SmokeResult,
     player: KitePlayer?,
-    renderer: UIKitVideoRenderer?,
+    view: KitePlayerUIView,
 ) {
     player?.let { activePlayer ->
         runCatching { activePlayer.stats.value }.getOrNull()?.let { stats ->
@@ -370,7 +344,7 @@ private fun captureCounters(
             result.audioUnderruns = maxOf(result.audioUnderruns, stats.audioUnderruns)
         }
     }
-    renderer?.let { result.presentedFrames = maxOf(result.presentedFrames, it.presentedFrames) }
+    result.presentedFrames = maxOf(result.presentedFrames, view.presentedFrames)
 }
 
 private fun writeSmokeResult(result: SmokeResult) {

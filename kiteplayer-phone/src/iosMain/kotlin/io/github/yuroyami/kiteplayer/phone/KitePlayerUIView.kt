@@ -49,7 +49,16 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
-        detach = { player -> player.detachRenderer() },
+        detach = { player ->
+            try {
+                player.detachRenderer()
+            } catch (_: IllegalStateException) {
+                // The ordinary teardown order is close-the-player-then-clear-the-view, and a
+                // closed player refuses every command, including this one. Closing already
+                // detached everything, so there is nothing left to undo. Found by the S1.e.2
+                // smoke's teardownCompleted key.
+            }
+        },
         close = { renderer ->
             presentedBefore += renderer.presentedFrames
             supersededBefore += renderer.supersededFrames
@@ -79,6 +88,14 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
     /** Frames that reached no layer for a reason other than being superseded. */
     public val failedFrames: Long
         get() = failedBefore + (binding.activeRenderer?.failedFrames ?: 0L)
+
+    /**
+     * True while the video layer holds a picture. The renderer's close never clears the last
+     * delivered contents, so this stays true after teardown until something replaces the layer's
+     * contents; it is presentation evidence, not playback state.
+     */
+    public val hasPicture: Boolean
+        get() = videoLayer.contents != null
 
     init {
         backgroundColor = UIColor.blackColor

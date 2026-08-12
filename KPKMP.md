@@ -7686,6 +7686,24 @@ is no other.
   of garbage at 1080p30 before). iOS stays one Skia raster per frame behind the same shape,
   because KV-2 owns Apple. Host suite 12 arms; the public dump is unchanged (the seam is
   internal); all three targets compile; Tier 1 green.
+- 2026-08-12, A3's first measured run found a REAL S1.c DEFECT and the fix landed as a fence
+  amendment in kiteplayer-ffmpeg, one module beyond the rider's written fence, recorded loudly:
+  FFmpeg's mediacodec wrapper marks NO output frame as a keyframe (AV_FRAME_FLAG_KEY never set),
+  so the replay driver's boundary was never confirmed, the retention window grew to its 16 MiB
+  cap and EVERY Android hardware playback longer than that WITHOUT a seek failed terminally
+  ("no decoded replay keyframe has been confirmed"). Every earlier green dodged it honestly:
+  the S1.c.6 and S1.d.4 smokes seek mid-run (seek flushes the window) and the S1.e.4 matrix
+  decodes ten frames per clip. The fix: boundary confirmation now accepts the timestamp proof
+  when the flag never comes: a decoded output at or past the boundary packet's presentation
+  time cannot exist unless the boundary keyframe was decoded (later frames reference it;
+  earlier frames, including open-GOP leading ones, sit earlier in presentation); a boundary
+  packet without a timestamp keeps flag-only confirmation, exactly the old behaviour. Two
+  falsifying arms were RUN RED against the unfixed driver first (flagless confirmation, and the
+  A3 shape: flagless keyframed 8 MiB packets crossing the cap), then green; one existing arm's
+  scripted delayed frame carried a FUTURE pts impossible in a conformant stream and was
+  re-anchored to a past pts with the reasoning in place (its intent, cap accounting over
+  old-plus-candidate windows, is unchanged). Fallback suite 28 arms green; ffmpeg macOS, JVM
+  and Android host suites green.
 
 ---
 

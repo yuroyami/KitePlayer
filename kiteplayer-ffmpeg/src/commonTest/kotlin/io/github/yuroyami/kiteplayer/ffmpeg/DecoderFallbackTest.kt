@@ -85,6 +85,50 @@ class DecoderFallbackTest {
     }
 
     @Test
+    fun flaglessOutputsConfirmTheBoundaryByTimestamp() = runBlocking {
+        // FFmpeg's mediacodec wrapper marks no output frame as a keyframe. Confirmation must
+        // then come from the timestamp, or every failure before the cap is wrongly terminal.
+        val flagless: (TestPacket) -> List<FrameSpec> = { packet ->
+            listOf(FrameSpec(packet.id, keyframe = false))
+        }
+        val h = Harness().apply {
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3, output = flagless) }
+            softwareFactory = { ScriptDecoder(ledger, HwdecStatus.Software, output = flagless) }
+        }
+        val decoder = requireNotNull(h.open(autoSelection()))
+        assertDelivered(decoder, h.packet(1, keyframe = true), 1)
+        assertDelivered(decoder, h.packet(2), 2)
+        assertDelivered(decoder, h.packet(3), 3)
+        assertEquals(HwdecStatus.Software, decoder.hardware)
+        assertEquals(1, h.warnings.size)
+        decoder.close()
+        h.assertLedgerZero()
+    }
+
+    @Test
+    fun flaglessOutputsReleaseTheWindowBeforeTheCap() = runBlocking {
+        // The A3 device shape: keyframed 8 MiB packets, outputs never flagged. Without the
+        // timestamp confirmation the window kept every packet, hit the 16 MiB cap mid-file and
+        // failed terminally with no seek to save it.
+        val flagless: (TestPacket) -> List<FrameSpec> = { packet ->
+            listOf(FrameSpec(packet.id, keyframe = false))
+        }
+        val h = Harness().apply {
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, output = flagless) }
+        }
+        val decoder = requireNotNull(h.open(autoSelection()))
+        val eightMiB = 8 * 1024 * 1024
+        assertDelivered(decoder, h.packet(1, keyframe = true, bytes = eightMiB), 1)
+        assertDelivered(decoder, h.packet(2, keyframe = true, bytes = eightMiB), 2)
+        assertDelivered(decoder, h.packet(3, keyframe = true, bytes = eightMiB), 3)
+        assertDelivered(decoder, h.packet(4, keyframe = true, bytes = eightMiB), 4)
+        assertEquals(h.hardwareStatus, decoder.hardware, "the window released; nothing demoted")
+        assertTrue(h.warnings.isEmpty())
+        decoder.close()
+        h.assertLedgerZero()
+    }
+
+    @Test
     fun receiveFailureAfterOneFrameReplaysFromRetainedKeyframe() = runBlocking {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failReceiveAt = 2) }
@@ -245,8 +289,12 @@ class DecoderFallbackTest {
     @Test
     fun sixteenMiBCapCountsOldAndCandidateWindowsBeforeAcceptingCrossingPacket() = runBlocking {
         val h = Harness().apply {
+            // The delayed frame belongs to the OLD window, so its timestamp sits BEFORE the
+            // candidate keyframe's. It used to carry a fictional future pts, which was harmless
+            // under flag-only confirmation and impossible in a conformant stream; the timestamp
+            // confirmation made the contract notice.
             val delayedCandidate: (TestPacket) -> List<FrameSpec> = { packet ->
-                if (packet.id == 3) listOf(FrameSpec(30, keyframe = false))
+                if (packet.id == 3) listOf(FrameSpec(30, keyframe = false, pts = Pts(0)))
                 else listOf(FrameSpec(packet.id, packet.isKeyframe))
             }
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, output = delayedCandidate) }
@@ -255,7 +303,7 @@ class DecoderFallbackTest {
         val decoder = requireNotNull(h.open(autoSelection()))
         assertDelivered(decoder, h.packet(1, keyframe = true, bytes = 8 * 1024 * 1024), 1)
         assertDelivered(decoder, h.packet(2, bytes = 6 * 1024 * 1024), 2)
-        assertDelivered(decoder, h.packet(3, keyframe = true, bytes = 1 * 1024 * 1024), 30)
+        assertDelivered(decoder, h.packet(3, keyframe = true, bytes = 1 * 1024 * 1024), 30, expectedPts = Pts(0))
         assertDelivered(decoder, h.packet(4, bytes = 2 * 1024 * 1024), 4)
         assertEquals(HwdecStatus.Software, decoder.hardware)
         assertEquals(3, h.hardware().acceptedPacketIds.size)

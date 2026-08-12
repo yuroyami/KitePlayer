@@ -67,6 +67,8 @@ private data class RetainedPacket(
     val packet: PlayerPacket,
     val bytes: Int,
     val isKeyframe: Boolean,
+    /** The original packet's presentation timestamp, for flag-free boundary confirmation. */
+    val pts: io.github.yuroyami.kiteplayer.Pts?,
 )
 
 private class ReplayFallbackDecoder(
@@ -226,6 +228,7 @@ private class ReplayFallbackDecoder(
             packet = clone,
             bytes = original.sizeBytes.coerceAtLeast(0),
             isKeyframe = original.isKeyframe,
+            pts = original.pts,
         )
         retained += entry
         retainedBytes += entry.bytes
@@ -234,7 +237,7 @@ private class ReplayFallbackDecoder(
 
     private fun accountHardwareOutput(frame: VideoFrame) {
         val boundary = pendingBoundary
-        if (boundary != null && isKeyframe(frame)) {
+        if (boundary != null && confirmsBoundary(frame, retained.getOrNull(boundary))) {
             // The decoded keyframe, not merely its accepted packet, makes the candidate safe. Delayed
             // B-frames observed before this point belonged to the old ordinal window.
             closeRetainedPrefix(boundary)
@@ -246,6 +249,25 @@ private class ReplayFallbackDecoder(
         } else if (hasConfirmedBoundary) {
             deliveredSinceBoundary += 1
         }
+    }
+
+    /**
+     * True when [frame] proves the boundary keyframe was decoded.
+     *
+     * The flag is the first-class proof. The timestamp is the fallback for decoders that never
+     * set it: FFmpeg's mediacodec wrapper marks no output frame as a keyframe, which without
+     * this made the window grow until the 16 MiB cap failed EVERY Android playback longer than
+     * that with no seek in between (found by the 17.4.6 A3 measured run; the earlier smokes
+     * seeked mid-run, which resets the window, and dodged it). A decoded output at or past the
+     * boundary packet's presentation time cannot exist unless the boundary keyframe itself was
+     * decoded: frames later in presentation reference it, and frames decoded before it sit
+     * earlier in presentation, including open-GOP leading frames. A boundary packet without a
+     * timestamp keeps flag-only confirmation, which is exactly the old behaviour.
+     */
+    private fun confirmsBoundary(frame: VideoFrame, boundary: RetainedPacket?): Boolean {
+        if (isKeyframe(frame)) return true
+        val boundaryPts = boundary?.pts ?: return false
+        return frame.pts >= boundaryPts
     }
 
     private suspend fun demote(reason: String, failure: Throwable?, replayDrain: Boolean) {

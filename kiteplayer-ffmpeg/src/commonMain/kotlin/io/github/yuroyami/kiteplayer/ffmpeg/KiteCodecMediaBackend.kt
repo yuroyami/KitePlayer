@@ -21,10 +21,9 @@ import io.github.yuroyami.kitecodec.MediaSource
  * above it ever has to know that the source and the decoders are the same implementation underneath.
  * The engine used to reach these factories by downcasting the source, which is the defect this removes.
  *
- * @param onWarning where a decoder's degradation goes. The one warning this backend produces today is
- *        `PlaybackWarning.TonemappingUnavailable`, emitted at most once per stream when the colour a
- *        frame carries can only be converted approximately. The callback runs on the decoder's own
- *        worker, so it must be cheap and must not block. The default discards.
+ * @param onWarning where decoder degradations go. Colour approximation and a permitted hardware-to-
+ *        software fallback are both reported here. The callback runs on the decoder's own worker, so
+ *        it must be cheap and must not block. The default discards.
  */
 public class KiteCodecMediaBackend(
     private val onWarning: (PlaybackWarning) -> Unit = {},
@@ -32,7 +31,7 @@ public class KiteCodecMediaBackend(
 
     override suspend fun open(media: MediaItem): BackendSession {
         require(media.io == null) {
-            "Custom I/O is not wired yet. KiteCodec has no AVIOContext path."
+            "Custom I/O is not wired yet. KiteCodec has no custom-input path."
         }
         // MediaSource.open is where KiteCodec's FFmpeg identity gate runs, before its first allocation.
         // A rejection there is not about this file and never will be: it means the linked FFmpeg does not
@@ -49,7 +48,7 @@ public class KiteCodecMediaBackend(
  * One opened container and its decoders.
  *
  * The lists come from the source itself, because a KiteCodec decoder is opened against the very
- * `AVFormatContext` the packets are read from. There is no subtitle decoder in this build: KiteCodec
+ * container context the packets are read from. There is no subtitle decoder in this build: KiteCodec
  * decodes no subtitle stream yet, so the list is empty rather than holding a factory that always
  * refuses. An empty list is how a backend says "not this kind of stream", and the engine deselects such
  * a stream instead of failing the open.

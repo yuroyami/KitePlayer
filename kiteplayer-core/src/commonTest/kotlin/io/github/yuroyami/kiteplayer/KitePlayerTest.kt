@@ -264,6 +264,32 @@ class KitePlayerTest {
     }
 
     @Test
+    fun `stats publish current decoder hardware and change immediately after demotion`() = runTest {
+        val harness = CoreHarness(this, config = PlayerConfig(statsInterval = 10.milliseconds))
+        harness.backend.videoDecoderStatus.value = HwdecStatus.HardwareWithDownload(HwdecKind.MediaCodec)
+        val player = player(harness)
+
+        player.open(MediaItem("scripted://dynamic-hardware-status"))
+        harness.run(50.milliseconds)
+        assertEquals(
+            HwdecStatus.HardwareWithDownload(HwdecKind.MediaCodec),
+            player.stats.value.hardwareDecode,
+            "stats read the live decoder path rather than assuming software",
+        )
+
+        // A real fallback changes this from the video-decode worker. The injected status uses the same
+        // cross-thread-safe shape, so the actor must read it again instead of preserving the open value.
+        harness.backend.videoDecoderStatus.value = HwdecStatus.Software
+        harness.run(50.milliseconds)
+        assertEquals(
+            HwdecStatus.Software,
+            player.stats.value.hardwareDecode,
+            "the first stats publication after demotion must not retain a stale hardware claim",
+        )
+        harness.close()
+    }
+
+    @Test
     fun `position and progress come from the player and agree with each other`() = runTest {
         val harness = CoreHarness(this, config = PlayerConfig(progressInterval = 50.milliseconds))
         val player = player(harness)

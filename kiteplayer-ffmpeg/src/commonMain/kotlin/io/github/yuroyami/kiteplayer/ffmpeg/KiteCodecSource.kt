@@ -1,9 +1,10 @@
-@file:OptIn(KiteCodecLowLevelApi::class, ExperimentalForeignApi::class)
+@file:OptIn(KiteCodecLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -29,6 +30,7 @@ import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
+import io.github.yuroyami.kitecodec.CodecId
 import io.github.yuroyami.kitecodec.MediaSource
 import io.github.yuroyami.kitecodec.MediaType
 import io.github.yuroyami.kitecodec.Packet
@@ -39,7 +41,6 @@ import io.github.yuroyami.kitecodec.StreamInfo
 import io.github.yuroyami.kitecodec.durationMicros
 import io.github.yuroyami.kitecodec.ptsMicros
 import io.github.yuroyami.kitecodec.Frame as KiteFrame
-import kotlinx.cinterop.ExperimentalForeignApi
 import kotlin.math.roundToLong
 
 /**
@@ -52,7 +53,7 @@ import kotlin.math.roundToLong
 public class KiteCodecSourceFactory : MediaSourceFactory {
     override suspend fun open(media: MediaItem): PlayerMediaSource {
         require(media.io == null) {
-            "Custom I/O is not wired yet. KiteCodec has no AVIOContext path."
+            "Custom I/O is not wired yet. KiteCodec has no custom-input path."
         }
         return KiteCodecSource(MediaSource.open(media.uri))
     }
@@ -67,9 +68,8 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
      * Where this source's decoders report a degradation they had to accept and carry on through.
      *
      * The decoders are the only place that knows, because the knowledge arrives with the frames and
-     * not with the container: a stream can start standard dynamic range and change. Today one warning
-     * comes out of here, `PlaybackWarning.TonemappingUnavailable`, emitted at most once per stream by
-     * the video decoder when the colour it was handed can only be converted approximately.
+     * not with the container: a stream can start standard dynamic range and change. Colour
+     * approximation and a policy-permitted hardware fallback both come out here.
      *
      * The callback runs on whichever thread called `receive`, which is the decoder's own thread, so it
      * must be cheap and must not block. Set it before decoding starts. The default discards.
@@ -128,7 +128,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
         // [target] needs no conversion. KiteCodec's seek already speaks the content-relative
         // timeline, and every timestamp this class produces is now on that same timeline.
         reader.seek(target.micros, SeekDirection.Backward)
-        // libavformat does not report where it landed. The engine finds out from the first decoded
+        // The container reader does not report where it landed. The engine finds out from the first decoded
         // frame, which is also how it detects an overshoot and decides whether to retry.
         return null
     }
@@ -142,8 +142,8 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     internal fun kiteStream(index: Int): StreamInfo =
         byIndex[index] ?: error("no stream at index $index")
 
-    internal fun openDecoder(index: Int, lowDelay: Boolean): StreamDecoder =
-        source.openDecoder(kiteStream(index), lowDelay = lowDelay)
+    internal fun openDecoder(index: Int, lowDelay: Boolean, decoder: CodecId? = null): StreamDecoder =
+        source.openDecoder(kiteStream(index), lowDelay = lowDelay, decoder = decoder)
 
     /**
      * The decoder wrappers are built here rather than in the factories, because they need the
@@ -152,8 +152,19 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
      * The warning sink is passed as a lambda that reads [onWarning] when it fires, not as the current
      * value of it, so a caller that sets the property after building its decoders is still heard.
      */
-    internal fun newVideoDecoder(stream: PlayerStreamInfo): VideoDecoder =
-        KiteCodecVideoDecoder(openDecoder(stream.index, lowDelay = false), stream, mapper) { onWarning(it) }
+    internal fun newVideoDecoder(
+        stream: PlayerStreamInfo,
+        decoder: CodecId? = null,
+        hardware: HwdecStatus = HwdecStatus.Software,
+        continuity: VideoDecoderContinuity = VideoDecoderContinuity(),
+    ): VideoDecoder = KiteCodecVideoDecoder(
+        decoder = openDecoder(stream.index, lowDelay = false, decoder = decoder),
+        stream = stream,
+        mapper = mapper,
+        hardware = hardware,
+        continuity = continuity,
+        warn = { onWarning(it) },
+    )
 
     /**
      * Low delay for audio: a player is waiting on these frames, and the decoder holding them back
@@ -169,7 +180,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
             declaredChannelLayoutMask = kiteStream(stream.index).audio?.channelLayoutMask,
         )
 
-    /** Video decoders for this source. Ordered best first, which today means software only. */
+    /** Video decoders for this source. The factory applies the caller's platform policy at open. */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> =
         listOf(KiteCodecVideoDecoderFactory(this))
 
@@ -202,7 +213,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
  * through `av_rescale_q` and its 128 bit intermediate, because the obvious
  * `ticks * 1_000_000 * num / den` overflows a signed 64 bit multiply on a fine time base.
  */
-private class TimestampMapper(private val containerStartMicros: Long) {
+internal class TimestampMapper(private val containerStartMicros: Long) {
 
     /** A point on the timeline. Null in, null out: an absent timestamp is not a timestamp of zero. */
     fun mapTimestamp(micros: Long?): Pts? = micros?.let { Pts(it - containerStartMicros) }
@@ -217,6 +228,60 @@ private class TimestampMapper(private val containerStartMicros: Long) {
  * ever applies to a stream that declares no frame rate and whose decoder reports no duration.
  */
 private const val SYNTHESIZED_FRAME_STEP_US: Long = 40_000
+
+/**
+ * State that must survive replacing a hardware decoder wrapper with its software replay wrapper.
+ *
+ * Replay begins at the last decoded keyframe. Remembering the timestamp immediately before that
+ * keyframe makes a timestampless replay reproduce the same synthetic sequence, so ordinal
+ * suppression neither jumps backward to zero nor advances the timeline twice. The colour-warning
+ * latch is also per stream, not per wrapper, and deliberately survives seeks.
+ */
+internal class VideoDecoderContinuity {
+    private var lastPts: Pts? = null
+    private var replaySeed: Pts? = null
+    private var replaySeedPending: Boolean = false
+    private var colorWarningClaimed: Boolean = false
+
+    internal fun timestamp(
+        real: Pts?,
+        duration: Pts?,
+        frameRate: Double?,
+        isKeyframe: Boolean,
+    ): Pts {
+        val before = lastPts
+        val stepMicros = duration?.micros?.takeIf { it > 0 }
+            ?: frameRate
+                ?.takeIf { it.isFinite() && it > 0.0 && it < 1000.0 }
+                ?.let { (1_000_000.0 / it).roundToLong() }
+            ?: SYNTHESIZED_FRAME_STEP_US
+        val value = real ?: before?.let { Pts(it.micros + stepMicros) } ?: Pts.Zero
+        if (isKeyframe) {
+            replaySeed = before
+            replaySeedPending = true
+        }
+        lastPts = value
+        return value
+    }
+
+    /** Restores the state immediately before the confirmed replay keyframe. */
+    internal fun beginReplay() {
+        lastPts = replaySeed
+        replaySeedPending = false
+    }
+
+    /** A seek starts a new timestamp epoch but does not make a repeated colour warning useful. */
+    internal fun resetEpoch() {
+        lastPts = null
+        if (!replaySeedPending) replaySeed = null
+    }
+
+    internal fun claimColorWarning(): Boolean {
+        if (colorWarningClaimed) return false
+        colorWarningClaimed = true
+        return true
+    }
+}
 
 private fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo? {
     val kind = when (type) {
@@ -260,7 +325,7 @@ private fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo
     )
 }
 
-private class KiteCodecPacket(val native: Packet, private val mapper: TimestampMapper) : PlayerPacket {
+internal class KiteCodecPacket(val native: Packet, private val mapper: TimestampMapper) : PlayerPacket {
     override val streamIndex: Int get() = native.streamIndex
     override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros)
 
@@ -276,24 +341,48 @@ private class KiteCodecPacket(val native: Packet, private val mapper: TimestampM
     override val isKeyframe: Boolean get() = native.isKeyframe
     override val sizeBytes: Int get() = native.sizeBytes
     override val bytePosition: Long? get() = native.bytePosition.takeIf { it >= 0 }
+    internal fun copyForReplay(): KiteCodecPacket = KiteCodecPacket(native.copy(), mapper)
     override fun close() = native.close()
 }
 
 /**
- * Creates video decoders, all of them software.
- *
- * There is no hardware path, so [HwdecPolicy.Require] gets no decoder at all rather than a software one
- * behind its back. Every other policy value decodes in software.
+ * Creates the platform-selected decoder and, where policy allows, its replay-safe software fallback.
  */
 public class KiteCodecVideoDecoderFactory internal constructor(
     private val source: KiteCodecSource,
 ) : VideoDecoderFactory {
-    override val name: String = "KiteCodec software"
+    override val name: String = "KiteCodec FFmpeg"
 
     override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
-        if (hwdec is HwdecPolicy.Require) return null
-        return source.newVideoDecoder(stream)
+        val selection = platformDecoderSelection(stream.codec, hwdec)
+        if (selection.requiresHardware && selection.hardwareDecoder == null) return null
+
+        val hardware = selection.hardwareDecoder
+        if (hardware == null) return source.newVideoDecoder(stream)
+
+        val continuity = VideoDecoderContinuity()
+
+        return openDecoderWithFallback(
+            stream = stream,
+            selection = selection,
+            open = { decoder ->
+                source.newVideoDecoder(
+                    stream = stream,
+                    decoder = decoder,
+                    hardware = if (decoder == null) {
+                        HwdecStatus.Software
+                    } else {
+                        HwdecStatus.HardwareWithDownload(HwdecKind.MediaCodec)
+                    },
+                    continuity = continuity,
+                )
+            },
+            copyPacket = { packet -> (packet as KiteCodecPacket).copyForReplay() },
+            isKeyframe = { frame -> (frame as? KiteCodecVideoFrame)?.isKeyframe == true },
+            prepareReplay = continuity::beginReplay,
+            warn = { source.onWarning(it) },
+        )
     }
 }
 
@@ -301,26 +390,12 @@ private class KiteCodecVideoDecoder(
     private val decoder: StreamDecoder,
     private val stream: PlayerStreamInfo,
     private val mapper: TimestampMapper,
+    override val hardware: HwdecStatus,
+    private val continuity: VideoDecoderContinuity,
     private val warn: (PlaybackWarning) -> Unit,
 ) : VideoDecoder {
 
-    override val hardware: HwdecStatus = HwdecStatus.Software
-
     private var generation: Generation = Generation.Initial
-
-    /**
-     * The last timestamp handed out, real or synthesised, and the base for the next synthesised one.
-     * Null before the first frame of an epoch.
-     */
-    private var lastPts: Pts? = null
-
-    /**
-     * Whether the approximate-colour warning has already gone out for this stream.
-     *
-     * Once per stream and not once per epoch, so it survives a seek: the viewer does not need telling
-     * again that the file is what it was a second ago.
-     */
-    private var warnedAboutColor = false
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteCodecPacket?)?.native)
@@ -331,12 +406,22 @@ private class KiteCodecVideoDecoder(
     override suspend fun receive(): VideoFrame? {
         val frame = decoder.receive() ?: return null
         val duration = mapper.mapDuration(frame.durationMicros)
-        val pts = mapper.mapTimestamp(frame.ptsMicros) ?: synthesisedPts(duration)
-        lastPts = pts
+        val info = frame.info
+        val pts = continuity.timestamp(
+            real = mapper.mapTimestamp(frame.ptsMicros),
+            duration = duration,
+            frameRate = stream.frameRate,
+            isKeyframe = info.isKeyframe,
+        )
         // The rotation is the stream's, taken from the container's display matrix once at open. Every
         // frame of the stream carries it, because the renderer sees frames and nothing else.
         val wrapped = KiteCodecVideoFrame(frame, pts, duration, generation, stream.rotationDegrees)
-        warnIfColorIsApproximated(wrapped.colorSpace)
+        try {
+            warnIfColorIsApproximated(wrapped.colorSpace)
+        } catch (failure: Throwable) {
+            wrapped.close()
+            throw failure
+        }
         return wrapped
     }
 
@@ -357,7 +442,6 @@ private class KiteCodecVideoDecoder(
      * approximately and say so, which is also the documented default until that pipeline exists.
      */
     private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
-        if (warnedAboutColor) return
         val detail = when {
             color.isHdr -> "${color.transfer} transfer converted as standard dynamic range on stream ${stream.index}"
             color.matrix == ColorMatrix.Bt2020Cl ->
@@ -365,32 +449,10 @@ private class KiteCodecVideoDecoder(
                     "stream ${stream.index}"
             else -> return
         }
+        if (!continuity.claimColorWarning()) return
         // Latched before the callback runs, so a callback that throws cannot turn a one-time warning
         // into one per frame.
-        warnedAboutColor = true
         warn(PlaybackWarning.TonemappingUnavailable(detail))
-    }
-
-    /**
-     * A timestamp for a frame that has none: the previous one plus this frame's best known length.
-     *
-     * The step is the frame's own duration, else the container's declared rate, else 40 ms. That
-     * order is deliberate: the decoder reports a duration per frame, so it stays right on a stream
-     * whose rate varies, while the declared rate is one number for the whole stream and can only be
-     * an average of it.
-     *
-     * The first frame of a stream that carries no timestamps sits at zero, because a counter has to
-     * start somewhere and the timeline starts there. That is not the fabricated stamp this replaced:
-     * the second frame is one step later rather than zero again, so the frames keep their spacing
-     * and the scheduler can pace them.
-     */
-    private fun synthesisedPts(duration: Pts?): Pts {
-        val stepMicros = duration?.micros?.takeIf { it > 0 }
-            ?: stream.frameRate
-                ?.takeIf { it.isFinite() && it > 0.0 && it < 1000.0 }
-                ?.let { (1_000_000.0 / it).roundToLong() }
-            ?: SYNTHESIZED_FRAME_STEP_US
-        return lastPts?.let { Pts(it.micros + stepMicros) } ?: Pts.Zero
     }
 
     override suspend fun flush(newGeneration: Generation) {
@@ -399,7 +461,7 @@ private class KiteCodecVideoDecoder(
         decoder.flush()
         generation = newGeneration
         // A timestamp measured before a seek is no base for one after it.
-        lastPts = null
+        continuity.resetEpoch()
     }
 
     override fun close() = decoder.close()
@@ -560,6 +622,9 @@ public class KiteCodecVideoFrame internal constructor(
      * previous frame rather than read from the media.
      */
     public val hasPts: Boolean = info.hasPts
+
+    /** Decoder-keyframe truth used only to confirm the fallback replay handover boundary. */
+    internal val isKeyframe: Boolean = info.isKeyframe
 
     override fun close(): Unit = frame.close()
 }

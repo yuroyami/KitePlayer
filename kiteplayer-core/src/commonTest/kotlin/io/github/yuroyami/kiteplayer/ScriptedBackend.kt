@@ -21,6 +21,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
+import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -183,6 +184,9 @@ internal class ScriptedBackend(
     private val trace: ScriptTrace = ScriptTrace(),
 ) : MediaBackend {
 
+    /** Mutable decoder truth used to prove that stats do not retain an open-time hardware claim. */
+    val videoDecoderStatus: ScriptedVideoDecoderStatus = ScriptedVideoDecoderStatus()
+
     var openCalls: Int = 0
         private set
 
@@ -199,7 +203,7 @@ internal class ScriptedBackend(
         openCalls++
         openGate?.await()
         openFailure?.let { throw it }
-        return ScriptedSession(script, ledger, faults, trace).also { sessions += it }
+        return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus).also { sessions += it }
     }
 }
 
@@ -208,6 +212,7 @@ internal class ScriptedSession(
     private val ledger: LeakLedger,
     private val faults: FaultPlan,
     private val trace: ScriptTrace = ScriptTrace(),
+    videoDecoderStatus: ScriptedVideoDecoderStatus = ScriptedVideoDecoderStatus(),
 ) : BackendSession {
 
     val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace)
@@ -215,7 +220,7 @@ internal class ScriptedSession(
     override val source: PlayerMediaSource get() = scriptedSource
 
     override val videoDecoders: List<VideoDecoderFactory> =
-        listOf(ScriptedVideoDecoderFactory(script, ledger, faults, trace))
+        listOf(ScriptedVideoDecoderFactory(script, ledger, faults, trace, videoDecoderStatus))
 
     override val audioDecoders: List<AudioDecoderFactory> =
         listOf(ScriptedAudioDecoderFactory(script, ledger, faults, trace))
@@ -374,13 +379,25 @@ private class ScriptedVideoDecoderFactory(
     private val ledger: LeakLedger,
     private val faults: FaultPlan,
     private val trace: ScriptTrace,
+    private val hardwareStatus: ScriptedVideoDecoderStatus,
 ) : VideoDecoderFactory {
     override val name: String = "scripted video"
     override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
         if (faults.videoDecodersRefuse) return null
-        return ScriptedVideoDecoder(script, ledger, faults, trace)
+        return ScriptedVideoDecoder(script, ledger, faults, trace, hardwareStatus)
     }
+}
+
+/** Cross-thread-safe mutable status injected into the scripted decoder. */
+internal class ScriptedVideoDecoderStatus(initial: HwdecStatus = HwdecStatus.Software) {
+    private val current = atomic<HwdecStatus>(initial)
+
+    var value: HwdecStatus
+        get() = current.value
+        set(value) {
+            current.value = value
+        }
 }
 
 /**
@@ -392,9 +409,10 @@ internal class ScriptedVideoDecoder(
     private val ledger: LeakLedger,
     private val faults: FaultPlan,
     private val trace: ScriptTrace = ScriptTrace(),
+    private val hardwareStatus: ScriptedVideoDecoderStatus = ScriptedVideoDecoderStatus(),
 ) : VideoDecoder {
 
-    override val hardware: HwdecStatus = HwdecStatus.Software
+    override val hardware: HwdecStatus get() = hardwareStatus.value
 
     private val pending = ArrayDeque<VideoFrame>()
     private var generation: Generation = Generation.Initial

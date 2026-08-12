@@ -248,8 +248,8 @@ public enum class LatencyQuality {
 /**
  * How the current video track is being decoded.
  *
- * Only [Software] is ever reported: no decoder in this library uses a hardware device.
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * This is current decoder state, not the policy requested at open. It can change from a hardware
+ * value to [Software] when a recoverable decoder failure causes a runtime fallback.
  */
 public sealed class HwdecStatus {
     /** Decoding in software. */
@@ -265,8 +265,9 @@ public sealed class HwdecStatus {
 /**
  * A hardware decoding API.
  *
- * This is naming for a capability nothing has: no target decodes in hardware.
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Backends use these values for ordered preference and report the active kind through [HwdecStatus].
+ * A kind unsupported on the current platform is skipped; naming one does not make its platform API
+ * available.
  */
 public enum class HwdecKind {
     VideoToolbox,

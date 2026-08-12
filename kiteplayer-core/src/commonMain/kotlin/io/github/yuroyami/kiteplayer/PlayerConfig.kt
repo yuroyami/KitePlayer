@@ -22,11 +22,9 @@ public data class PlayerConfig(
     /**
      * What to do about hardware decoding.
      *
-     * Passed to every video decoder factory. No decoder in this library uses a hardware device, so
-     * [HwdecPolicy.Auto], [HwdecPolicy.Off] and [HwdecPolicy.Prefer] all decode in software and behave
-     * identically. [HwdecPolicy.Require] is the one value with an effect, and it is honoured the only way
-     * it can be: the factory supplies no decoder, so the open fails rather than quietly falling back.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Passed to every video decoder factory. A backend may select a platform decoder, fall back to
+     * software when policy permits, or refuse the stream when hardware is required. The decoder's
+     * current path is reported separately by [PlaybackStats.hardwareDecode].
      */
     val hardwareDecode: HwdecPolicy = HwdecPolicy.Auto,
     val frameDrop: FrameDropPolicy = FrameDropPolicy.LateOnly,
@@ -57,9 +55,9 @@ public data class PlayerConfig(
 /**
  * Whether to decode on a hardware device, and what to do when one is not available.
  *
- * Every decoder in this library decodes in software and no target has a hardware path at all, so the
- * only value that changes anything is [Require], which is refused. The rest name an intent nothing can
- * act on yet. Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * A backend applies this policy when it creates a video decoder. The policy controls whether hardware
+ * may be tried and whether a software fallback is legal; [PlaybackStats.hardwareDecode] reports what
+ * the decoder is actually using after open and after any runtime fallback.
  */
 public sealed class HwdecPolicy {
     /** Try hardware, fall back to software with a warning. The right default. */
@@ -72,18 +70,16 @@ public sealed class HwdecPolicy {
      * Fail to open rather than fall back to software. For an application that must not decode 4K
      * on a phone's CPU under any circumstances.
      *
-     * Honoured, and the only value here that is: no factory can supply a hardware decoder, so every
-     * factory refuses the stream and the open fails with [PlaybackError.NoPlayableStream] after a
-     * [PlaybackWarning.HardwareDecodeUnavailable]. A caller that asks for this gets a refusal rather than
-     * silent software decoding, which is what asking for it means.
+     * A backend that cannot open an eligible hardware decoder refuses the stream rather than silently
+     * opening its software decoder. Runtime decoder failures are likewise not demoted to software.
      */
     public data object Require : HwdecPolicy()
 
     /**
      * Only these kinds, tried in this order.
      *
-     * Nothing reads the order, because nothing tries a kind.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * A backend tries only kinds it supports and preserves this order. Kinds belonging to another
+     * platform are skipped rather than treated as permission to call that platform's APIs.
      */
     public data class Prefer(val order: List<HwdecKind>) : HwdecPolicy()
 }

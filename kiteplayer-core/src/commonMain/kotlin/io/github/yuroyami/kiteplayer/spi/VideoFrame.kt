@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.spi
 
 import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoSize
 
@@ -148,8 +149,9 @@ public enum class ChromaLocation { Left, Center, TopLeft, Top, BottomLeft, Botto
 /**
  * What kind of hardware surface a frame holds, so a renderer can say whether it can draw it.
  *
- * No frame ever holds one: nothing decodes in hardware, and the one renderer that exists supports no
- * surface kind at all. Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Null [VideoFrame.hardwareSurface] means the pixels are CPU-readable or otherwise not tied to one of
+ * these platform surfaces. A hardware decoder may still report [HwdecStatus.HardwareWithDownload]
+ * while returning such frames, because it copied decoded pixels back to main memory.
  */
 public enum class HwSurfaceKind {
     /** Apple `CVPixelBuffer` backed by an `IOSurface`. Reaches Metal with no copy. */

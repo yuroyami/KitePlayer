@@ -125,7 +125,7 @@ public class PlaybackException(public val error: PlaybackError) : Exception(erro
 public sealed class PlaybackWarning {
     public abstract val message: String
 
-    /** A hardware decoder was requested and refused. Playback continues in software. */
+    /** A hardware decoder was unavailable or failed and policy allowed playback to continue in software. */
     public data class HardwareDecodeUnavailable(val codec: String, val reason: String) : PlaybackWarning() {
         override val message: String get() = "hardware decode unavailable for $codec: $reason"
     }

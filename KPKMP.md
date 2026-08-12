@@ -7377,6 +7377,36 @@ is no other.
   gating on what could run: buildSrc compiles, the patch tool proof ran twice (apply and
   reverse-check), and both repositories' dash scans stay clean.
 
+- 2026-08-12, window 2c requalified and S1.c.3 completed. The executor hit its usage limit
+  mid-S1.c.3; at the owner's direction the planner took over, ran the machine-heavy
+  requalification, verified the executor's uncommitted work, and closed the sub-phase. WINDOW
+  2c, all green: both Android FFmpeg trees rebuilt with the patch and each tree's
+  ffmpeg-patches.txt names it with matching SHA-256 while the vendored source stays pristine;
+  all three JNI arms relinked, and both Android arms pass the full assertion set (exactly
+  JNI_OnLoad, no forbidden names, PT_LOAD 0x4000, no libav NEEDED); the 0.0.2 superset published
+  ONCE at 13:27 local (this is the publication a later review flagged as a possible immutability
+  breach: it was the authorized window-2c act, and 0.0.1 is untouched); the Apple scratch
+  consumer links all three frameworks offline against 0.0.2; the Android scratch consumer
+  decodes PASS in both debug and minified release on the named emulator, with both APKs carrying
+  exactly two Stored 16 KiB-aligned libraries byte-identical to the AAR. S1.c.3, all arms green
+  on the patched build: the named emulator run passes 37 of 37 including
+  AndroidMediaCodecDeviceTest (hardware H.264 via FFmpeg's decoder, the exact case the defect
+  blocked) and the 26-case fallback suite; jvm, Android host and macosArm64 suites pass; the JVM
+  and macOS real-media transcripts are BYTE-IDENTICAL at 453 bytes each; the API dumps moved
+  deliberately (core unmoved, kiteplayer-ffmpeg gains only its JVM dump); both boundary scans
+  are clean and two planted controls (a MediaCodec import, a direct avcodec token) failed them
+  as designed; the previously unevidenced retention falsifiability arm was run by the planner
+  (retention removed: 15 fallback tests fail; reverted: green); kiteplayer-core jvmTest reran at
+  12 of 12 so the new demotion-stats test has now actually executed. An independent Opus review
+  of all thirty uncommitted files found zero dangling references, zero incomplete files, and
+  confirmed the four stale hardware KDocs were exactly four and all corrected; its remaining
+  findings were closed before this commit (README truth rows for Android and JVM, the restored
+  chroma-siting reasoning comment) or recorded here as known sharp edges: kiteplayer-ffmpeg's
+  jvmTest hard-fails without -Pkitecodec.jni.localPath (loud by design, revisit at S1.d), the
+  macosArm64 transcript env is set in doFirst unlike the KITEPLAYER_TESTMEDIA pattern, and two
+  duplicate configureEach blocks remain cosmetic. AUTHORSHIP: the S1.c.3 product code and tests
+  are the executor's; the planner requalified, verified, corrected the record and committed.
+
 ---
 
 ## 15. Horizon B execution: B1

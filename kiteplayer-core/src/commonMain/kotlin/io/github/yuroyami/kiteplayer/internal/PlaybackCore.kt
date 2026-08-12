@@ -8,6 +8,7 @@ package io.github.yuroyami.kiteplayer.internal
 import io.github.yuroyami.kiteplayer.AudioPlayback
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
@@ -1828,6 +1829,7 @@ internal class PlaybackCore(
                 videoQueueDepth = session?.video?.buffered ?: Duration.ZERO,
                 audioQueueDepth = session?.audio?.buffered ?: Duration.ZERO,
                 audioLatencyQuality = session?.audio?.latencyQuality ?: LatencyQuality.Unreliable,
+                hardwareDecode = session?.videoDecoder?.hardware ?: HwdecStatus.Software,
                 syncMode = config.syncMode,
                 masterClock = masterClockKind(session),
             )

@@ -67,7 +67,9 @@ Today, honestly:
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
 | iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media, lands a precise seek, reaches Ended through RemoteIO and a caller-owned layer, and completes causally awaited teardown. Real-media cancellation and the broader matrix are absent, so this is explicitly below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
-| JVM, Android, iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
+| Android emulator arm64 (API 36, 16 KiB) | Experimental T2 Codec candidate | The FFmpeg backend runs on one named emulator: real media decodes through FFmpeg's `h264_mediacodec` with CPU-readable output and measured software-fallback recovery, and the JVM decode transcript is byte-identical to macOS. Audio, video presentation and the sample app are later S1.c sub-phases; nothing ran on a physical Android device. |
+| JVM (desktop) | T1, decode-proven | The FFmpeg backend's JVM arm decodes real media in tests over a test-only local JNI library. No desktop audio or video output path exists yet. |
+| iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
 
 macOS arm64 remains the only T3 candidate. The named iOS simulator is now a second candidate above T1,
@@ -209,8 +211,12 @@ enough to call any platform supported.
   source that is loud in several channels at once can clip.
 - **Subtitles are one parser.** `kiteplayer-subtitles` reads SubRip. Nothing times, positions or draws
   a cue, and the player never reads a subtitle track. SubRip parsing is not subtitle support.
-- **No hardware decode and no GPU renderer.** Frames are converted on the CPU and drawn through Core
-  Graphics, which costs milliseconds per frame at 1080p.
+- **Hardware decode exists on Android only, inside FFmpeg, and there is no GPU renderer.** On the
+  named Android emulator FFmpeg's own `h264_mediacodec`/`hevc_mediacodec` decoders run under the
+  `Auto`/`Prefer`/`Require` policy with automatic software fallback, and their output is
+  CPU-readable (`HardwareWithDownload`), never a zero-copy surface. Every other platform decodes in
+  software. Frames are converted on the CPU everywhere and drawn through Core Graphics on Apple,
+  which costs milliseconds per frame at 1080p.
 - **Rotation is four turns and no more.** The three quarter turns and no rotation are drawn. A display
   matrix that mirrors the picture or skews it by an arbitrary angle is drawn as stored, which keeps the
   picture rather than the exact transform.

@@ -47,6 +47,9 @@ abstract class KitePlayerJvmTestArguments : CommandLineArgumentProvider {
 // to rely on, so the location is passed in explicitly.
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+    // `simctl spawn` forwards only SIMCTL_CHILD_-prefixed variables to the spawned binary, so a
+    // simulator test sees the plain name only through this twin (S1.e.3).
+    environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
 
 val localJniPath = providers.gradleProperty("kitecodec.jni.localPath")

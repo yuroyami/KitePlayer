@@ -7612,6 +7612,17 @@ is no other.
   counters, seek landed in 5000..5034, Ended, layerImage true, zero underruns, teardown causal
   and completed; the S1.b jq oracle passes verbatim. Phone binding suites re-ran green on host
   and simulator; Tier 1 green.
+- 2026-08-12, S1.e.3 completed: the matrix on the iOS simulator. One build-file line made it
+  possible (simctl spawn forwards only SIMCTL_CHILD_-prefixed variables, so the media path
+  gained that twin), then the matrix class ran on the booted Test iPhone 17 through the bare
+  spawn host, SPI-direct, exactly as designed. 17 OF 17 ROWS PASS: every MustPlay row decoded
+  its quota (4K HEVC its 5, every audio row its 10) and resumed after its mid-file seek.
+  MEASURED MustSurvive outcomes on the PHONE profile, the first real capability measurement of
+  the AV1 gap: av1.mkv REFUSED with the typed FFmpeg not-implemented error (code -78), which is
+  the enabled-decoder-without-vendored-codec truth 17.4.5 predicted; both torture rows refused
+  with the typed invalid-data error (-1094995529). Nothing crashed, nothing hung. The iOS
+  simulator platform difference against the macOS baseline is exactly one row: AV1 plays on the
+  host build and refuses on the phone build, and both are recorded as measurements.
 
 ---
 

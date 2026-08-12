@@ -4,11 +4,21 @@ import androidx.compose.ui.graphics.ImageBitmap
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 
 /**
- * Builds a drawable image from tightly packed RGBA bytes, one byte per component, no row
- * padding. One allocation per published frame is the honest S1 cost; KV-2 (S2) owns removing
- * it along with the CPU conversion itself.
+ * Builds drawable images from tightly packed RGBA bytes, one byte per component, no row padding.
+ *
+ * A POOL rather than a function (A2 of the 17.4.6 rider), because the difference between them is
+ * the whole Android allocation story: a 1080p RGBA image is 8.3 MB, so one fresh image per
+ * published frame at 30 fps is 250 MB/s of garbage. The Android actual reuses a small ring; the
+ * iOS actual stays one raster per frame because KV-2 (S2) owns the Apple path.
+ *
+ * Every [imageFor] call comes from the renderer's single worker thread. [release] is called by
+ * the renderer's close AFTER that worker has been joined, so the two never race; the join is the
+ * happens-before edge.
  */
-internal expect fun rgbaToImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap
+internal expect class FrameImagePool() {
+    fun imageFor(rgba: ByteArray, width: Int, height: Int): ImageBitmap
+    fun release()
+}
 
 /**
  * Converts a frame from the aggregate's own FFmpeg backend to tightly packed RGBA. A frame from

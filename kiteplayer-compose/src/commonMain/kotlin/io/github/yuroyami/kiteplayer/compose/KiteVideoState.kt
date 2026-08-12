@@ -28,10 +28,14 @@ import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 public class KiteVideoState internal constructor(
     convert: (VideoFrame) -> ByteArray,
     makeImage: (rgba: ByteArray, width: Int, height: Int) -> ImageBitmap,
+    releaseImages: () -> Unit,
 ) {
-    public constructor() : this(
+    public constructor() : this(FrameImagePool())
+
+    private constructor(pool: FrameImagePool) : this(
         convert = { frame -> phoneFrameToRgba(frame) },
-        makeImage = ::rgbaToImageBitmap,
+        makeImage = { rgba, width, height -> pool.imageFor(rgba, width, height) },
+        releaseImages = { pool.release() },
     )
 
     /**
@@ -47,6 +51,7 @@ public class KiteVideoState internal constructor(
         convert = convert,
         makeImage = makeImage,
         publish = { newest -> frame.value = newest },
+        releaseImages = releaseImages,
     )
 
     /** Attach this to the player. Close it when the video surface is done (or use [rememberKiteVideoState]). */

@@ -7670,7 +7670,22 @@ is no other.
   KiteVideoState.frameCost whose KDoc states what the number is not: draw cost, GPU cost, or a
   device claim when measured on an emulator. Host suite grew to 11 arms (published-only
   sampling, zero-sample snapshot all zeros, monotone worst with exact average); ABI dump moved
-  by ritual; Tier 1 green.
+  by ritual; Tier 1 green. One process incident, caught by the very next Tier 1 dash scan and
+  recorded loudly: the A1 commit's git add -A swept the owner's untracked art/ directory into
+  the tree; the fix untracked it and amended (A1 is 0b2a049 after the amend), the owner's files
+  stayed on disk unchanged, and the S1.c lesson stands reinforced: the planner stages explicit
+  paths, never -A, in a tree that may carry the owner's local work.
+- 2026-08-12, A2 completed: the Android image ring. The image seam became FrameImagePool (one
+  per renderer, released by close strictly after the worker join and the null publish, which the
+  new host arm pins as publish, publish-null, release, exactly once across a double close). The
+  Android actual reuses a ring of three ARGB_8888 bitmaps while dimensions hold, rebuilt on a
+  size change; three because the image just published may still be inside HWUI's asynchronous
+  draw while the worker fills the next, a standing assumption to re-examine at S3 on devices;
+  release drops references and deliberately never recycles, because recycling an image that can
+  still be mid-draw is a crash. The per-published-frame allocation is gone on Android (250 MB/s
+  of garbage at 1080p30 before). iOS stays one Skia raster per frame behind the same shape,
+  because KV-2 owns Apple. Host suite 12 arms; the public dump is unchanged (the seam is
+  internal); all three targets compile; Tier 1 green.
 
 ---
 

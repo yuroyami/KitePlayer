@@ -220,6 +220,31 @@ class KiteVideoRendererTest {
     }
 
     @Test
+    fun closeReleasesTheImagesExactlyOnceAfterTheNullPublish() = runBlocking {
+        val order = CopyOnWriteArrayList<String>()
+        var releases = 0
+        val renderer = KiteVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            makeImage = { _, w, h -> FakeImage(w, h) },
+            publish = { frame -> order += if (frame == null) "publish-null" else "publish" },
+            releaseImages = {
+                releases += 1
+                order += "release"
+            },
+        )
+        assertTrue(renderer.present(TestFrame(), 0L))
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+        while (order.none { it == "publish" }) {
+            check(System.nanoTime() < deadline) { "nothing published within the deadline" }
+            Thread.sleep(2)
+        }
+        renderer.close()
+        renderer.close()
+        assertEquals(1, releases, "a double close must release once")
+        assertEquals(listOf("publish", "publish-null", "release"), order.toList())
+    }
+
+    @Test
     fun theCostTrackerCountsOnlyPublishedFrames() = runBlocking {
         var first = true
         val h = Harness(convert = { frame ->

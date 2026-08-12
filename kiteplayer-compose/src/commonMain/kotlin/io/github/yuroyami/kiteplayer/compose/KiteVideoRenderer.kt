@@ -56,10 +56,12 @@ internal class KiteVideoFrame(
 internal class KiteVideoRenderer(
     /** Converts a frame to tightly packed RGBA, one byte per component, no row padding. */
     private val convert: (VideoFrame) -> ByteArray,
-    /** Builds the drawable image. Production is [rgbaToImageBitmap]; host tests fake it. */
+    /** Builds the drawable image. Production asks a [FrameImagePool]; host tests fake it. */
     private val makeImage: (rgba: ByteArray, width: Int, height: Int) -> ImageBitmap,
     /** Publishes the newest finished frame, or null at close. Production writes snapshot state. */
     private val publish: (KiteVideoFrame?) -> Unit,
+    /** Releases whatever backs [makeImage]. Called by close after the worker has been joined. */
+    private val releaseImages: () -> Unit = {},
 ) : VideoRenderer {
 
     private val presented = atomic(0L)
@@ -209,6 +211,9 @@ internal class KiteVideoRenderer(
         runBlocking { workerJob.join() }
         drainPending()
         publish(null)
+        // After the join and the null publish: no worker can ask for an image and no reader
+        // should be handed one, so the image storage goes back now.
+        releaseImages()
         dispatcher.close()
     }
 

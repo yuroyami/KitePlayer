@@ -7760,6 +7760,29 @@ is no other.
   the CONSUMER-visible constructor path delivers only keyframes of the conformance clip (full
   decode >= 250 asserted, scrubbed at most a fifth). Dumps moved by ritual in both repos; both
   repos' full host gates green; Tier 1 green.
+- 2026-08-12, S4.b completed: the two C funnels, full ritual, with one deliberate register
+  refinement recorded here. KD-4's unused-options report became an OWNED remaining dictionary
+  (plus the one release ffkmp_dict_free) instead of a bare count, because S4.e's per-key echo
+  needs NAMES and a count cannot name; that makes the window five exported names, not four:
+  ffkmp_fmt_open_input2 (pairs applied between alloc and open, remainder handed back owned),
+  ffkmp_dict_free, ffkmp_fmt_chapter_count, ffkmp_fmt_chapter_get (bounds rescaled to
+  microseconds at the boundary), ffkmp_fmt_chapter_metadata (borrowed, for the standing dict
+  walk). Baselines moved by ritual at every site: signatures 193 to 198, exports 178 to 183,
+  klib metadata re-baselined at 1028 lines with the five additions named by the diff,
+  KITECODEC_C_ABI_MINOR 2 to 3. Guard suite gained four NULL arms (one first compile taught the
+  doctored-header rule again: tests speak kc_fmt_ctx, never the real struct name) and all four
+  variants ran green (plain, asan, tsan, interpose). The JNI bridge gained four rows by the
+  canonical pattern (the unused remainder crosses as ONE unit-separated string, the identity
+  report's own joining; one comment was reworded when the JNI discipline scan refused a raw
+  FFmpeg macro name even in prose); dylib relinked, exports exactly JNI_OnLoad. Kotlin:
+  Chapter, MediaInfo, MediaSource.open(path, options) and unusedOpenOptions on BOTH platforms;
+  six KdIntegration arms green including the named-unused-key proof and the consumed-probesize
+  proof; 0.0.3 republished complete. KitePlayer: KiteCodecSource.chapters maps the real table
+  through the same timestamp mapper everything crosses (clamped at zero, never dropped);
+  testmedia gained chapters.mkv with exact millisecond bounds; the matrix grew to 18 rows and
+  the chapter row PASSES on the host with the exact round-trip (0..2s Opening, 2..5s Middle,
+  5..9s Ending). Phone-platform matrix re-runs land at S4.g with the rest of the stage's
+  fixtures.
 
 ---
 

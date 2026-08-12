@@ -255,3 +255,25 @@ head -c $((sync_bytes * 2 / 5)) sync1080p30.mp4 > torture-truncated.mp4
 python3 -c "import sys; sys.stdout.buffer.write(bytes(range(256)) * 4096)" > torture-garbage.mp4
 
 ls -la
+
+echo "Chaptered Matroska with exact millisecond bounds, for the chapter round-trip row"
+cat > chapters.ffmeta <<'META'
+;FFMETADATA1
+[CHAPTER]
+TIMEBASE=1/1000
+START=0
+END=2000
+title=Opening
+[CHAPTER]
+TIMEBASE=1/1000
+START=2000
+END=5000
+title=Middle
+[CHAPTER]
+TIMEBASE=1/1000
+START=5000
+END=9000
+title=Ending
+META
+ffmpeg -v error -y -i sync1080p30.mp4 -i chapters.ffmeta -map_metadata 1 -map 0 -c copy -t 9 chapters.mkv
+rm -f chapters.ffmeta

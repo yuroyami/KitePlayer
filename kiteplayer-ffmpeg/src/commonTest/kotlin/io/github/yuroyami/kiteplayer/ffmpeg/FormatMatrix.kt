@@ -39,6 +39,8 @@ internal class MatrixRow(
     val expectAudioStreams: Int? = null,
     val expectSubtitleStreams: Int? = null,
     val expectRotation: Boolean = false,
+    /** Exact chapter round-trip: (startMicros, endMicros, title) per chapter, in order. */
+    val expectChapters: List<Triple<Long, Long, String>>? = null,
 )
 
 internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
@@ -57,6 +59,15 @@ internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
     MatrixRow("truevfr720.mp4", MatrixVerdict.MustPlay),
     MatrixRow("tsoffset1400.ts", MatrixVerdict.MustPlay),
     MatrixRow("subbed.mkv", MatrixVerdict.MustPlay, expectSubtitleStreams = 1),
+    MatrixRow(
+        "chapters.mkv",
+        MatrixVerdict.MustPlay,
+        expectChapters = listOf(
+            Triple(0L, 2_000_000L, "Opening"),
+            Triple(2_000_000L, 5_000_000L, "Middle"),
+            Triple(5_000_000L, 9_000_000L, "Ending"),
+        ),
+    ),
     MatrixRow("surround51.mp4", MatrixVerdict.MustPlay, hasVideo = false),
     MatrixRow("audio-aac.m4a", MatrixVerdict.MustPlay, hasVideo = false),
     MatrixRow("audio-mp3.mp3", MatrixVerdict.MustPlay, hasVideo = false),
@@ -141,6 +152,18 @@ internal object FormatMatrixRunner {
             }
             if (row.expectRotation) {
                 check(video!!.rotationDegrees != 0) { "${row.clip} reports no rotation" }
+            }
+            row.expectChapters?.let { expected ->
+                val actual = source.chapters.map { chapter ->
+                    Triple(
+                        chapter.start.inWholeMicroseconds,
+                        chapter.end?.inWholeMicroseconds ?: -1L,
+                        chapter.title ?: "",
+                    )
+                }
+                check(actual == expected) {
+                    "${row.clip} chapters were $actual, expected $expected"
+                }
             }
 
             val wantVideo = row.hasVideo && video != null

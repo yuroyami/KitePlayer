@@ -99,10 +99,18 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     /**
      * Always empty, because the container reader has no chapter list to offer.
      *
-     * Not a decision taken here: KiteCodec exposes no chapter API, so there is nothing to map. Reading
-     * the container's own chapter table is a roadmap item; see KPKMP.md section 11.
+     * Mapped from the container's own table (S4.b, KD-5). KiteCodec reports ABSOLUTE microsecond
+     * bounds; the engine's timeline starts at zero, so the same mapper every timestamp crosses
+     * moves them, and a chapter whose start maps before zero is clamped rather than dropped.
      */
-    override val chapters: List<Chapter> = emptyList()
+    override val chapters: List<Chapter> = source.chapters.mapIndexed { index, chapter ->
+        Chapter(
+            index = index,
+            start = (mapper.mapTimestamp(chapter.startMicros) ?: Pts(0)).coerceAtLeast(Pts(0)).asDuration,
+            end = mapper.mapTimestamp(chapter.endMicros)?.coerceAtLeast(Pts(0))?.asDuration,
+            title = chapter.title,
+        )
+    }
 
     /**
      * MPEG-TS and friends declare that their timestamps may jump. The engine uses this to pick a

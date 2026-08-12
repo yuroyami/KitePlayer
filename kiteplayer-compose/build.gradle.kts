@@ -49,6 +49,11 @@ kotlin {
         compileSdk = 37
         minSdk = 24
         withHostTest {}
+        withDeviceTestBuilder {
+            sourceSetTreeName = "test"
+        }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
     }
 
     sourceSets {
@@ -64,7 +69,22 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        getByName("androidDeviceTest").dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.androidx.test.core)
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.test.ext.junit)
+            implementation(libs.androidx.activity.compose)
+        }
     }
+}
+
+// Compose Multiplatform 1.12.0-rc01's resources plugin registers a device-test asset-copy task
+// whose outputDirectory is never configured (this module declares no compose resources at all),
+// and configuration validation fails the build on it. Disabling the task skips the validation;
+// nothing is lost because there is nothing to copy. Re-check on the next CMP upgrade.
+tasks.matching { it.name == "copyAndroidDeviceTestComposeResourcesToAndroidAssets" }.configureEach {
+    enabled = false
 }
 
 val ffmpegLocalRoot = providers.gradleProperty("kitecodec.ffmpeg.localRoot").map { path ->

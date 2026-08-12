@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The instrumentation APK for kiteplayer-compose's device tests (17.4.6 A3). The one declared
+     component hosts KiteVideo under real Compose modifiers for the measured emulator run. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="false">
+        <activity
+            android:name="io.github.yuroyami.kiteplayer.compose.KiteVideoTestActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize" />
+    </application>
+</manifest>

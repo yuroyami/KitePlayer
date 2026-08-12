@@ -7704,6 +7704,21 @@ is no other.
   re-anchored to a past pts with the reasoning in place (its intent, cap accounting over
   old-plus-candidate windows, is unchanged). Fallback suite 28 arms green; ffmpeg macOS, JVM
   and Android host suites green.
+- 2026-08-12, A3 completed: KiteVideo measured on the Android emulator. The device-test tree
+  landed in :kiteplayer-compose (one CMP 1.12.0-rc01 deviation recorded in the build file: the
+  resources plugin registers a device-test asset-copy task with no configured output although
+  this module declares no compose resources, so that task is disabled until the next CMP
+  upgrade). KiteVideoTestActivity hosts KiteVideo under a rounded-corner clip and a graphicsLayer
+  rotation, real Compose modifiers on the video itself, which is the D-6 flagship claim. THE
+  MEASURED EMULATOR RUN on Pixelu16KB, provisional evidence by definition: the full sync clip
+  played to Ended with NO seek, hardware-decoded (HardwareWithDownload MediaCodec), 300 decoded,
+  297 submitted, 80 published through Compose, 217 superseded (the software path is the honest
+  bottleneck, newest-wins doing its job), ZERO failed frames, zero audio underruns, frame cost
+  80 samples averaging 128.3 ms with a 375.8 ms worst on the emulated CPU. Those numbers are
+  the KV-7 judge 17.9 asked for and the baseline KV-2/S3 must beat; they are NOT device truth.
+  Pixelu16KB died once more mid-phase and was rebooted by the standing script (16384
+  re-proved); the media push used the recorded S1.e.4 recipe, plus one addition to it: the
+  captured appId carries a carriage return that must be stripped before the chown. Run OK twice.
 
 ---
 

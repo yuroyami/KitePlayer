@@ -7525,6 +7525,22 @@ is no other.
   dump is committed. Boundary held: the compose-import scan of kiteplayer-phone/src is clean,
   and one planted control (a compose import in PhoneBackends.kt) failed the scan before
   reversion. Tier 1 green.
+- 2026-08-12, S1.d.3 completed: the Compose-true KiteVideo core, the owner's rider. The three
+  17.9 laws landed as code contracts: the frame holder is snapshot state read at exactly ONE
+  site, inside KiteVideo's drawBehind, with the law named at both the write and read sites (law
+  1); the conversion is the honest CPU RGBA path with KV-2 named as its replacement (law 2
+  deferred, stated); no Android zero-copy exists (law 3, KV-7 parked). KiteVideoRenderer is the
+  fourth instance of the proven newest-wins shape, publishing into state instead of a platform
+  surface, host-tested through injected convert/makeImage/publish seams: 8 arms (ownership,
+  displacement counted and closed, converter failure survival, short-byte refusal, image-build
+  failure, worker-thread publish, close-publishes-null-and-refuses, degenerate size), plus 9
+  geometry arms pinning the same aspect/turn law the output renderers obey (anamorphic,
+  quarter-turn side exchange, fractional odd-side halving, degenerate refusals). ImageBitmap
+  actuals: Android rides ARGB_8888's RGBA in-memory order through copyPixelsFromBuffer (no
+  swizzle, and the comment says why none appears); iOS is one Skia raster. KiteVideo's letterbox
+  is transparent by design because true Compose content composites like Compose content.
+  17 host tests green, all three targets compile, the iOS test binary links, ABI dumps updated,
+  Tier 1 green. Per-frame cost remains UNMEASURED until S2's exit, and the KDoc says so.
 
 ---
 

@@ -6,4 +6,22 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-compose>
+final class io.github.yuroyami.kiteplayer.compose/KiteVideoState { // io.github.yuroyami.kiteplayer.compose/KiteVideoState|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.compose/KiteVideoState.<init>|<init>(){}[0]
+
+    final val failedFrames // io.github.yuroyami.kiteplayer.compose/KiteVideoState.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.compose/KiteVideoState.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val presentedFrames // io.github.yuroyami.kiteplayer.compose/KiteVideoState.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.compose/KiteVideoState.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    final val renderer // io.github.yuroyami.kiteplayer.compose/KiteVideoState.renderer|{}renderer[0]
+        final fun <get-renderer>(): io.github.yuroyami.kiteplayer.spi/VideoRenderer // io.github.yuroyami.kiteplayer.compose/KiteVideoState.renderer.<get-renderer>|<get-renderer>(){}[0]
+    final val supersededFrames // io.github.yuroyami.kiteplayer.compose/KiteVideoState.supersededFrames|{}supersededFrames[0]
+        final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.compose/KiteVideoState.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
+}
+
+final val io.github.yuroyami.kiteplayer.compose/io_github_yuroyami_kiteplayer_compose_KiteVideoState$stableprop // io.github.yuroyami.kiteplayer.compose/io_github_yuroyami_kiteplayer_compose_KiteVideoState$stableprop|#static{}io_github_yuroyami_kiteplayer_compose_KiteVideoState$stableprop[0]
+
 final fun io.github.yuroyami.kiteplayer.compose/KitePlayerSurface(io.github.yuroyami.kiteplayer/KitePlayer?, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.compose/KitePlayerSurface|KitePlayerSurface(io.github.yuroyami.kiteplayer.KitePlayer?;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
+final fun io.github.yuroyami.kiteplayer.compose/KiteVideo(io.github.yuroyami.kiteplayer.compose/KiteVideoState, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.compose/KiteVideo|KiteVideo(io.github.yuroyami.kiteplayer.compose.KiteVideoState;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
+final fun io.github.yuroyami.kiteplayer.compose/io_github_yuroyami_kiteplayer_compose_KiteVideoState$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.compose/io_github_yuroyami_kiteplayer_compose_KiteVideoState$stableprop_getter|io_github_yuroyami_kiteplayer_compose_KiteVideoState$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.compose/rememberKiteVideoState(androidx.compose.runtime/Composer?, kotlin/Int): io.github.yuroyami.kiteplayer.compose/KiteVideoState // io.github.yuroyami.kiteplayer.compose/rememberKiteVideoState|rememberKiteVideoState(androidx.compose.runtime.Composer?;kotlin.Int){}[0]

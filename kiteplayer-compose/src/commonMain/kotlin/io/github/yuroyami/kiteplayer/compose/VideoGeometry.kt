@@ -1,0 +1,90 @@
+package io.github.yuroyami.kiteplayer.compose
+
+import io.github.yuroyami.kiteplayer.VideoSize
+
+/**
+ * Where one picture lands on the draw area, in output pixels. The same law the output renderers
+ * obey, restated here because their versions are internal to their own modules: the pixel aspect
+ * scales the stored width, a quarter turn exchanges the sides, the fit is integer, centred and
+ * symmetric.
+ *
+ * The rectangle [left]/[top]/[right]/[bottom] is the picture's footprint after the turn. The
+ * rectangle the bitmap is drawn into is [drawLeft]/[drawTop] by [drawWidth]/[drawHeight], which
+ * for a quarter turn is the footprint with its sides exchanged about the same centre: rotating
+ * it by [rotationDegrees] about ([centerX], [centerY]) lands it exactly on the footprint. The
+ * draw rectangle is fractional because the exchange halves an odd side.
+ */
+internal data class VideoLayout(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+    val rotationDegrees: Int,
+) {
+    val width: Int get() = right - left
+    val height: Int get() = bottom - top
+
+    val centerX: Float get() = (left + right) / 2f
+    val centerY: Float get() = (top + bottom) / 2f
+
+    private val quarterTurned: Boolean get() = rotationDegrees == 90 || rotationDegrees == 270
+
+    val drawWidth: Float get() = (if (quarterTurned) height else width).toFloat()
+    val drawHeight: Float get() = (if (quarterTurned) width else height).toFloat()
+
+    val drawLeft: Float get() = centerX - drawWidth / 2f
+    val drawTop: Float get() = centerY - drawHeight / 2f
+}
+
+/**
+ * Fits a frame into the draw area, centred, keeping its shape, or returns null when there is
+ * nothing to draw. Integer arithmetic on purpose: exactly one axis fills the area exactly and
+ * the other splits its remainder in two, so the letterbox is symmetric to the pixel.
+ */
+internal fun videoLayout(
+    areaWidth: Int,
+    areaHeight: Int,
+    size: VideoSize,
+    rotationDegrees: Int,
+): VideoLayout? {
+    if (areaWidth <= 0 || areaHeight <= 0) return null
+    if (size.width <= 0 || size.height <= 0) return null
+
+    // A nonsense pixel aspect that scales the width away falls back to the stored width: a
+    // slightly wrong picture beats no picture, the same choice the output renderers make.
+    val displayWidth = size.displayWidth.takeIf { it > 0 } ?: size.width
+    val turn = quarterTurn(rotationDegrees)
+    val quarterTurned = turn == 90 || turn == 270
+    val contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
+    val contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
+
+    val fitsByHeight = contentWidth * areaHeight <= contentHeight * areaWidth
+    val destinationWidth: Int
+    val destinationHeight: Int
+    if (fitsByHeight) {
+        destinationHeight = areaHeight
+        destinationWidth = (contentWidth * areaHeight / contentHeight).toInt().coerceAtLeast(1)
+    } else {
+        destinationWidth = areaWidth
+        destinationHeight = (contentHeight * areaWidth / contentWidth).toInt().coerceAtLeast(1)
+    }
+    val left = (areaWidth - destinationWidth) / 2
+    val top = (areaHeight - destinationHeight) / 2
+    return VideoLayout(
+        left = left,
+        top = top,
+        right = left + destinationWidth,
+        bottom = top + destinationHeight,
+        rotationDegrees = turn,
+    )
+}
+
+/**
+ * The quarter turn that will actually be drawn. Only 0, 90, 180 and 270; anything else is drawn
+ * unrotated, because a slightly skewed picture is not worth a black screen. Negative and
+ * out-of-range values are normalised first.
+ */
+internal fun quarterTurn(rotationDegrees: Int): Int {
+    val normalised = ((rotationDegrees % 360) + 360) % 360
+    return if (normalised == 90 || normalised == 180 || normalised == 270) normalised else 0
+}

@@ -57,6 +57,9 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.ui)
+            // The library only, never the Gradle plugin: KPKMP.md contract item 6. The KiteVideo
+            // renderer's counters and newest-wins slot are atomics, like its three siblings.
+            implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

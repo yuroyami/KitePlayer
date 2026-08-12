@@ -7433,6 +7433,29 @@ is no other.
   android target), so the four declarations enter a dump the day the tooling covers them, and
   that is recorded here rather than silently. Both Tier 1 blocks close this entry.
 
+- 2026-08-12, S1.c.5 completed: converted frames onto a caller-owned Android Surface. MIXED
+  AUTHORSHIP, recorded exactly: the production renderer is the one surviving artifact of the
+  overloaded implementer agents, a genuinely well-built file (CanvasTarget seam, atomic
+  newest-wins slot with owned displacement, replay-8 event feed with the late-collector
+  rationale written down, pure frameLayout and quarterTurn functions with the draw-rectangle
+  side exchange); the planner reviewed it line by line, then authored everything else: both
+  host suites, the device activity, the instrumentation manifest and the device test. Host
+  suite: 10 renderer arms (hundred-frame newest-wins with an exact 100-close ledger, throwing
+  converter, short and oversized bytes refused with no partial draw, red-red/blue-blue swizzle
+  proof, invalid-surface refusal with ONE lost transition, lock exception then recovery with
+  SurfaceAvailable, draw exception still posting, stranded-frame close, fifty present-close
+  races each owned exactly once, double close) plus 8 geometry arms (both letterbox directions
+  symmetric to the pixel, anamorphic displayWidth, every quarter turn including normalisation,
+  the side exchange about the centre, null layouts, no rounding overhang). The slot-swap
+  negative control was RUN: removing the displacement accounting fails exactly the
+  hundred-frame arm, restored green. Device run GREEN on Pixelu16KB, which had to be rebooted
+  first (the long-lived emulator finally died; the expansion's own boot script brought it back
+  and re-proved the 16 KiB page size): the PixelCopy test sees red left and blue right with a
+  black letterbox, the same picture rotated 90 degrees with red on top, and Surface destruction
+  answered by a refusal plus one SurfaceLost while the renderer closes before the Activity
+  releases, exactly the caller contract. Boundary scans clean with the planted ffmpeg-package
+  control failing them as required. 35 host tests and 2 device tests in the module total.
+
 ---
 
 ## 15. Horizon B execution: B1

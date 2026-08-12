@@ -220,6 +220,54 @@ class KiteVideoRendererTest {
     }
 
     @Test
+    fun theCostTrackerCountsOnlyPublishedFrames() = runBlocking {
+        var first = true
+        val h = Harness(convert = { frame ->
+            if (first) {
+                first = false
+                error("deliberate conversion failure")
+            }
+            ByteArray(frame.size.width * frame.size.height * 4)
+        })
+        assertTrue(h.renderer.present(TestFrame(), 0L))
+        h.awaitFailed(1)
+        assertEquals(0L, h.renderer.costSnapshot().samples, "a failed frame is not a cost sample")
+
+        assertTrue(h.renderer.present(TestFrame(), 0L))
+        h.awaitPublished(1)
+        val cost = h.renderer.costSnapshot()
+        assertEquals(1L, cost.samples)
+        assertTrue(cost.lastNanos >= 0L)
+        assertTrue(cost.worstNanos >= cost.lastNanos || cost.samples > 1)
+        assertTrue(cost.averageNanos in 0..cost.worstNanos)
+        h.renderer.close()
+    }
+
+    @Test
+    fun aZeroSampleCostSnapshotIsAllZeros() {
+        val h = Harness()
+        val cost = h.renderer.costSnapshot()
+        assertEquals(0L, cost.samples)
+        assertEquals(0L, cost.lastNanos)
+        assertEquals(0L, cost.averageNanos)
+        assertEquals(0L, cost.worstNanos)
+        h.renderer.close()
+    }
+
+    @Test
+    fun theWorstCostIsMonotone() {
+        val tracker = FrameCostTracker()
+        tracker.record(50)
+        tracker.record(200)
+        tracker.record(100)
+        val cost = tracker.snapshot()
+        assertEquals(3L, cost.samples)
+        assertEquals(100L, cost.lastNanos)
+        assertEquals(200L, cost.worstNanos)
+        assertEquals(116L, cost.averageNanos)
+    }
+
+    @Test
     fun aDegenerateFrameSizeIsRefused() = runBlocking {
         val h = Harness()
         val frame = TestFrame(width = 0, height = 2)

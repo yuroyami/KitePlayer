@@ -102,6 +102,11 @@ internal class KiteVideoRenderer(
     /** Frames that published nothing: a bad conversion, a failed image build, a close in flight. */
     val failedFrames: Long get() = failed.value
 
+    /** Per-published-frame CPU cost of convert plus image build. See [KiteVideoFrameCost]. */
+    private val cost = FrameCostTracker()
+
+    fun costSnapshot(): KiteVideoFrameCost = cost.snapshot()
+
     /** Nothing zero-copy here yet; KV-3 (Apple, S2) is where that lands. */
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
@@ -133,6 +138,9 @@ internal class KiteVideoRenderer(
         val frame = pending.getAndSet(null) ?: return
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
+        // The cost clock starts before the conversion and stops after the image build, because
+        // that pair is exactly the CPU work this software path pays per published frame.
+        val started = kotlin.time.TimeSource.Monotonic.markNow()
         val rgba = try {
             convert(frame)
         } catch (failure: Throwable) {
@@ -162,6 +170,7 @@ internal class KiteVideoRenderer(
             failFrame(failure.message ?: "building the image failed")
             return
         }
+        cost.record(started.elapsedNow().inWholeNanoseconds)
         publish(KiteVideoFrame(image, size, rotation))
         presented.incrementAndGet()
     }

@@ -7664,6 +7664,13 @@ is no other.
   (A3). S3 keeps the launchable demo and device-grade numbers; KV-7's go/no-go is written at S3
   entry from this rider's measurements; emulator numbers stay labelled provisional everywhere.
   S3 reads 70 to 108 after the move; the road total is unchanged.
+- 2026-08-12, A1 completed: the KiteVideo frame cost is measured. The worker clocks conversion
+  plus image build per PUBLISHED frame (failed and superseded frames contribute no sample) into
+  a lock-free tracker (samples, last, average, worst, nanoseconds), exposed as
+  KiteVideoState.frameCost whose KDoc states what the number is not: draw cost, GPU cost, or a
+  device claim when measured on an emulator. Host suite grew to 11 arms (published-only
+  sampling, zero-sample snapshot all zeros, monotone worst with exact average); ABI dump moved
+  by ritual; Tier 1 green.
 
 ---
 

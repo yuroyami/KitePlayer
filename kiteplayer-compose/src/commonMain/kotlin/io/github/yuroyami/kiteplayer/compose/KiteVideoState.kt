@@ -60,6 +60,12 @@ public class KiteVideoState internal constructor(
 
     /** Frames that published nothing for a reason other than being superseded. */
     public val failedFrames: Long get() = videoRenderer.failedFrames
+
+    /**
+     * The measured CPU cost of the software path per published frame. On an emulator this is
+     * provisional stage evidence; the numbers that count are re-taken on devices at S3's exit.
+     */
+    public val frameCost: KiteVideoFrameCost get() = videoRenderer.costSnapshot()
 }
 
 /**

@@ -7165,6 +7165,37 @@ is no other.
   `Fence the named-decoder compatibility helper`. A postcommit three-lane S1.c.0 reread must then find
   zero residual against the corrected head before the frozen S1.c.2 implementation resumes.
 
+- 2026-08-12, S1.c.2 direct-platform source-scan fixed-fence correction. Exact starting heads were
+  KitePlayer `a9226f0a1cfd219b802376fb5487e4876701aa78` and KiteCodec
+  `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`. Player was clean; Codec's unstaged S1.c.2 draft was
+  preserved with an empty index. Tier 1 was selected because this correction changes KPKMP only.
+  The first complete implementation gate compiled JVM and Android, passed JVM and Android host
+  tests, assembled the two-ABI AAR, ran macOS tests and produced byte-identical JVM/native contract
+  transcripts. A subsequent hostile whole-fence read then found one BLOCKING plan contradiction,
+  not a product-gate failure: the mandatory final scan rejects the literal platform-native codec
+  token everywhere in Kotlin/native sources, but an existing buildSrc KDoc and cinterop comment
+  already spell it and neither file was in the S1.c.2 fence. Narrowing the scan to imports or
+  allowlisting comments would contradict its explicit whole-source rule.
+
+  The correction adds only `buildSrc/src/main/kotlin/BuildFFmpegTask.kt` and
+  `kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def` to the S1.c.2 fence for comment-only,
+  platform-neutral wording. The exact scan and its negative token set remain unchanged. This
+  changes no API, dependency, command, target, publication boundary, product policy, gate, phase
+  order or S1.c.2 commit first lines. Hostile review also found an in-fence owned-handle insertion
+  rollback defect and acceptance-test/doc gaps; those are ordinary preserved S1.c.2 product work,
+  not reasons to broaden this correction. The already-fixed consumer-rule and transcript-directory
+  issues likewise stay in the unstaged Codec draft and are not evidence of this correction.
+
+  Immediately before this entry the plan-only correction was exactly KPKMP +9/-2, file SHA-256
+  `750da087676018c7430e4a4dc47d801a611570ea47efd0e320092f18a36dafdc` and normalized binary-diff
+  SHA-256 `83c6ccbac9d5ba463da6bf54a94542f38e07a784f12dd0650573e257b66726a1`.
+  The full logged-byte Tier 1 result follows before commit. No Codec product byte is staged or
+  committed, and no Maven publication, remote ref, release or app/device mutation is authorized by
+  this correction. Pixelu16KB was already booted at fixed serial `emulator-5554`, exact AVD name
+  `Pixelu16KB` and page size 16384 during the paused implementation; it remains idle and running.
+  The exact correction subject is `Fence the Android direct-platform source scan`. A postcommit
+  three-lane reread must find zero residual before the preserved S1.c.2 draft resumes.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -12105,7 +12136,11 @@ Test files are new under
 support adds
 `buildSrc/src/main/kotlin/CompareCodecContractTask.kt` and
 `buildSrc/src/test/kotlin/CompareCodecContractTaskTest.kt`; existing
-`buildSrc/src/test/kotlin/LinkKiteCodecJniTaskTest.kt`. Existing JNI files in this fence are
+`buildSrc/src/test/kotlin/LinkKiteCodecJniTaskTest.kt`. Comment-only source-boundary truth edits
+also fence `buildSrc/src/main/kotlin/BuildFFmpegTask.kt` and
+`kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`: their existing Android-link comments spell
+the same direct platform C token that the gate below must reject everywhere in Kotlin/native
+sources. Existing JNI files in this fence are
 `native/kitecodec-jni/methods.def`, `kj_internal.h`, `kj_handles.c`, `kj_util.c`, `kj_abi.c`, `kj_format.c`,
 `kj_packet.c`, `kj_codec.c`, `kj_frame.c`, `kj_filter.c` and `README.md`. Also in the fence:
 `kitecodec-core/api/`; root `README.md` and `CHANGELOG.md`; `kitecodec-core/Module.md`;
@@ -12502,7 +12537,10 @@ contract run, one superset local publication and both offline consumers. The pub
 replaces Tier 2's host-only publish. Run every other Tier 2 command with the selector this sub-phase
 names, then both Tier 1 blocks. Source scans reject any libav include in JNI, `Java_*` export, and
 the tokens `android.media.MediaCodec`, `android.media.MediaExtractor`, `AMediaCodec` or
-`AMediaExtractor` anywhere in Kotlin/native sources; an import-only pattern is insufficient. The
+`AMediaExtractor` anywhere in Kotlin/native sources; an import-only pattern is insufficient.
+Before that scan, replace the two existing comment-only `AMediaCodec` spellings in
+`BuildFFmpegTask.kt` and `ffmpeg.def` with platform-neutral native-codec wording. The comments do
+not authorize a platform API call, and narrowing or allowlisting the scan is forbidden. The
 Codec version catalog change is limited to AGP and the three AndroidX test coordinates named here.
 
 Commit first line. KiteCodec: `Make KiteCodec real on JVM and Android`.

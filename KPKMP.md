@@ -6750,6 +6750,53 @@ is no other.
   differential, apiCheck); both repositories close with their Tier 1 blocks in this commit
   pair.
 
+- 2026-08-12, S1.c.0 post-scaffold execution-fence correction. Starting heads were KitePlayer
+  `02a9475b19f1c96df31436045b3ce1562f94516b` and KiteCodec
+  `613cd98b4864a2bc5ce8a4eb6d142f3e14e9faa6`, both clean. This is the owner's conservative
+  correction exception from S1.c.0 step 4: prose only, Tier 1 selected by the every-change rule,
+  and deliberately separate from the full mechanical rerun. The initial three-lane sweep found
+  BLOCKING plan/tree contradictions rather than an Android product failure. S1.c.1's scaffold
+  layer had residual C-count prose, a 31-field identity wire described as 30, a four-field manifest
+  described as five, an attach path that ignored the identity result, selector-bound Android helper
+  providers, an untracked Mach-O export input, and borrowed/static JNI tokens with no complete
+  release or parent-invalidation contract. S1.c.2 omitted the files those fixes require, ordered
+  attach before typed identity reporting, retained an AtomicFU/AGP transform conflict, configured
+  an unscoped sample under strict target checks, and used invalid or nullable-unchecked AGP DSL.
+  S1.c.3 placed an output dependency in common tests, omitted dynamic hardware status from core
+  stats, and made its own D-2 scan fail on four native-era prose tokens. S1.c.5's raw boundary scan
+  rejected three historical comments rather than code. S1.c.6 used nullable asset wiring without
+  a hard check and banned its own required project-package imports. S1.c.4 was mechanically clean.
+  The correction above resolves those contradictions conservatively without changing phase order,
+  publication order, support policy, product commit subjects or later-stage scope. Independent
+  hostile Codec and Player rereads both returned zero BLOCKING findings.
+
+  DESCRIPTIVE machine facts remain unchanged: JDK 21.0.9, Android SDK 36/36.1 and NDK r29 are
+  installed; `ANDROID_NDK_HOME` is intentionally explicit; `Pixelu16KB` is an arm64-v8a Android
+  36.1 Google APIs 16 KiB AVD; no x86_64 image/AVD or attached device exists; Android FFmpeg and
+  JNI outputs remain producer work; physical-device absence is carried to S1.e. The window-2a
+  Apple Maven-local variants and exact three-framework scratch consumer were rechecked offline
+  without republishing, and the selected metadata hash remained
+  `402f566ce9f0962d9f1c1b0c205ce5506a1cf7229f047d715845ad994b0cd827`.
+
+  The first fresh Tier 1 pass over the correction draft was green. Codec coupling executed and
+  reported 0 cinterop imports, 0 typed crossings, 292 opaque helper sites, 0 direct libav calls and
+  0 raw structs; deleted-surface reported 15/15 deleted with five allowlisted prose files; plain C
+  passed seven suites and 279 cases. Player coupling executed over 88 sources with all 3 matches
+  allowlisted; all five ABI checks executed in the 152-task forced arm; forced JVM XML was core
+  192 plus subtitles 8 with zero failures, errors or skips; rt plain C passed 8 suites and 132
+  cases; render audit passed 43 and source discipline 18. Both exact tracked-dash scans were silent
+  passing exit 1 and both diff checks were silent exit 0. The forced Player ABI arm rebuilt target
+  archives and cinterops despite Tier 1's ordinary no-build note; this is retained as a gate
+  deviation, not a product red. Before this entry the correction was KPKMP-only at +139/-58, its
+  binary diff SHA-256 was `86af795288f59a54960a18aa1a4cdeb31493a8abb77f5328b7fb3bad10c8ede9`
+  and the KPKMP file SHA-256 was
+  `cc9a8087281fef96cbd5a494d74ab307fbadabeaef20c97fd4c3fea6fd04b4fb`. No product file,
+  index, publication, release or remote ref moved. The correction commit first line is
+  `Correct the Android phone stage against the landed scaffold`; the required full S1.c.0 rerun
+  follows that commit and alone may use the phase's mandated verification subject. The complete
+  Tier 1 block is rerun over this final logged state before the correction commit; that terminal
+  result is a commit-boundary seal and is not preclaimed inside the bytes it gates.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -11255,16 +11302,19 @@ ground truth and override any step text they contradict.
 
 LANDED AND PROVEN (KiteCodec scaffold commit, 2026-08-12):
 
-- S1.c.1 steps 1 and 2 are COMPLETE: `kc_jvm_attach` (Android arm gated and calling
-  av_jni_set_java_vm inside the archive; every other build answers KC_JVM_UNSUPPORTED without
-  referencing the symbol), `enum kc_jvm_status`, and `ffkmp_packet_clone`. Tests: identity suite
+- S1.c.1 steps 1 and 2 are LANDED except for one Android attach-order defect found by the
+  post-scaffold S1.c.0 sweep: `kc_jvm_attach` exists and calls `av_jni_set_java_vm` only on Android,
+  but it must inspect `kc_init()`'s gate result before making that call. Every other build answers
+  KC_JVM_UNSUPPORTED without referencing the symbol. `enum kc_jvm_status` and
+  `ffkmp_packet_clone` are complete. Tests: identity suite
   grew to 18 cases (NULL and host-sentinel arms), ownership to 44 (clone metadata equality,
   independent close in both orders, NULL refusal), and the clone's falsifiability arm was RUN:
   an alias-the-input mutation crashed the ASan suite at the predicted case, then the real
   implementation went green in plain, asan, tsan and interpose. Baselines moved by ritual:
   export baseline +2 names, signature baseline 189 to 192 with the audit's count assertions
   updated at every site, klib metadata re-baselined at 1004 lines with the diff verified
-  additions-plus-relocations-only and zero LOST, apiCheck green, KITECODEC_C_ABI_MINOR now 1.
+  additions-plus-relocations-only and zero LOST, host-selector apiCheck green,
+  KITECODEC_C_ABI_MINOR now 1. The phone-superset API dump remains S1.c.2 work.
   One test-infrastructure fix rode along: `kc_rename.h` renames `kc_jvm_attach` per doctored
   copy, keeping the production file free of test branches.
 - S1.c.1 steps 4, 5 and 6 are SUBSTANTIALLY COMPLETE: `native/kitecodec-jni` exists with the
@@ -11273,7 +11323,7 @@ LANDED AND PROVEN (KiteCodec scaffold commit, 2026-08-12):
   and `JniNativeException`; the ffmpeg throw carries `code|context|text`), the X-macro
   registration engine over `methods.def`, `JNI_OnLoad` doing registration only (no kc_init, no
   attach, per S1.c.2 step 5's reasoning), and IMPLEMENTED category rows: abi complete
-  (17 rows including the 30-field unit-separator identity report documented in kj_abi.c),
+  (17 rows including the 31-field unit-separator identity report documented in kj_abi.c),
   packet complete (9 rows), and the playable core of format (9), codec (10) and frame (8).
   `kj_filter.c` is empty by design. `exports.map` (ELF) and `exports.macos` (Mach-O) exist.
   Both JNI audit scripts exist and PASS; the symbol audit reads ELF and Mach-O.
@@ -11283,23 +11333,41 @@ LANDED AND PROVEN (KiteCodec scaffold commit, 2026-08-12):
   Homebrew SvtAv1Enc and graphite2, JDK 21 includes, -exported_symbols_list) is encoded in the
   registration after being hand-proved first.
 
-THE EXECUTOR'S REMAINING S1.c.1 (roughly a tenth of the original sub-phase):
+THE EXECUTOR'S REMAINING S1.c.1 (the bounded post-scaffold remainder):
 
-1. Run the two Android FFmpeg producers (step 3's exact commands; machine time, not judgment)
+1. Correct the residual current-truth drift in `native/kitecodec-c/README.md`, the signature
+   baseline header and its writer, `methods.def` and `kj_abi.c`: the declaration split is 170
+   helper prototypes, eleven opaque typedefs, seven ABI prototypes, three ABI enums and the report
+   typedef; exports are 170 helpers plus seven ABI names, 177 total; the C suites contain 279 cases
+   per variant, including identity 18 and ownership 44, hence 837 across the three README variants.
+   Preserve explicitly historical counts while correcting every current-state sentence. The
+   manifest record has four X-macro fields with category supplied by its section and function
+   prefix; the identity wire has 31 fields. Make Android `kc_jvm_attach` return
+   `KC_JVM_FFMPEG_REFUSED` without calling FFmpeg when `kc_init()` rejects, and add a falsifiable
+   Android-side gate probe. Add exact Android-arm64 and x64 configure-argument tests, including
+   `--enable-pic`, `--enable-mediacodec` and `--enable-jni`.
+2. Run the two Android FFmpeg producers (step 3's exact commands; machine time, not judgment)
    and the provenance/archive assertions on their outputs.
-2. Run both Android link arms and step 8's ELF assertions (JNI_OnLoad-only, no libav NEEDED,
-   PT_LOAD 0x4000) on the packaged bytes; adjust the Android `-l` set only if the NDK link
-   demands it, recording any change in the log.
-3. Run step 9's four falsifiability controls (the clone control is already done; the four here
-   are the source-ban, Java_ export, 4 KiB page and corrupted-descriptor arms; the descriptor
-   arm lands with S1.c.2's manifest-parser test if no earlier harness exists).
-4. Write `LinkKiteCodecJniTaskTest` pinning both ABI recipes, and the S1.c.1 log entry and
-   commits under the sub-phase's named first lines.
+3. Decouple each Android JNI arm's opaque-helper compile provider from the Kotlin/Native target
+   map, because neither the Apple selector nor S1.c.2's phone selector registers `androidNative*`.
+   Dedicated arm64/x64 `CompileKiteCodecCTask` providers use the same API-24 target recipes and
+   feed the link tasks directly. Make `kitecodec-sample` honor the Apple selector so the exact
+   `requireAllTargets` link gate configures only its macosArm64 executable. Track `exports.macos`
+   as a macOS link-task input. Then run both Android link arms and step 8's ELF assertions
+   (JNI_OnLoad-only, no libav NEEDED, PT_LOAD 0x4000); adjust the Android `-l` set only if the NDK
+   link demands it and record any change.
+4. Run step 9's four falsifiability controls: a direct helper-bypassing FFmpeg call, a `Java_`
+   export, a 4 KiB page setting and a corrupted descriptor. The descriptor arm may land with
+   S1.c.2's manifest-parser test only if no earlier parser harness exists.
+5. Write `LinkKiteCodecJniTaskTest` pinning both ABI recipes, both dedicated Android helper
+   providers, all consumed export-control inputs and the four-field manifest schema; then write the
+   S1.c.1 log entry and commits under the sub-phase's named first lines.
 
-S1.c.2 ONWARD: unchanged, with these fixed points the scaffold decided (no executor judgment
-needed): the bridge class is `io/github/yuroyami/kitecodec/Internals`; the external method
+S1.c.2 ONWARD: phase ownership and order remain unchanged; the corrected fixed points include the
+following scaffold decisions (no executor judgment needed): the bridge class is
+`io/github/yuroyami/kitecodec/Internals`; the external method
 names, descriptors and semantics for every implemented row are exactly methods.def's; the
-identity report crosses as one \x1f-separated 30-field string whose order kj_abi.c documents;
+identity report crosses as one \x1f-separated 31-field string whose order kj_abi.c documents;
 zero jlong means "no handle" and a zero packet token to send is the drain packet; new rows for
 the remaining operations (dict walk, stream and codecpar accessors, filter, sink, remux,
 transcode) are ADDED to methods.def and implemented by kj_abi.c's canonical pattern, one row
@@ -11475,13 +11543,16 @@ Files, KiteCodec: `native/kitecodec-c/include/kitecodec_abi.h` and
 `native/kitecodec-c/README.md`;
 `buildSrc/src/main/kotlin/BuildFFmpegTask.kt`; new
 `buildSrc/src/main/kotlin/LinkKiteCodecJniTask.kt`; `kitecodec-core/build.gradle.kts`;
+`kitecodec-sample/build.gradle.kts`;
 `buildSrc/src/test/kotlin/BuildFFmpegTaskTest.kt` and new
 `LinkKiteCodecJniTaskTest.kt`. New `native/kitecodec-jni` files are exactly
-`methods.def`, `exports.map`, `kj_internal.h`, `kj_handles.c`, `kj_util.c`,
+`methods.def`, `exports.map`, `exports.macos`, `kj_internal.h`, `kj_handles.c`, `kj_util.c`,
 `kj_registration.c`, `kj_abi.c`, `kj_format.c`, `kj_packet.c`, `kj_codec.c`,
 `kj_frame.c`, `kj_filter.c`, `scripts/source-discipline.sh`,
 `scripts/symbol-audit.sh` and `README.md`. Generated JNI libraries and Android FFmpeg trees are
-evidence, not committed files. Player: KPKMP execution log only.
+evidence, not committed files. The landed scaffold fence also includes
+`native/kitecodec-c/tests/fake_headers/kc_rename.h` and
+`native/kitecodec-c/klib-metadata-baseline.txt`. Player: KPKMP execution log only.
 
 Steps.
 1. Add this stable C surface, with the enum in `kitecodec_abi.h`, the attach implementation in
@@ -11499,8 +11570,9 @@ Steps.
    KC_API kc_packet *ffkmp_packet_clone(const kc_packet *packet);
    ```
 
-   `kc_jvm_attach(NULL)` returns `KC_JVM_BAD_ARGUMENT`. On Android it runs the existing identity
-   gate and calls `av_jni_set_java_vm` inside the C archive, returning `KC_JVM_OK` or
+   `kc_jvm_attach(NULL)` returns `KC_JVM_BAD_ARGUMENT`. On Android it calls `kc_init()` first,
+   returns `KC_JVM_FFMPEG_REFUSED` without touching FFmpeg when the identity gate rejects, and only
+   then calls `av_jni_set_java_vm` inside the C archive, returning `KC_JVM_OK` or
    `KC_JVM_FFMPEG_REFUSED`. On every non-Android build it returns `KC_JVM_UNSUPPORTED` without
    referencing the FFmpeg JNI symbol. `ffkmp_packet_clone` rejects null, allocates one packet and
    uses `av_packet_ref`; allocation or ref failure frees everything and returns null. It is O(1)
@@ -11513,10 +11585,13 @@ Steps.
    Regenerate the export baseline only after reviewing its two added names. The final counts are
    192 normalized declaration records and the old export set plus exactly `kc_jvm_attach` and
    `ffkmp_packet_clone`. Update `symbol-audit.sh`'s count assertion, write refusal, baseline prose
-   and success text from 189 to 192 in this same commit; the declaration categories remain the
-   existing 189 plus exactly this enum and two prototypes.
+   and success text from 189 to 192 in this same commit. Correct every current README/baseline
+   category sentence to the measured final split: 170 helper prototypes, eleven opaque typedefs,
+   seven ABI prototypes, three ABI enums and the report typedef. Add an Android-side gate probe
+   that forces identity rejection and proves `av_jni_set_java_vm` was not called before restoring
+   the accepting control.
 3. Preserve the existing `--enable-pic` from `sharedCoreArgs()` in both Android FFmpeg argument
-   sets and pin its inclusion in the existing exact-argument test. Preserve API 24, static-only
+   sets and pin its inclusion in exact Android-arm64 and x64 argument tests. Preserve API 24, static-only
    LGPL, zlib, the current software formats and
    `--enable-mediacodec --enable-jni`. Do not build arm32. Producer and JNI-link invocations remain
    separate because target trees are resolved during configuration:
@@ -11531,12 +11606,14 @@ Steps.
 
    Assert each output has six archives and the public headers. The transactional install tree does
    not contain build-root `config.h`, so prove the feature selection twice: the full-list
-   `BuildFFmpegTaskTest` expectation contains `--enable-mediacodec` and `--enable-jni`, and each
+   `BuildFFmpegTaskTest` expectation contains `--enable-pic`, `--enable-mediacodec` and
+   `--enable-jni`, and each
    installed tree's S1.b provenance file `lib/kitecodec/ffmpeg-configure.txt` contains both exact
    options. `AndroidArm32` must have no generated output.
-4. Make `methods.def` the single registration manifest. Each non-comment record contains the
-   binary class name, Kotlin external-method name, JVM descriptor, C function and handle/result
-   category. `kj_registration.c` includes the manifest to create the exact `JNINativeMethod`
+4. Make `methods.def` the single registration manifest. Each non-comment X-macro record contains
+   exactly the binary class name, Kotlin external-method name, JVM descriptor and C function. Its
+   section and function prefix supply the category and handle/result convention; there is no fifth
+   field. `kj_registration.c` includes the manifest to create the exact `JNINativeMethod`
    tables. No hand-copied second list is allowed. `JNI_OnLoad` gets `JNIEnv`, finds the declared
    bridge classes and calls `RegisterNatives`, then returns `JNI_VERSION_1_6`. It does not call
    `kc_init`, does not call `kc_jvm_attach` and does not convert an identity rejection into an
@@ -11558,13 +11635,19 @@ Steps.
    - `:kitecodec-core:linkKiteCodecJniAndroidX64` to
      `kitecodec-core/build/kitecodec-jni/android-x64/x86_64/libkitecodec_jni.so`
 
+   The Android helper archives come from dedicated arm64/x64 `CompileKiteCodecCTask` providers,
+   not from Kotlin/Native target registration. This is required because the ordinary Android KMP
+   library and application consume JNI and deliberately never register `androidNative*` klibs.
    The two Android arms use NDK r29 clang, `-shared -fPIC -fvisibility=hidden` and
    `-Wl,-z,defs -Wl,-z,noexecstack -Wl,-z,relro -Wl,-z,now -Wl,--gc-sections`,
    `-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384`,
    `-Wl,--exclude-libs,ALL` and `--version-script=exports.map`. Link the opaque helper archive and
    six FFmpeg static archives with `mediandk`, `android`, `log`, `z`, `dl` and `m`. The output has
    no dependency on a `libav*.so`. The macOS dylib is test-only and may dynamically link the S1.b
-   Local macOS FFmpeg tree; S5 owns desktop runtime distribution.
+   Local macOS FFmpeg tree; S5 owns desktop runtime distribution. Track both `exports.map` and
+   `exports.macos` as task inputs, and pin the target recipes, helper providers and export-control
+   inputs in `LinkKiteCodecJniTaskTest`. Make `kitecodec-sample` honor the existing Apple selector
+   so this sub-phase's `requireAllTargets` gate configures only macosArm64 on this machine.
 7. Run the link tasks in one consumer invocation after the FFmpeg producer finishes:
 
    ```bash
@@ -11623,7 +11706,9 @@ KitePlayer: `Record the Android JNI boundary proof`.
 #### S1.c.2 Make every KiteCodec operation real on JVM and Android, then close window 2b
 
 Files, KiteCodec: `gradle/libs.versions.toml`; root `build.gradle.kts`;
-`kitecodec-core/build.gradle.kts`; `kitecodec-core/src/commonMain/.../FFmpeg.kt`,
+`kitecodec-core/build.gradle.kts`; `kitecodec-sample/build.gradle.kts`;
+`buildSrc/src/main/kotlin/LinkKiteCodecJniTask.kt`;
+`kitecodec-core/src/commonMain/.../FFmpeg.kt`,
 `FilterGraph.kt`, `Frame.kt`, `MediaSink.kt`, `MediaSource.kt`, `Remuxer.kt`,
 `Transcoder.kt`, `MediaType.kt` and `LowLevelApi.kt`; new common `Playback.kt`;
 all nine existing `kitecodec-core/src/nativeMain` implementation files. New
@@ -11645,7 +11730,10 @@ Test files are new under
 `ContractMediaMaterializer.android.kt`; and `src/androidDeviceTest/AndroidManifest.xml`. Build
 support adds
 `buildSrc/src/main/kotlin/CompareCodecContractTask.kt` and
-`buildSrc/src/test/kotlin/CompareCodecContractTaskTest.kt`. Also in the fence:
+`buildSrc/src/test/kotlin/CompareCodecContractTaskTest.kt`; existing
+`buildSrc/src/test/kotlin/LinkKiteCodecJniTaskTest.kt`. Existing JNI files in this fence are
+`native/kitecodec-jni/methods.def`, `kj_internal.h`, `kj_handles.c`, `kj_abi.c`, `kj_format.c`,
+`kj_packet.c`, `kj_codec.c`, `kj_frame.c`, `kj_filter.c` and `README.md`. Also in the fence:
 `kitecodec-core/api/`; root `README.md` and `CHANGELOG.md`; `kitecodec-core/Module.md`;
 `docs/about.md`, `docs/index.md`, `docs/decoding.md`, `docs/transcoding.md`,
 `docs/gradle-plugin.md`, `docs/platforms.md`, `docs/getting-started.md` and
@@ -11657,7 +11745,10 @@ new Android scratch consumer are ignored evidence only. Player: KPKMP execution 
 Steps.
 1. Add AGP 9.2.1 and `com.android.kotlin.multiplatform.library` to Codec's catalog and root with
    `apply(false)`. Add AndroidX test core/runner 1.7.0 and ext-junit 1.3.0 for device tests. Keep
-   `jvmToolchain(21)`. In core register `jvm()` and an Android KMP library named `android` with
+   `jvmToolchain(21)`. Remove the AtomicFU Gradle plugin application from `kitecodec-core` before
+   registering Android: AtomicFU 0.31's Android KMP transform looks for the nonexistent
+   `androidMainClasses` task under AGP 9.2.1. Retain the `kotlinx-atomicfu` runtime dependency and
+   its existing common code. In core register `jvm()` and an Android KMP library named `android` with
    namespace `io.github.yuroyami.kitecodec`, compileSdk 36, minSdk 24, host tests and device tests
    using `androidx.test.runner.AndroidJUnitRunner`. Do not add `androidNative*` to the S1.c
    selector: those klibs are a different platform and cannot satisfy a normal Android app.
@@ -11666,7 +11757,10 @@ Steps.
    macosArm64, iosArm64, iosSimulatorArm64, jvm and the Android JVM target on this machine. It is
    accepted only by Maven-local publication; every remote publish rejects it during configuration.
    It requires all three S1.b Local FFmpeg trees and both S1.c Android trees. Preserve the old
-   selectors and their exact behavior.
+   selectors and their exact behavior. Extend `kitecodec-sample`'s selector handling: on this
+   arm64 Mac the Apple and phone scopes register only the sample's macosArm64 executable. Thus root
+   invocations that combine the phone selector with `kitecodec.requireAllTargets=true` do not
+   configure unrelated macosX64, Linux or MinGW sample targets.
 3. Restore `@JvmInline` on `PixelFormat`, `SampleFormat` and `CodecId`, as the existing source
    comment already directs when a JVM target arrives. Move `Packet`, `PacketReader`,
    `StreamDecoder` and `SeekDirection` declarations into common `Playback.kt`, make the native
@@ -11707,17 +11801,26 @@ Steps.
    JVM/Android source set. `Internals.jvm.kt` owns only private external methods matching
    `methods.def`, typed handle wrappers, identity-report conversion and error mapping. Each public
    owner has one nonzero token, checks open before every operation and closes idempotently. JNI
-   errors become the same `FFmpegError` and `FFmpegException` subclasses native uses. Lambda
+   errors become the same `FFmpegError` and `FFmpegException` subclasses native uses. Borrowed
+   stream and static-codec tokens have explicit release semantics; stream tokens record their
+   format parent and are invalidated when that parent closes, while codec tokens are released when
+   their wrapper is finished. Parent close, explicit borrowed release and repeated release each
+   decrement the live-handle count exactly once. A stale stream token must never resolve to a
+   freed FFmpeg pointer. Lambda
    callbacks receive an owned or callback-scoped object under the existing KDoc, never a raw token.
    Arrays and strings are copied at the declared API boundary; no direct ByteBuffer or native
    pointer becomes public.
 5. Leaf loading is explicit. JVM reads a test-only absolute library override
    `kitecodec.jni.path` before falling back to `System.loadLibrary("kitecodec_jni")`; the dylib is
-   not added to the published JVM jar. Android always uses `System.loadLibrary`. After load, a
-   private `attachCurrentVm` native method calls `GetJavaVM` and then `kc_jvm_attach`. Android
-   requires `KC_JVM_OK`; JVM accepts `KC_JVM_UNSUPPORTED`. Only then call `kc_init`, copy the full
-   identity report and throw `FFmpegError.IncompatibleFFmpegRuntime` with the same typed fields as
-   native on rejection. This is why `JNI_OnLoad` itself did not run the gate.
+   not added to the published JVM jar. Android always uses `System.loadLibrary`. The private
+   `attachCurrentVm` native method obtains the VM with `GetJavaVM` and passes it to
+   `kc_jvm_attach`, but is not invoked yet. Immediately after load, call `kc_init` and copy/map the
+   full identity report first, throwing
+   `FFmpegError.IncompatibleFFmpegRuntime` with the same typed fields as native on rejection. Only
+   an accepted identity proceeds to VM attach: Android requires `KC_JVM_OK`; JVM accepts
+   `KC_JVM_UNSUPPORTED`. Attach redundantly observes the once-only gate, which keeps direct C
+   callers safe without making Kotlin's typed report unreachable. This is why `JNI_OnLoad` itself
+   did not run the gate.
    Wire `jvmTest` to `linkKiteCodecJniMacosArm64` with a `TaskProvider`, and set the
    `kitecodec.jni.path` test system property from that task's output-file provider. No test command
    relies on a caller exporting the property or on a stale dylib.
@@ -11747,20 +11850,24 @@ Steps.
    above its ABI directory: the arm task outputs `.../android-arm64/`, containing
    `arm64-v8a/libkitecodec_jni.so`, and the x64 task outputs `.../android-x64/`, containing
    `x86_64/libkitecodec_jni.so`. Configure `androidComponents.onVariants` so each variant's
-   `variant.sources.jniLibs.addGeneratedSourceDirectory(taskProvider, outputDirectory)` consumes
+   `checkNotNull(variant.sources.jniLibs).addGeneratedSourceDirectory(
+   taskProvider, LinkKiteCodecJniTask::outputDirectory)` consumes
    both exact task providers. Passing either leaf ABI directory is forbidden because it would
    package the library under the wrong path. Nothing is copied into `src/androidMain/jniLibs`.
    The library manifest carries `android:extractNativeLibs="false"`; APK-side nonlegacy packaging
    is owned by each consuming application, not inferred from the AAR ZIP. AGP 9.2.1 KMP does not
    publish consumer rules by default, so configure
-   `optimization { consumerKeepRules { publish = true; file("consumer-rules.pro") } }` explicitly.
+   `optimization { consumerKeepRules.apply { publish = true; file("consumer-rules.pro") } }`
+   explicitly.
    That file keeps the internal bridge class and all registered native method names/descriptors
    while allowing the public Kotlin API to shrink normally. The generated AAR contains only
    `arm64-v8a/libkitecodec_jni.so` and `x86_64/libkitecodec_jni.so`, and its `proguard.txt` contains
    the pinned native-method rule from this exact input.
 8. Write reproduction-first tests. Before actuals, `compileKotlinJvm` fails on missing actuals.
    Before JNI packaging, the device test fails with `UnsatisfiedLinkError`. A zero, stale and
-   wrong-kind token must each fail at the JNI table rather than crash. Load a host test library
+   wrong-kind token must each fail at the JNI table rather than crash. Tests also pin explicit
+   borrowed-codec release, parent-driven stream invalidation, repeated release, and a zero
+   live-handle ledger after every contract arm. Load a host test library
    built against the existing mismatched fake identity headers and require a typed
    `IncompatibleFFmpegRuntime` containing all six libraries and provisioning text. Change one
    `methods.def` descriptor while leaving Kotlin intact and require library load to fail; restore
@@ -12007,9 +12114,11 @@ to `SoftwareConverter.native.kt` and add
 `kiteplayer-ffmpeg/src/jvmAndAndroidMain/kotlin/io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter.jvm.kt`.
 New common files are `DecoderFallback.kt` and `PlatformDecoderSelection.kt`; actuals are
 `PlatformDecoderSelection.native.kt`, `PlatformDecoderSelection.jvm.kt` and
-`PlatformDecoderSelection.android.kt` in their matching source sets. Public truth corrections are
-limited to `kiteplayer-core/.../PlayerConfig.kt`, `PlayerState.kt`,
-`PlaybackError.kt` and `spi/VideoFrame.kt`. Test files are new common
+`PlatformDecoderSelection.android.kt` in their matching source sets. Public truth and stats
+propagation corrections include `kiteplayer-core/.../PlayerConfig.kt`, `PlayerState.kt`,
+`PlaybackError.kt`, `spi/VideoFrame.kt` and `internal/PlaybackCore.kt`. Existing core test support
+in the fence is `kiteplayer-core/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/ScriptedBackend.kt`
+and `KitePlayerTest.kt`. Test files are new common
 `DecoderFallbackTest.kt`, `PlatformDecoderSelectionTest.kt` and `BackendContractTranscript.kt`;
 JVM `JvmBackendContractTest.kt`; macosArm64 `MacosBackendContractTest.kt`; Android host
 `AndroidDecoderSelectionHostTest.kt`; and Android device
@@ -12025,7 +12134,10 @@ Steps.
    `io.github.yuroyami.kiteplayer.ffmpeg`, compileSdk 36, minSdk 24, host tests and device tests.
    Create `jvmAndAndroidMain` from `commonMain` and make both `jvmMain` and `androidMain` depend on
    it; the exact shared converter path named in the file fence lives there. Native targets keep
-   `SoftwareConverter.native.kt` in nativeMain.
+   `SoftwareConverter.native.kt` in nativeMain. Move the test-only
+   `implementation(project(":kiteplayer-output"))` dependency from `commonTest` to `nativeTest`:
+   the real-media output tests are native, while c.3's new JVM and Android test variants cannot
+   resolve an output JVM variant and output does not gain Android until S1.c.4.
    The Android target consumes the published KiteCodec AAR transitively; it neither declares
    jniLibs nor rebuilds Codec. JVM tests map
    `-Pkitecodec.jni.localPath=<absolute dylib>` to the test JVM system property
@@ -12037,7 +12149,10 @@ Steps.
    offsets and strides from the declared pixel format and uses the same coefficient, range,
    ten-bit alignment and chroma rules. Both public objects keep the same `toRgba` signature and
    golden bytes. A shared golden test covers YUV420P, NV12, P010, RGBA/BGRA, BT.601/709/2020,
-   full/studio range and red-blue channel order.
+   full/studio range and red-blue channel order. Before the D-2 source gate, replace the four
+   native-era diagnostic/KDoc spellings that name `AVIOContext`, `AVFormatContext` or
+   `libavformat` in `KiteCodecSource.kt` and `KiteCodecMediaBackend.kt` with platform-neutral
+   wording. Do not weaken the scan that catches direct-native tokens.
 3. Make platform selection an internal expect/actual plan, never a platform decoder call.
    Native and ordinary JVM return software only. Android maps H.264 to
    `CodecId("h264_mediacodec")` and HEVC to `CodecId("hevc_mediacodec")`, then uses the new
@@ -12058,7 +12173,11 @@ Steps.
    the decoder's `hardware` getter is `HardwareWithDownload(HwdecKind.MediaCodec)` while each
    delivered frame is software-readable with `hardwareSurface == null`. Do not claim zero copy or
    create a Surface in the decoder. D-2 is satisfied because selection remains FFmpeg's named
-   decoder.
+   decoder. Make `PlaybackCore.publishSnapshot()` assign
+   `hardwareDecode = session?.videoDecoder?.hardware ?: HwdecStatus.Software`; the fallback
+   driver's dynamic getter uses cross-thread-safe storage so the actor cannot retain a stale
+   hardware claim. Extend `ScriptedVideoDecoder` with a minimal injectable status and add a
+   `KitePlayerTest` that observes hardware first and Software immediately after demotion.
 5. Put open and runtime fallback in `DecoderFallback.kt` behind a small internal decoder-driver
    seam. For `Auto` and `Prefer`, a hardware open refusal emits one
    `HardwareDecodeUnavailable` warning and opens software. For `Require` it returns no decoder.
@@ -12395,16 +12514,21 @@ Steps.
 10. Run boundary scans:
 
     ```bash
+    ! rg --pcre2 -n \
+      '^(?!\s*(?:[*]|//)).*(kiteplayer[.]ffmpeg|kitecodec|SoftwareConverter|MediaCodec|MediaExtractor|ExoPlayer)' \
+      -g '*.kt' kiteplayer-output/src
     ! rg -n \
-      'kiteplayer[.]ffmpeg|kitecodec|SoftwareConverter|MediaCodec|MediaExtractor|ExoPlayer' \
-      kiteplayer-output/src
+      'kiteplayer-ffmpeg|kitecodec|SoftwareConverter|MediaCodec|MediaExtractor|ExoPlayer' \
+      kiteplayer-output/build.gradle.kts
     ! rg -n \
       'SurfaceHolder|AndroidView|KitePlayerView|Compose|OpenGL|GLES|Vulkan' \
       kiteplayer-output/src/androidMain
     ```
 
-    The sample and later phone module may spell `SoftwareConverter`; output may not. Temporarily
-    import it into the renderer and prove the first scan fails.
+    Historical comments may name the neighbouring FFmpeg module while explaining the boundary;
+    imports, fully qualified executable references and Gradle dependencies may not cross it. The
+    sample and later phone module may spell `SoftwareConverter`; output may not. Temporarily import
+    it into the renderer and prove the first scan fails.
 
 Gate. Tier 2, selected by Android Kotlin and Horizon completion. Add host geometry/ownership tests
 and the real Surface device test. Tier 3 is not selected because this is not the C audio render
@@ -12452,7 +12576,9 @@ Steps.
    is nonempty, copies it transactionally to
    `build/generated/s1cAssets/sync1080p30.mp4` and writes its SHA-256 beside the task log. Wire the
    output through `androidComponents.onVariants` and
-   `variant.sources.assets.addGeneratedSourceDirectory`; do not commit a 20 MB media file. Its unit
+   `checkNotNull(variant.sources.assets).addGeneratedSourceDirectory`; do not commit a 20 MB media
+   file. The explicit check is required because AGP 9.2.1 exposes nullable layered asset sources;
+   a safe-call could silently omit the generated fixture. Its unit
    test pins missing input, byte equality, SHA output, rerun after content change and no partial
    destination after injected failure. The Gradle task never invokes ffmpeg or a network; the
    producer remains the explicit first command:
@@ -12600,7 +12726,7 @@ Steps.
      'Compose|AndroidView|KitePlayerView|OpenGL|GLES|Vulkan' \
      -g '*.kt' kiteplayer-sample-android/src
    ! rg -n \
-     '(^|[^A-Za-z0-9_])(ffmpeg[.]|libav(codec|format|filter|util)|cnames[.]structs[.]AV|av(codec|format|filter|util)_[A-Za-z0-9_]+|sw(scale|resample)_[A-Za-z0-9_]+|AV[A-Z][A-Za-z0-9_]+)' \
+     '(^|[^A-Za-z0-9_])(libav(codec|format|filter|util)|cnames[.]structs[.]AV|av(codec|format|filter|util)_[A-Za-z0-9_]+|sw(scale|resample)_[A-Za-z0-9_]+|AV[A-Z][A-Za-z0-9_]+)' \
      -g '*.kt' kiteplayer-sample-android/src
    ```
 
@@ -12608,7 +12734,9 @@ Steps.
    `AndroidOutputBackend`, its caller-owned Surface and renderer constructor. The first scan's
    negative controls use a wildcard `import android.media.*`, a fully qualified
    `android.media.MediaCodec` reference and an `AMediaExtractor` token; the second adds one
-   forbidden view import. Observe each failure, then revert it.
+   forbidden view import. The direct-native scan intentionally does not ban the required
+   `io.github.yuroyami.kiteplayer.ffmpeg` project-package imports; its remaining alternatives ban
+   direct libav/cinterop symbols. Observe each failure, then revert it.
 10. Update root and sample docs to the measured state: Android debug and minified release run on
     `Pixelu16KB` at 16 KiB, arm64-v8a is runtime-qualified, x86_64 is package-qualified, Codec is
     Maven-local/private only, and this app uses three project dependencies until S1.d. Promote the

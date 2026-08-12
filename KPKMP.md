@@ -7407,6 +7407,32 @@ is no other.
   duplicate configureEach blocks remain cosmetic. AUTHORSHIP: the S1.c.3 product code and tests
   are the executor's; the planner requalified, verified, corrected the record and committed.
 
+- 2026-08-12, S1.c.4 completed, planner-authored: Android audio through AudioTrack. The executor
+  remained rate-limited; parallel implementer agents kept dying to server overload, so this
+  sub-phase is single-threaded planner work (the surviving agent contribution in the module is
+  the S1.c.5 renderer source, committed with ITS sub-phase, not here). The four public
+  declarations are exactly the spec's: AndroidMonotonicClock on elapsedRealtimeNanos (the
+  AudioTimestamp base, which is the point), AudioTrackSink behind the internal AudioTrackDriver
+  seam that holds every android.media and android.os call, AudioTrackSinkFactory, and
+  AndroidOutputBackend pairing clock and sink with null video. The writer is one dedicated
+  priority-audio thread: blocks of exactly min(deviceBufferFrames, 512) frames into ONE
+  preallocated buffer, timestamp-preferred deadlines with the spec's exact formula and a
+  wrap-extended playback-head fallback, tail silence on short returns, WRITE_BLOCKING loops, and
+  zero-or-negative writes surfacing as DeviceLost instead of a spin. Host suite 17 of 17 (14
+  sink arms including the release-before-join negative control, 3 clock arms); device run GREEN
+  on Pixelu16KB (real AudioTrack, head advance within bound, monotonic deadlines, close twice,
+  reopen and repeat). THE SUITE EARNED ITS KEEP DURING AUTHORSHIP, three real defects died
+  before commit: a deadlock (the stop path joined the writer while holding the lifecycle lock
+  the writer's head extension also takes; the lock discipline is now written above the locks),
+  a silent writer death on host (android.os.Process is a stub off-device; priority setting moved
+  onto the driver seam where it belongs), and a dead drain bound (the bound read the injected
+  clock, which a test deliberately freezes; it now counts real polls). Boundary scans clean
+  after one prose fix (this file's own KDoc naming the ffmpeg module tripped the token scan; the
+  prose changed, never the scan). updateKotlinAbi and checkKotlinAbi are green; the current
+  tooling emits no separate dump for AGP KMP android targets (identical to kiteplayer-ffmpeg's
+  android target), so the four declarations enter a dump the day the tooling covers them, and
+  that is recorded here rather than silently. Both Tier 1 blocks close this entry.
+
 ---
 
 ## 15. Horizon B execution: B1

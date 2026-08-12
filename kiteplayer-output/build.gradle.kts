@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.vanniktech.publish)
     alias(libs.plugins.dokka)
 }
@@ -28,6 +29,22 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
+    /* S1.c.4 step 1. Output depends only on core and its existing portable libraries: no
+     * KiteCodec, no FFmpeg, no NDK, no Android media support library (the boundary scans of
+     * S1.c.5 step 10 enforce it). Host tests drive the fake AudioTrack/canvas seams; device
+     * tests drive the real ones on the named emulator. */
+    android {
+        namespace = "io.github.yuroyami.kiteplayer.output"
+        compileSdk = 36
+        minSdk = 24
+        withHostTest {}
+        withDeviceTestBuilder {
+            sourceSetTreeName = "test"
+        }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
@@ -39,6 +56,12 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+        }
+        getByName("androidDeviceTest").dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.androidx.test.core)
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.test.ext.junit)
         }
     }
 }

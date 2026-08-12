@@ -1051,7 +1051,7 @@ say which sub-phase.
 | `../KiteCodec/native/kitecodec-c/klib-metadata-baseline.txt` | `klib-metadata-diff.sh --check`, on any cinterop metadata difference | `./scripts/klib-metadata-diff.sh --update`, in the same commit as the deliberate surface change | the script's whole SUMMARY block, pasted, so the record carries the reviewed numbers and not a pointer to a 19,000 line diff |
 | `../KiteCodec/native/kitecodec-c/deleted-surface.txt` (installed by I.3) | `check-deleted-surface.sh`, on any use of a name whose status is `deleted` | change that name's status to `resurrected-in-<item>` in the same commit that resurrects it | one sentence naming the item and the reason |
 | `../KiteCodec/native/kitecodec-c/exported-symbols-baseline.txt` (installed by I.4) | `symbol-audit.sh` check 6, when the archive's exported name set differs from the baseline | regenerate with the command the baseline's own header names, in the same commit as the deliberate export change | every symbol added or removed, and why |
-| `../KiteCodec/native/kitecodec-c/signature-baseline.txt` (installed by S1.a.8) | `symbol-audit.sh` check 7, when any committed normalized public C declaration record differs: 189 before S1.c.1 and 192 after its compatible ABI addition | from `native/kitecodec-c`, run `./scripts/symbol-audit.sh --write-signature-baseline` after reviewing the exact diff, in the same commit as the deliberate declaration change | every declaration class added, removed or changed, the old and new normalized records, and why the ABI move is intentional |
+| `../KiteCodec/native/kitecodec-c/signature-baseline.txt` (installed by S1.a.8) | `symbol-audit.sh` check 7, when any committed normalized public C declaration record differs: 189 before S1.c.1, 192 after its compatible addition and 193 after S1.c.2's named-decoder helper | from `native/kitecodec-c`, run `./scripts/symbol-audit.sh --write-signature-baseline` after reviewing the exact diff, in the same commit as the deliberate declaration change | every declaration class added, removed or changed, the old and new normalized records, and why the ABI move is intentional |
 | `ALLOWED_UNDEFINED` in `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh` | `symbol-audit.sh` check 4, when an archive references an undefined symbol outside the list | add the symbol to the list in the same commit as the code that needs it | the symbol and the helper that pulls it in |
 
 Multi-pass rule, owner-mandated: after each phase's code is written, re-read every changed
@@ -7107,6 +7107,64 @@ is no other.
   as the commit-boundary seals; this sentence deliberately does not preclaim those terminal runs.
   The remaining exact Player commit first line is `Record the Android JNI boundary proof`.
 
+- 2026-08-12, S1.c.2 pre-implementation fixed-fence correction. Exact starting heads were
+  KitePlayer `7a5945cb715498d546fdd34dd336bd89337289ac` and KiteCodec
+  `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`, both clean. Tier 1 was selected mechanically
+  because this correction changes KPKMP only. S1.c.2 product work started in the Codec worktree,
+  then stopped before product compilation when two tree-backed mechanical contradictions became
+  observable. Those in-fence draft bytes remain frozen and unstaged; they are not part of this
+  correction commit and do not constitute S1.c.2 evidence or completion.
+
+  BLOCKING 1 was named-decoder compatibility. S1.c.2 requires a non-null decoder name to be
+  verified against the stream codec before allocation/open, but the current opaque C surface
+  exposes codecpar-to-id and decoder lookup without any selected-codec-to-id accessor. A native or
+  JNI implementation could only defer the incompatibility to decoder open, contradicting the
+  stated pre-open rule. The corrected fence adds `ffkmp_codec_id(const kc_codec *)`, its helper
+  header/source, argument test, ABI header, signature/export/cinterop-metadata ratchets, symbol
+  audit and C README truth. This compatible public C addition moves ABI 2.1 to 2.2 and is expected
+  to move the measured totals to 171 helper prototypes, 178 exports and 193 declarations. One
+  two-assertion `test_args` case makes that suite 23 and the C total 280 per variant, 840 across
+  plain/ASan/TSan. The ratchet procedures must prove those values and the implementation log must
+  record every actual delta. Native and the private `nativeCodecId(J)I` JNI route now both own the
+  comparison before allocation/open; the public Kotlin API does not move. The coupling baseline
+  remains byte-identical at 0/0 because the additional opaque-helper call site is reported-only.
+
+  BLOCKING 2 was the shared contract-test tree. The first exact offline AGP configuration/buildSrc
+  probe succeeded in 15 seconds with 7 actionable tasks, 6 executed and 1 up-to-date, and exposed
+  all named JVM/Android/publication/contract/link tasks. It also emitted that
+  `androidDeviceTest` cannot depend on `codecContractTest` because the default device compilation
+  is in a different source-set tree. The corrected step creates the device compilation with
+  `withDeviceTestBuilder { sourceSetTreeName = "test" }` before configuring the runner and direct
+  contract dependency. Silencing the warning without putting the compilation in the test tree is
+  forbidden because it would leave the shared contract outside the device binary.
+
+  The first correction Tier 1 supplied reproducible gate evidence but is not the final-byte seal.
+  Codec ran in a clean isolated clone at exact `be59e20`: forced coupling reported
+  `0/0/292/0/0`; deleted-surface was 15/15 with zero live use, Kotlin or def references; a fresh
+  host build produced ten helper units and seven binaries; and plain C passed seven suites and
+  279/279 cases, `44+32+114+24+25+18+22`. Its tracked-dash scan was silent passing exit 1 and
+  diff-check was silent exit 0. The clone remained clean. A first static-prefix build attempt was
+  rejected when the symlinked install lacked its transitive host link context; the accepted fresh
+  build used the script's intended pkg-config host path. The clone necessarily saw four Codec
+  prose allowlist files rather than the adjacent Player KPKMP entry. Initial restricted Gradle
+  launches that could not open the wrapper cache lock were followed by identical authorized runs.
+
+  Player's first Tier 1 was green at every gate: 88 files and all 3 coupling matches allowlisted;
+  all five ABI checks in 152/152 executed tasks; JVM XML core 192 plus subtitles 8 with zero
+  failures/errors/skips; rt eight suites/132 cases; render 43; source 18; silent passing dash exit
+  1; and silent diff-check exit 0. That run began on the intermediate +13/-0 correction and ended
+  after the final fixed points first made it +20/-1, so it is retained as non-sealing evidence. The
+  forced ABI arm rebuilt rt archives/cinterops, and the initial restricted coupling launch needed
+  the identical authorized retry.
+
+  Immediately before this entry the finalized correction was exactly KPKMP +35/-2, file SHA-256
+  `09b5721a8488e3602c92fa7896cf2e78c20ee527c42eaca6999e93461730bb9f` and binary-diff SHA-256
+  `cee8dcc9556b3459b89ea8b98df3eccecfb9bc662881897b6bd080121c3355dd`. No product byte was
+  staged or committed; no Maven publication, remote ref, release, emulator or device state moved.
+  The final logged-byte Tier 1 seal follows before the exact correction subject
+  `Fence the named-decoder compatibility helper`. A postcommit three-lane S1.c.0 reread must then find
+  zero residual against the corrected head before the frozen S1.c.2 implementation resumes.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -12018,6 +12076,12 @@ KitePlayer: `Record the Android JNI boundary proof`.
 Files, KiteCodec: `gradle/libs.versions.toml`; root `build.gradle.kts`;
 `kitecodec-core/build.gradle.kts`; `kitecodec-sample/build.gradle.kts`;
 `buildSrc/src/main/kotlin/LinkKiteCodecJniTask.kt`;
+`native/kitecodec-c/include/kitecodec_abi.h` and `kitecodec_helpers.h`;
+`native/kitecodec-c/src/helpers_codec.c`;
+`native/kitecodec-c/tests/test_args.c`;
+`native/kitecodec-c/signature-baseline.txt`, `exported-symbols-baseline.txt`,
+`klib-metadata-baseline.txt`, `scripts/symbol-audit.sh` and
+`README.md`;
 `kitecodec-core/src/commonMain/.../FFmpeg.kt`,
 `FilterGraph.kt`, `Frame.kt`, `MediaSink.kt`, `MediaSource.kt`, `Remuxer.kt`,
 `Transcoder.kt`, `MediaType.kt` and `LowLevelApi.kt`; new common `Playback.kt`;
@@ -12060,7 +12124,10 @@ Steps.
    `androidMainClasses` task under AGP 9.2.1. Retain the `kotlinx-atomicfu` runtime dependency and
    its existing common code. In core register `jvm()` and an Android KMP library named `android` with
    namespace `io.github.yuroyami.kitecodec`, compileSdk 36, minSdk 24, host tests and device tests
-   using `androidx.test.runner.AndroidJUnitRunner`. Do not add `androidNative*` to the S1.c
+   using `androidx.test.runner.AndroidJUnitRunner`. Create the device compilation with
+   `withDeviceTestBuilder { sourceSetTreeName = "test" }` and configure the returned device test;
+   the default device-test tree cannot depend directly on `codecContractTest` and emits a hierarchy
+   warning before compilation. Do not add `androidNative*` to the S1.c
    selector: those klibs are a different platform and cannot satisfy a normal Android app.
 2. Add `-Pkitecodec.phoneTargetsOnly=true`. It is mutually exclusive with
    `stableTargetsOnly`, `hostTargetsOnly` and `applePhoneTargetsOnly` and registers exactly
@@ -12107,6 +12174,30 @@ Steps.
    FFmpeg decoder by name and verifies it can decode the stream codec before open; null preserves
    the existing by-id default. Close, use-after-close, seek and drain behavior remains identical
    on native and JVM.
+
+   The existing opaque helper surface does not expose a selected `kc_codec`'s codec id, so add the
+   compatible helper `int ffkmp_codec_id(const kc_codec *codec)` in the helper header/source named
+   by this corrected fence. The named-decoder path compares that value with
+   `ffkmp_codecpar_codec_id` before allocating or opening the decoder. Add null and selected-codec
+   argument assertions. This compatible public C addition moves `KITECODEC_C_ABI_MINOR` from 1 to
+   2; then move every affected signature, export and cinterop-metadata ratchet by its
+   section 9 procedure and correct the C README's current counts and ABI truth. Record every exact
+   measured delta. The fixed expected counts are 171 helper prototypes plus seven ABI exports =
+   178 exports, 193 normalized declarations, `test_args` 23 and 280 C cases per variant, hence 840
+   across plain/ASan/TSan. The one new table case contains both the null-to-zero and selected
+   `pcm_s16le` codec-id/name assertions. Letting decoder open discover an incompatible named codec
+   is not the required pre-open verification.
+
+   `coupling-baseline.txt` remains byte-identical at its two zero ceilings;
+   `checkCinteropCoupling` records the measured `ffkmp_call_sites` increase as reported-only
+   traffic.
+
+   Route the same check through the private JNI row `nativeCodecId(J)I`: `methods.def` registers
+   it, `kj_codec.c` resolves the exact codec handle kind and calls `ffkmp_codec_id`, and
+   `Internals.jvm.kt` declares it. Native compares before `ffkmp_codecctx_alloc`; JVM/Android
+   compares before `nativeCodecCtxAlloc`. A temporary always-zero helper mutation must make the
+   selected-`pcm_s16le` test fail before restoring the real accessor. Invalid JNI tokens remain
+   typed handle-table errors; only the C helper's direct null contract returns zero.
 4. Implement all ten common expects and the four low-level declarations in the shared
    JVM/Android source set. `Internals.jvm.kt` owns only private external methods matching
    `methods.def`, typed handle wrappers, identity-report conversion and error mapping. Each public

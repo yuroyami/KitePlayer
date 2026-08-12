@@ -7637,6 +7637,25 @@ is no other.
   pushed tree, so the run drives the installed instrumentation directly with am instrument.
   Every one of those denied rows failed LOUDLY first (all fourteen MustPlay rows red on EACCES,
   twice), which is the matrix doing its job: no silent skip, no green without media.
+- 2026-08-12, S1.e.5 completed and S1.e EXITS, which closes everything of S1 an executor can
+  close. THE STAGE'S EVIDENCE, all of it measured today: the 17.5 matrix exists as one table
+  and one SPI-direct runner, and its three transcripts are green at 17 of 17 on the macOS host,
+  on Test iPhone 17 and on Pixelu16KB, with AV1's phone-profile refusal (not-implemented, -78
+  Darwin / -38 Linux) and both torture refusals (-1094995529) recorded as measurements; the iOS
+  host consumes the ONE :kiteplayer-phone coordinate through KitePlayerUIView and its re-run
+  S1.b oracle passes verbatim (decoded 133, submitted 123, presented 6, seek in 5000..5034,
+  Ended, layerImage true, zero underruns, teardown completed); the Android application consumes
+  the same coordinate through KitePlayerView and its two S1.d.4 oracles stand (debug 153/38,
+  release 149/41, zero underruns, both green under the exact eleven-key predicate). Defects the
+  stage's own gates caught and fixed along the way: the closed-player detach throw in both
+  platform views, the sample's missing Main-dispatcher artifact, the stale progress-sample seek
+  read, and the runner's two source-contract corrections. THE ONE OPEN ITEM, stated here and in
+  the README blockquote: the owner device session. No physical iPhone or Android device has run
+  anything; that needs the owner's hardware and signing, and until it happens S1's promise "IT
+  PLAYS ON PHONES" is proven on one named simulator and one named emulator, hardware-decoded on
+  Android, software on iOS, through one dependency coordinate and two reusable views, in debug
+  and in release shape. Nothing is pushed, publicly published or released; every commit of the
+  stage is local per the standing rule.
 
 ---
 

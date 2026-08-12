@@ -11,7 +11,9 @@ device, the video surface and the decoder are per platform.
 > **KitePlayer is early and cannot be used as a dependency.** Nothing is publicly published, there is
 > no public dependency installation path, and macOS arm64 is the only T3 candidate. One named iOS
 > simulator holds a narrower experimental T2 Codec candidate, and one named Android emulator holds
-> T2 Codec with provisional output evidence, each backed by a local runnable sample, not a full tier.
+> T2 Codec with provisional output evidence, each backed by a local runnable sample and a green
+> 17-row format matrix, not a full tier. No physical iPhone or Android device has run any of it:
+> that session needs the owner's hardware and signing and is the one open item of the phone stage.
 > This file states what has been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) is the
 > full plan, defect register and running execution log: every phase, measured number and decision.
 
@@ -66,9 +68,9 @@ Today, honestly:
 | Platform | Tier | What that means here |
 |---|---|---|
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
-| iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media, lands a precise seek, reaches Ended through RemoteIO and a caller-owned layer, and completes causally awaited teardown. Real-media cancellation and the broader matrix are absent, so this is explicitly below the full T2 Codec tier. |
+| iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 17-row format matrix runs green on the same named simulator: every playable row decodes and resumes after a mid-file seek, and AV1 refuses with a typed error because the phone FFmpeg profile vendors no software AV1 codec. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
-| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application depends on the one `:kiteplayer-phone` coordinate, builds its player from `phoneBackends()` and shows it in the reusable `KitePlayerView`, opens real media, plays with hardware H.264 through FFmpeg's own decoder, lands a precise seek, reaches Ended and tears down causally, in both debug and R8-minified release, on one named emulator. The output paths carry provisional stage evidence below T3-Full: subtitles and the full lifecycle and format qualification that tier demands do not exist yet, and nothing ran on a physical Android device. x86_64 is compile, link and package qualified only. |
+| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application depends on the one `:kiteplayer-phone` coordinate, builds its player from `phoneBackends()` and shows it in the reusable `KitePlayerView`, opens real media, plays with hardware H.264 through FFmpeg's own decoder, lands a precise seek, reaches Ended and tears down causally, in both debug and R8-minified release, on one named emulator. The 17-row format matrix runs green on the same emulator, with AV1 refusing on the same typed error as iOS. The output paths carry provisional stage evidence below T3-Full: subtitles and the full lifecycle qualification that tier demands do not exist yet, and nothing ran on a physical Android device. x86_64 is compile, link and package qualified only. |
 | JVM (desktop) | T1, decode-proven | The FFmpeg backend's JVM arm decodes real media in tests over a test-only local JNI library. No desktop audio or video output path exists yet. |
 | iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |

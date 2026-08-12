@@ -7623,6 +7623,20 @@ is no other.
   with the typed invalid-data error (-1094995529). Nothing crashed, nothing hung. The iOS
   simulator platform difference against the macOS baseline is exactly one row: AV1 plays on the
   host build and refuses on the phone build, and both are recorded as measurements.
+- 2026-08-12, S1.e.4 completed: the matrix on the Android emulator. 17 OF 17 ROWS PASS on
+  Pixelu16KB, the same shape as the simulator: every MustPlay row decoded its quota and resumed
+  after its mid-file seek (multitrack's two audio and two subtitle streams counted, rotation
+  reported, VP9 and MPEG-4 part 2 decoded in software, 4K HEVC ten-bit decoded its 5, the
+  MPEG-TS offset clip opened and sought); av1.mkv REFUSED with the typed not-implemented error
+  (code -38, Linux's spelling of the same errno the simulator reported as -78), both torture
+  rows refused with the typed invalid-data error. TWO INFRASTRUCTURE truths were measured, not
+  guessed, and are recorded in the device actual's KDoc for the next runner: a directory made
+  over adb belongs to the shell uid and the emulated-storage FUSE answers the app EACCES under
+  it (fixed by adb root, chown -R appId:ext_data_rw, adb unroot, page size re-proved 16384
+  after), and the managed connectedAndroidDeviceTest task reinstalls the APK and orphans the
+  pushed tree, so the run drives the installed instrumentation directly with am instrument.
+  Every one of those denied rows failed LOUDLY first (all fourteen MustPlay rows red on EACCES,
+  twice), which is the matrix doing its job: no silent skip, no green without media.
 
 ---
 

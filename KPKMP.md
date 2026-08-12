@@ -7285,6 +7285,77 @@ is no other.
   not preclaim that seal. No repo product edit, stage, second publication, push, public release or
   additional device action occurred in this plan correction.
 
+- 2026-08-12, S1.c.2 execution: JVM and Android playback were implemented on the opaque C boundary from Player `7a5945cb715498d546fdd34dd336bd89337289ac` and Codec `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`. Product work changed Codec only. The complete playback surface remains available on JVM and Android, with low-level declarations consolidated in common `Playback.kt`, platform actuals backed by the private JNI bridge, explicit loader/identity handling, host and packaged contract tests, Android AAR packaging, `Packet.copy()`, and optional named-decoder selection in `MediaSource.openDecoder`.
+
+  Two fixed-fence corrections were required during implementation. Named decoder selection could not be made safely through the existing opaque API, so `ffkmp_codec_id(const kc_codec *)` was added as a compatible C helper, the ABI minor advanced from 2.1 to 2.2, and private `nativeCodecId(J)I` comparison was placed before allocation/open. This added one `test_args` case with two assertions. Player commit `a9226f0a1cfd219b802376fb5487e4876701aa78` recorded that compatibility correction. The final direct-platform token scan also sees comments, so Player commit `2eddb39ee0dce73555a5d06d48ed98a36704d0b9` added the two comment-only build files to the fixed fence. Android device tests use `withDeviceTestBuilder { sourceSetTreeName = "test" }`, as required by the current Kotlin/AGP model.
+
+  The resulting C contract is ABI 2.2 with 171 helper prototypes plus seven ABI exports (178 exports total) and 193 normalized declarations. The checked baselines are: export `84a1dbe99a8a6c88293a02a6c537b1ae5a5648fa519635f969ad05075c7aacde`, signature `cf740926293e13da1dc357e02e10593b5655ab67c640f8e20420cec2c6d26cfc`, KLIB metadata `e2af6feb92cdd5550174ca6cbafd23705ceadcb7285947159a71bd3abe5cb736`, and unchanged coupling `9cedcc528f07282c1ce175a77e45a8770d55692ab644b2c681fdbf75ec63bd0b`.
+
+  API reconciliation retained two distinct tooling reds. Running dump and check as one unordered mutation attempt was red, so every accepted mutation is ordered dump then check. Later, manually removing the JVM dump's extra terminal blank line made `jvmApiCheck` red solely because BCV regenerated that LF, while retaining it made staged `git diff --check` red. The producer, not the checked-in output, was corrected: `jvmApiBuild` now has a declared-output `doLast` canonicalizer in `kitecodec-core/build.gradle.kts`. Two complete ordered `apiDump`/`apiCheck` cycles were then green and byte-idempotent. The final KLIB dump is 1,083 lines, SHA-256 `888b0854e80675fc466989dd13f3ab414f3715bdea627adcbfe1df8de1fa2b9d`; the canonical JVM dump is 853 lines, SHA-256 `3d43862a843fbb4450a1d3bb90ec71f7e775ba0a970f64eaecb750ddd10fc01d`. Because the normalizer changed a build script, it mechanically reselected the complete Codec Tier 2 even though no product declaration or runtime byte changed.
+
+  On the final product-source bytes before that tooling-only normalizer, the comprehensive phone-superset Gradle gate completed 55/55 tasks in 17 seconds across build logic, JVM compilation/tests, Android host tests/AAR, macOS tests, and JVM/native contract comparison. The JVM and macOS transcripts were byte-identical at 1,492 bytes and SHA-256 `39d5bc05297f317153015163ee33a314baec6a2cadb193e29cae141f6a628376`. Fresh XML reported buildSrc 55, plugin 19, JVM 33, Android host 25, macOS 87, and Android device 26 tests, all with zero failures, errors, or skips.
+
+  The closing standalone Codec evidence on those source bytes was also green: forced cinterop completed 2/2 tasks; buildSrc 6/6 tasks and 55 tests; plugin 14/14 tasks and 19 tests; macOS 15/15 tasks and 87 tests. C ASan, TSan, and required/live interposition each passed seven suites/280 cases; ASan corpus replay passed six targets over 105 files. Symbol/signature/metadata checks reported ten archive members, 178 exports exactly equal across header and baseline, 193 exact declarations, and the unchanged 1,008-line metadata baseline. JNI source discipline passed 4/4; static parity was exactly 172 manifest rows = 172 Kotlin externals/descriptors = 172 C definitions, split `29+17+51+32+34+9`; and macOS, arm64-v8a, and x86_64 symbol audits each found exactly `JNI_OnLoad`. Both Android ELFs have three `PT_LOAD` segments at `0x4000`, exactly seven platform `NEEDED` libraries and no libav/libsw dependency. The 1/1 deliberately 0x1000-aligned temporary negative ELF was rejected by the packaged-ELF assertion as required, without touching product bytes. The fixed-fence/direct-platform source scan was clean with zero forbidden tokens. Reproduction-first red arms and negative controls are retained as reds rather than counted as green gates.
+
+  Android device coverage used the sole available `Pixelu16KB` arm64 emulator (`emulator-5554`, API 36, `PAGE_SIZE=16384`). An initial offline launch failed before tests because the required UTP additional-output artifact was absent. The authorized rerun on the final product-source bytes passed all 26 device contract tests with zero failures, errors, or skips, including VM attachment. No physical-device or x86_64 runtime qualification is claimed.
+
+  The produced Android AAR is 7,536,866 bytes, SHA-256 `22f9aa776e120ecbba0e2d230df39299fb534cedac94efa933b60555e0beb31c`, with ten entries, exactly `arm64-v8a` and `x86_64` JNI libraries, `extractNativeLibs=false`, and consumer rules preserving the `Internals` native methods plus `JniHandleException`/`JniNativeException` constructors. The local Maven Android AAR is byte-identical to the build AAR. The JVM Maven jar is byte-identical to the build jar at `e8b497b25ee1cf548e76ad52352174b180b16e818c3bc090c0f471ccc0513cf4`.
+
+  The required remote-publication refusal was proved first: `:kitecodec-core:publish` failed during configuration with the explicit local-only selector and only three tasks up-to-date. The one permitted phone-superset `publishToMavenLocal` then completed once, in 19 seconds, with 98 actionable tasks (62 executed, 36 up-to-date), finishing at 07:30:44. Maven coordinates are `io.github.yuroyami:kitecodec-core:0.0.1`; root metadata routes Android, JVM, macOS arm64, iOS arm64, and iOS Simulator arm64. No remote publication or public release occurred. In particular, the later API-output normalizer did not authorize or trigger a second publication; the immutable publication and its consumer proofs remain the only publication chronology.
+
+  After that immutable publication, the Apple scratch consumer linked macOS arm64, iOS arm64, and iOS Simulator arm64 successfully (8/8 tasks). The Android scratch consumer exposed two plan defects. Applying `org.jetbrains.kotlin.android` in the app failed under AGP 9.2.1 because Kotlin is built in; Player correction `7e7287fb8f5aa598d11fe8ad97d88a3b94791b94` removed the app plugin while retaining the root Kotlin 2.4.10 `apply false` marker. A measured A/B check showed the retained marker builds offline, while removing it requests uncached Kotlin 2.2.10 artifacts before tasks. The corrected consumer then built 69/69 tasks and ran debug and release, but its AAR-to-APK identity audit caught AGP stripping the JNI binaries.
+
+  Player correction `107d3f854e187e30a7694a9f6b146131d8700e61` added `packaging.jniLibs.keepDebugSymbols += "**/libkitecodec_jni.so"` beside nonlegacy packaging. The final scratch rebuild completed 69/69 tasks in eight seconds at 08:01:20. For both ABIs, AAR input, merged native library, stripped-library task output, debug APK, and release APK are byte-identical. Both APKs contain exactly the two expected Stored JNI entries, satisfy 16 KiB zip alignment and the ELF architecture/export/dependency/PT_LOAD audits, and the release minification pipeline emitted a 455,604-byte mapping. The corrected install/oracle loop reran and recorded `PASS` for both debug and release. The live final package is the release install (`lastUpdateTime` 08:02:08), remains debuggable solely for the `run-as` oracle, reports arm64-v8a, and its live `files/result.txt` is `PASS`.
+
+  Final consumer JNI identity is exact across source AAR, debug APK, and release APK: arm64-v8a is `41cada5fd6f1be3f13c30babcc5353272bc16fba569fd233b3c64dddccb986ea` and x86_64 is `bd455b56267c0808e79a5e9df7891aa9ff8532f3ea4887282011c68c8000b79b`. The debug APK is 19,301,253 bytes, SHA-256 `3e805e12688bb9a295be18e529fd78bfa64a3ed5b9a39c9675e45b94942611c6`; the release APK is 17,777,368 bytes, SHA-256 `d1ef7ca5f29bdaff343cef9abb3bb11848cfc139c1933b1500754511c94e9770`. macOS linkage and x86_64 packaging are link/package proofs, not runtime claims. The macOS dylib remains test-only, and no native binary was added to the JVM publication.
+
+  Complete Player Tier 2 was green on its unchanged tree and the once-published dependency. buildSrc completed 6/6 tasks and 40 tests; the forced native arm completed 41/41 tasks and passed core 201, output 34, and FFmpeg 36 tests. Runtime ASan/UBSan, TSan, and required/live interposition each passed eight suites/132 cases. Cross-target compilation and sample link completed 20/20 and 33/33 tasks. The first host-authorized media observations all met their oracle: sync 300/300 with all counters zero, Audio master, -12 ms final drift and 10 ms worst schedule; true VFR 240/240 with all counters zero, Audio master, -17 ms drift and 12 ms worst schedule; HEVC 180/180 with zero drops, Video master, and 6 ms worst schedule. Missing input returned 1 with exactly two concise lines and no stack. The first sandboxed sync launch could not open CoreAudio; the identical host-authorized launch is the accepted observation.
+
+  The complete post-normalizer Codec Tier 2 and S1.c.2 integration re-seal was green. Forced
+  cinterop completed 5/5 tasks; the final ordered dump/check arms completed 19/19 and 20/20 tasks.
+  The phone-superset integration completed 69/69 tasks and freshly reported buildSrc 55, plugin 19,
+  JVM 33, Android host 25 and macOS 87 tests, all with zero failures, errors or skips; the 1,492-byte
+  transcript remained equal. C ASan, TSan and required interposition each passed seven suites/280
+  cases, and corpus replay passed six targets/105 files. Export/signature/metadata results remained
+  178/193/1,008 exact. All three JNI audits, the two packaged-ELF audits and the 1/1 deliberately
+  0x1000-aligned negative control were green. The final device arm completed 48/48 Gradle tasks and
+  26/26 tests on Pixelu16KB with zero failures, errors or skips. Rebuilt AAR and JVM jar bytes remained
+  exactly equal to the immutable one-time Maven-local artifacts at `22f9aa776e120ecbba0e2d230df39299fb534cedac94efa933b60555e0beb31c`
+  and `e8b497b25ee1cf548e76ad52352174b180b16e818c3bc090c0f471ccc0513cf4`; the newest selected
+  Maven-local mtime remained unchanged. There was no second publication.
+
+  The final pre-commit Codec Tier 1 seal was also green. A fresh plain build produced ten units and
+  seven binaries; forced coupling held `0 imports / 0 typed crossings / 294 reported-only helper
+  calls / 0 direct libav calls / 0 raw structs`; deleted-surface passed 15/15 with zero live uses;
+  and plain C passed seven suites/280 cases with live allocation accounting. Tracked and untracked
+  dash scans were empty and `git diff --check` passed. Exact pre/post fingerprints matched at HEAD
+  `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`, status SHA-256
+  `8c4888cff56bfd7bcf633c4ccbbd963810a4f2184a670013a54a71cec2e253dd`, empty-index SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`, and untracked manifest
+  SHA-256 `5c0f9dcc4306cb1a2f4ef3f85b648512e320a8ab9ae01ae72c5a64fff3e681be`.
+  The exact corrected fence was 65 status groups representing 52 modified and 29 new files, 81 files
+  total, with no staged path; the tracked portion was 2,515 insertions and 398 deletions. Final
+  staged-tree and commit fingerprints follow rather than being inferred from the unstaged split.
+
+  Codec commit `af061c0f5af61ef72e9a19138d0ed151cc604ad7` has exact parent
+  `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`, exact one-line subject
+  `Make KiteCodec real on JVM and Android`, empty body/trailers and tree
+  `d144e3fecb90a82614af50b911546a186c669ea3`. Its exact corrected fence is 81 files at 7,472
+  insertions and 398 deletions; the full-index binary commit-diff SHA-256 is
+  `5711ddea9cb5aec95ed6c9003c1208f9b7d82207e2db39869530e4be9d21eee6`.
+  `git show --check` is clean and the Codec worktree and index are empty. The shell assertion that
+  first spelled unquoted `HEAD^` was rejected by zsh glob parsing after the commit had succeeded;
+  the same read-only assertions with quoted revision syntax all passed, so this was neither a
+  product, staging nor commit red.
+
+  The first Player commit-boundary dash scan rejected the entry heading's U+2014 punctuation. It
+  was replaced with the colon above before either terminal Tier 1 seal was accepted.
+
+  The complete Codec and Player Tier 1 blocks now rerun over this final completed entry as the
+  commit-boundary seals; this sentence deliberately does not preclaim either terminal run inside
+  the bytes being sealed. The remaining exact Player commit first line is
+  `Record the JVM and Android Codec proof`.
+
 ---
 
 ## 15. Horizon B execution: B1

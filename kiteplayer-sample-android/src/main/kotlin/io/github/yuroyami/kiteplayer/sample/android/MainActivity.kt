@@ -2,16 +2,16 @@ package io.github.yuroyami.kiteplayer.sample.android
 
 import android.app.Activity
 import android.os.Bundle
-import android.view.SurfaceHolder
-import android.view.SurfaceView
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import io.github.yuroyami.kiteplayer.phone.KitePlayerView
 
 /**
- * The whole user interface, built programmatically (S1.c.6 step 4): one SurfaceView and three
- * buttons. No XML layout, no reusable public view, no declarative UI toolkit; the reusable phone host is
- * S1.d's, and this Activity exists to prove the assembled backend in an ordinary app.
+ * The whole user interface, built programmatically: one [KitePlayerView] and three buttons.
+ * Since S1.d.4 the surface lifecycle lives inside the reusable view; this Activity holds no
+ * SurfaceHolder callback, no renderer and no Surface, which is the shape an ordinary consumer's
+ * Activity actually has.
  */
 internal class MainActivity : Activity() {
 
@@ -23,11 +23,11 @@ internal class MainActivity : Activity() {
         controller = SampleController(applicationContext)
         smoke = intent.getBooleanExtra("s1c_smoke", false)
 
-        val surfaceView = SurfaceView(this)
+        val playerView = KitePlayerView(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(
-                surfaceView,
+                playerView,
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f),
             )
             if (!smoke) {
@@ -51,17 +51,9 @@ internal class MainActivity : Activity() {
         }
         setContentView(root, FrameLayout.LayoutParams(-1, -1))
 
-        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                if (smoke) controller.runSmoke(holder.surface) else controller.openNormally(holder.surface)
-            }
-
-            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = Unit
-
-            override fun surfaceDestroyed(holder: SurfaceHolder) {
-                controller.onSurfaceDestroyed()
-            }
-        })
+        // No surface wait: the view attaches its renderer when its own surface appears, and the
+        // engine plays with or without a picture.
+        if (smoke) controller.runSmoke(playerView) else controller.openNormally(playerView)
     }
 
     override fun onPause() {

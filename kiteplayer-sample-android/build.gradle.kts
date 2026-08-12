@@ -1,10 +1,10 @@
 import io.github.yuroyami.kiteplayer.buildtools.PrepareAndroidSampleMediaTask
 
 /*
- * The provisional Android assembly proof (S1.c.6, register item S1C-06): one plain application
- * whose whole job is to prove Gradle variant resolution, transitive JNI packaging, R8, the
- * Activity/Surface lifecycle, audio, seek and teardown in one ordinary app. S1.d creates
- * :kiteplayer-phone and re-consumes this app through one coordinate; nothing here is reusable.
+ * The Android assembly proof (S1.c.6, re-consumed by S1.d.4): one plain application whose whole
+ * job is to prove Gradle variant resolution, transitive JNI packaging, R8, the view lifecycle,
+ * audio, seek and teardown in one ordinary app. Since S1.d it consumes exactly ONE coordinate,
+ * :kiteplayer-phone, and presents through the reusable KitePlayerView.
  *
  * Release is deliberately debug-signed and debuggable: the smoke oracle reads the app's private
  * files through run-as, which needs both, and R8 still runs, which is the half that matters.
@@ -50,9 +50,12 @@ android {
 }
 
 dependencies {
-    implementation(project(":kiteplayer-core"))
-    implementation(project(":kiteplayer-ffmpeg"))
-    implementation(project(":kiteplayer-output"))
+    // The whole point of the aggregate: one line, and the playable stack arrives api-transitively.
+    implementation(project(":kiteplayer-phone"))
+    // Dispatchers.Main's factory. The view's members are main-thread only, and the controller
+    // hops threads the way any ordinary app does. Found by the S1.d.4 smoke: without this the
+    // hop throws before open() and the oracle reports Idle.
+    implementation(libs.kotlinx.coroutines.android)
 }
 
 /* The bundled clip: copied from the conformance media, never committed (about 20 MB), never

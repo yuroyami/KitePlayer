@@ -7541,6 +7541,34 @@ is no other.
   is transparent by design because true Compose content composites like Compose content.
   17 host tests green, all three targets compile, the iOS test binary links, ABI dumps updated,
   Tier 1 green. Per-frame cost remains UNMEASURED until S2's exit, and the KDoc says so.
+- 2026-08-12, S1.d.4 completed and S1.d EXITS: the Android sample re-consumed through the phone
+  coordinate. The app now holds ONE project dependency, builds its player from phoneBackends()
+  and shows it in KitePlayerView; the Activity's SurfaceHolder callback, hand-built renderer and
+  Surface import are deleted, which is the shape an ordinary consumer actually has. TWO real
+  defects were found and fixed by the re-run smokes, both in the SAMPLE, neither in the views:
+  (1) the controller's main-thread hop needs kotlinx-coroutines-android (Dispatchers.Main has no
+  factory without it; the first smoke pair reported Idle with nothing decoded), a dependency
+  every ordinary app carries and the sample now does; (2) the S1.c.6 smoke read
+  progress.value.position, an interval-republished sample that is stale for up to one interval
+  after a seek, and had passed on timing luck; it now reads position(), the immediate read the
+  iOS smoke always used. THE MEASURED EXIT on Pixelu16KB (16384): debug decoded 153, presented
+  38 through the view's cumulative counters, seek landed in 5000..5034 with a later
+  presentation, Ended, HardwareWithDownload(MediaCodec), causal teardown, zero underruns;
+  R8-minified release decoded 149, presented 41, same truths, zero underruns; both JSON oracles
+  pass the plan's exact eleven-key jq predicate. The evolved sample scan (KitePlayerView is now
+  sanctioned; Compose, AndroidView, OpenGL/GLES/Vulkan, AndroidSurfaceVideoRenderer and
+  android.view.Surface are banned) is clean, and one planted control per scan family (an
+  android.media wildcard import, an AndroidSurfaceVideoRenderer import, a raw ffmpeg call)
+  failed its scan before reversion; one process lesson recorded: reverting controls with git
+  checkout also reverted the phase's own uncommitted rewrite once, caught immediately by the
+  post-revert diff and redone. Both APKs still carry exactly two Stored 16 KiB-aligned JNI
+  libraries. README: Android support row re-anchored on the phone coordinate, the Modules table
+  updated with the two new modules' honest evidence lines (the iOS view and the whole Compose
+  module compile, link and are host-tested, with nothing measured consuming them yet). Tier 1
+  green both repos. S1.d EXITS: the aggregate exists, both platform views exist, both D-6
+  Compose paths exist in :kiteplayer-compose, and the one consumer that measures any of it does
+  so through the phone coordinate. S1.e remains: the iOS host re-consumption, the 17.5 matrix
+  on both platforms, and the owner's physical devices.
 
 ---
 

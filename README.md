@@ -68,7 +68,7 @@ Today, honestly:
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
 | iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media, lands a precise seek, reaches Ended through RemoteIO and a caller-owned layer, and completes causally awaited teardown. Real-media cancellation and the broader matrix are absent, so this is explicitly below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
-| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application assembles the FFmpeg backend, AudioTrack audio and the Surface renderer, opens real media, plays with hardware H.264 through FFmpeg's own decoder, lands a precise seek, reaches Ended and tears down causally, in both debug and R8-minified release, on one named emulator. The output paths carry provisional stage evidence below T3-Full: subtitles and the full lifecycle and format qualification that tier demands do not exist yet, and nothing ran on a physical Android device. x86_64 is compile, link and package qualified only. |
+| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application depends on the one `:kiteplayer-phone` coordinate, builds its player from `phoneBackends()` and shows it in the reusable `KitePlayerView`, opens real media, plays with hardware H.264 through FFmpeg's own decoder, lands a precise seek, reaches Ended and tears down causally, in both debug and R8-minified release, on one named emulator. The output paths carry provisional stage evidence below T3-Full: subtitles and the full lifecycle and format qualification that tier demands do not exist yet, and nothing ran on a physical Android device. x86_64 is compile, link and package qualified only. |
 | JVM (desktop) | T1, decode-proven | The FFmpeg backend's JVM arm decodes real media in tests over a test-only local JNI library. No desktop audio or video output path exists yet. |
 | iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
@@ -367,10 +367,13 @@ public interface MonotonicClock {
 |---|---|---|
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; DefaultOutput is exercised on macOS and RemoteIO by an app-hosted native test on one named iOS simulator |
-| `kiteplayer-output` | the Apple audio sink and policy, the macOS AppKit window and Core Graphics renderer, and the iOS caller-owned layer renderer | macOS arm64, iOS arm64 and iOS simulator arm64; the private simulator sample consumes the iOS path |
-| `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64 and iOS simulator arm64; the iOS variants consume private local codec trees |
+| `kiteplayer-output` | the audio sinks and renderers that talk to an operating system: Apple audio and layers, the macOS AppKit window, Android AudioTrack and the Surface renderer | macOS arm64, iOS arm64, iOS simulator arm64 and Android; the private simulator sample consumes the iOS path and the Android sample the Android one |
+| `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64, iOS simulator arm64, JVM and Android; the iOS variants consume private local codec trees |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
+| `kiteplayer-phone` | the phone aggregate: one coordinate carrying the playable stack, `KitePlayerView` for Android, `KitePlayerUIView` for iOS, and `phoneBackends()` | Android, iOS arm64 and iOS simulator arm64; the Android view is exercised by the Android sample's measured smoke, the iOS view compiles and links but nothing measured consumes it yet |
+| `kiteplayer-compose` | the optional Compose Multiplatform surface: `KitePlayerSurface`, wrapping the platform view, and `KiteVideo`, the Compose-true renderer whose frames draw through Compose itself | Android, iOS arm64 and iOS simulator arm64; compiles and links on all three, host-tested off device, and no measured app consumes it yet; `KiteVideo`'s per-frame cost is unmeasured until the plan's S2 exit |
 | `kiteplayer-sample` | a CLI on macOS plus a private UIKit host with Play, Pause, Seek 5s and a bounded smoke oracle | macOS arm64, iOS arm64 and iOS simulator arm64; the device app is link-only |
+| `kiteplayer-sample-android` | the plain Android app: one `KitePlayerView`, three buttons and the smoke oracle, on the one `kiteplayer-phone` dependency | Android arm64-v8a and x86_64; debug and R8 release measured on one named emulator |
 
 The dependency arrow never points into `kiteplayer-core`. The core declares interfaces and the backends
 implement them, which is what allows a completely different backend, for example WebCodecs in a
@@ -378,7 +381,7 @@ browser, without the engine noticing.
 
 Every library module tracks its own public API in a checked-in dump under `api/`. `updateKotlinAbi`
 rewrites the dumps, `checkKotlinAbi` fails the build when the code and the dumps disagree, and the
-sample has neither because an executable has no public API to keep.
+samples have none because an application has no public API to keep.
 
 ## Build and test it here
 

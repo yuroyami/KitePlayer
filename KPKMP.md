@@ -7244,6 +7244,47 @@ is no other.
   gates. The final logged-byte Tier 1 seal follows before exact subject
   `Use AGP built-in Kotlin in the Android consumer`; this entry does not preclaim that seal.
 
+- 2026-08-12, S1.c.2 Android scratch-consumer JNI-byte preservation correction. Exact starting
+  heads were KitePlayer `7e7287fb8f5aa598d11fe8ad97d88a3b94791b94` and KiteCodec
+  `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`. Player was clean; Codec's preserved S1.c.2 draft
+  remained exactly 52 unstaged modified plus 13 untracked paths with an empty index. Tier 1 was
+  selected because this correction changes KPKMP only. The immutable window-2b Maven-local
+  publication was not repeated.
+
+  After the built-in-Kotlin correction, the Android scratch build executed 69/69 tasks and both
+  debug and R8 release installed on `emulator-5554`, cold-started, decoded the private H.264 fixture
+  and wrote exact `PASS`. Each APK carried exactly the two named ABI libraries as Stored entries,
+  passed `zipalign -c -P 16 -v 4`, and release produced a nonempty 455604-byte R8 mapping. The
+  subsequent required byte-identity assertion then exposed one BLOCKING scratch packaging-recipe
+  gap: AGP had stripped both JNI inputs because the recipe configured nonlegacy packaging but did
+  not configure its debug-symbol preservation set. The AAR arm64 input was 8387816 bytes at
+  `41cada5fd6f1be3f13c30babcc5353272bc16fba569fd233b3c64dddccb986ea`, while both APK variants
+  carried 7732696 bytes at `0733891ad62d9e34f30c51da521a27e2ddf5998ddf8394f8822e811a5b8ad015`;
+  the x86_64 AAR input was 9254000 bytes at
+  `bd455b56267c0808e79a5e9df7891aa9ff8532f3ea4887282011c68c8000b79b`, while both variants
+  carried 8766120 bytes at `b6b230605a59a7b97186b7065cd18213efb366eeaa083b7412427c01538fda39`.
+  This was deterministic AGP stripping, not an AAR, runtime,
+  JNI, R8 or publication failure.
+
+  Cached AGP 9.2.1 source identifies the exact nondeprecated control:
+  `packaging.jniLibs.keepDebugSymbols` is a glob set, and a match copies the merged native input
+  unchanged instead of invoking `llvm-strip --strip-unneeded`. The conservative correction adds
+  only the name-specific `"**/libkitecodec_jni.so"` pattern beside `useLegacyPackaging = false`.
+  It preserves exactly the two already-required libraries and makes the existing AAR-to-APK SHA
+  assertion load-bearing; it does not broadly preserve unrelated native files or relax any gate.
+  Exact-two paths, Stored entries, 16 KiB ZIP alignment, both runtime oracles, R8, per-ABI SHA
+  equality and packaged ELF audits all remain mandatory.
+
+  This changes no Codec product byte, API, coordinate, publication, dependency, device oracle,
+  phase order, support claim or product commit first line. Execution resumes after this correction
+  commit by rebuilding the same seven-file consumer against the existing one-time publication; it
+  must not republish. Before this entry the plan-only correction was exactly KPKMP +4/-1, file
+  SHA-256 `fc34f436d60ccd42600e87e02cf44aff170a9665796ba3628bc08d699b73a15b` and binary-diff SHA-256
+  `cff51983457a9cc3b9894cef8bcb2407424b09242cbde7c0b6948b63bdec2500`. The final logged-byte Tier
+  1 seal follows before exact subject `Preserve JNI bytes in the Android consumer`; this entry does
+  not preclaim that seal. No repo product edit, stage, second publication, push, public release or
+  additional device action occurred in this plan correction.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -12511,7 +12552,10 @@ Steps.
     release is minified with the default optimized rules, uses the otherwise empty
     `proguard-rules.pro`, and is debuggable and signed by the debug signing configuration solely
     for this local `run-as` proof. Both use
-    `packaging.jniLibs.useLegacyPackaging = false`, and the scratch manifest preserves
+    `packaging.jniLibs.useLegacyPackaging = false` and the name-specific
+    `packaging.jniLibs.keepDebugSymbols += "**/libkitecodec_jni.so"`. The latter makes AGP copy
+    the two already-audited JNI inputs byte for byte rather than strip them before the existing
+    AAR-to-APK identity assertion. The scratch manifest preserves
     `android:extractNativeLibs="false"`. It applies only the Android application plugin,
     uses no app keep rule and has exactly one library dependency:
 

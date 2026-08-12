@@ -7728,6 +7728,17 @@ is no other.
   judge: 128.3 ms average software cost per published 1080p frame on the emulated CPU is the
   number any zero-copy or YUV path must argue against. The Android-only road the owner asked
   for is done; everything else remaining needs Apple, desktop or cross-platform work.
+- 2026-08-12, S4 expanded (17.4.7) at the owner's direction ("Do all of S4"), executed BEFORE
+  S2/S3 under the stage law. One cross-stage consequence recorded as an owner decision: the
+  KD half of KiteCodec window 3 (the two C funnels, KD-4/KD-5) pulls forward as its own window
+  with the full ritual and VERSION 0.0.3; the VideoToolbox half stays in S2. Order: KD Kotlin
+  slices, the funnels window, the subtitle TEXT path end to end, the debuggability register
+  with KD-7, facade completion in its local scope (network-adjacent items stay parked with
+  17.8; editions/programs typed-rejected where nothing is exposed), then the ASS/bitmap half
+  as the one sub-phase carrying its own entry expansion (vendored libass plus an AVSubtitle C
+  window are named there so neither is ever an improvisation), then exit. Estimates 95 to 139
+  hours across seven sub-phases, each with its own commit so any interruption leaves a
+  continuable tree.
 
 ---
 
@@ -14266,6 +14277,196 @@ Commit first line. KitePlayer: `Measure KiteVideo on the Android emulator`.
 both trees are clean, and the S3 register can point at real KV-4 numbers instead of assumptions.
 Estimates: A1 2 to 3 hours, A2 2 to 4, A3 3 to 5: 7 to 12 focused hours, moved out of S3's
 KiteVideo slice (S3 reads 70 to 108 after the move; road total unchanged).
+
+### 17.4.7 The S4 register and sub-phases, decision complete
+
+Authored 2026-08-12 by the planner against clean KitePlayer `deaf4ce` and KiteCodec `52a3e5d`,
+at the owner's direction: "Do all of S4", executed BEFORE S2 and S3. The stage law permits it
+(stages are outcome-named; prerequisites live inside the stage needing them), and the one
+cross-stage consequence is recorded as an owner decision: KD-4 and KD-5's C funnels were homed
+in KiteCodec window 3 (S2); running S4 first pulls that window's KD half forward as its own
+KiteCodec window, full S1.a.7-style ritual, VERSION 0.0.3 beside the untouched 0.0.2. The
+VideoToolbox half of window 3 stays in S2, untouched.
+
+S4's whole scope, from the 17.2 register: subtitles per old B3, the debuggability register,
+facade completion from old B11, and KD (17.10). The honest size note stands: this is the
+largest remaining stage (90 to 125 hours), and its sub-phases land in engineering order, each
+with its own commit and log entry, so an interruption always leaves a clean, continuable tree.
+
+**Owner-fixed points (no executor judgment):**
+
+- The renderers that exist are the compositing targets: the Apple layers, the Android Surface
+  renderer, and KiteVideo. No Metal work enters S4 (that is S2); overlays composite on the
+  software paths and their contracts must survive S2 unchanged.
+- Subtitle text rasterisation uses each platform's own text engine behind ONE seam (Android
+  Canvas/StaticLayout, Apple CoreText through CGBitmapContext), because shipping a font
+  rasteriser is libass's job (S4.f), not the text path's.
+- The subtitle model stays in `kiteplayer-subtitles` (pure Kotlin: parsers, cue selection,
+  layout arithmetic); platform raster lives in `kiteplayer-output`; the engine learns cue
+  TIMING only. The dependency arrow still never points into the core.
+- SRT-plus-WebVTT alone is never called subtitle support (old B3's law). The stage exit
+  labels the text path exactly that: the TEXT path, with ASS/bitmap state stated beside it.
+- B11's network-adjacent items stay parked with 17.8 (external URL tracks over the network).
+  External tracks land for LOCAL files. Editions and programs land as typed API over what the
+  container reader exposes; where KiteCodec exposes nothing, the API is typed-rejected per the
+  truth-ledger rule, never silently empty.
+
+Execution order: S4.a KD Kotlin, S4.b the C funnels window, S4.c subtitles text path, S4.d
+debuggability, S4.e facade completion, S4.f the ASS/bitmap half, S4.g exit.
+
+#### S4.a The KD Kotlin slices (KD-1, KD-2, KD-3, KD-6, KD-8)
+
+Files, KiteCodec: new `kitecodec-core/src/commonMain/kotlin/io/github/yuroyami/kitecodec/dsl/`
+(`FilterDsl.kt`, `FilterEscaping.kt`, `DecoderOptions.kt`, `EncoderTuning.kt`); the openDecoder
+path gains one typed options parameter threaded to the EXISTING `ffkmp_codecctx_set_opt` funnel
+between context creation and open (one Kotlin injection point per platform actual, no new C);
+new `kitecodec-core/src/commonTest/.../KdGoldensTest.kt` (KD-8); api dumps; README row.
+Files, KitePlayer: new `kiteplayer-core/src/commonMain/.../PlaybackProfile.kt` (KD-6) compiling
+into PlayerConfig plus decoder options; the ffmpeg backend threads profile decoder options into
+its openDecoder calls; api dumps; log.
+
+Steps.
+1. KD-1 exactly as 17.10 registers it: typed builders (video scale, crop, pad,
+   transpose/rotate, fps, format, eq, yadif/bwdif, drawbox; audio volume, atempo, aresample,
+   pan, aformat, loudnorm; raw), one centralised escaping function, compiles to the existing
+   buildVideo/buildAudio strings. Law 4: the compiled description is a value a caller can
+   print.
+2. KD-2: `DecoderOptions(skipLoopFilter, skipFrame, errDetect, threadType, options)` applied
+   through the existing funnel; a wrong key must reproduce the measured EINVAL path.
+3. KD-3: typed encoder knobs (crf, preset, profile, tune, rate control, gop) compiling INTO
+   the existing options maps; contradictory combinations refuse typed (CRF plus CBR).
+4. KD-6: `PlaybackProfile.Scrubbing/LowLatency/Battery` as data, compiled configuration
+   golden-tested; the player's backend threads the profile's decoder options.
+5. KD-8: every golden in one host suite per repo, exact strings pinned including escaping and
+   the 2048-byte bound refusal.
+6. Publish KiteCodec 0.0.3 locally (phone superset, same one-publication rule as window 2b);
+   Player consumes 0.0.3.
+
+Gate. Both repos' host suites, KiteCodec four-variant C suites untouched (no C), api dump
+rituals, Tier 1 both repos, one end-to-end real-media filter run reusing the existing
+FilterGraph tests.
+Commit first lines. KiteCodec: `Compile typed FFmpeg control onto the existing funnels`.
+KitePlayer: `Give the player its playback profiles`.
+
+#### S4.b The two C funnels, a KiteCodec window (KD-4, KD-5)
+
+Files, KiteCodec: `native/kitecodec-c/include/kitecodec_helpers.h` and `src/helpers_format.c`
+(`ffkmp_fmt_open_input2(out, path, keys, values, n)` applying pairs between alloc and open;
+`ffkmp_fmt_chapter_count(fmt)`, `ffkmp_fmt_chapter_get(fmt, i, out_id, out_start_us,
+out_end_us)` plus dict reuse for chapter metadata); guard suite NULL arms; signature and export
+baselines plus the audit count assertions; KITECODEC_C_ABI_MINOR bump; the JNI rows for the new
+funnels in methods.def plus kj_format.c; Kotlin commonMain `Chapter`, `MediaInfo`, and
+`MediaSource.open(path, openOptions)`; klib metadata re-baseline; api dumps.
+Files, KitePlayer: 17.5 gains a chaptered fixture (`chapters.mkv`, exact bounds asserted in the
+matrix); `KiteCodecSource.chapters` stops being the documented empty list and maps the real
+table; log.
+
+Steps. The full S1.a.7-style ritual, no shortcuts: prototypes and NULL-arm tests first, the
+four C suite variants (plain, asan, tsan, interpose), baselines moved by ritual with counts
+updated at every site, JNI rows following kj_abi.c's canonical pattern, one local 0.0.3a
+publication is NOT made (0.0.3 from S4.a is re-published complete with the funnels; exactly one
+new coordinate this stage), the Apple scratch consumer and the Android consumer must still
+link, and the chaptered fixture must round-trip exact chapter bounds on the host matrix run.
+Gate. KiteCodec Tier 2 equivalents plus both consumers; KitePlayer matrix row on the host;
+Tier 1 both repos.
+Commit first lines. KiteCodec: `Open with options and read the chapter table`.
+KitePlayer: `Read chapters through the source`.
+
+#### S4.c Subtitles, the text path, end to end
+
+Files, KitePlayer: `kiteplayer-subtitles` gains `WebVttParser.kt`, `CueSelector.kt` (active-set
+by time, overlap policy, seek reconstruction = selector is a pure function of (cues, time)),
+`CueLayout.kt` (line breaking arithmetic against a measured-width callback, bottom-up regions,
+user style precedence: accessibility wins, then user override, then authored, then defaults);
+`kiteplayer-core` learns subtitle TIMING: the session loop reads the selected subtitle stream's
+packets, drives a `SubtitleDecoder` (the SPI exists unused today), holds the active cue set,
+publishes `SubtitleOverlay` to the attached renderer on cue-set changes and viewport changes
+(never per frame; cues change about once a second, 9's measured law); `TrackKind.Subtitle`
+auto-selection honours forced and accessibility dispositions; `kiteplayer-ffmpeg` implements
+`SubtitleDecoderFactory` for srt/subrip and webvtt PACKETS (text payloads through the existing
+packet path, parsed by the subtitles module: no new C); `kiteplayer-output` gains the ONE text
+raster seam (`SubtitleRasterizer`: Android StaticLayout into a Bitmap's pixels, Apple CoreText
+into a CGBitmapContext) producing `RgbaBitmap`s for `OverlayImage`; the three renderers'
+`setOverlay` become real compositors (draw overlay images after the picture, skip re-upload on
+unchanged contentHash); KiteVideo draws the overlay in the same drawBehind after the frame.
+Matrix: `subbed.mkv` grows a WebVTT sibling and the matrix asserts a cue is DECODED (not
+drawn) on every platform; drawn proof is the device tests below.
+
+Steps in that order, each with host tests (parser goldens incl. BOM/CRLF/overlap/malformed,
+selector properties incl. seek reconstruction, layout arithmetic against a scripted measurer,
+renderer compositing through the existing canvas seams) plus one Android device test asserting
+non-black overlay pixels above the picture and one simulator assertion of layer contents, and
+the engine's virtual-clock tests for cue timing (cue appears and disappears at its bounds,
+seeks rebuild the active set exactly).
+Gate. Tier 2 plus the two device/simulator proofs; Tier 1 both repos.
+Commit first lines, one per landing: `Parse WebVTT and select cues by time`,
+`Time subtitle cues in the engine loop`, `Decode subtitle packets in the FFmpeg backend`,
+`Rasterise and composite subtitle overlays`.
+
+#### S4.d The debuggability register (with KD-7)
+
+Files, KitePlayer: new `kiteplayer-core/src/commonMain/.../Diagnostics.kt`
+(`KitePlayer.diagnosticsDump(): String`: config as resolved, backends by name, tracks and
+selections, the state/stats/progress snapshot, warning history, and every compiled KD artifact
+attached to the session: filter strings as sent, option pairs as applied with their per-key
+answer, the active profile = KD-7); a bounded warning HISTORY on the facade (the existing
+warning flow gains a replayed, capped log the dump prints); the logging policy stated in code
+(one `KiteLog` seam, silent by default, pluggable sink, never printing on its own: the policy
+is a documented contract, not a framework); the typed warning audit (every `PlaybackWarning`
+emission site enumerated in one table test that fails when a new warning ships undocumented);
+`docs/spi-cookbook.md` with a WORKED custom backend: a complete, compiling test-fixture backend
+(the scripted container the core tests already use, promoted to a documented example).
+Gate. Host tests (dump golden with a scripted session, warning audit table), Tier 1.
+Commit first line: `Let the player explain itself`.
+
+#### S4.e Facade completion (old B11, the local scope)
+
+Files, KitePlayer core plus backend. The decided list, each typed-implemented or
+typed-rejected, never silent: playlist/queue with `LoopMode.All` unlocked; chapters surfaced on
+the facade from S4.b's `MediaInfo` (`chapters`, `chapterAt(position)`, seek-to-chapter); frame
+stepping (`stepFrame()` while paused, precise-seek plus one-frame decode, video-only media
+included); typed filter attachment on open (KD-1 constructs compiled and handed to the
+backend's existing graph path; runtime hot-swap stays a documented non-goal); external LOCAL
+subtitle files (`MediaItem.externalSubtitles`, parsed by the subtitles module, timed by the
+same engine path); screenshots (`captureFrame(): SoftwareReadableFrame` from the newest
+presented frame, the documented use of that interface); support bundle
+(`supportBundle(): String` = diagnosticsDump plus platform and version block, redaction rule:
+paths trimmed to basenames); the option escape hatch with unused-option REPORTING (openOptions
+echoed per key: applied, rejected, unused); editions/programs typed-REJECTED with the ledger
+sentence naming what the container reader does not expose; the API truth ledger swept: every
+public member implemented, typed-rejected, or deleted, one table in the log entry.
+Gate. Host suites for each feature (virtual-clock playlist transitions, step determinism,
+screenshot pixel assertions through the fake seams), one real-media run each for stepping and
+screenshots on the host, Tier 1.
+Commit first lines, one per landing: `Play a queue and loop it`, `Step frames and capture
+pictures`, `Surface chapters and external subtitles`, `Finish the facade truthfully`.
+
+#### S4.f The ASS and bitmap half of old B3
+
+The honest register, decided now, expanded at ITS entry (the one sub-phase big enough to carry
+its own expansion, exactly as stages do): vendored libass builds per platform behind the
+KiteCodec build machinery's pattern (new third-party provisioning, macOS first, then iOS and
+Android); a `kiteplayer-subtitles-libass` module implementing the same renderer-overlay
+contract; FFmpeg bitmap subtitle decode (PGS, VobSub, DVB) which REQUIRES a new C surface for
+AVSubtitle (a KiteCodec window with the full ritual; register change per 17.10 law 3, named
+here so it is never an improvisation); the reference corpus (scripts, bidi, karaoke, overlaps,
+palettes, seeks) matched against pinned libass output; HDR-aware composition deferred to S2's
+colour work by construction (composition happens before tone mapping today and the exit says
+so). S4.f EXECUTES AFTER S4.a-e and may close as PARTIAL with its state recorded: old B3's
+exit is the corpus match, and the stage exit reports exactly how far that got.
+Commit first lines at its entry expansion.
+
+#### S4.g Stage exit
+
+Every measured number in the log; the matrix re-run where fixtures grew (host at minimum,
+phones for the subtitle decode row); README: subtitles described as exactly what they are
+(text path end to end; ASS/bitmap state as measured), the debuggability and facade truths, the
+KD surface documented; the API dumps clean; both trees clean; nothing pushed.
+Commit first line: `Close the stage that explains itself`.
+
+Estimates. S4.a 10 to 15, S4.b 5 to 8, S4.c 25 to 35, S4.d 8 to 12, S4.e 20 to 30, S4.f 25 to
+35, S4.g 2 to 4: 95 to 139 focused hours, consistent with the 17.3 row (90 to 125) within its
+own error bars; the table is not re-litigated mid-stage.
 
 ### 17.5 The format conformance matrix
 

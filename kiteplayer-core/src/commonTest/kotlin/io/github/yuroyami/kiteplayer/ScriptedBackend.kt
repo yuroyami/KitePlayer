@@ -16,6 +16,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
+import io.github.yuroyami.kiteplayer.spi.SubtitleDecoder
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
@@ -83,9 +84,14 @@ internal class MediaScript(
      * because that deadlock has to be provably answered.
      */
     val badlyInterleaved: Boolean = false,
+    /** Scripted subtitle cues. Non-empty adds a subtitle stream whose packets carry them. */
+    val subtitleCues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> = emptyList(),
+    val subtitleLanguage: String = "eng",
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
+    val hasSubtitles: Boolean get() = subtitleCues.isNotEmpty()
+    val subtitleIndex: Int = (if (hasVideo) 1 else 0) + (if (hasAudio) 1 else 0)
     val audioBufferDurationUs: Long = audioBufferFrames.toLong() * 1_000_000L / sampleRate
 
     fun format(): AudioFormat = AudioFormat(
@@ -176,6 +182,46 @@ internal class ScriptTrace {
 
 }
 
+/**
+ * The scripted subtitle decoder: a packet's pts names the cue it carries, and receive hands the
+ * cue over exactly once per delivery. Flush drops undelivered cues, the way a real decoder's
+ * epoch boundary does.
+ */
+internal class ScriptedSubtitleDecoderFactory(
+    private val script: MediaScript,
+) : SubtitleDecoderFactory {
+    override val name: String = "scripted-subtitle"
+    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder = ScriptedSubtitleDecoder(script)
+}
+
+internal class ScriptedSubtitleDecoder(private val script: MediaScript) : SubtitleDecoder {
+    private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
+    var closed: Boolean = false
+        private set
+
+    override suspend fun send(packet: PlayerPacket?): Boolean {
+        if (packet == null) return true
+        val pts = packet.pts?.micros ?: return true
+        script.subtitleCues.filterTo(pending) { it.startMicros == pts }
+        return true
+    }
+
+    override suspend fun receive(): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> {
+        if (pending.isEmpty()) return emptyList()
+        val out = pending.toList()
+        pending.clear()
+        return out
+    }
+
+    override suspend fun flush(newGeneration: Generation) {
+        pending.clear()
+    }
+
+    override fun close() {
+        closed = true
+    }
+}
+
 /** The scripted backend. One session per [open]. */
 internal class ScriptedBackend(
     private val script: MediaScript = MediaScript(),
@@ -225,7 +271,8 @@ internal class ScriptedSession(
     override val audioDecoders: List<AudioDecoderFactory> =
         listOf(ScriptedAudioDecoderFactory(script, ledger, faults, trace))
 
-    override val subtitleDecoders: List<SubtitleDecoderFactory> = emptyList()
+    override val subtitleDecoders: List<SubtitleDecoderFactory> =
+        if (script.hasSubtitles) listOf(ScriptedSubtitleDecoderFactory(script)) else emptyList()
 
     var closeCount: Int = 0
         private set
@@ -263,6 +310,16 @@ internal class ScriptedSource(
                     videoSize = VideoSize(1920, 1080),
                     frameRate = 1_000_000.0 / script.videoFrameDurationUs,
                     isCoverArt = script.videoIsCoverArt,
+                ),
+            )
+        }
+        if (script.hasSubtitles) {
+            add(
+                PlayerStreamInfo(
+                    index = script.subtitleIndex,
+                    kind = TrackKind.Subtitle,
+                    codec = "scripted-subtitle",
+                    language = script.subtitleLanguage,
                 ),
             )
         }
@@ -310,11 +367,33 @@ internal class ScriptedSource(
         selectCalls++
     }
 
+    /** The next scripted cue to emit as a packet. Reset by seeks to redeliver from the landing. */
+    private var subtitleCursor: Int = 0
+
     override suspend fun readPacket(): PlayerPacket? {
         check(selectCalls > 0) { "selectStreams must be called before readPacket" }
         reads++
         if (faults.failRead(reads)) error("the scripted source failed on read $reads")
         if (script.readDelayUs > 0) delay(script.readDelayUs / 1_000)
+
+        // Subtitle packets interleave by start time, ahead of the picture like a real muxer.
+        if (script.hasSubtitles && script.subtitleIndex in selected && subtitleCursor < script.subtitleCues.size) {
+            val cue = script.subtitleCues[subtitleCursor]
+            val mediaCursor = minOf(
+                if (script.hasVideo) videoCursorUs else Long.MAX_VALUE,
+                if (script.hasAudio) audioCursorUs else Long.MAX_VALUE,
+            )
+            if (cue.startMicros <= mediaCursor) {
+                subtitleCursor++
+                return FakePacket(
+                    streamIndex = script.subtitleIndex,
+                    pts = Pts(cue.startMicros),
+                    duration = Pts(cue.endMicros - cue.startMicros),
+                    isKeyframe = true,
+                    ledger = ledger,
+                )
+            }
+        }
 
         val video = script.videoIndex.takeIf {
             script.hasVideo && it in selected && videoCursorUs < script.durationUs
@@ -362,6 +441,8 @@ internal class ScriptedSource(
         trace.record("source.seek")
         val aimed = (target.micros + script.seekOvershootUs).coerceIn(0L, script.durationUs)
         val landing = aimed / script.keyframeIntervalUs * script.keyframeIntervalUs
+        subtitleCursor = script.subtitleCues.indexOfFirst { it.startMicros >= landing }
+            .takeIf { it >= 0 } ?: script.subtitleCues.size
         videoCursorUs = landing
         audioCursorUs = landing
         // Like libavformat, this cursor does not report where it landed. The engine finds out from the
@@ -780,4 +861,21 @@ internal class ScriptedOutput(
         override val name: String = "scripted"
         override suspend fun create(): AudioSink = sink
     }
+
+    /** One 1x1 image per cue: enough to prove the raster call and count what was drawn. */
+    override val subtitleRasterizer: io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer =
+        object : io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer {
+            override fun rasterize(
+                cues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+                viewportWidth: Int,
+                viewportHeight: Int,
+                fontScale: Float,
+            ): List<io.github.yuroyami.kiteplayer.spi.OverlayImage> = cues.map { cue ->
+                io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                    x = 0,
+                    y = viewportHeight - 1,
+                    bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(1, 1, ByteArray(4)),
+                )
+            }
+        }
 }

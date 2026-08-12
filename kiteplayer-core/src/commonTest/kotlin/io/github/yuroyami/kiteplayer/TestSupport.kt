@@ -142,7 +142,12 @@ internal class RecordingRenderer(
 
     override fun setViewport(width: Int, height: Int, scale: Float) = Unit
 
-    override suspend fun setOverlay(overlay: SubtitleOverlay?) = Unit
+    /** Every overlay handed over, in order, nulls included. */
+    val overlays: MutableList<SubtitleOverlay?> = mutableListOf()
+
+    override suspend fun setOverlay(overlay: SubtitleOverlay?) {
+        overlays += overlay
+    }
 
     override val events: Flow<RendererEvent> = emptyFlow()
 

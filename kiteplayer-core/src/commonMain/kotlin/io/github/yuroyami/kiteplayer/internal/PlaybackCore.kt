@@ -41,6 +41,8 @@ import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
+import io.github.yuroyami.kiteplayer.subtitle.CueSelector
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CancellationException
@@ -660,8 +662,9 @@ internal class PlaybackCore(
                     "this source is not seekable, so a track switch cannot reopen it and seek back to " +
                         "where playback was; see KPKMP.md digest 8.3",
                 )
-                command.kind == TrackKind.Subtitle -> UnsupportedOperationException(
-                    "no subtitle decoder exists in this build, so a subtitle track cannot be selected",
+                command.kind == TrackKind.Subtitle &&
+                    session?.backendSession?.subtitleDecoders.isNullOrEmpty() -> UnsupportedOperationException(
+                    "this backend decodes no subtitle format, so a subtitle track cannot be selected",
                 )
                 else -> null
             }
@@ -797,7 +800,7 @@ internal class PlaybackCore(
         openedAtNanos = clock.nanos()
         setStatus(PlaybackStatus.Opening)
         try {
-            val built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto)
+            val built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto, StreamChoice.Auto)
             session = built
             startWorkers(built)
             awaitInitialFill(built)
@@ -827,6 +830,7 @@ internal class PlaybackCore(
         item: MediaItem,
         videoChoice: StreamChoice,
         audioChoice: StreamChoice,
+        subtitleChoice: StreamChoice,
     ): OpenSession {
         val backendSession = withContext(dispatchers.demux) { backend.open(item) }
         try {
@@ -846,9 +850,15 @@ internal class PlaybackCore(
                 is StreamChoice.At -> source.streams.firstOrNull { it.index == audioChoice.index }
                 StreamChoice.Auto -> pickAudio(source.streams)
             }
+            val subtitleCandidate = when (subtitleChoice) {
+                StreamChoice.None -> null
+                is StreamChoice.At -> source.streams.firstOrNull { it.index == subtitleChoice.index }
+                StreamChoice.Auto -> pickSubtitle(source.streams, audioCandidate)
+            }
 
             var videoStream = videoCandidate
             var audioStream = audioCandidate
+            var subtitleStream = subtitleCandidate
             val videoDecoder = videoStream?.let { createVideoDecoder(backendSession, it) }
             if (videoStream != null && videoDecoder == null) {
                 warn(
@@ -868,6 +878,18 @@ internal class PlaybackCore(
                     ),
                 )
                 audioStream = null
+            }
+            val subtitleDecoder = subtitleStream?.let { stream ->
+                backendSession.subtitleDecoders.firstNotNullOfOrNull { factory -> factory.create(stream) }
+            }
+            if (subtitleStream != null && subtitleDecoder == null) {
+                warn(
+                    PlaybackWarning.TrackDeselected(
+                        TrackId(subtitleStream.index),
+                        "no decoder accepted this subtitle stream",
+                    ),
+                )
+                subtitleStream = null
             }
             if (videoStream == null && audioStream == null) {
                 throw PlaybackException(
@@ -905,7 +927,9 @@ internal class PlaybackCore(
 
             try {
                 withContext(dispatchers.demux) {
-                    source.selectStreams(setOfNotNull(videoStream?.index, audioStream?.index))
+                    source.selectStreams(
+                        setOfNotNull(videoStream?.index, audioStream?.index, subtitleStream?.index),
+                    )
                 }
             } catch (failure: Throwable) {
                 // Interlude item I-03. The audio path above is already live: a created sink, an
@@ -922,6 +946,7 @@ internal class PlaybackCore(
             tracks = tracks
                 .withSelection(TrackKind.Video, videoStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Audio, audioStream?.let { TrackId(it.index) })
+                .withSelection(TrackKind.Subtitle, subtitleStream?.let { TrackId(it.index) })
             videoStream?.videoSize?.let { eventSink.tryEmit(PlayerEvent.VideoSizeChanged(it)) }
 
             val softLimitUs = config.buffer.softTarget.inWholeMicroseconds
@@ -934,6 +959,9 @@ internal class PlaybackCore(
             val audioQueue = audioStream?.let {
                 PacketQueue(it.index, softLimitUs).also { queue -> queue.flushTo(requestedEpoch) }
             }
+            val subtitleQueue = subtitleStream?.let {
+                PacketQueue(it.index, softLimitUs).also { queue -> queue.flushTo(requestedEpoch) }
+            }
             return OpenSession(
                 backendSession = backendSession,
                 source = source,
@@ -943,6 +971,9 @@ internal class PlaybackCore(
                 audioDecoder = if (audioStream == null) null else audioDecoder,
                 videoQueue = videoQueue,
                 audioQueue = audioQueue,
+                subtitleStream = subtitleStream,
+                subtitleDecoder = if (subtitleStream == null) null else subtitleDecoder,
+                subtitleQueue = subtitleQueue,
                 video = videoPlayback,
                 audio = audioPlayback,
                 sink = sink,
@@ -998,6 +1029,33 @@ internal class PlaybackCore(
     }
 
     /** Language preference first, then the container's default disposition, then the first audio track. */
+    /**
+     * The automatic subtitle choice, per SubtitleConfig and the container's dispositions:
+     * an accessibility track in a preferred language wins, then any preferred-language track
+     * (default-flagged first), then, when the audio is not in a preferred language and the
+     * config allows it, a forced track. No preference means no automatic subtitles.
+     */
+    private fun pickSubtitle(
+        streams: List<PlayerStreamInfo>,
+        audio: PlayerStreamInfo?,
+    ): PlayerStreamInfo? {
+        val subtitles = streams.filter { it.kind == TrackKind.Subtitle }
+        if (subtitles.isEmpty()) return null
+        val preferred = config.subtitles.preferredLanguages.map { it.lowercase() }
+        fun matches(stream: PlayerStreamInfo) = stream.language?.lowercase() in preferred
+        if (preferred.isNotEmpty()) {
+            subtitles.firstOrNull { matches(it) && it.isAccessibility }?.let { return it }
+            subtitles.filter { matches(it) }.sortedByDescending { it.isDefault }.firstOrNull()?.let { return it }
+        }
+        if (config.subtitles.autoSelectForced) {
+            val audioPreferred = audio?.language?.lowercase() in preferred
+            if (preferred.isNotEmpty() && !audioPreferred) {
+                subtitles.firstOrNull { it.isForced && matches(it) }?.let { return it }
+            }
+        }
+        return null
+    }
+
     private fun pickAudio(streams: List<PlayerStreamInfo>): PlayerStreamInfo? {
         val audio = streams.filter { it.kind == TrackKind.Audio }
         if (audio.isEmpty()) return null
@@ -1067,10 +1125,11 @@ internal class PlaybackCore(
         // the automatic choice is what an open does rather than what a change to one track does.
         val video = choiceFor(change, TrackKind.Video, current.videoStream?.index)
         val audio = choiceFor(change, TrackKind.Audio, current.audioStream?.index)
+        val subtitle = choiceFor(change, TrackKind.Subtitle, current.subtitleStream?.index)
         try {
             teardownSession()
             requestedEpoch = requestedEpoch.next()
-            val rebuilt = buildSession(item, video, audio)
+            val rebuilt = buildSession(item, video, audio, subtitle)
             session = rebuilt
             startWorkers(rebuilt)
             if (at > Pts.Zero) {
@@ -1196,8 +1255,86 @@ internal class PlaybackCore(
         wakeIn(WORKER_POLL)
     }
 
-    /** Cue timing is Horizon B. The handler exists so the pass order does not change when it lands. */
-    private fun handleSubtitles() = Unit
+    /**
+     * Cue timing (S4.c). Three cheap steps per pass: drain decoded cues in, ask the pure
+     * selector what is visible NOW, and publish an overlay only when that answer changed.
+     *
+     * Publishing on changes, never per frame, is 17.9's measured law applied to subtitles: cues
+     * change about once a second. The raster cost therefore sits on cue edges, and the renderer
+     * skips re-uploading an unchanged overlay by contentHash.
+     */
+    private suspend fun handleSubtitles() {
+        val session = this.session ?: return
+        val decoder = session.subtitleDecoder ?: return
+        val queue = session.subtitleQueue ?: return
+
+        // Text decode is parsing; it runs inline. The send contract is the decoder SPI's: false
+        // means full and the caller must drain before retrying the SAME packet.
+        while (true) {
+            val packet = queue.poll() ?: break
+            try {
+                while (!decoder.send(packet)) {
+                    val decoded = decoder.receive()
+                    if (decoded.isEmpty()) break
+                    insertCues(session, decoded)
+                }
+            } finally {
+                packet.close()
+            }
+            while (true) {
+                val decoded = decoder.receive()
+                if (decoded.isEmpty()) break
+                insertCues(session, decoded)
+            }
+        }
+
+        val positionUs = currentPosition().micros - config.subtitles.delay.inWholeMicroseconds
+        val active = CueSelector.activeAt(session.subtitleCues, positionUs)
+        val key = active.map { it.startMicros to it.endMicros }
+        if (key != session.publishedCueKey) {
+            session.publishedCueKey = key
+            publishOverlay(session, active)
+        }
+
+        // Sleep exactly to the next cue edge instead of polling for it.
+        CueSelector.nextChangeAfter(session.subtitleCues, positionUs)?.let { nextUs ->
+            val untilNext = (nextUs - positionUs).microseconds
+            if (untilNext > Duration.ZERO) wakeIn(minOf(untilNext, WORKER_POLL))
+        }
+    }
+
+    private fun insertCues(session: OpenSession, decoded: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>) {
+        session.subtitleCues.addAll(decoded)
+        session.subtitleCues.sortBy { it.startMicros }
+    }
+
+    /**
+     * Rasterises [active] at the video's own display size and hands the overlay to the renderer.
+     * With no platform rasterizer the timing still ran; only the drawing is absent, and the
+     * OutputBackend KDoc says exactly that.
+     */
+    private suspend fun publishOverlay(
+        session: OpenSession,
+        active: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+    ) {
+        val rasterizer = output.subtitleRasterizer ?: return
+        val size = session.videoStream?.videoSize
+        val width = size?.displayWidth?.takeIf { it > 0 } ?: DEFAULT_SUBTITLE_CANVAS_WIDTH
+        val height = size?.height?.takeIf { it > 0 } ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT
+        val images = if (active.isEmpty()) {
+            emptyList()
+        } else {
+            rasterizer.rasterize(active, width, height, config.subtitles.fontScale)
+        }
+        session.renderer.setOverlay(
+            SubtitleOverlay(
+                images = images,
+                viewportWidth = width,
+                viewportHeight = height,
+                contentHash = session.publishedCueKey.hashCode().toLong(),
+            ),
+        )
+    }
 
     /**
      * End of stream, which is six conditions and not one flag.
@@ -1495,6 +1632,12 @@ internal class PlaybackCore(
     private suspend fun clearBuffers(session: OpenSession, epoch: Generation) {
         session.videoQueue?.flushTo(epoch)
         session.audioQueue?.flushTo(epoch)
+        session.subtitleQueue?.flushTo(epoch)
+        // The pure selector makes seek reconstruction trivial: clear, re-decode from the landing
+        // point, and the next pass's activeAt IS the rebuilt state, in either direction.
+        session.subtitleCues.clear()
+        session.publishedCueKey = null
+        session.subtitleDecoder?.flush(epoch)
         while (true) {
             val buffer = session.decodedAudio.tryReceive().getOrNull() ?: break
             buffer.close()
@@ -1993,12 +2136,14 @@ internal class PlaybackCore(
             if (packet == null) {
                 session.videoQueue?.signalEndOfStream(epoch)
                 session.audioQueue?.signalEndOfStream(epoch)
+                session.subtitleQueue?.signalEndOfStream(epoch)
                 ended = true
                 continue
             }
             when (packet.streamIndex) {
                 session.videoStream?.index -> session.videoQueue?.offer(packet, epoch) ?: packet.close()
                 session.audioStream?.index -> session.audioQueue?.offer(packet, epoch) ?: packet.close()
+                session.subtitleStream?.index -> session.subtitleQueue?.offer(packet, epoch) ?: packet.close()
                 else -> packet.close()
             }
         }
@@ -2370,6 +2515,9 @@ internal class PlaybackCore(
         val audioDecoder: AudioDecoder?,
         val videoQueue: PacketQueue?,
         val audioQueue: PacketQueue?,
+        val subtitleStream: PlayerStreamInfo?,
+        val subtitleDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder?,
+        val subtitleQueue: PacketQueue?,
         val video: VideoPlayback?,
         val audio: AudioPlayback?,
         val sink: AudioSink?,
@@ -2399,6 +2547,12 @@ internal class PlaybackCore(
 
         /** Said once: the condition lasts as long as the file does. */
         var warnedAboutInterleaving: Boolean = false
+
+        /** The cue store, session thread only, kept start-sorted. Cleared on every flush. */
+        val subtitleCues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> = mutableListOf()
+
+        /** What the last published overlay showed, so an unchanged set publishes nothing. */
+        var publishedCueKey: List<Pair<Long, Long>>? = null
 
         var videoStatus: StreamStatus = StreamStatus.Syncing
         var audioStatus: StreamStatus = StreamStatus.Syncing
@@ -2439,6 +2593,10 @@ internal class PlaybackCore(
 
         /** The ceiling on any wait inside a worker, which is what makes quiescence bounded. */
         val WORKER_POLL: Duration = 50.milliseconds
+
+        /** Overlay canvas for subtitles on audio-only media, where no video size exists. */
+        const val DEFAULT_SUBTITLE_CANVAS_WIDTH: Int = 1280
+        const val DEFAULT_SUBTITLE_CANVAS_HEIGHT: Int = 720
 
         /** How long the actor waits for one worker to reach a boundary. */
         val QUIESCE_DEADLINE: Duration = 2.seconds

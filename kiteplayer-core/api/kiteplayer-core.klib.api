@@ -407,6 +407,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/OutputBackend { // io.githu
         abstract fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.spi/OutputBackend.clock.<get-clock>|<get-clock>(){}[0]
     abstract val videoRenderer // io.github.yuroyami.kiteplayer.spi/OutputBackend.videoRenderer|{}videoRenderer[0]
         abstract fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.spi/OutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
+    open val subtitleRasterizer // io.github.yuroyami.kiteplayer.spi/OutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
+        open fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer? // io.github.yuroyami.kiteplayer.spi/OutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource|null[0]
@@ -465,6 +467,10 @@ abstract interface io.github.yuroyami.kiteplayer.spi/SubtitleDecoderFactory { //
         abstract fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/SubtitleDecoderFactory.name.<get-name>|<get-name>(){}[0]
 
     abstract suspend fun create(io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo): io.github.yuroyami.kiteplayer.spi/SubtitleDecoder? // io.github.yuroyami.kiteplayer.spi/SubtitleDecoderFactory.create|create(io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo){}[0]
+}
+
+abstract interface io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer { // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer|null[0]
+    abstract fun rasterize(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Int, kotlin/Int, kotlin/Float): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/OverlayImage> // io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer.rasterize|rasterize(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Int;kotlin.Int;kotlin.Float){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/VideoDecoder : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/VideoDecoder|null[0]
@@ -2188,6 +2194,11 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.toString|toString(){}[0]
     }
+}
+
+final object io.github.yuroyami.kiteplayer.subtitle/CueSelector { // io.github.yuroyami.kiteplayer.subtitle/CueSelector|null[0]
+    final fun activeAt(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.subtitle/CueSelector.activeAt|activeAt(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
+    final fun nextChangeAfter(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin/Long? // io.github.yuroyami.kiteplayer.subtitle/CueSelector.nextChangeAfter|nextChangeAfter(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
 }
 
 // Targets: [native]

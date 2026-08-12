@@ -1341,7 +1341,12 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaSourceFac
 public abstract interface class io/github/yuroyami/kiteplayer/spi/OutputBackend {
 	public abstract fun getAudioSink ()Lio/github/yuroyami/kiteplayer/spi/AudioSinkFactory;
 	public abstract fun getClock ()Lio/github/yuroyami/kiteplayer/MonotonicClock;
+	public fun getSubtitleRasterizer ()Lio/github/yuroyami/kiteplayer/spi/SubtitleRasterizer;
 	public abstract fun getVideoRenderer ()Lio/github/yuroyami/kiteplayer/spi/VideoRendererFactory;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/OutputBackend$DefaultImpls {
+	public static fun getSubtitleRasterizer (Lio/github/yuroyami/kiteplayer/spi/OutputBackend;)Lio/github/yuroyami/kiteplayer/spi/SubtitleRasterizer;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/OverlayImage {
@@ -1544,6 +1549,10 @@ public final class io/github/yuroyami/kiteplayer/spi/SubtitleOverlay {
 	public fun toString ()Ljava/lang/String;
 }
 
+public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleRasterizer {
+	public abstract fun rasterize (Ljava/util/List;IIF)Ljava/util/List;
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoDecoder : java/lang/AutoCloseable {
 	public abstract fun flush-zBfWXis (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getHardware ()Lio/github/yuroyami/kiteplayer/HwdecStatus;
@@ -1650,6 +1659,12 @@ public final class io/github/yuroyami/kiteplayer/subtitle/CueLayout {
 	public final fun getWrap ()Lio/github/yuroyami/kiteplayer/subtitle/CueWrap;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/subtitle/CueSelector {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/CueSelector;
+	public final fun activeAt (Ljava/util/List;J)Ljava/util/List;
+	public final fun nextChangeAfter (Ljava/util/List;J)Ljava/lang/Long;
 }
 
 public final class io/github/yuroyami/kiteplayer/subtitle/CueStyle {

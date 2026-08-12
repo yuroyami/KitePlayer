@@ -22,6 +22,14 @@ public interface OutputBackend {
     public val audioSink: AudioSinkFactory
 
     /**
+     * The platform's text raster engine for subtitle cues, or null when the platform has none.
+     *
+     * Null costs drawn subtitles and nothing else: cue timing still runs, and the selection is
+     * still reported. The Android and Apple backends supply real ones (S4.c).
+     */
+    public val subtitleRasterizer: SubtitleRasterizer? get() = null
+
+    /**
      * Where video goes, when the platform can decide that on its own.
      *
      * Null is the normal answer for a windowing system: a renderer needs a surface, and only the

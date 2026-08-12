@@ -1,9 +1,3 @@
-public final class io/github/yuroyami/kiteplayer/subtitle/CueSelector {
-	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/CueSelector;
-	public final fun activeAt (Ljava/util/List;J)Ljava/util/List;
-	public final fun nextChangeAfter (Ljava/util/List;J)Ljava/lang/Long;
-}
-
 public final class io/github/yuroyami/kiteplayer/subtitle/SubRipParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/SubRipParser;
 	public final fun parse (Ljava/lang/String;)Ljava/util/List;

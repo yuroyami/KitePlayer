@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
+import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 
 /**
@@ -22,4 +23,7 @@ public object AndroidOutputBackend : OutputBackend {
     override val clock: MonotonicClock get() = AndroidMonotonicClock
     override val audioSink: AudioSinkFactory = AudioTrackSinkFactory()
     override val videoRenderer: VideoRendererFactory? get() = null
+
+    /** StaticLayout does the line breaking, bidi and shaping; see the rasteriser's own KDoc. */
+    override val subtitleRasterizer: SubtitleRasterizer = AndroidSubtitleRasterizer()
 }

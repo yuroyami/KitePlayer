@@ -1,0 +1,165 @@
+package io.github.yuroyami.kiteplayer.output
+
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.text.Layout
+import android.text.SpannableStringBuilder
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.text.style.ForegroundColorSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
+import io.github.yuroyami.kiteplayer.spi.OverlayImage
+import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
+import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
+import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
+import java.nio.ByteBuffer
+
+/**
+ * The Android text raster engine (S4.c): each active text cue becomes one image through
+ * [StaticLayout], the platform's own line breaker, so wrapping, bidi and shaping are Android's
+ * and not this project's. Bitmap cues pass their pixels through untouched.
+ *
+ * Placement is the cue's own [io.github.yuroyami.kiteplayer.subtitle.CueLayout]: margins carve
+ * the safe area, alignment picks the corner or centre, stacking is the engine's draw order
+ * (this rasteriser positions each cue independently; overlapping cues stack bottom-up because
+ * the engine hands them over lowest layer first and later images draw above earlier ones).
+ *
+ * The outline the style asks for is drawn the way every subtitle renderer fakes it cheaply and
+ * well: the text painted first in the outline colour with a stroke, then filled on top.
+ */
+internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
+
+    override fun rasterize(
+        cues: List<SubtitleCue>,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        fontScale: Float,
+    ): List<OverlayImage> {
+        if (viewportWidth <= 0 || viewportHeight <= 0) return emptyList()
+        val images = mutableListOf<OverlayImage>()
+        var stackedBottom = 0
+        for (cue in cues) {
+            when (cue) {
+                is SubtitleCue.Text -> rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom)
+                    ?.let { image ->
+                        images += image
+                        if (cue.layout.alignment.isBottom) {
+                            stackedBottom += image.bitmap.height + STACK_GAP_PX
+                        }
+                    }
+                is SubtitleCue.Bitmap -> cue.regions.forEach { region ->
+                    // Authored pixels: scale placement from the authored canvas to the viewport.
+                    val sx = viewportWidth.toFloat() / region.canvasWidth.coerceAtLeast(1)
+                    val sy = viewportHeight.toFloat() / region.canvasHeight.coerceAtLeast(1)
+                    images += OverlayImage(
+                        x = (region.x * sx).toInt(),
+                        y = (region.y * sy).toInt(),
+                        bitmap = region.bitmap,
+                    )
+                }
+            }
+        }
+        return images
+    }
+
+    private fun rasterizeText(
+        cue: SubtitleCue.Text,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        fontScale: Float,
+        stackedBottom: Int,
+    ): OverlayImage? {
+        val text = SpannableStringBuilder()
+        var baseColor = Color.WHITE
+        cue.spans.forEachIndexed { index, span ->
+            val start = text.length
+            text.append(span.text)
+            val end = text.length
+            val style = span.style
+            if (index == 0) baseColor = style.primaryColor
+            if (style.bold && style.italic) text.setSpan(StyleSpan(android.graphics.Typeface.BOLD_ITALIC), start, end, 0)
+            else if (style.bold) text.setSpan(StyleSpan(android.graphics.Typeface.BOLD), start, end, 0)
+            else if (style.italic) text.setSpan(StyleSpan(android.graphics.Typeface.ITALIC), start, end, 0)
+            if (style.underline) text.setSpan(UnderlineSpan(), start, end, 0)
+            if (style.strikeThrough) text.setSpan(StrikethroughSpan(), start, end, 0)
+            if (style.primaryColor != baseColor) {
+                text.setSpan(ForegroundColorSpan(style.primaryColor), start, end, 0)
+            }
+        }
+        if (text.isEmpty()) return null
+
+        val layoutSpec = cue.layout
+        // The classic subtitle size rule: about one twentieth of the picture height, scaled by
+        // the user's preference and by the authoring resolution when the format declared one.
+        val authoredScale = layoutSpec.authoredHeight?.let { viewportHeight.toFloat() / it } ?: 1f
+        val sizePx = (cue.spans.firstOrNull()?.style?.fontSizePx?.times(authoredScale)
+            ?: (viewportHeight / 20f)) * fontScale
+
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = baseColor
+            textSize = sizePx
+        }
+        val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
+        if (safeWidth <= 0) return null
+
+        val alignment = when (layoutSpec.alignment) {
+            CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> Layout.Alignment.ALIGN_NORMAL
+            CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight -> Layout.Alignment.ALIGN_OPPOSITE
+            else -> Layout.Alignment.ALIGN_CENTER
+        }
+        val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, safeWidth)
+            .setAlignment(alignment)
+            .build()
+        val width = layout.width.coerceAtLeast(1)
+        val height = layout.height.coerceAtLeast(1)
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        // Outline pass first, fill second: the cheap universal legibility trick.
+        val style = cue.spans.firstOrNull()?.style
+        if (style != null && style.outlineWidthPx > 0f) {
+            val outline = TextPaint(paint).apply {
+                this.style = Paint.Style.STROKE
+                strokeWidth = style.outlineWidthPx * fontScale
+                color = style.outlineColor
+            }
+            StaticLayout.Builder.obtain(text, 0, text.length, outline, safeWidth)
+                .setAlignment(alignment)
+                .build()
+                .draw(canvas)
+        }
+        layout.draw(canvas)
+
+        val pixels = ByteArray(width * height * 4)
+        bitmap.copyPixelsToBuffer(ByteBuffer.wrap(pixels))
+
+        val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
+        val marginYPx = (viewportHeight * layoutSpec.marginVertical).toInt()
+        val x = layoutSpec.positionX?.let { (it * viewportWidth).toInt() } ?: when (layoutSpec.alignment) {
+            CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> marginXPx
+            CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight ->
+                viewportWidth - marginXPx - width
+            else -> (viewportWidth - width) / 2
+        }
+        val y = layoutSpec.positionY?.let { (it * viewportHeight).toInt() } ?: when (layoutSpec.alignment) {
+            CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> marginYPx
+            CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
+                (viewportHeight - height) / 2
+            else -> viewportHeight - marginYPx - height - stackedBottom
+        }
+        return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, pixels))
+    }
+
+    private val CueAlignment.isBottom: Boolean
+        get() = this == CueAlignment.BottomLeft || this == CueAlignment.BottomCenter ||
+            this == CueAlignment.BottomRight
+
+    private companion object {
+        private const val STACK_GAP_PX: Int = 8
+    }
+}

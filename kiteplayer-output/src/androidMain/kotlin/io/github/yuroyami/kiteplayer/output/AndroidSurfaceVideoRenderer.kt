@@ -114,6 +114,10 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /** The single frame waiting to be drawn. Newest wins, and the displaced one is closed here. */
     private val pending = atomic<VideoFrame?>(null)
 
+    /** The overlay to composite above the picture. Written by the engine, read by the worker. */
+    private val overlay = atomic<SubtitleOverlay?>(null)
+
+
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
@@ -347,6 +351,9 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                 )
             } else {
                 canvas.drawFrame(picture, size.width, size.height, layout)
+                overlay.value?.let { active ->
+                    if (active.images.isNotEmpty()) drawOverlay(canvas, active, layout)
+                }
             }
         } catch (failure: Throwable) {
             drawFailure = failure
@@ -370,6 +377,29 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         }
         presented.incrementAndGet()
         noteSurfaceAvailable()
+    }
+
+    /**
+     * Draws the overlay's images mapped by the same transform the picture used, so subtitles
+     * stay glued to the video through every letterbox. Overlay coordinates are the engine's
+     * video-display space ([SubtitleOverlay.viewportWidth/Height]).
+     */
+    private fun drawOverlay(canvas: TargetCanvas, active: SubtitleOverlay, layout: FrameLayout) {
+        if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
+        val scaleX = layout.width.toFloat() / active.viewportWidth
+        val scaleY = layout.height.toFloat() / active.viewportHeight
+        for (image in active.images) {
+            canvas.drawOverlayImage(
+                rgba = image.bitmap.pixels,
+                width = image.bitmap.width,
+                height = image.bitmap.height,
+                left = layout.left + image.x * scaleX,
+                top = layout.top + image.y * scaleY,
+                drawWidth = image.bitmap.width * scaleX,
+                drawHeight = image.bitmap.height * scaleY,
+                contentHash = active.contentHash,
+            )
+        }
     }
 
     /** [CanvasTarget.isValid] must never be the reason a frame is lost, so a throwing one reads false. */
@@ -411,7 +441,15 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 
-    override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
+    /**
+     * Stores the overlay for the worker to composite above every following picture. The engine
+     * publishes on cue edges, so a cue appears with the next frame drawn after it, at most one
+     * frame interval late, which at 30 fps is inside anyone's reading reaction.
+     */
+    override suspend fun setOverlay(overlay: SubtitleOverlay?) {
+        this.overlay.value = overlay
+        signal.trySend(Unit)
+    }
 
     /**
      * Stops drawing and gives everything back except the Surface, which was never this renderer's.
@@ -486,6 +524,22 @@ internal interface TargetCanvas {
      * [FrameLayout.rotationDegrees] about the destination centre.
      */
     fun drawFrame(argb: IntArray, sourceWidth: Int, sourceHeight: Int, layout: FrameLayout)
+
+    /**
+     * Composites one subtitle image above whatever [drawFrame] painted. [rgba] is straight
+     * non-premultiplied RGBA per the cue contract; the production target premultiplies on
+     * upload and caches by [contentHash] so an unchanged overlay uploads nothing.
+     */
+    fun drawOverlayImage(
+        rgba: ByteArray,
+        width: Int,
+        height: Int,
+        left: Float,
+        top: Float,
+        drawWidth: Float,
+        drawHeight: Float,
+        contentHash: Long,
+    )
 }
 
 /**
@@ -510,6 +564,45 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
     /** Reused so that drawing a frame allocates nothing at all. */
     private val destination = RectF()
 
+    /** Uploaded overlay images, keyed by the overlay's contentHash, then by identity order. */
+    private var overlayHash: Long = Long.MIN_VALUE
+    private val overlayBitmaps = mutableListOf<Bitmap>()
+    private var overlayCursor = 0
+
+    /**
+     * The premultiply-on-upload the cue contract prescribes: cue pixels arrive straight, a
+     * Canvas needs premultiplied. Done once per contentHash: within one overlay the images are
+     * requested in a stable order, so the cache is a list walked by a cursor that the hash
+     * change resets.
+     */
+    private fun overlayBitmapFor(rgba: ByteArray, width: Int, height: Int, contentHash: Long): Bitmap {
+        if (contentHash != overlayHash) {
+            overlayBitmaps.forEach { it.recycle() }
+            overlayBitmaps.clear()
+            overlayHash = contentHash
+            overlayCursor = 0
+        }
+        if (overlayCursor < overlayBitmaps.size) {
+            return overlayBitmaps[overlayCursor++].also {
+                if (overlayCursor == overlayBitmaps.size) overlayCursor = 0
+            }
+        }
+        val pixels = IntArray(width * height)
+        var at = 0
+        for (index in pixels.indices) {
+            val r = rgba[at].toInt() and 0xFF
+            val g = rgba[at + 1].toInt() and 0xFF
+            val b = rgba[at + 2].toInt() and 0xFF
+            val a = rgba[at + 3].toInt() and 0xFF
+            pixels[index] = (a shl 24) or ((r * a / 255) shl 16) or ((g * a / 255) shl 8) or (b * a / 255)
+            at += 4
+        }
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+        overlayBitmaps += bitmap
+        return bitmap
+    }
+
     override fun isValid(): Boolean = surface.isValid
 
     override fun lock(): TargetCanvas? {
@@ -525,6 +618,8 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
     override fun release() {
         bitmap?.recycle()
         bitmap = null
+        overlayBitmaps.forEach { it.recycle() }
+        overlayBitmaps.clear()
     }
 
     private fun bitmapFor(width: Int, height: Int): Bitmap {
@@ -563,6 +658,21 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
             } finally {
                 canvas.restoreToCount(saved)
             }
+        }
+
+        override fun drawOverlayImage(
+            rgba: ByteArray,
+            width: Int,
+            height: Int,
+            left: Float,
+            top: Float,
+            drawWidth: Float,
+            drawHeight: Float,
+            contentHash: Long,
+        ) {
+            val bitmap = overlayBitmapFor(rgba, width, height, contentHash)
+            destination.set(left, top, left + drawWidth, top + drawHeight)
+            canvas.drawBitmap(bitmap, null, destination, paint)
         }
     }
 }

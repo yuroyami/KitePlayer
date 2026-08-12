@@ -27,6 +27,52 @@ import kotlin.test.assertTrue
  * with no Android graphics anywhere. The frame ledger ends at zero in every arm, exactly like
  * the fallback suite's, and pending work never exceeds one frame by construction of the slot.
  */
+
+class AndroidSurfaceOverlayTest {
+
+    @Test
+    fun anOverlayCompositesAboveThePictureThroughTheFrameTransform() {
+        val target = FakeTarget(canvasWidth = 200, canvasHeight = 100)
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            target = target,
+        )
+        try {
+            kotlinx.coroutines.runBlocking {
+                renderer.setOverlay(
+                    io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                        images = listOf(
+                            io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                                x = 10,
+                                y = 20,
+                                bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(4, 2, ByteArray(4 * 2 * 4)),
+                            ),
+                        ),
+                        viewportWidth = 100,
+                        viewportHeight = 50,
+                        contentHash = 7L,
+                    ),
+                )
+                // A 100x50 frame fits the 200x100 canvas exactly at 2x scale.
+                renderer.present(TestFrame(width = 100, height = 50), 0L)
+                val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+                while (target.canvases.lastOrNull()?.drawnOverlays?.isEmpty() != false) {
+                    check(System.nanoTime() < deadline) { "no overlay was composited" }
+                    Thread.sleep(2)
+                }
+            }
+            val draw = target.canvases.last().drawnOverlays.single()
+            assertEquals(20f, draw.left, "x scales by the frame transform")
+            assertEquals(40f, draw.top)
+            assertEquals(8f, draw.drawWidth)
+            assertEquals(4f, draw.drawHeight)
+            assertEquals(7L, draw.contentHash)
+        } finally {
+            renderer.close()
+        }
+    }
+}
+
 private class TestFrame(
     width: Int = 4,
     height: Int = 2,
@@ -67,6 +113,31 @@ private class FakeCanvas(override val width: Int, override val height: Int) : Ta
         throwOnDraw?.let { throw it }
         drawnPictures += argb.copyOf()
         drawnLayouts += layout
+    }
+
+    data class OverlayDraw(
+        val width: Int,
+        val height: Int,
+        val left: Float,
+        val top: Float,
+        val drawWidth: Float,
+        val drawHeight: Float,
+        val contentHash: Long,
+    )
+
+    val drawnOverlays = mutableListOf<OverlayDraw>()
+
+    override fun drawOverlayImage(
+        rgba: ByteArray,
+        width: Int,
+        height: Int,
+        left: Float,
+        top: Float,
+        drawWidth: Float,
+        drawHeight: Float,
+        contentHash: Long,
+    ) {
+        drawnOverlays += OverlayDraw(width, height, left, top, drawWidth, drawHeight, contentHash)
     }
 }
 

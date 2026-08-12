@@ -7783,6 +7783,34 @@ is no other.
   the chapter row PASSES on the host with the exact round-trip (0..2s Opening, 2..5s Middle,
   5..9s Ending). Phone-platform matrix re-runs land at S4.g with the rest of the stage's
   fixtures.
+- 2026-08-12, S4.c landings one to three completed (the fourth, rasterisation and compositing,
+  continues next). LANDING 1 (15add4c): WebVttParser with the same accept-what-exists philosophy
+  as SubRip (signature optional, NOTE/STYLE/REGION skipped whole, voice/class/karaoke tags
+  contribute text and drop decoration, align settings reach the layout), and CueSelector, the
+  active-cue rule as one PURE function of (cues, time), which makes seek reconstruction the act
+  of asking again; 7 parser and 4 selector arms green. CueSelector was then MOVED into
+  kiteplayer-core's subtitle package (the engine cannot depend on the parsers module; the
+  dependency arrow held). LANDING 2 (0123492), the engine: OutputBackend gained the
+  subtitleRasterizer seam (null costs drawing, never timing); buildSession selects a subtitle
+  stream per SubtitleConfig and dispositions (accessibility-in-preferred-language first, then
+  preferred with default flag, then forced when the audio is not preferred; NO preference means
+  NO automatic subtitles), creates the SPI decoder that has waited unused since the SPI was
+  written, routes subtitle packets through a third queue, clears cues on every flush, and the
+  handleSubtitles slot the pass order reserved on purpose now drains cues, asks the selector,
+  publishes an overlay ONLY on cue-set changes, and sleeps to the next cue edge instead of
+  polling. The scripted test world grew a subtitle stream, decoder and overlay-recording
+  renderer, and FIVE virtual-clock arms passed first run: appears at start, disappears at end,
+  no republish while unchanged, seek-back rebuilds by redelivery, language auto-selection on and
+  off. The straddling-cue seek limitation is real and documented: a cue whose packet sits before
+  the landing keyframe is not redelivered until S4.f's engines own full reconstruction. All 201
+  core arms green. LANDING 3 (c13254d): KiteCodec Packet gained copyBytes (613766d, dumps moved,
+  0.0.3 republished; the JNI row already existed), the parsers gained parseCueBody (a Matroska
+  text track's packets carry the BODY, timing on the packet), and the FFmpeg backend's
+  subtitleDecoders list stopped being empty: SubRip/WebVTT/mov_text decode over the packet path
+  with no C. The matrix's multitrack row now REQUIRES a decoded cue and its transcript reads:
+  cue 'Hello from KitePlayer'. One scripted-edit lesson recorded: a python replace wrote escaped
+  template dollars into two message strings and silently skipped a third edit; caught by reading
+  the transcript, which lacked the cue note the edit should have produced.
 
 ---
 

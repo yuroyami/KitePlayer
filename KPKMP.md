@@ -7579,6 +7579,23 @@ is no other.
   decoder but vendors no dav1d, so a typed refusal is a legal recorded outcome. The owner
   device session is the stage's one open item by construction (physical hardware and signing
   are the owner's) and S1 closes on named-simulator plus named-emulator evidence.
+- 2026-08-12, S1.e.1 completed: the matrix grown once and baselined on the host. testmedia.sh
+  gained its 17.5 gaps (multitrack.mkv with two audio languages and two SubRip tracks,
+  baseline.mkv, vp9.webm, av1.mkv via libsvtav1, mpeg4part2.mp4, three audio-only files, and
+  two byte-built torture cases: the first 40% of the sync clip, which amputates the trailing
+  moov, and a deterministic non-media pattern behind a media extension). FormatMatrix.kt holds
+  the 17-row table and the SPI-direct runner in the module's commonTest, with a
+  formatMatrixMediaDir expect and four leaf actuals; wrappers sit in jvmAndNativeTest and
+  androidDeviceTest. The first baseline run taught the runner two SOURCE contracts and was
+  corrected to obey them rather than the contracts weakened: selectStreams is once-before-first-
+  read (so each row selects everything it will decode and routes packets in one loop), and
+  seekToKeyframe returns null BY DESIGN (the engine learns the landing from the first decoded
+  frame), so the runner proves a seek by flushing both decoders with a new generation and
+  decoding past it. THE MACOS BASELINE: 17 of 17 rows PASS. Every MustPlay row decoded its
+  quota and resumed after its mid-file seek. MEASURED MustSurvive outcomes on macOS: av1.mkv
+  PLAYED (video 10, audio 10, seek resumed; the host build carries a software AV1 decoder), and
+  both torture rows refused cleanly with the typed FFmpeg invalid-data error (-1094995529),
+  nothing crashed, nothing hung. Tier 1 green.
 
 ---
 

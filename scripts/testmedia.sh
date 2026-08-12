@@ -194,4 +194,64 @@ ffmpeg -v error -y \
   -f lavfi -i "sine=frequency=200:sample_rate=48000:duration=1800" \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -shortest soak30min.mp4
 
+# ---------------------------------------------------------------------------------------------
+# The 17.5 format conformance matrix, grown once at S1.e. Every clip below is a matrix row; the
+# table itself is FormatMatrix.kt in kiteplayer-ffmpeg. Small and short on purpose: the matrix
+# proves formats open, decode, seek and close, not that they look good for minutes.
+# ---------------------------------------------------------------------------------------------
+
+echo "Matroska multi-track: one video, two audio languages, two SubRip tracks"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=6" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
+  -f lavfi -i "sine=frequency=660:sample_rate=48000:duration=6" \
+  -i subs.srt -i subs.srt \
+  -map 0:v -map 1:a -map 2:a -map 3:0 -map 4:0 \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+  -c:a aac -b:a 96k -c:s srt \
+  -metadata:s:a:0 language=eng -metadata:s:a:1 language=jpn \
+  -metadata:s:s:0 language=eng -metadata:s:s:1 language=jpn \
+  multitrack.mkv
+
+echo "Matroska baseline, ordered-chapters-free: plain h264 + aac"
+ffmpeg -v error -y -i sync1080p30.mp4 -c copy -t 6 baseline.mkv
+
+echo "VP9 + Opus WebM"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=6" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
+  -c:v libvpx-vp9 -deadline realtime -cpu-used 8 -b:v 500k \
+  -c:a libopus -b:a 96k vp9.webm
+
+echo "AV1 + Opus Matroska. The DEVICE verdict for this row is measured, not assumed:"
+echo "the phone FFmpeg profile enables the av1 decoder but vendors no software AV1 codec."
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=4" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=4" \
+  -c:v libsvtav1 -preset 12 -b:v 500k \
+  -c:a libopus -b:a 96k av1.mkv
+
+echo "MPEG-4 part 2 + AAC"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=30:duration=6" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
+  -c:v mpeg4 -qscale:v 5 -c:a aac -b:a 96k mpeg4part2.mp4
+
+echo "Audio-only files: AAC in M4A, MP3, FLAC"
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
+  -c:a aac -b:a 128k audio-aac.m4a
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=6" \
+  -c:a libmp3lame -b:a 128k audio-mp3.mp3
+ffmpeg -v error -y -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=6" \
+  -c:a flac audio-flac.flac
+
+echo "Torture cases, from bytes rather than encoders, deterministic"
+# The first 40% of the sync clip. The default mp4 layout writes moov after mdat, so this
+# amputates the index entirely; a player must refuse it with a typed error or survive whatever
+# partial view the demuxer offers, and must never crash or hang.
+sync_bytes=$(wc -c < sync1080p30.mp4)
+head -c $((sync_bytes * 2 / 5)) sync1080p30.mp4 > torture-truncated.mp4
+# Not media at all: a repeating deterministic pattern behind a media extension.
+python3 -c "import sys; sys.stdout.buffer.write(bytes(range(256)) * 4096)" > torture-garbage.mp4
+
 ls -la

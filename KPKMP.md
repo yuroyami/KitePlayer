@@ -6712,6 +6712,23 @@ is no other.
   requiring text changes. VERDICT: SAFE TO EXECUTE. S1.c.0 remains binding and re-verifies
   against the post-S1.b heads as written.
 
+- 2026-08-12, section 17.10 authored: the KD piloting package, typed FFmpeg control. Prose
+  only, Tier 1 gate (selected by rule). The owner asked for maximum FFmpeg piloting through
+  Kotlin data classes and DSLs, researched and distilled into the plan. The research was a
+  verification sweep of both trees, not prose recall: the generic option funnels already exist
+  (ffkmp_fmt_set_opt at kitecodec_helpers.h:321 with its measured EINVAL passthrough,
+  ffkmp_codecctx_set_opt at :251), the four filter builders take description strings and
+  already carry FFmpeg 7-to-8 rename-proofing via the appended aformat stage, and the Kotlin
+  side already ships typed StreamInfo/encoder specs with option escape hatches, so the DSL is
+  mostly a compilation layer onto shipped surfaces. 17.10 carries seven laws (control-plane
+  only; curated core plus escape hatch, never a ten-thousand-option mirror; compile to existing
+  funnels with new C only by window ritual; values inspectable; goldens; capability-honest per
+  D-5; dump-governed) and register KD-1 to KD-8 homed in S4 with exactly two new C funnels
+  (pre-open format options, chapter accessors) riding KiteCodec window 3 in S2. Chapters were
+  verified UNEXPOSED today (zero Kotlin hits), the one genuine gap the sweep found. Estimates:
+  S4 90 to 125, whole road 710 to 1015. Nothing enters S1.c or S1.d; every slice expands at its
+  home stage's entry.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -9406,7 +9423,9 @@ the KiteVideo modifier demo runs on the S1 Android device.
 
 **S4. IT EXPLAINS ITSELF.** Exit: subtitles per old B3, the debuggability register (diagnostics
 dump API, logging policy, typed warning audit, SPI cookbook with a worked custom backend), facade
-completion absorbed from old B11.
+completion absorbed from old B11, and the KD piloting package (17.10): the typed filter DSL,
+decoder and encoder option layers, playback profiles and their goldens, with KD's two C funnels
+arriving earlier inside KiteCodec window 3.
 
 **S5. ANYONE CAN HAVE IT.** Exit: public artifacts. Size tiers of 17.6 measured per target; the
 umbrella artifact; POMs, licences, readiness checks (named steps HERE, never in Tier 1 earlier);
@@ -9430,7 +9449,8 @@ S1.a (opaque migration and guards); window 2a inside S1.b (the iOS standard soft
 FFmpeg build, local-only Apple target publication and Local consumer wiring); window 2b inside
 S1.c (the C/JNI bridge and complete JVM/Android actuals, followed by one local-only phone-superset
 publication that preserves the window-2a Apple variants); window 3 inside S2 (VideoToolbox device
-context); window 4 inside S5 (runtime artifacts); and window 5 inside S6 (wasm binding) if the spike
+context, plus KD's two option funnels from 17.10: pre-open format options and chapter accessors);
+window 4 inside S5 (runtime artifacts); and window 5 inside S6 (wasm binding) if the spike
 passes.
 
 | Stage | Hours, honest range | Dominated by |
@@ -9441,16 +9461,18 @@ passes.
 | S1.d + S1.e | 25 to 40 | the phone aggregate, two view surfaces, two app re-consumptions, the matrix runs |
 | S2 | 120 to 165 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync; KiteVideo KV-1 to KV-3 at 30 to 45 |
 | S3 | 75 to 115 | two C audio sinks with their instruments; KiteVideo KV-4 and KV-5 at 15 to 25 |
-| S4 | 60 to 80 | subtitle rendering correctness |
+| S4 | 90 to 125 | subtitle rendering correctness; KD piloting package (17.10) at 30 to 45 |
 | S5 | 40 to 60 | cheap in hours, irreversible in consequence |
 | S6 | 80 to 120 | the spike bounds it; failure path is cheap |
 | S7 | 60 to 90 | soak time and owner device sessions |
 
-**S1 in total: 245 to 340 hours to the owner's first outcome.** Whole road: 680 to 970 focused
+**S1 in total: 245 to 340 hours to the owner's first outcome.** Whole road: 710 to 1015 focused
 hours, network excluded. The earlier phase-shaped totals reconcile: the same work moved between
 containers, plus the iOS-usable slice pulled forward out of the old P1. The growth over the first
 staging (45 to 70 hours across S2 and S3) is KiteVideo (17.9), added by owner decision D-6 on
-2026-08-11; its web slice sits inside S6's existing spike bound.
+2026-08-11; its web slice sits inside S6's existing spike bound. The 2026-08-12 growth (30 to 45
+hours in S4, 3 to 5 inside window 3) is the KD piloting package (17.10), added at the owner's
+direction.
 
 ### 17.4 The S1.a register, decision complete
 
@@ -12634,6 +12656,119 @@ feeds, mini players) loses nothing, because Compose was compositing those pixels
   mode renders only to a Surface and exposes no HardwareBuffer handle. A true zero-copy route
   needs AImageReader plumbing behind FFmpeg or upstream FFmpeg work. Costs ASSUMED; decided at S3
   entry whether to research it or keep the one-copy path, using KV-4's measurements as the judge.
+
+### 17.10 The piloting surface: typed FFmpeg control, package KD
+
+Authored 2026-08-12 by the planner at the owner's direction, from a verification sweep of both
+trees (KitePlayer 4b3580a, KiteCodec 23b8bf4). The owner's ask: maximum FFmpeg piloting through
+Kotlin data classes and DSLs, without more C and without touching performance. This section is
+the bedstone: the verified funnel inventory, the laws, and the decided register. Slices expand
+at their home stage's entry per 17.2's ritual. NOTHING here enters an S1.c or S1.d commit; 18.3
+rule 4 applies in full.
+
+**The verified funnel inventory (what the DSL compiles onto, as of the heads above).** Generic
+option funnels already exist in C and are passthroughs to `av_opt_set`:
+`ffkmp_fmt_set_opt` (kitecodec_helpers.h:321, measured to answer AVERROR(EINVAL) without
+crashing on unknown keys) and `ffkmp_codecctx_set_opt` (:251). The four filter-graph builders
+(:388, :401, :419, :436) take one FFmpeg description STRING and already carry rename-proofing
+(output pinning is appended as an `aformat` stage precisely because option names moved across
+FFmpeg 7 to 8 while filter-string syntax did not). Dict iteration for metadata exists (:122 to
+:124). On the Kotlin side the typed foundation already exists: `StreamInfo` with typed video and
+audio sub-info, disposition, rotation and a metadata map; `VideoEncoderSpec`/`AudioEncoderSpec`
+data classes that ALREADY carry an `options: Map<String, String>` escape hatch documented as
+`av_opt_set` strings; `Transcoder` with typed arguments and `audioCopy`; `FilterGraph.buildVideo
+(description)` with a documented 2048-byte composed-chain bound and Flow processing;
+capability queries `hasDecoder`/`hasEncoder`/`hasFilter`; and the whole `PlayerConfig` tree
+(HwdecPolicy sealed, FrameDropPolicy, BufferPolicy, AudioConfig). The DSL is therefore mostly a
+compilation layer onto surfaces this project already ships.
+
+**The laws.** Binding on every KD slice:
+
+1. **Control plane only.** A DSL construct configures opens, graphs and encoders. It may never
+   introduce a per-frame Kotlin-to-C crossing that does not exist today. Anything per-frame is
+   KiteVideo's or the engine's business, not KD's.
+2. **Curated core plus escape hatch, never a mirror.** FFmpeg exposes on the order of ten
+   thousand AVOptions. Typing them all would freeze FFmpeg's option namespace into this API the
+   same way the struct layout was almost frozen (C-43's lesson). The typed set is the curated
+   few dozen below; everything else flows through `option(key, value)`, which already exists at
+   both funnels and on both encoder specs.
+3. **Compile to existing funnels.** A KD feature that needs a NEW C entry point is a KiteCodec
+   window item with the full S1.a.7-style ritual (signature baseline, export baseline, minor
+   version, guards, tests). This section names exactly two such funnel additions (KD-4, KD-5);
+   any further one is a register change, not an improvisation.
+4. **Values, not magic.** Every DSL produces a plain immutable data class first; builders are
+   sugar over constructors. Every compiled result (an option list, a filter string) is
+   inspectable and printable, and the S4 diagnostics dump prints exactly what was compiled, so
+   a bug report always carries the real FFmpeg-facing configuration.
+5. **Deterministic and golden-tested.** DSL compilation is a pure function from data class to
+   option pairs or description string. Goldens pin the exact output, including escaping, the
+   2048-byte bound behavior and ordering. These are host tests; they cost no device time.
+6. **Capability-honest per D-5.** A typed construct that requires a codec or filter outside the
+   lean tier queries capability first (`hasFilter`, `hasEncoder`) and fails TYPED when absent,
+   naming the tier that carries it. No typed construct may silently no-op.
+7. **Dump-governed.** Every KD slice moves API dumps deliberately, with the log entry naming
+   each added declaration, exactly like every other surface change in this project.
+
+**The register, decided at design level (expansion at entry):**
+
+- **KD-1, the filter DSL.** Typed builders compiling to the existing description string:
+  video `scale`, `crop`, `pad`, `transpose`/`rotate`, `fps`, `format`, `eq`, `yadif`/`bwdif`,
+  `drawbox`; audio `volume`, `atempo`, `aresample`, `pan` (downmix matrices), `aformat`,
+  `loudnorm`; plus `raw("...")` for any chain the typed set lacks. Escaping is centralised and
+  golden-tested against the exact alphabet the fuzz corpus already exercises (16.4 item 5's
+  measured character set). Compiles to `FilterGraph.buildVideo`/`buildAudio` unchanged. Sketch:
+  `filters { scale(1280, 720); eq(brightness = 0.1); format(Yuv420p) }`. Home: S4, KiteCodec
+  side, pure Kotlin. Test: goldens per builder, bound-overflow refusal, capability-honest
+  failure for a non-lean filter, and one end-to-end real-media run reusing the existing
+  FilterGraph tests.
+- **KD-2, decoder options.** `openDecoder` gains an optional typed block compiling through
+  `ffkmp_codecctx_set_opt` between context creation and open: `skipLoopFilter`, `skipFrame`
+  (the scrubbing pair), `errDetect`, `threads` beyond the existing count (frame versus slice),
+  plus the escape hatch. Requires ONE Kotlin-side injection point in the existing open path and
+  no new C. Home: S4, KiteCodec side. Test: reproduction-first proof that the option reached
+  FFmpeg (a wrong key must produce the measured EINVAL path), plus a scrub-preset decode of the
+  conformance clip asserting decode speedup is observed and frames are still delivered.
+- **KD-3, the encoder typed layer.** Typed common knobs compiling INTO the existing
+  `options` map of `VideoEncoderSpec`/`AudioEncoderSpec`: `crf`, `preset` (enum), `profile`,
+  `tune`, rate-control mode (CRF versus ABR versus CBR shapes the bitrate fields), `gop` from
+  the existing keyframe interval. Pure sugar, zero C, zero new funnel. Home: S4, KiteCodec
+  side. Test: goldens proving each typed knob lands as the exact expected option pair; refusal
+  goldens for contradictory combinations (CRF plus CBR).
+- **KD-4, pre-open format options, ONE new C funnel.** Today `ffkmp_fmt_open_input` allocates
+  and opens in one call, so true pre-open options (`probesize`, `fflags`, format forcing)
+  cannot be applied; post-open-pre-find_stream_info options already work through the existing
+  funnel. Add `ffkmp_fmt_open_input2(out, path, keys, values, n)` applying pairs between alloc
+  and open. Full S1.a.7-style ritual. C half home: the next open KiteCodec window at its stage
+  (window 3, S2); Kotlin half home: S4 (`MediaSource.open(path) { probe { ... } }`). Test: the
+  guard suite gains its NULL arms; a probesize-shrunk open of a torture clip must measurably
+  change probe behavior, reproduction-first.
+- **KD-5, chapters and container info, the second new C funnel.** Chapters are not exposed at
+  all today (verified: zero hits in the Kotlin tree). Add `ffkmp_fmt_chapter_count` and
+  `ffkmp_fmt_chapter_get(i, out fields)` plus reuse of the dict iteration for chapter metadata;
+  Kotlin gains `data class Chapter(startMicros, endMicros, metadata)` and a container-level
+  `MediaInfo` (duration, container metadata, chapters) beside the existing per-stream info.
+  Same window and ritual as KD-4. Home: C in window 3; Kotlin in S4. Test: a chaptered
+  conformance fixture (added to 17.5) round-trips exact chapter bounds.
+- **KD-6, playback profiles.** Player-side presets as data: `PlaybackProfile.Scrubbing`
+  (KD-2's skip pair plus FrameDropPolicy), `.LowLatency` (lowDelay, small buffers),
+  `.Battery` (hardware preference, relaxed intervals), compiling into `PlayerConfig` plus
+  decoder options. Pure Kotlin, Player side. Home: S4. Test: each profile's compiled
+  configuration golden, plus one real-media scrubbing run.
+- **KD-7, diagnostics integration.** The S4 diagnostics dump prints every compiled KD artifact
+  attached to the session: the filter strings as sent, the option pairs as applied and their
+  per-key FFmpeg answer, the active profile. This is law 4 made mechanical. Home: S4, inside
+  the existing debuggability register item.
+- **KD-8, the goldens suite.** One host-test source set holding every KD compilation golden,
+  named in Tier 2's selector the moment it exists (it is buildSrc-adjacent pure Kotlin, so the
+  existing Kotlin-source selector already reaches it). Home: S4, first KD commit.
+
+**Non-goals, stated so nobody invents them:** no full AVOption mirror (law 2); no custom
+Kotlin AVIO callbacks (that is data plane and network is parked per D-4; revisit only when
+17.8 reopens); no runtime filter hot-swap in v1; no DSL constructs for encoding features the
+lean and standard tiers cannot carry without a capability check (law 6).
+
+**Cost.** S4 grows by 30 to 45 hours (the 17.3 table carries it); the two C funnels add 3 to 5
+hours inside KiteCodec window 3. Nothing else moves.
 
 ## 18. The skeleton, for any executor
 

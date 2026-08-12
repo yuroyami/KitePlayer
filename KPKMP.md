@@ -7356,6 +7356,27 @@ is no other.
   the bytes being sealed. The remaining exact Player commit first line is
   `Record the JVM and Android Codec proof`.
 
+- 2026-08-12, window 2c authorized and landed: the Annex-B start-code hotfix. The executor
+  stopped on real broken MP4 playback rather than disguising a contrived fixture pass as
+  completion, which is exactly the honesty the contract buys, and proposed the right shape
+  (patch the Android FFmpeg build, publish 0.0.2, never overwrite 0.0.1, requalify). The owner
+  authorized; the planner confirmed the defect at FFmpeg source level (count_or_copy gives 3-byte
+  start codes to every non-first NAL) and landed the fix: a committed patch under
+  native/patches/ffmpeg proven to apply from pristine n8.0 with the build's own tool and to
+  leave zero 3-byte emission lines; BuildFFmpegTask's new content-tracked sourcePatches applied
+  to the scratch copy so the vendored checkout stays pristine at its ref, with a per-tree
+  ffmpeg-patches.txt SHA-256 evidence file; producer wiring; VERSION 0.0.2 in KiteCodec and the
+  0.0.2 consumer bump in kiteplayer-ffmpeg (the plugin coordinate deliberately stays 0.0.1, its
+  artifact unchanged). Full detail and the executor's requalification list live in 17.4.3's
+  window 2c block. Deviations stated: the normalization measurements were the executor's
+  experiment and the patched-build requalification is the proof; Apple FFmpeg trees are not
+  rebuilt this window (their play path never runs the BSF, ASSUMED boundary recorded); and the
+  planner could not run :buildSrc:test because clean af061c0 already fails configuration with
+  "compileSdk version is not set" under default and hostTargetsOnly selectors, verified against
+  the pristine tree and handed to the executor as an S1.c.2 defect observation. Planner-side
+  gating on what could run: buildSrc compiles, the patch tool proof ran twice (apply and
+  reverse-check), and both repositories' dash scans stay clean.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -11931,6 +11952,50 @@ zero jlong means "no handle" and a zero packet token to send is the drain packet
 the remaining operations (dict walk, stream and codecpar accessors, filter, sink, remux,
 transcode) are ADDED to methods.def and implemented by kj_abi.c's canonical pattern, one row
 per operation, in their category units.
+
+**WINDOW 2c, THE ANNEX-B HOTFIX, owner-authorized and planner-landed 2026-08-12.** The executor
+found Android playback blocked by a real Codec defect and stopped honestly rather than shipping a
+contrived pass: FFmpeg's h264_mediacodec path feeds MediaCodec Annex-B where only parameter sets
+and the FIRST NAL of an access unit get a 4-byte start code; every later NAL gets 3 bytes
+(`count_or_copy`'s else branch, CONFIRMED by the planner at
+vendor/ffmpeg/libavcodec/bsf/h264_mp4toannexb.c:66 to :68). The Goldfish API 36 decoder does not
+split on 3-byte boundaries and returns zero frames; the executor measured 12/12 and 24/24
+hardware frames once boundaries were widened. The fix is landed, not planned:
+
+- A committed source patch,
+  `../KiteCodec/native/patches/ffmpeg/0001-h264-mp4toannexb-always-4-byte-start-codes.patch`,
+  makes the BSF emit the 4-byte form always (Android's documented MediaCodec shape, universally
+  accepted, one byte per non-first NAL; count and copy share the function so sizing stays
+  consistent by construction). Proved to apply cleanly from pristine n8.0 with the exact tool
+  the build uses (`/usr/bin/patch -p1 --forward --fuzz=0`) and to leave zero 3-byte emission
+  lines.
+- `BuildFFmpegTask` gains content-tracked `sourcePatches`, applied in name order to the SCRATCH
+  source copy before configure, so `vendor/ffmpeg` stays pristine at its ref; each install tree
+  gains `lib/kitecodec/ffmpeg-patches.txt` naming every applied patch with its SHA-256. The
+  producer registrations wire `native/patches/ffmpeg/*.patch`.
+- Versions: KiteCodec `gradle.properties` VERSION is 0.0.2; `0.0.1` is never overwritten, per
+  the executor's own correct instinct. Player's `kiteplayer-ffmpeg` consumes
+  `kitecodec-core:0.0.2`. The Gradle PLUGIN coordinate stays 0.0.1 deliberately: that artifact
+  did not change and is not republished by the phone-superset publication.
+- Apple FFmpeg trees are deliberately NOT rebuilt in this window: the Apple software play path
+  consumes avcC extradata directly and does not run mp4toannexb; the patch rides into Apple
+  trees at their next natural rebuild. ASSUMED boundary, stated: any Apple flow that does invoke
+  the BSF gets the spec-legal 4-byte widening and nothing else.
+
+THE EXECUTOR'S REQUALIFICATION LIST (machine-heavy, in order): rerun both Android producers
+with `--rerun-tasks` and assert each tree's `ffmpeg-patches.txt` names the patch; rerun both
+Android link arms and the ELF assertions; publish the superset EXACTLY once as 0.0.2
+(`:kitecodec-core:publishToMavenLocal -Pkitecodec.phoneTargetsOnly=true`); bump BOTH scratch
+consumers' dependency lines to 0.0.2 and rerun them (Apple links offline, Android decodes in
+debug and release); rerun Player's re-consume, the contract arms, the device arms and both
+sample smokes; the S1.c.6 jq oracle is unchanged and ordinary MP4 playback on the named
+emulator is the exit that was blocked. The 12/12 and 24/24 normalization measurements were an
+experiment, not the proof; the patched-build run is the proof. One OBSERVATION for the
+executor, found while gating this hotfix: on clean af061c0, `./gradlew :buildSrc:test` fails
+during `:kitecodec-core` configuration with "compileSdk version is not set" under BOTH the
+default and hostTargetsOnly selectors (planner-verified against the pristine tree, so it is
+not this hotfix). Classify and fix it as your own S1.c.2 defect: a selector that breaks every
+non-phone invocation will strand the next stage.
 
 #### S1C-01. The JNI library is a narrow adapter over the opaque C boundary
 

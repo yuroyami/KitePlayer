@@ -7494,6 +7494,25 @@ is no other.
   Maven Central metadata) with a stated step-down rule if it fights Kotlin 2.4.10. Authored
   against clean KitePlayer c2716cf and KiteCodec 52a3e5d. Planner acts as executor for this
   stage, single-threaded, per the owner's standing model rule.
+- 2026-08-12, S1.d.0 and S1.d.1 completed: the phone aggregate with the two platform views.
+  S1.d.0's sweep found ZERO blocking findings (every expansion claim held; Pixelu16KB up at
+  16384) and one standing DESCRIPTIVE fact: KiteCodec's Tier 1 gradle line needs
+  -Pkitecodec.phoneTargetsOnly=true until the known open selector defect (assigned to the
+  executor as an S1.c.2 observation) is fixed, because the android-kmp-library plugin is applied
+  unconditionally while its android block is selector-conditional. S1.d.1 landed
+  :kiteplayer-phone: PlayerViewBinding, the ONE attach state machine both views drive (renderer
+  exists exactly while player AND surface do; close before detach because a Surface touched
+  after surfaceDestroyed returns is a native abort; swap tears down first; everything
+  idempotent), pinned by 12 commonTest arms run twice, on the Android host JVM and on the real
+  iOS simulator, 24 green results total. KitePlayerView (FrameLayout over SurfaceView) and
+  KitePlayerUIView (UIView over a CALayer, layoutSubviews inside a no-action CATransaction,
+  didMoveToWindow as the lifecycle boundary) both carry cumulative diagnostic counters that
+  survive surface bounces. phoneBackends() gives each platform its standard pair. One discovery
+  cost an hour less than it might have: the phone module's own iOS TEST binaries link FFmpeg, so
+  the kitecodec Gradle plugin is required exactly as :kiteplayer-sample's comment predicts
+  (bare -lavformat with no -L); with it, linkDebugTest for both iOS arms and the simulator test
+  run pass against the local trees. The iOS-target ABI dump is committed; the android target
+  still produces none (standing tooling gap, recorded not faked). Tier 1 green both repos.
 
 ---
 

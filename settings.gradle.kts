@@ -61,6 +61,11 @@ include(":kiteplayer-rt")
 // module graph is visible from the build file.
 include(":kiteplayer-ffmpeg")
 include(":kiteplayer-output")
+
+// :kiteplayer-phone is the aggregate a phone app depends on: one coordinate that carries the
+// FFmpeg backend, the output backends and the two reusable views, KitePlayerView for Android
+// and KitePlayerUIView for iOS. It holds no playback policy and no Compose (S1.d).
+include(":kiteplayer-phone")
 // include(":kiteplayer-libass")     // optional full ASS renderer
 // include(":kiteplayer")            // umbrella artifact
 // include(":kiteplayer-compose")    // Compose Multiplatform surface and controls

@@ -1,0 +1,27 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-phone>
+final class io.github.yuroyami.kiteplayer.phone/KitePlayerUIView : platform.UIKit/UIView { // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.<init>|<init>(){}[0]
+
+    final val failedFrames // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val presentedFrames // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    final val supersededFrames // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.supersededFrames|{}supersededFrames[0]
+        final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
+
+    final var player // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.player|{}player[0]
+        final fun <get-player>(): io.github.yuroyami.kiteplayer/KitePlayer? // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.player.<get-player>|<get-player>(){}[0]
+        final fun <set-player>(io.github.yuroyami.kiteplayer/KitePlayer?) // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.player.<set-player>|<set-player>(value:io.github.yuroyami.kiteplayer.KitePlayer?){}[0]
+
+    final fun didMoveToWindow() // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.didMoveToWindow|objc:didMoveToWindow[0]
+    final fun layoutSubviews() // io.github.yuroyami.kiteplayer.phone/KitePlayerUIView.layoutSubviews|objc:layoutSubviews[0]
+}
+
+final fun io.github.yuroyami.kiteplayer.phone/phoneBackends(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer.phone/phoneBackends|phoneBackends(){}[0]

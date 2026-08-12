@@ -7484,6 +7484,16 @@ is no other.
   consumer, the Android consumer and both sample APKs; nothing is pushed, publicly published or
   released. S1.c IS COMPLETE: KitePlayer plays real media on Android, hardware-decoded through
   FFmpeg's own decoder, in an ordinary application, in release shape.
+- 2026-08-12, S1.d expanded (17.4.4) with an owner-decided rider. The owner directed the stage
+  to deliver the native views, the baseline interop Composable AND the Compose-true KiteVideo
+  core, which pulls KV-1's core forward from S2 into S1.d as an explicit 17.1 rider, software-fed
+  per the KV-4 shape. Every measurement exit stays in S2; the rider lands API and laws, not
+  performance claims. The 17.2 register line, the 17.9 slice homes, the 17.3 table (S1.d + S1.e
+  35 to 55, S2 105 to 150, S1 total 255 to 355, road unchanged at 710 to 1015) were amended in
+  the same pass. Compose Multiplatform pinned at 1.12.0-rc01 (newest published, verified against
+  Maven Central metadata) with a stated step-down rule if it fights Kotlin 2.4.10. Authored
+  against clean KitePlayer c2716cf and KiteCodec 52a3e5d. Planner acts as executor for this
+  stage, single-threaded, per the owner's standing model rule.
 
 ---
 
@@ -10154,7 +10164,9 @@ dependency order inside the stage:
     The SEPARATE optional `:kiteplayer-compose` module depends on phone and exposes one Composable
     that wraps AndroidView on Android and UIKitView on iOS, so a non-Compose consumer never pulls
     Compose. This wrapper is the BASELINE Compose path per D-6; the Compose-true flagship
-    (KiteVideo, 17.9) is deliberately NOT in S1: usable beats beautiful.
+    (KiteVideo, 17.9) was deliberately NOT in S1 when this register was written. Owner amendment
+    2026-08-12: KiteVideo's CORE rides S1.d as an explicit 17.1 rider, software-fed; every
+    measurement exit stays in S2. The execution expansion is 17.4.4.
   - **S1.e Stage exit**: re-consume the provisional S1.b iOS host and S1.c Android application
     through the S1.d phone coordinate, run the matrix on both platforms, write every measured
     number, and complete the owner device session.
@@ -10214,21 +10226,22 @@ passes.
 | S1.a | 25 to 35 | four check tasks, opaque migration completion, corrections |
 | S1.b | 55 to 75 | mobile FFmpeg provisioning, the appleMain split, iOS audio and the Xcode host |
 | S1.c | 140 to 190 | JNI actuals with a shared differential suite across JVM and native |
-| S1.d + S1.e | 25 to 40 | the phone aggregate, two view surfaces, two app re-consumptions, the matrix runs |
-| S2 | 120 to 165 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync; KiteVideo KV-1 to KV-3 at 30 to 45 |
+| S1.d + S1.e | 35 to 55 | the phone aggregate, two view surfaces, the Compose baseline, the KiteVideo core rider (17.4.4), two app re-consumptions, the matrix runs |
+| S2 | 105 to 150 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync; KiteVideo KV-2/KV-3 plus KV-1's measurement exits at 20 to 30 |
 | S3 | 75 to 115 | two C audio sinks with their instruments; KiteVideo KV-4 and KV-5 at 15 to 25 |
 | S4 | 90 to 125 | subtitle rendering correctness; KD piloting package (17.10) at 30 to 45 |
 | S5 | 40 to 60 | cheap in hours, irreversible in consequence |
 | S6 | 80 to 120 | the spike bounds it; failure path is cheap |
 | S7 | 60 to 90 | soak time and owner device sessions |
 
-**S1 in total: 245 to 340 hours to the owner's first outcome.** Whole road: 710 to 1015 focused
+**S1 in total: 255 to 355 hours to the owner's first outcome.** Whole road: 710 to 1015 focused
 hours, network excluded. The earlier phase-shaped totals reconcile: the same work moved between
 containers, plus the iOS-usable slice pulled forward out of the old P1. The growth over the first
 staging (45 to 70 hours across S2 and S3) is KiteVideo (17.9), added by owner decision D-6 on
 2026-08-11; its web slice sits inside S6's existing spike bound. The 2026-08-12 growth (30 to 45
 hours in S4, 3 to 5 inside window 3) is the KD piloting package (17.10), added at the owner's
-direction.
+direction. The 2026-08-12 KiteVideo-core rider (17.4.4) moves 10 to 15 hours from S2 into S1.d,
+which is why S1 grew while the road total did not.
 
 ### 17.4 The S1.a register, decision complete
 
@@ -13557,6 +13570,220 @@ below T3-Full, the promotion-triggered Tier 3 gate passes, and every deviation i
 x86_64 remains compile/link/package only. The absent physical Android remains an explicit S1.e
 blocker. Nothing is pushed, publicly published or released.
 
+### 17.4.4 The S1.d register and sub-phases, decision complete
+
+Authored 2026-08-12 by the planner against clean KitePlayer `c2716cf` and KiteCodec `52a3e5d`,
+immediately after the S1.c exit, at the owner's direction. The owner's instruction changes the
+stage's scope in one way: S1.d delivers the native views, the baseline interop Composable AND the
+Compose-true KiteVideo core. That pulls the core of KV-1 (17.9) forward from S2 into S1.d as an
+explicit stage rider under 17.1's refinement, fed the only way S1 can feed it: through the S1.c
+software converter, which is the KV-4-shaped path. What does NOT move: every measurement exit
+(per-frame cost and dropped frames on named devices stay S2), the YUV image path (KV-2, S2),
+Apple zero-copy (KV-3, S2) and the desktop paths (KV-5, S3). The rider lands the API and the
+three laws as code contracts, not the performance claims. KiteVideo's S1.d truth is "correct,
+law-abiding and honest about its CPU cost", never "fast", and no README row may claim measured
+smoothness before S2 measures it.
+
+Expansion-authorship commit first line. KitePlayer:
+`Expand the pluggable views stage with the owner's Compose rider`.
+
+**Owner-fixed points (no executor judgment):**
+
+- Compose Multiplatform `1.12.0-rc01` (the newest published plugin at authorship, verified
+  against Maven Central metadata) with the Kotlin-bundled compose compiler plugin
+  (`org.jetbrains.kotlin.plugin.compose` at the catalog's Kotlin version). Prerelease is
+  acceptable by the owner's standing rule. If resolution or compilation fails against Kotlin
+  2.4.10, step down one version at a time toward 1.11.1 and record the landing version in the
+  log; do not burn hours patching an rc.
+- The interop wrapper and KiteVideo live in ONE module, `:kiteplayer-compose`, exactly as the
+  D-6 register text names it. The reusable platform views live in `:kiteplayer-phone`.
+- Both new modules are library modules in full standing: root coordinates, `explicitApi()`,
+  `abiValidation`, vanniktech publish and dokka, committed API dumps where the tooling produces
+  them (the AGP KMP android target still produces none; record that honestly, never fake a dump).
+- No new C, no KiteCodec change, no new FFmpeg symbol, no network. Window 2c remains the last
+  Codec change inside S1. Nothing from KD (17.10) enters these commits; 18.3 rule 4 applies.
+- `:kiteplayer-phone` API-depends on `:kiteplayer-ffmpeg` and `:kiteplayer-output`, so ONE
+  implementation line gives a phone consumer the playable stack. `:kiteplayer-compose` depends on
+  phone. `:kiteplayer-output` stays FFmpeg-free and Compose-free; `:kiteplayer-phone` stays
+  Compose-free, so a plain-View consumer never pulls Compose.
+
+Execution order is S1.d.0 through S1.d.4. Targets for both new modules are exactly `android`
+(namespace per module, compileSdk 36, minSdk 24, `withHostTest {}`), `iosArm64` and
+`iosSimulatorArm64`. No macOS, jvm-desktop or web target enters S1.d; those are S3 and S6 work.
+
+#### S1.d.0 One verification sweep
+
+Verify this expansion against the tree before any product edit: one full sweep, one consolidated
+report, findings classified BLOCKING versus DESCRIPTIVE per the recalibrated S1.a.0 protocol.
+The checkable claims: `settings.gradle.kts` carries `:kiteplayer-compose` commented and no
+`:kiteplayer-phone` line yet; `AndroidSurfaceVideoRenderer(surface, convert)` and
+`UIKitVideoRenderer(layer, convert)` are the public constructors with the
+`presentedFrames`/`supersededFrames`/`failedFrames` counters; `SoftwareConverter.toRgba` takes a
+`KiteCodecVideoFrame` on both jvmAndAndroidMain and nativeMain; `AndroidOutputBackend` and
+`AppleOutputBackend` exist; `Backends(backend, output)` is the config shape;
+`kiteplayer-ffmpeg`'s android block is compileSdk 36 minSdk 24; `Pixelu16KB` boots and reports
+`getconf PAGE_SIZE` 16384.
+
+#### S1.d.1 The phone aggregate and the two platform views
+
+Files: `settings.gradle.kts`; new `kiteplayer-phone/build.gradle.kts`; new
+`kiteplayer-phone/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/phone/PhoneBackends.kt`
+and `PlayerViewBinding.kt`; new `src/androidMain/.../KitePlayerView.kt` and
+`PhoneBackends.android.kt`; new `src/iosMain/.../KitePlayerUIView.kt` and `PhoneBackends.ios.kt`;
+new `src/commonTest/.../PlayerViewBindingTest.kt`; the module's API dump; KPKMP execution log.
+
+Steps.
+1. Create the module with the four library plugins and the three targets above. commonMain:
+   `api(project(":kiteplayer-ffmpeg"))`, `api(project(":kiteplayer-output"))`. The build-file
+   comment states the aggregate's one job: one coordinate, two reusable views, zero policy.
+2. `public fun phoneBackends(): Backends` as commonMain expect. Android actual returns
+   `Backends(KiteCodecMediaBackend(), AndroidOutputBackend)`; iOS actual returns
+   `Backends(KiteCodecMediaBackend(), AppleOutputBackend)`. This is convenience, not policy: a
+   consumer may still assemble `Backends` by hand.
+3. `internal class PlayerViewBinding` in commonMain: the one attach state machine both views
+   drive, pure Kotlin, effects injected as functions (`createRenderer`, `attachToPlayer`,
+   `detachFromPlayer`, `closeRenderer`). The law: a renderer exists exactly while a player is set
+   AND the platform surface is ready. Surface teardown closes the renderer BEFORE the platform
+   callback returns (the output renderers' close blocks until their worker is done, which is what
+   makes that safe), then detaches. A player swap mid-surface closes the old renderer, detaches
+   the old player, then builds fresh for the new one. Every transition is idempotent.
+   commonTest pins: create/close pairing, close-before-detach ordering, swap mid-surface,
+   idempotent double teardown, no renderer without both preconditions.
+4. Android `KitePlayerView(context)`: a FrameLayout hosting one SurfaceView, SurfaceHolder
+   callbacks driving the binding, `var player: KitePlayer?`, and read-only passthrough counters
+   (`presentedFrames`, `supersededFrames`, `failedFrames`, zero with no renderer). The renderer is
+   `AndroidSurfaceVideoRenderer(holder.surface) { SoftwareConverter.toRgba(it as KiteCodecVideoFrame) }`.
+   No Compose import, no android.media import, no raw FFmpeg name; the S1.c.6 scan families keep
+   applying to this module's sources.
+5. iOS `KitePlayerUIView`: a UIView subclass, black background, one CALayer video sublayer whose
+   frame follows `layoutSubviews` inside a CATransaction with actions disabled, window
+   attachment driving the binding (`didMoveToWindow`: a window means surface-ready, nil means
+   teardown), same `player` property and counters, renderer
+   `UIKitVideoRenderer(videoLayer) { SoftwareConverter.toRgba(it as KiteCodecVideoFrame) }`.
+6. Run `updateKotlinAbi` then `checkKotlinAbi` as two invocations; commit the new dumps. Where
+   the plan's prose counts "five library modules" for the ABI gate, it now reads six.
+
+Gate. Tier 1, then Tier 2 (selected by build scripts and platform Kotlin): compile the android
+target and both iOS klibs, run the phone host tests. Link-level iOS proof needs the local FFmpeg
+trees flag from settings.gradle.kts's own comment; run it if the trees are present, record SKIPPED
+with the reason if not. Do not republish anything.
+
+Commit first line. KitePlayer: `Add the phone aggregate with the two platform views`.
+
+#### S1.d.2 The baseline Composable
+
+Files: `gradle/libs.versions.toml`; `settings.gradle.kts` (activate the commented module line);
+new `kiteplayer-compose/build.gradle.kts`; new
+`kiteplayer-compose/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/compose/KitePlayerSurface.kt`;
+new `src/androidMain/.../KitePlayerSurface.android.kt`; new
+`src/iosMain/.../KitePlayerSurface.ios.kt`; the module's API dump; KPKMP execution log.
+
+Steps.
+1. Catalog: `compose-multiplatform = "1.12.0-rc01"` under versions; plugins
+   `compose-multiplatform` (`org.jetbrains.compose`) and `kotlin-compose`
+   (`org.jetbrains.kotlin.plugin.compose`, version.ref kotlin). Root build declares both
+   `apply false` beside the existing plugin roster.
+2. Create the module: the four library plugins plus the two Compose plugins, the three targets,
+   commonMain `api(project(":kiteplayer-phone"))` plus `compose.runtime`, `compose.foundation`,
+   `compose.ui`.
+3. One expect Composable, the whole baseline surface:
+   `@Composable public expect fun KitePlayerSurface(player: KitePlayer?, modifier: Modifier = Modifier)`.
+   Android actual wraps `AndroidView` (factory builds a `KitePlayerView`, update assigns
+   `player`, onRelease assigns null). iOS actual wraps `UIKitView` the same way over
+   `KitePlayerUIView`. The KDoc says what D-6 says: this is the baseline path every player
+   offers, the one that wins sustained fullscreen battery, and KiteVideo is the flagship beside
+   it, not its replacement.
+4. Boundary: `kiteplayer-phone/src` must contain no compose import (scan it), and
+   `kiteplayer-output/src` stays clean under the standing S1.c scans.
+
+Gate. Tier 1, then compile all three targets of the new module and the API dump ritual. A
+Compose-plugin/AGP-KMP incompatibility discovered here is a BLOCKING finding to report with the
+exact error, not something to hack around silently.
+
+Commit first line. KitePlayer: `Wrap the phone views in one Composable`.
+
+#### S1.d.3 KiteVideo core, the owner's rider
+
+Files, all in `kiteplayer-compose`: new commonMain `KiteVideo.kt`, `KiteVideoState.kt`,
+`KiteVideoRenderer.kt`, `VideoGeometry.kt`, `ImageBitmaps.kt` (expect); new androidMain
+`ImageBitmaps.android.kt`; new iosMain `ImageBitmaps.ios.kt`; new androidHostTest
+`KiteVideoRendererTest.kt` and `VideoGeometryTest.kt`; the API dump; KPKMP execution log.
+
+Steps.
+1. The three 17.9 laws land as code contracts. Law 1: the frame holder is a
+   `MutableState<KiteVideoFrame?>` read at exactly one site, inside `drawBehind`, and the comment
+   at that site says reading it during composition or layout is the bug that turns video into a
+   recomposition storm. Law 2 is explicitly deferred: this rider converts to tightly packed RGBA
+   through the same converter the platform views use, the KDoc names that as 17.9's stated
+   last-resort, and KV-2 replaces it in S2. Law 3 has no Android path (KV-7 stays parked).
+2. `public class KiteVideoState`: the internal frame state, `public val renderer: VideoRenderer`,
+   and the three passthrough counters. `public fun rememberKiteVideoState(): KiteVideoState`
+   remembers one and closes its renderer when it leaves composition.
+3. `internal class KiteVideoRenderer`, the fourth instance of the proven renderer shape: one
+   atomic newest-wins pending slot whose displaced frame is closed and counted, one conflated
+   signal channel, one single-thread worker, `present` returns immediately, close blocks
+   acceptance then joins the worker then drains the slot. The worker converts, builds an
+   ImageBitmap, publishes a `KiteVideoFrame(bitmap, displayWidth, height, quarterTurn)` into the
+   state. Internal constructor takes `convert`, `makeImage` and `publish` so host tests drive it
+   with fakes; the public wiring supplies the real three.
+4. `internal expect fun rgbaToImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap`.
+   Android actual: one ARGB_8888 `Bitmap` filled by `copyPixelsFromBuffer` (whose in-memory
+   layout IS tightly packed RGBA), then `asImageBitmap()`. iOS actual: a Skia raster image over
+   the bytes (RGBA_8888, opaque) converted with `toComposeImageBitmap()`. One allocation per
+   published frame is the honest S1 cost; KV-2 owns removing it.
+5. `@Composable public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier)`:
+   a Box whose `drawBehind` reads the frame once, computes the integer aspect-fit rectangle with
+   the same law the output renderers obey (pixel-aspect scales the stored width, a quarter turn
+   exchanges the sides, the fit is centred and symmetric), rotates about the destination centre
+   and draws with low filter quality. The geometry is a pure commonMain function.
+6. Host tests pin the renderer's ownership truths (displaced frame closed and counted, convert
+   failure counted without killing the worker, close order, publish called on the worker, byte
+   validation refuses short buffers) and the geometry table (plain, anamorphic, quarter-turned,
+   odd-pixel, degenerate).
+
+Gate. Tier 1, all three targets compile, host tests green, API dump ritual. No performance claim
+anywhere: the log entry records that per-frame cost is UNMEASURED until S2.
+
+Commit first line. KitePlayer: `Land the Compose-true KiteVideo core as the stage rider`.
+
+#### S1.d.4 The Android sample consumes the phone view
+
+Files: `kiteplayer-sample-android/build.gradle.kts`; `SampleController.kt` and `MainActivity.kt`
+as the wiring demands; the sample README and root README sentences that count its dependencies;
+KPKMP execution log.
+
+Steps.
+1. Replace the three project dependencies with `implementation(project(":kiteplayer-phone"))`,
+   which is the whole point of the aggregate: the settings.gradle.kts comment promised exactly
+   this replacement.
+2. Replace the private SurfaceView plus hand-built renderer with one `KitePlayerView`; use
+   `phoneBackends()` for the config; read the smoke's presentation counters through the view's
+   passthroughs. The surface-evidence key keeps its existing mechanism against the view's
+   surface.
+3. The S1.c.6 close-scan line evolves with the scope: `KitePlayerView` and the Surface renderer
+   are now the sanctioned path, so the sample scan becomes a ban on
+   `Compose|AndroidView|OpenGL|GLES|Vulkan|AndroidSurfaceVideoRenderer|android[.]view[.]Surface`
+   in `kiteplayer-sample-android/src`, while the android.media and raw-FFmpeg scans run
+   unchanged. Run all three with one planted control each, observe the failures, revert.
+4. Re-run S1.c.6 step 8 verbatim on `Pixelu16KB`: debug and release smokes, the same eleven-key
+   jq oracle, both must pass. A debug pass never excuses a release failure.
+
+Gate. Tier 2 plus the two smoke runs plus the scans. Do not republish, do not re-run Tier 3 (no
+support-tier promotion happens here; the sample changed lanes, not evidence class).
+
+Commit first line. KitePlayer: `Consume the phone view from the Android sample`.
+
+**S1.d exits** when the four product sub-phases have their named local commits and log entries,
+both trees are clean, both new modules carry committed API dumps (with the android-target gap
+recorded, not faked), the Android sample passes both smokes through the phone coordinate, and the
+README states the new truth without overclaiming: reusable views exist on both phones, the
+baseline Composable exists, KiteVideo's core exists with its cost unmeasured until S2. The iOS
+host re-consumption, the 17.5 matrix runs and the owner device session remain S1.e, unchanged.
+
+Estimates. S1.d.1 6 to 9 hours, S1.d.2 3 to 5, S1.d.3 8 to 12, S1.d.4 2 to 4: S1.d totals 19 to
+30 focused hours. The rider moves 10 to 15 of S2's KiteVideo hours into S1.d, so S2 reads 105 to
+150 and the whole-road total stays 710 to 1015: hours moved, not added.
+
 ### 17.5 The format conformance matrix
 
 One suite, grown once, run everywhere: the existing testmedia clips plus MKV multi-track,
@@ -13628,18 +13855,24 @@ fullscreen playback therefore belongs to the baseline wrapper. Video embedded in
 feeds, mini players) loses nothing, because Compose was compositing those pixels anyway.
 
 **The slices and their homes** (each expands into register items at its home stage's entry, per
-17.2's ritual; nothing here starts earlier):
+17.2's ritual; nothing here starts earlier, with one owner-decided exception recorded on the
+slice it moves):
 
-- **KV-1, the core** (S2): `KiteVideo(state, modifier)` in :kiteplayer-compose; a frame holder
+- **KV-1, the core** (home S2; the CORE pulled forward into S1.d by owner decision 2026-08-12,
+  expansion 17.4.4): `KiteVideo(state, modifier)` in :kiteplayer-compose; a frame holder
   obeying law 1; fed by a VideoRenderer SPI implementation. The engine does not change: this is
-  one more SPI consumer and a further proof the SPI is sufficient.
+  one more SPI consumer and a further proof the SPI is sufficient. The S2 slice keeps what S1.d
+  does not land: the measurement exits (per-frame CPU cost, dropped frames, modifiers applied,
+  named devices) and law 2's arrival via KV-2.
 - **KV-2, the YUV image path** (S2): law 2 end to end, with the shader fallback.
 - **KV-3, Apple zero-copy** (S2): law 3 on iOS and macOS, riding S2's VideoToolbox work
   (KiteCodec window 3 already sits there).
 - **KV-4, Android software path** (S3, exit rider): frames over the S1.c converter into
   ImageBitmap, one copy per frame; days of work once KV-1 and KV-2 exist. It rides S3 because
   that is where the JVM rendering paths mature; S3's exit carries it as an explicit rider per
-  17.1's refinement.
+  17.1's refinement. Note 2026-08-12: S1.d's pulled-forward core already feeds itself this way
+  (RGBA, not yet ImageBitmap-from-YUV), so KV-4's remaining S3 work is the measured maturation
+  of that path, not its first existence.
 - **KV-5, desktop upload path** (S3): one upload per frame; desktop bandwidth makes this cheap;
   measured anyway.
 - **KV-6, web** (S6): the only Compose rendering story on wasm; measured inside the S6 spike.

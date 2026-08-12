@@ -6729,6 +6729,27 @@ is no other.
   S4 90 to 125, whole road 710 to 1015. Nothing enters S1.c or S1.d; every slice expands at its
   home stage's entry.
 
+- 2026-08-12, the S1.c.1 scaffold, planner-landed at the owner's direction to shrink the
+  executor's remaining S1.c work to roughly a tenth. KiteCodec side, one commit; KPKMP gains
+  17.4.3's scaffold layer naming the new ground truth and the executor's remaining list. What
+  landed and how it was proven is recorded in that layer verbatim: the kc_jvm_attach and
+  ffkmp_packet_clone pair with reproduction-first tests (the clone falsifiability mutation was
+  run and crashed ASan at the predicted case before the real implementation went green in all
+  four variants), every ratchet moved by its procedure (exports +2, signatures 189 to 192,
+  metadata re-baselined additions-only at 1004 lines, apiCheck green, C ABI 2.1), the complete
+  kitecodec-jni substrate (handle table, util, X-macro registration over methods.def, 53
+  implemented rows across abi, packet, format, codec and frame, both audit scripts), and the
+  three link-task registrations with the macOS arm run through Gradle and audited to export
+  exactly JNI_OnLoad. Two scaffold defects were found and fixed by the scaffold's own gates:
+  a comment containing the token sequence star-slash truncated a block comment (caught by
+  -Werror), and the identity-gate duplicate-symbol link caught kc_jvm_attach missing from
+  kc_rename.h's per-copy renames. DEVIATION, stated plainly: the planner wrote product code
+  under the executor's sub-phase; the fence stands for the executor, and this layer plus the
+  named remaining list is the boundary between the two. Tier: the KiteCodec pieces ran the
+  relevant Tier 2 members as they landed (all C suites in four variants, both audits, metadata
+  differential, apiCheck); both repositories close with their Tier 1 blocks in this commit
+  pair.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -11198,10 +11219,12 @@ handled by S1.c.0's classification rule, not silently adapted by an executor.
 Expansion-authorship commit first line. KitePlayer:
 `Expand the Android phone stage against the planned iOS substrate`.
 
-The located substrate is exact at authorship. KiteCodec has ten common `expect` declarations and
-nine native implementation files totalling 3,108 lines. Its opaque C boundary has 189 normalized
-declaration records: 169 helper prototypes, eleven opaque typedefs, six ABI prototypes, two enums
-and the report typedef. The Android FFmpeg tasks are
+The located substrate is exact at authorship, and the counts in THIS paragraph were re-anchored
+by the 2026-08-12 scaffold (see the scaffold layer below): KiteCodec has ten common `expect`
+declarations and nine native implementation files totalling 3,108 lines. Its opaque C boundary
+has 192 normalized declaration records: 170 helper prototypes (ffkmp_packet_clone landed), eleven
+opaque typedefs, seven ABI prototypes (kc_jvm_attach landed), three enums (kc_jvm_status landed)
+and the report typedef. The C ABI stands at 2.1. The Android FFmpeg tasks are
 `:kitecodec-core:buildFFmpegForAndroidArm64`,
 `:kitecodec-core:buildFFmpegForAndroidArm32` and
 `:kitecodec-core:buildFFmpegForAndroidX64`. S1.c deliberately uses the first and third only. The
@@ -11224,6 +11247,63 @@ that the S1.b Apple consumer still links and an ordinary Android consumer resolv
 and decodes from the same coordinate. Publishing an Android-only `0.0.1` is forbidden because it
 would replace the root Gradle metadata written in window 2a and silently remove the iOS variants.
 No later S1.c phase changes KiteCodec. Nothing from S1.d, S2 or KiteVideo enters these commits.
+
+**THE 2026-08-12 SCAFFOLD LAYER, planner-landed, and the executor's remaining work.** At the
+owner's direction the planner landed the mechanical substrate of S1.c.1 in the tree, every piece
+gated as it landed. S1.c.0 verifies against the post-scaffold heads; the facts below are the new
+ground truth and override any step text they contradict.
+
+LANDED AND PROVEN (KiteCodec scaffold commit, 2026-08-12):
+
+- S1.c.1 steps 1 and 2 are COMPLETE: `kc_jvm_attach` (Android arm gated and calling
+  av_jni_set_java_vm inside the archive; every other build answers KC_JVM_UNSUPPORTED without
+  referencing the symbol), `enum kc_jvm_status`, and `ffkmp_packet_clone`. Tests: identity suite
+  grew to 18 cases (NULL and host-sentinel arms), ownership to 44 (clone metadata equality,
+  independent close in both orders, NULL refusal), and the clone's falsifiability arm was RUN:
+  an alias-the-input mutation crashed the ASan suite at the predicted case, then the real
+  implementation went green in plain, asan, tsan and interpose. Baselines moved by ritual:
+  export baseline +2 names, signature baseline 189 to 192 with the audit's count assertions
+  updated at every site, klib metadata re-baselined at 1004 lines with the diff verified
+  additions-plus-relocations-only and zero LOST, apiCheck green, KITECODEC_C_ABI_MINOR now 1.
+  One test-infrastructure fix rode along: `kc_rename.h` renames `kc_jvm_attach` per doctored
+  copy, keeping the production file free of test branches.
+- S1.c.1 steps 4, 5 and 6 are SUBSTANTIALLY COMPLETE: `native/kitecodec-jni` exists with the
+  full handle table (generation-tagged, odd-generation-live, idempotent close, live counter),
+  `kj_util.c` (the two exception classes are `io.github.yuroyami.kitecodec.JniHandleException`
+  and `JniNativeException`; the ffmpeg throw carries `code|context|text`), the X-macro
+  registration engine over `methods.def`, `JNI_OnLoad` doing registration only (no kc_init, no
+  attach, per S1.c.2 step 5's reasoning), and IMPLEMENTED category rows: abi complete
+  (17 rows including the 30-field unit-separator identity report documented in kj_abi.c),
+  packet complete (9 rows), and the playable core of format (9), codec (10) and frame (8).
+  `kj_filter.c` is empty by design. `exports.map` (ELF) and `exports.macos` (Mach-O) exist.
+  Both JNI audit scripts exist and PASS; the symbol audit reads ELF and Mach-O.
+- `LinkKiteCodecJniTask` exists in buildSrc and all three arms are registered.
+  `linkKiteCodecJniMacosArm64` was RUN through Gradle: BUILD SUCCESSFUL, and the audit proves
+  the dylib exports exactly JNI_OnLoad. The macOS link recipe (vendored LGPL archives plus
+  Homebrew SvtAv1Enc and graphite2, JDK 21 includes, -exported_symbols_list) is encoded in the
+  registration after being hand-proved first.
+
+THE EXECUTOR'S REMAINING S1.c.1 (roughly a tenth of the original sub-phase):
+
+1. Run the two Android FFmpeg producers (step 3's exact commands; machine time, not judgment)
+   and the provenance/archive assertions on their outputs.
+2. Run both Android link arms and step 8's ELF assertions (JNI_OnLoad-only, no libav NEEDED,
+   PT_LOAD 0x4000) on the packaged bytes; adjust the Android `-l` set only if the NDK link
+   demands it, recording any change in the log.
+3. Run step 9's four falsifiability controls (the clone control is already done; the four here
+   are the source-ban, Java_ export, 4 KiB page and corrupted-descriptor arms; the descriptor
+   arm lands with S1.c.2's manifest-parser test if no earlier harness exists).
+4. Write `LinkKiteCodecJniTaskTest` pinning both ABI recipes, and the S1.c.1 log entry and
+   commits under the sub-phase's named first lines.
+
+S1.c.2 ONWARD: unchanged, with these fixed points the scaffold decided (no executor judgment
+needed): the bridge class is `io/github/yuroyami/kitecodec/Internals`; the external method
+names, descriptors and semantics for every implemented row are exactly methods.def's; the
+identity report crosses as one \x1f-separated 30-field string whose order kj_abi.c documents;
+zero jlong means "no handle" and a zero packet token to send is the drain packet; new rows for
+the remaining operations (dict walk, stream and codecpar accessors, filter, sink, remux,
+transcode) are ADDED to methods.def and implemented by kj_abi.c's canonical pattern, one row
+per operation, in their category units.
 
 #### S1C-01. The JNI library is a narrow adapter over the opaque C boundary
 

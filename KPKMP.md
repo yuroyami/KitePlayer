@@ -6681,6 +6681,37 @@ is no other.
   All 15 paths are inside the corrected fence. Nothing is staged, pushed, publicly published or
   released.
 
+- 2026-08-12, independent hostile review of the S1.c expansion (17.4.3) completed by the
+  planner, at the owner's direction, before S1.c.0 runs. Prose only, Tier 1 gate (selected by
+  rule). This restores the author-verifier separation for one pass: the expansion was authored
+  by the executor, and this review re-derived its located facts from both trees and the machine
+  rather than trusting them. VERIFIED EXACT: ten common expects; nine nativeMain files at 3,108
+  lines; 189 signature records with symbol-audit pinning 189 at four sites; C ABI 2.0; the
+  Android FFmpeg profile really carries --enable-pic, --enable-mediacodec, --enable-jni,
+  --target-os=android and the lib/kitecodec/ffmpeg-configure.txt provenance constant; the
+  buildFFmpegFor naming scheme and the AndroidArm64/AndroidX64 triples; the
+  applePhoneTargetsOnly and requireAllTargets selectors; BuildFFmpegTaskTest exists; the
+  MediaType.kt comment really directs restoring @JvmInline when a JVM target arrives; the
+  low-level Packet/PacketReader/StreamDecoder/SeekDirection surface and the current
+  openDecoder(stream, threadCount, lowDelay) signature, so the named-decoder parameter is a
+  pure addition; Frame.copyPlanesToByteArray and its layout KDoc; the five moving
+  kiteplayer-ffmpeg files plus the native converter; AGP 9.2.1 with the
+  com.android.kotlin.multiplatform.library alias already in Player's catalog;
+  updateKotlinAbi/checkKotlinAbi task names confirmed from Gradle itself; the stale
+  hardware-KDoc claims in PlayerConfig.kt; both Apple renderers carrying the three counters the
+  Android renderer mirrors; testmedia/sync1080p30.mp4; NDK 29.0.14206865, build-tools 36.1.0
+  zipalign, the Pixelu16KB AVD, /usr/bin/jq, rg and the emulator binary all present. MEASURED:
+  gradle help --offline --refresh-dependencies exits 0 on this Gradle 9.6 host with remote
+  plugins resolved from cache, so the S1.c.2 consumer flag combination is valid here. LAW
+  CHECKS: D-1 and D-2 hold (MediaCodec only as FFmpeg's named decoders, buffer mode reported
+  honestly as HardwareWithDownload, platform demux/decode scans with negative controls); D-3
+  holds (one local publication, remote publish proven refused); tier selections are mechanical,
+  including Tier 3 at S1.c.6 by the support-tier promotion trigger; the window-2b
+  single-publication rule protects the window-2a Apple variants; every sub-phase carries
+  reproduction-first tests and falsifiability arms. FINDINGS: zero blocking, zero descriptive
+  requiring text changes. VERDICT: SAFE TO EXECUTE. S1.c.0 remains binding and re-verifies
+  against the post-S1.b heads as written.
+
 ---
 
 ## 15. Horizon B execution: B1

@@ -7819,6 +7819,45 @@ is no other.
   blit on Apple while Android's GPU story stays parked at KV-7 for the S3-entry judgment. Order:
   the KiteCodec VideoToolbox window (0.0.4), the player's D-2 integration, the Metal renderer,
   the KiteVideo GPU path, colour and 4K, exit.
+- 2026-08-13, S2.a completed: KiteCodec window 3's VideoToolbox half, full ritual. The three
+  Apple FFmpeg trees (macos_arm64, ios_arm64, ios_simulator_arm64) rebuilt with
+  `--enable-hwaccel=h264_videotoolbox,hevc_videotoolbox`, confirmed by the configure evidence
+  line in each installed tree and by the defined `_ff_*_videotoolbox_hwaccel` symbols in each
+  libavcodec.a; the simulator gets DECODE deliberately (it works there on Apple silicon; encode
+  stays desktop-only per the standing comment). Two C funnels in a new `helpers_hwaccel.c`, both
+  portable C with no preprocessor platform split (FFmpeg's own hwdevice create answers the
+  function-not-implemented error on a build without the framework, which IS the capability
+  answer): `ffkmp_codecctx_use_videotoolbox` (device context attached in the pre-open window, a
+  format negotiation that prefers hardware and falls back to the default when the offer is
+  withdrawn mid-stream, repeat-attach replaces rather than leaks, ASan holding that word) and
+  `ffkmp_frame_hw_download` (transfer plus properties, dst left blank on failure, a software src
+  REFUSED because reaching the download on one means the caller's bookkeeping is wrong). The
+  export predicate pair (`ffkmp_frame_hw_surface`/`is_hardware`) already existed and moved
+  nothing. Ritual: baselines 183 to 185 names and 198 to 200 records with the audit script's own
+  enumeration updated at every site; KITECODEC_C_ABI_MINOR 3 to 4; args suite 27 to 31 cases
+  (three refusal arms plus the attach control, and the S4.b-stale header count corrected while
+  there); all four C variants green (plain, asan, tsan, interpose, 7 suites each); klib metadata
+  re-baselined at 1036 lines naming exactly the two externals and the minor constant; JNI rows
+  `nativeCodecCtxUseVideoToolbox` and `nativeFrameHwDownload` by the canonical pattern (one
+  discipline-scan refusal for a raw FFmpeg macro name in prose, reworded, scan untouched, the
+  S4.b lesson again). Kotlin: `HardwareAccel.VideoToolbox` on `openDecoder` (attach in the same
+  pre-open moment as KD-2's options, both actuals) and `Frame.downloadFromHardware()`; dumps
+  moved by ritual on both boundaries. THE PROOF, differential by construction: a contract arm in
+  codecContractTest encodes real H.264 through `h264_videotoolbox`, decodes it back with the
+  hwaccel, and asserts hardware frames, timestamp-preserving downloads and readable pixels; it
+  ran green on the cinterop boundary (macosArm64Test) and on the JNI boundary (jvmTest), 5
+  hardware frames and 5 downloads each, plus a nativeTest twin that also pins the CVPixelBuffer
+  surface pointer non-null. One stale pin found and corrected: JniIdentityTest asserted ABI
+  "2.2" from S1.c and had been latently wrong since S4.b's bump to 2.3; it surfaced now because
+  this window relinked the test dylib, and it now pins "2.4" with the pin's law written beside
+  it. One process note recorded honestly: the 0.0.4 publication command ran chained behind that
+  red gate (a pipe masked the exit); the gate was then fixed and re-run green on identical main
+  sources, so the published artifacts are the proven ones. iOS static links gain
+  CoreFoundation/CoreMedia/CoreVideo/VideoToolbox in StaticLinkFlags (the mobile trees now
+  reference those frameworks); CHANGELOG and README retired their now-false mobile negatives.
+  0.0.4 published locally (phone superset); both scratch consumers were RECREATED from the
+  recorded S1.b.1/S1.c.6 recipes (the OS cleaned /private/tmp between sessions) pinned at 0.0.4,
+  and both link.
 
 ---
 

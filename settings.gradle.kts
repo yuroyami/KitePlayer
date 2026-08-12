@@ -66,9 +66,12 @@ include(":kiteplayer-output")
 // FFmpeg backend, the output backends and the two reusable views, KitePlayerView for Android
 // and KitePlayerUIView for iOS. It holds no playback policy and no Compose (S1.d).
 include(":kiteplayer-phone")
+// :kiteplayer-compose is the optional Compose Multiplatform surface: the baseline Composable
+// that wraps the phone views, and KiteVideo, the Compose-true renderer (D-6, 17.9). A
+// non-Compose consumer never pulls it (S1.d).
+include(":kiteplayer-compose")
 // include(":kiteplayer-libass")     // optional full ASS renderer
 // include(":kiteplayer")            // umbrella artifact
-// include(":kiteplayer-compose")    // Compose Multiplatform surface and controls
 include(":kiteplayer-sample")
 // The provisional Android assembly proof (S1.c.6). S1.d replaces its internals with the
 // :kiteplayer-phone aggregate; the module itself stays.

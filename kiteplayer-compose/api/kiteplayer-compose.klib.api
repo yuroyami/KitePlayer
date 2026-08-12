@@ -1,0 +1,9 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-compose>
+final fun io.github.yuroyami.kiteplayer.compose/KitePlayerSurface(io.github.yuroyami.kiteplayer/KitePlayer?, androidx.compose.ui/Modifier?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.compose/KitePlayerSurface|KitePlayerSurface(io.github.yuroyami.kiteplayer.KitePlayer?;androidx.compose.ui.Modifier?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]

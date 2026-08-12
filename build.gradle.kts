@@ -12,6 +12,9 @@ plugins {
     alias(libs.plugins.android.kmp.library).apply(false)
     // The plain application plugin, for :kiteplayer-sample-android only (S1.c.6 step 1).
     alias(libs.plugins.android.application).apply(false)
+    // The two Compose plugins, for :kiteplayer-compose only (S1.d.2).
+    alias(libs.plugins.kotlin.compose).apply(false)
+    alias(libs.plugins.compose.multiplatform).apply(false)
     // Applied at the root so dokkaGenerate aggregates every library module into one API site
     // at build/dokka/html.
     alias(libs.plugins.dokka)

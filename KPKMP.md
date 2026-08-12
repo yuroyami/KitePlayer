@@ -7513,6 +7513,18 @@ is no other.
   (bare -lavformat with no -L); with it, linkDebugTest for both iOS arms and the simulator test
   run pass against the local trees. The iOS-target ABI dump is committed; the android target
   still produces none (standing tooling gap, recorded not faked). Tier 1 green both repos.
+- 2026-08-12, S1.d.2 completed: the baseline Composable. Compose Multiplatform 1.12.0-rc01
+  landed on the first try against Kotlin 2.4.10 with ONE forced deviation: the Compose 1.12
+  Android artifacts refuse compileSdk 36, so :kiteplayer-compose alone compiles against the
+  installed android-37.0 platform (compileSdk 37, minSdk unchanged at 24; every other module
+  stays at 36; the build file comment records why). KitePlayerSurface(player, modifier) is one
+  expect Composable; the Android actual wraps AndroidView over KitePlayerView, the iOS actual
+  wraps UIKitView over KitePlayerUIView, and update/onRelease assign and clear the view's
+  player. All three targets compile; the iOS test binary links the full FFmpeg stack through
+  the phone dependency (the kitecodec plugin supplies -L exactly as in S1.d.1); the iOS ABI
+  dump is committed. Boundary held: the compose-import scan of kiteplayer-phone/src is clean,
+  and one planted control (a compose import in PhoneBackends.kt) failed the scan before
+  reversion. Tier 1 green.
 
 ---
 

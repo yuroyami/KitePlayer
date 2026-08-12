@@ -7811,6 +7811,14 @@ is no other.
   cue 'Hello from KitePlayer'. One scripted-edit lesson recorded: a python replace wrote escaped
   template dollars into two message strings and silently skipped a third edit; caught by reading
   the transcript, which lacked the cue note the edit should have produced.
+- 2026-08-12, S2 entered by owner order ("do s2 fully") while S4 stood mid-S4.c. The expansion
+  is 17.4.8, authored against KitePlayer 885ccc0 and KiteCodec 613766d and adversarially reread
+  before execution. The three recorded owner decisions: S4 pauses and resumes after S2 at its
+  device proofs; S4.c landing 4's Apple and KiteVideo halves ride S2 as explicit riders so the
+  compositing is written once, onto Metal; and the premise stated honestly, S2 removes the CPU
+  blit on Apple while Android's GPU story stays parked at KV-7 for the S3-entry judgment. Order:
+  the KiteCodec VideoToolbox window (0.0.4), the player's D-2 integration, the Metal renderer,
+  the KiteVideo GPU path, colour and 4K, exit.
 
 ---
 
@@ -10488,7 +10496,8 @@ dependency order inside the stage:
     through the S1.d phone coordinate, run the matrix on both platforms, write every measured
     number, and complete the owner device session.
 
-**S2. IT PLAYS BEAUTIFULLY ON APPLE.** Exit: Metal renderer on macOS and iOS, VideoToolbox inside
+**S2. IT PLAYS BEAUTIFULLY ON APPLE.** (Expanded 17.4.8; entered 2026-08-12 by owner order,
+after S4.a to S4.c, before S4.d to S4.g.) Exit: Metal renderer on macOS and iOS, VideoToolbox inside
 FFmpeg per D-2 with measured software fallback, colour instrument, vsync-snapped scheduling,
 sustained 4K runs with committed thresholds. Absorbs draft items C-09 to C-31, C-33, C-48 to
 C-50 with their verifier corrections. Also KiteVideo's first landing (17.9, KV-1 to KV-3): the
@@ -14539,6 +14548,171 @@ Commit first line: `Close the stage that explains itself`.
 Estimates. S4.a 10 to 15, S4.b 5 to 8, S4.c 25 to 35, S4.d 8 to 12, S4.e 20 to 30, S4.f 25 to
 35, S4.g 2 to 4: 95 to 139 focused hours, consistent with the 17.3 row (90 to 125) within its
 own error bars; the table is not re-litigated mid-stage.
+
+### 17.4.8 The S2 register and sub-phases, decision complete
+
+Authored 2026-08-12 by the planner against KitePlayer `885ccc0` and KiteCodec `613766d`, at the
+owner's direction: "do s2 fully", given while S4 stood mid-S4.c (landings 1 to 3 committed, the
+Android half of landing 4 committed as `885ccc0`, the Apple and KiteVideo halves open). The
+stage law permits the reordering; three owner decisions are recorded so nothing is implicit:
+
+1. S4 PAUSES. S4.d to S4.g stay S4 work and resume after S2's exit, against the tree S2
+   leaves behind.
+2. S4.c landing 4's Apple and KiteVideo halves ride S2 as explicit riders. They are renderer
+   work; writing their compositing twice, once onto the CG layers and once onto Metal weeks
+   later, is the kind of duplicated throwaway the stage law exists to prevent. The landing's
+   device proofs (non-black overlay pixels on the phone targets) return to S4.c when S4
+   resumes.
+3. The premise is recorded honestly: S2 removes the CPU blit on APPLE. Android's GPU story
+   remains KV-7, parked, judged at S3 entry with KV-4's measured 128.3 ms as the number to
+   beat. The owner ordered S2 knowing this.
+
+S2's whole scope, from the 17.2 register: the Metal renderer on macOS and iOS (old draft
+C-09 to C-31: plane targets, texture pools, stride discipline, presentation feedback, vsync
+snapping, the colour instrument), VideoToolbox inside FFmpeg per D-2 with measured software
+fallback (C-33, C-48 to C-50), sustained 4K runs with committed thresholds, and KiteVideo's
+first landing (KV-2, KV-3, and KV-1's measurement exits; KV-1's core landed in S1.d by the
+17.4.4 rider).
+
+**Owner-fixed points (no executor judgment):**
+
+- ONE Metal core in appleMain, hosted by thin platform layers. The CG renderers
+  (AppKitVideoRenderer, UIKitVideoRenderer) stay exactly as they are: they are the measured
+  software fallback, their contracts do not change, and no consumer is forced to migrate.
+- VideoToolbox is an HWACCEL behind the standard `h264`/`hevc` decoders, not a named decoder
+  the way `h264_mediacodec` is. Selection therefore happens at the codec context (a device
+  context attached between creation and open), and D-2's fallback discipline extends the
+  existing replay driver rather than forking it. The 16 MiB retention law and the pts-based
+  boundary confirmation from `8a47d35` apply unchanged.
+- Pixels never enter Kotlin memory on the hardware path. A hardware frame crosses as an
+  opaque handle; the renderer reads it through CVMetalTextureCache. The only per-frame
+  crossings are the ones that exist today.
+- Zero-copy is CLAIMED only where measured. Simulator numbers are provisional by definition
+  and labelled so in the log, exactly like A3's emulator numbers.
+- KV-3 is a SPIKE with a committed fallback: if Skiko's public API cannot adopt a Metal
+  texture into an Image, KiteVideo keeps its upload path, the exact API gap is named in the
+  log, and the stage exit states law 3's Apple status truthfully. The stage does not block
+  on Skiko.
+- Shaders are MSL source strings compiled at runtime through the Metal API. No .metallib
+  toolchain enters the build; there is nothing to provision and nothing new for a consumer
+  to carry.
+- KiteCodec work is window 3's VideoToolbox half exactly as 17.3 homed it, full S1.a.7-style
+  ritual, VERSION 0.0.4, one new coordinate, local publication only, nothing pushed.
+
+Execution order: S2.a the KiteCodec window, S2.b the player's D-2 integration, S2.c the Metal
+renderer, S2.d the KiteVideo GPU path, S2.e colour and 4K, S2.f exit.
+
+#### S2.a KiteCodec window 3: VideoToolbox decode behind the opaque boundary
+
+Files, KiteCodec: `buildSrc/src/main/kotlin/BuildFFmpegTask.kt` (`appleHardwareArgs()` gains
+`--enable-hwaccel=h264_videotoolbox,hevc_videotoolbox`; the mobile Apple profile gains
+VideoToolbox DECODE for device and simulator, encoders stay desktop-only per the existing
+comment); `native/kitecodec-c/include/kitecodec_helpers.h` plus a new `src/helpers_hwaccel.c`:
+`ffkmp_codecctx_use_videotoolbox(ctx)` (creates the AV_HWDEVICE_TYPE_VIDEOTOOLBOX device
+context, attaches it, installs the get_format callback preferring the VideoToolbox format,
+returns 0 or the AVERROR; a non-Apple build returns ENOSYS from its own `#if`),
+`ffkmp_frame_hw_download(src, out)` (av_hwframe_transfer_data plus av_frame_copy_props, the
+measured software download), `ffkmp_frame_cv_pixel_buffer(frame)` (the CVPixelBufferRef as an
+opaque pointer on Apple, NULL elsewhere), and the existing hw_frames_ctx predicate promoted to
+the exported surface if it is not already there. Guard suite NULL arms; the doctored-header
+rule holds (tests speak `kc_` types); signature, exported-symbols and klib baselines moved by
+ritual with counts updated at every site; `KITECODEC_C_ABI_MINOR` 3 to 4; JNI parity rows in
+`methods.def` following the canonical pattern (on macOS JVM they WORK, because the C links
+VideoToolbox there; on other JVM platforms they return the same typed ENOSYS, so the bridge
+surface never forks). Kotlin commonMain: a typed hardware-decode request on the decoder-open
+path (Apple natives real, elsewhere typed-rejected per D-5's capability honesty), and the
+frame surface gains isHardware, downloadToSoftware and the pixel-buffer handle.
+Steps: prototypes and NULL arms first, then the four C suite variants (plain, asan, tsan,
+interpose), then the Kotlin actuals, then 0.0.4 published locally (phone superset preserving
+the Apple variants), then both scratch consumers must still link.
+Gate: KiteCodec Tier 2 equivalents, api dump rituals, four C variants green.
+Commit first line, KiteCodec: `Decode through VideoToolbox behind the opaque boundary`.
+
+#### S2.b VideoToolbox in the player, per D-2, with measured fallback
+
+Files, KitePlayer: `kiteplayer-ffmpeg` decoder selection grows an Apple axis (the nativeMain
+actual stops returning bare software: on Apple targets h264/hevc map to the VideoToolbox
+request under the same policy table, driven by the existing exhaustive common test);
+`KiteCodecSource` opens the hw path when selected and maps frames honestly: a hardware frame
+becomes `PlayerPixelFormat.Opaque` with `HwSurfaceKind.CoreVideoPixelBuffer` when the sink
+renderer accepts that surface, and is downloaded to NV12 (HwdecStatus.HardwareWithDownload)
+when it does not; `DecoderFallback` gains the VideoToolbox arms (open refusal and mid-stream
+refusal), red-tested against the unfixed path first exactly like `8a47d35`; HwdecStatus
+reported as Hardware, HardwareWithDownload or Software, never optimistically. Player consumes
+0.0.4.
+Gate: ffmpeg suites on every host, fallback suite grown and green, macOS host matrix re-run
+(must-play rows through VideoToolbox where the renderer path exists, download path
+elsewhere), Tier 1.
+Commit first line: `Select VideoToolbox on Apple and fall back with proof`.
+
+#### S2.c The Metal renderer on macOS and iOS
+
+Files, KitePlayer: new `kiteplayer-output/src/appleMain/.../MetalVideoRenderer.kt` plus its
+shader source and geometry support; thin hosts in macosArm64Main and iosMain (layer
+attachment and the display link); `AppleSubtitleRasterizer.kt` in appleMain (CoreText through
+CGBitmapContext into RgbaBitmap, the S4.c Apple rider) wired as
+`AppleOutputBackend.subtitleRasterizer`; `setOverlay` made real on the CG renderers too (the
+same newest-wins slot and draw-above-picture law as `885ccc0`); the phone and sample view
+paths choose Metal where a CAMetalLayer is available, CG remains the fallback.
+Content, in the old draft's own words made concrete: plane targets (NV12, YUV420P, P010,
+BGRA), texture pools (CVMetalTextureCache for hardware frames, a stride-respecting
+MTLTexture ring for software planes), stride discipline (row-by-row uploads honouring
+planeStride, the classic skew bug pinned by a test), colour matrix selection from
+ColorSpaceInfo (601/709/2020, studio and full range) in the fragment shader, rotation in the
+vertex transform, the same letterbox geometry law the existing renderers obey, vsync-snapped
+scheduling (CADisplayLink on iOS, the display link or layer pacing on macOS), presentation
+feedback (presented, superseded, failed counters, same names as every other renderer),
+newest-wins slot discipline copied from AppKitVideoRenderer, and overlay compositing as
+textured quads above the picture in video-display space.
+Tests: macOS can run REAL Metal on the host, so the renderer's correctness suite renders
+offscreen and reads pixels back (this is also where the colour instrument will point); iOS
+simulator gets the smoke and a layer-has-picture assertion through the phone view.
+Gate: apple test suites, render audit extended to the new instrument names, macOS sample and
+iOS host re-consumed and their smokes green, Tier 1.
+Commit first lines: `Render video through Metal on Apple`, then
+`Rasterise and composite subtitle overlays on Apple`.
+
+#### S2.d The KiteVideo GPU path (KV-2, KV-3, KV-1's exits)
+
+KV-2, the YUV image path, Apple first (Android's maturation is S3/KV-7 by the standing
+decision): the KiteVideoRenderer convert seam stops producing CPU RGBA wherever the platform
+can take YUV or a texture. KV-3, the zero-copy spike: CVPixelBuffer through
+CVMetalTextureCache onto Skiko's Metal context, attempted on iOS first (Compose there owns a
+Metal-backed Skia context); the committed fallback stands if Skiko's API refuses. The macOS
+JVM desktop path gets whatever the JNI bridge's working VideoToolbox rows allow, measured,
+never promised. KiteVideo `setOverlay` becomes real (the S4.c KiteVideo rider): overlays draw
+after the frame in the same draw phase, mapped by VideoGeometry, using the active backend's
+rasterizer. KV-1's measurement exits: per-frame cost and dropped frames through
+KiteVideoFrameCost on this Mac and the iOS simulator, written in the log beside A3's 128.3 ms
+so the three paths (Android software, Apple upload, Apple zero-copy) sit in one honest table.
+Gate: compose suites, the KiteVideo device/simulator smokes, Tier 1.
+Commit first lines: `Feed KiteVideo from the GPU on Apple`, then
+`Composite subtitle overlays in KiteVideo`.
+
+#### S2.e The colour instrument and sustained 4K
+
+The colour instrument: programmatic fixtures at known YUV values in all four corners (601
+studio, 601 full, 709 studio, 709 full; 2020 as far as the fixture pipeline allows), decoded
+and rendered offscreen through Metal on the macOS host, pixels read back and asserted within
+a stated per-channel tolerance, with one falsifying arm proving a deliberately wrong matrix
+FAILS. Sustained 4K with thresholds committed NOW, before measurement: on this Mac, the
+existing 10-bit 4K HEVC through VideoToolbox and Metal must sustain a looped run with zero
+failed frames and dropped frames under one percent; the software-download path is measured
+beside it without a threshold; simulator numbers provisional.
+Gate: the instrument suite green with its falsifying arm, the numbers in the log.
+Commit first line: `Prove colour and hold 4K`.
+
+#### S2.f Stage exit
+
+The matrix re-run on macOS and the iOS simulator through the new default paths; README rows
+tell the new truth with measured numbers and provisional labels; the 17.2 register line
+amended; every number in section 14; memory updated; nothing pushed. S4 resumes at its
+paused point: S4.c's device proofs, then S4.d.
+Commit first line: `Close the stage that plays beautifully on Apple`.
+
+Estimates. S2.a 15 to 22, S2.b 12 to 18, S2.c 35 to 50, S2.d 20 to 30, S2.e 10 to 15, S2.f 3
+to 5: 95 to 140 focused hours, consistent with 17.3's 105 to 150 once the 10 to 15 hours the
+17.4.4 rider already moved into S1.d are subtracted; the table is not re-litigated mid-stage.
 
 ### 17.5 The format conformance matrix
 

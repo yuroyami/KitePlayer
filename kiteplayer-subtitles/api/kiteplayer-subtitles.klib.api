@@ -6,6 +6,15 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-subtitles>
+final object io.github.yuroyami.kiteplayer.subtitle/CueSelector { // io.github.yuroyami.kiteplayer.subtitle/CueSelector|null[0]
+    final fun activeAt(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.subtitle/CueSelector.activeAt|activeAt(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
+    final fun nextChangeAfter(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin/Long? // io.github.yuroyami.kiteplayer.subtitle/CueSelector.nextChangeAfter|nextChangeAfter(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.yuroyami.kiteplayer.subtitle/SubRipParser|null[0]
     final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.parse|parse(kotlin.String){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.subtitle/WebVttParser { // io.github.yuroyami.kiteplayer.subtitle/WebVttParser|null[0]
+    final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text> // io.github.yuroyami.kiteplayer.subtitle/WebVttParser.parse|parse(kotlin.String){}[0]
 }

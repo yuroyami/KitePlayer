@@ -7456,6 +7456,35 @@ is no other.
   releases, exactly the caller contract. Boundary scans clean with the planted ffmpeg-package
   control failing them as required. 35 host tests and 2 device tests in the module total.
 
+- 2026-08-12, S1.c.6 completed and S1.c EXITS: the provisional Android phone application,
+  planner-authored end to end. The plain application (AGP 9's built-in Kotlin; the separate
+  Kotlin Android plugin is refused by AGP and was removed after it said so) assembles
+  KiteCodecMediaBackend, AndroidOutputBackend and AndroidSurfaceVideoRenderer over a private
+  SurfaceView with three programmatic buttons, copies the conformance sync clip through the new
+  transactional PrepareAndroidSampleMediaTask (buildSrc suite green: missing input named,
+  byte-identical copy, re-copy on change, no partial destination past an injected rename
+  failure), and packages exactly two Stored 16 KiB-aligned JNI libraries in both variants.
+  THE MEASURED EXIT, both variants on Pixelu16KB (rebooted mid-stage and re-proved at 16384):
+  debug decoded 151 frames, presented 39, seek requested and landed inside 5000 to 5034 ms with
+  a later presentation, terminal Ended, hardware HardwareWithDownload(MediaCodec), teardown
+  causally completed, 7 audio underruns; minified RELEASE decoded 157, presented 42, same seek
+  and terminal truth, ZERO underruns; both JSON oracles pass the plan's exact eleven-key jq
+  predicate byte for byte. Scans: the spec's exact sample scan is CLEAN (the spec's own
+  dot-aware boundary already anticipated the false positive on the backend package; the planner
+  first ran a paraphrase, learned the difference, and ran the spec's line verbatim), two prose
+  tokens were reworded rather than the scans weakened, and three planted controls (MediaCodec
+  import, a declarative-view import, a raw cinterop import) each failed their scan before
+  reversion. TIER 3, selected by the T1-to-T2 Android promotion trigger: the standing macOS
+  soaks ran once, RealTimeSoakTest 3 of 3 over 2402 seconds and RealTimeMediaSoakTest 1 of 1 at
+  599.8 seconds, zero failures. Android is now labelled T2 Codec with provisional output
+  evidence below T3-Full in the README's blockquote and support table, x86_64 stays
+  compile/link/package qualified only, and the absent physical Android device remains the
+  explicit S1.e blocker. Every S1.c sub-phase now has its named local commits and log entries;
+  the one window publication in force is 0.0.2 per window 2c, linking the Apple scratch
+  consumer, the Android consumer and both sample APKs; nothing is pushed, publicly published or
+  released. S1.c IS COMPLETE: KitePlayer plays real media on Android, hardware-decoded through
+  FFmpeg's own decoder, in an ordinary application, in release shape.
+
 ---
 
 ## 15. Horizon B execution: B1

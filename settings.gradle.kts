@@ -65,3 +65,6 @@ include(":kiteplayer-output")
 // include(":kiteplayer")            // umbrella artifact
 // include(":kiteplayer-compose")    // Compose Multiplatform surface and controls
 include(":kiteplayer-sample")
+// The provisional Android assembly proof (S1.c.6). S1.d replaces its internals with the
+// :kiteplayer-phone aggregate; the module itself stays.
+include(":kiteplayer-sample-android")

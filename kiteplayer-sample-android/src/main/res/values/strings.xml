@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KitePlayer Sample</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="seek_five">Seek 5s</string>
+</resources>

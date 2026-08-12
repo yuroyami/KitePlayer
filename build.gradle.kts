@@ -10,6 +10,8 @@ plugins {
     alias(libs.plugins.vanniktech.publish).apply(false)
     alias(libs.plugins.kotlin.multiplatform).apply(false)
     alias(libs.plugins.android.kmp.library).apply(false)
+    // The plain application plugin, for :kiteplayer-sample-android only (S1.c.6 step 1).
+    alias(libs.plugins.android.application).apply(false)
     // Applied at the root so dokkaGenerate aggregates every library module into one API site
     // at build/dokka/html.
     alias(libs.plugins.dokka)

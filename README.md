@@ -10,8 +10,9 @@ device, the video surface and the decoder are per platform.
 
 > **KitePlayer is early and cannot be used as a dependency.** Nothing is publicly published, there is
 > no public dependency installation path, and macOS arm64 is the only T3 candidate. One named iOS
-> simulator has a narrower experimental T2 Codec candidate backed by a local runnable sample, not a full
-> tier. This file states what has been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) is the
+> simulator holds a narrower experimental T2 Codec candidate, and one named Android emulator holds
+> T2 Codec with provisional output evidence, each backed by a local runnable sample, not a full tier.
+> This file states what has been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) is the
 > full plan, defect register and running execution log: every phase, measured number and decision.
 
 ## Playing a file
@@ -67,7 +68,7 @@ Today, honestly:
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
 | iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media, lands a precise seek, reaches Ended through RemoteIO and a caller-owned layer, and completes causally awaited teardown. Real-media cancellation and the broader matrix are absent, so this is explicitly below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
-| Android emulator arm64 (API 36, 16 KiB) | Experimental T2 Codec candidate | The FFmpeg backend runs on one named emulator: real media decodes through FFmpeg's `h264_mediacodec` with CPU-readable output and measured software-fallback recovery, and the JVM decode transcript is byte-identical to macOS. Audio, video presentation and the sample app are later S1.c sub-phases; nothing ran on a physical Android device. |
+| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application assembles the FFmpeg backend, AudioTrack audio and the Surface renderer, opens real media, plays with hardware H.264 through FFmpeg's own decoder, lands a precise seek, reaches Ended and tears down causally, in both debug and R8-minified release, on one named emulator. The output paths carry provisional stage evidence below T3-Full: subtitles and the full lifecycle and format qualification that tier demands do not exist yet, and nothing ran on a physical Android device. x86_64 is compile, link and package qualified only. |
 | JVM (desktop) | T1, decode-proven | The FFmpeg backend's JVM arm decodes real media in tests over a test-only local JNI library. No desktop audio or video output path exists yet. |
 | iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |

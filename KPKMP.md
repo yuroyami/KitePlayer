@@ -6829,6 +6829,58 @@ is no other.
   after that commit. The complete Tier 1 block is rerun over this final logged state before the
   correction commit; that terminal result is a commit-boundary seal and is not preclaimed here.
 
+- 2026-08-12, S1.c.0 post-scaffold mechanical expansion sweep completed clean. Exact starting
+  heads were KitePlayer `acdf3f09a7b730f8ab59e454c5f313ba19cc0a4d` and KiteCodec
+  `613cd98b4864a2bc5ce8a4eb6d142f3e14e9faa6`, both clean. Three independent lanes reran the
+  complete Codec/scaffold, Player and machine/publication audit after both conservative correction
+  commits. Consolidated result: zero BLOCKING and zero DESCRIPTIVE mismatch requiring text or
+  product changes. S1.c.1's five-item remainder, every c.1-c.6 file fence, API, command, expected
+  result, publication boundary, gate and product commit subject now match the landed scaffold and
+  current trees. S1.c.4 required no correction.
+
+  Recounted Codec facts are ten common expects; nine native implementation files and 3,108 lines;
+  C ABI 2.1; 192 normalized declaration records; 177 exports; and a 1,004-line metadata baseline.
+  The seven plain C suites total 279 cases: 44+32+114+24+25+18+22. The four-field JNI manifest has
+  53 rows split 17+9+9+10+8; both JNI audits pass, and the current macOS library exports exactly
+  `JNI_OnLoad`. The absent Android FFmpeg trees, Android JNI libraries, Android exact-argument and
+  link-task tests are precisely named S1.c.1 producer work, not hidden completion. The dedicated
+  Android helper providers, sample selector, `exports.macos` input, attach-gate correction,
+  borrowed-token lifetime work and falsifiability arms remain in that bounded list. S1.c.2 now
+  includes `kj_util.c` for its sole Java-array input-copy helper and has no residual fence gap.
+
+  Player task discovery under JDK 21.0.9 and the existing Local FFmpeg root confirmed the current
+  and planned graph, including `jvmTest`, `macosArm64Test`, `testAndroidHostTest`,
+  `assembleAndroidMain` and AGP 9.2.1's `connectedAndroidDeviceTest`. The c.3 output-test dependency
+  move, dynamic hardware-stat publication, four native-prose neutralisations, c.5 executable-code
+  boundary scan and c.6 checked asset source are mechanically exact. The sync fixture remains
+  19,867,162 bytes at SHA-256
+  `c12d952878f43c488327a05e51ff8791f215c93c39a1422d37bfa02eec1911de`. AGP 9.2.1 and
+  Kotlin 2.4.10 are available from cache.
+
+  Machine facts are JDK 21.0.9; SDK 36/36.1; NDK 27, 28c and r29
+  `29.0.14206865`, whose tools, JNI header and API-24 arm64/x64 libraries are present.
+  `ANDROID_NDK_HOME` is intentionally supplied by each command. `Pixelu16KB` is the Android 36.1
+  arm64-v8a Google APIs 16 KiB AVD. There is no x86_64 image or AVD and the authorized read-only
+  adb inventory is empty; physical-device absence remains an S1.e blocker only. Both
+  `gradle.properties` files and root coordinate sources remained unchanged. The window-2a
+  Maven-local metadata still carries macOS arm64, iOS arm64 and iOS simulator arm64; its selected
+  fingerprint remained
+  `402f566ce9f0962d9f1c1b0c205ce5506a1cf7229f047d715845ad994b0cd827`, artifact mtimes did
+  not move, and the preserved scratch consumer linked all three frameworks offline with 8/8 tasks
+  executed in seven seconds and output platforms 1/2/7. Nothing was republished.
+
+  Fresh Tier 1 on the exact committed pre-entry bytes was green. Codec reported
+  0/0/292/0/0 coupling, 15/15 deleted with five allowlisted prose files, and seven suites/279
+  cases. Player reported 88 scanned/3 allowlisted, all five ABI checks in 152/152 executed tasks,
+  forced JVM XML core 192 plus subtitles 8 with zero failures/errors/skips, rt 8 suites/132 cases,
+  render 43 and source 18. Both exact tracked-dash scans were silent passing exit 1 and both diff
+  checks were silent exit 0. The forced Player ABI arm rebuilt target archives and cinterops, the
+  already retained Tier 1 deviation. Before this entry KPKMP SHA-256 was
+  `c0d89fb67f9931849bfbc8ced85685ba707cd8a16bde3141e4d4cc2f7cf1bd35`. No product file,
+  publication, release, remote ref, emulator or device state moved. The final logged-byte Tier 1
+  seal follows before the exact commit first line
+  `Verify the Android phone stage against the landed iOS substrate`.
+
 ---
 
 ## 15. Horizon B execution: B1

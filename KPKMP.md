@@ -6970,6 +6970,143 @@ is no other.
   `Verify the Android phone stage against the landed iOS substrate`; that clean commit authorizes
   only the bounded S1.c.1 remainder.
 
+- 2026-08-12, S1.c.1 opaque JNI and Android native substrate execution. Exact starting heads were
+  KitePlayer `d8bfb8d3274a283931b2d80bec3e6ab4c9df8f28` and KiteCodec
+  `613cd98b4864a2bc5ce8a4eb6d142f3e14e9faa6`, both clean. Tier 2 was selected mechanically by
+  the native C, buildSrc and build-script changes and by completion of a Horizon sub-phase.
+  All five bounded post-scaffold items are complete in product and evidence. The exact Codec
+  product commit is `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`; this Player execution-log
+  commit follows the final logged-byte seals below. No S1.c.2 Kotlin/JVM/Android actual,
+  handle-lifetime expansion, AAR wiring or publication work entered this fence.
+
+  The scaffold ratchets held rather than moving again: C ABI 2.1, 192 normalized declarations
+  split as 170 helper prototypes, eleven opaque typedefs, seven ABI prototypes, three ABI enums
+  and the report typedef; 177 exports; and a 1,004-line metadata baseline. Current-truth prose and
+  baseline headings now say exactly that. The seven C suites contain 279 cases per build,
+  `44+32+114+24+25+18+22`, hence 837 over plain, ASan and TSan. The registration manifest has 53
+  implemented four-field rows split `17+9+9+10+8`, with category supplied by section and function
+  prefix, and the identity report has 31 fields. Android `kc_jvm_attach` now calls the public
+  identity gate before handing the JavaVM to FFmpeg: the rejecting doctored Android copy returned
+  `KC_JVM_FFMPEG_REFUSED` with zero setter calls, the accepting control reached the setter once,
+  and a setter refusal mapped back to the typed refusal result. The host and Android assertions
+  remain inside the existing 18-case identity suite.
+
+  The exact JDK-21/NDK-r29 arm64 and x64 FFmpeg producer invocation completed 5/5 tasks in 91
+  seconds. Both transactional installs contain public headers and all six required link archives
+  (`avformat`, `avcodec`, `avfilter`, `avutil`, `swscale`, `swresample`); each install also carries
+  the harmless unconsumed `libavdevice.a`, so this is not an exact-six-total claim. Both provenance
+  files contain `--enable-pic`, `--enable-mediacodec`, `--enable-jni`, static/no-shared, API 24 and
+  the correct architecture. The arm32 output remains absent. Full ordered-argument tests pin both
+  producer recipes.
+
+  Dedicated `compileKiteCodecCForJniAndroidArm64` and
+  `compileKiteCodecCForJniAndroidX64` providers now build the opaque archive independently of the
+  Kotlin/Native target map and feed the two links directly. The sample honors the Apple selector;
+  `exports.map` and `exports.macos` are content-tracked task inputs; and the final combined macOS,
+  Android arm64 and Android x64 invocation completed 12/12 tasks in six seconds. A hostile review
+  found that the first Link-task test pinned constants and synthetic tasks but not the production
+  registration. The added source-wiring test now pins both dedicated providers, their consumption,
+  and both platform export-control selections; its focused run passed 6/6 tasks in seven seconds,
+  and the final full buildSrc suite passed 47 tests across six suites. The arm64 and x64 ELF files
+  have SHA-256 `7c29cac55995a483c5ed185e1284b83f5f328666856e1f5dc488f05db3360ab1` and
+  `beaa1c61c16fb382c3fa577e7b19b195a6faeb6a7e7f0a6f4b7ceb6cb20d4429`; each is the correct
+  architecture, defines exactly `JNI_OnLoad`, has `0x4000` on every PT_LOAD and has no libav/libsw
+  NEEDED entry. The macOS dylib is SHA-256
+  `f9137b750b9c7f7ef4b2a2e6913db5fb9b5c109b71fa251c2495533a15914dbf` and defines exactly
+  `_JNI_OnLoad`.
+
+  Every falsifiability arm runnable in S1.c.1 was observed rather than inferred. The first
+  direct-call plant exposed that the scaffold audit did not catch `avcodec_version()`; the
+  corrected four-ban audit uses an exact include allowlist, complete libav/libsw call families, raw
+  FFmpeg identifier/type rejection and the Java-export ban across C/H plus `methods.def`.
+  Foreign-include, direct-call, raw-`AVFrame`, same-line-helper and leading-block-comment plants
+  then all failed before byte restoration. A temporary `Java_fake` plus export-map entry made the
+  arm64 symbol audit fail on the extra dynamic symbol. Temporary 4 KiB max/common page flags
+  produced `0x1000` and made the exact ELF assertion fail. Each mutation was restored and the
+  accepted combined link re-created the hashes above. The apparent fifth-field corruption in the
+  Link-task test is only the required four-field schema control, not a JVM descriptor oracle. The
+  descriptor-mismatch arm is explicitly deferred under S1.c.1 step 9's stated S1.c.2 exception
+  because the Kotlin bridge/name-descriptor validator does not exist yet; `methods.def` states that
+  future ownership and this entry does not claim that the deferred fourth arm ran.
+
+  The complete closing Codec Tier 2 reran after the final Link-task test edit and was byte-stable.
+  Fresh plain, ASan and TSan builds each passed seven suites/279 cases; live interpose passed the
+  same 279 with required/live allocation accounting; ASan corpus replay passed six targets over
+  105 corpus files. Symbol and signature audit reported 10 archive members, 177 exports and 192
+  declarations. The metadata differential remained 1,004 lines at SHA-256
+  `7c761e414dbdf1c646bf683af412687675ebba8f42bfdf3e2d2337af0058ffd1`, with 177 direct and
+  zero raw crossings and no diff. Deleted-surface remained 15/15 with zero live references.
+  Forced coupling reported 0 cinterop imports, 0 typed crossings, 292 opaque sites, 0 direct libav
+  calls and 0 raw structs; forced cinterop and API arms passed, buildSrc passed 47 tests, plugin
+  passed 19, and macOS passed 85, all with zero failures/errors/skips. The hardened JNI source
+  audit passed 4/4 and all three final symbol audits passed. The exact frozen Codec fingerprint was
+  `b01caad82b6a954d23b3c4e5bf7b9b08c0afd7b0ca74b5a3ba02aaf51daa8b0` before and after.
+  Host-only Maven publication was deliberately omitted because window 2b publishes exactly once
+  after S1.c.2.
+
+  The complete Player Tier 2 then ran on this entry's bytes and was also byte-stable. testmedia.sh
+  remained SHA-256 `c332b82c778b689e4124b53987075b99580c751a5363079ab8c77d5aafbaf319`, and all 27
+  fixtures were nonempty, so regeneration was correctly skipped. buildSrc passed 40 tests. The
+  forced native trio executed 38/38 tasks and passed core 201, output 34 and FFmpeg 36, 271 total,
+  with zero failures/errors/skips. rt ASan/UBSan, TSan and live interpose each passed eight suites
+  and 132 cases; cross-target compilation executed 20/20 tasks and the sample link 30/30.
+
+  Every first media observation met its oracle, so no quiet control ran. Sync was 300/300 with
+  zero drops, repeats, underruns, rebuffers or warnings, 2 ms final drift and 5 ms worst schedule.
+  VFR was 240/240 with all zero counters, 0 ms drift and 8 ms worst schedule. HEVC was 180/180,
+  zero drops, Video master and 3 ms worst schedule. The timestamp-offset clip was 300/300 with zero
+  drops/repeats/underruns, 24 ms drift and 19 ms worst schedule. Surround proved
+  6-channel/48 kHz to 2-channel/48 kHz with zero underruns; rotated was 25/25 with zero
+  drops/repeats; nonexistent input returned 1 with exactly the expected two lines and no stack.
+  The high-aligned P010 golden passed inside the 36 FFmpeg tests. Player's pre/post state
+  fingerprint was
+  `7a8a705f0a3da0a0a908cc1057771a23345a429ff583c928721853878b0233e2`.
+
+  A preliminary post-entry Player Tier 1 supplied the counts reconciled here: forced coupling
+  executed 1/1 over 88 files with all three matches allowlisted; all five ABI checks were green in
+  155/155 executed tasks; fresh JVM XML was core 192 plus subtitles 8 with zero
+  failures/errors/skips; rt plain passed eight suites/132 cases; render audit passed 43 and source
+  discipline 18. Both repositories' exact tracked-dash scans printed no repository matches and
+  returned the required exit 1; both diff checks were clean. Its pre/post Player fingerprint was
+  `0ff9e7a3c86b181303075aae38a471d1400036a3ef68d5204408180daaf929eb`.
+
+  DEVIATIONS are retained. A first plain C run was rejected as evidence when hostile review found
+  its binary older than the changed gate source; fresh plain, ASan and TSan builds supplied the
+  accepted runs. The direct-call control forced the audit strengthening above, and two subsequent
+  bypass probes extended coverage to the manifest and leading block comments. The temporary Java
+  export contaminated only the intended arm64 proof artifact before restoration and relink. Initial
+  restricted Gradle launches that could not open the existing wrapper cache lock were followed by
+  identical authorized invocations; one focused wiring-test launch and the closing Codec coupling
+  launch were among them. Strict chronology required the entire Codec Tier 2 block to rerun after
+  the final source-wiring test edit; the earlier green results remain history rather than the
+  closing gate. Player's forced ABI arm transitively rebuilt all 17 rt target archives/cinterops,
+  and its native compilers emitted seven pre-existing redundant-conversion warnings; generic
+  Gradle-10 notices were non-product warnings. A Codec dash invocation's login shell emitted an
+  unrelated RVM process-sandbox warning before the exact silent repository scan. No source was
+  recovered by snapshot overwrite: every product mutation was made and reversed with bounded
+  patches and the original hashes were checked.
+
+  Before this entry, the Codec fence was exactly 14 modified and one new path, all inside S1.c.1,
+  at 629 insertions and 119 deletions including the new test. The tracked binary diff SHA-256 was
+  `8490cc0d5d1ffd732f514486ee0f4e649a93f8c5ec5965a80174f8e7e963cd06`; the untracked
+  Link-task test SHA-256 was
+  `949a258dd8f8ec8781fa046471e24fe3eac9227a2180da4d0057897d4eb5a01e`. The pre-entry KPKMP
+  SHA-256 was `71572465ca562fc8da3f4735a224678d402e8177ca1451b81056132da664456c`.
+  Generated Android FFmpeg/JNI trees remain ignored evidence. There has been no local Maven
+  publication, push, release, emulator/device operation or Android runtime qualification.
+
+  The Codec commit has exact parent `613cd98b4864a2bc5ce8a4eb6d142f3e14e9faa6`, exact one-line
+  subject `Build the Android JNI bridge on the opaque boundary`, empty body/trailers, tree
+  `46b3078d7f6dff2405b4a3ef3b68f131df81b955` and the exact 15-path, 629-addition/119-deletion
+  fence. Its normalized binary commit diff is SHA-256
+  `608234ddbf8ec40888f7bc2612f29ecf83fe1fa84a8adaf5e0b586a7fa625162`; the Codec worktree
+  and index are clean.
+
+  The plan-required Player Tier 2 and preliminary Tier 1 evidence above ran only after this entry
+  existed. The complete Codec and Player Tier 1 blocks now rerun over these final reconciled bytes
+  as the commit-boundary seals; this sentence deliberately does not preclaim those terminal runs.
+  The remaining exact Player commit first line is `Record the Android JNI boundary proof`.
+
 ---
 
 ## 15. Horizon B execution: B1

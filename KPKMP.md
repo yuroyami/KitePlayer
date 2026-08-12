@@ -7196,6 +7196,54 @@ is no other.
   The exact correction subject is `Fence the Android direct-platform source scan`. A postcommit
   three-lane reread must find zero residual before the preserved S1.c.2 draft resumes.
 
+- 2026-08-12, S1.c.2 Android scratch-consumer built-in-Kotlin correction. Exact starting heads were
+  KitePlayer `2eddb39ee0dce73555a5d06d48ed98a36704d0b9` and KiteCodec
+  `be59e20abeb99e2b31eb75894528fc6c61bcc4ef`. Player was clean; Codec's unstaged 65-path S1.c.2
+  draft was preserved with an empty index. Tier 1 was selected because this correction changes
+  KPKMP only. The one window-2b phone-superset `publishToMavenLocal` had already completed before
+  this contradiction became observable and is not repeated. The preserved Apple scratch consumer
+  had also relinked all three frameworks, 8/8 tasks executed, against that immutable publication.
+
+  The first exact Android scratch invocation reached configuration only and failed in four seconds
+  at `app/build.gradle.kts:1` while applying `org.jetbrains.kotlin.android`. AGP 9.2.1 reported that
+  the plugin is no longer required since AGP 9.0 and must be removed. No Kotlin compilation, APK,
+  install, Activity launch, oracle, package inspection or device mutation followed. This was a
+  BLOCKING plan/toolchain contradiction, not a Codec, AAR or publication failure: the seven-file
+  recipe required both plugins in the application although AGP 9.2.1 owns application-module Kotlin
+  compilation through built-in Kotlin.
+
+  Cached AGP source confirmed that applying the Kotlin Android plugin triggers the refusal. The
+  conservative correction keeps the root's non-applied Kotlin Android 2.4.10 marker so the offline
+  plugin classpath selects Kotlin 2.4.10, but the app applies only `com.android.application`. This
+  distinction was then measured both ways. With the root marker retained and only the app plugin
+  removed, debug and minified release built successfully, 69/69 tasks executed. In a temporary
+  scratch-only negative control, removing the root marker made offline configuration request AGP's
+  uncached Kotlin 2.2.10 artifacts and fail before tasks; the 2.4.10 marker was restored. The earlier
+  S1.c.0 `gradle help` result is therefore only repository/cache-resolution evidence, not proof that
+  both plugins may be applied together.
+
+  The plan correction changes only those plugin-ownership sentences. It changes no Codec product
+  byte, public API, coordinate, locally published byte, seven-file source fence, dependency, R8
+  policy, packaging assertion, device oracle, phase order or product commit first line. It forbids
+  republishing: after this KPKMP-only correction commit and postcommit reread, execution resumes at
+  the Android half of S1.c.2 step 13 against the existing one-time publication. Before this entry
+  the plan-only correction was exactly KPKMP +5/-2, file SHA-256
+  `7ec36b0f8b3fff2b04533f6752e37655d9e243b27573362e296fbdb3d6b3499d` and binary-diff SHA-256
+  `e07993747519658e67d8e6bb5a290769f9ed9f9f25db341949a2f15455615c1d`.
+
+  The first correction Tier 1 evidence was GREEN. Player forced coupling scanned 88 files and
+  allowlisted all 3 matches; the five ABI checks executed 155/155 tasks; forced JVM tests executed
+  13/13 tasks and reported core 192 plus subtitles 8 with zero failures, errors or skips; rt plain
+  passed 8 suites/132 cases; render passed 43/43 and source discipline 18/18; tracked dash and
+  diff-check were silent passing scans. In an isolated clean Codec clone, forced coupling reported
+  0 imports, 0 typed crossings, 292 opaque sites, 0 direct libav calls and 0 raw structs; deleted
+  surface passed 15/15; a fresh plain build passed 7 suites/279 cases; tracked dash and diff-check
+  were silent passing scans. The initial restricted Codec Gradle launch was denied on its existing
+  user-cache lock before tasks; the identical authorized rerun is accepted. No repo product edit,
+  stage, second publication, push, public release or device action occurred in these correction
+  gates. The final logged-byte Tier 1 seal follows before exact subject
+  `Use AGP built-in Kotlin in the Android consumer`; this entry does not preclaim that seal.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -12455,13 +12503,16 @@ Steps.
     `ContractMedia.kt`. Settings give plugin management `google()`, `mavenLocal()`, the plugin
     portal and Maven Central, dependency resolution `mavenLocal()`, `google()` and Maven Central,
     and include only `:app`. The root declares Android application 9.2.1 and Kotlin Android 2.4.10
-    with `apply false`. The app uses namespace/application id
+    with `apply false`; the latter selects Kotlin 2.4.10 on the shared plugin classpath without
+    applying the incompatible plugin. AGP 9.2.1 owns the app's Kotlin compilation through
+    built-in Kotlin, so the app does not apply `org.jetbrains.kotlin.android`. The app uses
+    namespace/application id
     `io.github.yuroyami.kitecodec.smoke`, compileSdk 36, minSdk 24 and JDK 21. Debug is debuggable;
     release is minified with the default optimized rules, uses the otherwise empty
     `proguard-rules.pro`, and is debuggable and signed by the debug signing configuration solely
     for this local `run-as` proof. Both use
     `packaging.jniLibs.useLegacyPackaging = false`, and the scratch manifest preserves
-    `android:extractNativeLibs="false"`. It applies only the Android application and Kotlin plugins,
+    `android:extractNativeLibs="false"`. It applies only the Android application plugin,
     uses no app keep rule and has exactly one library dependency:
 
     ```kotlin

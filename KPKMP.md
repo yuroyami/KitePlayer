@@ -7656,6 +7656,14 @@ is no other.
   Android, software on iOS, through one dependency coordinate and two reusable views, in debug
   and in release shape. Nothing is pushed, publicly published or released; every commit of the
   stage is local per the standing rule.
+- 2026-08-12, the Android rider package expanded (17.4.6), owner-directed: work the Android-only
+  road now, defer Apple, desktop and cross-platform. The only Android-only package is KV-4 plus
+  the parked KV-7 whose judge is KV-4's numbers, so KV-4's CORE moves forward under 17.1: frame
+  cost instrumentation (A1), the Android three-image ring that removes the per-published-frame
+  allocation (A2), and one measured KiteVideo run on Pixelu16KB under real Compose modifiers
+  (A3). S3 keeps the launchable demo and device-grade numbers; KV-7's go/no-go is written at S3
+  entry from this rider's measurements; emulator numbers stay labelled provisional everywhere.
+  S3 reads 70 to 108 after the move; the road total is unchanged.
 
 ---
 
@@ -10390,7 +10398,7 @@ passes.
 | S1.c | 140 to 190 | JNI actuals with a shared differential suite across JVM and native |
 | S1.d + S1.e | 35 to 55 | the phone aggregate, two view surfaces, the Compose baseline, the KiteVideo core rider (17.4.4), two app re-consumptions, the matrix runs |
 | S2 | 105 to 150 | Metal renderer 30 to 40; VideoToolbox in KiteCodec; colour and vsync; KiteVideo KV-2/KV-3 plus KV-1's measurement exits at 20 to 30 |
-| S3 | 75 to 115 | two C audio sinks with their instruments; KiteVideo KV-4 and KV-5 at 15 to 25 |
+| S3 | 70 to 108 | two C audio sinks with their instruments; KiteVideo KV-5 plus KV-4's demo and device numbers at 8 to 13 (KV-4's core moved to the 17.4.6 rider) |
 | S4 | 90 to 125 | subtitle rendering correctness; KD piloting package (17.10) at 30 to 45 |
 | S5 | 40 to 60 | cheap in hours, irreversible in consequence |
 | S6 | 80 to 120 | the spike bounds it; failure path is cheap |
@@ -14105,6 +14113,96 @@ session is the stage's only open item, stated in log and README. Estimates: S1.e
 S1.e.2 3 to 5, S1.e.3 2 to 4, S1.e.4 2 to 4, S1.e.5 1 to 2: 12 to 21 focused hours, inside the
 17.3 envelope.
 
+### 17.4.6 The Android rider package: KV-4's core, owner-directed
+
+Authored 2026-08-12 by the planner against clean KitePlayer `770187f` and KiteCodec `52a3e5d`,
+at the owner's direction: work the Android-only parts of the remaining road now, defer the
+Apple, desktop and cross-platform stages. The only Android-only package on the road is KV-4
+(17.9, homed S3) plus the parked KV-7 research whose declared judge is KV-4's measurements.
+This rider pulls KV-4's CORE forward under 17.1's refinement: the frame-cost instrumentation,
+the Android image reuse that removes the per-published-frame allocation, and one measured
+KiteVideo run on the named emulator. What does NOT move: the launchable modifier demo
+application and the physical-device numbers stay in S3's exit rider and the owner's device
+session; KV-7 stays parked, and its go/no-go note is written at S3 entry using the numbers this
+rider produces. Emulator numbers are provisional stage evidence, never device truth, and every
+doc that quotes them says so.
+
+Execution order is A1 through A3, then the closing entry. No KiteCodec change, no new module,
+no engine change; every edit lives in `:kiteplayer-compose` and its device-test tree.
+
+#### A1 Frame-cost instrumentation
+
+Files: `kiteplayer-compose/src/commonMain/.../KiteVideoRenderer.kt`, `KiteVideoState.kt`; new
+commonMain `KiteVideoFrameCost.kt`; androidHostTest `KiteVideoRendererTest.kt` (new arms); the
+module's API dump; KPKMP log.
+
+Steps.
+1. The worker measures each published frame's conversion-plus-image-build with the monotonic
+   time source and folds it into four numbers behind one lock-free shape: samples, last,
+   average, worst, all in nanoseconds. Failed and superseded frames are not samples.
+2. `public class KiteVideoFrameCost` (samples, lastNanos, averageNanos, worstNanos) and
+   `public val KiteVideoState.frameCost: KiteVideoFrameCost` snapshotting those atomics. The
+   KDoc states what the number is (CPU cost of the S1 software path per published frame) and
+   what it is not (draw cost, GPU cost, or a device claim when measured on an emulator).
+3. Host-test arms: samples count only published frames, worst is monotone, average within
+   bounds, zero-sample snapshot is all zeros.
+
+Gate. Tier 1; module host tests; API dump ritual.
+Commit first line. KitePlayer: `Measure the KiteVideo frame cost`.
+
+#### A2 The Android image ring
+
+Files: commonMain `ImageBitmaps.kt` (the seam becomes a small pool type), `KiteVideoRenderer.kt`
+(holds one pool per renderer); androidMain `ImageBitmaps.android.kt`; iosMain
+`ImageBitmaps.ios.kt`; androidHostTest (new arms through the injected seam); KPKMP log.
+
+Steps.
+1. The stateless `rgbaToImageBitmap` becomes `internal expect class FrameImagePool` with one
+   method (`imageFor(rgba, width, height): ImageBitmap`) and a `release()`. One pool per
+   renderer, released in close after the worker joins.
+2. Android actual: a three-image ring of ARGB_8888 bitmaps reused while dimensions match,
+   rebuilt on a size change, filled by `copyPixelsFromBuffer` exactly as before. Three, not
+   two, because the image just published may still be in HWUI's async draw while the worker
+   fills the next; the ring depth is the standing assumption to re-examine at S3 with device
+   numbers. The KDoc carries that reasoning.
+3. iOS actual: unchanged behaviour behind the new shape (one Skia raster per frame; KV-2 owns
+   Apple).
+4. Host tests keep driving the renderer through the injected `makeImage` seam, plus new arms
+   pinning that the renderer asks the pool rather than allocating, and that close releases it.
+
+Gate. Tier 1; module host tests; all three targets compile; API dump unchanged or moved by
+ritual.
+Commit first line. KitePlayer: `Reuse the Android KiteVideo images through a ring`.
+
+#### A3 The measured emulator run
+
+Files: `kiteplayer-compose/build.gradle.kts` (device-test builder plus its dependencies); new
+`src/androidDeviceTest/AndroidManifest.xml`, `KiteVideoTestActivity.kt`,
+`KiteVideoDeviceTest.kt`; KPKMP log.
+
+Steps.
+1. Give `:kiteplayer-compose` the same device-test shape the sibling modules use
+   (`withDeviceTestBuilder { sourceSetTreeName = "test" }`, AndroidJUnitRunner, androidx test
+   plus activity-compose in the device tree only).
+2. The activity hosts `KiteVideo(state)` under real Compose modifiers (a rounded-corner clip
+   and a graphicsLayer rotation), because modifiers applying to the video is the whole D-6
+   claim.
+3. The device test builds a player from `phoneBackends()`, attaches `state.renderer`, plays the
+   pushed conformance clip to Ended, then asserts and logs the measured truth: published frames
+   positive, cost snapshot populated, superseded counted honestly, terminal Ended, teardown
+   clean, and the KV4-tagged logcat lines carry every number. Media arrives by the S1.e.4
+   recipe (push after install, chown per the recorded FUSE truth, am instrument directly).
+4. The log entry records the numbers and names them EMULATOR numbers.
+
+Gate. Tier 2 (build scripts and platform Kotlin changed) plus the device run plus Tier 1. No
+soak, no tier move.
+Commit first line. KitePlayer: `Measure KiteVideo on the Android emulator`.
+
+**The rider exits** when the three sub-phases have their named local commits and log entries,
+both trees are clean, and the S3 register can point at real KV-4 numbers instead of assumptions.
+Estimates: A1 2 to 3 hours, A2 2 to 4, A3 3 to 5: 7 to 12 focused hours, moved out of S3's
+KiteVideo slice (S3 reads 70 to 108 after the move; road total unchanged).
+
 ### 17.5 The format conformance matrix
 
 One suite, grown once, run everywhere: the existing testmedia clips plus MKV multi-track,
@@ -14193,7 +14291,10 @@ slice it moves):
   that is where the JVM rendering paths mature; S3's exit carries it as an explicit rider per
   17.1's refinement. Note 2026-08-12: S1.d's pulled-forward core already feeds itself this way
   (RGBA, not yet ImageBitmap-from-YUV), so KV-4's remaining S3 work is the measured maturation
-  of that path, not its first existence.
+  of that path, not its first existence. Second owner rider, later the same day (17.4.6): the
+  maturation CORE moved forward too, so KV-4's cost instrumentation, Android image ring and
+  first measured emulator run land before S2, and S3 keeps only the launchable modifier demo
+  and the device-grade numbers.
 - **KV-5, desktop upload path** (S3): one upload per frame; desktop bandwidth makes this cheap;
   measured anyway.
 - **KV-6, web** (S6): the only Compose rendering story on wasm; measured inside the S6 spike.

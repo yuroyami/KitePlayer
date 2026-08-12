@@ -14,7 +14,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecAudioDecoderFactory : 
 }
 
 final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecMediaBackend : io.github.yuroyami.kiteplayer.spi/MediaBackend { // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecMediaBackend|null[0]
-    constructor <init>(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit> = ...) // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecMediaBackend.<init>|<init>(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
+    constructor <init>(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecMediaBackend.<init>|<init>(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Boolean){}[0]
 
     final suspend fun open(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.spi/BackendSession // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecMediaBackend.open|open(io.github.yuroyami.kiteplayer.MediaItem){}[0]
 }

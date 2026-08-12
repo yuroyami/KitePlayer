@@ -27,6 +27,14 @@ import io.github.yuroyami.kitecodec.MediaSource
  */
 public class KiteCodecMediaBackend(
     private val onWarning: (PlaybackWarning) -> Unit = {},
+    /**
+     * Decoder configuration as `av_opt_set` strings, applied to every video decoder this backend
+     * opens (KPKMP 17.10, KD-6). `PlaybackProfile.decoderOptions` is the intended producer; a
+     * wrong key fails the decoder open with the funnel's own typed error.
+     */
+    private val decoderOptions: Map<String, String> = emptyMap(),
+    /** Open video decoders in low-delay shape (KD-6's LowLatency profile). */
+    private val lowDelayDecode: Boolean = false,
 ) : MediaBackend {
 
     override suspend fun open(media: MediaItem): BackendSession {
@@ -40,6 +48,8 @@ public class KiteCodecMediaBackend(
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
         val source = mappingFFmpegRuntimeRejection { KiteCodecSource(MediaSource.open(media.uri)) }
         source.onWarning = onWarning
+        source.videoDecoderOptions = decoderOptions
+        source.videoLowDelay = lowDelayDecode
         return KiteCodecBackendSession(source)
     }
 }

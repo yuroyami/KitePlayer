@@ -31,6 +31,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
 import io.github.yuroyami.kitecodec.CodecId
+import io.github.yuroyami.kitecodec.dsl.DecoderOptions
 import io.github.yuroyami.kitecodec.MediaSource
 import io.github.yuroyami.kitecodec.MediaType
 import io.github.yuroyami.kitecodec.Packet
@@ -142,8 +143,17 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     internal fun kiteStream(index: Int): StreamInfo =
         byIndex[index] ?: error("no stream at index $index")
 
-    internal fun openDecoder(index: Int, lowDelay: Boolean, decoder: CodecId? = null): StreamDecoder =
-        source.openDecoder(kiteStream(index), lowDelay = lowDelay, decoder = decoder)
+    /** KD-6: the backend's profile knobs, applied to every VIDEO decoder opened here. */
+    internal var videoDecoderOptions: Map<String, String> = emptyMap()
+    internal var videoLowDelay: Boolean = false
+
+    internal fun openDecoder(
+        index: Int,
+        lowDelay: Boolean,
+        decoder: CodecId? = null,
+        options: DecoderOptions? = null,
+    ): StreamDecoder =
+        source.openDecoder(kiteStream(index), lowDelay = lowDelay, decoder = decoder, options = options)
 
     /**
      * The decoder wrappers are built here rather than in the factories, because they need the
@@ -158,7 +168,12 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
         hardware: HwdecStatus = HwdecStatus.Software,
         continuity: VideoDecoderContinuity = VideoDecoderContinuity(),
     ): VideoDecoder = KiteCodecVideoDecoder(
-        decoder = openDecoder(stream.index, lowDelay = false, decoder = decoder),
+        decoder = openDecoder(
+            stream.index,
+            lowDelay = videoLowDelay,
+            decoder = decoder,
+            options = videoDecoderOptions.takeIf { it.isNotEmpty() }?.let { DecoderOptions(options = it) },
+        ),
         stream = stream,
         mapper = mapper,
         hardware = hardware,

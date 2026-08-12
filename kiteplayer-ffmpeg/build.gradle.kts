@@ -118,7 +118,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
-            implementation("io.github.yuroyami:kitecodec-core:0.0.2")
+            implementation("io.github.yuroyami:kitecodec-core:0.0.3")
             implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {

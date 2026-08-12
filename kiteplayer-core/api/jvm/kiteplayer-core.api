@@ -456,6 +456,21 @@ public final class io/github/yuroyami/kiteplayer/PlaybackException : java/lang/E
 	public final fun getError ()Lio/github/yuroyami/kiteplayer/PlaybackError;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackProfile {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/PlaybackProfile$Companion;
+	public final fun applyTo (Lio/github/yuroyami/kiteplayer/PlayerConfig;)Lio/github/yuroyami/kiteplayer/PlayerConfig;
+	public final fun getDecoderOptions ()Ljava/util/Map;
+	public final fun getLowDelayDecode ()Z
+	public final fun getName ()Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaybackProfile$Companion {
+	public final fun getBattery ()Lio/github/yuroyami/kiteplayer/PlaybackProfile;
+	public final fun getLowLatency ()Lio/github/yuroyami/kiteplayer/PlaybackProfile;
+	public final fun getScrubbing ()Lio/github/yuroyami/kiteplayer/PlaybackProfile;
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackStats {
 	public synthetic fun <init> (JJJJJJJJJDJJJLio/github/yuroyami/kiteplayer/LatencyQuality;Lio/github/yuroyami/kiteplayer/HwdecStatus;Ljava/lang/Long;Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/MasterClock;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (JJJJJJJJJDJJJLio/github/yuroyami/kiteplayer/LatencyQuality;Lio/github/yuroyami/kiteplayer/HwdecStatus;Ljava/lang/Long;Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/MasterClock;Lkotlin/jvm/internal/DefaultConstructorMarker;)V

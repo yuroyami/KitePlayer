@@ -7739,6 +7739,27 @@ is no other.
   window are named there so neither is ever an improvisation), then exit. Estimates 95 to 139
   hours across seven sub-phases, each with its own commit so any interruption leaves a
   continuable tree.
+- 2026-08-12, S4.a completed: the KD Kotlin slices. KiteCodec (f06e85d) gained the dsl package:
+  KD-1's filter DSL (fifteen typed steps plus Raw, one centralised escaping function, FilterChain
+  compiling to the existing description strings, requireAvailable failing typed through
+  hasFilter), KD-2's DecoderOptions threaded into openDecoder on BOTH platforms between context
+  creation and open through the EXISTING av_opt_set funnel (one new optional parameter, no new
+  C), KD-3's encoder tuning compiling into the existing options maps with rate control as one
+  sealed choice (the CRF-plus-CBR contradiction is unrepresentable; the remaining collision, a
+  typed knob against the same key in the escape hatch, refuses), and KD-8's goldens: 12 pinned
+  compilation goldens (one first-draft golden was WRONG about escaping, expecting a backslashed
+  colon inside quotes where FFmpeg's syntax wants none, and was corrected against the
+  implementation after reading the grammar, not the other way around) plus 3 real-media
+  integration proofs (a DSL chain filters real frames to 32x32; a wrong option key reproduces
+  the funnel's EINVAL; the Scrubbing pair measurably decodes ~keyframes-only on generated 60-
+  frame media). KiteCodec published as 0.0.3 (phone superset; S4.b republishes the same
+  coordinate complete with the funnels). KitePlayer (this commit) gained KD-6:
+  PlaybackProfile.Scrubbing/LowLatency/Battery as printable values compiling into PlayerConfig
+  plus av_opt_set strings, threaded through KiteCodecMediaBackend's new constructor knobs into
+  every video decoder open; 4 profile goldens plus the real-media proof that Scrubbing through
+  the CONSUMER-visible constructor path delivers only keyframes of the conformance clip (full
+  decode >= 250 asserted, scrubbed at most a fifth). Dumps moved by ritual in both repos; both
+  repos' full host gates green; Tier 1 green.
 
 ---
 

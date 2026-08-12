@@ -5,8 +5,8 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecAudioDecoderFac
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecMediaBackend : io/github/yuroyami/kiteplayer/spi/MediaBackend {
 	public fun <init> ()V
-	public fun <init> (Lkotlin/jvm/functions/Function1;)V
-	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lkotlin/jvm/functions/Function1;Ljava/util/Map;Z)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Ljava/util/Map;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 

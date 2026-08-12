@@ -1323,6 +1323,27 @@ final class io.github.yuroyami.kiteplayer/PlaybackException : kotlin/Exception {
         final fun <get-error>(): io.github.yuroyami.kiteplayer/PlaybackError // io.github.yuroyami.kiteplayer/PlaybackException.error.<get-error>|<get-error>(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/PlaybackProfile { // io.github.yuroyami.kiteplayer/PlaybackProfile|null[0]
+    final val decoderOptions // io.github.yuroyami.kiteplayer/PlaybackProfile.decoderOptions|{}decoderOptions[0]
+        final fun <get-decoderOptions>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackProfile.decoderOptions.<get-decoderOptions>|<get-decoderOptions>(){}[0]
+    final val lowDelayDecode // io.github.yuroyami.kiteplayer/PlaybackProfile.lowDelayDecode|{}lowDelayDecode[0]
+        final fun <get-lowDelayDecode>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackProfile.lowDelayDecode.<get-lowDelayDecode>|<get-lowDelayDecode>(){}[0]
+    final val name // io.github.yuroyami.kiteplayer/PlaybackProfile.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackProfile.name.<get-name>|<get-name>(){}[0]
+
+    final fun applyTo(io.github.yuroyami.kiteplayer/PlayerConfig): io.github.yuroyami.kiteplayer/PlayerConfig // io.github.yuroyami.kiteplayer/PlaybackProfile.applyTo|applyTo(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackProfile.toString|toString(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer/PlaybackProfile.Companion|null[0]
+        final val Battery // io.github.yuroyami.kiteplayer/PlaybackProfile.Companion.Battery|{}Battery[0]
+            final fun <get-Battery>(): io.github.yuroyami.kiteplayer/PlaybackProfile // io.github.yuroyami.kiteplayer/PlaybackProfile.Companion.Battery.<get-Battery>|<get-Battery>(){}[0]
+        final val LowLatency // io.github.yuroyami.kiteplayer/PlaybackProfile.Companion.LowLatency|{}LowLatency[0]
+            final fun <get-LowLatency>(): io.github.yuroyami.kiteplayer/PlaybackProfile // io.github.yuroyami.kiteplayer/PlaybackProfile.Companion.LowLatency.<get-LowLatency>|<get-LowLatency>(){}[0]
+        final val Scrubbing // io.github.yuroyami.kiteplayer/PlaybackProfile.Companion.Scrubbing|{}Scrubbing[0]
+            final fun <get-Scrubbing>(): io.github.yuroyami.kiteplayer/PlaybackProfile // io.github.yuroyami.kiteplayer/PlaybackProfile.Companion.Scrubbing.<get-Scrubbing>|<get-Scrubbing>(){}[0]
+    }
+}
+
 final class io.github.yuroyami.kiteplayer/PlaybackStats { // io.github.yuroyami.kiteplayer/PlaybackStats|null[0]
     constructor <init>(kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin.time/Duration = ..., kotlin/Double = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., io.github.yuroyami.kiteplayer/LatencyQuality = ..., io.github.yuroyami.kiteplayer/HwdecStatus = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/MasterClock = ...) // io.github.yuroyami.kiteplayer/PlaybackStats.<init>|<init>(kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.Long;kotlin.time.Duration;kotlin.Double;kotlin.time.Duration;kotlin.time.Duration;kotlin.time.Duration;io.github.yuroyami.kiteplayer.LatencyQuality;io.github.yuroyami.kiteplayer.HwdecStatus;kotlin.Long?;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.MasterClock){}[0]
 

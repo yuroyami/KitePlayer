@@ -106,7 +106,7 @@ kotlin {
     android {
         namespace = "io.github.yuroyami.kiteplayer.ffmpeg"
         compileSdk = 36
-        minSdk = 24
+        minSdk = 29
         withHostTest {}
         withDeviceTestBuilder {
             sourceSetTreeName = "test"

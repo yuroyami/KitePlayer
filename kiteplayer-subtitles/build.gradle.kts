@@ -28,7 +28,7 @@ kotlin {
     android {
         namespace = "io.github.yuroyami.kiteplayer.subtitles"
         compileSdk = 36
-        minSdk = 21
+        minSdk = 29
         withHostTest {}
     }
 

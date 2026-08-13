@@ -36,7 +36,7 @@ kotlin {
     android {
         namespace = "io.github.yuroyami.kiteplayer.core"
         compileSdk = 36
-        minSdk = 21
+        minSdk = 29
         withHostTest {}
     }
 

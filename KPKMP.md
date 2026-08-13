@@ -7858,6 +7858,33 @@ is no other.
   0.0.4 published locally (phone superset); both scratch consumers were RECREATED from the
   recorded S1.b.1/S1.c.6 recipes (the OS cleaned /private/tmp between sessions) pinned at 0.0.4,
   and both link.
+- 2026-08-13, S2.b completed: VideoToolbox in the player per D-2, consuming 0.0.4. Selection
+  generalised to a sealed HardwareRoute (a NAMED decoder like h264_mediacodec, or an ACCEL
+  attached pre-open like VideoToolbox), because FFmpeg's two hardware shapes open differently
+  and the old CodecId-shaped selection could not say the second; the policy table keys on the
+  route's kind, the Apple native actual maps h264/hevc to the VideoToolbox route, Android keeps
+  mediacodec, desktop JVM deliberately stays software until S3 matures its rendering paths (the
+  working macOS JVM bridge rows are a recorded opportunity, not a promise). Frames stay honest:
+  a VideoToolbox frame is Opaque with HwSurfaceKind.CoreVideoPixelBuffer, and the wrapper owns a
+  LAZILY downloaded software twin (readableFrame), so a newest-wins renderer never pays the 3 to
+  25 MB copy for a superseded frame; SoftwareConverter on both boundaries converts through the
+  twin (the twin's real nv12 format; copy_props preserved the colour); HwdecStatus reports
+  HardwareWithDownload(VideoToolbox) until S2.c makes zero-copy real, and the code says so. ONE
+  REAL D-2 GAP, found red by the first VideoToolbox matrix run and fixed by the fence's ritual:
+  an hwaccel accepts its attach cheaply and can refuse the very FIRST send (tsoffset1400.ts,
+  a VideoToolbox OSStatus inside the AVERROR), and the replay driver treated any hardware
+  failure before a confirmed keyframe as TERMINAL, which turned a refusable stream into a dead
+  player. The falsifying arm ran red against the unfixed driver first; the fix is a
+  deliveredThisEpoch count and the head-replay licence: with nothing delivered this epoch the
+  retained window is the COMPLETE history since open or flush, so software replay from the head
+  loses nothing; terminal stays reserved for delivered-but-unconfirmed outputs, whose pinned
+  message moved with it. The conversion suite pins hwdec OFF (its subject is the software pixel
+  path; Auto now honestly returns Opaque frames it cannot name) and gained the hardware arm:
+  Auto on this Mac yields HardwareWithDownload(VideoToolbox), an Opaque frame carrying its
+  CVPixelBuffer kind, and toRgba produces the full 320x240x4 through the download with the
+  timestamp intact. The 18-row matrix re-ran 18/18 on macOS THROUGH the new default, tsoffset
+  surviving via the new head replay; ffmpeg suites green on macOS, JVM and the Android host;
+  Tier 1 green. KitePlayer 6c98bb7.
 
 ---
 

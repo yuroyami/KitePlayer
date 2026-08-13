@@ -1,7 +1,10 @@
 package io.github.yuroyami.kiteplayer.sample.android
 
 import android.content.Context
+import android.os.SystemClock
+import android.util.Log
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
@@ -12,11 +15,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
+import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -42,7 +48,10 @@ internal class SampleController(private val context: Context) {
     }
 
     private fun createPlayer(): KitePlayer = KitePlayer.create(
-        PlayerConfig(backends = phoneBackends()),
+        PlayerConfig(
+            hardwareDecode = HwdecPolicy.Require,
+            backends = phoneBackends(),
+        ),
     )
 
     /** The ordinary controls: open the private copy paused, with the picture on [view]. */
@@ -70,6 +79,49 @@ internal class SampleController(private val context: Context) {
 
     fun onBackground() {
         pause()
+    }
+
+    /** Samples engine and renderer totals once a second for the Android performance baseline. */
+    fun observePerformance(view: KitePlayerView, onSample: (String) -> Unit) {
+        scope.launch {
+            var previousPresented: Long? = null
+            var previousSampleNanos: Long? = null
+            while (isActive) {
+                delay(1_000)
+                val currentPlayer = player ?: run {
+                    previousPresented = null
+                    previousSampleNanos = null
+                    continue
+                }
+                val stats = currentPlayer.stats.value
+                val renderer = withContext(Dispatchers.Main) {
+                    Triple(view.presentedFrames, view.failedFrames, view.supersededFrames)
+                }
+                val presented = renderer.first
+                val sampleNanos = SystemClock.elapsedRealtimeNanos()
+                val previousCount = previousPresented
+                val previousNanos = previousSampleNanos
+                previousPresented = presented
+                previousSampleNanos = sampleNanos
+                if (previousCount == null || previousNanos == null) continue
+
+                val elapsedNanos = (sampleNanos - previousNanos).coerceAtLeast(1L)
+                val presentedFps = (presented - previousCount).coerceAtLeast(0L) *
+                    1_000_000_000.0 / elapsedNanos.toDouble()
+                val dropped = stats.droppedFramesLate + stats.droppedFramesDecode
+                val line = String.format(
+                    Locale.US,
+                    "presented=%.1f decoded=%.1f engineDrop=%d outputFail=%d superseded=%d",
+                    presentedFps,
+                    stats.videoDecodeFps,
+                    dropped,
+                    renderer.second,
+                    renderer.third,
+                )
+                Log.i("KitePerf", line)
+                withContext(Dispatchers.Main) { onSample(line) }
+            }
+        }
     }
 
     /**
@@ -106,18 +158,18 @@ internal class SampleController(private val context: Context) {
 
                     seekRequested = true
                     p.seek(5_000.milliseconds, SeekMode.Precise)
-                    val presentedAtSeek = view.presentedFrames
+                    val presentedAtSeek = withContext(Dispatchers.Main) { view.presentedFrames }
                     // position(), not progress.value: progress republishes on an interval, so its
                     // sample is stale for up to one interval after a seek. The iOS smoke always
                     // read position(); the S1.c.6 Android smoke passed on sample-timing luck.
                     val landed = p.position().inWholeMilliseconds
                     if (landed in 5_000..5_034) {
                         /* A later presentation proves the landed picture reached the view. */
-                        while (view.presentedFrames <= presentedAtSeek) {
+                        while (withContext(Dispatchers.Main) { view.presentedFrames } <= presentedAtSeek) {
                             kotlinx.coroutines.delay(10)
                         }
                         seekLanded = true
-                        surfaceFrame = view.presentedFrames > 0
+                        surfaceFrame = withContext(Dispatchers.Main) { view.presentedFrames } > 0
                     }
 
                     p.state.first { it.status == PlaybackStatus.Ended || it.status == PlaybackStatus.Failed }
@@ -127,7 +179,7 @@ internal class SampleController(private val context: Context) {
                 terminal = p.state.value.status.toString()
             } finally {
                 val stats = p.stats.value
-                val presented = view.presentedFrames
+                val presented = withContext(Dispatchers.Main) { view.presentedFrames }
                 runCatching { withTimeout(12_000) { p.closeAndAwait() } }
                     .onSuccess { teardownCompleted = true }
                 runCatching { withContext(Dispatchers.Main) { view.player = null } }

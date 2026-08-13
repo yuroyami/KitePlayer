@@ -4,4 +4,5 @@
     <string name="play">Play</string>
     <string name="pause">Pause</string>
     <string name="seek_five">Seek 5s</string>
+    <string name="perf_waiting">presented=0 decoded=0 engineDrop=0 outputFail=0 superseded=0</string>
 </resources>

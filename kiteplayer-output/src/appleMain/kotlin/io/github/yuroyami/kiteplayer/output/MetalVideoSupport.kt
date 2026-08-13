@@ -263,9 +263,13 @@ internal fun MTLDeviceProtocol.makePlaneTexture(
 }
 
 /** An offscreen render target, which is also what the colour instrument reads back. */
-internal fun MTLDeviceProtocol.makeTargetTexture(width: Int, height: Int): MTLTextureProtocol {
+internal fun MTLDeviceProtocol.makeTargetTexture(
+    width: Int,
+    height: Int,
+    format: ULong = MTLPixelFormatBGRA8Unorm,
+): MTLTextureProtocol {
     val descriptor = MTLTextureDescriptor.texture2DDescriptorWithPixelFormat(
-        pixelFormat = MTLPixelFormatBGRA8Unorm,
+        pixelFormat = format,
         width = width.toULong(),
         height = height.toULong(),
         mipmapped = false,

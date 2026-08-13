@@ -58,10 +58,12 @@ import platform.Metal.MTLTextureProtocol
  */
 internal class MetalFrameComposer(
     internal val device: MTLDeviceProtocol,
+    /** The render target's pixel format: BGRA for a CAMetalLayer, RGBA for an offscreen read. */
+    private val targetFormat: ULong = MTLPixelFormatBGRA8Unorm,
 ) {
     private val library = device.compileKitePlayerLibrary()
-    private val picturePipeline = device.makePicturePipeline(library, MTLPixelFormatBGRA8Unorm)
-    private val overlayPipeline = device.makeOverlayPipeline(library, MTLPixelFormatBGRA8Unorm)
+    private val picturePipeline = device.makePicturePipeline(library, targetFormat)
+    private val overlayPipeline = device.makeOverlayPipeline(library, targetFormat)
 
     internal val queue: MTLCommandQueueProtocol =
         checkNotNull(device.newCommandQueue()) { "Metal refused a command queue" }
@@ -92,6 +94,11 @@ internal class MetalFrameComposer(
         viewportWidth: Int,
         viewportHeight: Int,
         presentDrawable: platform.QuartzCore.CAMetalDrawableProtocol? = null,
+        /**
+         * Overrides the letterbox-and-rotation quad. The offscreen frame reader passes the
+         * identity quad to get the STORED picture back raw; a renderer leaves this null.
+         */
+        quadOverride: FloatArray? = null,
     ): MTLCommandBufferProtocol {
         pictureColor = frame.colorSpace
         val inputs = when (picture) {
@@ -111,7 +118,7 @@ internal class MetalFrameComposer(
         }
         try {
             encoder.setRenderPipelineState(picturePipeline)
-            val quad = quadUniformsFor(frame, viewportWidth, viewportHeight)
+            val quad = quadOverride ?: quadUniformsFor(frame, viewportWidth, viewportHeight)
             quad.usePinned { pinned ->
                 encoder.setVertexBytes(pinned.addressOf(0), (quad.size * 4).toULong(), atIndex = 0u)
             }

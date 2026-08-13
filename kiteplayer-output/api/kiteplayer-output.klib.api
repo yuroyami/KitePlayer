@@ -53,6 +53,12 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.githu
     final suspend fun create(): io.github.yuroyami.kiteplayer.spi/AudioSink // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.create|create(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.output/MetalPictureReader { // io.github.yuroyami.kiteplayer.output/MetalPictureReader|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.output/MetalPictureReader.<init>|<init>(){}[0]
+
+    final fun readRgba(io.github.yuroyami.kiteplayer.spi/VideoFrame, io.github.yuroyami.kiteplayer.output/MetalPicture): kotlin/ByteArray // io.github.yuroyami.kiteplayer.output/MetalPictureReader.readRgba|readRgba(io.github.yuroyami.kiteplayer.spi.VideoFrame;io.github.yuroyami.kiteplayer.output.MetalPicture){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer|null[0]
     constructor <init>(platform.QuartzCore/CAMetalLayer, io.github.yuroyami.kiteplayer.output/MetalPictureResolver) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.<init>|<init>(platform.QuartzCore.CAMetalLayer;io.github.yuroyami.kiteplayer.output.MetalPictureResolver){}[0]
 

@@ -98,3 +98,11 @@ kitecodec {
         license.set(FFmpegLicense.LGPL)
     }
 }
+
+// The S2.d measured exit drives real media through the renderer on the iOS simulator, so the
+// native tests need the fixture location, through the SIMCTL_CHILD twin exactly like the
+// ffmpeg module's matrix runs (S1.e.3).
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+    environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}

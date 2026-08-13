@@ -7999,6 +7999,31 @@ is no other.
   publish ritual, consumer relink, emulator and simulator matrix over the wide trees, README
   and platform docs, register, memory.
 
+- **2026-08-13, W.c landed and 17.4.9 closed: the wide profile is consumed everywhere it
+  plays.** KiteCodec 0.0.5 published to mavenLocal under the phone-superset scope (195f9f4);
+  the klib metadata differential reports zero changes in every category, the kc_ surface
+  untouched, exactly what a profile-only release should read; the Gradle plugin republished
+  at its standing 0.0.1 coordinate after the repo-wide bump, the S2.d lesson applied on
+  purpose this time. KitePlayer's one pin moved to 0.0.5. THE THREE CONSUMER RUNS, wide
+  trees, all through the new publication: JVM host gate 27 of 27 PASS; iOS simulator 27 of
+  27 PASS, the nine wide rows passing there being the proof the wide static tree is what
+  linked; Android emulator (Pixelu16KB) 26 of 27, every one of the nine wide rows PASS, the
+  wide arm64 .so inside the test APK at 15,506,904 bytes (x86_64 17,431,680). THE ONE
+  DEVICE FAILURE IS NOT THE PROFILE'S: multitrack.mkv "decoded no subtitle cue", the S4.c
+  text path's device proof, which S4.c has always owed and never run; the same cue decode
+  passes on the JVM and the simulator, and the path is pure Kotlin over packet bytes, so it
+  is profile-independent by construction. It is S4.c's first device measurement and S4.c's
+  defect to fix, named here so the emulator's 26 of 27 is never misread as a codec gap.
+  Recipe truths re-learned on the way: connectedAndroidDeviceTest reinstalls the APK and
+  orphans the pushed media (the FormatMatrixMediaDir.device KDoc's own warning, honored by
+  installing the APK, re-pushing testmedia, chown to the app id with the ext_data_rw group,
+  and running am instrument directly); and one process discipline slip, a gradle invocation
+  piped through tail masked a failing exit code again, the exact 0.0.4-era lesson, caught
+  because the results XML was read rather than trusted. README rows now tell the 27-row
+  truth with the emulator exception named, and the profile paragraph states the wide read
+  side, the five protocols, and the named absences (https, phone AV1, cue decode beyond
+  SubRip/WebVTT).
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10677,7 +10702,8 @@ dependency order inside the stage:
 
 **S2. IT PLAYS BEAUTIFULLY ON APPLE.** (Expanded 17.4.8; entered 2026-08-12 by owner order,
 after S4.a to S4.c, before S4.d to S4.g. The wide-profile order 17.4.9, entered 2026-08-13,
-rides inside it between S2.d and S2.e.) Exit: Metal renderer on macOS and iOS, VideoToolbox inside
+rode inside it between S2.d and S2.e and closed the same day, KiteCodec 0.0.5.) Exit: Metal
+renderer on macOS and iOS, VideoToolbox inside
 FFmpeg per D-2 with measured software fallback, colour instrument, vsync-snapped scheduling,
 sustained 4K runs with committed thresholds. Absorbs draft items C-09 to C-31, C-33, C-48 to
 C-50 with their verifier corrections. Also KiteVideo's first landing (17.9, KV-1 to KV-3): the

@@ -22,6 +22,17 @@ abstract fun interface io.github.yuroyami.kiteplayer.output/MetalPictureResolver
     abstract fun resolve(io.github.yuroyami.kiteplayer.spi/VideoFrame): io.github.yuroyami.kiteplayer.output/MetalPicture? // io.github.yuroyami.kiteplayer.output/MetalPictureResolver.resolve|resolve(io.github.yuroyami.kiteplayer.spi.VideoFrame){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.output/CodecSpecificData { // io.github.yuroyami.kiteplayer.output/CodecSpecificData|null[0]
+    constructor <init>(kotlin/ByteArray, kotlin/ByteArray?, kotlin/Int) // io.github.yuroyami.kiteplayer.output/CodecSpecificData.<init>|<init>(kotlin.ByteArray;kotlin.ByteArray?;kotlin.Int){}[0]
+
+    final val csd0 // io.github.yuroyami.kiteplayer.output/CodecSpecificData.csd0|{}csd0[0]
+        final fun <get-csd0>(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.output/CodecSpecificData.csd0.<get-csd0>|<get-csd0>(){}[0]
+    final val csd1 // io.github.yuroyami.kiteplayer.output/CodecSpecificData.csd1|{}csd1[0]
+        final fun <get-csd1>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.output/CodecSpecificData.csd1.<get-csd1>|<get-csd1>(){}[0]
+    final val nalLengthSize // io.github.yuroyami.kiteplayer.output/CodecSpecificData.nalLengthSize|{}nalLengthSize[0]
+        final fun <get-nalLengthSize>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/CodecSpecificData.nalLengthSize.<get-nalLengthSize>|<get-nalLengthSize>(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink { // io.github.yuroyami.kiteplayer.output/CoreAudioSink|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy, io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppleAudioSessionPolicy;io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
@@ -111,6 +122,13 @@ sealed class io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yu
                 final fun <get-rows>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.rows.<get-rows>|<get-rows>(){}[0]
         }
     }
+}
+
+final object io.github.yuroyami.kiteplayer.output/AnnexB { // io.github.yuroyami.kiteplayer.output/AnnexB|null[0]
+    final fun isAnnexB(kotlin/ByteArray): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/AnnexB.isAnnexB|isAnnexB(kotlin.ByteArray){}[0]
+    final fun parseAvcC(kotlin/ByteArray): io.github.yuroyami.kiteplayer.output/CodecSpecificData? // io.github.yuroyami.kiteplayer.output/AnnexB.parseAvcC|parseAvcC(kotlin.ByteArray){}[0]
+    final fun parseHvcC(kotlin/ByteArray): io.github.yuroyami.kiteplayer.output/CodecSpecificData? // io.github.yuroyami.kiteplayer.output/AnnexB.parseHvcC|parseHvcC(kotlin.ByteArray){}[0]
+    final fun toAnnexB(kotlin/ByteArray, kotlin/Int): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.output/AnnexB.toAnnexB|toAnnexB(kotlin.ByteArray;kotlin.Int){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer.output/AppleHostClock : io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer.output/AppleHostClock|null[0]

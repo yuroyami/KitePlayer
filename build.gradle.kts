@@ -22,7 +22,10 @@ plugins {
 
 allprojects {
     group = "io.github.yuroyami"
-    version = "0.0.1"
+    // Read from gradle.properties rather than written twice. It was a literal here while
+    // gradle.properties also carried a VERSION line, so bumping the properties file published the
+    // old coordinate and said BUILD SUCCESSFUL while doing it.
+    version = providers.gradleProperty("VERSION").get()
 }
 
 val kitertProjects = subprojects

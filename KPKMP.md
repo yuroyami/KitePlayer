@@ -8024,6 +8024,30 @@ is no other.
   side, the five protocols, and the named absences (https, phone AV1, cue decode beyond
   SubRip/WebVTT).
 
+- **2026-08-13, the first real-device defect, found by the first real consumer: `content://` and
+  the `fd` protocol.** KitePlayer was wired into Syncplay (`../syncplay-mobile`) as a selectable
+  engine on Android and iOS, one shared implementation for both. Two defects surfaced, and the
+  second is the one that matters to this plan. FIRST, in the integration: nothing called the
+  engine's `initialize()`, because in that codebase an engine constructs itself inside its own
+  `VideoPlayer` composable rather than being initialised by shared code; every later call then
+  returned quietly against a null engine, so nothing played AND nothing was logged. The silence
+  was the integration's own doing (`?: return` everywhere) and is now loud. SECOND, and the real
+  finding: on a physical phone, opening a SAF file through `/proc/self/fd/N` fails with
+  `fmt_open_input: Permission denied (code=-13)`. Re-opening by path makes the kernel recheck
+  permissions against the PATH, which a descriptor this process may legitimately read can still
+  fail. That trick is what mpv falls back to and what every "just use /proc" answer recommends,
+  and it is not sound. THE FIX, at its proper owner: KiteCodec's profile enables FFmpeg's `fd`
+  protocol, which takes the descriptor as a pre-open option, `dup()`s it (so the caller keeps
+  ownership) and never re-opens anything; its own `fstat` sets `is_streamed`, so a regular file
+  stays SEEKABLE. `pipe:<fd>` was rejected as a substitute after reading its source: it dups too,
+  but hardcodes `is_streamed = 1`, which would cost seeking and therefore sync. The banner is now
+  exactly `file fd pipe data http tcp`. KitePlayer gains `MediaItem.openOptions`, passed to
+  KiteCodec's existing KD-4 pre-open funnel by `KiteCodecMediaBackend`; this is the S4.e
+  "openOptions echo" item pulled forward by need, and it is additive. NOTE FOR S5 AND FOR ANY
+  BEGINNER DOC: an Android consumer cannot play a picked file without this, so the pairing of
+  `fd:` plus the `fd` option is not an advanced feature, it is the ordinary Android path and
+  belongs in the quickstart.
+
 ---
 
 ## 15. Horizon B execution: B1

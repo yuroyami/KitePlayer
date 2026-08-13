@@ -44,6 +44,16 @@ public data class MediaItem(
      * Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     val formatHint: String? = null,
+    /**
+     * Demuxer options applied between allocation and open, the only moment `probesize`, `fflags`,
+     * format forcing and protocol options can act. Passed straight to the source's pre-open funnel;
+     * a key the demuxer does not consume is reported rather than silently dropped.
+     *
+     * These belong to the ITEM and not to the backend because the useful ones differ per file. The
+     * motivating case is Android: a picked `content://` file reaches FFmpeg as the `fd:` protocol
+     * with `"fd"` set to a descriptor number, and that number is different for every file.
+     */
+    val openOptions: Map<String, String> = emptyMap(),
 ) {
     /** A short label for logs and for a UI that has nothing better to show. */
     val label: String get() = uri.substringAfterLast('/').ifEmpty { uri }

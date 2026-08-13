@@ -46,7 +46,17 @@ public class KiteCodecMediaBackend(
         // match the headers KiteCodec was compiled against, so every open fails and retrying is pointless.
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
-        val source = mappingFFmpegRuntimeRejection { KiteCodecSource(MediaSource.open(media.uri)) }
+        val source = mappingFFmpegRuntimeRejection {
+            KiteCodecSource(
+                if (media.openOptions.isEmpty()) {
+                    MediaSource.open(media.uri)
+                } else {
+                    // KD-4's pre-open funnel. Unconsumed keys are reported by KiteCodec rather
+                    // than dropped, so a typo surfaces instead of quietly doing nothing.
+                    MediaSource.open(media.uri, media.openOptions)
+                },
+            )
+        }
         source.onWarning = onWarning
         source.videoDecoderOptions = decoderOptions
         source.videoLowDelay = lowDelayDecode

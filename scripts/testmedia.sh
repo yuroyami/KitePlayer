@@ -277,3 +277,59 @@ title=Ending
 META
 ffmpeg -v error -y -i sync1080p30.mp4 -i chapters.ffmeta -map_metadata 1 -map 0 -c copy -t 9 chapters.mkv
 rm -f chapters.ffmeta
+
+# The wide-profile rows (KPKMP 17.4.9 W.b). Every clip below is a format the NARROW profile
+# could not open or could not decode; each one ran RED against the narrow trees before the wide
+# trees existed, which is the whole evidentiary point. All are synthesizable with a stock
+# ffmpeg CLI; VC-1 and RealVideo have no FFmpeg encoders, so those two wait for real sample
+# files and are a named absence in the plan rather than rows here.
+
+echo "AVI with MPEG-4 part 2 video and MP3 audio, the classic downloaded file of 2005"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=25:duration=5" \
+  -f lavfi -i "sine=frequency=300:sample_rate=44100:duration=5" \
+  -c:v mpeg4 -q:v 5 -c:a libmp3lame -b:a 128k -shortest avi-mpeg4.avi
+
+echo "WMV: ASF container, MS-MPEG4v3 video, WMA2 audio"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=25:duration=5" \
+  -f lavfi -i "sine=frequency=350:sample_rate=44100:duration=5" \
+  -c:v msmpeg4 -q:v 5 -c:a wmav2 -b:a 96k -shortest wmv-msmpeg4.wmv
+
+echo "FLV: Sorenson Spark video with MP3 audio, the web video of 2008"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=25:duration=5" \
+  -f lavfi -i "sine=frequency=400:sample_rate=44100:duration=5" \
+  -c:v flv -q:v 5 -c:a libmp3lame -ar 44100 -b:a 96k -shortest flv-flv1.flv
+
+echo "VOB: MPEG-PS container, MPEG-2 video, AC-3 audio, the DVD shape"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=720x576:rate=25:duration=5" \
+  -f lavfi -i "sine=frequency=250:sample_rate=48000:duration=5" \
+  -c:v mpeg2video -b:v 3M -c:a ac3 -b:a 192k -shortest -f vob vob-mpeg2.vob
+
+echo "E-AC-3 audio in Matroska, the broadcast and anime-release codec the narrow set lacked"
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=5" \
+  -c:a eac3 -b:a 192k audio-eac3.mkv
+
+echo "DTS core audio in Matroska (dca encoder is experimental but decode-representative)"
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=5" \
+  -c:a dca -strict experimental -b:a 768k audio-dts.mkv
+
+echo "TrueHD audio in Matroska (experimental encoder, decode-representative)"
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=5" \
+  -c:a truehd -strict experimental audio-truehd.mkv
+
+echo "ALAC in m4a, the Apple lossless shape"
+ffmpeg -v error -y \
+  -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=5" \
+  -c:a alac audio-alac.m4a
+
+echo "ASS subtitle track in Matroska; the row asserts the stream is SEEN (cue decode is S4's)"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=640x360:rate=25:duration=6" \
+  -i subs.srt \
+  -map 0:v -map 1 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:s ass asssubbed.mkv

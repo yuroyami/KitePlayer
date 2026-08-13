@@ -78,6 +78,23 @@ internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
     MatrixRow("av1.mkv", MatrixVerdict.MustSurvive),
     MatrixRow("torture-truncated.mp4", MatrixVerdict.MustSurvive, hasAudio = false),
     MatrixRow("torture-garbage.mp4", MatrixVerdict.MustSurvive, hasVideo = false, hasAudio = false),
+
+    // The wide-profile rows (17.4.9 W.b): formats real files arrive in that the narrow
+    // editor-era profile could not open or could not decode. Every row below ran RED against
+    // the narrow trees before the wide trees existed; the red transcript is in the log. VC-1
+    // and RealVideo are the named absences: FFmpeg has no encoders for them, so their rows
+    // wait for real sample files instead of pretending.
+    MatrixRow("avi-mpeg4.avi", MatrixVerdict.MustPlay),
+    MatrixRow("wmv-msmpeg4.wmv", MatrixVerdict.MustPlay),
+    MatrixRow("flv-flv1.flv", MatrixVerdict.MustPlay),
+    MatrixRow("vob-mpeg2.vob", MatrixVerdict.MustPlay),
+    MatrixRow("audio-eac3.mkv", MatrixVerdict.MustPlay, hasVideo = false),
+    MatrixRow("audio-dts.mkv", MatrixVerdict.MustPlay, hasVideo = false),
+    MatrixRow("audio-truehd.mkv", MatrixVerdict.MustPlay, hasVideo = false),
+    MatrixRow("audio-alac.m4a", MatrixVerdict.MustPlay, hasVideo = false),
+    // The ass row asserts the subtitle STREAM is seen; decoding its cues is S4.f's, because
+    // the text path deliberately speaks SubRip and WebVTT only today.
+    MatrixRow("asssubbed.mkv", MatrixVerdict.MustPlay, hasAudio = false, expectSubtitleStreams = 1),
 )
 
 /** One row's transcript line. [ok] is the pass/fail; [outcome] is the measured detail. */

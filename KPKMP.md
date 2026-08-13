@@ -7885,6 +7885,46 @@ is no other.
   timestamp intact. The 18-row matrix re-ran 18/18 on macOS THROUGH the new default, tsoffset
   surviving via the new head replay; ffmpeg suites green on macOS, JVM and the Android host;
   Tier 1 green. KitePlayer 6c98bb7.
+- 2026-08-13, S2.c completed: the Metal renderer on macOS and iOS, three KitePlayer commits and
+  one KiteCodec commit. LANDING 1 (0023bc6): one appleMain Metal core split by the Android
+  renderer's own testability law, MetalFrameComposer (pipelines, plane texture reuse,
+  CVMetalTextureCache, offscreen targets with shared storage) apart from MetalVideoRenderer
+  (thread, newest-wins slot, CAMetalLayer); MSL compiled from source at runtime, the fragment
+  arithmetic deliberately SoftwareConverter's coefficients in the same working space; hardware
+  frames wrap per plane with no copy, software planes upload in native format one memcpy each
+  through the ffmpeg module's new public seam (corePixelBufferOrNull, uploadPlanesOrNull), and
+  the output module keeps SPI purity through the resolver. Four offscreen proofs with REAL
+  Metal on the host: known YUV to expected sRGB within 2 of 255, the 709-versus-601 uniform
+  demonstrably live, letterbox clearing plus an overlay above the picture, and a hand-filled
+  IOSurface-backed CVPixelBuffer wrapping zero-copy to the same red (a null-callback attribute
+  dictionary SEGFAULTS inside CVPixelBufferCreate; the CFType callbacks are load-bearing). ONE
+  REAL LIFETIME BUG found by the first offscreen run: wrapped CVMetalTextures released at
+  commit while the GPU still read them; the release rides addCompletedHandler now. THE MACOS
+  MEASUREMENT: the sample's window through Metal drew 299 of 300 frames of the 1080p sync clip
+  with ZERO superseded and zero failed, worst schedule 3 ms, no underruns, VideoToolbox
+  zero-copy end to end; the A3 software baseline published 80 of 297. LANDING 2 (556bc58): the
+  S4.c Apple rider. AppleSubtitleRasterizer through CoreText with the Android placement
+  arithmetic mirrored line for line (two honest limits stated: no strikethrough, premultiplied
+  antialiased edges; both S4.f's), wired as AppleOutputBackend.subtitleRasterizer; setOverlay
+  real on BOTH CG renderers, compositing in display space under an identity transform; AppKit's
+  unrotated fast path skipped compositing and its new arm caught it. Proofs: cue pixels at the
+  exact Android bottom-centre spot, outline beside fill (the arm needs a 96 px glyph; a 3 px
+  stroke swallows subtitle-size stems whole), stacking, and white-above-red at the authored
+  spot; rasterizer and renderer arms green on macOS and the iOS simulator (the simulator's
+  CoreAudio arms fail under bare spawn by the recorded S1.b law, app-hosted is their home).
+  LANDING 3 (6133323 plus KiteCodec 9e4151b): KitePlayerUIView defaults to Metal over its own
+  CAMetalLayer, physical-pixel drawable, preferMetal=false keeping the CG route; TWO
+  consumer-link truths found by the first iOS smoke and fixed at their owners, because the
+  static Kotlin framework resolves FFmpeg's videotoolbox references only at the final app
+  link: the KiteCodec plugin's Local-source iOS branch names the media frameworks now, and so
+  does the sample app's own Xcode link. One infra lesson recorded: a failed xcodebuild leaves a
+  gutted .app that installs or launches as older dyld errors, so the smoke script now fails
+  loudly at the build step instead of masking it behind a pipe. THE IOS MEASUREMENT, simulator,
+  provisional: the nine-key smoke through Metal passes with 151 decoded, 141 submitted, 17
+  presented against the CG baseline's 6, seek landed, Ended, zero underruns, teardown complete.
+  The expansion's "render audit extended" sentence was imprecise and is corrected here: that
+  audit's scope is the audio callback's C and it gained nothing. Dumps moved in output, ffmpeg
+  and phone; Tier 1 green at every landing.
 
 ---
 

@@ -136,6 +136,7 @@ private class FakeCanvas(override val width: Int, override val height: Int) : Ta
         drawWidth: Float,
         drawHeight: Float,
         contentHash: Long,
+        imageIndex: Int,
     ) {
         drawnOverlays += OverlayDraw(width, height, left, top, drawWidth, drawHeight, contentHash)
     }

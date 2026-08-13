@@ -13,6 +13,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.CloseableCoroutineDispatcher
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 
 /**
  * Draws frames into a [Surface] the caller owns.
@@ -90,6 +92,12 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     private val convert: (VideoFrame) -> ByteArray,
     /** Where finished pictures go. Production locks a real Surface; a host test records the calls. */
     private val target: CanvasTarget,
+    /** Present only for renderer generations that can negotiate direct MediaCodec output. */
+    private val codecTarget: MediaCodecSurfaceTarget? = null,
+    /** A separate UI layer used when MediaCodec owns the video Surface. */
+    private val overlayConsumer: ((SubtitleOverlay?) -> Unit)? = null,
+    /** Keeps the view geometry in step with both direct and software decoder output. */
+    private val geometryConsumer: ((VideoSize, Int) -> Unit)? = null,
 ) : VideoRenderer {
 
     /**
@@ -105,6 +113,36 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         surface: Surface,
         convert: (VideoFrame) -> ByteArray,
     ) : this(convert = convert, target = SurfaceCanvasTarget(surface))
+
+    /**
+     * Builds a renderer before its display Surface exists.
+     *
+     * Attach this renderer before opening media so its paired MediaCodec factory participates in
+     * decoder selection, then forward every Surface lifecycle change through [setSurface]. Software
+     * frames still use [convert] as a fallback. [onOverlay] should draw into a separate view above the
+     * Surface because MediaCodec owns the video Surface while the direct path is active.
+     */
+    public constructor(
+        convert: (VideoFrame) -> ByteArray,
+        onOverlay: (SubtitleOverlay?) -> Unit,
+        onVideoGeometry: (VideoSize, Int) -> Unit = { _, _ -> },
+    ) : this(
+        convert = convert,
+        targets = AndroidSurfaceTargets(null, onVideoGeometry),
+        overlayConsumer = onOverlay,
+    )
+
+    private constructor(
+        convert: (VideoFrame) -> ByteArray,
+        targets: AndroidSurfaceTargets,
+        overlayConsumer: ((SubtitleOverlay?) -> Unit)? = null,
+    ) : this(
+        convert = convert,
+        target = targets.canvas,
+        codecTarget = targets.codec,
+        overlayConsumer = overlayConsumer,
+        geometryConsumer = targets.geometryConsumer,
+    )
 
     private val presented = atomic(0L)
     private val superseded = atomic(0L)
@@ -188,10 +226,15 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      */
     public val failedFrames: Long get() = failed.value
 
-    /** Nothing zero-copy here. Pixels arrive in main memory and are pushed through a software canvas. */
-    override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
+    override fun videoDecoderFactories(): List<VideoDecoderFactory> =
+        codecTarget?.let { listOf(MediaCodecVideoDecoderFactory(it)) }.orEmpty()
 
-    override fun supports(format: PlayerPixelFormat): Boolean = format != PlayerPixelFormat.Opaque
+    /** MediaCodec buffers go straight to the Surface; every other format uses the software fallback. */
+    override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> =
+        if (codecTarget != null) setOf(HwSurfaceKind.MediaCodecBuffer) else emptySet()
+
+    override fun supports(format: PlayerPixelFormat): Boolean =
+        format != PlayerPixelFormat.Opaque || codecTarget != null
 
     /**
      * Queues [frame] for drawing and returns immediately.
@@ -206,6 +249,25 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             frame.close()
             failed.incrementAndGet()
             return false
+        }
+        if (frame is DirectSurfaceVideoFrame) {
+            if (frame.target !== codecTarget) {
+                frame.close()
+                failFrame("a MediaCodec frame belongs to a different Surface target")
+                return false
+            }
+            val accepted = frame.renderAt(targetNanos) { rendered ->
+                if (rendered) {
+                    presented.incrementAndGet()
+                    noteSurfaceAvailable()
+                } else if (!closed.value) {
+                    failed.incrementAndGet()
+                }
+            }
+            if (!accepted) {
+                failWithLostSurface("there is no live Surface for the MediaCodec frame")
+            }
+            return accepted
         }
         if (!targetIsValid()) {
             frame.close()
@@ -235,6 +297,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val frame = pending.getAndSet(null) ?: return
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
+        geometryConsumer?.invoke(size, rotation)
         val converted = try {
             convert(frame)
         } catch (failure: Throwable) {
@@ -388,7 +451,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
         val scaleX = layout.width.toFloat() / active.viewportWidth
         val scaleY = layout.height.toFloat() / active.viewportHeight
-        for (image in active.images) {
+        for ((imageIndex, image) in active.images.withIndex()) {
             canvas.drawOverlayImage(
                 rgba = image.bitmap.pixels,
                 width = image.bitmap.width,
@@ -398,6 +461,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                 drawWidth = image.bitmap.width * scaleX,
                 drawHeight = image.bitmap.height * scaleY,
                 contentHash = active.contentHash,
+                imageIndex = imageIndex,
             )
         }
     }
@@ -448,7 +512,36 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      */
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         this.overlay.value = overlay
-        signal.trySend(Unit)
+        val external = overlayConsumer
+        if (external != null) {
+            external(overlay)
+        } else {
+            signal.trySend(Unit)
+        }
+    }
+
+    /**
+     * Replaces the display Surface without replacing this renderer or its paired decoder.
+     *
+     * Passing null synchronously fences software canvas work and MediaCodec output release before it
+     * returns, which makes it safe to call from `SurfaceHolder.Callback.surfaceDestroyed`.
+     */
+    public fun setSurface(surface: Surface?) {
+        val directTarget = codecTarget
+            ?: throw IllegalStateException("this renderer was built with a test CanvasTarget")
+        if (closed.value) return
+        runCatching { directTarget.update(surface) }
+            .onFailure { failure ->
+                eventFlow.tryEmit(
+                    RendererEvent.Failed(
+                        failure.message ?: "MediaCodec could not switch its output Surface",
+                    ),
+                )
+            }
+        val switching = target as? SwitchingSurfaceCanvasTarget ?: return
+        runBlocking {
+            withContext(dispatcher) { switching.refresh() }
+        }
     }
 
     /**
@@ -466,6 +559,11 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      */
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
+        codecTarget?.let { directTarget ->
+            directTarget.clearGeometryConsumer()
+            runCatching { directTarget.update(null) }
+        }
+        overlayConsumer?.invoke(null)
         signal.close()
         worker.cancel()
         runBlocking { workerJob.join() }
@@ -479,6 +577,66 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         private const val RGBA_BYTES_PER_PIXEL: Long = 4L
         private const val OPAQUE_ALPHA: Int = 0xFF shl 24
         private val EMPTY_ARGB: IntArray = IntArray(0)
+    }
+}
+
+/** One shared lifecycle target for the direct codec producer and the software Canvas fallback. */
+private class AndroidSurfaceTargets(
+    initialSurface: Surface?,
+    val geometryConsumer: ((VideoSize, Int) -> Unit)? = null,
+) {
+    val codec = MediaCodecSurfaceTarget(initialSurface, geometryConsumer)
+    val canvas: CanvasTarget = SwitchingSurfaceCanvasTarget(codec)
+}
+
+/**
+ * Lazily swaps the software fallback's Canvas target on the renderer worker.
+ *
+ * [isValid] only reads the shared lifecycle state. Delegate creation and release happen in [lock] or
+ * [refresh], both serialized on the renderer dispatcher, so a Surface callback cannot recycle a
+ * bitmap or replace a delegate underneath an active draw.
+ */
+private class SwitchingSurfaceCanvasTarget(
+    private val source: MediaCodecSurfaceTarget,
+) : CanvasTarget {
+    private var version: Long = Long.MIN_VALUE
+    private var delegate: SurfaceCanvasTarget? = null
+    private var lockedDelegate: SurfaceCanvasTarget? = null
+
+    override fun isValid(): Boolean = source.snapshot().isDisplayable
+
+    override fun lock(): TargetCanvas? {
+        refresh()
+        val active = delegate ?: return null
+        val canvas = active.lock() ?: return null
+        check(lockedDelegate == null) { "a Canvas is already locked" }
+        lockedDelegate = active
+        return canvas
+    }
+
+    override fun post(canvas: TargetCanvas) {
+        val active = lockedDelegate ?: error("no Canvas is locked")
+        try {
+            active.post(canvas)
+        } finally {
+            lockedDelegate = null
+        }
+    }
+
+    fun refresh() {
+        check(lockedDelegate == null) { "cannot replace a Surface while its Canvas is locked" }
+        val snapshot = source.snapshot()
+        if (snapshot.version == version) return
+        delegate?.release()
+        delegate = snapshot.surface?.takeIf { snapshot.isDisplayable }?.let(::SurfaceCanvasTarget)
+        version = snapshot.version
+    }
+
+    override fun release() {
+        check(lockedDelegate == null) { "cannot release a Surface while its Canvas is locked" }
+        delegate?.release()
+        delegate = null
+        version = Long.MIN_VALUE
     }
 }
 
@@ -539,6 +697,7 @@ internal interface TargetCanvas {
         drawWidth: Float,
         drawHeight: Float,
         contentHash: Long,
+        imageIndex: Int,
     )
 }
 
@@ -564,29 +723,28 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
     /** Reused so that drawing a frame allocates nothing at all. */
     private val destination = RectF()
 
-    /** Uploaded overlay images, keyed by the overlay's contentHash, then by identity order. */
+    /** Uploaded overlay images, keyed by the overlay's contentHash, then by image index. */
     private var overlayHash: Long = Long.MIN_VALUE
     private val overlayBitmaps = mutableListOf<Bitmap>()
-    private var overlayCursor = 0
 
     /**
      * The premultiply-on-upload the cue contract prescribes: cue pixels arrive straight, a
-     * Canvas needs premultiplied. Done once per contentHash: within one overlay the images are
-     * requested in a stable order, so the cache is a list walked by a cursor that the hash
-     * change resets.
+     * Canvas needs premultiplied. Done once per contentHash and image index.
      */
-    private fun overlayBitmapFor(rgba: ByteArray, width: Int, height: Int, contentHash: Long): Bitmap {
+    private fun overlayBitmapFor(
+        rgba: ByteArray,
+        width: Int,
+        height: Int,
+        contentHash: Long,
+        imageIndex: Int,
+    ): Bitmap {
         if (contentHash != overlayHash) {
             overlayBitmaps.forEach { it.recycle() }
             overlayBitmaps.clear()
             overlayHash = contentHash
-            overlayCursor = 0
         }
-        if (overlayCursor < overlayBitmaps.size) {
-            return overlayBitmaps[overlayCursor++].also {
-                if (overlayCursor == overlayBitmaps.size) overlayCursor = 0
-            }
-        }
+        overlayBitmaps.getOrNull(imageIndex)?.let { return it }
+        check(imageIndex == overlayBitmaps.size) { "overlay images must be drawn in index order" }
         val pixels = IntArray(width * height)
         var at = 0
         for (index in pixels.indices) {
@@ -669,8 +827,9 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
             drawWidth: Float,
             drawHeight: Float,
             contentHash: Long,
+            imageIndex: Int,
         ) {
-            val bitmap = overlayBitmapFor(rgba, width, height, contentHash)
+            val bitmap = overlayBitmapFor(rgba, width, height, contentHash, imageIndex)
             destination.set(left, top, left + drawWidth, top + drawHeight)
             canvas.drawBitmap(bitmap, null, destination, paint)
         }

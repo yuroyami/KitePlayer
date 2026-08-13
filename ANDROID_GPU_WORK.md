@@ -2,13 +2,39 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. If those skills are not available in your harness, execute the tasks strictly in order, one at a time, running every verification step before moving on.
 
-**Goal:** Replace KitePlayer's CPU-bound Android video path with a GPU path that stays 100% Compose-native: MediaCodec hardware decode into an ImageReader, frames travel as AHardwareBuffer-backed hardware Bitmaps, and Compose draws them as ImageBitmaps with zero CPU pixel work.
+**Goal:** Replace KitePlayer's CPU-bound Android video path with hardware decode and GPU-native presentation. The immediate sample path uses MediaCodec directly into its SurfaceView. The Compose path will use an external-OES texture and one GPU conversion into an RGBA hardware buffer, with no CPU video-pixel conversion.
 
-**Architecture:** A new `MediaCodecVideoDecoderFactory` (androidMain of kiteplayer-output) implements the existing `VideoDecoderFactory` SPI, so the engine picks it up through the same factory list it already iterates. Compressed packets from the KiteCodec demuxer are converted from avcC/hvcC length-prefixed form to Annex B by a pure-Kotlin bitstream converter, fed to MediaCodec, and decoded onto an ImageReader Surface configured for GPU sampling. Each output image becomes a `VideoFrame` wrapping a hardware `Bitmap` (`Bitmap.wrapHardwareBuffer`), which the Compose renderer returns directly as an `ImageBitmap`. The existing FFmpeg software path stays untouched as the fallback tier.
+**Architecture:** A renderer-coupled `MediaCodecVideoDecoderFactory` implements the existing `VideoDecoderFactory` SPI. Compressed packets from the KiteCodec demuxer are converted from avcC/hvcC length-prefixed form to Annex B by a pure-Kotlin bitstream converter and fed to MediaCodec. For `KitePlayerView`, each decoded output stays in MediaCodec until the scheduler releases it at the target monotonic timestamp directly to the SurfaceView. The existing FFmpeg software path remains the compatibility fallback. Compose requires a separate OES-to-RGBA GPU bridge because opaque decoder buffers are not portable Android Bitmaps.
 
 **Tech Stack:** Kotlin Multiplatform (androidMain), MediaCodec, ImageReader, HardwareBuffer, Compose Multiplatform, existing KitePlayer SPI (`VideoDecoderFactory`, `VideoDecoder`, `VideoFrame`), KiteCodec 0.0.6 (extradata exposure may require a KiteCodec change, see Task 2).
 
 **Spec:** `/Users/macbook/StudioProjects/#Kite/KiteCodec/SOL_REVIEW.md`, section "Performance findings", blocker 1 ("Android's flagship path is entirely CPU-bound") and the "Central architectural recommendation". This plan implements the review's required direction: "MediaCodec directly to Surface where possible; AHardwareBuffer interop for composited paths; CPU RGBA only as a compatibility fallback."
+
+## Implementation correction and current status
+
+The original `MediaCodec -> ImageReader(PRIVATE) -> HardwareBuffer -> Bitmap` design is not a portable Android API path. `ImageFormat.PRIVATE` is implementation-defined opaque storage, commonly vendor YUV, while `Bitmap.wrapHardwareBuffer` supports RGB-compatible buffers. Closing an acquired Image immediately would also return its BufferQueue slot while the UI could still be sampling it. That design is superseded by these two tiers:
+
+1. `KitePlayerView`: MediaCodec output buffer directly to SurfaceView. This is the lowest-overhead path and contains no per-frame CPU pixel conversion, RGBA array, Bitmap upload, or Canvas video draw.
+2. Compose: MediaCodec to `SurfaceTexture` external-OES, then one EGL shader pass to an RGBA_8888 ImageReader. The acquired Image must remain open for the displayed frame lease. This tier is still pending.
+
+Implemented in this pass:
+
+- Annex B packet conversion and strict avcC/hvcC parsing.
+- Owned codec extradata from KiteCodec through the KitePlayer source SPI.
+- Renderer-provided decoder factories, selected before backend decoder factories when attached before open.
+- API 29+ hardware MediaCodec factory for 8-bit AVC and HEVC under strict `HwdecPolicy.Require`.
+- Direct output-buffer presentation at the engine's target `System.nanoTime()` timestamp.
+- Synchronous Surface replacement, a private fallback Surface, flush/CSD replay, EOS final-frame handling, input-size guards, frame ownership tests, and software fallback.
+- Headless renderer attachment before open, Surface recreation without renderer replacement, aspect-correct SurfaceView layout, and a separate subtitle overlay view.
+- Sample diagnostics for presented FPS, decode FPS, dropped frames, and `KitePerf` logcat output.
+
+Physical FPS measurement is not checked off yet because no Android device is currently connected. Host tests and Android compilation do not substitute for the 30-second device run.
+
+Runtime smoke on the installed API 36 arm64 emulator with 16 KiB pages passed on the final source bytes: hardware status `HardwareZeroCopy(MediaCodec)`, 151 decoded and presented frames, precise seek landed, terminal state `Ended`, a Surface frame was presented, audio underruns stayed at zero, and teardown completed. A separate normal run of the 1080p30 fixture stabilized around 29 to 31 presented FPS after warm-up, with zero renderer failures or superseded frames. Those emulator numbers validate the path and telemetry, but are not recorded as the physical-device baseline.
+
+The direct factory intentionally declines `Auto` and `Prefer` for now. Those policies promise
+runtime software fallback, but replaying already-accepted packets across a renderer factory and the
+backend factory is not yet an engine capability. `Require` makes the no-demotion behavior explicit.
 
 ## Global Constraints
 
@@ -22,7 +48,7 @@
   - KitePlayer Android compilation: `./gradlew :kiteplayer-output:compileAndroidMain :kiteplayer-core:compileAndroidMain :kiteplayer-ffmpeg:compileAndroidMain`
   - KiteCodec (only if you touch it): `./gradlew :kitecodec-core:jvmTest -Pkitecodec.phoneTargetsOnly=true :kitecodec-core:compileKotlinMacosArm64`
 - If KiteCodec changes, republish before building KitePlayer against it: `./gradlew publishToMavenLocal -Pkitecodec.phoneTargetsOnly=true` in KiteCodec. KitePlayer's settings resolve mavenLocal first, so the republish is picked up automatically. KiteCodec version stays 0.0.6 for local work.
-- minSdk is 26 (Android 8.0) across every Android module in both repos, by owner decision. Do not change it. `Bitmap.wrapHardwareBuffer` (API 26) is therefore unconditional, but the GPU frame path additionally needs API 29 (`ImageReader.newInstance` with a usage flag, `ImageFormat.PRIVATE` GPU sampling), so the MediaCodec factory MUST gate at runtime with `Build.VERSION.SDK_INT >= 29` and return null below it: devices on API 26 to 28 fall back to the existing software path automatically.
+- minSdk is 26 (Android 8.0) across every Android module in both repos, by owner decision. Do not change it. `Bitmap.wrapHardwareBuffer` is API 29, not API 26. The direct MediaCodec factory also gates at API 29 because it uses the ImageReader usage overload for its offscreen fallback Surface. Devices on API 26 to 28 fall back to the existing software path automatically.
 - The audit fixes landed in commits `6a74344` (KitePlayer) and `2e60bf3` (KiteCodec) carry `audit P0-x` / `audit P1-x` comments. Do not undo any behavior they introduced. In particular: `VideoDecoderFactory` failures must keep producing `TrackDeselected` warnings with real reasons, and decoder EOF handling must keep retrying `send(null)` until accepted.
 
 ## Reality-Check Protocol

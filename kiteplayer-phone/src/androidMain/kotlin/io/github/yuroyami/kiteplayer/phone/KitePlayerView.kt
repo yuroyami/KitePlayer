@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.phone
 
 import android.content.Context
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -9,21 +10,21 @@ import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
 import io.github.yuroyami.kiteplayer.output.AndroidSurfaceVideoRenderer
+import kotlin.math.roundToInt
 
 /**
  * The reusable Android player view: a [SurfaceView] whose whole lifecycle is handled here.
  *
- * Assign [player] and the view does the rest: when the surface exists it builds an
- * [AndroidSurfaceVideoRenderer] over it and attaches it to the player, and when the surface goes
- * away it closes that renderer before the callback returns, which is the rule the Surface
- * contract actually demands and the one every hand-rolled integration gets wrong first. The
- * player itself is never owned here: opening media, playing, seeking and closing stay the
- * caller's, and setting [player] to null (or letting the view leave the window) only stops the
- * picture, never the playback.
+ * Assign [player] before opening media and the view attaches a renderer immediately. On Android 10
+ * and newer that renderer offers a paired hardware MediaCodec decoder for strict
+ * [io.github.yuroyami.kiteplayer.HwdecPolicy.Require] sessions, releasing decoded output straight
+ * into the SurfaceView. Auto stays on the replay-safe backend path until cross-factory runtime
+ * fallback exists. Older or unsupported devices keep the software Canvas fallback.
+ * Surface creation and destruction are forwarded into the same renderer generation, so a temporary
+ * backgrounding does not force playback or decoder reconstruction.
  *
- * The view draws through the software Surface path (S1.c). It is the BASELINE presentation
- * path per D-6: a SurfaceView composits through the display controller, which is what wins
- * sustained fullscreen battery. The Compose-true flagship lives in `:kiteplayer-compose`.
+ * Subtitles use a transparent view above the Surface. MediaCodec remains the Surface's only producer,
+ * while cue changes can redraw even when video is paused.
  *
  * All members must be used from the main thread, where Android delivers the callbacks that
  * drive them.
@@ -35,6 +36,9 @@ public class KitePlayerView @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     private val surfaceView = SurfaceView(context)
+    private val subtitleView = SubtitleOverlayView(context)
+    private var videoAspect: Float = 0f
+    private var rendererGeneration: Long = 0L
 
     /**
      * Counters accumulated across closed renderer generations, so a surface bounce (a rotation,
@@ -46,12 +50,21 @@ public class KitePlayerView @JvmOverloads constructor(
 
     private val binding = PlayerViewBinding<KitePlayer, AndroidSurfaceVideoRenderer>(
         createRenderer = {
+            val generation = ++rendererGeneration
             // The frame cast is the honest boundary of this convenience: the view exists for the
             // aggregate's own FFmpeg backend. A frame from some other backend fails the cast
             // inside the renderer's converter seam, which counts it as a failed frame and plays
             // on, rather than crashing the process.
-            AndroidSurfaceVideoRenderer(surfaceView.holder.surface) { frame ->
-                SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+            AndroidSurfaceVideoRenderer(
+                convert = { frame -> SoftwareConverter.toRgba(frame as KiteCodecVideoFrame) },
+                onOverlay = { overlay ->
+                    runForRenderer(generation) { subtitleView.showOverlay(overlay) }
+                },
+                onVideoGeometry = { size, rotationDegrees ->
+                    runForRenderer(generation) { setVideoGeometry(size.displayAspect, rotationDegrees) }
+                },
+            ).also { renderer ->
+                surfaceView.holder.surface.takeIf { it.isValid }?.let(renderer::setSurface)
             }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
@@ -66,11 +79,15 @@ public class KitePlayerView @JvmOverloads constructor(
             }
         },
         close = { renderer ->
+            rendererGeneration += 1L
+            renderer.close()
             presentedBefore += renderer.presentedFrames
             supersededBefore += renderer.supersededFrames
             failedBefore += renderer.failedFrames
-            renderer.close()
+            subtitleView.showOverlay(null)
+            setVideoGeometry(0f, 0)
         },
+        rendererNeedsSurface = false,
     )
 
     /**
@@ -97,19 +114,61 @@ public class KitePlayerView @JvmOverloads constructor(
 
     init {
         addView(surfaceView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(subtitleView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
+                binding.activeRenderer?.setSurface(holder.surface)
                 binding.surfaceReady()
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-                // The renderer reads the canvas size on every draw, so a resize needs no action.
+                binding.activeRenderer?.setSurface(holder.surface)
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                // Must guarantee no surface access after returning; the binding closes first.
+                // setSurface(null) fences both Canvas and codec releases before this callback returns.
+                binding.activeRenderer?.setSurface(null)
                 binding.surfaceGone()
             }
         })
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        val aspect = videoAspect
+        val availableWidth = width - paddingLeft - paddingRight
+        val availableHeight = height - paddingTop - paddingBottom
+        if (!aspect.isFinite() || aspect <= 0f || availableWidth <= 0 || availableHeight <= 0) return
+
+        val availableAspect = availableWidth.toFloat() / availableHeight.toFloat()
+        val videoWidth: Int
+        val videoHeight: Int
+        if (availableAspect > aspect) {
+            videoHeight = availableHeight
+            videoWidth = (videoHeight * aspect).roundToInt().coerceIn(1, availableWidth)
+        } else {
+            videoWidth = availableWidth
+            videoHeight = (videoWidth / aspect).roundToInt().coerceIn(1, availableHeight)
+        }
+        val videoLeft = paddingLeft + (availableWidth - videoWidth) / 2
+        val videoTop = paddingTop + (availableHeight - videoHeight) / 2
+        surfaceView.layout(videoLeft, videoTop, videoLeft + videoWidth, videoTop + videoHeight)
+        subtitleView.layout(videoLeft, videoTop, videoLeft + videoWidth, videoTop + videoHeight)
+    }
+
+    private fun setVideoGeometry(displayAspect: Float, rotationDegrees: Int) {
+        val turn = ((rotationDegrees % 360) + 360) % 360
+        videoAspect = if (turn == 90 || turn == 270) {
+            if (displayAspect > 0f) 1f / displayAspect else 0f
+        } else {
+            displayAspect
+        }
+        subtitleView.setVideoRotation(turn)
+        requestLayout()
+    }
+
+    private fun runForRenderer(generation: Long, block: () -> Unit) {
+        val guarded = { if (generation == rendererGeneration) block() }
+        if (Looper.myLooper() === Looper.getMainLooper()) guarded() else post(guarded)
     }
 }

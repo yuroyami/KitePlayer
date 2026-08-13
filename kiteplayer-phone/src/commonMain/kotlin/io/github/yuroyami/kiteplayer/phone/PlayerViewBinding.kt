@@ -3,19 +3,20 @@ package io.github.yuroyami.kiteplayer.phone
 /**
  * The one attach state machine both platform views drive.
  *
- * The law: a renderer exists exactly while a player is set AND the platform surface is ready.
- * Both views feed the same two facts in through [setPlayer], [surfaceReady] and [surfaceGone],
- * and this class owns every ordering rule that follows from them, so the rules are written once
- * and tested once instead of twice with a platform in the way.
+ * By default a renderer exists exactly while a player is set AND the platform surface is ready.
+ * A renderer with its own headless fallback can opt into the earlier player-only lifetime described
+ * below. Both views feed their state through [setPlayer], [surfaceReady] and [surfaceGone], and this
+ * class owns every ordering rule that follows, so the rules are written once and tested once instead
+ * of twice with a platform in the way.
  *
  * The ordering rules, and why each holds:
  *
- * 1. **Close before detach.** When the surface goes away, the renderer is closed BEFORE the
- *    platform callback returns, because on Android a Surface touched after `surfaceDestroyed`
- *    returns is a native abort, not an exception. The output renderers' close blocks until their
- *    drawing worker has finished, which is exactly what makes closing here sufficient. Only then
- *    is the player told to detach; detach is asynchronous, and a present that races the swap
- *    lands on a closed renderer, which refuses it safely.
+ * 1. **Close before detach.** When a surface-bound renderer's surface goes away, it is closed
+ *    BEFORE the platform callback returns, because on Android a Surface touched after
+ *    `surfaceDestroyed` returns is a native abort, not an exception. The output renderers' close
+ *    blocks until their drawing worker has finished, which is exactly what makes closing here
+ *    sufficient. Only then is the player told to detach; detach is asynchronous, and a present
+ *    that races the swap lands on a closed renderer, which refuses it safely.
  * 2. **A player swap tears down first.** The old renderer is closed and the OLD player detached
  *    before anything is built for the new player, so no renderer is ever shared between two
  *    players.
@@ -26,6 +27,12 @@ package io.github.yuroyami.kiteplayer.phone
  * Android view supplies a Surface-backed renderer factory, the iOS view a layer-backed one, and
  * the tests supply recorders.
  *
+ * [rendererNeedsSurface] is false for a renderer that owns a headless platform fallback. That
+ * renderer is attached as soon as the player is assigned, so its renderer-coupled decoder factory
+ * can participate in decoder selection before the real display surface arrives. Surface lifecycle
+ * callbacks must still be forwarded to the platform renderer by the view; this binding only
+ * decides whether losing the surface also ends the renderer generation.
+ *
  * Not thread-safe. Every call must come from the platform's main thread, which is where both
  * platforms deliver the lifecycle callbacks this is driven by.
  */
@@ -34,6 +41,7 @@ internal class PlayerViewBinding<P : Any, R : Any>(
     private val attach: (P, R) -> Unit,
     private val detach: (P) -> Unit,
     private val close: (R) -> Unit,
+    private val rendererNeedsSurface: Boolean = true,
 ) {
     private var player: P? = null
     private var surfaceIsReady = false
@@ -50,7 +58,7 @@ internal class PlayerViewBinding<P : Any, R : Any>(
         buildIfReady()
     }
 
-    /** The platform surface became usable. Idempotent. */
+    /** Marks the platform surface usable. Idempotent. */
     fun surfaceReady() {
         if (surfaceIsReady) return
         surfaceIsReady = true
@@ -58,19 +66,20 @@ internal class PlayerViewBinding<P : Any, R : Any>(
     }
 
     /**
-     * The platform surface is going away. Rule 1: when this returns, nothing will touch the
-     * surface again. Idempotent.
+     * Marks the platform surface unavailable. Rule 1 closes a surface-bound generation before
+     * returning. A headless-capable generation remains attached and must receive the actual surface
+     * change directly from its platform view. Idempotent.
      */
     fun surfaceGone() {
         if (!surfaceIsReady) return
         surfaceIsReady = false
-        dropRenderer()
+        if (rendererNeedsSurface) dropRenderer()
     }
 
     private fun buildIfReady() {
         if (renderer != null) return
         val boundPlayer = player ?: return
-        if (!surfaceIsReady) return
+        if (rendererNeedsSurface && !surfaceIsReady) return
         val built = createRenderer()
         renderer = built
         attach(boundPlayer, built)

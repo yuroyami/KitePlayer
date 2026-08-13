@@ -6,6 +6,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
+import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
@@ -121,6 +122,7 @@ internal class FakeVideoFrame(
 internal class RecordingRenderer(
     /** False makes every frame refused, the way a renderer whose surface went away refuses. */
     private val accepts: Boolean = true,
+    private val decoderFactories: List<VideoDecoderFactory> = emptyList(),
 ) : VideoRenderer {
 
     private val received = mutableListOf<Presentation>()
@@ -129,6 +131,8 @@ internal class RecordingRenderer(
     val count: Int get() = received.size
     val timestamps: List<Pts> get() = received.map { it.pts }
     val targets: List<Long> get() = received.map { it.targetNanos }
+
+    override fun videoDecoderFactories(): List<VideoDecoderFactory> = decoderFactories
 
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 

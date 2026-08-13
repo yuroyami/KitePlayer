@@ -5,6 +5,9 @@ import io.github.yuroyami.kiteplayer.internal.PlaybackDispatchers
 import io.github.yuroyami.kiteplayer.internal.SeekResult
 import io.github.yuroyami.kiteplayer.internal.StatusMachine
 import io.github.yuroyami.kiteplayer.internal.platformPlaybackDispatchers
+import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
+import io.github.yuroyami.kiteplayer.spi.VideoDecoder
+import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -113,6 +116,66 @@ class PlaybackCoreTest {
         assertEquals(1, harness.renderer?.count, "the first frame is presented with the clock stopped")
         assertEquals(0, harness.sink.startCount, "the fill happened with the device stopped")
         assertNull(snapshot.error)
+        harness.close()
+    }
+
+    @Test
+    fun `an attached renderer decoder factory wins over the backend`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        val selectedStatus = HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec)
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            ScriptedVideoDecoder(
+                script = script,
+                ledger = ledger,
+                faults = FaultPlan.None,
+                hardwareStatus = ScriptedVideoDecoderStatus(selectedStatus),
+            )
+        }
+        val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(
+                hardwareDecode = HwdecPolicy.Require,
+                statsInterval = 10.milliseconds,
+            ),
+            ledger = ledger,
+            renderer = renderer,
+        )
+
+        harness.openWithRenderer()
+        harness.run(50.milliseconds)
+
+        assertEquals(1, factory.createCount)
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Require), factory.policies)
+        assertEquals(selectedStatus, harness.core.stats.value.hardwareDecode)
+        assertEquals(TrackId(script.videoIndex), harness.core.snapshots.value.tracks.selectedVideo)
+        harness.close()
+    }
+
+    @Test
+    fun `the backend is tried when an attached renderer factory fails`() = runTest {
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            error("renderer surface decoder unavailable")
+        }
+        val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+        val harness = CoreHarness(
+            scope = this,
+            config = PlayerConfig(statsInterval = 10.milliseconds),
+            renderer = renderer,
+        )
+        val backendStatus = HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox)
+        harness.backend.videoDecoderStatus.value = backendStatus
+
+        harness.openWithRenderer()
+        harness.run(50.milliseconds)
+
+        assertEquals(1, factory.createCount)
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Auto), factory.policies)
+        assertEquals(backendStatus, harness.core.stats.value.hardwareDecode)
+        assertEquals(TrackId(0), harness.core.snapshots.value.tracks.selectedVideo)
+        assertEquals(1, renderer.count, "the backend decoder still supplied the initial frame")
         harness.close()
     }
 
@@ -766,5 +829,20 @@ class PlaybackCoreTest {
             parent = parent,
             closeDeadline = closeDeadline,
         )
+    }
+}
+
+private class RecordingVideoDecoderFactory(
+    private val createDecoder: suspend (PlayerStreamInfo, HwdecPolicy) -> VideoDecoder?,
+) : VideoDecoderFactory {
+    override val name: String = "renderer-coupled test decoder"
+    var createCount: Int = 0
+        private set
+    val policies: MutableList<HwdecPolicy> = mutableListOf()
+
+    override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
+        createCount++
+        policies += hwdec
+        return createDecoder(stream, hwdec)
     }
 }

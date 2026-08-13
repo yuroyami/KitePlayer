@@ -1068,7 +1068,8 @@ internal class PlaybackCore(
         if (stream.kind != TrackKind.Video) return null
         val failures = mutableListOf<String>()
         decoderCandidateFailures = failures
-        for (factory in session.videoDecoders) {
+        val factories = pendingRenderer?.videoDecoderFactories().orEmpty() + session.videoDecoders
+        for (factory in factories) {
             val decoder = withContext(dispatchers.videoDecode) {
                 try {
                     factory.create(stream, config.hardwareDecode)

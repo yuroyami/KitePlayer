@@ -1613,7 +1613,12 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer 
 	public abstract fun setViewport (IIF)V
 	public abstract fun supportedHardwareSurfaces ()Ljava/util/Set;
 	public abstract fun supports (Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;)Z
+	public fun videoDecoderFactories ()Ljava/util/List;
 	public abstract fun vsyncIntervalNanos ()Ljava/lang/Long;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/VideoRenderer$DefaultImpls {
+	public static fun videoDecoderFactories (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Ljava/util/List;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRendererFactory {

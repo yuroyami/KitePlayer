@@ -21,11 +21,20 @@ import kotlinx.coroutines.flow.Flow
  *    and nothing else.
  * 5. Losing a surface is an event, not an exception. Playback continues, video frames are counted as
  *    dropped, and audio keeps playing, because a minimised window should not stop the sound.
- * 6. A renderer may be attached and detached at any time, including while playing. Video decoding
- *    does not depend on one existing. libmpv requires its render context to exist before playback
- *    starts and aborts the process if it is freed in the wrong order; that is not reproduced here.
+ * 6. A renderer may be attached and detached at any time, including while playing. Ordinary video
+ *    decoding does not depend on one existing. A renderer-coupled decoder is considered only when
+ *    its renderer is attached before the media session opens; attaching later does not replace the
+ *    active decoder.
  */
 public interface VideoRenderer : AutoCloseable {
+
+    /**
+     * Decoder factories that require this renderer's surface or graphics context.
+     *
+     * When this renderer is attached before open, these candidates are tried before the media
+     * backend's factories. Attaching a renderer after open does not reconfigure the active decoder.
+     */
+    public fun videoDecoderFactories(): List<VideoDecoderFactory> = emptyList()
 
     /** Hardware surface kinds this renderer can present without a download to main memory. */
     public fun supportedHardwareSurfaces(): Set<HwSurfaceKind>

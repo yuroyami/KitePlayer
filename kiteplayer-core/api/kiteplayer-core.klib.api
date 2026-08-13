@@ -525,6 +525,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoRenderer : kotlin/Auto
     abstract fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/VideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
     abstract suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/VideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
     abstract suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
+    open fun videoDecoderFactories(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/VideoDecoderFactory> // io.github.yuroyami.kiteplayer.spi/VideoRenderer.videoDecoderFactories|videoDecoderFactories(){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.spi/VideoRendererFactory|null[0]

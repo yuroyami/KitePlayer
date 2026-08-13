@@ -28,4 +28,8 @@ public object AppleOutputBackend : OutputBackend {
     )
 
     override val videoRenderer: VideoRendererFactory? = null
+
+    /** CoreText behind the one seam (S4.c's Apple half, carried by S2.c). */
+    override val subtitleRasterizer: io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer =
+        AppleSubtitleRasterizer()
 }

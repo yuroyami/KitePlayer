@@ -370,6 +370,68 @@ class AppKitVideoRendererTest {
      * so nothing is scaled and no colour is converted on the way in: the bytes that come out are the
      * bytes that were drawn.
      */
+    /**
+     * The CG compositor's transform math (S2.c, the Apple twin of the Android 885ccc0 arm): an
+     * overlay authored against a 4x2 viewport lands on the drawn image at the same spot, above
+     * the picture. Red carries proof the picture is underneath; white proves the overlay won.
+     */
+    @Test
+    fun `an overlay draws above the picture at its authored spot`() = runBlocking {
+        val storedWidth = 4
+        val storedHeight = 2
+        val red = ByteArray(storedWidth * storedHeight * 4)
+        for (index in red.indices step 4) {
+            red[index] = -1
+            red[index + 3] = -1
+        }
+        val drawn = atomic<NSImage?>(null)
+        val renderer = AppKitVideoRenderer(
+            convert = { red },
+            enqueueOnMain = { block -> block() },
+            showImage = { image -> drawn.value = image },
+        )
+        try {
+            renderer.setOverlay(
+                io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                    images = listOf(
+                        io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                            x = 1,
+                            y = 0,
+                            bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(
+                                2, 1, ByteArray(2 * 1 * 4) { 0xFF.toByte() },
+                            ),
+                        ),
+                    ),
+                    viewportWidth = storedWidth,
+                    viewportHeight = storedHeight,
+                    contentHash = 7L,
+                ),
+            )
+            val ledger = LeakLedger()
+            val frame = FakeVideoFrame(
+                pts = Pts(0),
+                size = VideoSize(storedWidth, storedHeight),
+                rotationDegrees = 0,
+                ledger = ledger,
+            )
+            assertTrue(renderer.present(frame, targetNanos = 0L))
+            awaitTrue("the composited frame was drawn") { drawn.value != null }
+            val pixels = readBack(assertNotNull(drawn.value))
+            assertEquals(
+                255 to 255,
+                pixels.redAndGreenAt(1, 0),
+                "the overlay pixel at (1,0) must be white above the red picture",
+            )
+            assertEquals(
+                255 to 0,
+                pixels.redAndGreenAt(0, 1),
+                "the picture outside the overlay must stay red",
+            )
+        } finally {
+            renderer.close()
+        }
+    }
+
     private fun readBack(image: NSImage): DrawnPixels {
         val cgImage = image.CGImageForProposedRect(null, null, null) ?: fail("the drawn image has no bitmap")
         val pixelWidth = CGImageGetWidth(cgImage).toInt()

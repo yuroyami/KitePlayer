@@ -117,6 +117,8 @@ final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github
         final fun <get-audioSink>(): io.github.yuroyami.kiteplayer.spi/AudioSinkFactory // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.audioSink.<get-audioSink>|<get-audioSink>(){}[0]
     final val clock // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.clock|{}clock[0]
         final fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.clock.<get-clock>|<get-clock>(){}[0]
+    final val subtitleRasterizer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
+        final fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
     final val videoRenderer // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer|{}videoRenderer[0]
         final fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
 }

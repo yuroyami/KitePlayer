@@ -38,7 +38,9 @@ import platform.CoreGraphics.CGColorSpaceRef
 import platform.CoreGraphics.CGColorSpaceRelease
 import platform.CoreGraphics.CGContextDrawImage
 import platform.CoreGraphics.CGContextRelease
+import platform.CoreGraphics.CGContextRestoreGState
 import platform.CoreGraphics.CGContextRotateCTM
+import platform.CoreGraphics.CGContextSaveGState
 import platform.CoreGraphics.CGContextTranslateCTM
 import platform.CoreGraphics.CGImageAlphaInfo
 import platform.CoreGraphics.CGImageRef
@@ -89,6 +91,9 @@ public class UIKitVideoRenderer internal constructor(
     private val superseded = atomic(0L)
     private val failed = atomic(0L)
     private val closed = atomic(false)
+
+    /** The active subtitle overlay; replaced wholesale by [setOverlay]. */
+    private val overlaySlot = atomic<SubtitleOverlay?>(null)
 
     private val pendingFrame = atomic<VideoFrame?>(null)
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -290,6 +295,7 @@ public class UIKitVideoRenderer internal constructor(
             bitmapInfo = CGImageAlphaInfo.kCGImageAlphaNoneSkipLast.value,
         ) ?: return null
         try {
+            CGContextSaveGState(context)
             when (rotationDegrees) {
                 90 -> {
                     CGContextTranslateCTM(context, 0.0, displayWidth.toDouble())
@@ -309,6 +315,8 @@ public class UIKitVideoRenderer internal constructor(
                 CGRectMake(0.0, 0.0, displayWidth.toDouble(), height.toDouble()),
                 image,
             )
+            CGContextRestoreGState(context)
+            drawOverlayInto(context, outputWidth, outputHeight)
             return CGBitmapContextCreateImage(context)
         } finally {
             CGContextRelease(context)
@@ -327,11 +335,70 @@ public class UIKitVideoRenderer internal constructor(
         return if (normalised == 90 || normalised == 180 || normalised == 270) normalised else 0
     }
 
+
+    /**
+     * Draws the active overlay above the picture, in DISPLAY space with identity CTM (S2.c,
+     * carrying S4.c's Apple half): overlay coordinates are authored top-down against the
+     * overlay's own viewport, Core Graphics draws bottom-up, and the scale maps one onto the
+     * other, the same law the Android compositor and the Metal renderer obey.
+     */
+    private fun drawOverlayInto(context: platform.CoreGraphics.CGContextRef, outputWidth: Int, outputHeight: Int) {
+        val active = overlaySlot.value ?: return
+        if (active.images.isEmpty()) return
+        val sx = outputWidth.toDouble() / active.viewportWidth.coerceAtLeast(1)
+        val sy = outputHeight.toDouble() / active.viewportHeight.coerceAtLeast(1)
+        active.images.forEach { image ->
+            val cg = rgbaImage(image.bitmap) ?: return@forEach
+            try {
+                val drawWidth = image.bitmap.width * sx
+                val drawHeight = image.bitmap.height * sy
+                val cgY = outputHeight - image.y * sy - drawHeight
+                CGContextDrawImage(context, CGRectMake(image.x * sx, cgY, drawWidth, drawHeight), cg)
+            } finally {
+                CGImageRelease(cg)
+            }
+        }
+    }
+
+    /** An overlay bitmap as a CGImage. The pixels are premultiplied, which is what CG blends. */
+    private fun rgbaImage(bitmap: io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap): CGImageRef? {
+        val rowBytes = bitmap.width * 4
+        if (bitmap.pixels.size != rowBytes * bitmap.height) return null
+        val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
+        try {
+            return bitmap.pixels.usePinned { pinned ->
+                val context = CGBitmapContextCreate(
+                    data = pinned.addressOf(0),
+                    width = bitmap.width.toULong(),
+                    height = bitmap.height.toULong(),
+                    bitsPerComponent = 8u,
+                    bytesPerRow = rowBytes.toULong(),
+                    space = colorSpace,
+                    bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
+                ) ?: return@usePinned null
+                try {
+                    CGBitmapContextCreateImage(context)
+                } finally {
+                    CGContextRelease(context)
+                }
+            }
+        } finally {
+            CGColorSpaceRelease(colorSpace)
+        }
+    }
+
     override fun vsyncIntervalNanos(): Long? = null
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 
-    override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
+    /**
+     * Stored wholesale and drawn above every later frame. A paused picture shows the change on
+     * the next frame, the same honest note as the Metal renderer; cue edges republish during
+     * playback at most one frame away.
+     */
+    override suspend fun setOverlay(overlay: SubtitleOverlay?) {
+        overlaySlot.value = overlay
+    }
 
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return

@@ -36,7 +36,7 @@ kotlin {
     android {
         namespace = "io.github.yuroyami.kiteplayer.output"
         compileSdk = 36
-        minSdk = 29
+        minSdk = 26
         withHostTest {}
         withDeviceTestBuilder {
             sourceSetTreeName = "test"

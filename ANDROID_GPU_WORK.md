@@ -22,7 +22,7 @@
   - KitePlayer Android compilation: `./gradlew :kiteplayer-output:compileAndroidMain :kiteplayer-core:compileAndroidMain :kiteplayer-ffmpeg:compileAndroidMain`
   - KiteCodec (only if you touch it): `./gradlew :kitecodec-core:jvmTest -Pkitecodec.phoneTargetsOnly=true :kitecodec-core:compileKotlinMacosArm64`
 - If KiteCodec changes, republish before building KitePlayer against it: `./gradlew publishToMavenLocal -Pkitecodec.phoneTargetsOnly=true` in KiteCodec. KitePlayer's settings resolve mavenLocal first, so the republish is picked up automatically. KiteCodec version stays 0.0.6 for local work.
-- minSdk is 29 (Android 10) across every Android module in both repos, by owner decision. The GPU frame path's API requirements (`ImageReader.newInstance` with a usage flag, `ImageFormat.PRIVATE` GPU sampling, `Bitmap.wrapHardwareBuffer`) are therefore met unconditionally: NO runtime `Build.VERSION` gate is needed anywhere in this plan. Do not lower minSdk back.
+- minSdk is 26 (Android 8.0) across every Android module in both repos, by owner decision. Do not change it. `Bitmap.wrapHardwareBuffer` (API 26) is therefore unconditional, but the GPU frame path additionally needs API 29 (`ImageReader.newInstance` with a usage flag, `ImageFormat.PRIVATE` GPU sampling), so the MediaCodec factory MUST gate at runtime with `Build.VERSION.SDK_INT >= 29` and return null below it: devices on API 26 to 28 fall back to the existing software path automatically.
 - The audit fixes landed in commits `6a74344` (KitePlayer) and `2e60bf3` (KiteCodec) carry `audit P0-x` / `audit P1-x` comments. Do not undo any behavior they introduced. In particular: `VideoDecoderFactory` failures must keep producing `TrackDeselected` warnings with real reasons, and decoder EOF handling must keep retrying `send(null)` until accepted.
 
 ## Reality-Check Protocol
@@ -506,13 +506,16 @@ import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.hardware.HardwareBuffer
 import android.graphics.ImageFormat
+import android.os.Build
 import java.nio.ByteBuffer
 
 public class MediaCodecVideoDecoderFactory : VideoDecoderFactory {
     override val name: String = "MediaCodec hardware"
 
     override suspend fun create(stream: PlayerStreamInfo, policy: HwdecPolicy): VideoDecoder? {
-        // No SDK_INT gate: minSdk is 29, which covers every API this path uses.
+        // minSdk is 26; the ImageReader GPU-sampling path needs 29. Older devices fall back to
+        // the software decoder by this refusal, which the engine treats as an ordinary pass.
+        if (Build.VERSION.SDK_INT < 29) return null
         if (policy is HwdecPolicy.Disabled) return null   // grep the real policy variants
         val mime = when (stream.codec) {                   // grep how codec ids are spelled on PlayerStreamInfo
             "h264", "avc" -> MediaFormat.MIMETYPE_VIDEO_AVC

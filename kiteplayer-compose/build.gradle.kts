@@ -47,7 +47,7 @@ kotlin {
         // this module is the only one that depends on them. compileSdk is not minSdk; nothing
         // about the shipped support floor changes.
         compileSdk = 37
-        minSdk = 29
+        minSdk = 26
         withHostTest {}
         withDeviceTestBuilder {
             sourceSetTreeName = "test"

@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.yuroyami.kiteplayer.sample.android"
-        minSdk = 29
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "0.0.1"

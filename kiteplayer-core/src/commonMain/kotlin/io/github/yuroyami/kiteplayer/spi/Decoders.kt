@@ -34,8 +34,9 @@ public interface VideoDecoder : AutoCloseable {
     /**
      * Offers a packet. A null packet starts the drain that flushes the decoder's internal delay.
      *
-     * @return false when the decoder is full and the caller must [receive] before offering again.
-     *         The caller must then retry the same packet, never discard it.
+     * @return false when the decoder did not accept the packet and the caller must [receive] before
+     *         offering again. A platform codec may transiently return null from that receive while
+     *         its internal worker makes progress. The caller must retry the same packet, never discard it.
      */
     public suspend fun send(packet: PlayerPacket?): Boolean
 

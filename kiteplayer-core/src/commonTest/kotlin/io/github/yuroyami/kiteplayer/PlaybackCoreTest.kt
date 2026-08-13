@@ -180,6 +180,34 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `transient decoder readiness with no output is retried`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        var readinessMisses = 3
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            val delegate = ScriptedVideoDecoder(script, ledger, FaultPlan.None)
+            object : VideoDecoder by delegate {
+                override suspend fun send(packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket?): Boolean {
+                    if (packet != null && readinessMisses > 0) {
+                        readinessMisses--
+                        return false
+                    }
+                    return delegate.send(packet)
+                }
+            }
+        }
+        val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+        val harness = CoreHarness(scope = this, script = script, ledger = ledger, renderer = renderer)
+
+        harness.openWithRenderer()
+
+        assertEquals(0, readinessMisses)
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+        assertEquals(1, renderer.count, "the decoder eventually supplied the initial frame")
+        harness.close()
+    }
+
+    @Test
     fun `a video stream no decoder accepts is deselected and the audio still plays`() = runTest {
         val faults = FaultPlan().also { it.videoDecodersRefuse = true }
         val harness = CoreHarness(this, faults = faults)

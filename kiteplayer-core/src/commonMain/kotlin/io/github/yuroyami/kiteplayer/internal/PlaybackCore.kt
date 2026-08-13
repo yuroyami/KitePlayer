@@ -2446,13 +2446,17 @@ internal class PlaybackCore(
             }
             try {
                 while (!decoder.send(packet)) {
-                    // False means the decoder is full and did NOT take the packet, so it is offered
-                    // again after draining rather than discarded. A decoder that accepts nothing and
-                    // produces nothing has no legal state to be in.
-                    val frame = decoder.receive() ?: error(
-                        "decoder refused a packet and produced nothing; this violates the codec contract",
-                    )
-                    if (!handOver(session, worker, video, frame, epoch)) break
+                    // False means the decoder did NOT take this packet. A synchronous codec usually
+                    // has output immediately, but Android's asynchronous internals can transiently
+                    // expose neither an input slot nor an output frame. Retry in bounded steps so
+                    // that ordinary readiness is not fatal and a seek can still park this worker.
+                    val frame = decoder.receive()
+                    if (frame != null) {
+                        if (!handOver(session, worker, video, frame, epoch)) break
+                    } else {
+                        if (worker.quiesceRequested) break
+                        delay(HANDOVER_RETRY)
+                    }
                 }
             } finally {
                 packet.close()

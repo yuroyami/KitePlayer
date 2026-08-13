@@ -7925,6 +7925,36 @@ is no other.
   The expansion's "render audit extended" sentence was imprecise and is corrected here: that
   audit's scope is the audio callback's C and it gained nothing. Dumps moved in output, ffmpeg
   and phone; Tier 1 green at every landing.
+- 2026-08-13, S2.d completed, two commits. LANDING 1 (ae09782): the KiteVideo half of S4.c
+  landing 4. The renderer stops ignoring setOverlay: overlay images become PREMULTIPLIED
+  ImageBitmaps through a new platform seam (Android Bitmap, iOS Skia raster), once per
+  contentHash, published into snapshot state beside the frame under the same draw-phase-only
+  law; KiteVideo draws them above the picture in OUTPUT space, unrotated, the law every
+  platform renderer obeys. Host arms: authored coordinates survive, an unchanged hash rebuilds
+  and republishes nothing, clearing publishes exactly one null, close publishes a null overlay.
+  LANDING 2 (80680ad): KV-2 on Apple. MetalFrameComposer learns a target format and a raw quad;
+  MetalPictureReader renders one picture offscreen and reads RGBA back, so the colour
+  arithmetic runs in the fragment shader, a VideoToolbox frame wraps with NO copy, and the CPU
+  pays one readback memcpy (law 2, with KV-4's same one copy); KiteVideo's iOS convert routes
+  through a thread-local reader, CPU converter as the stated fallback. THE KV-3 SPIKE IS
+  ANSWERED with exact names: Skiko 0.150.1 ships Image.adoptTextureFrom(DirectContext,
+  BackendTexture, SurfaceOrigin, ColorType), but BackendTexture has NO Metal factory (its
+  companion carries only makeGL) and Compose exposes no DirectContext accessor, so zero-copy
+  into Compose's own context is blocked on those two upstream gaps and the committed fallback
+  stands; law 3 on Apple KiteVideo is deferred with its blockers named. THE MEASURED EXIT, iOS
+  simulator, provisional: 60 of 60 frames of the 1080p sync clip published through
+  HardwareWithDownload(VideoToolbox) with zero failures on the GPU path, and a side-by-side CPU
+  arm on the same run; both land near 1.2 seconds per frame and are statistically
+  indistinguishable (GPU 1197 ms, CPU 1226 ms average), which convicts the debug simulator test
+  process, not either pipeline; the macOS composer proofs already pin the GPU path pixel for
+  pixel. Device-grade numbers stay with the owner device session. Two scope truths recorded:
+  the compose module has NO macOS target (desktop is KV-5/S3), so the exit's "this Mac"
+  measurement was satisfied by the macOS composer suite rather than a KiteVideo run; and ONE
+  INFRA DEFECT found and fixed at its owner: the repo-wide VERSION bump had been re-versioning
+  the PLUGIN publication too, so consumers pinned at plugin 0.0.1 kept resolving the Aug-11 jar
+  and the S2.c framework-flags fix never reached the compose test link until the plugin was
+  republished AT 0.0.1 (its standing coordinate), found when the first compose simulator link
+  died on the same videotoolbox symbols the plugin fix had already cured.
 
 ---
 

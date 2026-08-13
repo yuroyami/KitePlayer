@@ -4,7 +4,6 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.Chapter
 import io.github.yuroyami.kiteplayer.Generation
-import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -31,6 +30,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
 import io.github.yuroyami.kitecodec.CodecId
+import io.github.yuroyami.kitecodec.HardwareAccel
 import io.github.yuroyami.kitecodec.dsl.DecoderOptions
 import io.github.yuroyami.kitecodec.MediaSource
 import io.github.yuroyami.kitecodec.MediaType
@@ -160,8 +160,14 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
         lowDelay: Boolean,
         decoder: CodecId? = null,
         options: DecoderOptions? = null,
-    ): StreamDecoder =
-        source.openDecoder(kiteStream(index), lowDelay = lowDelay, decoder = decoder, options = options)
+        hardwareAccel: HardwareAccel? = null,
+    ): StreamDecoder = source.openDecoder(
+        kiteStream(index),
+        lowDelay = lowDelay,
+        decoder = decoder,
+        options = options,
+        hardware = hardwareAccel,
+    )
 
     /**
      * The decoder wrappers are built here rather than in the factories, because they need the
@@ -173,6 +179,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     internal fun newVideoDecoder(
         stream: PlayerStreamInfo,
         decoder: CodecId? = null,
+        hardwareAccel: HardwareAccel? = null,
         hardware: HwdecStatus = HwdecStatus.Software,
         continuity: VideoDecoderContinuity = VideoDecoderContinuity(),
     ): VideoDecoder = KiteCodecVideoDecoder(
@@ -181,6 +188,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
             lowDelay = videoLowDelay,
             decoder = decoder,
             options = videoDecoderOptions.takeIf { it.isNotEmpty() }?.let { DecoderOptions(options = it) },
+            hardwareAccel = hardwareAccel,
         ),
         stream = stream,
         mapper = mapper,
@@ -379,24 +387,28 @@ public class KiteCodecVideoDecoderFactory internal constructor(
     override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
         val selection = platformDecoderSelection(stream.codec, hwdec)
-        if (selection.requiresHardware && selection.hardwareDecoder == null) return null
+        if (selection.requiresHardware && selection.hardware == null) return null
 
-        val hardware = selection.hardwareDecoder
-        if (hardware == null) return source.newVideoDecoder(stream)
+        if (selection.hardware == null) return source.newVideoDecoder(stream)
 
         val continuity = VideoDecoderContinuity()
 
         return openDecoderWithFallback(
             stream = stream,
             selection = selection,
-            open = { decoder ->
+            open = { route ->
                 source.newVideoDecoder(
                     stream = stream,
-                    decoder = decoder,
-                    hardware = if (decoder == null) {
+                    decoder = (route as? HardwareRoute.NamedDecoder)?.decoder,
+                    hardwareAccel = (route as? HardwareRoute.Accel)?.accel,
+                    // HardwareWithDownload is the honest S2.b status for BOTH shapes: mediacodec
+                    // downloads inside FFmpeg's wrapper, and every current renderer reads a
+                    // VideoToolbox frame through the download twin. S2.c revisits this when the
+                    // Metal renderer makes zero-copy real.
+                    hardware = if (route == null) {
                         HwdecStatus.Software
                     } else {
-                        HwdecStatus.HardwareWithDownload(HwdecKind.MediaCodec)
+                        HwdecStatus.HardwareWithDownload(route.kind)
                     },
                     continuity = continuity,
                 )
@@ -649,7 +661,32 @@ public class KiteCodecVideoFrame internal constructor(
     /** Decoder-keyframe truth used only to confirm the fallback replay handover boundary. */
     internal val isKeyframe: Boolean = info.isKeyframe
 
-    override fun close(): Unit = frame.close()
+    /**
+     * The software twin of a VideoToolbox frame, downloaded ONCE on first need and owned by this
+     * wrapper (S2.b). Lazy on purpose: a newest-wins renderer supersedes most frames without ever
+     * reading pixels, and an eager download would pay 3 to 25 MB of copying for every one of
+     * them. A renderer that can draw the CVPixelBuffer itself never triggers this.
+     */
+    private var downloadedTwin: KiteFrame? = null
+
+    /**
+     * The frame whose planes may be read: the frame itself when it is software, its downloaded
+     * twin when it is a VideoToolbox frame. Other hardware kinds refuse here, because their
+     * pixels genuinely cannot be read back and pretending otherwise would hide a wiring bug.
+     */
+    internal fun readableFrame(): KiteFrame {
+        if (!info.isHardware) return frame
+        check(hardwareSurface == HwSurfaceKind.CoreVideoPixelBuffer) {
+            "a $hardwareSurface frame needs its matching renderer"
+        }
+        return downloadedTwin ?: frame.downloadFromHardware().also { downloadedTwin = it }
+    }
+
+    override fun close() {
+        downloadedTwin?.close()
+        downloadedTwin = null
+        frame.close()
+    }
 }
 
 internal class KiteCodecAudioBuffer(

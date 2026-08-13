@@ -9,7 +9,6 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
-import io.github.yuroyami.kitecodec.CodecId
 import kotlinx.atomicfu.atomic
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -25,19 +24,19 @@ internal const val DECODER_REPLAY_LIMIT_BYTES: Int = 16 * 1024 * 1024
 internal suspend fun openDecoderWithFallback(
     stream: PlayerStreamInfo,
     selection: DecoderSelection,
-    open: suspend (CodecId?) -> VideoDecoder,
+    open: suspend (HardwareRoute?) -> VideoDecoder,
     copyPacket: (PlayerPacket) -> PlayerPacket,
     isKeyframe: (VideoFrame) -> Boolean,
     prepareReplay: () -> Unit = {},
     warn: (PlaybackWarning) -> Unit,
 ): VideoDecoder? {
-    val hardwareDecoder = selection.hardwareDecoder
-    if (hardwareDecoder == null) {
+    val route = selection.hardware
+    if (route == null) {
         return if (selection.requiresHardware) null else open(null)
     }
 
     val hardware = try {
-        open(hardwareDecoder)
+        open(route)
     } catch (failure: Throwable) {
         failure.rethrowCancellation()
         if (!selection.mayFallback) return null
@@ -98,6 +97,14 @@ private class ReplayFallbackDecoder(
 
     /** Outputs handed to the caller since the confirmed keyframe, including that keyframe. */
     private var deliveredSinceBoundary: Long = 0
+
+    /**
+     * Every hardware output ever handed to the caller this epoch, confirmed or not. Zero is the
+     * S2.b head-replay licence: an hwaccel can accept its attach and refuse the very first send
+     * (VideoToolbox on a stream it dislikes), and with nothing delivered the retained window is
+     * the COMPLETE history since open or flush, so software replay from the head loses nothing.
+     */
+    private var deliveredThisEpoch: Long = 0
 
     /** Outputs still to discard when replay needs later packets before reproducing the old output. */
     private var replaySuppressRemaining: Long = 0
@@ -236,6 +243,7 @@ private class ReplayFallbackDecoder(
     }
 
     private fun accountHardwareOutput(frame: VideoFrame) {
+        deliveredThisEpoch += 1
         val boundary = pendingBoundary
         if (boundary != null && confirmsBoundary(frame, retained.getOrNull(boundary))) {
             // The decoded keyframe, not merely its accepted packet, makes the candidate safe. Delayed
@@ -271,12 +279,15 @@ private class ReplayFallbackDecoder(
     }
 
     private suspend fun demote(reason: String, failure: Throwable?, replayDrain: Boolean) {
-        if (!hasConfirmedBoundary) {
+        // Terminal only when outputs already crossed to the caller WITHOUT a confirmed keyframe
+        // boundary: replaying then risks duplicating them. With nothing delivered this epoch the
+        // window is the complete history and the head replay below is exact (the S2.b licence).
+        if (!hasConfirmedBoundary && deliveredThisEpoch > 0) {
             failTerminal(
                 PlaybackException(
                     PlaybackError.DecoderFailed(
                         codec = stream.codec,
-                        detail = "$reason; no decoded replay keyframe has been confirmed",
+                        detail = "$reason; outputs were delivered but no replay keyframe was confirmed",
                         cause = failure,
                     ),
                 ),
@@ -559,6 +570,7 @@ private class ReplayFallbackDecoder(
         pendingBoundary = null
         hasConfirmedBoundary = false
         deliveredSinceBoundary = 0
+        deliveredThisEpoch = 0
         replaySuppressRemaining = 0
         hardwareDrainAccepted = false
     }

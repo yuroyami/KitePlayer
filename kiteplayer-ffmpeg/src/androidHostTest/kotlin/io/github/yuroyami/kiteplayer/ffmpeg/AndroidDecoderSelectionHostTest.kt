@@ -10,31 +10,28 @@ import kotlin.test.assertTrue
 
 class AndroidDecoderSelectionHostTest {
 
+    private fun namedDecoderOf(codec: String, policy: HwdecPolicy): CodecId? =
+        (platformDecoderSelection(codec, policy).hardware as? HardwareRoute.NamedDecoder)?.decoder
+
     @Test
     fun h264AndHevcAliasesMapToNamedMediaCodecDecoders() {
         listOf("h264", "H264", "avc1").forEach { codec ->
-            assertEquals(
-                CodecId.H264MediaCodec,
-                platformDecoderSelection(codec, HwdecPolicy.Auto).hardwareDecoder,
-            )
+            assertEquals(CodecId.H264MediaCodec, namedDecoderOf(codec, HwdecPolicy.Auto))
         }
         listOf("hevc", "HEVC", "h265", "hev1").forEach { codec ->
-            assertEquals(
-                CodecId.HevcMediaCodec,
-                platformDecoderSelection(codec, HwdecPolicy.Auto).hardwareDecoder,
-            )
+            assertEquals(CodecId.HevcMediaCodec, namedDecoderOf(codec, HwdecPolicy.Auto))
         }
     }
 
     @Test
     fun ineligibleAndExcludedPoliciesStaySoftwareOrStrict() {
-        assertNull(platformDecoderSelection("mpeg4", HwdecPolicy.Auto).hardwareDecoder)
-        assertNull(platformDecoderSelection("h264", HwdecPolicy.Off).hardwareDecoder)
+        assertNull(platformDecoderSelection("mpeg4", HwdecPolicy.Auto).hardware)
+        assertNull(platformDecoderSelection("h264", HwdecPolicy.Off).hardware)
         assertNull(
             platformDecoderSelection(
                 "h264",
                 HwdecPolicy.Prefer(listOf(HwdecKind.VideoToolbox)),
-            ).hardwareDecoder,
+            ).hardware,
         )
         assertTrue(platformDecoderSelection("mpeg4", HwdecPolicy.Require).requiresHardware)
     }

@@ -56,6 +56,28 @@ class DecoderFallbackTest {
         assertFalse(continuity.claimColorWarning())
     }
 
+    /**
+     * The S2.b arm, found red by the first VideoToolbox matrix run (tsoffset1400.ts): an hwaccel
+     * attach succeeds cheaply and the hardware then refuses the very FIRST send, before any
+     * output exists. Before the first confirmation the retained window still holds every packet
+     * since open, so falling back and replaying from the head is complete and safe; failing
+     * terminal here turned a refusable stream into a dead player.
+     */
+    @Test
+    fun hardwareFailingBeforeAnyOutputFallsBackFromTheStreamHead() = runBlocking {
+        val h = Harness().apply {
+            hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 1) }
+        }
+        val decoder = requireNotNull(h.open(autoSelection()))
+        assertDelivered(decoder, h.packet(1, keyframe = true), 1)
+        assertEquals(listOf(CodecId.H264MediaCodec, null), h.opens)
+        assertEquals(1, h.warnings.size)
+        assertEquals(HwdecStatus.Software, decoder.hardware)
+        assertDelivered(decoder, h.packet(2), 2)
+        decoder.close()
+        h.assertLedgerZero()
+    }
+
     @Test
     fun hardwareOpenRefusalWarnsOnceAndOpensSoftware() = runBlocking {
         val h = Harness().apply {
@@ -322,7 +344,7 @@ class DecoderFallbackTest {
         val packet = h.packet(2)
         val failure = assertFailsWith<PlaybackException> { decoder.send(packet) }
         packet.close()
-        assertTrue(failure.error.message.contains("no decoded replay keyframe"))
+        assertTrue(failure.error.message.contains("no replay keyframe was confirmed"))
         assertEquals(1, h.opens.size)
         decoder.close()
         h.assertLedgerZero()
@@ -616,11 +638,17 @@ class DecoderFallbackTest {
         return actual
     }
 
-    private fun autoSelection(): DecoderSelection =
-        DecoderSelection(CodecId.H264MediaCodec, mayFallback = true, requiresHardware = false)
+    private fun autoSelection(): DecoderSelection = DecoderSelection(
+        HardwareRoute.NamedDecoder(CodecId.H264MediaCodec, HwdecKind.MediaCodec),
+        mayFallback = true,
+        requiresHardware = false,
+    )
 
-    private fun requireSelection(): DecoderSelection =
-        DecoderSelection(CodecId.H264MediaCodec, mayFallback = false, requiresHardware = true)
+    private fun requireSelection(): DecoderSelection = DecoderSelection(
+        HardwareRoute.NamedDecoder(CodecId.H264MediaCodec, HwdecKind.MediaCodec),
+        mayFallback = false,
+        requiresHardware = true,
+    )
 }
 
 private class Harness {
@@ -639,9 +667,11 @@ private class Harness {
     suspend fun open(selection: DecoderSelection): VideoDecoder? = openDecoderWithFallback(
         stream = PlayerStreamInfo(index = 0, kind = TrackKind.Video, codec = "h264"),
         selection = selection,
-        open = { id ->
-            opens += id
-            if (id == null) softwareFactory().also(openedSoftware::add)
+        open = { route ->
+            // The ledger of opens stays decoder-name shaped: every route this suite drives is
+            // the named-decoder shape, so the existing assertions keep their vocabulary.
+            opens += (route as? HardwareRoute.NamedDecoder)?.decoder
+            if (route == null) softwareFactory().also(openedSoftware::add)
             else hardwareFactory().also(openedHardware::add)
         },
         copyPacket = {

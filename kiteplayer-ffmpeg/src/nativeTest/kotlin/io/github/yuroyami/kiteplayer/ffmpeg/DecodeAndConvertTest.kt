@@ -7,7 +7,9 @@ import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
+import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kitecodec.FilterGraph
 import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
@@ -62,13 +64,18 @@ class DecodeAndConvertTest {
         }
     }
 
-    /** Opens a source with only its video stream selected, and decodes the first frame. */
+    /**
+     * Opens a source with only its video stream selected, and decodes the first frame.
+     *
+     * Hwdec is OFF deliberately (S2.b): this suite's subject is the SOFTWARE pixel path, plane
+     * layouts included, and Auto now selects VideoToolbox on Apple, whose frames are opaque.
+     */
     private suspend fun firstVideoFrame(file: String): Pair<KiteCodecSource, KiteCodecVideoFrame> {
         val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteCodecSource
         val stream = assertNotNull(source.firstVideo, "no video stream in $file")
         source.selectStreams(setOf(stream.index))
         val decoder = assertNotNull(
-            source.videoDecoderFactories().first().create(stream, io.github.yuroyami.kiteplayer.HwdecPolicy.Auto),
+            source.videoDecoderFactories().first().create(stream, io.github.yuroyami.kiteplayer.HwdecPolicy.Off),
         )
 
         var frame: VideoFrame? = null
@@ -94,6 +101,56 @@ class DecodeAndConvertTest {
             if (frame == null) frame = decoder.receive()
         }
         return source to assertNotNull(frame, "no frame decoded from $file") as KiteCodecVideoFrame
+    }
+
+    /** Decodes the first frame with the platform's own hwdec policy, for the S2.b hardware arm. */
+    private suspend fun firstVideoFrameAuto(file: String): Triple<KiteCodecSource, VideoDecoder, KiteCodecVideoFrame> {
+        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteCodecSource
+        val stream = assertNotNull(source.firstVideo, "no video stream in $file")
+        source.selectStreams(setOf(stream.index))
+        val decoder = assertNotNull(
+            source.videoDecoderFactories().first().create(stream, io.github.yuroyami.kiteplayer.HwdecPolicy.Auto),
+        )
+        var frame: VideoFrame? = null
+        while (frame == null) {
+            val packet = source.readPacket() ?: break
+            if (packet.streamIndex != stream.index) {
+                packet.close()
+                continue
+            }
+            while (!decoder.send(packet)) {
+                frame = decoder.receive()
+                if (frame != null) break
+            }
+            packet.close()
+            if (frame == null) frame = decoder.receive()
+        }
+        return Triple(source, decoder, assertNotNull(frame, "no frame decoded from $file") as KiteCodecVideoFrame)
+    }
+
+    /**
+     * The S2.b hardware arm: on Apple, Auto selects VideoToolbox, the frame arrives genuinely in
+     * hardware memory, and the converter still produces pixels through the download twin, which
+     * is exactly the HardwareWithDownload contract the status reports.
+     */
+    @Test
+    fun `videotoolbox frames arrive hardware and convert through the download`() = runBlocking {
+        val (source, decoder, frame) = firstVideoFrameAuto("colors-bt709.mp4")
+        try {
+            assertEquals(
+                io.github.yuroyami.kiteplayer.HwdecStatus.HardwareWithDownload(io.github.yuroyami.kiteplayer.HwdecKind.VideoToolbox),
+                decoder.hardware,
+                "Auto on Apple must select VideoToolbox for h264",
+            )
+            assertEquals(HwSurfaceKind.CoreVideoPixelBuffer, frame.hardwareSurface)
+            assertEquals(PlayerPixelFormat.Opaque, frame.pixelFormat)
+            val rgba = SoftwareConverter.toRgba(frame)
+            assertEquals(320 * 240 * 4, rgba.size)
+            assertTrue(frame.hasPts, "the first hardware frame carries its timestamp")
+        } finally {
+            frame.close()
+            source.close()
+        }
     }
 
     @Test
@@ -329,8 +386,9 @@ class DecodeAndConvertTest {
         val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/colors-bt709.mp4")) as KiteCodecSource
         val stream = assertNotNull(source.firstVideo)
         source.selectStreams(setOf(stream.index))
+        // Off for the same reason as firstVideoFrame: the subject is the software path.
         val decoder = assertNotNull(
-            source.videoDecoderFactories().first().create(stream, io.github.yuroyami.kiteplayer.HwdecPolicy.Auto),
+            source.videoDecoderFactories().first().create(stream, io.github.yuroyami.kiteplayer.HwdecPolicy.Off),
         )
 
         var count = 0

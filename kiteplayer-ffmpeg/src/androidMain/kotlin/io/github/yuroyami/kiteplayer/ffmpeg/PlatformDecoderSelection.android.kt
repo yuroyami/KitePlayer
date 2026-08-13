@@ -1,13 +1,14 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
+import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kitecodec.CodecId
 
 internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection =
-    decoderSelection(policy, hardwareDecoder = codec.mediaCodecDecoder())
+    decoderSelection(policy, route = codec.mediaCodecRoute())
 
-private fun String.mediaCodecDecoder(): CodecId? = when (trim().lowercase()) {
-    "h264", "avc1" -> CodecId("h264_mediacodec")
-    "hevc", "h265", "hev1" -> CodecId("hevc_mediacodec")
+private fun String.mediaCodecRoute(): HardwareRoute? = when (trim().lowercase()) {
+    "h264", "avc1" -> HardwareRoute.NamedDecoder(CodecId("h264_mediacodec"), HwdecKind.MediaCodec)
+    "hevc", "h265", "hev1" -> HardwareRoute.NamedDecoder(CodecId("hevc_mediacodec"), HwdecKind.MediaCodec)
     else -> null
 }

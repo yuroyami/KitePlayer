@@ -53,8 +53,18 @@ public object SoftwareConverter {
         val height = frame.size.height
         require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
 
+        // A VideoToolbox frame converts through its downloaded software twin (S2.b): the twin
+        // carries the REAL pixel format (nv12) where the wrapper honestly says Opaque, and
+        // av_frame_copy_props preserved the colour metadata, so the wrapper's colorSpace holds.
+        // Hardware kinds that cannot be read back refuse inside readableFrame.
+        val format = if (frame.hardwareSurface == null) {
+            frame.pixelFormat
+        } else {
+            frame.readableFrame().info.pixelFormat.toPlayerFormat()
+        }
+
         val out = ByteArray(width * height * 4)
-        when (frame.pixelFormat) {
+        when (format) {
             PlayerPixelFormat.Yuv420p ->
                 frame.convertPlanarYuv(out, subsampleX = 1, subsampleY = 1, layout = SampleLayout.Eight)
             PlayerPixelFormat.Yuv422p ->
@@ -71,7 +81,7 @@ public object SoftwareConverter {
             PlayerPixelFormat.Bgra -> frame.copyPacked(out, sourceComponents = 4, redFirst = false)
             PlayerPixelFormat.Rgb24 -> frame.copyPacked(out, sourceComponents = 3, redFirst = true)
             else -> throw IllegalArgumentException(
-                "tier 0 cannot convert ${frame.pixelFormat}. A hardware frame needs its matching " +
+                "tier 0 cannot convert $format. A hardware frame needs its matching " +
                     "renderer, and an unusual software format needs a filter graph first.",
             )
         }
@@ -90,7 +100,7 @@ public object SoftwareConverter {
         val chromaShift = chromaSampleShift(colorSpace.chromaLocation, subsampleX)
         val lastChromaColumn = chromaColumns(width, subsampleX) - 1
 
-        frame.withPlanes { planes, strides, _ ->
+        readableFrame().withPlanes { planes, strides, _ ->
             require(planes.size >= 3) { "a planar YUV frame needs three planes, got ${planes.size}" }
             val y = planes[0]
             val u = planes[1]
@@ -127,7 +137,7 @@ public object SoftwareConverter {
         val chromaShift = chromaSampleShift(colorSpace.chromaLocation, subsampleX = 1)
         val lastChromaColumn = chromaColumns(width, subsampleX = 1) - 1
 
-        frame.withPlanes { planes, strides, _ ->
+        readableFrame().withPlanes { planes, strides, _ ->
             require(planes.size >= 2) { "an NV12 frame needs two planes, got ${planes.size}" }
             val y = planes[0]
             val uv = planes[1]
@@ -155,7 +165,7 @@ public object SoftwareConverter {
     private fun KiteCodecVideoFrame.copyPacked(out: ByteArray, sourceComponents: Int, redFirst: Boolean) {
         val width = size.width
         val height = size.height
-        frame.withPlanes { planes, strides, _ ->
+        readableFrame().withPlanes { planes, strides, _ ->
             require(planes.isNotEmpty()) { "a packed frame needs one plane" }
             val source = planes[0]
             val stride = strides[0]

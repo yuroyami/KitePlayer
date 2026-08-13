@@ -121,7 +121,7 @@ kotlin {
             // The text subtitle parsers (S4.c). Pure Kotlin; the decoder below is a thin shim
             // from packet payloads onto them.
             implementation(project(":kiteplayer-subtitles"))
-            implementation("io.github.yuroyami:kitecodec-core:0.0.3")
+            implementation("io.github.yuroyami:kitecodec-core:0.0.4")
             implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {

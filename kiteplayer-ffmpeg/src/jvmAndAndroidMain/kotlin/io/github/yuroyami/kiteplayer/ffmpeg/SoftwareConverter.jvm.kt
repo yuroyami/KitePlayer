@@ -9,16 +9,22 @@ package io.github.yuroyami.kiteplayer.ffmpeg
  */
 public object SoftwareConverter {
 
-    /** Converts [frame] to `width * height * 4` RGBA bytes with no row padding. */
+    /**
+     * Converts [frame] to `width * height * 4` RGBA bytes with no row padding.
+     *
+     * A VideoToolbox frame converts through its downloaded software twin (S2.b), one measured
+     * copy per frame, which is exactly what HardwareWithDownload reports upstream. Hardware
+     * kinds that cannot be read back still refuse inside [KiteCodecVideoFrame.readableFrame].
+     */
     public fun toRgba(frame: KiteCodecVideoFrame): ByteArray {
-        check(frame.hardwareSurface == null) { "a hardware frame needs its matching renderer" }
-        val copiedPlanes = frame.frame.copyPlanesToByteArray()
+        val readable = frame.readableFrame()
+        val info = readable.info
         return tightlyPackedToRgba(
-            bytes = copiedPlanes,
+            bytes = readable.copyPlanesToByteArray(),
             width = frame.size.width,
             height = frame.size.height,
-            pixelFormat = frame.pixelFormat,
-            colorSpace = frame.colorSpace,
+            pixelFormat = info.pixelFormat.toPlayerFormat(),
+            colorSpace = info.color.toPlayerColorSpace(),
         )
     }
 }

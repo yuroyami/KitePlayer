@@ -9,6 +9,14 @@ import kotlin.test.Test
 class JvmBackendContractTest {
 
     @Test
+    fun packetPayloadCopiesAreOwned() = runBlocking {
+        val media = requireNotNull(System.getProperty("KITEPLAYER_TESTMEDIA")) {
+            "KITEPLAYER_TESTMEDIA system property is not set"
+        }
+        assertOwnedPacketPayload(media)
+    }
+
+    @Test
     fun writesPathFreeBackendContract() {
         runBlocking {
             val media = requireNotNull(System.getProperty("KITEPLAYER_TESTMEDIA")) {

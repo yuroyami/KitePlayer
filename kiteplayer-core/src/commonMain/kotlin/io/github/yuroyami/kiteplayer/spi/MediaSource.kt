@@ -105,9 +105,9 @@ public data class PlayerStreamInfo(
 /**
  * One compressed packet.
  *
- * The payload is not exposed. A packet goes from the source to a decoder and nowhere else, and
- * neither of them is Kotlin code that needs to look at the bytes. Keeping the payload opaque is
- * what lets a native implementation pass an `AVPacket` pointer straight through with no copy.
+ * The source-to-decoder handoff keeps the payload opaque so native backends can pass a referenced
+ * packet through without copying it. Platform decoders that require Kotlin-visible bytes may opt
+ * into the explicit copy provided by [copyBytes].
  */
 public interface PlayerPacket : AutoCloseable {
     public val streamIndex: Int
@@ -122,6 +122,14 @@ public interface PlayerPacket : AutoCloseable {
     public val isKeyframe: Boolean
 
     public val sizeBytes: Int
+
+    /**
+     * Returns a new, caller-owned copy of the compressed payload.
+     *
+     * The returned array remains valid after this packet is closed and may be modified freely.
+     * Avoid this on native decoder paths, where handing the opaque packet through is copy-free.
+     */
+    public fun copyBytes(): ByteArray
 
     /** Byte offset in the container, when known. Used for progress on streams with broken times. */
     public val bytePosition: Long?

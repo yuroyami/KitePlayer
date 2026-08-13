@@ -372,6 +372,7 @@ internal class KiteCodecPacket(val native: Packet, private val mapper: Timestamp
     override val duration: Pts? get() = mapper.mapDuration(native.durationMicros)
     override val isKeyframe: Boolean get() = native.isKeyframe
     override val sizeBytes: Int get() = native.sizeBytes
+    override fun copyBytes(): ByteArray = native.copyBytes()
     override val bytePosition: Long? get() = native.bytePosition.takeIf { it >= 0 }
     internal fun copyForReplay(): KiteCodecPacket = KiteCodecPacket(native.copy(), mapper)
     override fun close() = native.close()

@@ -18,6 +18,13 @@ import kotlin.test.Test
 class MacosBackendContractTest {
 
     @Test
+    fun packetPayloadCopiesAreOwned() = runBlocking {
+        val media = getenv("KITEPLAYER_TESTMEDIA")?.toKString()
+            ?: error("KITEPLAYER_TESTMEDIA is not set")
+        assertOwnedPacketPayload(media)
+    }
+
+    @Test
     fun writesPathFreeBackendContract() = runBlocking {
         val media = getenv("KITEPLAYER_TESTMEDIA")?.toKString()
             ?: error("KITEPLAYER_TESTMEDIA is not set")

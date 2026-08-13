@@ -63,6 +63,7 @@ internal class FakePacket(
     override val dts: Pts? = pts,
     override val bytePosition: Long? = null,
     private val ledger: LeakLedger? = null,
+    private val packetBytes: ByteArray? = null,
 ) : PlayerPacket {
     private var isClosed = false
 
@@ -74,6 +75,8 @@ internal class FakePacket(
         ledger?.onClose(isClosed)
         isClosed = true
     }
+
+    override fun copyBytes(): ByteArray = packetBytes?.copyOf() ?: ByteArray(sizeBytes)
 
     val closed: Boolean get() = isClosed
 }

@@ -88,6 +88,7 @@ final enum class io.github.yuroyami.kiteplayer.spi/ColorTransfer : kotlin/Enum<i
 }
 
 final enum class io.github.yuroyami.kiteplayer.spi/HwSurfaceKind : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> { // io.github.yuroyami.kiteplayer.spi/HwSurfaceKind|null[0]
+    enum entry AndroidHardwareBuffer // io.github.yuroyami.kiteplayer.spi/HwSurfaceKind.AndroidHardwareBuffer|null[0]
     enum entry CoreVideoPixelBuffer // io.github.yuroyami.kiteplayer.spi/HwSurfaceKind.CoreVideoPixelBuffer|null[0]
     enum entry CudaDevicePointer // io.github.yuroyami.kiteplayer.spi/HwSurfaceKind.CudaDevicePointer|null[0]
     enum entry D3d11Texture // io.github.yuroyami.kiteplayer.spi/HwSurfaceKind.D3d11Texture|null[0]
@@ -447,6 +448,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerPacket : kotlin/AutoC
         abstract fun <get-sizeBytes>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerPacket.sizeBytes.<get-sizeBytes>|<get-sizeBytes>(){}[0]
     abstract val streamIndex // io.github.yuroyami.kiteplayer.spi/PlayerPacket.streamIndex|{}streamIndex[0]
         abstract fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerPacket.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]
+
+    abstract fun copyBytes(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.spi/PlayerPacket.copyBytes|copyBytes(){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame : io.github.yuroyami.kiteplayer.spi/VideoFrame { // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame|null[0]

@@ -72,6 +72,46 @@ internal suspend fun backendContractTranscript(mediaDirectory: String): String {
     return lines.sorted().joinToString(separator = "\n", postfix = "\n")
 }
 
+/** Exercises the PlayerPacket boundary against a real KiteCodec-owned packet. */
+internal suspend fun assertOwnedPacketPayload(mediaDirectory: String) {
+    val source = KiteCodecSourceFactory()
+        .open(MediaItem("${mediaDirectory.trimEnd('/')}/sync1080p30.mp4")) as KiteCodecSource
+    try {
+        val stream = requireNotNull(source.firstVideo) { "sync fixture has no video stream" }
+        source.selectStreams(setOf(stream.index))
+        val packet = requireNotNull(nextContractPacket(source, stream.index)) {
+            "sync fixture has no video packet"
+        }
+        val expected: ByteArray
+        val snapshot: ByteArray
+        try {
+            val metadataSize = packet.sizeBytes
+            expected = packet.copyBytes()
+            snapshot = expected.copyOf()
+            val independent = packet.copyBytes()
+            check(expected.size == metadataSize) {
+                "packet payload size ${expected.size} differs from metadata $metadataSize"
+            }
+            check(expected !== independent && expected.contentEquals(independent)) {
+                "copyBytes must return equal, independently owned arrays"
+            }
+            if (expected.isNotEmpty()) {
+                independent[0] = (independent[0].toInt() xor 0xff).toByte()
+                check(!expected.contentEquals(independent)) {
+                    "mutating one packet payload copy changed another copy"
+                }
+            }
+        } finally {
+            packet.close()
+        }
+        check(expected.contentEquals(snapshot)) {
+            "owned payload changed after its source packet closed"
+        }
+    } finally {
+        source.close()
+    }
+}
+
 private suspend fun nextContractFrame(
     source: KiteCodecSource,
     streamIndex: Int,

@@ -1340,6 +1340,7 @@ public final class io/github/yuroyami/kiteplayer/spi/ColorTransfer : java/lang/E
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/HwSurfaceKind : java/lang/Enum {
+	public static final field AndroidHardwareBuffer Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
 	public static final field CoreVideoPixelBuffer Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
 	public static final field CudaDevicePointer Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
 	public static final field D3d11Texture Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
@@ -1398,6 +1399,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerMediaSou
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerPacket : java/lang/AutoCloseable {
+	public abstract fun copyBytes ()[B
 	public abstract fun getBytePosition ()Ljava/lang/Long;
 	public abstract fun getDts-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public abstract fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;

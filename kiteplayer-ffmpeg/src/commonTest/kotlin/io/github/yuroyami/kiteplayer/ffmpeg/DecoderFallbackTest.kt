@@ -721,6 +721,7 @@ private class TestPacket(
     override val dts: Pts = pts
     override val duration: Pts = Pts(1)
     override val bytePosition: Long? = null
+    override fun copyBytes(): ByteArray = ByteArray(sizeBytes) { id.toByte() }
 
     override fun close() {
         check(!closed) { "packet $id closed twice" }

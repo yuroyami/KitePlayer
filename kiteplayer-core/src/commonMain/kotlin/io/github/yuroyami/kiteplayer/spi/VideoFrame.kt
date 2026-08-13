@@ -166,6 +166,9 @@ public enum class HwSurfaceKind {
      */
     MediaCodecBuffer,
 
+    /** An Android `HardwareBuffer` that a GPU renderer can sample without a CPU pixel copy. */
+    AndroidHardwareBuffer,
+
     /** A VA-API surface, reaching EGL through a dmabuf export. */
     VaapiSurface,
 

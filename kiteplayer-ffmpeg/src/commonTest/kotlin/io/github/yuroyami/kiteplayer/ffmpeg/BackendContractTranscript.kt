@@ -25,6 +25,10 @@ internal suspend fun backendContractTranscript(mediaDirectory: String): String {
         .open(MediaItem("${mediaDirectory.trimEnd('/')}/sync1080p30.mp4")) as KiteCodecSource
     try {
         val stream = requireNotNull(source.firstVideo) { "sync fixture has no video stream" }
+        val extradata = requireNotNull(stream.codecExtradata) { "sync fixture has no codec extradata" }
+        check(extradata.isNotEmpty() && extradata[0].toInt() and 0xff == 1) {
+            "sync fixture does not expose an avcC version-one record"
+        }
         source.selectStreams(setOf(stream.index))
         val decoder = requireNotNull(
             source.videoDecoderFactories().first().create(stream, HwdecPolicy.Off),

@@ -95,6 +95,11 @@ public data class PlayerStreamInfo(
     // Audio.
     val sampleRate: Int? = null,
     val channels: Int? = null,
+    /**
+     * An owned copy of the container's codec configuration record, such as avcC or hvcC. Null
+     * when the stream has no separate configuration record.
+     */
+    val codecExtradata: ByteArray? = null,
 )
 
 /**

@@ -353,6 +353,7 @@ private fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo
         isCoverArt = disposition.attachedPicture,
         sampleRate = audio?.sampleRate,
         channels = audio?.channels,
+        codecExtradata = codecExtradata?.copyOf(),
     )
 }
 

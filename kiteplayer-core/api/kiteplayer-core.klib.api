@@ -390,6 +390,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/BackendSession : kotlin/Aut
         abstract fun <get-subtitleDecoders>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/SubtitleDecoderFactory> // io.github.yuroyami.kiteplayer.spi/BackendSession.subtitleDecoders.<get-subtitleDecoders>|<get-subtitleDecoders>(){}[0]
     abstract val videoDecoders // io.github.yuroyami.kiteplayer.spi/BackendSession.videoDecoders|{}videoDecoders[0]
         abstract fun <get-videoDecoders>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/VideoDecoderFactory> // io.github.yuroyami.kiteplayer.spi/BackendSession.videoDecoders.<get-videoDecoders>|<get-videoDecoders>(){}[0]
+
+    open fun setWarningSink(kotlin/Function1<io.github.yuroyami.kiteplayer/PlaybackWarning, kotlin/Unit>) // io.github.yuroyami.kiteplayer.spi/BackendSession.setWarningSink|setWarningSink(kotlin.Function1<io.github.yuroyami.kiteplayer.PlaybackWarning,kotlin.Unit>){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/MediaBackend { // io.github.yuroyami.kiteplayer.spi/MediaBackend|null[0]
@@ -911,7 +913,7 @@ final class io.github.yuroyami.kiteplayer.spi/OverlayImage { // io.github.yuroya
 }
 
 final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo|null[0]
-    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?){}[0]
+    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/ByteArray? = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;kotlin.ByteArray?){}[0]
 
     final val bitrate // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate|{}bitrate[0]
         final fun <get-bitrate>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate.<get-bitrate>|<get-bitrate>(){}[0]
@@ -919,6 +921,8 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
         final fun <get-channels>(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.channels.<get-channels>|<get-channels>(){}[0]
     final val codec // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.codec|{}codec[0]
         final fun <get-codec>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.codec.<get-codec>|<get-codec>(){}[0]
+    final val codecExtradata // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.codecExtradata|{}codecExtradata[0]
+        final fun <get-codecExtradata>(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.codecExtradata.<get-codecExtradata>|<get-codecExtradata>(){}[0]
     final val colorSpace // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.colorSpace|{}colorSpace[0]
         final fun <get-colorSpace>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.colorSpace.<get-colorSpace>|<get-colorSpace>(){}[0]
     final val frameRate // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.frameRate|{}frameRate[0]
@@ -960,6 +964,7 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component16(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component16|component16(){}[0]
     final fun component17(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component17|component17(){}[0]
     final fun component18(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component18|component18(){}[0]
+    final fun component19(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component19|component19(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/TrackKind // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component2|component2(){}[0]
     final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component3|component3(){}[0]
     final fun component4(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component4|component4(){}[0]
@@ -968,7 +973,7 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component7|component7(){}[0]
     final fun component8(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component8|component8(){}[0]
     final fun component9(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component9|component9(){}[0]
-    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?){}[0]
+    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/ByteArray? = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;kotlin.ByteArray?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.toString|toString(){}[0]
@@ -1184,8 +1189,8 @@ final class io.github.yuroyami.kiteplayer/AudioPlayback : kotlin/AutoCloseable {
     final suspend fun open(io.github.yuroyami.kiteplayer.spi/AudioFormat): io.github.yuroyami.kiteplayer.spi/AudioFormat // io.github.yuroyami.kiteplayer/AudioPlayback.open|open(io.github.yuroyami.kiteplayer.spi.AudioFormat){}[0]
     final suspend fun pause() // io.github.yuroyami.kiteplayer/AudioPlayback.pause|pause(){}[0]
     final suspend fun play() // io.github.yuroyami.kiteplayer/AudioPlayback.play|play(){}[0]
-    final suspend fun submit(io.github.yuroyami.kiteplayer/Pts?, kotlin/FloatArray, kotlin/Int) // io.github.yuroyami.kiteplayer/AudioPlayback.submit|submit(io.github.yuroyami.kiteplayer.Pts?;kotlin.FloatArray;kotlin.Int){}[0]
-    final suspend fun submitDecoded(io.github.yuroyami.kiteplayer/Pts?, kotlin/FloatArray, kotlin/Int, io.github.yuroyami.kiteplayer.spi/AudioFormat) // io.github.yuroyami.kiteplayer/AudioPlayback.submitDecoded|submitDecoded(io.github.yuroyami.kiteplayer.Pts?;kotlin.FloatArray;kotlin.Int;io.github.yuroyami.kiteplayer.spi.AudioFormat){}[0]
+    final suspend fun submit(io.github.yuroyami.kiteplayer/Pts?, kotlin/FloatArray, kotlin/Int, kotlin/Function0<kotlin/Boolean> = ...) // io.github.yuroyami.kiteplayer/AudioPlayback.submit|submit(io.github.yuroyami.kiteplayer.Pts?;kotlin.FloatArray;kotlin.Int;kotlin.Function0<kotlin.Boolean>){}[0]
+    final suspend fun submitDecoded(io.github.yuroyami.kiteplayer/Pts?, kotlin/FloatArray, kotlin/Int, io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Function0<kotlin/Boolean> = ...) // io.github.yuroyami.kiteplayer/AudioPlayback.submitDecoded|submitDecoded(io.github.yuroyami.kiteplayer.Pts?;kotlin.FloatArray;kotlin.Int;io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlin.Function0<kotlin.Boolean>){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer/Backends { // io.github.yuroyami.kiteplayer/Backends|null[0]
@@ -2163,6 +2168,21 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.toString|toString(){}[0]
+    }
+
+    final class StartupIncomplete : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.<init>|<init>(kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.detail.<get-detail>|<get-detail>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.toString|toString(){}[0]
     }
 
     final class TonemappingUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable|null[0]

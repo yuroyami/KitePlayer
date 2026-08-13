@@ -7956,6 +7956,49 @@ is no other.
   republished AT 0.0.1 (its standing coordinate), found when the first compose simulator link
   died on the same videotoolbox symbols the plugin fix had already cured.
 
+- **2026-08-13, 17.4.9 entered and W.a landed: the wide decode profile.** Owner order,
+  verbatim scope: "activate all possible codecs". Root cause named before the fix: the read
+  side was KiteCodec's editor-era subset from its first commit, inherited unexamined, and the
+  17.5 matrix was derived from the same configure line, so a green matrix could only prove
+  the profile plays the profile. THE FLIP (KiteCodec ea00800): `--disable-everything` is
+  replaced by write-side class disables; decoders, demuxers, parsers, bitstream filters and
+  hwaccels compile whole; the curated encoder, muxer and filter lists and the five-name
+  protocol list are unchanged. FIXED POINT 5 FIRED ON THE FIRST CONFIGURE: the banner grew
+  udp and rtp because the rtsp and sdp demuxers SELECT them and configure's select beats a
+  class disable; a named `--disable-protocol=udp,rtp` beats the select, and configure then
+  drops those demuxers instead. Every one of the five trees' banners now names exactly
+  file, pipe, data, http, tcp; avi, asf, flv, mpegps, rm and hls demux arrive; devices and
+  https stay absent; AV1 on phones stays the typed refusal (FFmpeg's native av1 decoder is
+  a hardware-only wrapper; software AV1 means vendoring dav1d, a separate decision). SIZES,
+  measured not guessed, narrow to wide: libavcodec.a macos-arm64 6,650,512 to 16,048,392
+  bytes, ios-arm64 5,664,912 to 14,827,024, android-arm64 6,757,400 to 16,692,252,
+  android-x64 7,371,030 to 18,296,102; libavformat.a roughly doubles everywhere (1.55 to
+  3.17 MB on the host); whole trees macos 25.6 to 36.4 MB, ios 11.7 to 22.3, android-arm64
+  13.3 to 25.0, android-x64 14.4 to 27.0; the linked macOS JNI dylib is 21,051,560 bytes.
+  Host gates on the wide tree: plain C suite 7/7 suites, symbol audit 200/200 records equal,
+  the kc_ surface untouched. One infrastructure truth for the record: bare KiteCodec Gradle
+  invocations fail on Android compileSdk in this checkout; the working scope for every
+  FFmpeg build task here is `-Pkitecodec.phoneTargetsOnly=true` with ANDROID_NDK_HOME
+  pointing into the WORKSTATION SDK for the Android arms.
+
+- **2026-08-13, W.b landed: rows that used to fail (5378412).** Nine fixtures joined
+  testmedia.sh and the matrix: avi (mpeg4+mp3), asf/wmv (msmpeg4v3+wmav2), flv, MPEG-PS vob
+  (mpeg2video+ac3), eac3, DTS core, TrueHD and alac audio, and an ass-subbed mkv row that
+  pins subtitle-stream VISIBILITY only (cue decode stays S4; the text path speaks SubRip and
+  WebVTT). RED FIRST, RECORDED: on the narrow tree eight of nine failed on the honest gate,
+  four at open with Invalid data (avi row failed as "no audio stream": some demuxer misclaims
+  the RIFF, the row still red), four at decoder selection with "No decoder for codec id"
+  86056/86020/86060/86032; the ass row passed by design. With the wide tree and relinked JNI
+  dylib the same gate runs 27 of 27 PASS. AN EVIDENCE PATH CONVICTED IN PASSING: the macOS
+  native test binary links Homebrew's full shared FFmpeg (otool names
+  /opt/homebrew/opt/ffmpeg), so the macOS matrix never measured the vendored profile at all
+  and its green was worthless FOR PROFILE CLAIMS specifically; the honest host-side profile
+  gate is the JVM arm over the embedded JNI dylib (both transcripts above), and the vendored
+  truth on Apple devices lives in the simulator and device runs. VC-1 and RealVideo rows
+  wait for real sample files, FFmpeg encodes neither; a named absence. W.c remains: 0.0.5
+  publish ritual, consumer relink, emulator and simulator matrix over the wide trees, README
+  and platform docs, register, memory.
+
 ---
 
 ## 15. Horizon B execution: B1

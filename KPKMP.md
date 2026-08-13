@@ -10633,7 +10633,8 @@ dependency order inside the stage:
     number, and complete the owner device session.
 
 **S2. IT PLAYS BEAUTIFULLY ON APPLE.** (Expanded 17.4.8; entered 2026-08-12 by owner order,
-after S4.a to S4.c, before S4.d to S4.g.) Exit: Metal renderer on macOS and iOS, VideoToolbox inside
+after S4.a to S4.c, before S4.d to S4.g. The wide-profile order 17.4.9, entered 2026-08-13,
+rides inside it between S2.d and S2.e.) Exit: Metal renderer on macOS and iOS, VideoToolbox inside
 FFmpeg per D-2 with measured software fallback, colour instrument, vsync-snapped scheduling,
 sustained 4K runs with committed thresholds. Absorbs draft items C-09 to C-31, C-33, C-48 to
 C-50 with their verifier corrections. Also KiteVideo's first landing (17.9, KV-1 to KV-3): the
@@ -14849,6 +14850,76 @@ Commit first line: `Close the stage that plays beautifully on Apple`.
 Estimates. S2.a 15 to 22, S2.b 12 to 18, S2.c 35 to 50, S2.d 20 to 30, S2.e 10 to 15, S2.f 3
 to 5: 95 to 140 focused hours, consistent with 17.3's 105 to 150 once the 10 to 15 hours the
 17.4.4 rider already moved into S1.d are subtracted; the table is not re-litigated mid-stage.
+
+### 17.4.9 The wide-profile order, between S2.d and S2.e
+
+Entered 2026-08-13 by owner order: "activate all possible codecs". The narrow read side was
+KiteCodec's editor-era subset from its first commit, inherited by the player and never
+re-decided, and the format matrix was derived from that same configure line, so a green
+matrix could only ever prove that the profile plays the profile. This item is the
+re-decision. It sits between S2.d and S2.e on purpose: S2.e's colour and 4K work and S2.f's
+matrix re-runs then happen once, on the wide trees, instead of twice.
+
+Owner-fixed points, decided at entry:
+
+1. The read side goes wide BY CLASS, not by list. Decoders, demuxers, parsers and bitstream
+   filters compile whole: `--disable-everything` is replaced by class disables for the write
+   side (`--disable-encoders`, `--disable-muxers`, `--disable-filters`, `--disable-devices`,
+   `--disable-protocols`), and the current curated encoder, muxer, filter and protocol lists
+   are re-enabled by name, unchanged. A future FFmpeg bump widens the player automatically;
+   the write side stays the editor's deliberate opinion; the protocol list stays the
+   security boundary it is.
+2. What this order does NOT grant, so nobody reads more into it later: https stays absent
+   (the TLS backend decision is its own future item); AV1 on phones stays a typed refusal,
+   because FFmpeg's native av1 decoder is a hardware-only wrapper and software AV1 means
+   vendoring dav1d, a separate decision; the custom AVIO funnel is not this item; capture
+   and playback devices stay off.
+3. Sizes are measured, never guessed: per-target static archive totals and the linked
+   sample binaries, before and after, in the log. If a target's growth is grotesque the
+   owner decides the trade, not the executor.
+4. Evidence is red first. The new matrix rows run against the NARROW trees and their
+   failures are recorded before the wide trees exist; only then may they go green.
+5. Configure's dependency resolver must not resurrect protocols behind the list's back
+   (rtsp and its relatives select network members). The configure banner's protocol line is
+   checked to say exactly `file pipe data http tcp` per target, or explicit disables are
+   added until it does.
+
+#### W.a KiteCodec: the wide profile
+
+`sharedCoreArgs()` in `buildSrc/src/main/kotlin/BuildFFmpegTask.kt` flips as fixed point 1
+says; the configure comments and `docs/platforms.md` tell the new truth. Rebuild
+macos-arm64, run the C suite variants the changed path calls for, record the banner and the
+sizes. The KiteCodec version moves to 0.0.5 at the publish step in W.c, not here.
+Gate: C tests green on the wide host tree; banner protocol line exact; sizes in the log.
+Commit first line: `Widen the decode profile to everything FFmpeg has`
+
+#### W.b The evidence: fixtures and rows that used to fail
+
+`scripts/testmedia.sh` gains synthesizable real-world-shaped clips: avi (mpeg4 plus mp3),
+asf/wmv (msmpeg4v3 plus wmav2), flv (flv1 plus mp3), MPEG-PS vob (mpeg2video plus ac3),
+eac3 in mkv, DTS core in mkv (dca, experimental encoder), truehd in mkv, alac in m4a, and
+an ass-subbed mkv whose row asserts the subtitle stream is SEEN (cue decode stays S4's).
+VC-1 and RealVideo have no FFmpeg encoders, so their rows wait for real sample files; that
+absence is named here rather than papered over. The rows land in `FormatMatrix.kt` as
+MustPlay, run RED against the narrow trees and the failures are recorded, then the
+remaining trees rebuild (ios-arm64, ios-simulator-arm64, android-arm64, android-x64) and
+the host matrix goes green.
+Gate: host matrix green including every new row; the red-first record in the log.
+Commit first line: `Prove the wide profile with rows that used to fail`
+
+#### W.c The consumers and the close
+
+The 0.0.5 publish ritual (klib metadata differential, exported-symbols and signature
+baselines, and the Gradle plugin republished pinned at its own 0.0.1 coordinate per the
+S2.d infrastructure lesson); KitePlayer relinks; the matrix runs on the Android emulator
+and the iOS simulator over the wide trees; README and platform docs updated; the 17.2
+register line amended; numbers in section 14; memory updated; nothing pushed.
+Gate: three-platform matrix green on the wide trees; consumed versions verified by
+extraction; size numbers stated only where measured.
+Commit first line: `Consume the wide profile everywhere it plays`
+
+Estimates. W.a 4 to 6, W.b 5 to 8, W.c 4 to 6: 13 to 20 focused hours, most of it FFmpeg
+build time and three-platform matrix runs.
 
 ### 17.5 The format conformance matrix
 

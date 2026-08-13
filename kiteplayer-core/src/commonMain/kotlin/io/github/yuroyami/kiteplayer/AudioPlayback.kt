@@ -162,8 +162,19 @@ public class AudioPlayback(
      *        normal for buffers that continue from the previous one.
      * @param interleaved channel-interleaved float samples in the negotiated format.
      * @param frames sample frames in [interleaved], meaning one value per channel each.
+     * @param abort polled while the ring is full. Returning true gives the buffer up: whatever
+     *        was already accepted stays accepted, the remainder is abandoned, and the caller is
+     *        expected to flush (a seek's quiescence is the intended trigger). This exists so an
+     *        incremental commit is NEVER retried from the outside: cancelling this function
+     *        mid-buffer and calling it again would replay samples the ring already took and run
+     *        the conversion state twice (audit P1-3).
      */
-    public suspend fun submit(pts: Pts?, interleaved: FloatArray, frames: Int) {
+    public suspend fun submit(
+        pts: Pts?,
+        interleaved: FloatArray,
+        frames: Int,
+        abort: () -> Boolean = { false },
+    ) {
         // The FIELD is read under the lock, extending the one-sentence rule to the producer
         // (interlude item I-02): a member that may run beside [close] touches `ring` only under
         // the lock, so a submit can never load the reference in the same instant close is
@@ -181,6 +192,7 @@ public class AudioPlayback(
                 pts = if (firstChunk) pts else null,
             )
             if (accepted == 0) {
+                if (abort()) return
                 // The ring is full, which means the device has as much as it can hold. Waiting a
                 // fraction of a device period is exactly the right amount of patience.
                 delay(FULL_RING_WAIT)
@@ -214,6 +226,7 @@ public class AudioPlayback(
         interleaved: FloatArray,
         frames: Int,
         sourceFormat: AudioFormat,
+        abort: () -> Boolean = { false },
     ) {
         val negotiated = format ?: error("submitDecoded was called before open")
         val existing = pipeline
@@ -228,8 +241,10 @@ public class AudioPlayback(
         stage.volume = wantedVolume.value
         stage.muted = wantedMute.value
 
+        // Converted exactly once: the mixer, resampler and gain ramp all carry state, so running
+        // process twice over the same input is audible, not just wasteful (audit P1-3).
         val produced = stage.process(interleaved, frames)
-        if (produced > 0) submit(pts, stage.output, produced)
+        if (produced > 0) submit(pts, stage.output, produced, abort)
     }
 
     /**

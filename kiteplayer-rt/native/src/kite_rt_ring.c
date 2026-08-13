@@ -74,28 +74,44 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
      * be checked against this guard; CompileKiteRtTask.specFor's comment says so. */
     if (capacity_frames > (1 << 27) || channels > 64)
         return NULL;
+
+    /* The byte-count guard must reserve EVERYTHING the allocation later adds on top of the
+     * samples: the cacheline-aligned header (which is far larger than one cache line, the ring
+     * carries several _Alignas(64) counters and the segment table) and the alignment pad handed
+     * to malloc. Reserving only two cache lines admitted near-boundary capacities, e.g.
+     * ((1<<24)-1 frames, 64 ch): sample_bytes = SIZE_MAX-255 on 32 bit, which passed the old
+     * guard and then wrapped total_bytes, so the first fill wrote past a tiny allocation. The
+     * factor product itself cannot overflow uint64_t: the bounds above cap it at 2^35. */
+    header_bytes = KPRT_ALIGN_UP_SIZE(sizeof(kprt_ring), KPRT_CACHELINE);
     if ((uint64_t)capacity_frames * (uint64_t)channels * sizeof(float)
-            > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE)
+            > (uint64_t)SIZE_MAX - (uint64_t)header_bytes - (uint64_t)KPRT_CACHELINE)
         return NULL;
 
-    /* The guard above, proved at this target's own width: the three vectors the review measured
-     * wrapping on the 32 bit targets must be refused there and admitted on 64 bit. The
-     * expressions mirror the guard exactly; if the guard's arithmetic ever changes, these change
-     * with it or the build stops. */
+    /* The guard above, proved at this target's own width: vectors the review measured wrapping
+     * on the 32 bit targets must be refused there and admitted on 64 bit. The expressions mirror
+     * the guard exactly; if the guard's arithmetic ever changes, these change with it or the
+     * build stops. */
+#define KPRT_GUARD_LIMIT                                                            \
+    ((uint64_t)SIZE_MAX - KPRT_ALIGN_UP_SIZE(sizeof(kprt_ring), KPRT_CACHELINE)     \
+        - (uint64_t)KPRT_CACHELINE)
     _Static_assert(
-        (uint64_t)(1 << 27) * 8u * sizeof(float) > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE
+        (uint64_t)(1 << 27) * 8u * sizeof(float) > KPRT_GUARD_LIMIT
             ? sizeof(size_t) == 4 : sizeof(size_t) >= 8,
         "the (1<<27, 8) byte count must overflow exactly on 32 bit size_t");
     _Static_assert(
-        (uint64_t)(1 << 27) * 32u * sizeof(float) > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE
+        (uint64_t)(1 << 27) * 32u * sizeof(float) > KPRT_GUARD_LIMIT
             ? sizeof(size_t) == 4 : sizeof(size_t) >= 8,
         "the (1<<27, 32) byte count must overflow exactly on 32 bit size_t");
     _Static_assert(
-        (uint64_t)(1 << 24) * 64u * sizeof(float) > (uint64_t)SIZE_MAX - 2u * KPRT_CACHELINE
+        (uint64_t)(1 << 24) * 64u * sizeof(float) > KPRT_GUARD_LIMIT
             ? sizeof(size_t) == 4 : sizeof(size_t) >= 8,
         "the (1<<24, 64) byte count must overflow exactly on 32 bit size_t");
+    _Static_assert(
+        (uint64_t)((1 << 24) - 1) * 64u * sizeof(float) > KPRT_GUARD_LIMIT
+            ? sizeof(size_t) == 4 : sizeof(size_t) >= 8,
+        "the near-boundary ((1<<24)-1, 64) byte count must be refused on 32 bit size_t");
+#undef KPRT_GUARD_LIMIT
 
-    header_bytes = KPRT_ALIGN_UP_SIZE(sizeof(kprt_ring), KPRT_CACHELINE);
     sample_bytes = (size_t)capacity_frames * (size_t)channels * sizeof(float);
     total_bytes = header_bytes + sample_bytes;
 

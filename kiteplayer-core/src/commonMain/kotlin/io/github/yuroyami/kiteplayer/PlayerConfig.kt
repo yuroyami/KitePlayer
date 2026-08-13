@@ -31,10 +31,9 @@ public data class PlayerConfig(
     val buffer: BufferPolicy = BufferPolicy(),
     val audio: AudioConfig = AudioConfig(),
     /**
-     * Subtitle selection, timing and styling.
-     *
-     * No cue reaches a screen, so none of these values changes anything.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Subtitle selection, timing and styling. The session core reads the language preferences and
+     * the forced-track rule when it picks a track, applies [SubtitleConfig.delay] when it times
+     * cues, and passes [SubtitleConfig.fontScale] to the platform rasterizer.
      */
     val subtitles: SubtitleConfig = SubtitleConfig(),
     /** How often [KitePlayer.progress] is sampled while playing. */
@@ -50,7 +49,15 @@ public data class PlayerConfig(
     val logger: PlayerLogger? = null,
     /** The backends to build the pipeline from. Replace them for a test or a new platform. */
     val backends: Backends = Backends(),
-)
+) {
+    init {
+        // Validated at construction, before a player exists to be wedged by it: a nonpositive
+        // interval is a hot publication loop, and each nested policy carries its own checks
+        // (audit P1-19).
+        require(progressInterval > Duration.ZERO) { "progressInterval must be positive, was $progressInterval" }
+        require(statsInterval > Duration.ZERO) { "statsInterval must be positive, was $statsInterval" }
+    }
+}
 
 /**
  * Whether to decode on a hardware device, and what to do when one is not available.
@@ -114,7 +121,21 @@ public data class BufferPolicy(
      * Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     val liveMaxLag: Duration = 10.seconds,
-)
+) {
+    init {
+        // A budget of zero or less never admits a packet and wedges the demuxer before the first
+        // read; an empty frame queue can never present. Refused here, before any native resource
+        // is acquired (audit P1-19).
+        require(readyDuration >= Duration.ZERO) { "readyDuration must not be negative, was $readyDuration" }
+        require(readyPackets > 0) { "readyPackets must be positive, was $readyPackets" }
+        require(softTarget > Duration.ZERO) { "softTarget must be positive, was $softTarget" }
+        require(totalBytes > 0) { "totalBytes must be positive, was $totalBytes" }
+        require(totalDuration > Duration.ZERO) { "totalDuration must be positive, was $totalDuration" }
+        require(videoFrameQueue >= 1) { "videoFrameQueue must hold at least one frame, was $videoFrameQueue" }
+        require(liveBackBuffer >= Duration.ZERO) { "liveBackBuffer must not be negative, was $liveBackBuffer" }
+        require(liveMaxLag >= Duration.ZERO) { "liveMaxLag must not be negative, was $liveMaxLag" }
+    }
+}
 
 public data class AudioConfig(
     /** Preferred language tags, best first, matched against the container's track languages. */
@@ -140,14 +161,20 @@ public data class AudioConfig(
      * Not implemented yet; see the roadmap in KPKMP.md section 11.
      */
     val startDisabled: Boolean = false,
-)
+) {
+    init {
+        require(assumedLatencyWhenUnreliable >= Duration.ZERO) {
+            "assumedLatencyWhenUnreliable must not be negative, was $assumedLatencyWhenUnreliable"
+        }
+    }
+}
 
 /**
  * Which subtitle track to pick, when to show its cues, and how large to draw them.
  *
- * Nothing in the player reads any of this. The SubRip parser in `kiteplayer-subtitles` is not
- * connected to playback, and no cue is timed, styled or drawn.
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Read by the session core: track selection uses the language preferences and the forced rule,
+ * cue timing applies [delay], and the platform rasterizer receives [fontScale]. [lookahead] is
+ * not consulted yet; decoded cues are held for the session and pruned on flush.
  */
 public data class SubtitleConfig(
     /** Select a subtitle track automatically when one matches these languages. */
@@ -160,7 +187,12 @@ public data class SubtitleConfig(
     val lookahead: Duration = 5.seconds,
     /** Scale applied to the authored font size. */
     val fontScale: Float = 1.0f,
-)
+) {
+    init {
+        require(lookahead >= Duration.ZERO) { "lookahead must not be negative, was $lookahead" }
+        require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }
+    }
+}
 
 /**
  * The two implementations the engine builds its pipeline from.

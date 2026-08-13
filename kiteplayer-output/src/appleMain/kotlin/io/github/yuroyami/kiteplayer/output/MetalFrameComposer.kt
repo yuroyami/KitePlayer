@@ -174,8 +174,13 @@ internal class MetalFrameComposer(
         val key = "${picture.format}:${picture.width}x${picture.height}"
         if (planeKey != key) {
             planeTextures = recipe.formats.mapIndexed { index, format ->
-                val width = if (index == 0) picture.width else picture.width shr recipe.chromaShiftX
-                val height = if (index == 0) picture.height else picture.height shr recipe.chromaShiftY
+                // Chroma planes are ceil-divided, matching how decoders size them: a 1279x719
+                // 4:2:0 picture carries 640x360 chroma, and a floor shift would drop the last
+                // column and row of every odd-sized frame.
+                val width = if (index == 0) picture.width
+                    else (picture.width + (1 shl recipe.chromaShiftX) - 1) shr recipe.chromaShiftX
+                val height = if (index == 0) picture.height
+                    else (picture.height + (1 shl recipe.chromaShiftY) - 1) shr recipe.chromaShiftY
                 device.makePlaneTexture(format, width.coerceAtLeast(1), height.coerceAtLeast(1))
             }
             planeKey = key

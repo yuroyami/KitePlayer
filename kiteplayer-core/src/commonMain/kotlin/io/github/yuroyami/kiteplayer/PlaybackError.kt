@@ -217,6 +217,15 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * Open completed before the initial fill reached readiness: the source is slow, so playback
+     * will begin in Buffering instead of with a ready pipeline. Opened is still truthful about
+     * the session existing; this says the pipeline behind it is not yet primed.
+     */
+    public data class StartupIncomplete(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "opened before the pipeline was primed: $detail"
+    }
+
+    /**
      * The file is interleaved so badly that one stream had to be truncated to keep the other
      * playing.
      */

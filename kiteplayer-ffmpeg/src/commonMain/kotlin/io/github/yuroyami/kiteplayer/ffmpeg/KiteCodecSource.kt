@@ -582,7 +582,17 @@ private class KiteCodecAudioDecoder(
         // sending surround content to the wrong speakers.
         if (info.sampleRate > 0 && info.channelCount > 0) {
             val candidate = audioFormat(info.sampleRate, info.channelCount, info.channelLayoutMask)
-            if (candidate != outputFormat) outputFormat = candidate
+            if (candidate != outputFormat) {
+                // Re-anchor before adopting the new format: the sample counter is denominated in
+                // the OLD rate, and applying the new rate to samples accumulated at the old one
+                // would misdate every synthetic timestamp after the transition (audit P1-17).
+                val oldRate = outputFormat.sampleRate
+                if (oldRate > 0 && samplesSinceAnchor > 0) {
+                    anchorMicros += samplesSinceAnchor * 1_000_000L / oldRate
+                    samplesSinceAnchor = 0
+                }
+                outputFormat = candidate
+            }
         }
 
         val mapped = mapper.mapTimestamp(frame.ptsMicros)
@@ -698,7 +708,16 @@ internal class KiteCodecAudioBuffer(
 ) : AudioBuffer {
 
     private val info = frame.info
-    private val samples: FloatArray by lazy { decodeToFloat(frame.copyPlanesToByteArray(), info) }
+
+    /**
+     * Decoded straight into the MODELLED layout. The stride has to be [format].channels, because
+     * every consumer indexes with it: a 16-channel source decoded at its own stride but read at
+     * the truncated stride interleaved wrong-channel samples into every frame (audit P1-16).
+     * decodeToFloat itself maps source channels onto the requested count.
+     */
+    private val samples: FloatArray by lazy {
+        decodeToFloat(frame.copyPlanesToByteArray(), info, format.channels)
+    }
 
     override val frameCount: Int get() = info.sampleCount
 

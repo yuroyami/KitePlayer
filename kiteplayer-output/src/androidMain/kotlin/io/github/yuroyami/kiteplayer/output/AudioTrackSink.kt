@@ -30,7 +30,7 @@ import kotlinx.coroutines.channels.BufferOverflow
  *
  * The internal constructor takes the driver factory and the clock so the host suite drives every
  * lifecycle and arithmetic arm with a fake, and so production cannot accidentally pair
- * `AudioTimestamp` (elapsedRealtimeNanos base) with another time base: the public constructor
+ * `AudioTimestamp` (`System.nanoTime` CLOCK_MONOTONIC base) with another time base: the public constructor
  * hard-wires [AndroidMonotonicClock].
  */
 public class AudioTrackSink internal constructor(

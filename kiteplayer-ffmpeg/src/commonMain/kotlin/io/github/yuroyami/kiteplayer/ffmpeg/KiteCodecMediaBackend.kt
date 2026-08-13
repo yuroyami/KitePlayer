@@ -77,6 +77,17 @@ private class KiteCodecBackendSession(private val kiteCodec: KiteCodecSource) : 
 
     override val source: PlayerMediaSource get() = kiteCodec
 
+    override fun setWarningSink(sink: (PlaybackWarning) -> Unit) {
+        // The engine's reporter joins whatever listener the application installed at construction,
+        // so a hardware fallback is never silent again (audit P1-21) and an app listener keeps
+        // seeing what it saw before.
+        val existing = kiteCodec.onWarning
+        kiteCodec.onWarning = { warning ->
+            existing(warning)
+            sink(warning)
+        }
+    }
+
     override val videoDecoders: List<VideoDecoderFactory> = kiteCodec.videoDecoderFactories()
 
     override val audioDecoders: List<AudioDecoderFactory> = kiteCodec.audioDecoderFactories()

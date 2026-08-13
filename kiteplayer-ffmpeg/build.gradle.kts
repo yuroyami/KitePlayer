@@ -121,7 +121,10 @@ kotlin {
             // The text subtitle parsers (S4.c). Pure Kotlin; the decoder below is a thin shim
             // from packet payloads onto them.
             implementation(project(":kiteplayer-subtitles"))
-            implementation("io.github.yuroyami:kitecodec-core:0.0.6")
+            // api, not implementation: KiteCodecVideoFrame publicly exposes kitecodec.Frame, and
+            // the phone/compose modules cast to it. Hiding the dependency made that public type
+            // invisible to consumers compiling against this module's ABI (audit P1-25).
+            api("io.github.yuroyami:kitecodec-core:0.0.6")
             implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {

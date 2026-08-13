@@ -107,7 +107,7 @@ class KitePlayerTest {
     }
 
     @Test
-    fun `speed is refused while audio is selected and accepted without it`() = runTest {
+    fun `speed refuses every non-unity rate until a real rate control exists`() = runTest {
         val withAudio = CoreHarness(this)
         val player = player(withAudio)
         player.open(MediaItem("scripted://audio"))
@@ -122,15 +122,17 @@ class KitePlayerTest {
         assertEquals(1.0, player.state.value.speed, "and unity is always legal")
         withAudio.close()
 
+        // Video-only is refused too: the frame scheduler has no scaled timer, so a stored 2.0
+        // would report a rate the picture provably does not play at (audit P1-11).
         val videoOnly = CoreHarness(this, script = MediaScript(hasAudio = false))
         val silentPlayer = player(videoOnly)
         silentPlayer.open(MediaItem("scripted://video-only"))
-        silentPlayer.setSpeed(2.0)
+        assertFailsWith<UnsupportedOperationException> { silentPlayer.setSpeed(2.0) }
         videoOnly.run(100.milliseconds)
         assertEquals(
-            2.0,
+            1.0,
             silentPlayer.state.value.speed,
-            "with no audio the rate is a property of the video clock and nothing refuses it",
+            "a refused rate must not leak into published state",
         )
         videoOnly.close()
     }

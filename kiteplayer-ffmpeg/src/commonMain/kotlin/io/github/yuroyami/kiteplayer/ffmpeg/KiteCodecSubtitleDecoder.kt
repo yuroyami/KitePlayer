@@ -23,14 +23,29 @@ internal class KiteCodecSubtitleDecoderFactory : SubtitleDecoderFactory {
     override val name: String = "kitecodec-text"
 
     override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? = when (stream.codec) {
-        "subrip", "srt", "text", "mov_text" -> KiteCodecTextSubtitleDecoder(SubRipParser::parseCueBody)
+        "subrip", "srt", "text" -> KiteCodecTextSubtitleDecoder(SubRipParser::parseCueBody)
+        // MP4 timed text is NOT raw UTF-8: a tx3g sample is a 2-byte big-endian text length,
+        // that many bytes of UTF-8, then optional style boxes. Decoding the whole payload put
+        // the binary length prefix and box bytes into the cue (audit P1-15). The styles are
+        // dropped for now; the text is exact.
+        "mov_text" -> KiteCodecTextSubtitleDecoder(SubRipParser::parseCueBody, extractBody = ::tx3gText)
         "webvtt" -> KiteCodecTextSubtitleDecoder(WebVttParser::parseCueBody)
         else -> null
     }
 }
 
+/** The UTF-8 text of one tx3g sample, per its 2-byte big-endian length header. */
+private fun tx3gText(payload: ByteArray): String {
+    if (payload.size < 2) return ""
+    val length = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
+    val end = (2 + length).coerceAtMost(payload.size)
+    if (end <= 2) return ""
+    return payload.decodeToString(2, end)
+}
+
 internal class KiteCodecTextSubtitleDecoder(
     private val parseBody: (String) -> List<StyledSpan>,
+    private val extractBody: (ByteArray) -> String = { it.decodeToString() },
 ) : SubtitleDecoder {
 
     private val pending = ArrayDeque<SubtitleCue>()
@@ -40,7 +55,8 @@ internal class KiteCodecTextSubtitleDecoder(
         check(!closed) { "the subtitle decoder is closed" }
         if (packet == null) return true
         val start = packet.pts?.micros ?: return true
-        val body = (packet as KiteCodecPacket).native.copyBytes().decodeToString()
+        val body = extractBody((packet as KiteCodecPacket).native.copyBytes())
+        if (body.isEmpty()) return true
         val spans = parseBody(body)
         if (spans.isEmpty()) return true
         val durationUs = packet.duration?.micros?.takeIf { it > 0 } ?: DEFAULT_HOLD_MICROS

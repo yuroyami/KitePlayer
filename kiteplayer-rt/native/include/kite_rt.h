@@ -389,7 +389,11 @@ enum {
     KPRT_SINK_OUT_OF_MEMORY = 10,
     /* The ring itself refused the negotiated format or the requested capacity. */
     KPRT_SINK_RING_REFUSED = 11,
-    KPRT_SINK_ALREADY_HAS_RING = 12
+    KPRT_SINK_ALREADY_HAS_RING = 12,
+    /* Teardown could not prove the render callback is out (stop, uninitialise or dispose
+     * refused). The sink and ring were deliberately leaked rather than freed under a possibly
+     * live callback. */
+    KPRT_SINK_TEARDOWN_UNPROVEN = 13
 };
 
 /* What the device accepted, reported by `kprt_sink_create` so the caller never has to assume it
@@ -464,8 +468,13 @@ KPRT_API int32_t kprt_sink_set_paused(kprt_sink *sink, int32_t paused, int32_t *
 /* Stops, uninitialises, disposes, and only then lets go of the ring.
  *
  * The order is the whole point: after the dispose no callback can be running, so clearing and
- * freeing the ring cannot race one. Tolerates NULL. */
-KPRT_API void kprt_sink_destroy(kprt_sink *sink);
+ * freeing the ring cannot race one. Tolerates NULL.
+ *
+ * Every teardown step is VERIFIED. When stop, uninitialise or dispose refuses, callback quiescence
+ * is unproven, and the sink fails closed: it deliberately leaks the sink and the ring rather than
+ * free storage a possibly-live callback still reads, and answers
+ * KPRT_SINK_TEARDOWN_UNPROVEN. KPRT_SINK_OK means everything was released. */
+KPRT_API int32_t kprt_sink_destroy(kprt_sink *sink);
 
 KPRT_API void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out);
 

@@ -69,7 +69,7 @@ internal fun interface AudioTrackDriverFactory {
 /**
  * The production driver: MODE_STREAM, PCM float, USAGE_MEDIA / CONTENT_TYPE_MOVIE, buffer at
  * least `getMinBufferSize` (S1.c.4 step 3). `AudioTimestamp` nanoTime is on the
- * `elapsedRealtimeNanos` base, which is why [AndroidMonotonicClock] reads that exact clock and
+ * `System.nanoTime` (CLOCK_MONOTONIC) base, which is why [AndroidMonotonicClock] reads that exact clock and
  * why the internal sink constructor exists: production cannot accidentally pair the timestamp
  * with another time base.
  */

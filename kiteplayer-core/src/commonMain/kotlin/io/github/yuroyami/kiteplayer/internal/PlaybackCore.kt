@@ -485,7 +485,12 @@ internal class PlaybackCore(
      */
     fun post(command: CoreCommand) {
         checkOpenFor(command.name)
-        commands.trySend(command)
+        // The lifecycle check and the send are two steps; a close landing between them used to
+        // drop the command silently (audit P1-22). The failed send now completes the reply
+        // exceptionally, so even a fire-and-forget caller that chooses to await learns the truth.
+        if (!commands.trySend(command).isSuccess) {
+            command.fail(closedCommand(command.name))
+        }
     }
 
     private suspend fun send(command: CoreCommand) {
@@ -666,6 +671,14 @@ internal class PlaybackCore(
                     session?.backendSession?.subtitleDecoders.isNullOrEmpty() -> UnsupportedOperationException(
                     "this backend decodes no subtitle format, so a subtitle track cannot be selected",
                 )
+                // Canonicalized against the active session's own track set BEFORE any mutation:
+                // an index of the wrong kind, or one this media does not have, used to silently
+                // deselect or rebuild the wrong path (audit P1-6).
+                command.track != null && tracks.all.none { it.id == command.track && it.kind == command.kind } ->
+                    IllegalArgumentException(
+                        "${command.track} is not a ${command.kind} track of the current media; " +
+                            "pass an id from tracks.all whose kind matches",
+                    )
                 else -> null
             }
             is CoreCommand.SetLoop -> when (command.mode) {
@@ -727,18 +740,27 @@ internal class PlaybackCore(
                 pendingTrackChange = command
             }
             is CoreCommand.AttachRenderer -> {
-                setRenderer(command.renderer)
-                command.reply.complete(Unit)
+                if (setRenderer(command.renderer)) command.reply.complete(Unit)
+                else command.reply.completeExceptionally(
+                    IllegalStateException("renderer attach aborted: the video scheduler did not quiesce within $QUIESCE_DEADLINE"),
+                )
             }
             is CoreCommand.DetachRenderer -> {
-                setRenderer(null)
-                command.reply.complete(Unit)
+                if (setRenderer(null)) command.reply.complete(Unit)
+                else command.reply.completeExceptionally(
+                    IllegalStateException("renderer detach aborted: the video scheduler did not quiesce within $QUIESCE_DEADLINE"),
+                )
             }
             is CoreCommand.SetSpeed -> {
-                speed = command.value
+                // Committed only after the pipeline accepted it: storing first published a rate
+                // the audio path then refused, so state claimed a speed nothing played at.
                 val failure = runCatching { session?.audio?.speed = command.value }.exceptionOrNull()
-                if (failure != null) command.reply.completeExceptionally(failure)
-                else command.reply.complete(Unit)
+                if (failure != null) {
+                    command.reply.completeExceptionally(failure)
+                } else {
+                    speed = command.value
+                    command.reply.complete(Unit)
+                }
             }
             is CoreCommand.SetVolume -> {
                 volume = command.value
@@ -758,26 +780,33 @@ internal class PlaybackCore(
     }
 
     /**
-     * Attaches or detaches, with the fence detach promises.
+     * Attaches or detaches, with the fence detach promises. Returns whether the swap happened.
      *
      * The scheduler is parked before the delegate changes and released afterwards, so when this returns
-     * there is no submission to the old renderer outstanding anywhere.
+     * true there is no submission to the old renderer outstanding anywhere. When the scheduler cannot
+     * be parked within the deadline the swap is REFUSED: replacing the delegate under a scheduler that
+     * may still be submitting to it is the use-after-free the fence exists to prevent, so the old
+     * renderer stays attached and the caller gets an explicit failure.
      */
-    private suspend fun setRenderer(renderer: VideoRenderer?) {
+    private suspend fun setRenderer(renderer: VideoRenderer?): Boolean {
         val session = this.session
         if (session == null) {
             pendingRenderer = renderer
-            return
+            return true
         }
         val scheduler = session.videoScheduler
         if (scheduler != null) {
-            scheduler.quiesce(QUIESCE_DEADLINE)
+            if (!scheduler.quiesce(QUIESCE_DEADLINE)) {
+                scheduler.release(requestedEpoch)
+                return false
+            }
             session.renderer.delegate = renderer
             scheduler.release(requestedEpoch)
         } else {
             session.renderer.delegate = renderer
         }
         pendingRenderer = renderer
+        return true
     }
 
     /** A renderer attached before anything was open, kept for the session that follows. */
@@ -788,6 +817,11 @@ internal class PlaybackCore(
     // ---------------------------------------------------------------------------------------------
 
     private suspend fun runOpen(command: CoreCommand.Open) {
+        // Open is legal from Ended, and Ended keeps its session alive so the viewer can seek back.
+        // That session must be fully torn down and awaited BEFORE the new one is installed:
+        // overwriting the field would strand its source, workers, decoders, sink and queues live
+        // but unreachable (audit P1-1).
+        if (session != null) teardownSession()
         media = command.media
         // An open ends paused by contract, whatever was asked for before it. A play issued while this one
         // is still running arrives after this line and is honoured, which is what queueing it means.
@@ -803,7 +837,21 @@ internal class PlaybackCore(
             val built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto, StreamChoice.Auto)
             session = built
             startWorkers(built)
-            awaitInitialFill(built)
+            when (awaitInitialFill(built)) {
+                // A worker that died during the fill means the pipeline behind Opened does not
+                // exist; publishing success anyway was the false-success path (audit P1-4). The
+                // worker's own outcome handler carries the specific cause; this makes the open
+                // itself fail instead of reporting a session that cannot play.
+                FillOutcome.WorkerFinished -> throw PlaybackException(
+                    PlaybackError.Internal("a pipeline worker stopped before the initial fill completed", null),
+                )
+                // A slow source is not a dead one: the session is real, so Opened stands, but the
+                // caller is told the pipeline was not primed instead of being left to infer it.
+                FillOutcome.TimedOut -> warn(
+                    PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE"),
+                )
+                FillOutcome.Ready, FillOutcome.Preempted -> Unit
+            }
             presentFirstFrame(built)
             setStatus(PlaybackStatus.Paused)
             eventSink.tryEmit(PlayerEvent.Opened(command.media, tracks))
@@ -833,7 +881,16 @@ internal class PlaybackCore(
         subtitleChoice: StreamChoice,
     ): OpenSession {
         val backendSession = withContext(dispatchers.demux) { backend.open(item) }
+        // The reverse-order construction ledger (audit P1-2). Every resource acquired below
+        // registers its undo the moment it exists; any failure runs the ledger newest-first under
+        // NonCancellable, so nothing half built survives. Ownership transfers to OpenSession only
+        // at the successful return.
+        val rollback = mutableListOf<suspend () -> Unit>()
+        rollback += { withContext(dispatchers.demux) { backendSession.close() } }
         try {
+            // Backend degradations (hardware fallback, colour approximation) flow into the same
+            // warning stream everything else uses, instead of a backend-private default (P1-21).
+            backendSession.setWarningSink { warning -> eventSink.tryEmit(PlayerEvent.Warning(warning)) }
             val source = backendSession.source
             tracks = source.streams.toTracks()
 
@@ -860,27 +917,36 @@ internal class PlaybackCore(
             var audioStream = audioCandidate
             var subtitleStream = subtitleCandidate
             val videoDecoder = videoStream?.let { createVideoDecoder(backendSession, it) }
+            if (videoDecoder != null) {
+                rollback += { withContext(dispatchers.videoDecode) { videoDecoder.close() } }
+            }
             if (videoStream != null && videoDecoder == null) {
                 warn(
                     PlaybackWarning.TrackDeselected(
                         TrackId(videoStream.index),
-                        "no decoder accepted this video stream",
+                        deselectionDetail("no decoder accepted this video stream"),
                     ),
                 )
                 videoStream = null
             }
             val audioDecoder = audioStream?.let { createAudioDecoder(backendSession, it) }
+            if (audioDecoder != null) {
+                rollback += { withContext(dispatchers.audioDecode) { audioDecoder.close() } }
+            }
             if (audioStream != null && audioDecoder == null) {
                 warn(
                     PlaybackWarning.TrackDeselected(
                         TrackId(audioStream.index),
-                        "no decoder accepted this audio stream",
+                        deselectionDetail("no decoder accepted this audio stream"),
                     ),
                 )
                 audioStream = null
             }
             val subtitleDecoder = subtitleStream?.let { stream ->
                 backendSession.subtitleDecoders.firstNotNullOfOrNull { factory -> factory.create(stream) }
+            }
+            if (subtitleDecoder != null) {
+                rollback += { subtitleDecoder.close() }
             }
             if (subtitleStream != null && subtitleDecoder == null) {
                 warn(
@@ -912,35 +978,34 @@ internal class PlaybackCore(
                     dropPolicy = config.frameDrop,
                 )
             }
+            if (videoPlayback != null) {
+                rollback += { videoPlayback.close() }
+            }
 
             var sink: AudioSink? = null
             var audioPlayback: AudioPlayback? = null
             var negotiated: AudioFormat? = null
             if (audioStream != null && audioDecoder != null) {
-                sink = output.audioSink.create()
-                audioPlayback = AudioPlayback(sink, clock, onWarning = { warn(it) })
-                negotiated = audioPlayback.open(audioDecoder.outputFormat)
-                audioPlayback.volume = volume
-                audioPlayback.muted = muted
+                val createdSink = output.audioSink.create()
+                sink = createdSink
+                // Interlude item I-03, generalized by the ledger: from AudioPlayback's
+                // construction onward the playback owns the sink and its close covers both (it is
+                // idempotent). The window between the sink's creation and that construction is one
+                // non-suspending line, and the playback entry below covers everything after it,
+                // including a throw from AudioPlayback.open itself, which used to leak the sink.
+                val createdPlayback = AudioPlayback(createdSink, clock, onWarning = { warn(it) })
+                audioPlayback = createdPlayback
+                rollback += { createdPlayback.close() }
+                negotiated = createdPlayback.open(audioDecoder.outputFormat)
+                createdPlayback.volume = volume
+                createdPlayback.muted = muted
                 eventSink.tryEmit(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
 
-            try {
-                withContext(dispatchers.demux) {
-                    source.selectStreams(
-                        setOfNotNull(videoStream?.index, audioStream?.index, subtitleStream?.index),
-                    )
-                }
-            } catch (failure: Throwable) {
-                // Interlude item I-03. The audio path above is already live: a created sink, an
-                // opened AudioPlayback, and since B1.8 that pair owns a C sink, a C ring and an
-                // initialised AudioUnit. The catch at the bottom of this function closes only the
-                // backend session, and runClose's teardownSession returns immediately because
-                // `this.session` is not assigned yet, so a throw from here used to leak all three
-                // while `retainedResources()` reported zero. `selectStreams` is the reachable
-                // thrower: it ends in a `check`, a `require` and `openPacketReader`.
-                runCatching { audioPlayback?.close() }
-                throw failure
+            withContext(dispatchers.demux) {
+                source.selectStreams(
+                    setOfNotNull(videoStream?.index, audioStream?.index, subtitleStream?.index),
+                )
             }
 
             tracks = tracks
@@ -981,21 +1046,38 @@ internal class PlaybackCore(
                 negotiatedFormat = negotiated,
             )
         } catch (failure: Throwable) {
-            // The backend session is the one resource every failure path above owes back from
-            // here; the audio path closes itself in the inner catch at its own creation site
-            // (interlude item I-03), because this outer catch cannot know whether it was reached
-            // before or after the device went live. Corrected at the interlude: the comment that
-            // stood here claimed nothing half built survives, while the audio path did.
-            runCatching { backendSession.close() }
+            // Newest-first, under NonCancellable: a cancelled open must still release everything
+            // it acquired, and each undo is isolated so one refusal cannot leak the rest.
+            withContext(NonCancellable) {
+                for (undo in rollback.asReversed()) {
+                    runCatching { undo() }
+                }
+            }
             throw failure
         }
     }
 
+    /**
+     * Why each decoder candidate refused the last stream it was offered, for the deselection
+     * warning. Actor-confined, overwritten per create attempt. runCatching+getOrNull here used to
+     * swallow cancellation and every diagnostic (audit P1-20).
+     */
+    private var decoderCandidateFailures: List<String> = emptyList()
+
     private suspend fun createVideoDecoder(session: BackendSession, stream: PlayerStreamInfo): VideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
+        val failures = mutableListOf<String>()
+        decoderCandidateFailures = failures
         for (factory in session.videoDecoders) {
             val decoder = withContext(dispatchers.videoDecode) {
-                runCatching { factory.create(stream, config.hardwareDecode) }.getOrNull()
+                try {
+                    factory.create(stream, config.hardwareDecode)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (failure: Throwable) {
+                    failures += "${factory.name}: ${failure.message ?: failure::class.simpleName}"
+                    null
+                }
             }
             if (decoder != null) return decoder
             // Named as a hardware problem only when hardware was actually asked for. A factory refusing a
@@ -1013,14 +1095,28 @@ internal class PlaybackCore(
 
     private suspend fun createAudioDecoder(session: BackendSession, stream: PlayerStreamInfo): AudioDecoder? {
         if (stream.kind != TrackKind.Audio) return null
+        val failures = mutableListOf<String>()
+        decoderCandidateFailures = failures
         for (factory in session.audioDecoders) {
             val decoder = withContext(dispatchers.audioDecode) {
-                runCatching { factory.create(stream) }.getOrNull()
+                try {
+                    factory.create(stream)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (failure: Throwable) {
+                    failures += "${factory.name}: ${failure.message ?: failure::class.simpleName}"
+                    null
+                }
             }
             if (decoder != null) return decoder
         }
         return null
     }
+
+    /** The deselection detail: the plain sentence plus whatever each candidate actually said. */
+    private fun deselectionDetail(base: String): String =
+        if (decoderCandidateFailures.isEmpty()) base
+        else "$base (${decoderCandidateFailures.joinToString("; ")})"
 
     private fun choiceFor(change: CoreCommand.SelectTrack, kind: TrackKind, current: Int?): StreamChoice = when {
         change.kind == kind -> change.track?.let { StreamChoice.At(it.value) } ?: StreamChoice.None
@@ -1072,16 +1168,20 @@ internal class PlaybackCore(
      * preemptible: a stop or a close arriving during a slow network open is answered rather than waited
      * out.
      */
-    private suspend fun awaitInitialFill(session: OpenSession) {
+    private suspend fun awaitInitialFill(session: OpenSession): FillOutcome {
         val deadline = clock.nanos() + OPEN_FILL_DEADLINE.inWholeNanoseconds
         while (clock.nanos() < deadline) {
-            if (preempted()) return
+            if (preempted()) return FillOutcome.Preempted
             updateStreamStatuses(session)
-            if (everySelectedStreamReady(session)) return
-            if (session.anyWorkerFinished()) return
+            if (everySelectedStreamReady(session)) return FillOutcome.Ready
+            if (session.anyWorkerFinished()) return FillOutcome.WorkerFinished
             delay(WORKER_POLL)
         }
+        return FillOutcome.TimedOut
     }
+
+    /** What the initial fill actually established, so open never mistakes a timeout for readiness. */
+    private enum class FillOutcome { Ready, Preempted, WorkerFinished, TimedOut }
 
     /**
      * Presents one frame with the clock stopped, so opening ends on a picture rather than on nothing.
@@ -1132,10 +1232,22 @@ internal class PlaybackCore(
             val rebuilt = buildSession(item, video, audio, subtitle)
             session = rebuilt
             startWorkers(rebuilt)
-            if (at > Pts.Zero) {
+            // A user seek that was already queued outranks the reposition: the rebuilt session
+            // must land where the user asked, and their waiting reply must answer THAT target.
+            // Overwriting it here made the caller receive Applied for an internal reposition they
+            // never requested (audit P1-5).
+            if (pendingSeek == null && at > Pts.Zero) {
                 pendingSeek = SeekRequest(SeekTarget.Absolute(at), SeekMode.Precise)
             }
-            awaitInitialFill(rebuilt)
+            when (awaitInitialFill(rebuilt)) {
+                FillOutcome.WorkerFinished -> throw PlaybackException(
+                    PlaybackError.Internal("a pipeline worker stopped before the track change could refill", null),
+                )
+                FillOutcome.TimedOut -> warn(
+                    PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE after the track change"),
+                )
+                FillOutcome.Ready, FillOutcome.Preempted -> Unit
+            }
             playRequested = wasPlaying
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
             change.reply.complete(Unit)
@@ -1269,17 +1381,30 @@ internal class PlaybackCore(
         val queue = session.subtitleQueue ?: return
 
         // Text decode is parsing; it runs inline. The send contract is the decoder SPI's: false
-        // means full and the caller must drain before retrying the SAME packet.
+        // means full and the caller must drain before retrying the SAME packet. A packet the
+        // decoder temporarily refuses is RETAINED for the next pass, exactly like the audio and
+        // video paths retain theirs: closing it on refusal silently dropped the cue (audit P1-8).
         while (true) {
-            val packet = queue.poll() ?: break
+            val packet = session.pendingSubtitlePacket ?: queue.poll() ?: break
+            session.pendingSubtitlePacket = null
+            var accepted = false
             try {
-                while (!decoder.send(packet)) {
+                while (true) {
+                    if (decoder.send(packet)) {
+                        accepted = true
+                        break
+                    }
                     val decoded = decoder.receive()
                     if (decoded.isEmpty()) break
                     insertCues(session, decoded)
                 }
             } finally {
-                packet.close()
+                if (accepted) packet.close()
+            }
+            if (!accepted) {
+                session.pendingSubtitlePacket = packet
+                wakeIn(WORKER_POLL)
+                break
             }
             while (true) {
                 val decoded = decoder.receive()
@@ -1290,9 +1415,11 @@ internal class PlaybackCore(
 
         val positionUs = currentPosition().micros - config.subtitles.delay.inWholeMicroseconds
         val active = CueSelector.activeAt(session.subtitleCues, positionUs)
-        val key = active.map { it.startMicros to it.endMicros }
-        if (key != session.publishedCueKey) {
-            session.publishedCueKey = key
+        // The cues themselves are the identity, not their timestamps: two different texts or
+        // styles over the same interval are different overlays, and a (start, end) key republished
+        // nothing for them (audit P1-14). Structural equality on the data classes is exact.
+        if (active != session.publishedCueKey) {
+            session.publishedCueKey = active.toList()
             publishOverlay(session, active)
         }
 
@@ -1331,7 +1458,7 @@ internal class PlaybackCore(
                 images = images,
                 viewportWidth = width,
                 viewportHeight = height,
-                contentHash = session.publishedCueKey.hashCode().toLong(),
+                contentHash = ++session.overlayGeneration,
             ),
         )
     }
@@ -1550,7 +1677,19 @@ internal class PlaybackCore(
         session.sink?.stop()
         val quiescent = quiesceWorkers(session)
         if (!quiescent) {
-            warn(PlaybackWarning.BadTimestamps("a worker did not reach a quiescent boundary within $QUIESCE_DEADLINE"))
+            // Quiescence is the precondition of every mutation below. Without it, flushing a
+            // decoder or clearing a queue mutates state a still-running worker may be using, so
+            // the seek aborts as a transaction instead of continuing on best effort. The workers
+            // are released so playback continues at the old position, and every waiting caller
+            // gets an explicit rejection rather than a fabricated success.
+            val reason = "a worker did not reach a quiescent boundary within $QUIESCE_DEADLINE; the seek was aborted"
+            warn(PlaybackWarning.BadTimestamps(reason))
+            seekPhase = SeekPhase.Idle
+            session.discardBeforeUs.value = Long.MIN_VALUE
+            releaseWorkers(session, epoch)
+            resolveSeekReplies(SeekResult.Rejected(reason))
+            if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
+            return
         }
 
         var attempt = 0
@@ -1570,9 +1709,13 @@ internal class PlaybackCore(
 
             // 7
             seekPhase = if (request.mode == SeekMode.Keyframe) SeekPhase.Filling else SeekPhase.Discarding
+            // The exact target, not target minus tolerance: the public promise is "the first
+            // frame at or after the target", and a 5 ms allowance under it showed pre-target
+            // pictures and audio the promise says cannot appear (audit P1-10). The tolerance
+            // still exists where it belongs, in the overshoot judgment below.
             session.discardBeforeUs.value = when (request.mode) {
                 SeekMode.Keyframe -> Long.MIN_VALUE
-                else -> target.micros - SeekTiming.PRECISE_TOLERANCE_US
+                else -> target.micros
             }
             session.firstVideo.clear()
             session.firstDecodedVideo.clear()
@@ -1589,7 +1732,13 @@ internal class PlaybackCore(
             if (!overshot || !laddered || preempted()) break
             attempt++
             session.schedulerMode.value = SCHEDULER_IDLE
-            quiesceWorkers(session)
+            // Same precondition as step 2: another flush pass may only run against parked
+            // workers. If they cannot be parked, this attempt's landing stands as the result,
+            // and the workers are released again so none stays parked behind the break.
+            if (!quiesceWorkers(session)) {
+                releaseWorkers(session, epoch)
+                break
+            }
         }
 
         // 8
@@ -1597,6 +1746,19 @@ internal class PlaybackCore(
         session.discardBeforeUs.value = Long.MIN_VALUE
         lastSeekAtNanos = clock.nanos()
         framesShownAtLastSeek = session.framesOut(session.video)
+        // No landing frame is a real answer, not a formality to paper over. It is legitimate in
+        // exactly two shapes: the seek ran off the end of the stream (nothing left to decode), or
+        // a later request preempted this one. Anything else means the pipeline produced nothing
+        // within the deadline, and reporting SeekCompleted there was the fabricated success the
+        // audit called P1-4. The caller gets a rejection and the completion event is not emitted.
+        val endOfStreamLanding = session.selectedQueues().all { it.isEndOfStream } && session.decodersDrained()
+        if (landed == null && !endOfStreamLanding && !preempted()) {
+            resolveSeekReplies(
+                SeekResult.Rejected("the pipeline produced no frame for the seek target within $SEEK_DEADLINE"),
+            )
+            if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
+            return
+        }
         publishedPositionMicros.value = (landed ?: target).micros
         presentFirstFrame(session)
         eventSink.tryEmit(PlayerEvent.SeekCompleted(epoch, (landed ?: target).asDuration))
@@ -1633,6 +1795,9 @@ internal class PlaybackCore(
         session.videoQueue?.flushTo(epoch)
         session.audioQueue?.flushTo(epoch)
         session.subtitleQueue?.flushTo(epoch)
+        // A retained subtitle packet belongs to the flushed position and is owned here alone.
+        session.pendingSubtitlePacket?.close()
+        session.pendingSubtitlePacket = null
         // The pure selector makes seek reconstruction trivial: clear, re-decode from the landing
         // point, and the next pass's activeAt IS the rebuilt state, in either direction.
         session.subtitleCues.clear()
@@ -1697,6 +1862,12 @@ internal class PlaybackCore(
         tracks = Tracks.Empty
         endOfStream.reset()
         seekPhase = SeekPhase.Idle
+        // Idle publishes Idle's numbers: a position and progress left over from the stopped
+        // session would describe media that no longer exists (audit P1-18). The stats baseline
+        // resets with them so the next session's zero-based counter never goes negative.
+        publishedPositionMicros.value = 0L
+        progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
+        lastStatsDecoded = 0L
         setStatus(PlaybackStatus.Idle)
         publishSnapshot()
     }
@@ -1812,6 +1983,13 @@ internal class PlaybackCore(
             status = PlaybackStatus.Idle
             statusHistory += PlaybackStatus.Idle
         }
+        // Terminal close leaves nothing of the closed media behind: a snapshot still naming the
+        // media, its tracks or its position would describe a session that no longer exists
+        // (audit P1-18).
+        media = null
+        tracks = Tracks.Empty
+        publishedPositionMicros.value = 0L
+        progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
         // Do not consult the clock or any worker after their dispatchers have closed. This is the same
         // state projection publishSnapshot would make with no live session, written once by the new owner.
         snapshotState.value = PlayerSnapshot(
@@ -1869,6 +2047,12 @@ internal class PlaybackCore(
         }
         session.videoQueue?.close()
         session.audioQueue?.close()
+        // Subtitles are resources like the other two paths: the decoder holds backend state and
+        // the queue holds owned packets, and skipping them here leaked both (audit P1-13).
+        runCatching { session.subtitleDecoder?.close() }
+        session.subtitleQueue?.close()
+        runCatching { session.pendingSubtitlePacket?.close() }
+        session.pendingSubtitlePacket = null
         runCatching { session.video?.close() }
         // Closes the sink too: the audio path owns the device it was given.
         runCatching { session.audio?.close() }
@@ -1953,8 +2137,12 @@ internal class PlaybackCore(
             val elapsed = (now - lastStatsAtNanos).nanoseconds
             lastStatsAtNanos = now
             val decoded = session?.decodedVideoFrames?.value ?: 0
+            // Coerced: the counter is per-session and restarts at zero on reopen, while
+            // lastStatsDecoded survives the session change; the raw difference then goes negative
+            // and reported a negative FPS against a monotonic-total contract (audit P1-18).
+            val delta = (decoded - lastStatsDecoded).coerceAtLeast(0L)
             val fps = if (elapsed > Duration.ZERO) {
-                (decoded - lastStatsDecoded) * 1_000.0 / elapsed.inWholeMilliseconds.coerceAtLeast(1)
+                delta * 1_000.0 / elapsed.inWholeMilliseconds.coerceAtLeast(1)
             } else {
                 0.0
             }
@@ -2003,15 +2191,34 @@ internal class PlaybackCore(
 
     private fun currentPosition(): Pts {
         val session = session ?: return Pts(publishedPositionMicros.value)
-        session.audio?.position()?.let { return it }
-        val video = session.lastVideoPtsUs.value
-        if (video != NO_POSITION) return Pts(video)
-        return Pts(publishedPositionMicros.value)
+        // The same selector scheduling uses decides whose reading IS the position: under
+        // VideoMaster the picture carries the timeline, and preferring audio here anyway made
+        // position, relative seeks and subtitles follow a clock scheduling ignores (audit P1-12).
+        // The other side is still the fallback, because a master that has produced no reading yet
+        // beats a stale published number.
+        val audioReading = session.audio?.position()
+        val videoReading = session.lastVideoPtsUs.value.takeIf { it != NO_POSITION }?.let(::Pts)
+        val position = when (masterClockKind(session)) {
+            MasterClock.Video -> videoReading ?: audioReading
+            else -> audioReading ?: videoReading
+        }
+        return position ?: Pts(publishedPositionMicros.value)
     }
 
     private fun everySelectedStreamReady(session: OpenSession): Boolean {
         val readyUs = config.buffer.readyDuration.inWholeMicroseconds
-        return session.selectedQueues().all { it.isReady(readyUs, config.buffer.readyPackets) }
+        if (!session.selectedQueues().all { it.isReady(readyUs, config.buffer.readyPackets) }) return false
+        // Decoded output too: a queue full of compressed packets proves nothing about a decoder
+        // that is producing nothing, and declaring readiness on packets alone started playback
+        // into an underrun or a blank first frame (audit P1-9). A stream that already ended is
+        // exempt, because no more output can ever arrive for it.
+        val videoReady = session.video == null ||
+            session.video.queuedFrames > 0 ||
+            session.videoQueue?.isEndOfStream == true
+        val audioReady = session.audio == null ||
+            session.audio.buffered > Duration.ZERO ||
+            session.audioQueue?.isEndOfStream == true
+        return videoReady && audioReady
     }
 
     private fun demuxerRanShort(session: OpenSession): Boolean =
@@ -2158,7 +2365,11 @@ internal class PlaybackCore(
     private fun overBudget(session: OpenSession): Boolean {
         val queues = session.selectedQueues()
         if (queues.isEmpty()) return false
-        val bytes = queues.sumOf { it.bytesBuffered }
+        // The subtitle queue counts toward the BYTE cap: its packets are real memory, and leaving
+        // them out made the backlog invisible to the budget (audit P1-13). It stays out of the
+        // duration cap, because subtitle streams are sparse: two cues can sit minutes apart, so
+        // their buffered duration says nothing about read-ahead and would trip the cap instantly.
+        val bytes = queues.sumOf { it.bytesBuffered } + (session.subtitleQueue?.bytesBuffered ?: 0L)
         val longest = queues.maxOf { it.bufferedUs }
         return bytes >= config.buffer.totalBytes || longest >= config.buffer.totalDuration.inWholeMicroseconds
     }
@@ -2216,8 +2427,10 @@ internal class PlaybackCore(
             if (queue.isEndOfStream && queue.count == 0) {
                 if (!ending) {
                     // The drain signal travels in band, as a null packet, exactly as libavcodec expects.
-                    decoder.send(null)
-                    ending = true
+                    // The decoder contract lets send refuse while its output side is full, so the signal
+                    // is only marked delivered when accepted; a refusal loops back through drainFrames
+                    // and retries, otherwise the decoder never drains and end-of-file hangs forever.
+                    if (decoder.send(null)) ending = true
                     continue
                 }
                 delay(WORKER_POLL)
@@ -2322,8 +2535,8 @@ internal class PlaybackCore(
             if (passBuffer(session, worker, decoder, epoch)) continue
             if (queue.isEndOfStream && queue.count == 0) {
                 if (!ending) {
-                    decoder.send(null)
-                    ending = true
+                    // Same rule as the video worker: the drain signal counts only when accepted.
+                    if (decoder.send(null)) ending = true
                     continue
                 }
                 delay(WORKER_POLL)
@@ -2420,14 +2633,33 @@ internal class PlaybackCore(
             try {
                 if (buffer.generation != epoch) continue
                 session.firstAudio.record(epoch, buffer.pts)
-                val interleaved = interleaver.interleave(buffer)
-                while (true) {
-                    if (worker.quiesceRequested) break
-                    val done = withTimeoutOrNull(HANDOVER_DEADLINE) {
-                        audio.submitDecoded(buffer.pts, interleaved, buffer.frameCount, buffer.format)
+                var interleaved = interleaver.interleave(buffer)
+                var pts = buffer.pts
+                var frames = buffer.frameCount
+                // Sample-exact trim of the one buffer that straddles the seek target. The decode
+                // side drops whole buffers that END before the target; this slices the leading
+                // pre-target samples off the survivor, so a precise seek starts its sound AT the
+                // target instead of up to one buffer early (audit P1-10). Runs at most once per
+                // seek, so the one copyOfRange is off any steady-state path.
+                val discardBefore = session.discardBeforeUs.value
+                if (discardBefore != Long.MIN_VALUE && pts.micros < discardBefore && buffer.format.sampleRate > 0) {
+                    val skipFrames = ((discardBefore - pts.micros) * buffer.format.sampleRate / 1_000_000L)
+                        .coerceIn(0L, frames.toLong()).toInt()
+                    if (skipFrames > 0) {
+                        val channels = buffer.format.channels
+                        interleaved = interleaved.copyOfRange(skipFrames * channels, frames * channels)
+                        pts = Pts(pts.micros + buffer.format.durationOf(skipFrames).micros)
+                        frames -= skipFrames
                     }
-                    if (done != null) break
                 }
+                if (frames == 0) continue
+                // One call, no external timeout, no retry. The old shape cancelled submitDecoded
+                // mid-buffer on a deadline and called it again with the same input, which replayed
+                // samples the ring had already accepted and ran the stateful conversion twice
+                // (audit P1-3). The abort callback bounds the wait instead: while the ring is full
+                // the submit polls it, and a quiesce request abandons the unaccepted remainder,
+                // which the seek's flush was about to discard anyway.
+                audio.submitDecoded(pts, interleaved, frames, buffer.format) { worker.quiesceRequested }
             } finally {
                 buffer.close()
             }
@@ -2551,8 +2783,21 @@ internal class PlaybackCore(
         /** The cue store, session thread only, kept start-sorted. Cleared on every flush. */
         val subtitleCues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> = mutableListOf()
 
+        /**
+         * A subtitle packet the decoder refused because its output side was full, retained so the
+         * next pass retries it instead of losing the cue. Session thread only; closed on flush
+         * and teardown like any other queued packet.
+         */
+        var pendingSubtitlePacket: io.github.yuroyami.kiteplayer.spi.PlayerPacket? = null
+
         /** What the last published overlay showed, so an unchanged set publishes nothing. */
-        var publishedCueKey: List<Pair<Long, Long>>? = null
+        var publishedCueKey: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>? = null
+
+        /**
+         * Monotonic overlay identity. A hash of the cue content is collision-prone; a counter
+         * bumped on every real change can never claim two different overlays are the same.
+         */
+        var overlayGeneration: Long = 0L
 
         var videoStatus: StreamStatus = StreamStatus.Syncing
         var audioStatus: StreamStatus = StreamStatus.Syncing
@@ -2726,6 +2971,14 @@ internal sealed interface SeekResult {
 
     /** A later request absorbed this one before it ran. Not a failure: the position moved anyway. */
     data class Superseded(val by: Generation) : SeekResult
+
+    /**
+     * The seek was aborted before mutating anything, because its precondition could not be
+     * established: a worker did not reach a quiescent boundary within the deadline. Flushing
+     * decoders and clearing queues under a live worker is the memory-safety fault the audit
+     * called P0-7, so the transaction refuses instead of proceeding on best effort.
+     */
+    data class Rejected(val reason: String) : SeekResult
 }
 
 /**

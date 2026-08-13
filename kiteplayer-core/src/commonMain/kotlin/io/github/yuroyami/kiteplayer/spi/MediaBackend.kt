@@ -45,10 +45,17 @@ public interface BackendSession : AutoCloseable {
     public val audioDecoders: List<AudioDecoderFactory>
 
     /**
-     * Always empty from every backend here, and read by nothing.
-     *
-     * The engine's subtitle handler has an empty body this run, so a factory offered here would never be
-     * asked for a decoder. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Factories for the text subtitle formats this backend can decode over the packet path. The
+     * engine asks the first factory that accepts the selected subtitle stream; an empty list means
+     * subtitle tracks cannot be selected on this backend.
      */
     public val subtitleDecoders: List<SubtitleDecoderFactory>
+
+    /**
+     * Where the engine installs its warning reporter after open, so backend degradations (a
+     * hardware-to-software fallback, colour approximation) surface as [PlayerEvent.Warning]
+     * instead of dying in a backend-private default. A backend with nothing to report keeps the
+     * empty default; a backend that already has an application-level listener calls both.
+     */
+    public fun setWarningSink(sink: (io.github.yuroyami.kiteplayer.PlaybackWarning) -> Unit) {}
 }

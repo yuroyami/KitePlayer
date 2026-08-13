@@ -11,7 +11,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
  * for video (S1.c.4 step 2).
  *
  * The pairing is the contract, not a convenience: `AudioTimestamp.nanoTime` reports on the
- * `elapsedRealtimeNanos` base, the sink anchors the master clock to deadlines computed from it,
+ * `System.nanoTime` (CLOCK_MONOTONIC) base, the sink anchors the master clock to deadlines computed from it,
  * and this object is what stops a caller assembling that sink with a clock on any other base.
  *
  * Video is null for the reason the SPI KDoc gives for windowing systems: a renderer needs a

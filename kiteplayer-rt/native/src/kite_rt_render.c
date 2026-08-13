@@ -105,6 +105,22 @@ static int64_t sub_saturating(int64_t a, int64_t b)
     return difference;
 }
 
+
+/* Bumps a single-writer statistics counter without a read-modify-write.
+ *
+ * Every counter this touches has exactly one writer: the device's render thread, in this
+ * translation unit. An `atomic_fetch_add` is therefore strength beyond the requirement, and on
+ * arm64 without LSE it compiles to an ldxr/stxr conditional retry loop, which breaks the
+ * bounded-work guarantee this hard-real-time object promises (audit P0-9). A relaxed load plus a
+ * relaxed store is wait-free, and readers on other threads still see a monotonic counter because
+ * no second writer exists to interleave with. */
+static void kprt_counter_bump(_Atomic int64_t *counter)
+{
+    atomic_store_explicit(counter,
+        atomic_load_explicit(counter, memory_order_relaxed) + 1,
+        memory_order_relaxed);
+}
+
 /* ---- The ring's consumer side ---- */
 
 /* Publishes the media time one sample past `last_real_frame`, reached at `at_nanos`.
@@ -169,7 +185,7 @@ static void publish_anchor(kprt_ring *ring, int64_t last_real_frame, int64_t at_
          * no segment exists at all is not a give-up: it is the honest "nothing has been dated
          * yet" state, and the Kotlin ring publishes nothing there too. */
         if (torn)
-            atomic_fetch_add_explicit(&ring->segment_giveups, 1, memory_order_relaxed);
+            kprt_counter_bump(&ring->segment_giveups);
         if (!atomic_load_explicit(&ring->cache_valid, memory_order_relaxed))
             return;
         base_frame = atomic_load_explicit(&ring->cache_base_frame, memory_order_relaxed);
@@ -237,7 +253,7 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                0,
                (size_t)(frames - to_read) * (size_t)channels * sizeof(float));
         if (atomic_load_explicit(&ring->ending, memory_order_relaxed) == 0)
-            atomic_fetch_add_explicit(&ring->underruns, 1, memory_order_relaxed);
+            kprt_counter_bump(&ring->underruns);
     }
 
     if (to_read > 0) {
@@ -308,19 +324,19 @@ int32_t kprt_render_into(kprt_sink *sink, float *destination, int32_t frames,
     /* Acquire, paired with the release in `kprt_sink_attach_ring`: a callback that sees a ring here
      * sees every field of a fully constructed one. */
     ring = atomic_load_explicit(&sink->ring, memory_order_acquire);
-    atomic_fetch_add_explicit(&sink->callbacks, 1, memory_order_relaxed);
+    kprt_counter_bump(&sink->callbacks);
 
     if (ring == NULL) {
         /* Teardown, and the only case left in which the device buffer is zeroed from outside
          * `kprt_ring_render` (register item B1-19). An unwritten device buffer plays whatever was
          * left in it, which is a burst of noise, so the whole thing goes to exact zeroes. */
         memset(destination, 0, (size_t)frames * (size_t)sink->channels * sizeof(float));
-        atomic_fetch_add_explicit(&sink->zero_filled_callbacks, 1, memory_order_relaxed);
+        kprt_counter_bump(&sink->zero_filled_callbacks);
         return 0;
     }
 
     if (host_ticks_estimated != 0)
-        atomic_fetch_add_explicit(&sink->estimated_anchors, 1, memory_order_relaxed);
+        kprt_counter_bump(&sink->estimated_anchors);
 
     /* The device's timestamp is when the FIRST frame of this buffer reaches it; the anchor wants the
      * instant its LAST frame becomes audible, which is one buffer later. No device latency is

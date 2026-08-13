@@ -180,8 +180,14 @@ public data class VideoSize(
 ) {
     /** The size to lay out at, after applying a non-square pixel aspect. */
     public val displayWidth: Int
-        get() = if (pixelAspectDenominator == 0) width
-        else width * pixelAspectNumerator / pixelAspectDenominator
+        get() {
+            if (pixelAspectDenominator == 0) return width
+            // In Long: container SAR values are unvalidated Ints, and width * numerator can wrap
+            // before the divide. Clamped rather than thrown, because this is display layout of
+            // hostile metadata, not an allocation.
+            val scaled = width.toLong() * pixelAspectNumerator.toLong() / pixelAspectDenominator.toLong()
+            return scaled.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+        }
 
     public val displayAspect: Float
         get() = if (height == 0) 0f else displayWidth.toFloat() / height.toFloat()

@@ -83,6 +83,18 @@ internal class KotlinAudioRing(
     val capacityFrames: Int,
 ) : AudioRingHandle {
     private val channels = format.channels
+
+    init {
+        require(capacityFrames > 0) { "capacityFrames must be positive, was $capacityFrames" }
+        require(channels > 0) { "channels must be positive, was $channels" }
+        // Checked in Long BEFORE the narrowing multiply: a wrapped Int here either throws from
+        // FloatArray with a confusing size or, worse, allocates a small array every write then
+        // indexes past. This mirrors the C ring's own guard.
+        require(capacityFrames.toLong() * channels.toLong() <= Int.MAX_VALUE.toLong()) {
+            "ring of $capacityFrames frames x $channels channels does not fit an array"
+        }
+    }
+
     private val data = FloatArray(capacityFrames * channels)
 
     /** Total frames ever written by the feeder. Only the feeder advances it. */

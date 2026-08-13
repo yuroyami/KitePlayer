@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.CoreCommand
 import io.github.yuroyami.kiteplayer.internal.PlaybackCore
+import io.github.yuroyami.kiteplayer.internal.SeekResult
 import io.github.yuroyami.kiteplayer.internal.platformPlaybackDispatchers
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.coroutines.CompletableDeferred
@@ -115,11 +116,14 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * @param to a finite position at or after zero. Past the end of the media it is clamped to the end.
      * @throws IllegalArgumentException when [to] is infinite or negative.
-     * @throws IllegalStateException when nothing is open.
+     * @throws IllegalStateException when nothing is open, or when the seek had to be aborted
+     *         because the pipeline could not be brought to a safe boundary in time. An aborted
+     *         seek changed nothing: playback continues at the old position.
      * @throws UnsupportedOperationException when the source is not seekable.
      */
     public suspend fun seek(to: Duration, mode: SeekMode = SeekMode.Precise) {
-        core.seek(Pts.ofDuration(validPosition(to, "seek")), mode)
+        val result = core.seek(Pts.ofDuration(validPosition(to, "seek")), mode)
+        if (result is SeekResult.Rejected) throw IllegalStateException(result.reason)
     }
 
     /**
@@ -150,25 +154,26 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Sets the playback rate as a multiplier of real time.
      *
-     * **While an audio track is selected the only accepted value is 1.0.** Anything else throws, because
-     * there is no tempo stage: the samples would still reach the device at the device's own rate, so the
-     * sound would play at normal speed while the clock and every frame timed against it ran at another. A
-     * player that accepts the value and does nothing with it is worse than one that refuses, because the
-     * caller cannot tell which it got. Video-only playback accepts any rate. Real speed control with pitch
-     * preserved is on the roadmap in KPKMP.md section 11.
+     * **The only accepted value in this build is 1.0.** There is no tempo stage for audio, so any
+     * other rate would move the clock without moving the sound, and the video frame scheduler has
+     * no scaled timer, so video-only playback would keep pacing at 1.0 while claiming another
+     * rate. A player that accepts a value and does nothing with it is worse than one that
+     * refuses, because the caller cannot tell which it got. Real speed control with pitch
+     * preserved is on the roadmap in KPKMP.md section 11; when it lands, this method will accept
+     * the range it implements.
      *
      * @param value finite and greater than zero.
      * @throws IllegalArgumentException when [value] is not finite and positive. Infinity passes a plain
      *         positivity test, which is why the check is explicit.
-     * @throws UnsupportedOperationException when an audio track is selected and [value] is not 1.0.
+     * @throws UnsupportedOperationException when [value] is not 1.0.
      */
     public fun setSpeed(value: Double) {
         require(value.isFinite() && value > 0.0) { "speed must be finite and positive, was $value" }
-        if (value != 1.0 && state.value.tracks.selectedAudio != null) {
+        if (value != 1.0) {
             throw UnsupportedOperationException(
-                "audio playback runs at 1.0 only: there is no tempo stage, so a rate of $value would move " +
-                    "the clock without moving the sound. Select no audio track to change the rate; see " +
-                    "KPKMP.md section 11",
+                "playback runs at 1.0 only in this build: there is no tempo stage for audio and no " +
+                    "scaled frame timer for video, so a rate of $value would either desync or do " +
+                    "nothing; see KPKMP.md section 11",
             )
         }
         core.post(CoreCommand.SetSpeed(value, CompletableDeferred()))

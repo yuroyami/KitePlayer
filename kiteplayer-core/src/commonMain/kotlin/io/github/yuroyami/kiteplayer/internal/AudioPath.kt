@@ -77,7 +77,15 @@ internal suspend fun openKotlinAudioPath(
         // start a device, and the assignment below happens before the engine calls `play`.
         holder.value?.render(destination, frames, deadlineNanos) ?: 0
     }
-    val ring = KotlinAudioRing(negotiated, capacityFrames = capacityFrames(negotiated))
-    holder.value = ring
-    return OpenedAudioPath(negotiated, ring)
+    // From here the sink is open and owns a device. capacityFrames is caller-supplied code and the
+    // ring constructor validates its capacity, so either can throw; without the catch the opened
+    // sink would leak with no owner ever learning about it (audit P1-2, AudioPath leak).
+    try {
+        val ring = KotlinAudioRing(negotiated, capacityFrames = capacityFrames(negotiated))
+        holder.value = ring
+        return OpenedAudioPath(negotiated, ring)
+    } catch (failure: Throwable) {
+        runCatching { sink.close() }
+        throw failure
+    }
 }

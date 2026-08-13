@@ -60,11 +60,28 @@ public sealed class MetalPicture {
         public val format: PlayerPixelFormat,
         public val planes: List<Plane>,
     ) : MetalPicture() {
+        init {
+            require(width > 0 && height > 0) { "SoftwarePlanes needs positive dimensions, got ${width}x$height" }
+            require(planes.isNotEmpty()) { "SoftwarePlanes needs at least one plane" }
+        }
+
         public class Plane(
             public val bytes: ByteArray,
             public val bytesPerRow: Int,
             public val rows: Int,
-        )
+        ) {
+            init {
+                // The upload path hands `bytes` to Metal pinned, so the declared geometry must
+                // never describe more storage than the array actually holds: Metal would read
+                // past the pin. Checked in Long because bytesPerRow * rows can overflow Int.
+                require(bytesPerRow > 0) { "bytesPerRow must be positive, got $bytesPerRow" }
+                require(rows > 0) { "rows must be positive, got $rows" }
+                require(bytes.size.toLong() >= bytesPerRow.toLong() * rows.toLong()) {
+                    "plane storage is ${bytes.size} bytes but bytesPerRow=$bytesPerRow x rows=$rows " +
+                        "declares ${bytesPerRow.toLong() * rows.toLong()}"
+                }
+            }
+        }
     }
 }
 
@@ -324,6 +341,24 @@ internal fun planeRecipeFor(format: PlayerPixelFormat): PlaneRecipe? = when (for
 
 /** Uploads one tightly strided plane. replaceRegion honours bytesPerRow, so no row loop exists. */
 internal fun MTLTextureProtocol.uploadPlane(plane: MetalPicture.SoftwarePlanes.Plane) {
+    // The region covers the whole texture, so the plane must actually carry that many rows and
+    // each row must span the texture's width at this format's element size. Without these checks
+    // Metal reads bytesPerRow * height bytes from the pinned array regardless of its length.
+    val elementBytes = when (pixelFormat) {
+        MTLPixelFormatR8Unorm -> 1L
+        MTLPixelFormatRG8Unorm, MTLPixelFormatR16Unorm -> 2L
+        MTLPixelFormatRG16Unorm, MTLPixelFormatRGBA8Unorm, MTLPixelFormatBGRA8Unorm -> 4L
+        else -> error("uploadPlane does not know the element size of Metal pixel format $pixelFormat")
+    }
+    require(plane.rows.toULong() >= height) {
+        "plane has ${plane.rows} rows but the texture needs $height"
+    }
+    require(plane.bytesPerRow.toLong() >= width.toLong() * elementBytes) {
+        "plane stride ${plane.bytesPerRow} is narrower than $width texels x $elementBytes bytes"
+    }
+    require(plane.bytes.size.toLong() >= plane.bytesPerRow.toLong() * height.toLong()) {
+        "plane storage ${plane.bytes.size} cannot cover stride ${plane.bytesPerRow} x $height rows"
+    }
     plane.bytes.usePinned { pinned ->
         replaceRegion(
             region = platform.Metal.MTLRegionMake2D(0u, 0u, width, height),

@@ -130,8 +130,11 @@ public class RgbaBitmap(
 ) {
     init {
         require(width > 0 && height > 0) { "bitmap must have positive dimensions, got ${width}x$height" }
-        require(pixels.size >= width * height * 4) {
-            "bitmap needs ${width * height * 4} bytes for ${width}x$height, got ${pixels.size}"
+        // In Long: width * height * 4 wraps Int at 23170x23170, and a wrapped requirement admits
+        // a short array that every consumer then reads past.
+        val needed = width.toLong() * height.toLong() * 4L
+        require(pixels.size.toLong() >= needed) {
+            "bitmap needs $needed bytes for ${width}x$height, got ${pixels.size}"
         }
     }
 }

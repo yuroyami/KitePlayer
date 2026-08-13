@@ -463,20 +463,29 @@ int32_t kprt_sink_set_paused(kprt_sink *sink, int32_t paused, int32_t *out_os_st
     return kprt_sink_start(sink, out_os_status);
 }
 
-void kprt_sink_destroy(kprt_sink *sink)
+int32_t kprt_sink_destroy(kprt_sink *sink)
 {
     kprt_ring *ring;
 
     if (sink == NULL)
-        return;
+        return KPRT_SINK_OK;
 
     if (sink->unit != NULL) {
         AudioComponentInstance instance = (AudioComponentInstance)sink->unit;
-        if (sink->running)
-            (void)AudioOutputUnitStop(instance);
-        if (sink->initialized)
-            (void)AudioUnitUninitialize(instance);
-        (void)AudioComponentInstanceDispose(instance);
+        int quiesced = 1;
+        if (sink->running && AudioOutputUnitStop(instance) != noErr)
+            quiesced = 0;
+        if (sink->initialized && AudioUnitUninitialize(instance) != noErr)
+            quiesced = 0;
+        if (AudioComponentInstanceDispose(instance) != noErr)
+            quiesced = 0;
+        if (!quiesced) {
+            /* One of the teardown steps refused, so nothing here PROVES the callback is out. Free
+             * the ring or the sink now and a still-running render reads freed memory. Fail closed:
+             * leak both deliberately, keep the ring pointer published so a live callback keeps
+             * reading valid storage, and tell the caller the teardown is unproven. */
+            return KPRT_SINK_TEARDOWN_UNPROVEN;
+        }
         sink->unit = NULL;
     }
     sink->running = 0;
@@ -492,6 +501,7 @@ void kprt_sink_destroy(kprt_sink *sink)
     sink->owns_ring = 0;
 
     free(sink);
+    return KPRT_SINK_OK;
 }
 
 void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)
@@ -578,9 +588,10 @@ int32_t kprt_sink_set_paused(kprt_sink *sink, int32_t paused, int32_t *out_os_st
     return KPRT_SINK_UNSUPPORTED_PLATFORM;
 }
 
-void kprt_sink_destroy(kprt_sink *sink)
+int32_t kprt_sink_destroy(kprt_sink *sink)
 {
     (void)sink;
+    return KPRT_SINK_OK;
 }
 
 void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)

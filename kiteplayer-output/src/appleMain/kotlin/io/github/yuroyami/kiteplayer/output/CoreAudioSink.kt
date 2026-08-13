@@ -57,7 +57,14 @@ internal fun interface CoreAudioSinkDestroyer {
 
 private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
     override fun destroy(sink: CPointer<kprt_sink>) {
-        kprt_sink_destroy(sink)
+        // KPRT_SINK_TEARDOWN_UNPROVEN means C could not prove the render callback is out and
+        // deliberately leaked the sink and ring instead of freeing them under it. Throwing here
+        // routes into the existing uncertain-teardown handling: the session lease is NOT
+        // deactivated, matching the fail-closed contract documented on CoreAudioSinkDestroyer.
+        val rc = kprt_sink_destroy(sink)
+        check(rc == KPRT_SINK_OK.toInt()) {
+            "CoreAudio sink teardown unproven (rc=$rc); sink and ring leaked deliberately"
+        }
     }
 }
 

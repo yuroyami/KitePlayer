@@ -202,8 +202,11 @@ internal class AttachableRenderer : VideoRenderer {
             // True, because the schedule did its job: there is simply nothing attached to draw on.
             return true
         }
-        submittedCount.incrementAndGet()
-        return target.present(frame, targetNanos)
+        // Counted only after the renderer says yes: submittedFrames documents "frames a real
+        // renderer accepted", and counting before the answer contradicted that on every refusal.
+        val accepted = target.present(frame, targetNanos)
+        if (accepted) submittedCount.incrementAndGet()
+        return accepted
     }
 
     override fun vsyncIntervalNanos(): Long? = delegate?.vsyncIntervalNanos()

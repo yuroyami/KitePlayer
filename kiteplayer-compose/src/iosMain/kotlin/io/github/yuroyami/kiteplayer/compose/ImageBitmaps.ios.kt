@@ -29,3 +29,8 @@ internal actual class FrameImagePool actual constructor() {
 
 internal actual fun phoneFrameToRgba(frame: VideoFrame): ByteArray =
     SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+
+internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
+    val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.PREMUL)
+    return Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap()
+}

@@ -47,11 +47,18 @@ public class KiteVideoState internal constructor(
      */
     internal val frame: MutableState<KiteVideoFrame?> = mutableStateOf(null)
 
+    /**
+     * The active subtitle overlay, under the same law as [frame]: read only inside the draw
+     * phase of [KiteVideo]. It changes on cue edges, so its invalidations are rare.
+     */
+    internal val overlay: MutableState<KiteVideoOverlay?> = mutableStateOf(null)
+
     private val videoRenderer = KiteVideoRenderer(
         convert = convert,
         makeImage = makeImage,
         publish = { newest -> frame.value = newest },
         releaseImages = releaseImages,
+        publishOverlay = { newest -> overlay.value = newest },
     )
 
     /** Attach this to the player. Close it when the video surface is done (or use [rememberKiteVideoState]). */

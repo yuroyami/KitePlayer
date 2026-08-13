@@ -31,7 +31,8 @@ import kotlin.math.roundToInt
 public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
     Box(
         modifier.drawBehind {
-            // The one sanctioned read of the frame state (law 1). Do not add another.
+            // The two sanctioned draw-phase reads (law 1): the frame, and the overlay whose
+            // writes arrive only on cue edges. Do not add another.
             val frame = state.frame.value ?: return@drawBehind
             val layout = videoLayout(
                 areaWidth = size.width.toInt(),
@@ -49,6 +50,25 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                     dstSize = IntSize(
                         layout.drawWidth.roundToInt().coerceAtLeast(1),
                         layout.drawHeight.roundToInt().coerceAtLeast(1),
+                    ),
+                    filterQuality = FilterQuality.Low,
+                )
+            }
+            // Subtitles composite above the picture in OUTPUT space, unrotated: overlays are
+            // laid out for the output size, the same law the platform renderers obey.
+            val overlay = state.overlay.value ?: return@drawBehind
+            val scaleX = size.width / overlay.viewportWidth.coerceAtLeast(1)
+            val scaleY = size.height / overlay.viewportHeight.coerceAtLeast(1)
+            overlay.items.forEach { item ->
+                drawImage(
+                    image = item.image,
+                    dstOffset = IntOffset(
+                        (item.x * scaleX).roundToInt(),
+                        (item.y * scaleY).roundToInt(),
+                    ),
+                    dstSize = IntSize(
+                        (item.width * scaleX).roundToInt().coerceAtLeast(1),
+                        (item.height * scaleY).roundToInt().coerceAtLeast(1),
                     ),
                     filterQuality = FilterQuality.Low,
                 )

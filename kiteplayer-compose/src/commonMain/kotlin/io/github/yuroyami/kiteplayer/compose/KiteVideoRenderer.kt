@@ -37,6 +37,26 @@ internal class KiteVideoFrame(
 )
 
 /**
+ * The subtitle overlay published for [KiteVideo] to draw above the picture (S2.d, carrying
+ * S4.c's KiteVideo half): each item keeps its authored position in the OVERLAY's own viewport
+ * units, and the draw phase scales that viewport onto the component, the same output-space law
+ * the Metal renderer obeys.
+ */
+internal class KiteVideoOverlay(
+    val items: List<Item>,
+    val viewportWidth: Int,
+    val viewportHeight: Int,
+) {
+    internal class Item(
+        val x: Int,
+        val y: Int,
+        val width: Int,
+        val height: Int,
+        val image: ImageBitmap,
+    )
+}
+
+/**
  * The renderer that feeds [KiteVideoState]: the fourth instance of the proven newest-wins shape
  * (Apple CALayer, AppKit, Android Surface, now Compose), differing only in where a finished
  * picture goes: not to a platform surface but into snapshot state, whose one reader is the draw
@@ -62,7 +82,15 @@ internal class KiteVideoRenderer(
     private val publish: (KiteVideoFrame?) -> Unit,
     /** Releases whatever backs [makeImage]. Called by close after the worker has been joined. */
     private val releaseImages: () -> Unit = {},
+    /** Builds a premultiplied overlay image. Production asks [overlayImageBitmap]. */
+    private val makeOverlayImage: (rgba: ByteArray, width: Int, height: Int) -> ImageBitmap =
+        { rgba, width, height -> overlayImageBitmap(rgba, width, height) },
+    /** Publishes the active overlay, or null when it clears or the renderer closes. */
+    private val publishOverlay: (KiteVideoOverlay?) -> Unit = {},
 ) : VideoRenderer {
+
+    /** The contentHash the published overlay was built from, so an unchanged one is not rebuilt. */
+    private var overlayHash: Long = Long.MIN_VALUE
 
     private val presented = atomic(0L)
     private val superseded = atomic(0L)
@@ -194,7 +222,47 @@ internal class KiteVideoRenderer(
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 
-    override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
+    /**
+     * Converts and publishes the overlay (S2.d). Inline rather than on the worker: cues change
+     * about once a second, the images are small, and the engine already calls this off the UI
+     * thread. An unchanged contentHash republishes nothing, which keeps a paused picture's draw
+     * state untouched.
+     */
+    override suspend fun setOverlay(overlay: SubtitleOverlay?) {
+        if (closed.value) return
+        if (overlay == null || overlay.images.isEmpty()) {
+            if (overlayHash != Long.MIN_VALUE) {
+                overlayHash = Long.MIN_VALUE
+                publishOverlay(null)
+            }
+            return
+        }
+        if (overlay.contentHash == overlayHash) return
+        val items = overlay.images.mapNotNull { image ->
+            val bitmap = image.bitmap
+            if (bitmap.width <= 0 || bitmap.height <= 0) return@mapNotNull null
+            KiteVideoOverlay.Item(
+                x = image.x,
+                y = image.y,
+                width = bitmap.width,
+                height = bitmap.height,
+                image = try {
+                    makeOverlayImage(bitmap.pixels, bitmap.width, bitmap.height)
+                } catch (failure: Throwable) {
+                    eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "building an overlay image failed"))
+                    return@mapNotNull null
+                },
+            )
+        }
+        overlayHash = overlay.contentHash
+        publishOverlay(
+            KiteVideoOverlay(
+                items = items,
+                viewportWidth = overlay.viewportWidth,
+                viewportHeight = overlay.viewportHeight,
+            ),
+        )
+    }
 
     /**
      * Stops converting and publishes null so no closed renderer's picture outlives it.
@@ -211,6 +279,7 @@ internal class KiteVideoRenderer(
         runBlocking { workerJob.join() }
         drainPending()
         publish(null)
+        publishOverlay(null)
         // After the join and the null publish: no worker can ask for an image and no reader
         // should be handed one, so the image storage goes back now.
         releaseImages()

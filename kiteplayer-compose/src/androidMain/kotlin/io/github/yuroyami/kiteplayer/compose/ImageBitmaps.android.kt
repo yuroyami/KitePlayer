@@ -61,3 +61,11 @@ internal actual class FrameImagePool actual constructor() {
 
 internal actual fun phoneFrameToRgba(frame: VideoFrame): ByteArray =
     SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+
+internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
+    // ARGB_8888 with alpha is premultiplied by default, which is exactly what the rasterizers
+    // hand over, so the buffer copies straight in.
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(rgba))
+    return bitmap.asImageBitmap()
+}

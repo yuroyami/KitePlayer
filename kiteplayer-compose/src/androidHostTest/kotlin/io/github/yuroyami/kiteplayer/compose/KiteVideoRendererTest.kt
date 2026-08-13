@@ -71,9 +71,16 @@ private class Harness(
 ) {
     val published = CopyOnWriteArrayList<KiteVideoFrame?>()
     val publishThreads = CopyOnWriteArrayList<String>()
+    val publishedOverlays = CopyOnWriteArrayList<KiteVideoOverlay?>()
+    @Volatile var overlayImagesBuilt = 0
     val renderer = KiteVideoRenderer(
         convert = convert,
         makeImage = makeImage,
+        makeOverlayImage = { _, w, h ->
+            overlayImagesBuilt += 1
+            FakeImage(w, h)
+        },
+        publishOverlay = { overlay -> publishedOverlays += overlay },
         publish = { frame ->
             published += frame
             publishThreads += Thread.currentThread().name
@@ -98,6 +105,59 @@ private class Harness(
 }
 
 class KiteVideoRendererTest {
+
+    private fun overlayOf(hash: Long, vararg positions: Pair<Int, Int>) =
+        io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+            images = positions.map { (x, y) ->
+                io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                    x = x,
+                    y = y,
+                    bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(8, 4, ByteArray(8 * 4 * 4)),
+                )
+            },
+            viewportWidth = 1280,
+            viewportHeight = 720,
+            contentHash = hash,
+        )
+
+    /** The S2.d overlay arms, the KiteVideo half of S4.c landing 4. */
+    @Test
+    fun anOverlayIsConvertedOncePerHashAndClearedExactlyOnce() = runBlocking {
+        val h = Harness()
+        h.renderer.setOverlay(overlayOf(1L, 10 to 20, 30 to 40))
+        val first = h.publishedOverlays.single()!!
+        assertEquals(2, first.items.size)
+        assertEquals(1280, first.viewportWidth)
+        assertEquals(10, first.items[0].x)
+        assertEquals(20, first.items[0].y)
+        assertEquals(8, first.items[0].width)
+        assertEquals(4, first.items[0].height)
+        assertEquals(2, h.overlayImagesBuilt)
+
+        // The same hash republishes nothing and rebuilds nothing.
+        h.renderer.setOverlay(overlayOf(1L, 10 to 20, 30 to 40))
+        assertEquals(1, h.publishedOverlays.size)
+        assertEquals(2, h.overlayImagesBuilt)
+
+        // A new hash rebuilds; clearing publishes one null; clearing again is silent.
+        h.renderer.setOverlay(overlayOf(2L, 5 to 6))
+        assertEquals(2, h.publishedOverlays.size)
+        assertEquals(3, h.overlayImagesBuilt)
+        h.renderer.setOverlay(null)
+        assertNull(h.publishedOverlays.last())
+        assertEquals(3, h.publishedOverlays.size)
+        h.renderer.setOverlay(null)
+        assertEquals(3, h.publishedOverlays.size)
+        h.renderer.close()
+    }
+
+    @Test
+    fun closePublishesANullOverlaySoNoClosedRenderersCuesOutliveIt() = runBlocking {
+        val h = Harness()
+        h.renderer.setOverlay(overlayOf(9L, 1 to 1))
+        h.renderer.close()
+        assertNull(h.publishedOverlays.last())
+    }
 
     @Test
     fun aPresentedFrameIsConvertedPublishedAndClosedOnce() = runBlocking {

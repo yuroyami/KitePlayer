@@ -26,3 +26,11 @@ internal expect class FrameImagePool() {
  * plays on, exactly like the platform views' converter seams.
  */
 internal expect fun phoneFrameToRgba(frame: VideoFrame): ByteArray
+
+/**
+ * Builds a PREMULTIPLIED-alpha image for a subtitle overlay (S2.d carrying S4.c's KiteVideo
+ * half). A separate builder from [FrameImagePool] on purpose: frames are opaque and pooled,
+ * overlays carry alpha, change about once a second, and pooling them would hand the draw phase
+ * a bitmap the next cue overwrites.
+ */
+internal expect fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap

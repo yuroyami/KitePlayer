@@ -244,11 +244,17 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lz",
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", VideoToolbox,
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
 					"-ObjC",
 					"-lz",
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", VideoToolbox,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.yuroyami.kiteplayer.sample.ios;
 				PRODUCT_MODULE_NAME = KitePlayerSampleHost;
@@ -291,11 +297,17 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lz",
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", VideoToolbox,
 				);
 				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
 					"-ObjC",
 					"-lz",
+					"-framework", CoreMedia,
+					"-framework", CoreVideo,
+					"-framework", VideoToolbox,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.yuroyami.kiteplayer.sample.ios;
 				PRODUCT_MODULE_NAME = KitePlayerSampleHost;

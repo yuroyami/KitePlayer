@@ -40,9 +40,17 @@ public class AppKitWindow(
     title: String,
     width: Int,
     height: Int,
+    /**
+     * True hosts a [platform.QuartzCore.CAMetalLayer] instead of the image view, for
+     * [MetalVideoRenderer] (S2.c). The image view stays the CG fallback's home.
+     */
+    useMetalLayer: Boolean = false,
 ) {
     private val window: NSWindow
     internal val imageView: NSImageView
+
+    /** The layer a [MetalVideoRenderer] draws into; null unless built with `useMetalLayer`. */
+    public val metalLayer: platform.QuartzCore.CAMetalLayer?
 
     /**
      * Called on the main thread when this window is closing, whatever closed it.
@@ -77,7 +85,24 @@ public class AppKitWindow(
 
         imageView = NSImageView(frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
         imageView.imageScaling = NSImageScaleProportionallyUpOrDown
-        window.contentView = imageView
+
+        if (useMetalLayer) {
+            // A plain layer-hosted view whose backing layer IS the CAMetalLayer. The drawable is
+            // sized in physical pixels from the screen's scale, so a Retina window is not half
+            // resolution; a live window-resize path is S2.f polish, stated rather than implied.
+            val layer = platform.QuartzCore.CAMetalLayer()
+            val scale = window.screen?.backingScaleFactor ?: 2.0
+            layer.contentsScale = scale
+            layer.drawableSize = platform.CoreGraphics.CGSizeMake(width * scale, height * scale)
+            val host = platform.AppKit.NSView(frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
+            host.wantsLayer = true
+            host.layer = layer
+            window.contentView = host
+            metalLayer = layer
+        } else {
+            window.contentView = imageView
+            metalLayer = null
+        }
 
         window.delegate = closeDelegate
         window.center()

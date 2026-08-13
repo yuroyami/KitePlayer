@@ -87,8 +87,34 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame : io.github
     final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.close|close(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes { // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes|null[0]
+    constructor <init>(kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat, kotlin.collections/List<io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane>) // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.<init>|<init>(kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat;kotlin.collections.List<io.github.yuroyami.kiteplayer.ffmpeg.UploadPlanes.UploadPlane>){}[0]
+
+    final val format // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.format|{}format[0]
+        final fun <get-format>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.format.<get-format>|<get-format>(){}[0]
+    final val height // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.height|{}height[0]
+        final fun <get-height>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.height.<get-height>|<get-height>(){}[0]
+    final val planes // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.planes|{}planes[0]
+        final fun <get-planes>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane> // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.planes.<get-planes>|<get-planes>(){}[0]
+    final val width // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.width|{}width[0]
+        final fun <get-width>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.width.<get-width>|<get-width>(){}[0]
+
+    final class UploadPlane { // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane|null[0]
+        constructor <init>(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane.<init>|<init>(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+
+        final val bytes // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane.bytes|{}bytes[0]
+            final fun <get-bytes>(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane.bytes.<get-bytes>|<get-bytes>(){}[0]
+        final val bytesPerRow // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane.bytesPerRow|{}bytesPerRow[0]
+            final fun <get-bytesPerRow>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane.bytesPerRow.<get-bytesPerRow>|<get-bytesPerRow>(){}[0]
+        final val rows // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane.rows|{}rows[0]
+            final fun <get-rows>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane.rows.<get-rows>|<get-rows>(){}[0]
+    }
+}
+
 final object io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter { // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter|null[0]
     final fun toRgba(io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter.toRgba|toRgba(io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame){}[0]
 }
 
+final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame).io.github.yuroyami.kiteplayer.ffmpeg/corePixelBufferOrNull(): kotlinx.cinterop/CPointer<out kotlinx.cinterop/CPointed>? // io.github.yuroyami.kiteplayer.ffmpeg/corePixelBufferOrNull|corePixelBufferOrNull@io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame(){}[0]
+final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame).io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull(): io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes? // io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull|uploadPlanesOrNull@io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame(){}[0]
 final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]

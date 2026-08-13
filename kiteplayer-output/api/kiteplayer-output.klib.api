@@ -18,6 +18,10 @@ final enum class io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy : 
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.values|values#static(){}[0]
 }
 
+abstract fun interface io.github.yuroyami.kiteplayer.output/MetalPictureResolver { // io.github.yuroyami.kiteplayer.output/MetalPictureResolver|null[0]
+    abstract fun resolve(io.github.yuroyami.kiteplayer.spi/VideoFrame): io.github.yuroyami.kiteplayer.output/MetalPicture? // io.github.yuroyami.kiteplayer.output/MetalPictureResolver.resolve|resolve(io.github.yuroyami.kiteplayer.spi.VideoFrame){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink { // io.github.yuroyami.kiteplayer.output/CoreAudioSink|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy, io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppleAudioSessionPolicy;io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
@@ -47,6 +51,60 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.githu
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.name.<get-name>|<get-name>(){}[0]
 
     final suspend fun create(): io.github.yuroyami.kiteplayer.spi/AudioSink // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.create|create(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer|null[0]
+    constructor <init>(platform.QuartzCore/CAMetalLayer, io.github.yuroyami.kiteplayer.output/MetalPictureResolver) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.<init>|<init>(platform.QuartzCore.CAMetalLayer;io.github.yuroyami.kiteplayer.output.MetalPictureResolver){}[0]
+
+    final val events // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.events.<get-events>|<get-events>(){}[0]
+    final val failedFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val presentedFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    final val supersededFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.supersededFrames|{}supersededFrames[0]
+        final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.close|close(){}[0]
+    final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
+    final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
+    final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+    final fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
+    final suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
+    final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
+}
+
+sealed class io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture|null[0]
+    final class CorePixelBuffer : io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer|null[0]
+        constructor <init>(kotlinx.cinterop/CPointer<out kotlinx.cinterop/CPointed>) // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer.<init>|<init>(kotlinx.cinterop.CPointer<out|kotlinx.cinterop.CPointed>){}[0]
+
+        final val buffer // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer.buffer|{}buffer[0]
+            final fun <get-buffer>(): kotlinx.cinterop/CPointer<out kotlinx.cinterop/CPointed> // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer.buffer.<get-buffer>|<get-buffer>(){}[0]
+    }
+
+    final class SoftwarePlanes : io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes|null[0]
+        constructor <init>(kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat, kotlin.collections/List<io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane>) // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.<init>|<init>(kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat;kotlin.collections.List<io.github.yuroyami.kiteplayer.output.MetalPicture.SoftwarePlanes.Plane>){}[0]
+
+        final val format // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.format|{}format[0]
+            final fun <get-format>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.format.<get-format>|<get-format>(){}[0]
+        final val height // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.height|{}height[0]
+            final fun <get-height>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.height.<get-height>|<get-height>(){}[0]
+        final val planes // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.planes|{}planes[0]
+            final fun <get-planes>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane> // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.planes.<get-planes>|<get-planes>(){}[0]
+        final val width // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.width|{}width[0]
+            final fun <get-width>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.width.<get-width>|<get-width>(){}[0]
+
+        final class Plane { // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane|null[0]
+            constructor <init>(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.<init>|<init>(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+
+            final val bytes // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.bytes|{}bytes[0]
+                final fun <get-bytes>(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.bytes.<get-bytes>|<get-bytes>(){}[0]
+            final val bytesPerRow // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.bytesPerRow|{}bytesPerRow[0]
+                final fun <get-bytesPerRow>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.bytesPerRow.<get-bytesPerRow>|<get-bytesPerRow>(){}[0]
+            final val rows // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.rows|{}rows[0]
+                final fun <get-rows>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/MetalPicture.SoftwarePlanes.Plane.rows.<get-rows>|<get-rows>(){}[0]
+        }
+    }
 }
 
 final object io.github.yuroyami.kiteplayer.output/AppleHostClock : io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer.output/AppleHostClock|null[0]
@@ -109,7 +167,10 @@ final class io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer : io.github
 
 // Targets: [macosArm64]
 final class io.github.yuroyami.kiteplayer.output/AppKitWindow { // io.github.yuroyami.kiteplayer.output/AppKitWindow|null[0]
-    constructor <init>(kotlin/String, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.output/AppKitWindow.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Int){}[0]
+    constructor <init>(kotlin/String, kotlin/Int, kotlin/Int, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.output/AppKitWindow.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Int;kotlin.Boolean){}[0]
+
+    final val metalLayer // io.github.yuroyami.kiteplayer.output/AppKitWindow.metalLayer|{}metalLayer[0]
+        final fun <get-metalLayer>(): platform.QuartzCore/CAMetalLayer? // io.github.yuroyami.kiteplayer.output/AppKitWindow.metalLayer.<get-metalLayer>|<get-metalLayer>(){}[0]
 
     final var onCloseRequested // io.github.yuroyami.kiteplayer.output/AppKitWindow.onCloseRequested|{}onCloseRequested[0]
         final fun <get-onCloseRequested>(): kotlin/Function0<kotlin/Unit>? // io.github.yuroyami.kiteplayer.output/AppKitWindow.onCloseRequested.<get-onCloseRequested>|<get-onCloseRequested>(){}[0]

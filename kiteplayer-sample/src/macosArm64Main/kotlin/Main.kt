@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package io.github.yuroyami.kiteplayer.sample
 
 import io.github.yuroyami.kiteplayer.Backends
@@ -12,9 +14,11 @@ import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecMediaBackend
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
-import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
-import io.github.yuroyami.kiteplayer.output.AppKitVideoRenderer
+import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
+import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
 import io.github.yuroyami.kiteplayer.output.AppKitWindow
+import io.github.yuroyami.kiteplayer.output.MetalPicture
+import io.github.yuroyami.kiteplayer.output.MetalVideoRenderer
 import io.github.yuroyami.kiteplayer.output.AppleHostClock
 import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
 import kotlinx.coroutines.CoroutineScope
@@ -103,10 +107,29 @@ fun main(args: Array<String>) {
             title = path.substringAfterLast('/'),
             width = (size?.displayWidth ?: 1280).coerceAtMost(1600),
             height = (size?.height ?: 720).coerceAtMost(1000),
+            useMetalLayer = true,
         )
-        val renderer = AppKitVideoRenderer(window) { frame ->
-            SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
-        }
+        // The Metal renderer is the S2.c default; the CG image-view path stays one flag away as
+        // the measured software fallback. The resolver is the consumer-side mapping of the
+        // backend's two frame truths onto the renderer's seam: a VideoToolbox CVPixelBuffer with
+        // no copy, or native-format planes with one memcpy each.
+        val renderer = MetalVideoRenderer(
+            layer = checkNotNull(window.metalLayer) { "the window was built with useMetalLayer" },
+            resolver = { frame ->
+                val decoded = frame as KiteCodecVideoFrame
+                decoded.corePixelBufferOrNull()?.let { MetalPicture.CorePixelBuffer(it) }
+                    ?: decoded.uploadPlanesOrNull()?.let { planes ->
+                        MetalPicture.SoftwarePlanes(
+                            width = planes.width,
+                            height = planes.height,
+                            format = planes.format,
+                            planes = planes.planes.map {
+                                MetalPicture.SoftwarePlanes.Plane(it.bytes, it.bytesPerRow, it.rows)
+                            },
+                        )
+                    }
+            },
+        )
         player.attachRenderer(renderer)
         val sessionContext = newSingleThreadContext("kiteplayer-sample")
         val session = CoroutineScope(sessionContext)

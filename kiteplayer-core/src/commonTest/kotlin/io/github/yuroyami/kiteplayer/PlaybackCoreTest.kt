@@ -176,6 +176,410 @@ class PlaybackCoreTest {
         assertEquals(backendStatus, harness.core.stats.value.hardwareDecode)
         assertEquals(TrackId(0), harness.core.snapshots.value.tracks.selectedVideo)
         assertEquals(1, renderer.count, "the backend decoder still supplied the initial frame")
+        assertEquals(
+            emptyList(),
+            harness.events
+                .filterIsInstance<PlayerEvent.Warning>()
+                .map { it.warning }
+                .filterIsInstance<PlaybackWarning.HardwareDecodeUnavailable>(),
+            "Auto candidate refusal continues silently when the next candidate succeeds",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun `cancellation at decoder dispatcher handoff closes the created decoder`() = runTest {
+        val parent = Job()
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        var decoderCloseCount = 0
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            val delegate = ScriptedVideoDecoder(
+                script = script,
+                ledger = ledger,
+                faults = FaultPlan.None,
+                hardwareStatus = ScriptedVideoDecoderStatus(
+                    HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec),
+                ),
+            )
+            val decoder = object : VideoDecoder by delegate {
+                override fun close() {
+                    decoderCloseCount++
+                    delegate.close()
+                }
+            }
+            // The decoder exists on its owning dispatcher, but the actor is cancelled before
+            // withContext can deliver the result. The acquisition helper must retain local ownership.
+            parent.cancel()
+            decoder
+        }
+        val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+        val backend = ScriptedBackend(script = script, ledger = ledger)
+        val sessionDispatcher = StandardTestDispatcher(testScheduler, "session")
+        val decodeDispatcher = StandardTestDispatcher(testScheduler, "video-decode")
+        val sharedDispatcher = StandardTestDispatcher(testScheduler, "other-workers")
+        val dispatchers = object : PlaybackDispatchers {
+            override val session = sessionDispatcher
+            override val demux = sharedDispatcher
+            override val videoDecode = decodeDispatcher
+            override val audioDecode = sharedDispatcher
+            override val audioFeed = sharedDispatcher
+            override val videoSchedule = sharedDispatcher
+            override fun close() = Unit
+        }
+        val core = PlaybackCore(
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            backend = backend,
+            output = ScriptedOutput(VirtualClock(testScheduler), ScriptedSink()),
+            dispatchers = dispatchers,
+            closeDispatchers = false,
+            parent = parent,
+        )
+        core.attachRenderer(renderer)
+
+        val opening = async { runCatching { core.open(MediaItem("scripted://handoff-cancel")) } }
+        opening.await()
+        parent.join()
+
+        assertEquals(1, decoderCloseCount)
+        assertEquals(1, backend.sessions.single().closeCount)
+        assertEquals(0, ledger.liveCount)
+    }
+
+    @Test
+    fun `auto reopens in backend software after queued direct frames fail`() = runTest {
+        for (policy in listOf<HwdecPolicy>(HwdecPolicy.Auto)) {
+            val script = MediaScript(durationUs = 4_000_000)
+            val hardwareFrames = LeakLedger()
+            val factory = RecordingVideoDecoderFactory { _, _ ->
+                queuedRendererDecoderFailingOnReceive(script, hardwareFrames, failOutputAt = 12)
+            }
+            val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+            val harness = CoreHarness(
+                scope = this,
+                script = script,
+                config = PlayerConfig(hardwareDecode = policy, statsInterval = 10.milliseconds),
+                renderer = renderer,
+            )
+
+            harness.openWithRenderer()
+            val openedGeneration = harness.core.snapshots.value.generation
+            harness.core.play()
+            harness.run(1.seconds)
+
+            val snapshot = harness.core.snapshots.value
+            assertTrue(snapshot.status != PlaybackStatus.Failed, "recovery failed for $policy: ${snapshot.error}")
+            assertTrue(snapshot.generation.value > openedGeneration.value, "recovery did not fence a new generation")
+            assertEquals(2, harness.backend.openCalls, "recovery must reopen the media exactly once")
+            assertEquals(emptyList(), harness.backend.sessions.first().videoDecoderPolicies)
+            assertEquals(
+                listOf<HwdecPolicy>(HwdecPolicy.Off),
+                harness.backend.sessions.last().videoDecoderPolicies,
+                "the replacement decoder must be backend-only and forced software",
+            )
+            assertEquals(HwdecStatus.Software, harness.core.stats.value.hardwareDecode)
+            assertEquals(TrackId(script.videoIndex), snapshot.tracks.selectedVideo)
+            assertEquals(TrackId(script.audioIndex), snapshot.tracks.selectedAudio)
+            assertTrue(harness.backend.sessions.last().scriptedSource.seeks > 0, "the new source was not repositioned")
+            assertTrue(harness.core.progress.value.position > Duration.ZERO, "playback did not resume")
+            assertEquals(0, hardwareFrames.liveCount, "queued direct frames outlived their failed codec")
+            assertTrue(hardwareFrames.closeCount >= 4, "the failure did not occur with direct frames queued")
+
+            val firstRecovered = renderer.presentations.indexOfFirst { it.generation == snapshot.generation }
+            assertTrue(firstRecovered >= 0, "the recovered generation presented no frame")
+            assertTrue(
+                renderer.presentations.drop(firstRecovered).all { it.generation == snapshot.generation },
+                "a stale direct frame crossed the rebuilt-session fence: ${renderer.presentations}",
+            )
+            val warnings = harness.events
+                .filterIsInstance<PlayerEvent.Warning>()
+                .map { it.warning }
+                .filterIsInstance<PlaybackWarning.HardwareDecodeUnavailable>()
+            assertEquals(1, warnings.size)
+            assertTrue(warnings.single().reason.contains("receive failed"), warnings.single().reason)
+
+            harness.close()
+            assertEquals(0, harness.ledger.liveCount)
+            assertEquals(0, hardwareFrames.liveCount)
+        }
+    }
+
+    @Test
+    fun `auto recovers during initial fill and ignores the stale failed-session outcome`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000)
+        val hardwareFrames = LeakLedger()
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(script, hardwareFrames, failOutputAt = 3)
+        }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+        harness.run(200.milliseconds)
+
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+        assertEquals(2, harness.backend.openCalls)
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Off), harness.session.videoDecoderPolicies)
+        assertTrue(harness.core.snapshots.value.generation.value > Generation.Initial.value)
+        assertNull(harness.core.snapshots.value.error, "the queued old WorkerOutcome killed the rebuilt session")
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `track selection queued with decoder failure is applied by the software reopen`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000)
+        val hardwareFrames = LeakLedger()
+        lateinit var harness: CoreHarness
+        var selectionCompleted = false
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(
+                script = script,
+                hardwareFrames = hardwareFrames,
+                failOutputAt = 12,
+                onBeforeFailure = {
+                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        harness.core.selectTrack(TrackKind.Audio, null)
+                        selectionCompleted = true
+                    }
+                },
+            )
+        }
+        harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+
+        assertTrue(selectionCompleted, "the selectTrack reply was left pending during recovery")
+        assertEquals(2, harness.backend.openCalls, "the requested track must be folded into the recovery reopen")
+        assertNull(harness.core.snapshots.value.tracks.selectedAudio)
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Off), harness.session.videoDecoderPolicies)
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `video deselection queued with decoder failure becomes a valid audio only recovery`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000)
+        val hardwareFrames = LeakLedger()
+        lateinit var harness: CoreHarness
+        var selectionCompleted = false
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(
+                script = script,
+                hardwareFrames = hardwareFrames,
+                failOutputAt = 12,
+                onBeforeFailure = {
+                    backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        harness.core.selectTrack(TrackKind.Video, null)
+                        selectionCompleted = true
+                    }
+                },
+            )
+        }
+        harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+
+        assertTrue(selectionCompleted)
+        assertEquals(2, harness.backend.openCalls)
+        assertNull(harness.core.snapshots.value.tracks.selectedVideo)
+        assertEquals(TrackId(script.audioIndex), harness.core.snapshots.value.tracks.selectedAudio)
+        assertTrue(harness.core.snapshots.value.status != PlaybackStatus.Failed)
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `startup recovery for a new item never inherits the ended item position`() = runTest {
+        val script = MediaScript(durationUs = 800_000)
+        val hardwareFrames = LeakLedger()
+        var creation = 0
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            creation++
+            queuedRendererDecoderFailingOnReceive(
+                script = script,
+                hardwareFrames = hardwareFrames,
+                failOutputAt = if (creation == 1) Int.MAX_VALUE else 3,
+            )
+        }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+        harness.openWithRenderer("scripted://first")
+        harness.core.play()
+        harness.run(2.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+
+        harness.openWithRenderer("scripted://second")
+
+        assertEquals(3, harness.backend.openCalls)
+        assertEquals(listOf(0L), harness.backend.sessions.last().scriptedSource.seekTargets)
+        assertTrue(harness.core.position() < 200.milliseconds, "the second item inherited the first item's end position")
+        harness.close()
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `track rebuild after recovery stays backend software only`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000)
+        val hardwareFrames = LeakLedger()
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(script, hardwareFrames, failOutputAt = 12)
+        }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        assertEquals(2, harness.backend.openCalls)
+
+        harness.core.selectTrack(TrackKind.Audio, null)
+        harness.run(200.milliseconds)
+
+        assertEquals(3, harness.backend.openCalls)
+        assertEquals(1, factory.createCount, "a post-recovery rebuild reselected renderer hardware")
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Off), harness.session.videoDecoderPolicies)
+        assertEquals(HwdecStatus.Software, harness.core.stats.value.hardwareDecode)
+        assertNull(harness.core.snapshots.value.tracks.selectedAudio)
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `decoder failure during precise seek reopens software and completes the user seek once`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000)
+        val hardwareFrames = LeakLedger()
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            rendererDecoderFailingOnFirstFlush(script, hardwareFrames)
+        }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+        harness.openWithRenderer()
+
+        val result = assertIs<SeekResult.Applied>(harness.core.seek(Pts(2_000_000), SeekMode.Precise))
+        harness.run(100.milliseconds)
+
+        assertTrue(result.landedAt.micros >= 2_000_000)
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+        assertEquals(2, harness.backend.openCalls)
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Off), harness.session.videoDecoderPolicies)
+        assertEquals(
+            1,
+            harness.events.filterIsInstance<PlayerEvent.SeekCompleted>().size,
+            "internal recovery must not publish a second public seek completion",
+        )
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `software reopen refusal after renderer failure is terminal`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000, hasAudio = false)
+        val hardwareFrames = LeakLedger()
+        val faults = FaultPlan().also { it.videoDecodersRefuse = true }
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(script, hardwareFrames, failOutputAt = 12)
+        }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            faults = faults,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+
+        val error = assertIs<PlaybackError.DecoderFailed>(harness.core.snapshots.value.error)
+        assertEquals(PlaybackStatus.Failed, harness.core.snapshots.value.status)
+        assertTrue(error.detail.contains("reopening with backend software failed"), error.detail)
+        assertEquals(2, harness.backend.openCalls)
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Off), harness.backend.sessions.last().videoDecoderPolicies)
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `require keeps renderer runtime failure terminal`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000, hasAudio = false)
+        val hardwareFrames = LeakLedger()
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            queuedRendererDecoderFailingOnReceive(script, hardwareFrames, failOutputAt = 12)
+        }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Require),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+
+        assertEquals(PlaybackStatus.Failed, harness.core.snapshots.value.status)
+        assertIs<PlaybackError.DecoderFailed>(harness.core.snapshots.value.error)
+        assertEquals(1, harness.backend.openCalls, "Require must not open a software replacement session")
+        assertEquals(emptyList(), harness.backend.sessions.single().videoDecoderPolicies)
+        harness.close()
+        assertEquals(0, hardwareFrames.liveCount)
+    }
+
+    @Test
+    fun `nonseekable auto skips renderer hardware`() = runTest {
+        val script = MediaScript(seekable = false)
+        val factory = RecordingVideoDecoderFactory { _, _ ->
+            error("a nonseekable Auto source must not create renderer-coupled hardware")
+        }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto),
+            renderer = RecordingRenderer(decoderFactories = listOf(factory)),
+        )
+
+        harness.openWithRenderer()
+
+        assertEquals(0, factory.createCount)
+        assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Auto), harness.session.videoDecoderPolicies)
+        assertEquals(HwdecStatus.Software, harness.core.stats.value.hardwareDecode)
         harness.close()
     }
 
@@ -217,6 +621,14 @@ class PlaybackCoreTest {
         assertEquals(PlaybackStatus.Paused, snapshot.status, "an open fails only when nothing playable is left")
         assertNull(snapshot.tracks.selectedVideo, "the stream whose every candidate refused is deselected")
         assertEquals(TrackId(1), snapshot.tracks.selectedAudio)
+        assertEquals(
+            emptyList(),
+            harness.events
+                .filterIsInstance<PlayerEvent.Warning>()
+                .map { it.warning }
+                .filterIsInstance<PlaybackWarning.HardwareDecodeUnavailable>(),
+            "Auto refusal is a decoder-selection result, not a hardware warning",
+        )
         harness.close()
     }
 
@@ -467,6 +879,45 @@ class PlaybackCoreTest {
         assertFailsWith<IllegalStateException> {
             core.seekLater(Pts(1_000_000), SeekMode.KeyframeThenRefine)
         }
+    }
+
+    @Test
+    fun `actor parent cancellation tears down an installed session before it returns`() = runTest {
+        val parent = Job()
+        val harness = CoreHarness(scope = this, parent = parent)
+        harness.open()
+
+        parent.cancelAndJoin()
+        harness.stopDevice()
+
+        assertEquals(1, harness.session.closeCount, "the backend session survived parent cancellation")
+        assertTrue(harness.sink.closed, "the audio path survived parent cancellation")
+        assertEquals(0, harness.ledger.liveCount, "frames or packets survived parent cancellation")
+    }
+
+    @Test
+    fun `an expired close budget still releases the installed graph`() = runTest {
+        val clock = VirtualClock(testScheduler)
+        val ledger = LeakLedger()
+        val backend = ScriptedBackend(ledger = ledger)
+        val sink = ScriptedSink()
+        val core = PlaybackCore(
+            config = PlayerConfig(),
+            backend = backend,
+            output = ScriptedOutput(clock, sink),
+            dispatchers = PlaybackDispatchers.sharing(StandardTestDispatcher(testScheduler)),
+            closeDispatchers = false,
+            parent = backgroundScope.coroutineContext[Job],
+            closeDeadline = Duration.ZERO,
+        )
+        core.open(MediaItem("scripted://close-budget"))
+
+        val failure = assertFailsWith<PlaybackException> { core.closeAndAwait() }
+
+        assertTrue(failure.error is PlaybackError.RuntimeCompromised)
+        assertEquals(1, backend.sessions.single().closeCount)
+        assertTrue(sink.closed)
+        assertEquals(0, ledger.liveCount)
     }
 
     @Test
@@ -872,5 +1323,59 @@ private class RecordingVideoDecoderFactory(
         createCount++
         policies += hwdec
         return createDecoder(stream, hwdec)
+    }
+}
+
+private fun queuedRendererDecoderFailingOnReceive(
+    script: MediaScript,
+    hardwareFrames: LeakLedger,
+    failOutputAt: Int,
+    onBeforeFailure: (() -> Unit)? = null,
+): VideoDecoder {
+    val delegate = ScriptedVideoDecoder(
+        script = script,
+        ledger = hardwareFrames,
+        faults = FaultPlan.None,
+        hardwareStatus = ScriptedVideoDecoderStatus(
+            HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec),
+        ),
+    )
+    return object : VideoDecoder by delegate {
+        private var outputs: Int = 0
+
+        override suspend fun receive(): io.github.yuroyami.kiteplayer.spi.VideoFrame? {
+            val frame = delegate.receive() ?: return null
+            if (++outputs == failOutputAt) {
+                onBeforeFailure?.invoke()
+                frame.close()
+                error("renderer decoder failed on receive $outputs")
+            }
+            return frame
+        }
+    }
+}
+
+private fun rendererDecoderFailingOnFirstFlush(
+    script: MediaScript,
+    hardwareFrames: LeakLedger,
+): VideoDecoder {
+    val delegate = ScriptedVideoDecoder(
+        script = script,
+        ledger = hardwareFrames,
+        faults = FaultPlan.None,
+        hardwareStatus = ScriptedVideoDecoderStatus(
+            HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec),
+        ),
+    )
+    return object : VideoDecoder by delegate {
+        private var failed = false
+
+        override suspend fun flush(newGeneration: Generation) {
+            if (!failed) {
+                failed = true
+                error("renderer decoder failed during seek flush")
+            }
+            delegate.flush(newGeneration)
+        }
     }
 }

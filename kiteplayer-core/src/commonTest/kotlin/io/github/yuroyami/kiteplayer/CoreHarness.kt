@@ -41,6 +41,7 @@ internal class CoreHarness(
     config: PlayerConfig = PlayerConfig(),
     val ledger: LeakLedger = LeakLedger(),
     val renderer: RecordingRenderer? = RecordingRenderer(),
+    parent: Job? = scope.backgroundScope.coroutineContext[Job],
 ) {
     val scheduler: TestCoroutineScheduler = scope.testScheduler
     val clock: VirtualClock = VirtualClock(scheduler)
@@ -60,7 +61,7 @@ internal class CoreHarness(
         // Under the test's own background lifetime, so a test that fails an assertion before it closes
         // still leaves no worker running. Without it, one failed assertion leaves five loops on the
         // scheduler and the test framework drains them for ever.
-        parent = scope.backgroundScope.coroutineContext[Job],
+        parent = parent,
     )
 
     /** The names of the handlers as they actually ran, once recording is switched on. */
@@ -111,6 +112,10 @@ internal class CoreHarness(
 
     suspend fun close() {
         core.closeAndAwait()
+        device.cancel()
+    }
+
+    fun stopDevice() {
         device.cancel()
     }
 

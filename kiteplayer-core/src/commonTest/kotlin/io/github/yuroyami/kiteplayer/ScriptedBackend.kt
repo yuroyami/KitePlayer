@@ -265,8 +265,19 @@ internal class ScriptedSession(
 
     override val source: PlayerMediaSource get() = scriptedSource
 
+    val videoDecoderPolicies: MutableList<HwdecPolicy> = mutableListOf()
+
     override val videoDecoders: List<VideoDecoderFactory> =
-        listOf(ScriptedVideoDecoderFactory(script, ledger, faults, trace, videoDecoderStatus))
+        listOf(
+            ScriptedVideoDecoderFactory(
+                script,
+                ledger,
+                faults,
+                trace,
+                videoDecoderStatus,
+                videoDecoderPolicies,
+            ),
+        )
 
     override val audioDecoders: List<AudioDecoderFactory> =
         listOf(ScriptedAudioDecoderFactory(script, ledger, faults, trace))
@@ -461,9 +472,11 @@ private class ScriptedVideoDecoderFactory(
     private val faults: FaultPlan,
     private val trace: ScriptTrace,
     private val hardwareStatus: ScriptedVideoDecoderStatus,
+    private val policies: MutableList<HwdecPolicy>,
 ) : VideoDecoderFactory {
     override val name: String = "scripted video"
     override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
+        policies += hwdec
         if (stream.kind != TrackKind.Video) return null
         if (faults.videoDecodersRefuse) return null
         return ScriptedVideoDecoder(script, ledger, faults, trace, hardwareStatus)

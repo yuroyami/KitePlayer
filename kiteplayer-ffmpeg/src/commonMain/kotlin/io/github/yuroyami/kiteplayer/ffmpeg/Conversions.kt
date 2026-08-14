@@ -41,32 +41,49 @@ internal fun PixelFormat.toPlayerFormat(): PlayerPixelFormat = when (name) {
 
 internal fun ColorInfo.toPlayerColorSpace(): ColorSpaceInfo = ColorSpaceInfo(
     matrix = when (matrix) {
+        KiteColorMatrix.Unspecified -> ColorMatrix.Unspecified
         KiteColorMatrix.Bt709 -> ColorMatrix.Bt709
-        KiteColorMatrix.Bt470bg, KiteColorMatrix.Smpte170m -> ColorMatrix.Bt601
+        KiteColorMatrix.Fcc -> ColorMatrix.Fcc
+        KiteColorMatrix.Bt470bg -> ColorMatrix.Bt470bg
+        KiteColorMatrix.Smpte170m -> ColorMatrix.Smpte170m
+        KiteColorMatrix.Smpte240m -> ColorMatrix.Smpte240m
+        KiteColorMatrix.YCgCo -> ColorMatrix.YCgCo
         KiteColorMatrix.Bt2020Ncl -> ColorMatrix.Bt2020Ncl
         KiteColorMatrix.Bt2020Cl -> ColorMatrix.Bt2020Cl
-        KiteColorMatrix.Smpte240m -> ColorMatrix.Smpte240m
+        KiteColorMatrix.ICtCp -> ColorMatrix.ICtCp
         KiteColorMatrix.Rgb -> ColorMatrix.Identity
-        else -> ColorMatrix.Bt709
     },
     primaries = when (primaries) {
+        KiteColorPrimaries.Unspecified -> ColorPrimaries.Unspecified
         KiteColorPrimaries.Bt709 -> ColorPrimaries.Bt709
-        KiteColorPrimaries.Bt470bg, KiteColorPrimaries.Smpte170m -> ColorPrimaries.Bt601
+        KiteColorPrimaries.Bt470m -> ColorPrimaries.Bt470m
+        KiteColorPrimaries.Bt470bg -> ColorPrimaries.Bt470bg
+        KiteColorPrimaries.Smpte170m -> ColorPrimaries.Smpte170m
+        KiteColorPrimaries.Smpte240m -> ColorPrimaries.Smpte240m
+        KiteColorPrimaries.Film -> ColorPrimaries.Film
         KiteColorPrimaries.Bt2020 -> ColorPrimaries.Bt2020
+        KiteColorPrimaries.SmpteSt428 -> ColorPrimaries.SmpteSt428
         KiteColorPrimaries.SmpteSt431 -> ColorPrimaries.DciP3
         KiteColorPrimaries.SmpteSt432 -> ColorPrimaries.DisplayP3
-        else -> ColorPrimaries.Bt709
     },
     transfer = when (transfer) {
-        KiteColorTransfer.Bt709, KiteColorTransfer.Bt2020Ten, KiteColorTransfer.Bt2020Twelve -> ColorTransfer.Bt709
+        KiteColorTransfer.Unspecified -> ColorTransfer.Unspecified
+        KiteColorTransfer.Bt709 -> ColorTransfer.Bt709
         KiteColorTransfer.Smpte170m -> ColorTransfer.Bt601
         KiteColorTransfer.Iec6196621 -> ColorTransfer.Srgb
         KiteColorTransfer.Linear -> ColorTransfer.Linear
         KiteColorTransfer.Gamma22 -> ColorTransfer.Gamma22
         KiteColorTransfer.Gamma28 -> ColorTransfer.Gamma28
+        KiteColorTransfer.Smpte240m -> ColorTransfer.Smpte240m
+        KiteColorTransfer.Log -> ColorTransfer.Log
+        KiteColorTransfer.LogSqrt -> ColorTransfer.LogSqrt
+        KiteColorTransfer.Iec6196624 -> ColorTransfer.Iec6196624
+        KiteColorTransfer.Bt1361Ecg -> ColorTransfer.Bt1361Ecg
+        KiteColorTransfer.Bt2020Ten -> ColorTransfer.Bt2020Ten
+        KiteColorTransfer.Bt2020Twelve -> ColorTransfer.Bt2020Twelve
         KiteColorTransfer.SmpteSt2084 -> ColorTransfer.Pq
+        KiteColorTransfer.SmpteSt428 -> ColorTransfer.SmpteSt428
         KiteColorTransfer.AribStdB67 -> ColorTransfer.Hlg
-        else -> ColorTransfer.Bt709
     },
     fullRange = fullRange,
     chromaLocation = when (chromaLocation) {
@@ -75,9 +92,10 @@ internal fun ColorInfo.toPlayerColorSpace(): ColorSpaceInfo = ColorSpaceInfo(
         KiteChromaLocation.Top -> ChromaLocation.Top
         KiteChromaLocation.BottomLeft -> ChromaLocation.BottomLeft
         KiteChromaLocation.Bottom -> ChromaLocation.Bottom
-        // Left is both the explicit value and the right default: it is what MPEG-2 and H.264 use.
-        else -> ChromaLocation.Left
+        KiteChromaLocation.Left -> ChromaLocation.Left
+        KiteChromaLocation.Unspecified -> ChromaLocation.Unspecified
     },
+    rangeSpecified = rangeSpecified,
 )
 
 internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pixelFormatName) {
@@ -272,6 +290,7 @@ private fun packedChromaSize(value: Int, subsampling: Int): Int =
  * inherited; the full reasoning lives beside the native original in SoftwareConverter.native.kt. */
 private fun packedChromaSampleShift(location: ChromaLocation, subsampleX: Int): Int {
     val shift = when (location) {
+        ChromaLocation.Unspecified,
         ChromaLocation.Left, ChromaLocation.TopLeft, ChromaLocation.BottomLeft -> 0
         ChromaLocation.Center, ChromaLocation.Top, ChromaLocation.Bottom -> 0
     }
@@ -293,7 +312,7 @@ private class PackedCoefficients(
             val lumaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 219.0
             val chromaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 224.0
             return when (colorSpace.matrix) {
-                ColorMatrix.Bt601 -> PackedCoefficients(
+                ColorMatrix.Bt601, ColorMatrix.Bt470bg, ColorMatrix.Smpte170m -> PackedCoefficients(
                     offset, lumaScale, chromaScale,
                     rCr = 1.402, gCb = 0.344136, gCr = 0.714136, bCb = 1.772,
                 )

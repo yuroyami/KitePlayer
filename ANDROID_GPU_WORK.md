@@ -1,12 +1,14 @@
-# Android GPU Video Path Implementation Plan
+# Android GPU Video Path Implementation Record
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. If those skills are not available in your harness, execute the tasks strictly in order, one at a time, running every verification step before moving on.
+> The detailed task recipes below are the historical implementation plan. They are retained to show
+> what was considered, including the original design that code review rejected. Their unchecked boxes
+> are not the current backlog. The completion ledger in this section is authoritative.
 
-**Goal:** Replace KitePlayer's CPU-bound Android video path with hardware decode and GPU-native presentation. The immediate sample path uses MediaCodec directly into its SurfaceView. The Compose path will use an external-OES texture and one GPU conversion into an RGBA hardware buffer, with no CPU video-pixel conversion.
+**Goal:** Replace KitePlayer's CPU-bound Android video path with hardware decode and GPU-native presentation. `KitePlayerView` sends MediaCodec output directly to its SurfaceView. The Compose path uses an external-OES texture and one GPU conversion into an RGBA hardware buffer, with no CPU video-pixel conversion.
 
 **Architecture:** A renderer-coupled `MediaCodecVideoDecoderFactory` implements the existing `VideoDecoderFactory` SPI. Compressed packets from the KiteCodec demuxer are converted from avcC/hvcC length-prefixed form to Annex B by a pure-Kotlin bitstream converter and fed to MediaCodec. For `KitePlayerView`, each decoded output stays in MediaCodec until the scheduler releases it at the target monotonic timestamp directly to the SurfaceView. The existing FFmpeg software path remains the compatibility fallback. Compose requires a separate OES-to-RGBA GPU bridge because opaque decoder buffers are not portable Android Bitmaps.
 
-**Tech Stack:** Kotlin Multiplatform (androidMain), MediaCodec, ImageReader, HardwareBuffer, Compose Multiplatform, existing KitePlayer SPI (`VideoDecoderFactory`, `VideoDecoder`, `VideoFrame`), KiteCodec 0.0.6 (extradata exposure may require a KiteCodec change, see Task 2).
+**Tech Stack:** Kotlin Multiplatform (`androidMain`), MediaCodec, SurfaceTexture, GLES2, ImageReader, HardwareBuffer, FrameMetrics, Compose Multiplatform, the existing KitePlayer SPI (`VideoDecoderFactory`, `VideoDecoder`, `VideoFrame`), and owned codec extradata exposed by KiteCodec.
 
 **Spec:** `/Users/macbook/StudioProjects/#Kite/KiteCodec/SOL_REVIEW.md`, section "Performance findings", blocker 1 ("Android's flagship path is entirely CPU-bound") and the "Central architectural recommendation". This plan implements the review's required direction: "MediaCodec directly to Surface where possible; AHardwareBuffer interop for composited paths; CPU RGBA only as a compatibility fallback."
 
@@ -15,26 +17,55 @@
 The original `MediaCodec -> ImageReader(PRIVATE) -> HardwareBuffer -> Bitmap` design is not a portable Android API path. `ImageFormat.PRIVATE` is implementation-defined opaque storage, commonly vendor YUV, while `Bitmap.wrapHardwareBuffer` supports RGB-compatible buffers. Closing an acquired Image immediately would also return its BufferQueue slot while the UI could still be sampling it. That design is superseded by these two tiers:
 
 1. `KitePlayerView`: MediaCodec output buffer directly to SurfaceView. This is the lowest-overhead path and contains no per-frame CPU pixel conversion, RGBA array, Bitmap upload, or Canvas video draw.
-2. Compose: MediaCodec to `SurfaceTexture` external-OES, then one EGL shader pass to an RGBA_8888 ImageReader. The acquired Image must remain open for the displayed frame lease. This tier is still pending.
+2. Compose on API 31+: MediaCodec to `SurfaceTexture` external-OES, then one EGL shader pass to an RGBA_8888 ImageReader. Each acquired Image remains open while Skia can sample it. The lease is retired only after an exact `FrameMetrics` record reports GPU completion for the matching frame. The Android Compose state must be bound to the host `Window`, because the completion signal belongs to that exact window. API 26 to 30 uses the software renderer.
 
-Implemented in this pass:
+Completed implementation ledger:
 
-- Annex B packet conversion and strict avcC/hvcC parsing.
-- Owned codec extradata from KiteCodec through the KitePlayer source SPI.
-- Renderer-provided decoder factories, selected before backend decoder factories when attached before open.
-- API 29+ hardware MediaCodec factory for 8-bit AVC and HEVC under strict `HwdecPolicy.Require`.
-- Direct output-buffer presentation at the engine's target `System.nanoTime()` timestamp.
-- Synchronous Surface replacement, a private fallback Surface, flush/CSD replay, EOS final-frame handling, input-size guards, frame ownership tests, and software fallback.
-- Headless renderer attachment before open, Surface recreation without renderer replacement, aspect-correct SurfaceView layout, and a separate subtitle overlay view.
-- Sample diagnostics for presented FPS, decode FPS, dropped frames, and `KitePerf` logcat output.
+- [x] Annex B packet conversion and strict avcC/hvcC parsing in Kotlin.
+- [x] Owned codec extradata from KiteCodec through the KitePlayer source SPI.
+- [x] Renderer-provided decoder factories, selected without putting Android types in the common engine.
+- [x] API 29+ direct Surface MediaCodec path with no per-frame CPU video-pixel conversion.
+- [x] Strict hardware admission for self-describing 8-bit AVC, HEVC, VP9, and AV1 configurations.
+- [x] Output-buffer presentation at the engine's target `System.nanoTime()` timestamp.
+- [x] Synchronous Surface replacement, fallback Surface ownership, flush/CSD replay, EOS final-frame handling, packet-size guards, dynamic output geometry, and frame ownership tests.
+- [x] Seekable `HwdecPolicy.Auto` recovery by closing the failed session and reopening the backend with `HwdecPolicy.Off` at the current position.
+- [x] API 31+ Compose OES-to-RGBA GPU bridge with explicit ImageReader leases and exact `FrameMetrics` GPU-completion fencing.
+- [x] Immutable software fallback images, so no mutable Bitmap is overwritten while HWUI may still sample it.
+- [x] Headless renderer attachment before open, Surface recreation without renderer replacement, aspect-correct SurfaceView layout, and a separate subtitle overlay view.
+- [x] Sample diagnostics for presented FPS, decode FPS, dropped frames, and `KitePerf` logcat output.
+- [x] API 36 arm64 emulator functional smoke and direct-Surface performance observation.
+- [ ] Physical-device before/after benchmark, rapid-seek and lifecycle checks, and the 30-minute graphics-memory soak. No physical Android device was available.
+- [x] Final Compose instrumentation rerun after the exact GPU-completion fence landed.
 
-Physical FPS measurement is not checked off yet because no Android device is currently connected. Host tests and Android compilation do not substitute for the 30-second device run.
+Physical FPS measurement is not checked off because no physical Android device was connected. Host tests, Android compilation, and emulator runs do not substitute for the 30-second physical-device run.
 
 Runtime smoke on the installed API 36 arm64 emulator with 16 KiB pages passed on the final source bytes: hardware status `HardwareZeroCopy(MediaCodec)`, 151 decoded and presented frames, precise seek landed, terminal state `Ended`, a Surface frame was presented, audio underruns stayed at zero, and teardown completed. A separate normal run of the 1080p30 fixture stabilized around 29 to 31 presented FPS after warm-up, with zero renderer failures or superseded frames. Those emulator numbers validate the path and telemetry, but are not recorded as the physical-device baseline.
 
-The direct factory intentionally declines `Auto` and `Prefer` for now. Those policies promise
-runtime software fallback, but replaying already-accepted packets across a renderer factory and the
-backend factory is not yet an engine capability. `Require` makes the no-demotion behavior explicit.
+The renderer factory participates in `Auto` only for a seekable source. If the renderer decoder fails,
+the actor closes the entire failed session, reopens the backend under `HwdecPolicy.Off`, seeks to the
+current position, prerolls, and resumes the requested play or pause state. It never replays a private
+compressed-packet window. `Require` may select the renderer on any source and treats runtime failure as
+terminal. `Prefer` is not used for renderer factories because the engine cannot yet preserve one global
+hardware-kind order across renderer and backend factories. `Off` and API 26 to 28 use the backend's
+software decoder.
+
+The MediaCodec path accepts only a container configuration it can validate before opening a codec:
+8-bit AVC Baseline, Constrained Baseline, Main, Extended, High, or Constrained High; 8-bit HEVC Main
+with monochrome or 4:2:0 chroma; VP9 Profile 0 with a complete WebM CodecPrivate or `vpcC` record; and
+AV1 Main 8 with a valid `av1C` record and sequence-header OBU. The declared profile and level must be
+covered by the selected MediaCodec. Ambiguous, malformed, wider, or unsupported declarations stay on
+software under `Auto` and fail admission under `Require`.
+
+Measured evidence is recorded in `ANDROID_GPU_WORK.baseline.txt`. The API 36 arm64 emulator direct
+Surface path stabilized at 29 to 31 presented FPS on the generated 1080p30 AVC fixture, with zero
+renderer failures or superseded frames after warm-up. A separate smoke reached `Ended` with 151 decoded
+and presented frames, a precise seek, zero audio underruns, and causal teardown. A preliminary Compose
+run decoded 290 frames, submitted 273, published 277, reported zero CPU conversion samples and zero
+renderer failures, and reached `Ended`. That Compose run predates the final completion-fence hardening,
+so it is not the final performance result. The final frozen-source run decoded 278 frames, submitted
+194, published 205 RGBA hardware frames, reported zero failed and superseded frames, zero audio
+underruns, and zero CPU conversion samples, selected `HardwareZeroCopy(MediaCodec)`, and reached
+`Ended` in 14.272 seconds. None of these numbers is physical-device qualification.
 
 ## Global Constraints
 
@@ -416,7 +447,11 @@ git add -A && git commit -m "feat: expose codec extradata on stream info for har
 
 ---
 
-### Task 3: MediaCodecVideoDecoder and the hardware frame
+### Task 3: Historical PRIVATE ImageReader proposal (superseded)
+
+This task recipe is intentionally unchecked. Its `ImageFormat.PRIVATE` buffer wrapping and early Image
+close are invalid for portable RGB presentation. The completed implementation is the direct Surface
+path plus the leased OES-to-RGBA Compose bridge described in the ledger above.
 
 The core deliverable. Lives entirely in `kiteplayer-output` androidMain.
 
@@ -700,7 +735,11 @@ git add -A && git commit -m "feat(output): MediaCodec hardware decoder producing
 
 ---
 
-### Task 4: Compose consumes the hardware frame with zero copies
+### Task 4: Historical direct PRIVATE-buffer Compose proposal (superseded)
+
+This task recipe depended on Task 3's invalid buffer assumption and is retained only as decision
+history. The implemented Compose tier performs one GPU conversion to RGBA and holds the ImageReader
+lease through an exact GPU-completion fence.
 
 **Files:**
 - Modify: `kiteplayer-compose/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/compose/ImageBitmaps.android.kt`
@@ -734,7 +773,11 @@ git add -A && git commit -m "feat(compose): draw hardware frames as ImageBitmaps
 
 ---
 
-### Task 5: Engine wiring: factory injection and policy
+### Task 5: Historical global factory-injection proposal (superseded)
+
+The common `PlayerConfig.extraVideoDecoders` API proposed here was not added. Renderers now contribute
+their own decoder factories through the renderer SPI, which preserves the ownership relationship between
+a MediaCodec decoder and its output Surface without adding Android configuration to the common API.
 
 The engine builds decoders from `BackendSession.videoDecoders` (owned by the FFmpeg backend). The output module cannot reach into that list, so give the player a supported injection point.
 

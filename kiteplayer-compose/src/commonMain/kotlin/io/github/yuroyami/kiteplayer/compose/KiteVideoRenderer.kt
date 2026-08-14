@@ -22,6 +22,7 @@ import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
@@ -34,7 +35,15 @@ internal class KiteVideoFrame(
     val image: ImageBitmap,
     val size: VideoSize,
     val rotationDegrees: Int,
-)
+    val requiresCommitFence: Boolean = false,
+    private val release: () -> Unit = {},
+) : AutoCloseable {
+    private val closed = atomic(false)
+
+    override fun close() {
+        if (closed.compareAndSet(expect = false, update = true)) release()
+    }
+}
 
 /**
  * The subtitle overlay published for [KiteVideo] to draw above the picture (S2.d, carrying
@@ -76,17 +85,21 @@ internal class KiteVideoOverlay(
 internal class KiteVideoRenderer(
     /** Converts a frame to tightly packed RGBA, one byte per component, no row padding. */
     private val convert: (VideoFrame) -> ByteArray,
-    /** Builds the drawable image. Production asks a [FrameImagePool]; host tests fake it. */
-    private val makeImage: (rgba: ByteArray, width: Int, height: Int) -> ImageBitmap,
+    /** Builds the drawable image and, when pooled, its asynchronous-consumer lease. */
+    private val makeImage: (rgba: ByteArray, width: Int, height: Int) -> FrameImage,
     /** Publishes the newest finished frame, or null at close. Production writes snapshot state. */
     private val publish: (KiteVideoFrame?) -> Unit,
     /** Releases whatever backs [makeImage]. Called by close after the worker has been joined. */
     private val releaseImages: () -> Unit = {},
+    /** Releases published-frame bookkeeping after the platform producer has been destroyed. */
+    private val releasePublishedFrames: () -> Unit = {},
     /** Builds a premultiplied overlay image. Production asks [overlayImageBitmap]. */
     private val makeOverlayImage: (rgba: ByteArray, width: Int, height: Int) -> ImageBitmap =
         { rgba, width, height -> overlayImageBitmap(rgba, width, height) },
     /** Publishes the active overlay, or null when it clears or the renderer closes. */
     private val publishOverlay: (KiteVideoOverlay?) -> Unit = {},
+    /** Optional platform GPU tier. Software frames still use this renderer's worker. */
+    private val hardwareRenderer: KiteVideoHardwareRenderer? = null,
 ) : VideoRenderer {
 
     /** The contentHash the published overlay was built from, so an unchanged one is not rebuilt. */
@@ -123,30 +136,45 @@ internal class KiteVideoRenderer(
         }
     }
 
+    /** Carries platform surface failures through the one renderer event stream exposed to core. */
+    private val hardwareEventJob: Job? = hardwareRenderer?.let { renderer ->
+        worker.launch {
+            renderer.events.collect(eventFlow::emit)
+        }
+    }
+
     /** Frames whose picture was published for drawing. */
-    val presentedFrames: Long get() = presented.value
+    val presentedFrames: Long get() = presented.value + (hardwareRenderer?.presentedFrames ?: 0L)
 
     /** Frames replaced in the waiting slot by a newer one before they could be converted. */
-    val supersededFrames: Long get() = superseded.value
+    val supersededFrames: Long get() = superseded.value + (hardwareRenderer?.supersededFrames ?: 0L)
 
     /** Frames that published nothing: a bad conversion, a failed image build, a close in flight. */
-    val failedFrames: Long get() = failed.value
+    val failedFrames: Long get() = failed.value + (hardwareRenderer?.failedFrames ?: 0L)
 
     /** Per-published-frame CPU cost of convert plus image build. See [KiteVideoFrameCost]. */
     private val cost = FrameCostTracker()
 
     fun costSnapshot(): KiteVideoFrameCost = cost.snapshot()
 
-    /** Nothing zero-copy here yet; KV-3 (Apple, S2) is where that lands. */
-    override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
+    override fun videoDecoderFactories() = hardwareRenderer?.videoDecoderFactories().orEmpty()
 
-    override fun supports(format: PlayerPixelFormat): Boolean = format != PlayerPixelFormat.Opaque
+    override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> =
+        hardwareRenderer?.supportedHardwareSurfaces().orEmpty()
+
+    override fun supports(format: PlayerPixelFormat): Boolean =
+        format != PlayerPixelFormat.Opaque || hardwareRenderer?.supports(format) == true
 
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
         if (closed.value) {
             frame.close()
             failed.incrementAndGet()
             return false
+        }
+        val hardware = hardwareRenderer
+        val surface = frame.hardwareSurface
+        if (hardware != null && surface != null && surface in hardware.supportedHardwareSurfaces()) {
+            return hardware.present(frame, targetNanos)
         }
         val displaced = pending.getAndSet(frame)
         if (displaced != null) {
@@ -201,7 +229,15 @@ internal class KiteVideoRenderer(
             return
         }
         cost.record(started.elapsedNow().inWholeNanoseconds)
-        publish(KiteVideoFrame(image, size, rotation))
+        publish(
+            KiteVideoFrame(
+                image = image.image,
+                size = size,
+                rotationDegrees = rotation,
+                requiresCommitFence = image.requiresCommitFence,
+                release = image.release,
+            ),
+        )
         presented.incrementAndGet()
     }
 
@@ -220,7 +256,9 @@ internal class KiteVideoRenderer(
 
     override fun vsyncIntervalNanos(): Long? = null
 
-    override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+    override fun setViewport(width: Int, height: Int, scale: Float) {
+        hardwareRenderer?.setViewport(width, height, scale)
+    }
 
     /**
      * Converts and publishes the overlay (S2.d). Inline rather than on the worker: cues change
@@ -274,16 +312,26 @@ internal class KiteVideoRenderer(
      */
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
-        signal.close()
-        worker.cancel()
-        runBlocking { workerJob.join() }
-        drainPending()
-        publish(null)
-        publishOverlay(null)
-        // After the join and the null publish: no worker can ask for an image and no reader
-        // should be handed one, so the image storage goes back now.
-        releaseImages()
-        dispatcher.close()
+        var failure: Throwable? = null
+        try {
+            hardwareRenderer?.close()
+        } catch (caught: Throwable) {
+            failure = caught
+        } finally {
+            signal.close()
+            worker.cancel()
+            runBlocking { workerJob.join() }
+            hardwareEventJob?.let { runBlocking { it.join() } }
+            drainPending()
+            publish(null)
+            releasePublishedFrames()
+            publishOverlay(null)
+            // After the join and the null publish: no worker can ask for an image and no reader
+            // should be handed one, so the image storage goes back now.
+            releaseImages()
+            dispatcher.close()
+        }
+        failure?.let { throw it }
     }
 
     private companion object {

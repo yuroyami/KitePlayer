@@ -289,7 +289,11 @@ public object SoftwareConverter {
         // lives names every case it answers for, and so a new siting has to be decided here.
         val shift = when (location) {
             // Co-sited horizontally: chroma sample j sits on luma column 2j.
-            ChromaLocation.Left, ChromaLocation.TopLeft, ChromaLocation.BottomLeft -> 0
+            ChromaLocation.Unspecified,
+            ChromaLocation.Left,
+            ChromaLocation.TopLeft,
+            ChromaLocation.BottomLeft,
+            -> 0
             // Half a luma column to the right of that: chroma sample j sits at 2j + 0.5.
             ChromaLocation.Center, ChromaLocation.Top, ChromaLocation.Bottom -> 0
         }
@@ -339,7 +343,7 @@ public object SoftwareConverter {
                 val chromaScale = if (colorSpace.fullRange) 1.0 else 255.0 / 224.0
 
                 return when (colorSpace.matrix) {
-                    ColorMatrix.Bt601 -> Coefficients(
+                    ColorMatrix.Bt601, ColorMatrix.Bt470bg, ColorMatrix.Smpte170m -> Coefficients(
                         offset, lumaScale, chromaScale,
                         rCr = 1.402, gCb = 0.344136, gCr = 0.714136, bCb = 1.772,
                     )

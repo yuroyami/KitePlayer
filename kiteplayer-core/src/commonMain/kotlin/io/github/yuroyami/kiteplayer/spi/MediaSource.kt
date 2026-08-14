@@ -95,12 +95,58 @@ public data class PlayerStreamInfo(
     // Audio.
     val sampleRate: Int? = null,
     val channels: Int? = null,
+    /** Typed VP9 sequence metadata. Present only for VP9; unknown declarations remain null inside. */
+    val vp9: Vp9CodecConfiguration? = null,
     /**
      * An owned copy of the container's codec configuration record, such as avcC or hvcC. Null
      * when the stream has no separate configuration record.
      */
     val codecExtradata: ByteArray? = null,
 )
+
+public data class Vp9CodecConfiguration(
+    val profile: Vp9Profile?,
+    val level: Vp9Level?,
+    val bitDepth: Vp9BitDepth?,
+    val chromaSubsampling: Vp9ChromaSubsampling?,
+)
+
+public enum class Vp9Profile(public val number: Int) {
+    Profile0(0),
+    Profile1(1),
+    Profile2(2),
+    Profile3(3),
+}
+
+public enum class Vp9Level(public val code: Int) {
+    Level1(10),
+    Level1_1(11),
+    Level2(20),
+    Level2_1(21),
+    Level3(30),
+    Level3_1(31),
+    Level4(40),
+    Level4_1(41),
+    Level5(50),
+    Level5_1(51),
+    Level5_2(52),
+    Level6(60),
+    Level6_1(61),
+    Level6_2(62),
+}
+
+public enum class Vp9BitDepth(public val bits: Int) {
+    Eight(8),
+    Ten(10),
+    Twelve(12),
+}
+
+public enum class Vp9ChromaSubsampling(public val code: Int) {
+    Monochrome(400),
+    Yuv420(420),
+    Yuv422(422),
+    Yuv444(444),
+}
 
 /**
  * One compressed packet.

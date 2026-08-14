@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.compose
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.runtime.Composable
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
@@ -21,9 +22,9 @@ import org.jetbrains.skia.ImageInfo
  */
 internal actual class FrameImagePool actual constructor() {
 
-    actual fun imageFor(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
+    actual fun imageFor(rgba: ByteArray, width: Int, height: Int): FrameImage {
         val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.OPAQUE)
-        return Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap()
+        return FrameImage(Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap())
     }
 
     actual fun release() {
@@ -73,4 +74,14 @@ internal actual fun phoneFrameToRgba(frame: VideoFrame): ByteArray {
 internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
     val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.PREMUL)
     return Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap()
+}
+
+@Composable
+internal actual fun rememberKiteVideoFrameCommitter(
+    state: KiteVideoState,
+): KiteVideoFrameCommitter = object : KiteVideoFrameCommitter {
+    private val owner = Any()
+    override val canDrawCommitFencedFrames: Boolean get() = true
+
+    override fun frameRecorded(frame: KiteVideoFrame?) = state.frameCommitted(owner, frame)
 }

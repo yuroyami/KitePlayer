@@ -1,22 +1,29 @@
 package io.github.yuroyami.kiteplayer.compose
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 
 /**
  * Builds drawable images from tightly packed RGBA bytes, one byte per component, no row padding.
  *
- * A POOL rather than a function (A2 of the 17.4.6 rider), because the difference between them is
- * the whole Android allocation story: a 1080p RGBA image is 8.3 MB, so one fresh image per
- * published frame at 30 fps is 250 MB/s of garbage. The Android actual reuses a small ring; the
- * iOS actual stays one raster per frame because KV-2 (S2) owns the Apple path.
+ * The Android software fallback deliberately creates immutable storage. Reusing even a small ring
+ * is unsafe when its Window detaches or drops completion metrics: HWUI may still sample a bitmap
+ * after the worker wants to refill it. The normal Android tier never reaches this fallback.
  *
  * Every [imageFor] call comes from the renderer's single worker thread. [release] is called by
  * the renderer's close AFTER that worker has been joined, so the two never race; the join is the
  * happens-before edge.
  */
+internal class FrameImage(
+    val image: ImageBitmap,
+    val requiresCommitFence: Boolean = false,
+    val release: () -> Unit = {},
+)
+
 internal expect class FrameImagePool() {
-    fun imageFor(rgba: ByteArray, width: Int, height: Int): ImageBitmap
+    fun imageFor(rgba: ByteArray, width: Int, height: Int): FrameImage
     fun release()
 }
 
@@ -34,3 +41,22 @@ internal expect fun phoneFrameToRgba(frame: VideoFrame): ByteArray
  * a bitmap the next cue overwrites.
  */
 internal expect fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap
+
+/** A platform renderer that can publish GPU-native images into the software renderer's state slot. */
+internal interface KiteVideoHardwareRenderer : VideoRenderer {
+    val presentedFrames: Long
+    val supersededFrames: Long
+    val failedFrames: Long
+}
+
+/** Records a platform proof that a frame is no longer sampled by the asynchronous UI renderer. */
+internal interface KiteVideoFrameCommitter {
+    /** True only when this exact Compose node can obtain a completion proof for hardware images. */
+    val canDrawCommitFencedFrames: Boolean
+
+    fun frameRecorded(frame: KiteVideoFrame?)
+}
+
+/** The frame-commit implementation bound to the platform view hosting [KiteVideo]. */
+@Composable
+internal expect fun rememberKiteVideoFrameCommitter(state: KiteVideoState): KiteVideoFrameCommitter

@@ -19,40 +19,55 @@ import kotlin.math.roundToInt
  * transparent by design, because video that is real Compose content should composite like it;
  * add a background modifier for the classic black bars.
  *
- * The honest trade, until S2 measures and improves it: each frame is CPU-converted and uploaded,
- * which costs more power than [KitePlayerSurface]'s display-controller path. Sustained
- * fullscreen playback belongs to the baseline; video embedded inside UI loses nothing, because
- * Compose was compositing those pixels anyway. Per-frame cost is UNMEASURED until S2's exit.
+ * Android API 31+ can use the explicit-Window state overload to keep decoded pixels on the GPU:
+ * MediaCodec to external-OES, one RGBA shader blit, then a HardwareBuffer-backed Compose image.
+ * Other states/platforms retain their software or platform-specific fallback.
  *
  * Per frame, the UI tree does nothing: the frame state is read only inside the draw phase, so a
  * new frame invalidates drawing alone, never composition or layout (law 1 of 17.9).
  */
 @Composable
 public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
+    val frameCommitter = rememberKiteVideoFrameCommitter(state)
     Box(
         modifier.drawBehind {
             // The two sanctioned draw-phase reads (law 1): the frame, and the overlay whose
             // writes arrive only on cue edges. Do not add another.
-            val frame = state.frame.value ?: return@drawBehind
-            val layout = videoLayout(
-                areaWidth = size.width.toInt(),
-                areaHeight = size.height.toInt(),
-                size = frame.size,
-                rotationDegrees = frame.rotationDegrees,
-            ) ?: return@drawBehind
-            rotate(
-                degrees = layout.rotationDegrees.toFloat(),
-                pivot = androidx.compose.ui.geometry.Offset(layout.centerX, layout.centerY),
-            ) {
-                drawImage(
-                    image = frame.image,
-                    dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
-                    dstSize = IntSize(
-                        layout.drawWidth.roundToInt().coerceAtLeast(1),
-                        layout.drawHeight.roundToInt().coerceAtLeast(1),
-                    ),
-                    filterQuality = FilterQuality.Low,
-                )
+            val frame = state.acquireFrameForDraw(frameCommitter.canDrawCommitFencedFrames)
+            if (frame == null) {
+                frameCommitter.frameRecorded(null)
+                return@drawBehind
+            }
+            var recorded = false
+            try {
+                val layout = videoLayout(
+                    areaWidth = size.width.toInt(),
+                    areaHeight = size.height.toInt(),
+                    size = frame.size,
+                    rotationDegrees = frame.rotationDegrees,
+                ) ?: return@drawBehind
+                rotate(
+                    degrees = layout.rotationDegrees.toFloat(),
+                    pivot = androidx.compose.ui.geometry.Offset(layout.centerX, layout.centerY),
+                ) {
+                    drawImage(
+                        image = frame.image,
+                        dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
+                        dstSize = IntSize(
+                            layout.drawWidth.roundToInt().coerceAtLeast(1),
+                            layout.drawHeight.roundToInt().coerceAtLeast(1),
+                        ),
+                        filterQuality = FilterQuality.Low,
+                    )
+                }
+                recorded = true
+            } finally {
+                state.frameDrawFinished(frame, recorded)
+                if (recorded) {
+                    // A software image carries no ImageReader lease, but its committed display
+                    // list is still the proof that an older hardware image is no longer sampled.
+                    frameCommitter.frameRecorded(frame.takeIf(KiteVideoFrame::requiresCommitFence))
+                }
             }
             // Subtitles composite above the picture in OUTPUT space, unrotated: overlays are
             // laid out for the output size, the same law the platform renderers obey.

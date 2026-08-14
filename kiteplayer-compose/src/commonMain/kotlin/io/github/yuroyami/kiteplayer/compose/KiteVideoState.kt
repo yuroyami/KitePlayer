@@ -5,9 +5,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.ImageBitmap
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 
 /**
  * The connection between a player and [KiteVideo]: it owns the renderer the player draws
@@ -27,15 +28,20 @@ import io.github.yuroyami.kiteplayer.spi.VideoRenderer
  */
 public class KiteVideoState internal constructor(
     convert: (VideoFrame) -> ByteArray,
-    makeImage: (rgba: ByteArray, width: Int, height: Int) -> ImageBitmap,
+    makeImage: (rgba: ByteArray, width: Int, height: Int) -> FrameImage,
     releaseImages: () -> Unit,
+    hardwareRendererFactory: ((publish: (KiteVideoFrame) -> Unit) -> KiteVideoHardwareRenderer?) = { null },
 ) {
-    public constructor() : this(FrameImagePool())
+    public constructor() : this(FrameImagePool(), { null })
 
-    private constructor(pool: FrameImagePool) : this(
+    internal constructor(
+        pool: FrameImagePool,
+        hardwareRendererFactory: ((publish: (KiteVideoFrame) -> Unit) -> KiteVideoHardwareRenderer?),
+    ) : this(
         convert = { frame -> phoneFrameToRgba(frame) },
         makeImage = { rgba, width, height -> pool.imageFor(rgba, width, height) },
         releaseImages = { pool.release() },
+        hardwareRendererFactory = hardwareRendererFactory,
     )
 
     /**
@@ -53,19 +59,144 @@ public class KiteVideoState internal constructor(
      */
     internal val overlay: MutableState<KiteVideoOverlay?> = mutableStateOf(null)
 
+    /**
+     * A hardware image stays leased while Compose records it and while Android's RenderThread can
+     * still sample it. On Android the latter boundary is the owning Window's exact VSYNC-matched
+     * GPU-completion metric, not display-list submission or a guessed number of newer frames. If
+     * that proof never arrives, keeping the lease applies bounded decoder backpressure; reusing
+     * pixels with no proven consumer fence is never allowed.
+     */
+    private val frameFence = SynchronizedObject()
+    private val drawingFrames = mutableMapOf<KiteVideoFrame, Int>()
+    private val pendingCommits = mutableMapOf<KiteVideoFrame, Int>()
+    private val committedFrames = mutableMapOf<Any, KiteVideoFrame>()
+    private var publishedFrame: KiteVideoFrame? = null
+
+    internal val hardwareRenderer: KiteVideoHardwareRenderer? = hardwareRendererFactory(::publishFrame)
+
     private val videoRenderer = KiteVideoRenderer(
         convert = convert,
         makeImage = makeImage,
-        publish = { newest -> frame.value = newest },
+        publish = ::publishFrame,
         releaseImages = releaseImages,
+        releasePublishedFrames = ::releaseFramesAfterRendererClosed,
         publishOverlay = { newest -> overlay.value = newest },
+        hardwareRenderer = hardwareRenderer,
     )
+
+    internal fun publishFrame(newest: KiteVideoFrame?) {
+        val retire = mutableListOf<KiteVideoFrame>()
+        synchronized(frameFence) {
+            val previous = publishedFrame
+            publishedFrame = newest
+            frame.value = newest
+            if (
+                previous != null &&
+                previous !== newest &&
+                previous !in committedFrames.values &&
+                previous !in drawingFrames &&
+                previous !in pendingCommits
+            ) {
+                retire += previous
+            }
+        }
+        retire.forEach(KiteVideoFrame::close)
+    }
+
+    /**
+     * The draw phase's only frame-state read. Reading and marking the lease in one critical
+     * section prevents publication from retiring the image between those two operations.
+     */
+    internal fun acquireFrameForDraw(allowCommitFence: Boolean = true): KiteVideoFrame? = synchronized(frameFence) {
+        frame.value
+            ?.takeIf { allowCommitFence || !it.requiresCommitFence }
+            ?.also { drawingFrames[it] = drawingFrames.getOrElse(it) { 0 } + 1 }
+    }
+
+    /**
+     * Called from [KiteVideo]'s draw phase after this exact image was (or was not) recorded.
+     * A recorded image moves from the synchronous draw lease to an asynchronous commit lease.
+     */
+    internal fun frameDrawFinished(drawn: KiteVideoFrame, recorded: Boolean) {
+        var retire = false
+        synchronized(frameFence) {
+            val drawing = drawingFrames[drawn]
+            if (drawing != null) {
+                if (drawing == 1) drawingFrames.remove(drawn) else drawingFrames[drawn] = drawing - 1
+            }
+            if (recorded && drawn.requiresCommitFence) {
+                pendingCommits[drawn] = pendingCommits.getOrElse(drawn) { 0 } + 1
+            }
+            retire = drawn !== publishedFrame &&
+                drawn !in committedFrames.values &&
+                drawn !in drawingFrames &&
+                drawn !in pendingCommits
+        }
+        if (retire) drawn.close()
+    }
+
+    /**
+     * Called only after the platform proves GPU completion for the display list containing
+     * [drawn]. Null means a completed draw with no leased image replaced the previous display list.
+     */
+    internal fun frameCommitted(drawn: KiteVideoFrame?) = frameCommitted(DEFAULT_COMMIT_OWNER, drawn)
+
+    /** Each KiteVideo node owns a distinct persistent display list in the shared Window. */
+    internal fun frameCommitted(owner: Any, drawn: KiteVideoFrame?) {
+        val retire = mutableListOf<KiteVideoFrame>()
+        synchronized(frameFence) {
+            if (drawn != null) {
+                val pending = pendingCommits[drawn] ?: return
+                if (pending == 1) pendingCommits.remove(drawn) else pendingCommits[drawn] = pending - 1
+            }
+            val previous = committedFrames[owner]
+            if (drawn == null) committedFrames.remove(owner) else committedFrames[owner] = drawn
+            if (
+                previous != null &&
+                previous !== drawn &&
+                previous !== publishedFrame &&
+                previous !in committedFrames.values &&
+                previous !in drawingFrames &&
+                previous !in pendingCommits
+            ) {
+                retire += previous
+            }
+        }
+        retire.forEach(KiteVideoFrame::close)
+    }
+
+    /**
+     * Final renderer teardown has already disconnected and destroyed the producer queue. At that
+     * point no slot can be overwritten, so even a commit callback lost with a detached view can be
+     * released without weakening the draw-time fence.
+     */
+    private fun releaseFramesAfterRendererClosed() {
+        val retire = synchronized(frameFence) {
+            buildSet {
+                publishedFrame?.let(::add)
+                addAll(committedFrames.values)
+                addAll(drawingFrames.keys)
+                addAll(pendingCommits.keys)
+            }.also {
+                publishedFrame = null
+                committedFrames.clear()
+                drawingFrames.clear()
+                pendingCommits.clear()
+                frame.value = null
+            }
+        }
+        retire.forEach(KiteVideoFrame::close)
+    }
 
     /** Attach this to the player. Close it when the video surface is done (or use [rememberKiteVideoState]). */
     public val renderer: VideoRenderer get() = videoRenderer
 
     /** Frames whose picture was published for drawing. */
     public val presentedFrames: Long get() = videoRenderer.presentedFrames
+
+    private companion object {
+        val DEFAULT_COMMIT_OWNER = Any()
+    }
 
     /** Frames replaced by a newer one before they could be converted. */
     public val supersededFrames: Long get() = videoRenderer.supersededFrames
@@ -78,6 +209,7 @@ public class KiteVideoState internal constructor(
      * provisional stage evidence; the numbers that count are re-taken on devices at S3's exit.
      */
     public val frameCost: KiteVideoFrameCost get() = videoRenderer.costSnapshot()
+
 }
 
 /**

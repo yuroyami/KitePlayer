@@ -28,6 +28,11 @@ import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import io.github.yuroyami.kiteplayer.spi.Vp9BitDepth
+import io.github.yuroyami.kiteplayer.spi.Vp9ChromaSubsampling
+import io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration
+import io.github.yuroyami.kiteplayer.spi.Vp9Level
+import io.github.yuroyami.kiteplayer.spi.Vp9Profile
 import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
 import io.github.yuroyami.kitecodec.CodecId
 import io.github.yuroyami.kitecodec.HardwareAccel
@@ -314,7 +319,7 @@ internal class VideoDecoderContinuity {
     }
 }
 
-private fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo? {
+internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo? {
     val kind = when (type) {
         MediaType.Video -> TrackKind.Video
         MediaType.Audio -> TrackKind.Audio
@@ -347,12 +352,29 @@ private fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInfo
         // no stream kind has to be excluded here.
         rotationDegrees = rotationDegrees,
         frameRate = video?.frameRate?.let { if (it.den == 0) null else it.num.toDouble() / it.den },
+        colorSpace = video?.color?.toPlayerColorSpace(),
         // A stream with exactly one frame of cover art must never carry the timeline or drive
         // synchronisation. Treating it as normal video makes the player hang at the end of every
         // audio file that has album art.
         isCoverArt = disposition.attachedPicture,
         sampleRate = audio?.sampleRate,
         channels = audio?.channels,
+        vp9 = video?.vp9?.let { metadata ->
+            Vp9CodecConfiguration(
+                profile = metadata.profile?.let { source ->
+                    Vp9Profile.entries.firstOrNull { it.number == source.number }
+                },
+                level = metadata.level?.let { source ->
+                    Vp9Level.entries.firstOrNull { it.code == source.code }
+                },
+                bitDepth = metadata.bitDepth?.let { source ->
+                    Vp9BitDepth.entries.firstOrNull { it.bits == source.bits }
+                },
+                chromaSubsampling = metadata.chromaSubsampling?.let { source ->
+                    Vp9ChromaSubsampling.entries.firstOrNull { it.code == source.code }
+                },
+            )
+        },
         codecExtradata = codecExtradata?.copyOf(),
     )
 }

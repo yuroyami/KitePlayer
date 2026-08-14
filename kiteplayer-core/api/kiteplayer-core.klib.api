@@ -33,6 +33,7 @@ final enum class io.github.yuroyami.kiteplayer.spi/ChromaLocation : kotlin/Enum<
     enum entry Left // io.github.yuroyami.kiteplayer.spi/ChromaLocation.Left|null[0]
     enum entry Top // io.github.yuroyami.kiteplayer.spi/ChromaLocation.Top|null[0]
     enum entry TopLeft // io.github.yuroyami.kiteplayer.spi/ChromaLocation.TopLeft|null[0]
+    enum entry Unspecified // io.github.yuroyami.kiteplayer.spi/ChromaLocation.Unspecified|null[0]
 
     final val entries // io.github.yuroyami.kiteplayer.spi/ChromaLocation.entries|#static{}entries[0]
         final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/ChromaLocation> // io.github.yuroyami.kiteplayer.spi/ChromaLocation.entries.<get-entries>|<get-entries>#static(){}[0]
@@ -44,10 +45,16 @@ final enum class io.github.yuroyami.kiteplayer.spi/ChromaLocation : kotlin/Enum<
 final enum class io.github.yuroyami.kiteplayer.spi/ColorMatrix : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/ColorMatrix> { // io.github.yuroyami.kiteplayer.spi/ColorMatrix|null[0]
     enum entry Bt2020Cl // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Bt2020Cl|null[0]
     enum entry Bt2020Ncl // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Bt2020Ncl|null[0]
+    enum entry Bt470bg // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Bt470bg|null[0]
     enum entry Bt601 // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Bt601|null[0]
     enum entry Bt709 // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Bt709|null[0]
+    enum entry Fcc // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Fcc|null[0]
+    enum entry ICtCp // io.github.yuroyami.kiteplayer.spi/ColorMatrix.ICtCp|null[0]
     enum entry Identity // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Identity|null[0]
+    enum entry Smpte170m // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Smpte170m|null[0]
     enum entry Smpte240m // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Smpte240m|null[0]
+    enum entry Unspecified // io.github.yuroyami.kiteplayer.spi/ColorMatrix.Unspecified|null[0]
+    enum entry YCgCo // io.github.yuroyami.kiteplayer.spi/ColorMatrix.YCgCo|null[0]
 
     final val entries // io.github.yuroyami.kiteplayer.spi/ColorMatrix.entries|#static{}entries[0]
         final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/ColorMatrix> // io.github.yuroyami.kiteplayer.spi/ColorMatrix.entries.<get-entries>|<get-entries>#static(){}[0]
@@ -58,10 +65,17 @@ final enum class io.github.yuroyami.kiteplayer.spi/ColorMatrix : kotlin/Enum<io.
 
 final enum class io.github.yuroyami.kiteplayer.spi/ColorPrimaries : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/ColorPrimaries> { // io.github.yuroyami.kiteplayer.spi/ColorPrimaries|null[0]
     enum entry Bt2020 // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Bt2020|null[0]
+    enum entry Bt470bg // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Bt470bg|null[0]
+    enum entry Bt470m // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Bt470m|null[0]
     enum entry Bt601 // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Bt601|null[0]
     enum entry Bt709 // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Bt709|null[0]
     enum entry DciP3 // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.DciP3|null[0]
     enum entry DisplayP3 // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.DisplayP3|null[0]
+    enum entry Film // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Film|null[0]
+    enum entry Smpte170m // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Smpte170m|null[0]
+    enum entry Smpte240m // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Smpte240m|null[0]
+    enum entry SmpteSt428 // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.SmpteSt428|null[0]
+    enum entry Unspecified // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.Unspecified|null[0]
 
     final val entries // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.entries|#static{}entries[0]
         final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/ColorPrimaries> // io.github.yuroyami.kiteplayer.spi/ColorPrimaries.entries.<get-entries>|<get-entries>#static(){}[0]
@@ -71,14 +85,23 @@ final enum class io.github.yuroyami.kiteplayer.spi/ColorPrimaries : kotlin/Enum<
 }
 
 final enum class io.github.yuroyami.kiteplayer.spi/ColorTransfer : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/ColorTransfer> { // io.github.yuroyami.kiteplayer.spi/ColorTransfer|null[0]
+    enum entry Bt1361Ecg // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Bt1361Ecg|null[0]
+    enum entry Bt2020Ten // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Bt2020Ten|null[0]
+    enum entry Bt2020Twelve // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Bt2020Twelve|null[0]
     enum entry Bt601 // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Bt601|null[0]
     enum entry Bt709 // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Bt709|null[0]
     enum entry Gamma22 // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Gamma22|null[0]
     enum entry Gamma28 // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Gamma28|null[0]
     enum entry Hlg // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Hlg|null[0]
+    enum entry Iec6196624 // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Iec6196624|null[0]
     enum entry Linear // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Linear|null[0]
+    enum entry Log // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Log|null[0]
+    enum entry LogSqrt // io.github.yuroyami.kiteplayer.spi/ColorTransfer.LogSqrt|null[0]
     enum entry Pq // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Pq|null[0]
+    enum entry Smpte240m // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Smpte240m|null[0]
+    enum entry SmpteSt428 // io.github.yuroyami.kiteplayer.spi/ColorTransfer.SmpteSt428|null[0]
     enum entry Srgb // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Srgb|null[0]
+    enum entry Unspecified // io.github.yuroyami.kiteplayer.spi/ColorTransfer.Unspecified|null[0]
 
     final val entries // io.github.yuroyami.kiteplayer.spi/ColorTransfer.entries|#static{}entries[0]
         final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/ColorTransfer> // io.github.yuroyami.kiteplayer.spi/ColorTransfer.entries.<get-entries>|<get-entries>#static(){}[0]
@@ -146,6 +169,75 @@ final enum class io.github.yuroyami.kiteplayer.spi/SampleFormat : kotlin/Enum<io
 
     final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.spi/SampleFormat // io.github.yuroyami.kiteplayer.spi/SampleFormat.valueOf|valueOf#static(kotlin.String){}[0]
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.spi/SampleFormat> // io.github.yuroyami.kiteplayer.spi/SampleFormat.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.spi/Vp9BitDepth : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/Vp9BitDepth> { // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth|null[0]
+    enum entry Eight // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.Eight|null[0]
+    enum entry Ten // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.Ten|null[0]
+    enum entry Twelve // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.Twelve|null[0]
+
+    final val bits // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.bits|{}bits[0]
+        final fun <get-bits>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.bits.<get-bits>|<get-bits>(){}[0]
+    final val entries // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/Vp9BitDepth> // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.spi/Vp9BitDepth // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.spi/Vp9BitDepth> // io.github.yuroyami.kiteplayer.spi/Vp9BitDepth.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling> { // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling|null[0]
+    enum entry Monochrome // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.Monochrome|null[0]
+    enum entry Yuv420 // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.Yuv420|null[0]
+    enum entry Yuv422 // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.Yuv422|null[0]
+    enum entry Yuv444 // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.Yuv444|null[0]
+
+    final val code // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.code|{}code[0]
+        final fun <get-code>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.code.<get-code>|<get-code>(){}[0]
+    final val entries // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling> // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling> // io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.spi/Vp9Level : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/Vp9Level> { // io.github.yuroyami.kiteplayer.spi/Vp9Level|null[0]
+    enum entry Level1 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level1|null[0]
+    enum entry Level1_1 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level1_1|null[0]
+    enum entry Level2 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level2|null[0]
+    enum entry Level2_1 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level2_1|null[0]
+    enum entry Level3 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level3|null[0]
+    enum entry Level3_1 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level3_1|null[0]
+    enum entry Level4 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level4|null[0]
+    enum entry Level4_1 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level4_1|null[0]
+    enum entry Level5 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level5|null[0]
+    enum entry Level5_1 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level5_1|null[0]
+    enum entry Level5_2 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level5_2|null[0]
+    enum entry Level6 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level6|null[0]
+    enum entry Level6_1 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level6_1|null[0]
+    enum entry Level6_2 // io.github.yuroyami.kiteplayer.spi/Vp9Level.Level6_2|null[0]
+
+    final val code // io.github.yuroyami.kiteplayer.spi/Vp9Level.code|{}code[0]
+        final fun <get-code>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/Vp9Level.code.<get-code>|<get-code>(){}[0]
+    final val entries // io.github.yuroyami.kiteplayer.spi/Vp9Level.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/Vp9Level> // io.github.yuroyami.kiteplayer.spi/Vp9Level.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.spi/Vp9Level // io.github.yuroyami.kiteplayer.spi/Vp9Level.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.spi/Vp9Level> // io.github.yuroyami.kiteplayer.spi/Vp9Level.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.spi/Vp9Profile : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/Vp9Profile> { // io.github.yuroyami.kiteplayer.spi/Vp9Profile|null[0]
+    enum entry Profile0 // io.github.yuroyami.kiteplayer.spi/Vp9Profile.Profile0|null[0]
+    enum entry Profile1 // io.github.yuroyami.kiteplayer.spi/Vp9Profile.Profile1|null[0]
+    enum entry Profile2 // io.github.yuroyami.kiteplayer.spi/Vp9Profile.Profile2|null[0]
+    enum entry Profile3 // io.github.yuroyami.kiteplayer.spi/Vp9Profile.Profile3|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.spi/Vp9Profile.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.spi/Vp9Profile> // io.github.yuroyami.kiteplayer.spi/Vp9Profile.entries.<get-entries>|<get-entries>#static(){}[0]
+    final val number // io.github.yuroyami.kiteplayer.spi/Vp9Profile.number|{}number[0]
+        final fun <get-number>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/Vp9Profile.number.<get-number>|<get-number>(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.spi/Vp9Profile // io.github.yuroyami.kiteplayer.spi/Vp9Profile.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.spi/Vp9Profile> // io.github.yuroyami.kiteplayer.spi/Vp9Profile.values|values#static(){}[0]
 }
 
 final enum class io.github.yuroyami.kiteplayer.subtitle/CueAlignment : kotlin/Enum<io.github.yuroyami.kiteplayer.subtitle/CueAlignment> { // io.github.yuroyami.kiteplayer.subtitle/CueAlignment|null[0]
@@ -864,7 +956,7 @@ final class io.github.yuroyami.kiteplayer.spi/AudioFormat { // io.github.yuroyam
 }
 
 final class io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo { // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer.spi/ColorMatrix = ..., io.github.yuroyami.kiteplayer.spi/ColorPrimaries = ..., io.github.yuroyami.kiteplayer.spi/ColorTransfer = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.spi/ChromaLocation = ...) // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.<init>|<init>(io.github.yuroyami.kiteplayer.spi.ColorMatrix;io.github.yuroyami.kiteplayer.spi.ColorPrimaries;io.github.yuroyami.kiteplayer.spi.ColorTransfer;kotlin.Boolean;io.github.yuroyami.kiteplayer.spi.ChromaLocation){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.spi/ColorMatrix = ..., io.github.yuroyami.kiteplayer.spi/ColorPrimaries = ..., io.github.yuroyami.kiteplayer.spi/ColorTransfer = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.spi/ChromaLocation = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.<init>|<init>(io.github.yuroyami.kiteplayer.spi.ColorMatrix;io.github.yuroyami.kiteplayer.spi.ColorPrimaries;io.github.yuroyami.kiteplayer.spi.ColorTransfer;kotlin.Boolean;io.github.yuroyami.kiteplayer.spi.ChromaLocation;kotlin.Boolean){}[0]
 
     final val chromaLocation // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.chromaLocation|{}chromaLocation[0]
         final fun <get-chromaLocation>(): io.github.yuroyami.kiteplayer.spi/ChromaLocation // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.chromaLocation.<get-chromaLocation>|<get-chromaLocation>(){}[0]
@@ -876,6 +968,8 @@ final class io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo { // io.github.yuro
         final fun <get-matrix>(): io.github.yuroyami.kiteplayer.spi/ColorMatrix // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.matrix.<get-matrix>|<get-matrix>(){}[0]
     final val primaries // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.primaries|{}primaries[0]
         final fun <get-primaries>(): io.github.yuroyami.kiteplayer.spi/ColorPrimaries // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.primaries.<get-primaries>|<get-primaries>(){}[0]
+    final val rangeSpecified // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.rangeSpecified|{}rangeSpecified[0]
+        final fun <get-rangeSpecified>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.rangeSpecified.<get-rangeSpecified>|<get-rangeSpecified>(){}[0]
     final val transfer // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.transfer|{}transfer[0]
         final fun <get-transfer>(): io.github.yuroyami.kiteplayer.spi/ColorTransfer // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.transfer.<get-transfer>|<get-transfer>(){}[0]
 
@@ -884,7 +978,8 @@ final class io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo { // io.github.yuro
     final fun component3(): io.github.yuroyami.kiteplayer.spi/ColorTransfer // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.component3|component3(){}[0]
     final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.component4|component4(){}[0]
     final fun component5(): io.github.yuroyami.kiteplayer.spi/ChromaLocation // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.component5|component5(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer.spi/ColorMatrix = ..., io.github.yuroyami.kiteplayer.spi/ColorPrimaries = ..., io.github.yuroyami.kiteplayer.spi/ColorTransfer = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.spi/ChromaLocation = ...): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.copy|copy(io.github.yuroyami.kiteplayer.spi.ColorMatrix;io.github.yuroyami.kiteplayer.spi.ColorPrimaries;io.github.yuroyami.kiteplayer.spi.ColorTransfer;kotlin.Boolean;io.github.yuroyami.kiteplayer.spi.ChromaLocation){}[0]
+    final fun component6(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.component6|component6(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer.spi/ColorMatrix = ..., io.github.yuroyami.kiteplayer.spi/ColorPrimaries = ..., io.github.yuroyami.kiteplayer.spi/ColorTransfer = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer.spi/ChromaLocation = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.copy|copy(io.github.yuroyami.kiteplayer.spi.ColorMatrix;io.github.yuroyami.kiteplayer.spi.ColorPrimaries;io.github.yuroyami.kiteplayer.spi.ColorTransfer;kotlin.Boolean;io.github.yuroyami.kiteplayer.spi.ChromaLocation;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo.toString|toString(){}[0]
@@ -917,7 +1012,7 @@ final class io.github.yuroyami.kiteplayer.spi/OverlayImage { // io.github.yuroya
 }
 
 final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo|null[0]
-    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/ByteArray? = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;kotlin.ByteArray?){}[0]
+    constructor <init>(kotlin/Int, io.github.yuroyami.kiteplayer/TrackKind, kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ...) // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.<init>|<init>(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?){}[0]
 
     final val bitrate // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate|{}bitrate[0]
         final fun <get-bitrate>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.bitrate.<get-bitrate>|<get-bitrate>(){}[0]
@@ -957,6 +1052,8 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
         final fun <get-title>(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.title.<get-title>|<get-title>(){}[0]
     final val videoSize // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.videoSize|{}videoSize[0]
         final fun <get-videoSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.videoSize.<get-videoSize>|<get-videoSize>(){}[0]
+    final val vp9 // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.vp9|{}vp9[0]
+        final fun <get-vp9>(): io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.vp9.<get-vp9>|<get-vp9>(){}[0]
 
     final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component1|component1(){}[0]
     final fun component10(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component10|component10(){}[0]
@@ -968,8 +1065,9 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component16(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component16|component16(){}[0]
     final fun component17(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component17|component17(){}[0]
     final fun component18(): kotlin/Int? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component18|component18(){}[0]
-    final fun component19(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component19|component19(){}[0]
+    final fun component19(): io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component19|component19(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/TrackKind // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component2|component2(){}[0]
+    final fun component20(): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component20|component20(){}[0]
     final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component3|component3(){}[0]
     final fun component4(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component4|component4(){}[0]
     final fun component5(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component5|component5(){}[0]
@@ -977,7 +1075,7 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun component7(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component7|component7(){}[0]
     final fun component8(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component8|component8(){}[0]
     final fun component9(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.component9|component9(){}[0]
-    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/ByteArray? = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;kotlin.ByteArray?){}[0]
+    final fun copy(kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackKind = ..., kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long? = ..., io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., kotlin/Int = ..., kotlin/Double? = ..., io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo? = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Int? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration? = ..., kotlin/ByteArray? = ...): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.copy|copy(kotlin.Int;io.github.yuroyami.kiteplayer.TrackKind;kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean;kotlin.Boolean;kotlin.Long?;io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.VideoSize?;kotlin.Int;kotlin.Double?;io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo?;kotlin.Boolean;kotlin.Boolean;kotlin.Int?;kotlin.Int?;io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration?;kotlin.ByteArray?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.toString|toString(){}[0]
@@ -1003,6 +1101,28 @@ final class io.github.yuroyami.kiteplayer.spi/SubtitleOverlay { // io.github.yur
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration { // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.spi/Vp9Profile?, io.github.yuroyami.kiteplayer.spi/Vp9Level?, io.github.yuroyami.kiteplayer.spi/Vp9BitDepth?, io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling?) // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.<init>|<init>(io.github.yuroyami.kiteplayer.spi.Vp9Profile?;io.github.yuroyami.kiteplayer.spi.Vp9Level?;io.github.yuroyami.kiteplayer.spi.Vp9BitDepth?;io.github.yuroyami.kiteplayer.spi.Vp9ChromaSubsampling?){}[0]
+
+    final val bitDepth // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.bitDepth|{}bitDepth[0]
+        final fun <get-bitDepth>(): io.github.yuroyami.kiteplayer.spi/Vp9BitDepth? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.bitDepth.<get-bitDepth>|<get-bitDepth>(){}[0]
+    final val chromaSubsampling // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.chromaSubsampling|{}chromaSubsampling[0]
+        final fun <get-chromaSubsampling>(): io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.chromaSubsampling.<get-chromaSubsampling>|<get-chromaSubsampling>(){}[0]
+    final val level // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.level|{}level[0]
+        final fun <get-level>(): io.github.yuroyami.kiteplayer.spi/Vp9Level? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.level.<get-level>|<get-level>(){}[0]
+    final val profile // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.profile|{}profile[0]
+        final fun <get-profile>(): io.github.yuroyami.kiteplayer.spi/Vp9Profile? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.profile.<get-profile>|<get-profile>(){}[0]
+
+    final fun component1(): io.github.yuroyami.kiteplayer.spi/Vp9Profile? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.component1|component1(){}[0]
+    final fun component2(): io.github.yuroyami.kiteplayer.spi/Vp9Level? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.component2|component2(){}[0]
+    final fun component3(): io.github.yuroyami.kiteplayer.spi/Vp9BitDepth? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.component3|component3(){}[0]
+    final fun component4(): io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling? // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.component4|component4(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer.spi/Vp9Profile? = ..., io.github.yuroyami.kiteplayer.spi/Vp9Level? = ..., io.github.yuroyami.kiteplayer.spi/Vp9BitDepth? = ..., io.github.yuroyami.kiteplayer.spi/Vp9ChromaSubsampling? = ...): io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.copy|copy(io.github.yuroyami.kiteplayer.spi.Vp9Profile?;io.github.yuroyami.kiteplayer.spi.Vp9Level?;io.github.yuroyami.kiteplayer.spi.Vp9BitDepth?;io.github.yuroyami.kiteplayer.spi.Vp9ChromaSubsampling?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/Vp9CodecConfiguration.toString|toString(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.subtitle/BitmapRegion { // io.github.yuroyami.kiteplayer.subtitle/BitmapRegion|null[0]

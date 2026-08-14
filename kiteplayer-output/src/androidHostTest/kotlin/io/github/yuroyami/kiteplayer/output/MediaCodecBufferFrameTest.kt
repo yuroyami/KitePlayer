@@ -52,6 +52,17 @@ class MediaCodecBufferFrameTest {
     }
 
     @Test
+    fun composeFramesCarryPortraitRotationForTheDrawPhase() {
+        val frame = frame(mutableListOf(), rotationDegrees = 90)
+
+        assertEquals(90, frame.rotationDegrees)
+        assertEquals(90, normalizedGpuQuarterTurn(450))
+        assertEquals(270, normalizedGpuQuarterTurn(-90))
+        assertEquals(0, normalizedGpuQuarterTurn(45))
+        frame.close()
+    }
+
+    @Test
     fun headlessRendererAdvertisesItsPairedDecoderAndSurfaceKind() = runBlocking {
         val overlays = mutableListOf<Any?>()
         val renderer = AndroidSurfaceVideoRenderer(
@@ -69,7 +80,10 @@ class MediaCodecBufferFrameTest {
         assertEquals(listOf<Any?>(null, null), overlays)
     }
 
-    private fun frame(commands: MutableList<MediaCodecReleaseCommand>) = MediaCodecBufferFrame(
+    private fun frame(
+        commands: MutableList<MediaCodecReleaseCommand>,
+        rotationDegrees: Int = 0,
+    ) = MediaCodecBufferFrame(
         owner = MediaCodecFrameOwner(commands::add),
         outputIndex = 7,
         decoderEpoch = 9L,
@@ -79,5 +93,6 @@ class MediaCodecBufferFrameTest {
         generation = Generation(13),
         size = VideoSize(16, 9),
         colorSpace = ColorSpaceInfo.Unspecified,
+        rotationDegrees = rotationDegrees,
     )
 }

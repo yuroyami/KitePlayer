@@ -261,7 +261,7 @@ class DecodeAndConvertTest {
         val (source, decoded) = firstVideoFrame("colors-p010.mp4")
         val actual = try {
             assertEquals(PlayerPixelFormat.Yuv420p10le, decoded.pixelFormat, "the source must be 10-bit planar")
-            // The two values the lift restates. Asserted rather than assumed, because the restatement
+            // The values the lift restates. Asserted rather than assumed, because the restatement
             // below is written out and a fixture retagged without it would measure a range conversion.
             assertEquals(ColorMatrix.Bt709, decoded.colorSpace.matrix, "the fixture must be tagged BT.709")
             assertFalse(decoded.colorSpace.fullRange, "the fixture must be tagged studio range")
@@ -269,10 +269,11 @@ class DecodeAndConvertTest {
             try {
                 assertEquals(PlayerPixelFormat.P010le, asP010.pixelFormat, "the filter must produce P010")
                 assertEquals(
-                    decoded.colorSpace,
+                    decoded.colorSpace.copy(chromaLocation = asP010.colorSpace.chromaLocation),
                     asP010.colorSpace,
-                    "the lift must not change the colour, or the comparison below measures the matrix " +
-                        "rather than the bit alignment",
+                    "the lift must not change matrix, range, primaries or transfer, or the comparison " +
+                        "below measures a colour conversion rather than bit alignment; FFmpeg's format " +
+                        "filter may clear chroma siting, which nearest-neighbour conversion does not use",
                 )
                 SoftwareConverter.toRgba(asP010)
             } finally {

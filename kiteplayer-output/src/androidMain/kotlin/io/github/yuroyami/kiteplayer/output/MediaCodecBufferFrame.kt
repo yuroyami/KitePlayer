@@ -18,6 +18,7 @@ internal data class MediaCodecReleaseCommand(
     val decoderEpoch: Long,
     val renderNanos: Long?,
     val displayVersion: Long?,
+    val beforeRender: (renderTimestampNanos: Long) -> Unit,
     val completion: (rendered: Boolean) -> Unit,
 ) {
     fun complete(rendered: Boolean) {
@@ -41,16 +42,18 @@ internal class MediaCodecBufferFrame(
     override val generation: Generation,
     override val size: VideoSize,
     override val colorSpace: ColorSpaceInfo,
+    override val rotationDegrees: Int = 0,
 ) : DirectSurfaceVideoFrame {
     private val released = AtomicBoolean(false)
 
     override val pixelFormat: PlayerPixelFormat get() = PlayerPixelFormat.Opaque
     override val hardwareSurface: HwSurfaceKind get() = HwSurfaceKind.MediaCodecBuffer
 
-    /** Rotation is configured on MediaCodec and applied while it renders to the Surface. */
-    override val rotationDegrees: Int get() = 0
-
-    override fun renderAt(targetNanos: Long, onReleased: (rendered: Boolean) -> Unit): Boolean {
+    override fun renderAt(
+        targetNanos: Long,
+        beforeRender: (renderTimestampNanos: Long) -> Unit,
+        onReleased: (rendered: Boolean) -> Unit,
+    ): Boolean {
         if (!released.compareAndSet(false, true)) return false
         val display = target.snapshot()
         val canRender = display.isDisplayable
@@ -65,6 +68,7 @@ internal class MediaCodecBufferFrame(
                 decoderEpoch = decoderEpoch,
                 renderNanos = codecTargetNanos.takeIf { canRender },
                 displayVersion = display.version.takeIf { canRender },
+                beforeRender = beforeRender,
                 completion = if (canRender) onReleased else NO_COMPLETION,
             ),
         )
@@ -79,6 +83,7 @@ internal class MediaCodecBufferFrame(
                 decoderEpoch = decoderEpoch,
                 renderNanos = null,
                 displayVersion = null,
+                beforeRender = NO_PREPARE,
                 completion = NO_COMPLETION,
             ),
         )
@@ -86,6 +91,7 @@ internal class MediaCodecBufferFrame(
 
     private companion object {
         val NO_COMPLETION: (Boolean) -> Unit = {}
+        val NO_PREPARE: (Long) -> Unit = {}
     }
 }
 

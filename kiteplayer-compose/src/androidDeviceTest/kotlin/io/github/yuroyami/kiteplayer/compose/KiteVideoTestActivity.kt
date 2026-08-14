@@ -17,10 +17,12 @@ import androidx.compose.ui.unit.dp
  */
 internal class KiteVideoTestActivity : ComponentActivity() {
 
-    val videoState: KiteVideoState = KiteVideoState()
+    lateinit var videoState: KiteVideoState
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        videoState = createAndroidKiteVideoState(window)
         setContent {
             KiteVideo(
                 state = videoState,

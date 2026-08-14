@@ -1,0 +1,42 @@
+Android GPU work evidence, 2026-08-14
+
+Physical device before baseline:
+NOT RUN. No physical Android device was connected.
+The approximately 5 FPS starting point was reported by the owner, not measured in this session.
+
+Emulator direct Surface evidence:
+Runtime: Android emulator arm64, API 36, 16 KiB pages
+Media: generated 1080p30 AVC fixture
+Observed after warm-up: 29 to 31 presented FPS
+Renderer failures: 0
+Superseded frames: 0
+Separate bounded smoke: HardwareZeroCopy(MediaCodec), 151 decoded, 151 presented, precise seek landed, 0 audio underruns, Ended, causal teardown
+
+Emulator Compose evidence, preliminary:
+Runtime: Android emulator arm64, API 36, 16 KiB pages
+Media: generated 1080p30 AVC fixture
+Decoded: 290
+Submitted: 273
+Published RGBA hardware frames: 277
+CPU conversion cost samples: 0
+Renderer failures: 0
+Terminal status: Ended
+Qualification: this run predates the final exact FrameMetrics GPU-completion fence and is not the final Compose performance result
+
+Final Compose instrumentation rerun:
+Runtime: Android emulator arm64, API 36, 16 KiB pages
+Media: generated 1080p30 AVC fixture under Compose clip and rotation modifiers
+Instrumentation time: 14.272 seconds
+Decoded: 278
+Submitted: 194
+Published RGBA hardware frames: 205
+Superseded frames: 0
+Renderer failures: 0
+Audio underruns: 0
+Hardware decode: HardwareZeroCopy(MediaCodec)
+CPU conversion cost samples: 0
+Terminal status: Ended
+Qualification: final frozen-source emulator evidence; minimum 150-frame and delivery-ratio assertions passed
+
+Physical device after measurement and 30-minute soak:
+NOT RUN. Requires owner hardware.

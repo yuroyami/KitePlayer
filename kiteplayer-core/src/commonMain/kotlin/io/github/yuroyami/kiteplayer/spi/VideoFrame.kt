@@ -117,6 +117,8 @@ public data class ColorSpaceInfo(
     /** True for 0 to 255, false for the 16 to 235 studio range. Most video is studio range. */
     val fullRange: Boolean = false,
     val chromaLocation: ChromaLocation = ChromaLocation.Left,
+    /** False only when the source did not declare a range and [fullRange] is a rendering fallback. */
+    val rangeSpecified: Boolean = true,
 ) {
     /** True when the transfer function means high dynamic range. */
     public val isHdr: Boolean
@@ -124,7 +126,13 @@ public data class ColorSpaceInfo(
 
     public companion object {
         /** What a decoder should report when the container said nothing. See [guessFor]. */
-        public val Unspecified: ColorSpaceInfo = ColorSpaceInfo()
+        public val Unspecified: ColorSpaceInfo = ColorSpaceInfo(
+            matrix = ColorMatrix.Unspecified,
+            primaries = ColorPrimaries.Unspecified,
+            transfer = ColorTransfer.Unspecified,
+            chromaLocation = ChromaLocation.Unspecified,
+            rangeSpecified = false,
+        )
 
         /**
          * The conventional guess when a container declares nothing, which is common.
@@ -134,17 +142,74 @@ public data class ColorSpaceInfo(
          * of the world's video.
          */
         public fun guessFor(height: Int): ColorSpaceInfo = if (height <= 576) {
-            ColorSpaceInfo(ColorMatrix.Bt601, ColorPrimaries.Bt601, ColorTransfer.Bt601)
+            ColorSpaceInfo(
+                ColorMatrix.Bt601,
+                ColorPrimaries.Bt601,
+                ColorTransfer.Bt601,
+                rangeSpecified = false,
+            )
         } else {
-            ColorSpaceInfo(ColorMatrix.Bt709, ColorPrimaries.Bt709, ColorTransfer.Bt709)
+            ColorSpaceInfo(
+                ColorMatrix.Bt709,
+                ColorPrimaries.Bt709,
+                ColorTransfer.Bt709,
+                rangeSpecified = false,
+            )
         }
     }
 }
 
-public enum class ColorMatrix { Bt601, Bt709, Bt2020Ncl, Bt2020Cl, Smpte240m, Identity }
-public enum class ColorPrimaries { Bt601, Bt709, Bt2020, DciP3, DisplayP3 }
-public enum class ColorTransfer { Bt601, Bt709, Srgb, Linear, Gamma22, Gamma28, Pq, Hlg }
-public enum class ChromaLocation { Left, Center, TopLeft, Top, BottomLeft, Bottom }
+public enum class ColorMatrix {
+    Unspecified,
+    Bt601,
+    Bt709,
+    Fcc,
+    Bt470bg,
+    Smpte170m,
+    Smpte240m,
+    YCgCo,
+    Bt2020Ncl,
+    Bt2020Cl,
+    ICtCp,
+    Identity,
+}
+
+public enum class ColorPrimaries {
+    Unspecified,
+    Bt601,
+    Bt709,
+    Bt470m,
+    Bt470bg,
+    Smpte170m,
+    Smpte240m,
+    Film,
+    Bt2020,
+    SmpteSt428,
+    DciP3,
+    DisplayP3,
+}
+
+public enum class ColorTransfer {
+    Unspecified,
+    Bt601,
+    Bt709,
+    Srgb,
+    Linear,
+    Gamma22,
+    Gamma28,
+    Smpte240m,
+    Log,
+    LogSqrt,
+    Iec6196624,
+    Bt1361Ecg,
+    Bt2020Ten,
+    Bt2020Twelve,
+    Pq,
+    SmpteSt428,
+    Hlg,
+}
+
+public enum class ChromaLocation { Unspecified, Left, Center, TopLeft, Top, BottomLeft, Bottom }
 
 /**
  * What kind of hardware surface a frame holds, so a renderer can say whether it can draw it.

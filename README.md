@@ -1,9 +1,10 @@
 # KitePlayer
 
 A media player for Kotlin Multiplatform, written in Kotlin from the ground up. It does not wrap
-ExoPlayer, AVPlayer or libmpv: everything that makes it a player is pure Kotlin in `commonMain`, so it
-behaves the same wherever it runs, and FFmpeg (through KiteCodec) does the decoding. Only the audio
-device, the video surface and the decoder are per platform.
+ExoPlayer, AVPlayer or libmpv: the playback engine is pure Kotlin in `commonMain`, so it behaves the
+same wherever it runs. KiteCodec and FFmpeg provide the portable media backend and software decoder;
+Android can instead couple MediaCodec directly to its renderer. Only the audio device, video surface,
+and decoder are platform-specific.
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
@@ -70,7 +71,7 @@ Today, honestly:
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
 | iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 27-row format matrix runs green on the same named simulator: every playable row decodes and resumes after a mid-file seek, and AV1 refuses with a typed error because the phone FFmpeg profile vendors no software AV1 codec. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
-| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application depends on the one `:kiteplayer-phone` coordinate, builds its player from `phoneBackends()` and shows it in the reusable `KitePlayerView`, opens real media, plays with hardware H.264 through FFmpeg's own decoder, lands a precise seek, reaches Ended and tears down causally, in both debug and R8-minified release, on one named emulator. The 27-row format matrix runs 26 of 27 on the same emulator, with AV1 refusing on the same typed error as iOS; the one failing row is the subtitle cue-decode assertion, an open item of the subtitles stage whose device proof does not exist yet, and every audio and video row passes. The output paths carry provisional stage evidence below T3-Full: subtitles and the full lifecycle qualification that tier demands do not exist yet, and nothing ran on a physical Android device. x86_64 is compile, link and package qualified only. |
+| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application depends on the one `:kiteplayer-phone` coordinate, builds its player from `phoneBackends()`, and shows it in the reusable `KitePlayerView`. The renderer-coupled AVC MediaCodec path reported `HardwareZeroCopy(MediaCodec)` and the 1080p30 fixture stabilized at 29 to 31 presented FPS after warm-up, with zero renderer failures or superseded frames. A separate smoke landed a precise seek, reached Ended, and tore down causally. The earlier 27-row backend matrix remains 26 of 27 on this emulator; its subtitle cue-decode assertion is still open. A preliminary Compose GPU run reached Ended with zero CPU conversion samples, but predates the final completion-fence hardening and is not a final performance result. Nothing ran on a physical Android device. x86_64 is compile, link, and package qualified only. |
 | JVM (desktop) | T1, decode-proven | The FFmpeg backend's JVM arm decodes real media in tests over a test-only local JNI library. No desktop audio or video output path exists yet. |
 | iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
@@ -79,6 +80,36 @@ macOS arm64 remains the only T3 candidate. The named iOS simulator is now a seco
 but only for the narrower codec lifecycle described above; neither label grants a tier. No platform here
 has real-device qualification, a performance budget or a public installable package, which are among the
 requirements that separate these local candidates from product support.
+
+### Android rendering tiers
+
+`KitePlayerView` has an API 29+ direct path from a renderer-owned MediaCodec output buffer to its
+SurfaceView. The scheduler releases each buffer at its target monotonic timestamp. Video pixels do not
+enter a Kotlin array, CPU colour converter, Canvas video draw, or Bitmap upload on this tier.
+
+The hardware decoder admits only a self-describing configuration whose exact profile and level the
+selected MediaCodec advertises:
+
+- AVC Baseline, Constrained Baseline, Main, Extended, High, or Constrained High, all 8-bit.
+- HEVC Main, 8-bit, with monochrome or 4:2:0 chroma.
+- VP9 Profile 0, 8-bit 4:2:0, with a complete WebM CodecPrivate or `vpcC` record.
+- AV1 Main 8, 4:2:0, with a valid `av1C` record and sequence-header OBU.
+
+Malformed, ambiguous, wider, or unsupported declarations are not guessed into hardware. With
+`HwdecPolicy.Auto`, a seekable source may start on the renderer MediaCodec path. A decoder failure
+closes the failed session, reopens the backend under `HwdecPolicy.Off` at the current position, prerolls,
+and resumes the requested play or pause state. An unseekable `Auto` source stays on the backend because
+it cannot recover without losing content. `Require` allows the renderer path but makes a runtime failure
+terminal. `Prefer` is intentionally not applied to renderer factories until the engine can preserve one
+global hardware-kind order across renderer and backend factories. `Off` always uses the backend.
+
+Compose video has a separate API 31+ GPU tier: MediaCodec writes an external-OES SurfaceTexture, one
+GLES2 pass writes RGBA_8888 into an ImageReader, and Skia samples the resulting hardware Bitmap. Its
+Android state must be bound to the exact host `Window`. The bridge matches the draw to that window's
+`FrameMetrics` record and retires the ImageReader lease only after `GPU_DURATION` reports completion for
+the matching `VSYNC_TIMESTAMP`. API 26 to 30, unsupported codec declarations, unavailable hardware,
+and rejected colour configurations use immutable software images. No physical Android device has
+qualified either GPU tier yet; the exact emulator evidence is in `ANDROID_GPU_WORK.baseline.txt`.
 
 **What the vendored FFmpeg can open.** The decode side of the vendored profile is wide by class:
 every native FFmpeg decoder, demuxer, parser and bitstream filter is compiled, so the files people
@@ -224,12 +255,13 @@ enough to call any platform supported.
   source that is loud in several channels at once can clip.
 - **Subtitles are one parser.** `kiteplayer-subtitles` reads SubRip. Nothing times, positions or draws
   a cue, and the player never reads a subtitle track. SubRip parsing is not subtitle support.
-- **Hardware decode exists on Android only, inside FFmpeg, and there is no GPU renderer.** On the
-  named Android emulator FFmpeg's own `h264_mediacodec`/`hevc_mediacodec` decoders run under the
-  `Auto`/`Prefer`/`Require` policy with automatic software fallback, and their output is
-  CPU-readable (`HardwareWithDownload`), never a zero-copy surface. Every other platform decodes in
-  software. Frames are converted on the CPU everywhere and drawn through Core Graphics on Apple,
-  which costs milliseconds per frame at 1080p.
+- **Android's GPU tiers are not physical-device qualified.** API 29+ can decode admitted 8-bit AVC,
+  HEVC, VP9, and AV1 configurations directly to `KitePlayerView`'s SurfaceView. API 31+ can instead
+  make the picture true Compose content through one OES-to-RGBA GPU pass and an explicit
+  GPU-completion lease. API 26 to 28 and configurations the strict hardware gate refuses use the
+  FFmpeg software path. The direct path reached the generated clip's 30 FPS rate on one API 36 arm64
+  emulator, but there is no physical-device benchmark, release benchmark, power result, or soak result.
+  Every non-Android platform still decodes video in software.
 - **Rotation is four turns and no more.** The three quarter turns and no rotation are drawn. A display
   matrix that mirrors the picture or skews it by an arbitrary angle is drawn as stored, which keeps the
   picture rather than the exact transform.
@@ -379,11 +411,11 @@ public interface MonotonicClock {
 |---|---|---|
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; DefaultOutput is exercised on macOS and RemoteIO by an app-hosted native test on one named iOS simulator |
-| `kiteplayer-output` | the audio sinks and renderers that talk to an operating system: Apple audio and layers, the macOS AppKit window, Android AudioTrack and the Surface renderer | macOS arm64, iOS arm64, iOS simulator arm64 and Android; the private simulator sample consumes the iOS path and the Android sample the Android one |
+| `kiteplayer-output` | the audio sinks and renderers that talk to an operating system: Apple audio and layers, the macOS AppKit window, Android AudioTrack, the direct Surface renderer, and the OES-to-RGBA hardware-image bridge | macOS arm64, iOS arm64, iOS simulator arm64 and Android; the private simulator sample consumes the iOS path, while the Android sample and Compose module consume the Android paths |
 | `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64, iOS simulator arm64, JVM and Android; the iOS variants consume private local codec trees |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
 | `kiteplayer-phone` | the phone aggregate: one coordinate carrying the playable stack, `KitePlayerView` for Android, `KitePlayerUIView` for iOS, and `phoneBackends()` | Android, iOS arm64 and iOS simulator arm64; the Android view is exercised by the Android sample's measured smoke, the iOS view compiles and links but nothing measured consumes it yet |
-| `kiteplayer-compose` | the optional Compose Multiplatform surface: `KitePlayerSurface`, wrapping the platform view, and `KiteVideo`, the Compose-true renderer whose frames draw through Compose itself | Android, iOS arm64 and iOS simulator arm64; compiles and links on all three, host-tested off device. On the named Android emulator a device test plays real media to completion through `KiteVideo` under a Compose clip and rotation, hardware-decoded, with the software path's per-frame cost measured and exposed as `KiteVideoState.frameCost`. Emulator numbers are provisional; nothing ran on a physical device, and the Apple path's cost stays unmeasured until the plan's S2 exit |
+| `kiteplayer-compose` | the optional Compose Multiplatform surface: `KitePlayerSurface`, wrapping the platform view, and `KiteVideo`, the Compose-true renderer whose frames draw through Compose itself | Android, iOS arm64 and iOS simulator arm64; compiles and links on all three and is host-tested off device. Android API 31+ has a Window-bound OES-to-RGBA GPU path with exact FrameMetrics GPU-completion leases; API 26 to 30 uses immutable software images. One API 36 emulator has preliminary real-media Compose evidence, but the final post-fence rerun and every physical-device measurement remain open. The Apple path's cost stays unmeasured until the plan's S2 exit |
 | `kiteplayer-sample` | a CLI on macOS plus a private UIKit host with Play, Pause, Seek 5s and a bounded smoke oracle | macOS arm64, iOS arm64 and iOS simulator arm64; the device app is link-only |
 | `kiteplayer-sample-android` | the plain Android app: one `KitePlayerView`, three buttons and the smoke oracle, on the one `kiteplayer-phone` dependency | Android arm64-v8a and x86_64; debug and R8 release measured on one named emulator |
 

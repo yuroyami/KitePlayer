@@ -198,7 +198,7 @@ internal class MetalColorUniforms private constructor(
             val lumaScale = if (colorSpace.fullRange) 1f else 255f / 219f
             val chromaScale = if (colorSpace.fullRange) 1f else 255f / 224f
             return when (colorSpace.matrix) {
-                ColorMatrix.Bt601 -> MetalColorUniforms(
+                ColorMatrix.Bt601, ColorMatrix.Bt470bg, ColorMatrix.Smpte170m -> MetalColorUniforms(
                     offset, lumaScale, chromaScale,
                     rCr = 1.402f, gCb = 0.344136f, gCr = 0.714136f, bCb = 1.772f,
                 )

@@ -2,8 +2,8 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 
-// Desktop JVM stays software for now. On macOS the JNI bridge's VideoToolbox rows are proven to
-// work, but the desktop rendering paths mature in S3; wiring the selection there is measured
-// work, not promised here (17.4.8 S2.d records the opportunity).
+// Public JVM is an unavailable placeholder until the desktop backend exists. Keep its selection
+// software-shaped so it advertises no hardware route if lower-level code is inspected directly;
+// opening media still refuses first with KiteCodec's typed Unsupported error.
 internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection =
     decoderSelection(policy, route = null)

@@ -7,7 +7,7 @@ plugins {
     // Not optional. The Maven coordinate alone does not link: KiteCodec's cinterop declares its
     // linker options as bare -lavformat and friends with no -L, so every module whose link task
     // pulls FFmpeg in needs this plugin to supply the library directory.
-    id("io.github.yuroyami.kitecodec") version "0.0.1"
+    alias(libs.plugins.kitecodec)
 }
 
 /*
@@ -45,9 +45,8 @@ kotlin {
             implementation(project(":kiteplayer-output"))
         }
         iosMain.dependencies {
-            // The phone aggregate carries ffmpeg and output api-transitively; since S1.e.2 the
-            // iOS host consumes the same one coordinate an ordinary consumer would.
-            implementation(project(":kiteplayer-phone"))
+            // The mobile aggregate carries the default backend, output and native view.
+            implementation(project(":kiteplayer-mobile"))
         }
     }
 }

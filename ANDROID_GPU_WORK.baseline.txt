@@ -1,8 +1,22 @@
-Android GPU work evidence, 2026-08-14
+Android GPU work evidence, 2026-08-14 through 2026-08-15
 
 Physical device before baseline:
 NOT RUN. No physical Android device was connected.
 The approximately 5 FPS starting point was reported by the owner, not measured in this session.
+
+Measured Compose fixture identity:
+File: testmedia/sync1080p30.mp4
+SHA-256: c12d952878f43c488327a05e51ff8791f215c93c39a1422d37bfa02eec1911de
+Video: H.264 Constrained Baseline, 8-bit yuv420p, 1920x1080, 30/1 FPS, 300 frames, 10.000 seconds
+Colour metadata: range, matrix, transfer and primaries all unspecified
+
+Compose instrumentation provenance:
+Variant: debuggable kiteplayer-compose-video androidDeviceTest APK
+Automatic emulator-profile command form:
+adb shell am instrument -w -r -e class io.github.yuroyami.kiteplayer.compose.KiteVideoDeviceTest#kiteVideoPlaysRealMediaUnderComposeModifiers io.github.yuroyami.kiteplayer.compose.video.test/androidx.test.runner.AndroidJUnitRunner
+Forced threshold checks added: -e kiteplayer.performanceProfile physical
+Qualification: the successful raw shell transcripts were not retained beside this file. The values below
+are the recorded results, not a reproducible raw-log artifact or a source-commit identity.
 
 Emulator direct Surface evidence:
 Runtime: Android emulator arm64, API 36, 16 KiB pages
@@ -23,7 +37,7 @@ Renderer failures: 0
 Terminal status: Ended
 Qualification: this run predates the final exact FrameMetrics GPU-completion fence and is not the final Compose performance result
 
-Final Compose instrumentation rerun:
+Pre-optimization final-fence Compose instrumentation rerun:
 Runtime: Android emulator arm64, API 36, 16 KiB pages
 Media: generated 1080p30 AVC fixture under Compose clip and rotation modifiers
 Instrumentation time: 14.272 seconds
@@ -36,7 +50,163 @@ Audio underruns: 0
 Hardware decode: HardwareZeroCopy(MediaCodec)
 CPU conversion cost samples: 0
 Terminal status: Ended
-Qualification: final frozen-source emulator evidence; minimum 150-frame and delivery-ratio assertions passed
+Qualification: exposed a real throughput regression despite passing the former permissive smoke assertions
+
+Optimized Compose GPU bridge publication, three consecutive runs:
+Runtime: Android emulator arm64, API 36, 16 KiB pages
+Media: generated 1080p30 AVC fixture under Compose clip and rotation modifiers
+Changes: nonblocking codec-to-GL metadata handoff, steady EGL output surface, viewport-sized RGBA output
+Playback elapsed: 10.149, 10.123, and 10.146 seconds
+RGBA publication FPS: 29.559, 29.637, and 29.568, from a 30 FPS source
+Decoded: 300 in every run
+Submitted: 300 in every run
+Published RGBA hardware frames: 300 in every run
+Late/decode drops: 0/0 in every run
+Renderer accounting delta: 0 in every run
+Superseded frames: 0 in every run
+Renderer failures: 0 in every run
+Audio underruns: 0 in every run
+Hardware decode: HardwareZeroCopy(MediaCodec)
+CPU conversion cost samples: 0 in every run
+Terminal status: Ended in every run
+Qualification: full-rate decoder-to-RGBA publication evidence, not proof of Compose GPU completion
+
+Exact Compose GPU-proof instrumentation:
+Runtime: Android emulator arm64, API 36, 16 KiB pages
+Media: generated 1080p30 AVC fixture under Compose clip and rotation modifiers
+Measurement: unique hardware frame identity counted only after its exact VSYNC-matched FrameMetrics GPU_DURATION completion
+Before explicit proof-redraw invalidation: 298/300 at 29.406 FPS, then 299/300 at 29.652 FPS
+Proof-redraw runs: 300/300 at 29.852 FPS, 299/300 at 29.602 FPS, and 297/300 at 29.403 FPS
+Historical post-breadth emulator-profile run: 298 unique GPU-proven frames from 300 decoded and 300 submitted
+Historical GPU-proven draw coverage: 99.3%
+Historical GPU-proven draw cadence: 29.502 FPS across 10.067 seconds of GPU-proven VSYNC evidence
+Historical playback elapsed: 10.154 seconds for 10.000 seconds of media
+Historical post-Ended proof drain: not recorded
+Renderer accounting: 300 published, 0 superseded, 0 failed, delta 0
+Late/decode drops: 0/0
+Audio underruns: 0
+Hardware decode: HardwareZeroCopy(MediaCodec)
+CPU conversion cost samples: 0
+Terminal status: Ended
+Qualification: these FPS values are the cadence of draw VSYNCs which later gained exact GPU proof, not
+wall-clock completion-callback throughput. The automatically selected emulator-profile run passed and
+its 298-frame result clears the physical profile's numeric coverage threshold, but it is not physical-device
+evidence. Two earlier forced physical-profile emulator reruns proved 295 and 296 unique images and correctly
+failed its 99% coverage threshold, despite sustaining 29.450 to 29.548 FPS draw cadence over the full media
+span. The best earlier emulator run proved all 300 unique images. Physical-device qualification remains open.
+
+Current-source cold-install Compose gate after stale-callback fix:
+Runtime: Android emulator arm64, API 36, 16 KiB pages
+Media: the SHA-256-pinned 1080p30 AVC fixture identified above
+Gate contract: verify the fixture SHA-256 and exactly 300 decoded frames; require the exact partition
+decoded = submitted + headless + late-dropped; require renderer outcomes to equal submissions; then
+apply the profile drop budget and count only exact VSYNC-matched GPU-proven draws
+Drain bound: at most 2.0 seconds for the emulator profile or 1.0 second for the physical profile
+Current-source teardown bound: at most 2.0 seconds for the emulator profile or 1.0 second for the
+physical profile
+Cold-start defect exposed by the gate: a stale queued SurfaceTexture callback could repeat an already
+resolved timestamp after an intervening frame had latched
+Fix: bounded resolved-timestamp identity deduplication ignores that duplicate without weakening exact
+timestamp-to-frame configuration matching
+Host regression: OutputGenerationLeaseBookTest.staleCallbackIdentitySurvivesAnInterveningLatch
+
+Cold-install run 1: PASS, emulator profile
+Decoded/submitted/published: 300/300/300
+Unique GPU-proven draws: 297
+GPU-proven draw cadence: 29.550 FPS across 10.017 seconds
+Playback elapsed: 10.084 seconds
+Post-Ended proof drain: 1.322 seconds
+Teardown: 178.352 milliseconds
+
+Cold-install run 2: PASS, emulator profile
+Decoded/submitted/published: 300/300/300
+Unique GPU-proven draws: 299
+GPU-proven draw cadence: 29.602 FPS across 10.067 seconds
+Playback elapsed: 10.148 seconds
+Post-Ended proof drain: 1.273 seconds
+Teardown: 184.871 milliseconds
+
+Shared current-run outcomes: 0 superseded, 0 failed, 0 late/decode drops, 0 audio underruns, and
+0 CPU conversion samples
+
+Earlier post-policy and teardown-bound cold-install run: PASS, emulator profile
+Instrumentation test elapsed: 13.442 seconds
+Media duration: 10.000 seconds
+Playback elapsed: 10.150 seconds
+Decoded/submitted/presented: 300/300/300
+Unique GPU-proven draws: 297
+GPU-proven draw coverage: 99.0%
+GPU-proven draw cadence: 29.403 FPS across 10.067 seconds, 98.0% of the native rate
+Post-Ended proof drain: 1.279 seconds
+Teardown: 232.109 milliseconds
+Renderer superseded/failed: 0/0
+Late/decode drops: 0/0
+Repeated frames/rebuffers/audio underruns: 0/0/0
+Final A/V drift: -21.686 milliseconds
+Hardware decode: HardwareZeroCopy(MediaCodec)
+CPU conversion cost samples: 0
+Terminal status: Ended
+
+Gate-correction diagnostic repeat:
+Observation: exact 300 submissions was stricter than the declared late-drop budget, despite a healthy
+zero-copy run. The corrected gate uses the decoded-frame partition recorded above.
+Decoded/submitted/presented: 300/299/299
+Exact decoded partition: 300 = 299 submitted + 0 headless + 1 late-dropped
+Unique GPU-proven draws: 296
+GPU-proven draw coverage: 98.7%
+GPU-proven draw cadence: 29.696 FPS
+Post-Ended proof drain: 1.282 seconds
+Teardown: 126.866 milliseconds
+Renderer superseded/failed: 0/0
+Late drops: 1
+CPU conversion cost samples: 0
+Hardware path: healthy zero-copy
+
+Newest final gate after accounting correction: PASS, emulator profile
+Instrumentation test elapsed: 13.497 seconds
+Playback elapsed: 10.125 seconds
+Decoded/submitted/presented: 300/300/300
+Unique GPU-proven draws: 299
+GPU-proven draw coverage: 99.7%
+GPU-proven draw cadence: 29.749 FPS across 10.017 seconds, 99.2% of the native rate
+Post-Ended proof drain: 1.319 seconds
+Teardown: 178.274 milliseconds
+Headless/late drops/decode drops: 0/0/0
+Renderer superseded/failed: 0/0
+Repeated frames/rebuffers/audio underruns: 0/0/0
+Final A/V drift: +3.275 milliseconds
+Hardware decode: HardwareZeroCopy(MediaCodec)
+CPU conversion cost samples: 0
+Terminal status: Ended
+
+Qualification: the newest corrected-gate cold-install run passed every emulator-profile assertion. The
+earlier clean 297-frame pass provides repeatability evidence, while the diagnostic one-late-drop repeat
+motivated the exact partition correction and remains valid rendering evidence rather than a clean all-zero
+pass. None of these emulator runs is a physical-profile pass or physical-device evidence.
+
+Emulator 10-bit capability audit:
+Runtime: the same Android emulator arm64, API 36
+Media checked: HEVC Main10, 3840x2160 at 30 FPS, 10-bit 4:2:0, level 5
+Accelerated HEVC decoder: c2.goldfish.hevc.decoder
+Advertised accelerated profiles: Main and MainStill at High Tier level 5.2
+Advertised Main10 profile: none
+Result: strict GPU admission refused the stream before open; the emulator's only possible 10-bit route is software
+Qualification: correct capability refusal, not Main10 playback evidence. A physical device whose accelerated
+decoder advertises Main10 or a documented compatible superset at a covering level is still required for
+the real-media 10-bit run.
+
+Runtime breadth boundary:
+No successful device run in this record covers AVC High 10, HEVC Main or Main 10, VP9 Profiles 0 through 3,
+AV1 Main 8/Main 10, exact SDR RGB tags, PQ, HLG or HDR-to-SDR output. Those paths currently have parser,
+admission and host-contract evidence only. The one successful Compose performance fixture is the 8-bit AVC
+file identified above.
+
+Current-source admission qualifications, not additional device evidence:
+Untagged conventional HD uses the documented height-based BT.709 default and remains eligible for direct
+GPU presentation. Ambiguous generic unspecified color and real-SD guesses still require explicit,
+recognized codec output evidence; not every height-based guess has that requirement.
+AV1 high-tier records are parsed but conservatively refused for hardware because PlayerStreamInfo has no
+peak or maximum bitrate. Its average bitrate cannot prove a high-tier capability bound.
 
 Physical device after measurement and 30-minute soak:
 NOT RUN. Requires owner hardware.

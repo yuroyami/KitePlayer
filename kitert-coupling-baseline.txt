@@ -7,10 +7,17 @@
 # active Gradle subproject except the two exclusions below. Comments are stripped;
 # string and character literals remain, and each matching file counts once.
 # Included when this baseline was measured:
+#   :kiteplayer-compose
+#   :kiteplayer-compose-interop
+#   :kiteplayer-compose-video
 #   :kiteplayer-core
 #   :kiteplayer-ffmpeg
+#   :kiteplayer-mobile
+#   :kiteplayer-phone
 #   :kiteplayer-sample
+#   :kiteplayer-sample-android
 #   :kiteplayer-subtitles
+#   :kiteplayer-view
 # Excluded by design:
 #   :kiteplayer-output - owns the C sink pointer
 #   :kiteplayer-rt - is the binding

@@ -1,12 +1,5 @@
 import io.github.yuroyami.kitecodec.gradle.FFmpegLicense
 import io.github.yuroyami.kitecodec.gradle.FFmpegSource
-import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.tasks.InputFile
-import org.gradle.api.tasks.Internal
-import org.gradle.process.CommandLineArgumentProvider
-import org.gradle.api.tasks.PathSensitivity
-import org.gradle.api.tasks.PathSensitive
-import org.gradle.api.tasks.testing.Test
 import java.io.File
 
 plugins {
@@ -14,22 +7,7 @@ plugins {
     alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.vanniktech.publish)
     alias(libs.plugins.dokka)
-    id("io.github.yuroyami.kitecodec") version "0.0.1"
-}
-
-/** Execution-time, content-tracked JVM paths without capturing the Gradle script in the test task. */
-abstract class KitePlayerJvmTestArguments : CommandLineArgumentProvider {
-    @get:InputFile
-    @get:PathSensitive(PathSensitivity.NONE)
-    abstract val jniLibrary: RegularFileProperty
-
-    @get:Internal
-    abstract val transcript: RegularFileProperty
-
-    override fun asArguments(): Iterable<String> = listOf(
-        "-Dkitecodec.jni.path=${jniLibrary.get().asFile.absolutePath}",
-        "-Ds1c.transcript.path=${transcript.get().asFile.absolutePath}",
-    )
+    alias(libs.plugins.kitecodec)
 }
 
 /*
@@ -39,9 +17,9 @@ abstract class KitePlayerJvmTestArguments : CommandLineArgumentProvider {
  * interfaces in :kiteplayer-core, which is what lets a completely different backend (WebCodecs on
  * the web, a platform decoder, a test fake) take its place without the engine noticing.
  *
- * Kotlin/Native links KiteCodec directly. JVM loads the test-only local JNI dylib, while Android
- * consumes the JNI libraries from KiteCodec's published AAR. This module never rebuilds or packages
- * the desktop JNI library.
+ * Kotlin/Native links KiteCodec directly, while Android consumes the JNI libraries from KiteCodec's
+ * published AAR. Public JVM is deliberately a placeholder until a supported desktop backend ships:
+ * it compiles the common API and fails backend operations with KiteCodec's typed Unsupported error.
  */
 // The media fixtures live at the repo root and a native test's working directory is not something
 // to rely on, so the location is passed in explicitly.
@@ -52,24 +30,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
 
-val localJniPath = providers.gradleProperty("kitecodec.jni.localPath")
-tasks.withType<Test>().configureEach {
-    systemProperty("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
-}
-
 val transcriptRoot = layout.buildDirectory.dir("s1c-transcripts")
-tasks.withType<Test>().configureEach {
-    if (name == "jvmTest") {
-        val transcript = transcriptRoot.map { it.file("jvm.txt") }
-        outputs.file(transcript).withPropertyName("s1cJvmTranscript")
-        jvmArgumentProviders.add(
-            objects.newInstance<KitePlayerJvmTestArguments>().apply {
-                jniLibrary.fileProvider(localJniPath.map { File(it).absoluteFile.normalize() })
-                this.transcript.set(transcript)
-            },
-        )
-    }
-}
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     if (name == "macosArm64Test") {
         val transcript = transcriptRoot.map { it.file("macosArm64.txt") }
@@ -137,14 +98,14 @@ kotlin {
         getByName("jvmMain").dependsOn(jvmAndAndroidMain)
         getByName("androidMain").dependsOn(jvmAndAndroidMain)
 
-        // The unchanged runtime-gate contract is meaningful on JNI JVM and direct-link native,
-        // but Android host tests deliberately use fake drivers and never load a device JNI library.
+        // Real-media and FFmpeg-runtime tests belong only to direct-link native. Public JVM consumes
+        // KiteCodec's unavailable placeholder, while Android host tests use fake drivers and never load
+        // a device JNI library.
         val commonTest = getByName("commonTest")
-        val jvmAndNativeTest = maybeCreate("jvmAndNativeTest").apply {
+        val nativeBackendTest = maybeCreate("nativeBackendTest").apply {
             dependsOn(commonTest)
         }
-        getByName("jvmTest").dependsOn(jvmAndNativeTest)
-        getByName("nativeTest").dependsOn(jvmAndNativeTest)
+        getByName("nativeTest").dependsOn(nativeBackendTest)
 
         getByName("nativeTest").dependencies {
             // Test only, and only for the tests that drive the whole player: it needs an output backend to

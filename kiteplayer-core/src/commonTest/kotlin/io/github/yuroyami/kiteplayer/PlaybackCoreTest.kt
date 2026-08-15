@@ -699,6 +699,31 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `replacing the media with a renderer attached primes the new session instead of waiting out the deadlines`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(400.milliseconds)
+        harness.core.pause()
+        harness.run(100.milliseconds)
+
+        // What loading a second file actually looks like from a caller: stop, then open. The renderer
+        // stays attached across it, because it belongs to the view and not to the session.
+        val startedAt = harness.scheduler.currentTime
+        harness.core.stop()
+        harness.core.open(MediaItem("scripted://second"))
+        val elapsed = harness.scheduler.currentTime - startedAt
+
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+        assertTrue(
+            elapsed < 2_000,
+            "the replacement open took ${elapsed}ms: a second file must prime its pipeline like the " +
+                "first, not sit out the initial-fill and first-frame deadlines",
+        )
+        harness.close()
+    }
+
+    @Test
     fun `play and pause are idempotent in their own state and queue during an open`() = runTest {
         val harness = CoreHarness(this)
         harness.backend.openGate = kotlinx.coroutines.CompletableDeferred()

@@ -9,8 +9,9 @@ and decoder are platform-specific.
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-> **KitePlayer is early and cannot be used as a dependency.** Nothing is publicly published, there is
-> no public dependency installation path, and macOS arm64 is the only T3 candidate. One named iOS
+> **KitePlayer is early and is not publicly published.** Local Maven artifacts are development
+> inputs, not a public dependency installation path, and macOS arm64 is the only T3 candidate. One
+> named iOS
 > simulator holds a narrower experimental T2 Codec candidate, and one named Android emulator holds
 > T2 Codec with provisional output evidence, each backed by a local runnable sample and a
 > 27-row format matrix, not a full tier. No physical iPhone or Android device has run any of it:
@@ -71,7 +72,7 @@ Today, honestly:
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
 | iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 27-row format matrix runs green on the same named simulator: every playable row decodes and resumes after a mid-file seek, and AV1 refuses with a typed error because the phone FFmpeg profile vendors no software AV1 codec. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
-| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | A plain application depends on the one `:kiteplayer-phone` coordinate, builds its player from `phoneBackends()`, and shows it in the reusable `KitePlayerView`. The renderer-coupled AVC MediaCodec path reported `HardwareZeroCopy(MediaCodec)` and the 1080p30 fixture stabilized at 29 to 31 presented FPS after warm-up, with zero renderer failures or superseded frames. A separate smoke landed a precise seek, reached Ended, and tore down causally. The earlier 27-row backend matrix remains 26 of 27 on this emulator; its subtitle cue-decode assertion is still open. A preliminary Compose GPU run reached Ended with zero CPU conversion samples, but predates the final completion-fence hardening and is not a final performance result. Nothing ran on a physical Android device. x86_64 is compile, link, and package qualified only. |
+| Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | The sample's direct-XML Activity builds its player from `mobileBackends()` and shows it in the reusable XML-capable `KitePlayerView` from `kiteplayer-view`; two sibling Activities demonstrate Compose/native-view interop and GPU Compose video separately. Runtime GPU evidence is one 1080p30, 8-bit AVC Constrained Baseline fixture whose colour metadata is unspecified. The renderer-coupled MediaCodec path reported `HardwareZeroCopy(MediaCodec)` and the direct Surface tier stabilized at 29 to 31 presented FPS after warm-up. GPU Compose evidence spans 295 to 300 unique VSYNC-matched GPU-proven draws at 29.403 to 29.852 FPS. The newest corrected-gate cold-install passed with 300 decoded/submitted/presented, 299 GPU-proven draws at 29.749 FPS, 1.319 seconds of post-Ended proof drain, 178.274 milliseconds of teardown, +3.275 milliseconds of A/V drift, and no headless frames, drops, supersedes, failures, repeats, rebuffers, underruns, or CPU conversion. An earlier clean post-policy pass proved 297 at 29.403 FPS. A diagnostic repeat remained healthy zero-copy with 299 submitted/presented, one scheduler late drop, and 296 GPU-proven draws at 29.696 FPS; it exposed that the gate must validate the exact decoded-frame partition before applying its drop budget instead of requiring 300 submissions. Forced physical-profile reruns correctly rejected the emulator's variable sub-99% proof coverage. A separate smoke landed a precise seek, reached Ended, and tore down causally. The wider 10-bit, VP9, AV1 and HDR work has parser and host-contract coverage, not successful device playback evidence. Nothing ran on a physical Android device. x86_64 is compile, link, and package qualified only. |
 | JVM (desktop) | T1, decode-proven | The FFmpeg backend's JVM arm decodes real media in tests over a test-only local JNI library. No desktop audio or video output path exists yet. |
 | iOS x64, tvOS, watchOS, Android native, Linux x64 and arm64, Windows x64, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
@@ -87,13 +88,24 @@ requirements that separate these local candidates from product support.
 SurfaceView. The scheduler releases each buffer at its target monotonic timestamp. Video pixels do not
 enter a Kotlin array, CPU colour converter, Canvas video draw, or Bitmap upload on this tier.
 
-The hardware decoder admits only a self-describing configuration whose exact profile and level the
-selected MediaCodec advertises:
+The hardware decoder admits only a self-describing configuration when the selected MediaCodec advertises
+either the required profile itself or a documented compatible superset profile, at a level covering the
+stream. If several accelerated decoders match, KitePlayer tries each until one also accepts the output
+target's color contract:
 
-- AVC Baseline, Constrained Baseline, Main, Extended, High, or Constrained High, all 8-bit.
-- HEVC Main, 8-bit, with monochrome or 4:2:0 chroma.
-- VP9 Profile 0, 8-bit 4:2:0, with a complete WebM CodecPrivate or `vpcC` record.
-- AV1 Main 8, 4:2:0, with a valid `av1C` record and sequence-header OBU.
+- AVC Baseline, Constrained Baseline, Main, Extended, High, Constrained High, and High 10.
+- HEVC Main and Main 10, with monochrome or 4:2:0 chroma.
+- VP9 Profiles 0 through 3 with profile-consistent 8 or 10-bit depth and complete typed,
+  WebM CodecPrivate, or `vpcC` metadata.
+- AV1 Main 8 and Main 10, 4:2:0 or monochrome, with a valid `av1C` record and optional well-framed
+  configuration OBUs. Optional OBU payload semantics are not independently validated. Main-tier records
+  can proceed to hardware admission. High-tier records are parsed but conservatively refused because
+  `PlayerStreamInfo` has no peak or maximum bitrate; its average bitrate cannot prove the tier bound.
+
+That list is parser, admission and host-contract breadth. Successful Android runtime evidence currently
+covers only the generated 1080p30, 8-bit AVC Constrained Baseline fixture. AVC High 10, successful HEVC
+Main/Main 10, VP9 Profiles 0 through 3, AV1 Main 8/Main 10 and HDR-to-SDR output still need matching
+device fixtures and accelerated codec support before they become runtime claims.
 
 Malformed, ambiguous, wider, or unsupported declarations are not guessed into hardware. With
 `HwdecPolicy.Auto`, a seekable source may start on the renderer MediaCodec path. A decoder failure
@@ -104,12 +116,38 @@ terminal. `Prefer` is intentionally not applied to renderer factories until the 
 global hardware-kind order across renderer and backend factories. `Off` always uses the backend.
 
 Compose video has a separate API 31+ GPU tier: MediaCodec writes an external-OES SurfaceTexture, one
-GLES2 pass writes RGBA_8888 into an ImageReader, and Skia samples the resulting hardware Bitmap. Its
+GLES2 pass writes RGBA_8888 into an ImageReader, and Skia samples the resulting hardware Bitmap. Exact
+SDR output is color-tagged as sRGB, BT.709, SMPTE-C, BT.601 PAL, or BT.2020 for Skia color management.
+When a conventional HD stream has no color tags, the documented height-based default resolves it to
+BT.709 and it remains eligible for direct GPU presentation. Generic unspecified color and real-SD guesses
+remain ambiguous and require a recognized MediaCodec output standard before any buffer reaches Compose;
+there is no blanket rule that every height-based guess requires explicit output evidence.
+For PQ, HLG, and other Android-representable input outside that set, the renderer requests MediaCodec's
+hardware HDR-to-SDR output. After configuration it verifies that MediaCodec accepted the requested SDR
+transfer and rejects recognized output metadata which contradicts that contract or cannot be represented.
+That handshake cannot independently prove the pixels from an OEM codec which echoes the request while
+omitting or misreporting its output metadata, and no HDR device fixture has run yet. Its
 Android state must be bound to the exact host `Window`. The bridge matches the draw to that window's
 `FrameMetrics` record and retires the ImageReader lease only after `GPU_DURATION` reports completion for
-the matching `VSYNC_TIMESTAMP`. API 26 to 30, unsupported codec declarations, unavailable hardware,
+the matching `VSYNC_TIMESTAMP`. Reported FPS is the cadence of draw VSYNCs which later gained that exact
+GPU proof, not the wall-clock throughput of completion callbacks. Codec release never waits for the GL
+thread merely to register frame metadata, and the RGBA target is capped to the measured Compose viewport
+instead of always using the decoded source size. API 26 to 30, unsupported codec declarations, unavailable hardware,
 and rejected colour configurations use immutable software images. No physical Android device has
 qualified either GPU tier yet; the exact emulator evidence is in `ANDROID_GPU_WORK.baseline.txt`.
+The cold-start gate exposed stale queued `SurfaceTexture` callbacks which could repeat a previously
+resolved timestamp after another frame had latched. The bridge now keeps a bounded history of resolved
+timestamp identities and deduplicates those callbacks without weakening exact frame matching; a host
+regression covers the intervening-latch case.
+The current device gate verifies the fixture SHA-256 and exactly 300 decoded frames. It then requires the
+exact partition `decoded = submitted + headless + late-dropped`, requires renderer outcomes to equal
+submissions, and applies the profile drop budget. It measures the time from `Ended` until GPU proof and
+renderer outcomes stabilize, capped at 2.0 seconds for the emulator profile and 1.0 second for the physical
+profile. Teardown has the same profile-specific bounds. The newest corrected-gate cold-install passed all
+emulator assertions with 300 decoded/submitted/presented, 299 GPU-proven draws at 29.749 FPS, a 1.319
+second drain, and 178.274 milliseconds of teardown. An earlier clean pass proved 297 at 29.403 FPS. A
+diagnostic repeat rendered 299 frames with one budgeted scheduler late drop and exposed why exact
+submissions must not contradict the profile drop budget.
 
 **What the vendored FFmpeg can open.** The decode side of the vendored profile is wide by class:
 every native FFmpeg decoder, demuxer, parser and bitstream filter is compiled, so the files people
@@ -255,18 +293,34 @@ enough to call any platform supported.
   source that is loud in several channels at once can clip.
 - **Subtitles are one parser.** `kiteplayer-subtitles` reads SubRip. Nothing times, positions or draws
   a cue, and the player never reads a subtitle track. SubRip parsing is not subtitle support.
-- **Android's GPU tiers are not physical-device qualified.** API 29+ can decode admitted 8-bit AVC,
-  HEVC, VP9, and AV1 configurations directly to `KitePlayerView`'s SurfaceView. API 31+ can instead
+- **Android's GPU tiers are not physically qualified, and their runtime codec breadth is narrow.** API 29+
+  has parser and target-admission support for admitted 8 and 10-bit AVC, HEVC, VP9, and AV1 configurations
+  headed to `KitePlayerView`'s SurfaceView. Android's VP9
+  Profile 2/3 capability constants do not prove 12-bit support. API 31+ can instead
   make the picture true Compose content through one OES-to-RGBA GPU pass and an explicit
   GPU-completion lease. API 26 to 28 and configurations the strict hardware gate refuses use the
-  FFmpeg software path. The direct path reached the generated clip's 30 FPS rate on one API 36 arm64
-  emulator, but there is no physical-device benchmark, release benchmark, power result, or soak result.
+  FFmpeg software path. The only successful device fixture here is 8-bit AVC Constrained Baseline with
+  unspecified colour metadata. The direct path reached its 30 FPS rate on one API 36 arm64 emulator.
+  The GPU Compose path published all 300 RGBA images in three bridge runs. Its stricter end-to-end gate
+  then counted 295 to 300 unique images after exact VSYNC-matched GPU proof, with GPU-proven draw cadence
+  of 29.403 to 29.852 FPS and no recorded renderer failure or CPU conversion. The newest corrected-gate
+  cold-install passed the emulator profile with 300 decoded/submitted/presented, 299/300 GPU-proven draws
+  at 29.749 FPS, a 1.319 second post-`Ended` drain, and 178.274 milliseconds of teardown. An earlier clean
+  pass proved 297/300 at 29.403 FPS. A diagnostic repeat had one budgeted scheduler late drop, 299
+  submitted/presented, and 296 GPU-proven draws at 29.696 FPS with no renderer failure or CPU conversion.
+  The physical profile remains
+  deliberately unqualified. There is no physical-device benchmark, release benchmark, power result, or
+  soak result.
   Every non-Android platform still decodes video in software.
 - **Rotation is four turns and no more.** The three quarter turns and no rotation are drawn. A display
   matrix that mirrors the picture or skews it by an arbitrary angle is drawn as stored, which keeps the
   picture rather than the exact transform.
-- **No tone mapping.** PQ, HLG and BT.2020 constant luminance are converted with the matrix alone, so
-  they play and they look wrong. Each says so once per stream through a typed warning.
+- **Software tone mapping is still absent, and hardware tone mapping lacks device evidence.** The API 31+
+  Compose GPU tier requests an SDR transfer, verifies that MediaCodec accepted the request, and rejects
+  recognized contradictory output metadata. It cannot independently detect an OEM which echoes the
+  request while omitting or misreporting its result, and no HDR device fixture has run. The FFmpeg software
+  renderer still converts PQ, HLG, and BT.2020 constant luminance with the matrix alone and reports that
+  limitation through a typed warning.
 - **Network input is FFmpeg passthrough, not an application network layer.** The media URI reaches
   FFmpeg unchanged, so only protocols carried by the linked build are reachable. One loopback HTTP
   case has played to completion. There is no protocol allowlist, open or read deadline, or secret
@@ -378,9 +432,12 @@ the frame next to the colour rather than inside the frame's size. A frame's size
 which is what every stride in the converter depends on, and a quarter turn changes what is shown without
 changing that.
 
-High dynamic range is the current hole in this: PQ and HLG clips are converted with the matrix alone,
-with no tone mapping, so they play and they look wrong. BT.2020 constant luminance is the same case.
-Both say so, once per stream, through a typed playback warning rather than silently.
+High dynamic range remains a software-renderer hole: PQ and HLG clips converted on the CPU use the
+matrix alone, with no tone mapping, so they play and they look wrong. BT.2020 constant luminance is the
+same case. Android's API 31+ Compose GPU tier instead asks MediaCodec for SDR output, verifies that the
+request was accepted and rejects recognized contradictory metadata before presenting it. That protocol
+has host-contract coverage only; it is not a device HDR result and cannot prove pixels from a codec which
+lies or omits output metadata. Other platforms and Android hardware refusals retain the typed warning.
 
 ## Why the engine has no platform code
 
@@ -407,25 +464,59 @@ public interface MonotonicClock {
 
 ## Modules
 
+The presentation artifacts are separated by responsibility:
+
+- Use `kiteplayer-view` for the backend-agnostic native widgets alone. `KitePlayerView` is a normal
+  Android `View` usable from XML or Kotlin/Java, and `KitePlayerUIView` is its UIKit counterpart.
+  Install a renderer adapter before assigning a player; `kiteplayer-mobile` supplies
+  `installMobileRenderer()` for the default stack.
+- Use `kiteplayer-mobile` for the default platform stack. Android/iOS carry the real KiteCodec,
+  output and native-view implementation. Its JVM, JS and Wasm variants are explicit unavailable
+  placeholders, exposed through `KitePlayerPlatform`, so common consumers do not need a custom
+  source-set hierarchy.
+- Use `kiteplayer-compose-interop` when Compose should host the native widget through `AndroidView`
+  or `UIKitView`. It installs the default mobile adapter and preserves the native surface path.
+  This one coordinate also re-exports `KitePlayerPlatform`; on JVM, JS and Wasm its surface is an
+  empty layout node and availability is false.
+- Use `kiteplayer-compose-video` when video pixels must be drawn by Compose itself so Compose clip,
+  alpha, transforms, and effects apply to them.
+
+Every consumable module publishes a JVM variant so a consumer's commonMain can depend on it even
+when that consumer also compiles a desktop target. The variants differ in what they carry.
+`kiteplayer-mobile` and `kiteplayer-compose-interop` publish JVM desktop, JS and Wasm placeholder
+variants: a dependency-compatibility claim, not a playback claim; they carry neither FFmpeg nor
+platform output, `KitePlayerPlatform.isAvailable` is false, `createOrNull()` returns null, and
+`KitePlayerSurface` draws nothing. `kiteplayer-compose-video` publishes a JVM variant with the
+real software frame path (KiteCodec's CPU converter into Skia rasters); it renders frames it is
+fed, but the default JVM assembly is still unavailable, so desktop playback additionally requires
+real media, audio and frame adapters. `kiteplayer-view`, `kiteplayer-output` and the two 0.0.2
+umbrellas publish common-surface-only JVM variants with no widget or backend.
+
 | Module | Holds | Targets |
 |---|---|---|
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; DefaultOutput is exercised on macOS and RemoteIO by an app-hosted native test on one named iOS simulator |
-| `kiteplayer-output` | the audio sinks and renderers that talk to an operating system: Apple audio and layers, the macOS AppKit window, Android AudioTrack, the direct Surface renderer, and the OES-to-RGBA hardware-image bridge | macOS arm64, iOS arm64, iOS simulator arm64 and Android; the private simulator sample consumes the iOS path, while the Android sample and Compose module consume the Android paths |
+| `kiteplayer-output` | the audio sinks and renderers that talk to an operating system: Apple audio and layers, the macOS AppKit window, Android AudioTrack, the direct Surface renderer, and the OES-to-RGBA hardware-image bridge | macOS arm64, iOS arm64, iOS simulator arm64 and Android, plus a common-surface-only JVM variant with no backend; the private simulator sample consumes the iOS path, while the Android sample and `kiteplayer-compose-video` consume the Android paths |
 | `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64, iOS simulator arm64, JVM and Android; the iOS variants consume private local codec trees |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
-| `kiteplayer-phone` | the phone aggregate: one coordinate carrying the playable stack, `KitePlayerView` for Android, `KitePlayerUIView` for iOS, and `phoneBackends()` | Android, iOS arm64 and iOS simulator arm64; the Android view is exercised by the Android sample's measured smoke, the iOS view compiles and links but nothing measured consumes it yet |
-| `kiteplayer-compose` | the optional Compose Multiplatform surface: `KitePlayerSurface`, wrapping the platform view, and `KiteVideo`, the Compose-true renderer whose frames draw through Compose itself | Android, iOS arm64 and iOS simulator arm64; compiles and links on all three and is host-tested off device. Android API 31+ has a Window-bound OES-to-RGBA GPU path with exact FrameMetrics GPU-completion leases; API 26 to 30 uses immutable software images. One API 36 emulator has preliminary real-media Compose evidence, but the final post-fence rerun and every physical-device measurement remain open. The Apple path's cost stays unmeasured until the plan's S2 exit |
+| `kiteplayer-view` | the Compose-free, backend-agnostic native presentation widgets: XML/programmatic `KitePlayerView` on Android and `KitePlayerUIView` on iOS, plus their renderer-adapter SPI | Android, iOS arm64 and iOS simulator arm64, plus a common-surface-only JVM variant with no widget; the Android XML view is exercised by the Android sample's measured smoke, while the iOS view compiles and links but has no physical-device measurement |
+| `kiteplayer-mobile` | the default-platform facade over `kiteplayer-core`, plus the real FFmpeg/output/view assembly on Android/iOS; exposes `KitePlayerPlatform`, `mobileBackends()` and the mobile renderer installers | playable on Android, iOS arm64 and iOS simulator arm64; explicit unavailable placeholders on JVM, JS and Wasm |
+| `kiteplayer-compose-interop` | `KitePlayerSurface`, a thin Compose host that installs the default mobile adapter and hosts the native view through `AndroidView` or `UIKitView`; re-exports `kiteplayer-mobile` | real native-view hosting on Android/iOS; empty layout-preserving placeholders on JVM, JS and Wasm |
+| `kiteplayer-compose-video` | `KiteVideo`, the true Compose renderer whose pixels participate in Compose drawing | Android, iOS arm64, iOS simulator arm64 and JVM; Android API 31+ has a Window-bound OES-to-RGBA GPU path with exact FrameMetrics GPU-completion leases, nonblocking codec-to-GL metadata handoff, and viewport-sized RGBA output, while API 26 to 30 uses immutable software images. On one API 36 emulator, the 8-bit AVC fixture produced 295 to 300 of 300 unique GPU-proven images at 29.403 to 29.852 FPS draw cadence. The newest corrected-gate cold-install reached 300 decoded/submitted/presented and proved 299 draws at 29.749 FPS; an earlier clean pass proved 297 at 29.403 FPS, and a diagnostic repeat rendered 299 with one budgeted late drop and proved 296 at 29.696 FPS. Every run remained zero-copy with no renderer failure or CPU conversion. Wider codec and HDR claims remain parser/host-contract only, and every physical-device measurement remains open. The Apple path's cost stays unmeasured until the plan's S2 exit, and the JVM variant is the software path only (KiteCodec CPU conversion into Skia rasters), unmeasured |
+| `kiteplayer-phone` | deprecated 0.0.2 source-migration umbrella over `kiteplayer-mobile` and `kiteplayer-view`, retaining `phoneBackends()` and the old view package | Android, iOS arm64, iOS simulator arm64 and a JVM umbrella variant; source migration is checked, binary compatibility across the artifact split is not claimed, and new code should not depend on it |
+| `kiteplayer-compose` | deprecated 0.0.2 source-migration umbrella over `kiteplayer-compose-interop`, `kiteplayer-compose-video`, and the old transitive phone aggregate | Android, iOS arm64, iOS simulator arm64 and a JVM umbrella variant; source migration is checked, binary compatibility across the artifact split is not claimed, and new code should choose the rendering model directly |
 | `kiteplayer-sample` | a CLI on macOS plus a private UIKit host with Play, Pause, Seek 5s and a bounded smoke oracle | macOS arm64, iOS arm64 and iOS simulator arm64; the device app is link-only |
-| `kiteplayer-sample-android` | the plain Android app: one `KitePlayerView`, three buttons and the smoke oracle, on the one `kiteplayer-phone` dependency | Android arm64-v8a and x86_64; debug and R8 release measured on one named emulator |
+| `kiteplayer-sample-android` | one comparison APK with a launcher and three isolated demos: XML `KitePlayerView`, Compose/native-view `KitePlayerSurface`, and true-Compose `KiteVideo`; the original XML Activity retains the smoke oracle | Android arm64-v8a and x86_64; debug and R8 release were packaged and installed on one named emulator, while runtime performance numbers are debug-only |
 
 The dependency arrow never points into `kiteplayer-core`. The core declares interfaces and the backends
 implement them, which is what allows a completely different backend, for example WebCodecs in a
 browser, without the engine noticing.
 
-Every library module tracks its own public API in a checked-in dump under `api/`. `updateKotlinAbi`
-rewrites the dumps, `checkKotlinAbi` fails the build when the code and the dumps disagree, and the
-samples have none because an application has no public API to keep.
+Library modules keep checked-in Kotlin ABI dumps under `api/` for the JVM and Kotlin/Native surfaces the
+current Kotlin tool tracks. `updateKotlinAbi` rewrites those dumps and `checkKotlinAbi` fails when those
+tracked declarations disagree. Android-only declarations are not covered by these dumps, and moving a
+declaration between the 0.0.2 umbrella and a new artifact is treated as source migration rather than a
+proved binary-compatible move. Samples have no dumps because an application has no public API to keep.
 
 ## Build and test it here
 

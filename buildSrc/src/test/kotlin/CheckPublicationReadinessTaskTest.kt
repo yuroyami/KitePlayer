@@ -27,6 +27,51 @@ class CheckPublicationReadinessTaskTest {
     }
 
     @Test
+    fun `the split presentation graph and compatibility umbrellas remain publishable`() {
+        val modules = setOf(
+            ":core",
+            ":ffmpeg",
+            ":output",
+            ":view",
+            ":mobile",
+            ":compose-interop",
+            ":compose-video",
+            ":phone",
+            ":compose",
+        )
+        val edges = setOf(
+            CheckPublicationReadinessTask.ProjectEdge(":ffmpeg", ":core"),
+            CheckPublicationReadinessTask.ProjectEdge(":output", ":core"),
+            CheckPublicationReadinessTask.ProjectEdge(":view", ":core"),
+            CheckPublicationReadinessTask.ProjectEdge(":mobile", ":core"),
+            CheckPublicationReadinessTask.ProjectEdge(":mobile", ":ffmpeg"),
+            CheckPublicationReadinessTask.ProjectEdge(":mobile", ":output"),
+            CheckPublicationReadinessTask.ProjectEdge(":mobile", ":view"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose-interop", ":core"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose-interop", ":mobile"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose-video", ":core"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose-video", ":ffmpeg"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose-video", ":mobile"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose-video", ":output"),
+            CheckPublicationReadinessTask.ProjectEdge(":phone", ":mobile"),
+            CheckPublicationReadinessTask.ProjectEdge(":phone", ":view"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose", ":compose-interop"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose", ":compose-video"),
+            CheckPublicationReadinessTask.ProjectEdge(":compose", ":phone"),
+        )
+        val report = CheckPublicationReadinessTask.evaluate(
+            publishingModules = modules,
+            publications = modules.map(::completePom),
+            edges = edges,
+        )
+
+        CheckPublicationReadinessTask.requireReady(report)
+        assertEquals(modules.size, report.publishingModuleCount)
+        assertEquals(edges.size, report.dependencyEdgeCount)
+        assertTrue(report.siblingFindings.isEmpty())
+    }
+
+    @Test
     fun `a missing POM field fails naming the field and fix`() {
         val report = CheckPublicationReadinessTask.evaluate(
             publishingModules = setOf(":core"),

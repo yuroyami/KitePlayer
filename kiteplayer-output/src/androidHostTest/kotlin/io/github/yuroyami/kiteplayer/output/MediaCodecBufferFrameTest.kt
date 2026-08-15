@@ -52,6 +52,22 @@ class MediaCodecBufferFrameTest {
     }
 
     @Test
+    fun acceptedTimedReleaseRejectedAfterRendererCloseStillCountsFailure() {
+        var rendererClosed = false
+        var failures = 0
+        val completion = acceptedTimedReleaseCompletion {
+            assertTrue(rendererClosed)
+            failures++
+        }
+
+        rendererClosed = true
+        completion(false)
+        completion(true)
+
+        assertEquals(1, failures)
+    }
+
+    @Test
     fun composeFramesCarryPortraitRotationForTheDrawPhase() {
         val frame = frame(mutableListOf(), rotationDegrees = 90)
 

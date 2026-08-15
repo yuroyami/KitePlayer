@@ -1,10 +1,9 @@
 import io.github.yuroyami.kiteplayer.buildtools.PrepareAndroidSampleMediaTask
 
 /*
- * The Android assembly proof (S1.c.6, re-consumed by S1.d.4): one plain application whose whole
- * job is to prove Gradle variant resolution, transitive JNI packaging, R8, the view lifecycle,
- * audio, seek and teardown in one ordinary app. Since S1.d it consumes exactly ONE coordinate,
- * :kiteplayer-phone, and presents through the reusable KitePlayerView.
+ * One application comparing the three Android presentation products without hiding their
+ * lifecycle differences: an XML-inflated native view, that same native view hosted by Compose,
+ * and true Compose video. The original XML Activity remains the measured smoke component.
  *
  * Release is deliberately debug-signed and debuggable: the smoke oracle reads the app's private
  * files through run-as, which needs both, and R8 still runs, which is the half that matters.
@@ -13,11 +12,13 @@ import io.github.yuroyami.kiteplayer.buildtools.PrepareAndroidSampleMediaTask
 plugins {
     /* AGP 9 carries built-in Kotlin support; a separate Kotlin Android plugin is refused. */
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.compose.multiplatform)
 }
 
 android {
     namespace = "io.github.yuroyami.kiteplayer.sample.android"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.yuroyami.kiteplayer.sample.android"
@@ -47,11 +48,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+
+    buildFeatures {
+        compose = true
+    }
 }
 
 dependencies {
-    // The whole point of the aggregate: one line, and the playable stack arrives api-transitively.
-    implementation(project(":kiteplayer-phone"))
+    // The playable stack and the two deliberately different Compose presentation products.
+    implementation(project(":kiteplayer-mobile"))
+    implementation(project(":kiteplayer-compose-interop"))
+    implementation(project(":kiteplayer-compose-video"))
+    implementation(compose.runtime)
+    implementation(compose.ui)
+    implementation(compose.foundation)
+    implementation(libs.androidx.activity.compose)
     // Dispatchers.Main's factory. The view's members are main-thread only, and the controller
     // hops threads the way any ordinary app does. Found by the S1.d.4 smoke: without this the
     // hop throws before open() and the oracle reports Idle.

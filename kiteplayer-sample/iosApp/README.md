@@ -6,6 +6,10 @@ contains no decoder or platform media path of its own. Swift creates the control
 Swift module name `KitePlayerSampleHost`, so importing the framework module named `KitePlayerSample`
 is unambiguous.
 
+The Kotlin sample consumes `kiteplayer-mobile` for the default iOS backend stack and presents through
+the `KitePlayerUIView` owned by `kiteplayer-view`. Compose is not involved. `kiteplayer-phone` is only
+the deprecated 0.0.2 source-migration umbrella and is not part of this sample.
+
 Nothing here is an installation or distribution path. KiteCodec and its FFmpeg trees are local,
 there is no CocoaPods or downloaded framework, the framework is linked statically and is not embedded,
 and no artifact is publicly published. The simulator result is not physical-iPhone qualification or

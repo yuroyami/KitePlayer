@@ -14,6 +14,7 @@ import io.github.yuroyami.kiteplayer.spi.Vp9Profile
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -67,25 +68,42 @@ class MediaCodecConfigurationTest {
     }
 
     @Test
-    fun outputColorKeepsExact601StandardAndAmbiguousSdrTransferIdentity() {
+    fun outputColorDerivesSdrTransferFromTheReportedColorStandard() {
         val fallback = ColorSpaceInfo(
             matrix = ColorMatrix.Bt2020Ncl,
             primaries = ColorPrimaries.Bt2020,
-            transfer = ColorTransfer.Bt2020Ten,
+            transfer = ColorTransfer.Pq,
             rangeSpecified = false,
         )
 
-        val parsed = colorSpaceFromCodes(
+        val pal = colorSpaceFromCodes(
             standard = MediaFormat.COLOR_STANDARD_BT601_PAL,
             transferCode = MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
             range = null,
             fallback = fallback,
         )
+        val bt709 = colorSpaceFromCodes(
+            standard = MediaFormat.COLOR_STANDARD_BT709,
+            transferCode = MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
+            range = null,
+            fallback = fallback,
+        )
+        val bt2020 = colorSpaceFromCodes(
+            standard = MediaFormat.COLOR_STANDARD_BT2020,
+            transferCode = MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
+            range = null,
+            fallback = fallback,
+        )
 
-        assertEquals(ColorMatrix.Bt470bg, parsed.matrix)
-        assertEquals(ColorPrimaries.Bt470bg, parsed.primaries)
-        assertEquals(ColorTransfer.Bt2020Ten, parsed.transfer)
-        assertFalse(parsed.rangeSpecified)
+        assertEquals(ColorMatrix.Bt470bg, pal.matrix)
+        assertEquals(ColorPrimaries.Bt470bg, pal.primaries)
+        assertEquals(ColorTransfer.Bt601, pal.transfer)
+        assertFalse(pal.rangeSpecified)
+        assertEquals(ColorTransfer.Bt709, bt709.transfer)
+        assertEquals(ColorTransfer.Bt2020Ten, bt2020.transfer)
+        assertTrue(isComposeGpuColorRepresentable(pal))
+        assertTrue(isComposeGpuColorRepresentable(bt709))
+        assertTrue(isComposeGpuColorRepresentable(bt2020))
     }
 
     @Test
@@ -138,7 +156,7 @@ class MediaCodecConfigurationTest {
     }
 
     @Test
-    fun composeHardwareImagesAcceptOnlyExactlyTaggedBt709Primaries() {
+    fun composeHardwareImagesAcceptOnlyExactAndroidRgbTags() {
         assertTrue(isComposeSrgbSafeColor(ColorSpaceInfo()))
         assertTrue(isComposeSrgbSafeColor(ColorSpaceInfo(transfer = ColorTransfer.Srgb)))
         assertEquals(
@@ -168,6 +186,45 @@ class MediaCodecConfigurationTest {
             ),
         )
         assertFalse(isComposeSrgbSafeColor(ColorSpaceInfo(transfer = ColorTransfer.Pq)))
+        assertEquals(
+            AndroidRgbColorSpace.SmpteC,
+            androidRgbColorSpace(
+                ColorSpaceInfo(
+                    matrix = ColorMatrix.Smpte170m,
+                    primaries = ColorPrimaries.Smpte170m,
+                    transfer = ColorTransfer.Bt601,
+                ),
+            ),
+        )
+        assertEquals(
+            AndroidRgbColorSpace.Bt601Pal,
+            androidRgbColorSpace(
+                ColorSpaceInfo(
+                    matrix = ColorMatrix.Bt470bg,
+                    primaries = ColorPrimaries.Bt470bg,
+                    transfer = ColorTransfer.Bt601,
+                ),
+            ),
+        )
+        assertEquals(
+            AndroidRgbColorSpace.Bt2020,
+            androidRgbColorSpace(
+                ColorSpaceInfo(
+                    matrix = ColorMatrix.Bt2020Ncl,
+                    primaries = ColorPrimaries.Bt2020,
+                    transfer = ColorTransfer.Bt2020Ten,
+                ),
+            ),
+        )
+        assertTrue(
+            isComposeGpuColorRepresentable(
+                ColorSpaceInfo(
+                    matrix = ColorMatrix.Bt2020Ncl,
+                    primaries = ColorPrimaries.Bt2020,
+                    transfer = ColorTransfer.Bt2020Ten,
+                ),
+            ),
+        )
     }
 
     @Test
@@ -177,6 +234,7 @@ class MediaCodecConfigurationTest {
         assertEquals(MediaFormat.MIMETYPE_VIDEO_AVC, parsed.mime)
         assertEquals(MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline, parsed.profile)
         assertEquals(MediaCodecInfo.CodecProfileLevel.AVCLevel4, parsed.level)
+        assertEquals(8, parsed.bitDepth)
         assertEquals(4, parsed.csd!!.nalLengthSize)
     }
 
@@ -191,12 +249,15 @@ class MediaCodecConfigurationTest {
     }
 
     @Test
-    fun avcRefusesAmbiguousOrWideProfileRecords() {
+    fun avcAcceptsHigh10AndRefusesProfilesWhoseExactLayoutIsNotProved() {
         assertNull(parseMediaCodecConfiguration("h264", null))
         assertNull(parseMediaCodecConfiguration("h264", avcc(66, 0, 40).also { it[11] = 41 }))
         assertNull(parseMediaCodecConfiguration("h264", avcc(66, 0x01, 40)))
         assertNull(parseMediaCodecConfiguration("h264", avcc(66, 0, 9)))
-        assertNull(parseMediaCodecConfiguration("h264", avcc(110, 0, 40)))
+        val high10 = requireNotNull(parseMediaCodecConfiguration("h264", avcc(110, 0, 40)))
+        assertEquals(MediaCodecInfo.CodecProfileLevel.AVCProfileHigh10, high10.profile)
+        assertEquals(10, high10.bitDepth)
+        assertNull(parseMediaCodecConfiguration("h264", avcc(122, 0, 40)))
     }
 
     @Test
@@ -211,14 +272,18 @@ class MediaCodecConfigurationTest {
     }
 
     @Test
-    fun hevcRefusesReservedBitsWideColorAndInvalidTier() {
+    fun hevcAcceptsMain10AndRefusesReservedBitsMismatchedDepthAndInvalidTier() {
         assertNull(
             parseMediaCodecConfiguration(
                 "hevc",
                 hvcc(profile = 1, level = 120).also { it[16] = 0x3D },
             ),
         )
-        assertNull(parseMediaCodecConfiguration("hevc", hvcc(profile = 2, level = 120, bitDepth = 10)))
+        val main10 = requireNotNull(
+            parseMediaCodecConfiguration("hevc", hvcc(profile = 2, level = 120, bitDepth = 10)),
+        )
+        assertEquals(MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10, main10.profile)
+        assertEquals(10, main10.bitDepth)
         assertNull(parseMediaCodecConfiguration("hevc", hvcc(profile = 1, level = 120, bitDepth = 10)))
         assertNull(parseMediaCodecConfiguration("hevc", hvcc(profile = 1, level = 90, highTier = true)))
         assertNull(parseMediaCodecConfiguration("hevc", hvcc(profile = 1, level = 91)))
@@ -232,6 +297,7 @@ class MediaCodecConfigurationTest {
         assertEquals(MediaFormat.MIMETYPE_VIDEO_VP9, parsed.mime)
         assertEquals(MediaCodecInfo.CodecProfileLevel.VP9Profile0, parsed.profile)
         assertEquals(MediaCodecInfo.CodecProfileLevel.VP9Level41, parsed.level)
+        assertEquals(8, parsed.bitDepth)
         assertContentEquals(private, parsed.opaqueCsd)
     }
 
@@ -349,17 +415,65 @@ class MediaCodecConfigurationTest {
     }
 
     @Test
-    fun vp9RefusesIncompleteWideOrHdrDeclarations() {
+    fun vp9AcceptsProfileConsistentWideRecordsAndRefusesContradictions() {
         assertNull(parseMediaCodecConfiguration("vp9", byteArrayOf()))
         assertNull(parseMediaCodecConfiguration("vp9", vp9CodecPrivate().copyOf(9)))
         assertNull(parseMediaCodecConfiguration("vp9", vp9CodecPrivate(profile = 1)))
         assertNull(parseMediaCodecConfiguration("vp9", vp9CodecPrivate(bitDepth = 10)))
-        assertNull(parseMediaCodecConfiguration("vp9", vp9CodecPrivate(chroma = 2)))
-        assertNull(parseMediaCodecConfiguration("vp9", vp9CodecPrivate(level = 42)))
-        assertEquals(
-            ColorTransfer.Pq,
-            parseMediaCodecConfiguration("vp9", vpcc(transfer = 16))?.declaredColor?.transfer,
+        val profile1 = requireNotNull(
+            parseMediaCodecConfiguration("vp9", vp9CodecPrivate(profile = 1, chroma = 2)),
         )
+        assertEquals(MediaCodecInfo.CodecProfileLevel.VP9Profile1, profile1.profile)
+        val profile2 = requireNotNull(
+            parseMediaCodecConfiguration("vp9", vp9CodecPrivate(profile = 2, bitDepth = 10)),
+        )
+        assertEquals(MediaCodecInfo.CodecProfileLevel.VP9Profile2, profile2.profile)
+        assertEquals(10, profile2.bitDepth)
+        val profile3 = requireNotNull(
+            parseMediaCodecConfiguration(
+                "vp9",
+                vp9CodecPrivate(profile = 3, bitDepth = 10, chroma = 3),
+            ),
+        )
+        assertEquals(MediaCodecInfo.CodecProfileLevel.VP9Profile3, profile3.profile)
+        assertEquals(10, profile3.bitDepth)
+        assertNull(
+            parseMediaCodecConfiguration(
+                "vp9",
+                vp9CodecPrivate(profile = 3, bitDepth = 12, chroma = 3),
+            ),
+            "Android's VP9 Profile 2/3 capability constants standardize 10-bit, not 12-bit",
+        )
+        assertNull(parseMediaCodecConfiguration("vp9", vp9CodecPrivate(profile = 2, bitDepth = 8)))
+        assertNull(
+            parseMediaCodecConfiguration("vp9", vp9CodecPrivate(chroma = 4)),
+            "WebM VP9 CodecPrivate defines only chroma codes 0 through 3",
+        )
+        assertNull(
+            parseMediaCodecConfiguration("vp9", vpcc(chroma = 4)),
+            "vpcC reserves chroma codes 4 through 7",
+        )
+        assertNull(
+            parseMediaCodecConfiguration(
+                "vp9",
+                null,
+                Vp9CodecConfiguration(
+                    profile = Vp9Profile.Profile0,
+                    level = Vp9Level.Level4_1,
+                    bitDepth = Vp9BitDepth.Eight,
+                    chromaSubsampling = Vp9ChromaSubsampling.Monochrome,
+                ),
+            ),
+            "VP9 has no container-level monochrome chroma code",
+        )
+        assertNull(parseMediaCodecConfiguration("vp9", vp9CodecPrivate(level = 42)))
+        val hdr = requireNotNull(
+            parseMediaCodecConfiguration(
+                "vp9",
+                vpcc(profile = 2, bitDepth = 10, transfer = 16, primaries = 9, matrix = 9),
+            ),
+        )
+        assertEquals(ColorTransfer.Pq, hdr.declaredColor?.transfer)
         assertNull(parseMediaCodecConfiguration("vp9", vpcc().also { it[7] = 1 }))
         assertNull(
             parseMediaCodecConfiguration(
@@ -381,23 +495,57 @@ class MediaCodecConfigurationTest {
         assertEquals(MediaFormat.MIMETYPE_VIDEO_AV1, parsed.mime)
         assertEquals(MediaCodecInfo.CodecProfileLevel.AV1ProfileMain8, parsed.profile)
         assertEquals(MediaCodecInfo.CodecProfileLevel.AV1Level21, parsed.level)
+        assertEquals(8, parsed.bitDepth)
         assertContentEquals(av1c, parsed.opaqueCsd)
     }
 
     @Test
-    fun av1RefusesWideHdrOrMalformedConfiguration() {
+    fun av1ParsesMain10AndLevel4HighTierButRefusesMalformedConfiguration() {
         assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[0] = 1 }))
         assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[1] = 0x20 }))
-        assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[2] = 0x8C.toByte() }))
-        assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[2] = 0x4C }))
+        assertNull(
+            parseMediaCodecConfiguration(
+                "av01",
+                av1c().also {
+                    it[1] = 7
+                    it[2] = 0x8C.toByte()
+                },
+            ),
+            "AV1 high tier is reserved below level 4",
+        )
+        val main10 = requireNotNull(
+            parseMediaCodecConfiguration("av01", av1c().also { it[2] = 0x4C }),
+        )
+        assertEquals(MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10, main10.profile)
+        assertEquals(10, main10.bitDepth)
+        assertFalse(main10.highTier)
+        val highTier = requireNotNull(
+            parseMediaCodecConfiguration(
+                "av01",
+                av1c().also {
+                    it[1] = 8
+                    it[2] = 0x8C.toByte()
+                },
+            ),
+        )
+        assertEquals(MediaCodecInfo.CodecProfileLevel.AV1Level4, highTier.level)
+        assertTrue(highTier.highTier)
+        assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[2] = 0x6C }))
         assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[2] = 0x08 }))
         assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[3] = 1 }))
         assertNull(parseMediaCodecConfiguration("av01", av1c().also { it[4] = 0x02 }))
         assertNull(parseMediaCodecConfiguration("av01", av1c().copyOf(6)))
+        assertNull(
+            parseMediaCodecConfiguration(
+                "av01",
+                av1c().copyOf(4) + byteArrayOf(0x2A, 1, 1),
+            ),
+            "nonempty configOBUs need a well-framed sequence-header OBU first",
+        )
     }
 
     @Test
-    fun av1AcceptsAValidRecordWithOptionalConfigObusAbsent() {
+    fun av1AcceptsAWellFramedRecordWithOptionalConfigObusAbsent() {
         val headerOnly = av1c().copyOf(4)
 
         val parsed = parseMediaCodecConfiguration("av1", headerOnly)!!
@@ -405,6 +553,39 @@ class MediaCodecConfigurationTest {
         assertEquals(MediaCodecInfo.CodecProfileLevel.AV1ProfileMain8, parsed.profile)
         assertEquals(MediaCodecInfo.CodecProfileLevel.AV1Level2, parsed.level)
         assertContentEquals(headerOnly, parsed.opaqueCsd)
+    }
+
+    @Test
+    fun av1HighTierCannotBeAdmittedWithoutPeakBitrateMetadata() {
+        assertTrue(hasMediaCodecTierCapabilityProof(highTier = false))
+        assertFalse(hasMediaCodecTierCapabilityProof(highTier = true))
+    }
+
+    @Test
+    fun timedSurfaceReleaseTimestampsIncreaseStrictlyWithinAnEpochAndResetAcrossFlush() {
+        val sequence = MediaCodecReleaseTimestampSequence()
+
+        assertEquals(100L, sequence.normalize(100L))
+        assertEquals(101L, sequence.normalize(100L))
+        assertEquals(102L, sequence.normalize(90L))
+        assertEquals(1_000L, sequence.normalize(1_000L))
+
+        sequence.reset()
+
+        assertEquals(90L, sequence.normalize(90L))
+    }
+
+    @Test
+    fun timedSurfaceReleaseTimestampBoundariesDoNotWrap() {
+        val sequence = MediaCodecReleaseTimestampSequence()
+
+        assertEquals(Long.MIN_VALUE, sequence.normalize(Long.MIN_VALUE))
+        assertEquals(Long.MIN_VALUE + 1L, sequence.normalize(Long.MIN_VALUE))
+
+        sequence.reset()
+        assertEquals(Long.MAX_VALUE - 1L, sequence.normalize(Long.MAX_VALUE - 1L))
+        assertEquals(Long.MAX_VALUE, sequence.normalize(Long.MAX_VALUE - 1L))
+        assertFailsWith<IllegalStateException> { sequence.normalize(Long.MAX_VALUE) }
     }
 
     @Test
@@ -480,6 +661,113 @@ class MediaCodecConfigurationTest {
                 requiredLevel = MediaCodecInfo.CodecProfileLevel.HEVCMainTierLevel4,
             ),
         )
+        assertTrue(
+            advertisedProfileLevelSupports(
+                mime = MediaFormat.MIMETYPE_VIDEO_HEVC,
+                advertisedProfile = MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10,
+                advertisedLevel = MediaCodecInfo.CodecProfileLevel.HEVCMainTierLevel5,
+                requiredProfile = MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10,
+                requiredLevel = MediaCodecInfo.CodecProfileLevel.HEVCMainTierLevel4,
+            ),
+        )
+    }
+
+    @Test
+    fun hdrProfilePromotionAndComposeToneMapAreTargetAware() {
+        val pq = ColorSpaceInfo(
+            matrix = ColorMatrix.Bt2020Ncl,
+            primaries = ColorPrimaries.Bt2020,
+            transfer = ColorTransfer.Pq,
+        )
+        assertEquals(
+            MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10,
+            mediaCodecProfileForColor(
+                MediaFormat.MIMETYPE_VIDEO_HEVC,
+                MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10,
+                pq,
+            ),
+        )
+        val requirement = MediaCodecStreamRequirement(
+            mime = MediaFormat.MIMETYPE_VIDEO_HEVC,
+            profile = MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10,
+            level = MediaCodecInfo.CodecProfileLevel.HEVCMainTierLevel4,
+            bitDepth = 10,
+            colorSpace = pq,
+        )
+        assertNull(composeMediaCodecOutputContract(requirement, sdkInt = 30))
+        val contract = requireNotNull(composeMediaCodecOutputContract(requirement, sdkInt = 31))
+        assertEquals(MediaFormat.COLOR_TRANSFER_SDR_VIDEO, contract.requestedColorTransfer)
+        assertFalse(contract.requireExplicitOutputColor)
+        assertEquals(ColorSpaceInfo(), contract.trustedOutputColor)
+        assertTrue(
+            requireNotNull(contract.validateOutput).invoke(
+                MediaCodecOutputColor(ColorSpaceInfo(), reliable = true),
+            ),
+        )
+        assertFalse(
+            contract.validateOutput.invoke(MediaCodecOutputColor(pq, reliable = true)),
+            "a codec which ignores the tone-map request must be rejected",
+        )
+        val toneMappedBt2020 = colorSpaceFromCodes(
+            standard = MediaFormat.COLOR_STANDARD_BT2020,
+            transferCode = MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
+            range = MediaFormat.COLOR_RANGE_LIMITED,
+            fallback = pq,
+        )
+        assertFalse(
+            contract.validateOutput.invoke(MediaCodecOutputColor(toneMappedBt2020, reliable = true)),
+            "Android's decoder-side tone map must produce limited-range BT.709 SDR",
+        )
+
+        val sdr = requirement.copy(
+            profile = MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10,
+            colorSpace = ColorSpaceInfo(),
+        )
+        val preserved = requireNotNull(composeMediaCodecOutputContract(sdr, sdkInt = 31))
+        assertNull(preserved.requestedColorTransfer)
+        assertFalse(preserved.requireExplicitOutputColor)
+
+        val guessedSd = requirement.copy(colorSpace = ColorSpaceInfo.guessFor(576))
+        val guessedContract = requireNotNull(composeMediaCodecOutputContract(guessedSd, sdkInt = 31))
+        assertEquals(MediaFormat.COLOR_TRANSFER_SDR_VIDEO, guessedContract.requestedColorTransfer)
+        assertTrue(guessedContract.requireExplicitOutputColor)
+        assertNull(guessedContract.trustedOutputColor)
+
+        val hlg = pq.copy(transfer = ColorTransfer.Hlg)
+        assertEquals(
+            MediaCodecInfo.CodecProfileLevel.VP9Profile2,
+            mediaCodecProfileForColor(
+                MediaFormat.MIMETYPE_VIDEO_VP9,
+                MediaCodecInfo.CodecProfileLevel.VP9Profile2,
+                hlg,
+            ),
+            "Android assigns HLG to the base 10-bit profile, not its HDR10 profile",
+        )
+        assertEquals(
+            MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10,
+            mediaCodecProfileForColor(
+                MediaFormat.MIMETYPE_VIDEO_HEVC,
+                MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10,
+                hlg,
+            ),
+        )
+        assertEquals(
+            MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10,
+            mediaCodecProfileForColor(
+                MediaFormat.MIMETYPE_VIDEO_AV1,
+                MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10,
+                hlg,
+            ),
+        )
+        val unrepresentableP3 = requirement.copy(
+            colorSpace = ColorSpaceInfo(
+                matrix = ColorMatrix.Bt709,
+                primaries = ColorPrimaries.DisplayP3,
+                transfer = ColorTransfer.Srgb,
+                rangeSpecified = false,
+            ),
+        )
+        assertNull(composeMediaCodecOutputContract(unrepresentableP3, sdkInt = 31))
     }
 
     @Test

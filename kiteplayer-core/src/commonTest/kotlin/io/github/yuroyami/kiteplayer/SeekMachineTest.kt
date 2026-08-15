@@ -349,4 +349,35 @@ class SeekMachineTest {
         assertTrue(replies.all { it.isCompleted }, "every caller was answered")
         harness.close()
     }
+
+    @Test
+    fun `position stands on the requested timeline while a seekLater is still in flight`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(400.milliseconds)
+
+        // A seek-bar release inside the coalesce window of a previous request: the newest request is
+        // held until a frame from the first has shown. That hold is where the published position used
+        // to keep advancing on the old timeline, which a polling seek bar renders as the thumb
+        // snapping back before jumping to the destination.
+        harness.core.seekLater(Pts(2_000_000), SeekMode.Precise)
+        harness.run(20.milliseconds)
+        harness.core.seekLater(Pts(2_500_000), SeekMode.Precise)
+
+        val target = 2_500_000L
+        var settled = false
+        repeat(40) {
+            harness.run(25.milliseconds)
+            val read = harness.core.position().inWholeMicroseconds
+            assertTrue(
+                read >= target - SeekTiming.PRECISE_TOLERANCE_US,
+                "a poll observed $read µs while the newest request asked for $target µs: once a seek " +
+                    "is accepted, position() must answer on the requested timeline, never behind it",
+            )
+            if (!settled && read >= target - SeekTiming.PRECISE_TOLERANCE_US) settled = true
+        }
+        assertTrue(settled, "the merged seek landed at the newest target")
+        harness.close()
+    }
 }

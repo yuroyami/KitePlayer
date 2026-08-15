@@ -15,6 +15,10 @@ internal data class ParsedMediaCodecConfiguration(
     val mime: String,
     val profile: Int,
     val level: Int,
+    /** Maximum coded component depth proved by the container configuration record. */
+    val bitDepth: Int,
+    /** AV1's seq_tier_0 bit. Other codecs encode tier in their Android level constant. */
+    val highTier: Boolean = false,
     val csd: CodecSpecificData? = null,
     val opaqueCsd: ByteArray? = null,
     val declaredColor: ColorSpaceInfo? = null,
@@ -59,7 +63,10 @@ private fun parseAvcConfiguration(record: ByteArray): ParsedMediaCodecConfigurat
         } else {
             MediaCodecInfo.CodecProfileLevel.AVCProfileHigh
         }
-        // High 10, High 4:2:2, and High 4:4:4 need a verified wide-color output contract.
+        110 -> MediaCodecInfo.CodecProfileLevel.AVCProfileHigh10
+        // Android has profile constants for 4:2:2/4:4:4, but avcC's four-byte header does not
+        // prove their coded depth/chroma. Keep those records on the software decoder until the SPS
+        // parser exposes the exact format instead of guessing from a permissive profile envelope.
         else -> return null
     }
     val level = androidAvcLevel(levelIdc, compatibility) ?: return null
@@ -67,6 +74,7 @@ private fun parseAvcConfiguration(record: ByteArray): ParsedMediaCodecConfigurat
         mime = MediaFormat.MIMETYPE_VIDEO_AVC,
         profile = profile,
         level = level,
+        bitDepth = if (profileIdc == 110) 10 else 8,
         csd = AnnexB.parseAvcC(record) ?: return null,
     )
 }
@@ -130,14 +138,19 @@ private fun parseHevcConfiguration(record: ByteArray): ParsedMediaCodecConfigura
     val chromaFormat = record[16].u8() and 0x03
     val lumaDepth = 8 + (record[17].u8() and 0x07)
     val chromaDepth = 8 + (record[18].u8() and 0x07)
-    if (profileSpace != 0 || profileIdc != 1) return null
-    if (chromaFormat !in 0..1 || lumaDepth != 8 || chromaDepth != 8) return null
+    if (profileSpace != 0 || chromaFormat !in 0..1 || lumaDepth != chromaDepth) return null
+    val profile = when (profileIdc) {
+        1 -> MediaCodecInfo.CodecProfileLevel.HEVCProfileMain.takeIf { lumaDepth == 8 }
+        2 -> MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10.takeIf { lumaDepth in 8..10 }
+        else -> null
+    } ?: return null
 
     val level = androidHevcLevel(record[12].u8(), highTier) ?: return null
     return ParsedMediaCodecConfiguration(
         mime = MediaFormat.MIMETYPE_VIDEO_HEVC,
-        profile = MediaCodecInfo.CodecProfileLevel.HEVCProfileMain,
+        profile = profile,
         level = level,
+        bitDepth = lumaDepth,
         csd = AnnexB.parseHvcC(record) ?: return null,
     )
 }
@@ -192,6 +205,7 @@ private fun parseVp9Configuration(
     record: ByteArray?,
     typed: Vp9CodecConfiguration?,
 ): ParsedMediaCodecConfiguration? {
+    if (typed?.chromaSubsampling == Vp9ChromaSubsampling.Monochrome) return null
     val fromRecord = record?.let { parseVp9CodecPrivate(it) ?: parseVp9Vpcc(it) }
     if (record != null && fromRecord == null) return null
     val metadata = mergeVp9Metadata(typed?.toMediaCodecMetadata(), fromRecord) ?: return null
@@ -199,14 +213,23 @@ private fun parseVp9Configuration(
     val level = metadata.level ?: return null
     val bitDepth = metadata.bitDepth ?: return null
     val chromaSubsampling = metadata.chromaSubsampling ?: return null
-    // Profile 0 is the only 8-bit 4:2:0 VP9 profile. Wider profiles remain on software.
-    if (profile != 0 || bitDepth != 8 || chromaSubsampling !in 0..1) {
-        return null
-    }
+    if (metadata.color?.isHdr == true && bitDepth < 10) return null
+    val androidProfile = when (profile) {
+        0 -> MediaCodecInfo.CodecProfileLevel.VP9Profile0
+            .takeIf { bitDepth == 8 && chromaSubsampling in 0..1 }
+        1 -> MediaCodecInfo.CodecProfileLevel.VP9Profile1
+            .takeIf { bitDepth == 8 && chromaSubsampling in 2..3 }
+        2 -> MediaCodecInfo.CodecProfileLevel.VP9Profile2
+            .takeIf { bitDepth == 10 && chromaSubsampling in 0..1 }
+        3 -> MediaCodecInfo.CodecProfileLevel.VP9Profile3
+            .takeIf { bitDepth == 10 && chromaSubsampling in 2..3 }
+        else -> null
+    } ?: return null
     return ParsedMediaCodecConfiguration(
         mime = MediaFormat.MIMETYPE_VIDEO_VP9,
-        profile = MediaCodecInfo.CodecProfileLevel.VP9Profile0,
+        profile = androidProfile,
         level = androidVp9Level(level) ?: return null,
+        bitDepth = bitDepth,
         opaqueCsd = metadata.codecPrivate,
         declaredColor = metadata.color,
     )
@@ -220,7 +243,7 @@ private fun Vp9CodecConfiguration.toMediaCodecMetadata(): Vp9Metadata = Vp9Metad
         Vp9ChromaSubsampling.Yuv420 -> 0
         Vp9ChromaSubsampling.Yuv422 -> 2
         Vp9ChromaSubsampling.Yuv444 -> 3
-        Vp9ChromaSubsampling.Monochrome -> 4
+        Vp9ChromaSubsampling.Monochrome -> null
         null -> null
     },
     codecPrivate = null,
@@ -408,20 +431,33 @@ private fun parseAv1Configuration(record: ByteArray): ParsedMediaCodecConfigurat
     val delay = record[3].u8()
     val delayPresent = delay and 0x10 != 0
     if (delay and 0xE0 != 0 || !delayPresent && delay and 0x0F != 0) return null
-    if (profile != 0 || highTier || highBitDepth || twelveBit) return null
-    if (!subsamplingX || !subsamplingY || chromaSamplePosition == 3) return null
-    if (!hasValidAv1ConfigObus(record)) return null
+    val monochrome = flags and 0x10 != 0
+    if (
+        profile != 0 ||
+        twelveBit ||
+        highTier && levelIndex < AV1_HIGH_TIER_MIN_LEVEL_INDEX
+    ) return null
+    if ((!subsamplingX || !subsamplingY) && !monochrome || chromaSamplePosition == 3) return null
+    if (!hasWellFramedAv1ConfigObus(record)) return null
 
     return ParsedMediaCodecConfiguration(
         mime = MediaFormat.MIMETYPE_VIDEO_AV1,
-        profile = MediaCodecInfo.CodecProfileLevel.AV1ProfileMain8,
+        profile = if (highBitDepth) {
+            MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10
+        } else {
+            MediaCodecInfo.CodecProfileLevel.AV1ProfileMain8
+        },
         level = androidAv1Level(levelIndex) ?: return null,
+        bitDepth = if (highBitDepth) 10 else 8,
+        highTier = highTier,
         opaqueCsd = record.copyOf(),
     )
 }
 
-private fun hasValidAv1ConfigObus(record: ByteArray): Boolean {
-    var at = 4
+/** Checks OBU framing and ordering only; it deliberately does not parse sequence-header semantics. */
+private fun hasWellFramedAv1ConfigObus(record: ByteArray): Boolean {
+    val hasConfigObus = record.size > AV1_CONFIG_RECORD_HEADER_SIZE
+    var at = AV1_CONFIG_RECORD_HEADER_SIZE
     var sawSequenceHeader = false
     var firstObu = true
     while (at < record.size) {
@@ -447,7 +483,7 @@ private fun hasValidAv1ConfigObus(record: ByteArray): Boolean {
         at += size.value.toInt()
         firstObu = false
     }
-    return true
+    return !hasConfigObus || sawSequenceHeader
 }
 
 private data class Leb128(val value: Long, val next: Int)
@@ -513,12 +549,43 @@ internal fun advertisedProfileLevelSupports(
 
 private fun advertisedProfileSupports(mime: String, advertised: Int, required: Int): Boolean {
     if (advertised == required) return true
-    if (mime != MediaFormat.MIMETYPE_VIDEO_AVC) return false
-    return when (required) {
-        MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline ->
-            advertised == MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline
-        MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedHigh ->
-            advertised == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh
+    return when (mime) {
+        MediaFormat.MIMETYPE_VIDEO_AVC -> when (required) {
+            MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedBaseline ->
+                advertised == MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline
+            MediaCodecInfo.CodecProfileLevel.AVCProfileConstrainedHigh ->
+                advertised == MediaCodecInfo.CodecProfileLevel.AVCProfileHigh
+            else -> false
+        }
+        MediaFormat.MIMETYPE_VIDEO_HEVC -> when (required) {
+            MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 ->
+                advertised == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ||
+                    advertised == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
+            MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10 ->
+                advertised == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10Plus
+            else -> false
+        }
+        MediaFormat.MIMETYPE_VIDEO_VP9 -> when (required) {
+            MediaCodecInfo.CodecProfileLevel.VP9Profile2 ->
+                advertised == MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR ||
+                    advertised == MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR10Plus
+            MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR ->
+                advertised == MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR10Plus
+            MediaCodecInfo.CodecProfileLevel.VP9Profile3 ->
+                advertised == MediaCodecInfo.CodecProfileLevel.VP9Profile3HDR ||
+                    advertised == MediaCodecInfo.CodecProfileLevel.VP9Profile3HDR10Plus
+            MediaCodecInfo.CodecProfileLevel.VP9Profile3HDR ->
+                advertised == MediaCodecInfo.CodecProfileLevel.VP9Profile3HDR10Plus
+            else -> false
+        }
+        MediaFormat.MIMETYPE_VIDEO_AV1 -> when (required) {
+            MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10 ->
+                advertised == MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10 ||
+                    advertised == MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10Plus
+            MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10 ->
+                advertised == MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10Plus
+            else -> false
+        }
         else -> false
     }
 }
@@ -556,9 +623,10 @@ private const val AVC_RESERVED_COMPATIBILITY_MASK: Int = 0x03
 private const val AVC_CONSTRAINT_SET1: Int = 0x40
 private const val AVC_CONSTRAINT_SET3: Int = 0x10
 private const val AVC_CONSTRAINED_HIGH_MASK: Int = 0x0C
+private const val AV1_CONFIG_RECORD_HEADER_SIZE: Int = 4
+private const val AV1_HIGH_TIER_MIN_LEVEL_INDEX: Int = 8
 private const val AV1_OBU_SEQUENCE_HEADER: Int = 1
 private const val AV1_OBU_METADATA: Int = 5
-
 private val AVC_LEVELS = intArrayOf(
     MediaCodecInfo.CodecProfileLevel.AVCLevel1,
     MediaCodecInfo.CodecProfileLevel.AVCLevel1b,

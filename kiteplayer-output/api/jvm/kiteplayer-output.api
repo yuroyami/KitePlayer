@@ -1,0 +1,15 @@
+public final class io/github/yuroyami/kiteplayer/output/AnnexB {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/output/AnnexB;
+	public final fun isAnnexB ([B)Z
+	public final fun parseAvcC ([B)Lio/github/yuroyami/kiteplayer/output/CodecSpecificData;
+	public final fun parseHvcC ([B)Lio/github/yuroyami/kiteplayer/output/CodecSpecificData;
+	public final fun toAnnexB ([BI)[B
+}
+
+public final class io/github/yuroyami/kiteplayer/output/CodecSpecificData {
+	public fun <init> ([B[BI)V
+	public final fun getCsd0 ()[B
+	public final fun getCsd1 ()[B
+	public final fun getNalLengthSize ()I
+}
+

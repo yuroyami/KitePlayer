@@ -8,6 +8,7 @@ import android.media.MediaCodecInfo
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
+import android.util.Log
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
@@ -36,66 +37,211 @@ internal data class MediaCodecOutputColor(
     val reliable: Boolean,
 )
 
+/** Codec facts shared with the renderer target before a MediaCodec instance is selected. */
+internal data class MediaCodecStreamRequirement(
+    val mime: String,
+    val profile: Int,
+    val level: Int,
+    val bitDepth: Int,
+    val colorSpace: ColorSpaceInfo?,
+)
+
+/**
+ * The output target's contract with MediaCodec.
+ *
+ * A native Surface normally preserves the coded output. A composited target may instead ask the
+ * decoder to tone-map into a color space it can represent. Validation still happens against the
+ * actual output format, so a vendor cannot silently ignore that request and feed HDR into SDR GL.
+ */
+internal data class MediaCodecOutputContract(
+    val requestedColorTransfer: Int? = null,
+    val requireExplicitOutputColor: Boolean = false,
+    val trustedOutputColor: ColorSpaceInfo? = null,
+    val validateOutput: ((MediaCodecOutputColor) -> Boolean)? = null,
+)
+
+internal fun interface MediaCodecOutputAdmission {
+    fun admit(requirement: MediaCodecStreamRequirement): MediaCodecOutputContract?
+}
+
+private val DIRECT_SURFACE_ADMISSION = MediaCodecOutputAdmission { requirement ->
+    MediaCodecOutputContract().takeIf {
+        canRepresentMediaCodecColorExactly(requirement.colorSpace)
+    }
+}
+
 /** A hardware decoder paired with the Surface target owned by one Android video renderer. */
 internal class MediaCodecVideoDecoderFactory(
     private val target: MediaCodecSurfaceTarget,
     private val applyCodecRotation: Boolean = true,
-    private val outputColorValidator: ((MediaCodecOutputColor) -> Boolean)? = null,
+    private val outputAdmission: MediaCodecOutputAdmission = DIRECT_SURFACE_ADMISSION,
 ) : VideoDecoderFactory {
     override val name: String = "Android MediaCodec direct Surface"
 
     override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return refuseMediaCodec(hwdec, "direct MediaCodec output requires Android 10 or newer")
+        }
         if (stream.kind != TrackKind.Video || !hwdec.allowsMediaCodec()) return null
-        val size = stream.videoSize ?: return null
-        if (size.width <= 0 || size.height <= 0) return null
+        val size = stream.videoSize
+            ?: return refuseMediaCodec(hwdec, "the stream has no coded video size")
+        if (size.width <= 0 || size.height <= 0) {
+            return refuseMediaCodec(hwdec, "the stream has invalid coded size ${size.width}x${size.height}")
+        }
 
-        val codec = codecInput(stream) ?: return null
+        val codec = codecInput(stream) ?: return refuseMediaCodec(
+            hwdec,
+            "the ${stream.codec} configuration is missing, malformed, ambiguous, or outside Android's proved profiles",
+        )
+        if (!hasMediaCodecTierCapabilityProof(codec.highTier)) {
+            return refuseMediaCodec(
+                hwdec,
+                "AV1 high-tier hardware admission requires peak bitrate metadata, " +
+                    "which PlayerStreamInfo does not expose",
+            )
+        }
+        val outputContract = outputAdmission.admit(codec.requirement) ?: return refuseMediaCodec(
+            hwdec,
+            "the output target cannot safely represent ${codec.colorSpace ?: "unspecified color"}",
+        )
         val effectiveStream = if (codec.colorSpace == stream.colorSpace) {
             stream
         } else {
             stream.copy(colorSpace = codec.colorSpace)
         }
-        val format = MediaFormat.createVideoFormat(codec.mime, size.width, size.height).apply {
-            setInteger(MediaFormat.KEY_PROFILE, codec.androidProfile)
-            setInteger(MediaFormat.KEY_LEVEL, codec.androidLevel)
-            codec.csd?.let { data ->
-                setByteBuffer("csd-0", ByteBuffer.wrap(data.csd0))
-                data.csd1?.let { setByteBuffer("csd-1", ByteBuffer.wrap(it)) }
-            }
-            codec.opaqueCsd?.takeIf { it.isNotEmpty() }?.let {
-                setByteBuffer("csd-0", ByteBuffer.wrap(it))
-            }
-            stream.frameRate?.takeIf { it.isFinite() && it > 0.0 }?.let {
-                setFloat(MediaFormat.KEY_FRAME_RATE, it.toFloat())
-            }
-            stream.bitrate?.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.let {
-                setInteger(MediaFormat.KEY_BIT_RATE, it.toInt())
-            }
-            applyColorHints(codec.colorSpace)
-            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, codec.maxInputSize(size))
-            setInteger(MediaFormat.KEY_ALLOW_FRAME_DROP, 0)
-            normalizedQuarterTurn(stream.rotationDegrees).takeIf { applyCodecRotation && it != 0 }?.let {
-                setInteger(MediaFormat.KEY_ROTATION, it)
-            }
+        if (
+            outputContract.requestedColorTransfer != null &&
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+        ) {
+            return refuseMediaCodec(hwdec, "decoder-side color conversion requires Android 12 or newer")
         }
-        val decoderInfo = findHardwareDecoder(format, codec) ?: return null
-        val decoder = MediaCodecVideoDecoder(
-            codecName = decoderInfo.name,
-            format = format,
-            codecInput = codec,
-            stream = effectiveStream,
-            target = target,
-            frameRotationDegrees = if (applyCodecRotation) 0 else normalizedQuarterTurn(stream.rotationDegrees),
-            outputColorValidator = outputColorValidator,
+        val probeFormat = mediaCodecFormat(
+            codec = codec,
+            stream = stream,
+            size = size,
+            outputContract = outputContract,
+            configuredProfile = codec.androidProfile,
+            applyCodecRotation = applyCodecRotation,
+            includeOutputRequest = false,
         )
-        return try {
-            target.publishGeometry(size, normalizedQuarterTurn(stream.rotationDegrees))
-            decoder
-        } catch (failure: Throwable) {
-            decoder.close()
-            throw failure
+        val decoderProbe = findHardwareDecoders(probeFormat, codec)
+        if (decoderProbe.decoders.isEmpty()) return refuseMediaCodec(hwdec, decoderProbe.reason)
+
+        val configurationFailures = mutableListOf<String>()
+        for (candidate in decoderProbe.decoders) {
+            val format = mediaCodecFormat(
+                codec = codec,
+                stream = stream,
+                size = size,
+                outputContract = outputContract,
+                configuredProfile = candidate.configuredProfile,
+                applyCodecRotation = applyCodecRotation,
+                includeOutputRequest = true,
+            )
+            try {
+                val decoder = MediaCodecVideoDecoder(
+                    codecName = candidate.info.name,
+                    format = format,
+                    codecInput = codec,
+                    stream = effectiveStream,
+                    target = target,
+                    frameRotationDegrees = if (applyCodecRotation) {
+                        0
+                    } else {
+                        normalizedQuarterTurn(stream.rotationDegrees)
+                    },
+                    outputContract = outputContract,
+                )
+                return try {
+                    target.publishGeometry(size, normalizedQuarterTurn(stream.rotationDegrees))
+                    decoder
+                } catch (failure: Throwable) {
+                    decoder.close()
+                    throw failure
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                configurationFailures += "${candidate.info.name}: " +
+                    (failure.message ?: failure::class.simpleName.orEmpty())
+            }
         }
+        return refuseMediaCodec(
+            hwdec,
+            "accelerated decoders matched ${codec.mime} profile=${codec.androidProfile} " +
+                "level=${codec.androidLevel}, but configuration failed: " +
+                configurationFailures.joinToString(),
+        )
+    }
+}
+
+private fun mediaCodecFormat(
+    codec: CodecInput,
+    stream: PlayerStreamInfo,
+    size: VideoSize,
+    outputContract: MediaCodecOutputContract,
+    configuredProfile: Int,
+    applyCodecRotation: Boolean,
+    includeOutputRequest: Boolean,
+): MediaFormat = MediaFormat.createVideoFormat(codec.mime, size.width, size.height).apply {
+    setInteger(MediaFormat.KEY_PROFILE, configuredProfile)
+    setInteger(MediaFormat.KEY_LEVEL, codec.androidLevel)
+    codec.csd?.let { data ->
+        setByteBuffer("csd-0", ByteBuffer.wrap(data.csd0))
+        data.csd1?.let { setByteBuffer("csd-1", ByteBuffer.wrap(it)) }
+    }
+    codec.opaqueCsd?.takeIf { it.isNotEmpty() }?.let {
+        setByteBuffer("csd-0", ByteBuffer.wrap(it))
+    }
+    stream.frameRate?.takeIf { it.isFinite() && it > 0.0 }?.let {
+        setFloat(MediaFormat.KEY_FRAME_RATE, it.toFloat())
+    }
+    stream.bitrate?.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.let {
+        setInteger(MediaFormat.KEY_BIT_RATE, it.toInt())
+    }
+    applyColorHints(codec.colorSpace)
+    if (includeOutputRequest) {
+        outputContract.requestedColorTransfer?.let { requested ->
+            setInteger(MediaFormat.KEY_COLOR_TRANSFER_REQUEST, requested)
+        }
+    }
+    setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, codec.maxInputSize(size))
+    setInteger(MediaFormat.KEY_ALLOW_FRAME_DROP, 0)
+    normalizedQuarterTurn(stream.rotationDegrees).takeIf { applyCodecRotation && it != 0 }?.let {
+        setInteger(MediaFormat.KEY_ROTATION, it)
+    }
+}
+
+private fun refuseMediaCodec(policy: HwdecPolicy, reason: String): VideoDecoder? {
+    if (policy == HwdecPolicy.Require) {
+        Log.w(MEDIA_CODEC_LOG_TAG, reason)
+        throw IllegalArgumentException(reason)
+    }
+    return null
+}
+
+private const val MEDIA_CODEC_LOG_TAG: String = "KiteMediaCodec"
+
+/** Android's AV1 constants omit tier; average bitrate cannot prove a high-tier capability bound. */
+internal fun hasMediaCodecTierCapabilityProof(highTier: Boolean): Boolean = !highTier
+
+/** Decoder-epoch sequence for MediaCodec's absolute timed Surface-release timestamps. */
+internal class MediaCodecReleaseTimestampSequence {
+    private var lastTimestampNanos: Long? = null
+
+    fun normalize(requestedTimestampNanos: Long): Long {
+        val previous = lastTimestampNanos
+        val normalized = when {
+            previous == null || requestedTimestampNanos > previous -> requestedTimestampNanos
+            previous < Long.MAX_VALUE -> previous + 1L
+            else -> throw IllegalStateException("timed Surface release timestamp overflow")
+        }
+        lastTimestampNanos = normalized
+        return normalized
+    }
+
+    fun reset() {
+        lastTimestampNanos = null
     }
 }
 
@@ -106,7 +252,18 @@ private data class CodecInput(
     val csd: CodecSpecificData? = null,
     val opaqueCsd: ByteArray? = null,
     val colorSpace: ColorSpaceInfo? = null,
+    val bitDepth: Int,
+    val highTier: Boolean,
 ) {
+    val requirement: MediaCodecStreamRequirement
+        get() = MediaCodecStreamRequirement(
+            mime = mime,
+            profile = androidProfile,
+            level = androidLevel,
+            bitDepth = bitDepth,
+            colorSpace = colorSpace,
+        )
+
     fun packetBytes(bytes: ByteArray): ByteArray {
         if (bytes.isEmpty()) return bytes
         return csd?.let {
@@ -160,15 +317,37 @@ private fun codecInput(stream: PlayerStreamInfo): CodecInput? {
     } else {
         mergeMediaCodecColor(stream.colorSpace, parsed.declaredColor) ?: return null
     }
-    if (!canRepresentMediaCodecColorExactly(color)) return null
+    val profile = mediaCodecProfileForColor(parsed.mime, parsed.profile, color)
     return CodecInput(
         mime = parsed.mime,
-        androidProfile = parsed.profile,
+        androidProfile = profile,
         androidLevel = parsed.level,
         csd = parsed.csd,
         opaqueCsd = parsed.opaqueCsd,
         colorSpace = color,
+        bitDepth = parsed.bitDepth,
+        highTier = parsed.highTier,
     )
+}
+
+/** Selects Android's HDR profile only when the stream declaration proves that stronger contract. */
+internal fun mediaCodecProfileForColor(mime: String, baseProfile: Int, color: ColorSpaceInfo?): Int {
+    val transfer = color?.transfer
+    return when {
+        mime == MediaFormat.MIMETYPE_VIDEO_HEVC &&
+            baseProfile == MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10 &&
+            transfer == ColorTransfer.Pq -> MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10HDR10
+        mime == MediaFormat.MIMETYPE_VIDEO_VP9 && transfer == ColorTransfer.Pq &&
+            baseProfile == MediaCodecInfo.CodecProfileLevel.VP9Profile2 ->
+            MediaCodecInfo.CodecProfileLevel.VP9Profile2HDR
+        mime == MediaFormat.MIMETYPE_VIDEO_VP9 && transfer == ColorTransfer.Pq &&
+            baseProfile == MediaCodecInfo.CodecProfileLevel.VP9Profile3 ->
+            MediaCodecInfo.CodecProfileLevel.VP9Profile3HDR
+        mime == MediaFormat.MIMETYPE_VIDEO_AV1 &&
+            baseProfile == MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10 &&
+            transfer == ColorTransfer.Pq -> MediaCodecInfo.CodecProfileLevel.AV1ProfileMain10HDR10
+        else -> baseProfile
+    }
 }
 
 internal fun HwdecPolicy.allowsMediaCodec(): Boolean = when (this) {
@@ -178,12 +357,26 @@ internal fun HwdecPolicy.allowsMediaCodec(): Boolean = when (this) {
     is HwdecPolicy.Prefer -> false
 }
 
-private fun findHardwareDecoder(format: MediaFormat, codec: CodecInput): MediaCodecInfo? {
+private data class MediaCodecDecoderCandidate(
+    val info: MediaCodecInfo,
+    val configuredProfile: Int,
+)
+
+private data class MediaCodecDecoderProbe(
+    val decoders: List<MediaCodecDecoderCandidate>,
+    val reason: String,
+)
+
+private fun findHardwareDecoders(format: MediaFormat, codec: CodecInput): MediaCodecDecoderProbe {
+    val accepted = mutableListOf<MediaCodecDecoderCandidate>()
+    val candidates = mutableListOf<String>()
     for (info in MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos) {
         if (info.isEncoder || !info.isHardwareAccelerated) continue
         if (info.supportedTypes.none { it.equals(codec.mime, ignoreCase = true) }) continue
-        val accepted = try {
+        var advertised = "unreadable capabilities"
+        val acceptedProfile = try {
             val capabilities = info.getCapabilitiesForType(codec.mime)
+            advertised = capabilities.profileLevels.joinToString(",") { "${it.profile}/${it.level}" }
             val profiles = capabilities.profileLevels
                 .filter { advertised ->
                     advertisedProfileLevelSupports(
@@ -197,7 +390,7 @@ private fun findHardwareDecoder(format: MediaFormat, codec: CodecInput): MediaCo
                 .map { it.profile }
                 .distinct()
                 .sortedBy { if (it == codec.androidProfile) 0 else 1 }
-            profiles.any { advertisedProfile ->
+            profiles.firstOrNull { advertisedProfile ->
                 // Constrained AVC profiles are subsets. Some vendors advertise only the parent
                 // Baseline or High capability, which is proof of support but isFormatSupported
                 // compares profiles for exact equality. Probe and configure the advertised parent.
@@ -205,11 +398,23 @@ private fun findHardwareDecoder(format: MediaFormat, codec: CodecInput): MediaCo
                 capabilities.isFormatSupported(format)
             }
         } catch (_: Exception) {
-            false
+            null
         }
-        if (accepted) return info
+        if (acceptedProfile != null) {
+            accepted += MediaCodecDecoderCandidate(info, acceptedProfile)
+        } else {
+            candidates += "${info.name}[$advertised]"
+        }
     }
-    return null
+    if (accepted.isNotEmpty()) return MediaCodecDecoderProbe(accepted, "")
+    val requirement = "${codec.mime} profile=${codec.androidProfile} level=${codec.androidLevel} " +
+        "depth=${codec.bitDepth}"
+    val reason = if (candidates.isEmpty()) {
+        "no accelerated decoder advertises $requirement"
+    } else {
+        "no accelerated decoder accepts $requirement; candidates=${candidates.joinToString()}"
+    }
+    return MediaCodecDecoderProbe(emptyList(), reason)
 }
 
 private fun normalizedQuarterTurn(degrees: Int): Int {
@@ -251,7 +456,7 @@ private class MediaCodecVideoDecoder(
     private val stream: PlayerStreamInfo,
     private val target: MediaCodecSurfaceTarget,
     private val frameRotationDegrees: Int,
-    private val outputColorValidator: ((MediaCodecOutputColor) -> Boolean)?,
+    private val outputContract: MediaCodecOutputContract,
 ) : VideoDecoder, MediaCodecFrameOwner, MediaCodecSurfaceTarget.Switcher {
     override val hardware: HwdecStatus = HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec)
 
@@ -266,6 +471,7 @@ private class MediaCodecVideoDecoder(
     private val releaseCommands = ConcurrentLinkedQueue<MediaCodecReleaseCommand>()
     private val outstanding = mutableMapOf<Int, Long>()
     private val pendingConfig = ArrayDeque<ByteArray>()
+    private val releaseTimestamps = MediaCodecReleaseTimestampSequence()
     private var pendingInput: PendingInput? = null
 
     private var generation: Generation = Generation.Initial
@@ -279,10 +485,12 @@ private class MediaCodecVideoDecoder(
     @Volatile private var fatalFailure: Throwable? = null
     private var nextSyntheticPtsUs: Long = 0L
     private var outputSize: VideoSize = configuredSize
-    private var outputColor: ColorSpaceInfo = stream.colorSpace ?: ColorSpaceInfo.guessFor(configuredSize.height)
-    private var outputColorValidated: Boolean = outputColorValidator == null ||
-        stream.colorSpace?.let { declared ->
-            outputColorValidator.invoke(MediaCodecOutputColor(declared, reliable = true))
+    private var outputColor: ColorSpaceInfo = outputContract.trustedOutputColor ?: stream.colorSpace
+        ?: ColorSpaceInfo.guessFor(configuredSize.height)
+    private var outputColorValidated: Boolean = outputContract.validateOutput == null ||
+        !outputContract.requireExplicitOutputColor &&
+        (outputContract.trustedOutputColor ?: stream.colorSpace)?.let { declared ->
+            outputContract.validateOutput.invoke(MediaCodecOutputColor(declared, reliable = true))
         } == true
     private var configuredSurface: android.view.Surface = fallbackSurface
     private var configuredSurfaceVersion: Long? = null
@@ -293,6 +501,12 @@ private class MediaCodecVideoDecoder(
         try {
             synchronized(codecLock) {
                 codec.configure(format, fallbackSurface, null, 0)
+                outputContract.requestedColorTransfer?.let { requested ->
+                    val accepted = codec.inputFormat.intOrNull(MediaFormat.KEY_COLOR_TRANSFER_REQUEST)
+                    check(accepted == requested) {
+                        "MediaCodec rejected output transfer request $requested (reported $accepted)"
+                    }
+                }
                 codec.start()
             }
             target.bind(this)
@@ -344,10 +558,13 @@ private class MediaCodecVideoDecoder(
     override suspend fun flush(newGeneration: Generation) {
         check(!closed) { "MediaCodec decoder is closed" }
         while (true) readyFrames.pollFirst()?.close() ?: break
-        processReleaseCommands()
+        // Seeking invalidates every queued timed release. Rendering one here would publish an old
+        // generation after the new timeline has already started.
+        rejectReleaseCommands()
         val replayCodecConfig = !outputEstablished
         codecCall { flush() }
         decoderEpoch += 1L
+        releaseTimestamps.reset()
         outstanding.clear()
         rejectReleaseCommands()
         generation = newGeneration
@@ -375,7 +592,8 @@ private class MediaCodecVideoDecoder(
         closed = true
         while (true) readyFrames.pollFirst()?.close() ?: break
         if (!codecReleased) {
-            runCatching { processReleaseCommands() }
+            // Close is a discard boundary, not a final presentation opportunity.
+            runCatching { rejectReleaseCommands() }
             outstanding.keys.toList().forEach { index ->
                 runCatching { codecCall { releaseOutputBuffer(index, false) } }
             }
@@ -509,9 +727,28 @@ private class MediaCodecVideoDecoder(
                     val targetsConfiguredDisplay = configuredSurface === display.surface &&
                         configuredSurfaceVersion == display.version
                     if (render && targetsConfiguredDisplay) {
-                        val timestamp = requireNotNull(renderNanos)
-                        command.beforeRender(timestamp)
-                        codec.releaseOutputBuffer(command.outputIndex, timestamp)
+                        val timestamp = try {
+                            releaseTimestamps.normalize(requireNotNull(renderNanos)).also {
+                                command.beforeRender(it)
+                            }
+                        } catch (prepareFailure: Throwable) {
+                            try {
+                                codec.releaseOutputBuffer(command.outputIndex, false)
+                            } catch (discardFailure: Throwable) {
+                                prepareFailure.addSuppressed(discardFailure)
+                            }
+                            throw prepareFailure
+                        }
+                        try {
+                            codec.releaseOutputBuffer(command.outputIndex, timestamp)
+                        } catch (releaseFailure: Throwable) {
+                            try {
+                                command.onRenderFailed(timestamp)
+                            } catch (cancelFailure: Throwable) {
+                                releaseFailure.addSuppressed(cancelFailure)
+                            }
+                            throw releaseFailure
+                        }
                         rendered = true
                     } else {
                         codec.releaseOutputBuffer(command.outputIndex, false)
@@ -612,16 +849,21 @@ private class MediaCodecVideoDecoder(
             ?.let { bottom -> bottom - (format.intOrNull(MediaFormat.KEY_CROP_TOP) ?: 0) + 1 }
             ?: format.intOrNull(MediaFormat.KEY_HEIGHT)
             ?: outputSize.height
-        val updatedColor = colorSpaceFrom(format, outputColor)
-        outputColorValidator?.let { validate ->
-            val hasStandard = format.intOrNull(MediaFormat.KEY_COLOR_STANDARD) != null
-            val hasTransfer = format.intOrNull(MediaFormat.KEY_COLOR_TRANSFER) != null
-            val reliable = stream.colorSpace != null || hasStandard && hasTransfer
-            check(validate(MediaCodecOutputColor(updatedColor, reliable))) {
-                "MediaCodec reported color metadata this output target cannot represent: $updatedColor"
+        val detectedColor = mediaCodecOutputColorFromCodes(
+            standard = format.intOrNull(MediaFormat.KEY_COLOR_STANDARD),
+            transferCode = format.intOrNull(MediaFormat.KEY_COLOR_TRANSFER),
+            range = format.intOrNull(MediaFormat.KEY_COLOR_RANGE),
+            fallback = outputColor,
+            outputContract = outputContract,
+            sourceColorDeclared = stream.colorSpace != null,
+        )
+        outputContract.validateOutput?.let { validate ->
+            check(validate(detectedColor)) {
+                "MediaCodec reported color metadata this output target cannot represent: " +
+                    detectedColor.colorSpace
             }
         }
-        outputColor = updatedColor
+        outputColor = detectedColor.colorSpace
         outputColorValidated = true
         if (width > 0 && height > 0) {
             outputSize = VideoSize(
@@ -712,13 +954,67 @@ internal fun canRepresentMediaCodecColorExactly(color: ColorSpaceInfo?): Boolean
         (!color.rangeSpecified || hints.range != null)
 }
 
-private fun colorSpaceFrom(format: MediaFormat, fallback: ColorSpaceInfo): ColorSpaceInfo =
-    colorSpaceFromCodes(
-        standard = format.intOrNull(MediaFormat.KEY_COLOR_STANDARD),
-        transferCode = format.intOrNull(MediaFormat.KEY_COLOR_TRANSFER),
-        range = format.intOrNull(MediaFormat.KEY_COLOR_RANGE),
-        fallback = fallback,
+internal fun isRecognizedMediaCodecColorStandard(value: Int?): Boolean = when (value) {
+    MediaFormat.COLOR_STANDARD_BT601_NTSC,
+    MediaFormat.COLOR_STANDARD_BT601_PAL,
+    MediaFormat.COLOR_STANDARD_BT2020,
+    MediaFormat.COLOR_STANDARD_BT709,
+    -> true
+    else -> false
+}
+
+internal fun isRecognizedMediaCodecColorTransfer(value: Int?): Boolean = when (value) {
+    MediaFormat.COLOR_TRANSFER_LINEAR,
+    MediaFormat.COLOR_TRANSFER_ST2084,
+    MediaFormat.COLOR_TRANSFER_HLG,
+    MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
+    -> true
+    else -> false
+}
+
+internal fun isRecognizedMediaCodecColorRange(value: Int?): Boolean = when (value) {
+    MediaFormat.COLOR_RANGE_FULL,
+    MediaFormat.COLOR_RANGE_LIMITED,
+    -> true
+    else -> false
+}
+
+/** Resolves only recognized public color keys; an accepted transfer request proves transfer only. */
+internal fun mediaCodecOutputColorFromCodes(
+    standard: Int?,
+    transferCode: Int?,
+    range: Int?,
+    fallback: ColorSpaceInfo,
+    outputContract: MediaCodecOutputContract,
+    sourceColorDeclared: Boolean,
+): MediaCodecOutputColor {
+    val recognizedStandard = standard.takeIf(::isRecognizedMediaCodecColorStandard)
+    val recognizedTransfer = transferCode.takeIf(::isRecognizedMediaCodecColorTransfer)
+    val recognizedRange = range.takeIf(::isRecognizedMediaCodecColorRange)
+    // configure() verified that inputFormat echoed this request. Some codecs omit the redundant
+    // SDR transfer key from their output format; that handshake never proves the color standard.
+    val effectiveTransfer = recognizedTransfer ?: outputContract.requestedColorTransfer
+    val requestedOutputFallback = if (
+        outputContract.requestedColorTransfer == MediaFormat.COLOR_TRANSFER_SDR_VIDEO
+    ) {
+        // Android's decoder-side HDR conversion contract is limited-range BT.709 SDR. This fills
+        // omitted transfer/range dimensions, while reliability below still requires a recognized
+        // standard when the source itself was only guessed.
+        ColorSpaceInfo()
+    } else {
+        fallback
+    }
+    val color = colorSpaceFromCodes(
+        standard = recognizedStandard,
+        transferCode = effectiveTransfer,
+        range = recognizedRange,
+        fallback = requestedOutputFallback,
     )
+    val reliable = outputContract.trustedOutputColor != null ||
+        (recognizedStandard != null && effectiveTransfer != null) ||
+        (!outputContract.requireExplicitOutputColor && sourceColorDeclared)
+    return MediaCodecOutputColor(color, reliable)
+}
 
 internal fun colorSpaceFromCodes(
     standard: Int?,
@@ -744,13 +1040,20 @@ internal fun colorSpaceFromCodes(
         MediaFormat.COLOR_TRANSFER_LINEAR -> ColorTransfer.Linear
         MediaFormat.COLOR_TRANSFER_ST2084 -> ColorTransfer.Pq
         MediaFormat.COLOR_TRANSFER_HLG -> ColorTransfer.Hlg
-        MediaFormat.COLOR_TRANSFER_SDR_VIDEO -> when (fallback.transfer) {
-            ColorTransfer.Bt601,
-            ColorTransfer.Bt709,
-            ColorTransfer.Bt2020Ten,
-            ColorTransfer.Bt2020Twelve,
-            -> fallback.transfer
-            else -> ColorTransfer.Bt709
+        MediaFormat.COLOR_TRANSFER_SDR_VIDEO -> when (standard) {
+            MediaFormat.COLOR_STANDARD_BT601_NTSC,
+            MediaFormat.COLOR_STANDARD_BT601_PAL,
+            -> ColorTransfer.Bt601
+            MediaFormat.COLOR_STANDARD_BT2020 -> ColorTransfer.Bt2020Ten
+            MediaFormat.COLOR_STANDARD_BT709 -> ColorTransfer.Bt709
+            else -> when (fallback.transfer) {
+                ColorTransfer.Bt601,
+                ColorTransfer.Bt709,
+                ColorTransfer.Bt2020Ten,
+                ColorTransfer.Bt2020Twelve,
+                -> fallback.transfer
+                else -> ColorTransfer.Bt709
+            }
         }
         else -> fallback.transfer
     }
@@ -764,6 +1067,6 @@ internal fun colorSpaceFromCodes(
             else -> fallback.fullRange
         },
         chromaLocation = fallback.chromaLocation,
-        rangeSpecified = range != null || fallback.rangeSpecified,
+        rangeSpecified = isRecognizedMediaCodecColorRange(range) || fallback.rangeSpecified,
     )
 }

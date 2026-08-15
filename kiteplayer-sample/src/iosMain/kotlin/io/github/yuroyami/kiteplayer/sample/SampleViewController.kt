@@ -7,8 +7,9 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.SeekMode
-import io.github.yuroyami.kiteplayer.phone.KitePlayerUIView
-import io.github.yuroyami.kiteplayer.phone.phoneBackends
+import io.github.yuroyami.kiteplayer.mobile.mobileBackends
+import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
+import io.github.yuroyami.kiteplayer.view.KitePlayerUIView
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.ObjCAction
@@ -58,7 +59,7 @@ public fun sampleViewController(): UIViewController = SampleController()
  */
 private class SampleController : UIViewController(nibName = null, bundle = null) {
 
-    private val playerView = KitePlayerUIView()
+    private val playerView = KitePlayerUIView().apply { installMobileRenderer() }
     private val scope = MainScope()
     private val smokeMode = NSProcessInfo.processInfo.arguments.contains(SMOKE_ARGUMENT)
     private val controlButtons = mutableListOf<UIButton>()
@@ -144,7 +145,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
             ) { "$SMOKE_RESOURCE.$SMOKE_EXTENSION is not in the application bundle" }
 
             val activePlayer = KitePlayer.create(
-                PlayerConfig(backends = phoneBackends()),
+                PlayerConfig(backends = mobileBackends()),
             )
             samplePlayer = activePlayer
             playerView.player = activePlayer
@@ -251,7 +252,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                 ) { "$SMOKE_RESOURCE.$SMOKE_EXTENSION is not in the application bundle" }
 
                 val activePlayer = KitePlayer.create(
-                    PlayerConfig(backends = phoneBackends()),
+                    PlayerConfig(backends = mobileBackends()),
                 )
                 player = activePlayer
                 playerView.player = activePlayer

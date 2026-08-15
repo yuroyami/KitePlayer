@@ -18,7 +18,7 @@ import kotlin.time.Duration.Companion.seconds
  * val player = KitePlayer.create(
  *     profile.applyTo(PlayerConfig(backends = Backends(
  *         backend = KiteCodecMediaBackend(decoderOptions = profile.decoderOptions),
- *         output = phoneBackends().output,
+ *         output = mobileBackends().output,
  *     ))),
  * )
  * ```

@@ -217,6 +217,18 @@ internal class PlaybackCore(
     /** Read from any thread, so it is published rather than computed on demand. */
     private val publishedPositionMicros = atomic(0L)
 
+    /**
+     * The newest requested seek target, masking [publishedPositionMicros] until the seek machine
+     * drains. Written at the public entry points (an absolute target needs no session state) and
+     * again at acceptance with the merged request's resolution; cleared by [handlePlaybackTime] on
+     * the first pass with nothing queued, and by every teardown that zeroes the position. Without
+     * it, every poll between a request and its landing reads the old advancing clock, which a
+     * seek bar renders as the thumb snapping back before it jumps to the destination. The landing
+     * still writes only [publishedPositionMicros], so a stale landing can never overwrite the mask
+     * of a newer request.
+     */
+    private val maskedSeekTargetMicros = atomic(NO_SEEK_MASK)
+
     // Observable-for-tests counters. Everything here is written by the actor only.
     var loopPasses: Long = 0
         private set
@@ -349,6 +361,7 @@ internal class PlaybackCore(
     /** Seeks and returns what happened to this request: it landed, or a later request replaced it. */
     suspend fun seek(to: Pts, mode: SeekMode): SeekResult {
         val reply = CompletableDeferred<SeekResult>()
+        maskedSeekTargetMicros.value = to.micros
         send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(to), mode), reply))
         return awaitReply(reply)
     }
@@ -356,6 +369,11 @@ internal class PlaybackCore(
     /** Fire and forget, coalescing by contract. What a seek bar drag calls sixty times a second. */
     fun seekLater(to: Pts, mode: SeekMode) {
         checkOpenFor("seekLater")
+        // The mask is set from this very call, not from the actor's next pass: a fire-and-forget
+        // caller polls position() in the gap before the command is drained, and an absolute target
+        // needs no session state to name it. A request the drain drops (unseekable source) is
+        // cleared one pass later by handlePlaybackTime.
+        maskedSeekTargetMicros.value = to.micros
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(to), mode)))
     }
 
@@ -429,8 +447,12 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
-    /** The position as of the last pass, which is never more than the wake floor old. */
-    fun position(): Duration = publishedPositionMicros.value.microseconds
+    /** The position as of the last pass, which is never more than the wake floor old; while a seek
+     * request is in flight, the newest requested target, which is the timeline the caller asked for. */
+    fun position(): Duration {
+        val masked = maskedSeekTargetMicros.value
+        return (if (masked != NO_SEEK_MASK) masked else publishedPositionMicros.value).microseconds
+    }
 
     /** Terminal and idempotent. Atomically requests the shared close and returns without awaiting it. */
     override fun close() {
@@ -844,6 +866,7 @@ internal class PlaybackCore(
         videoRecoveryAttempted = false
         forceBackendSoftwareForMedia = false
         seekPhase = SeekPhase.Idle
+        maskedSeekTargetMicros.value = NO_SEEK_MASK
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
         firstFrameSeen = false
@@ -1808,7 +1831,13 @@ internal class PlaybackCore(
 
     private fun handlePlaybackTime() {
         val session = session ?: return
-        publishedPositionMicros.value = currentPosition().micros
+        // The mask lives exactly as long as a request is queued or held. drainCommands runs before
+        // this handler, so a newly accepted request re-arms the mask before this pass can clear it,
+        // and the clock resumes publishing only once the machine has actually drained.
+        if (pendingSeek == null) {
+            maskedSeekTargetMicros.value = NO_SEEK_MASK
+            publishedPositionMicros.value = currentPosition().micros
+        }
         if (session.isStillImage && session.framesOut(session.video) > 0) {
             if (stillImageShownSinceNanos == 0L) stillImageShownSinceNanos = clock.nanos()
             val shownFor = (clock.nanos() - stillImageShownSinceNanos).nanoseconds
@@ -2052,6 +2081,9 @@ internal class PlaybackCore(
         }
         if (session == null) {
             pendingSeek = null
+            // handlePlaybackTime cannot clear the mask with no session, so the request that
+            // cannot run clears it here; the published zero is the honest sessionless answer.
+            maskedSeekTargetMicros.value = NO_SEEK_MASK
             resolveSeekReplies(SeekResult.Applied(Pts.Zero))
             return
         }
@@ -2137,6 +2169,20 @@ internal class PlaybackCore(
         }
         pendingSeek = pendingSeek?.merge(request) ?: request
         reply?.let { pendingSeekReplies += it }
+
+        // The accepted request IS the timeline now. Refreshing the mask with the merged request's
+        // resolution covers the targets the entry points cannot name (relative and factor need a
+        // position and a duration). Resolving against the masked position rather than the cursor
+        // makes a relative request issued during a held seek stack on the timeline the user
+        // already asked for, exactly like the merge rules do.
+        val active = session
+        val accepted = pendingSeek
+        if (active != null && accepted != null) {
+            val basis = maskedSeekTargetMicros.value.takeIf { it != NO_SEEK_MASK }
+                ?: publishedPositionMicros.value
+            maskedSeekTargetMicros.value =
+                accepted.resolve(Pts(basis), active.source.duration).micros
+        }
     }
 
     private fun resolveSeekReplies(result: SeekResult) {
@@ -2380,6 +2426,7 @@ internal class PlaybackCore(
         // Idle publishes Idle's numbers: a position and progress left over from the stopped
         // session would describe media that no longer exists (audit P1-18). The stats baseline
         // resets with them so the next session's zero-based counter never goes negative.
+        maskedSeekTargetMicros.value = NO_SEEK_MASK
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
         lastStatsDecoded = 0L
@@ -2510,6 +2557,7 @@ internal class PlaybackCore(
         // (audit P1-18).
         media = null
         tracks = Tracks.Empty
+        maskedSeekTargetMicros.value = NO_SEEK_MASK
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
         // Do not consult the clock or any worker after their dispatchers have closed. This is the same
@@ -2660,7 +2708,9 @@ internal class PlaybackCore(
         if ((now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
             progressState.value = Progress(
-                position = publishedPositionMicros.value.microseconds,
+                // The masked read, deliberately: the progress flow feeds the same seek bars that
+                // poll position(), and the two must never disagree about which timeline is current.
+                position = position(),
                 bufferedAhead = bufferedAhead(session),
             )
         }
@@ -3383,6 +3433,9 @@ internal class PlaybackCore(
     }
 
     private companion object {
+        /** No seek in flight: [maskedSeekTargetMicros] defers to the published clock. */
+        const val NO_SEEK_MASK: Long = Long.MIN_VALUE
+
         /**
          * The longest the loop sleeps when nothing asks for earlier.
          *

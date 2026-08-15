@@ -5,16 +5,18 @@ kotlin = "2.4.10"
 agp = "9.2.1"
 vanniktechPublish = "0.36.0"
 dokka = "2.2.0"
+kitecodec = "0.0.6"
 
 coroutines = "1.11.0"
 atomicfu = "0.31.0"
-# Compose Multiplatform, for :kiteplayer-compose only. The compose COMPILER ships inside the
-# Kotlin distribution since Kotlin 2.0, so its plugin below rides the kotlin version.
+# Compose Multiplatform, for :kiteplayer-compose-interop and :kiteplayer-compose-video. The
+# compatibility :kiteplayer-compose artifact only re-exports those modules. The Compose compiler
+# ships inside the Kotlin distribution since Kotlin 2.0, so its plugin below rides the Kotlin version.
 composeMultiplatform = "1.12.0-rc01"
 androidxTestCore = "1.7.0"
 androidxTestRunner = "1.7.0"
 androidxTestExtJunit = "1.3.0"
-# Device tests of :kiteplayer-compose only: the ComponentActivity + setContent host (17.4.6 A3).
+# Device tests of :kiteplayer-compose-video only: the ComponentActivity + setContent host.
 androidxActivityCompose = "1.13.0"
 
 [libraries] ######################################################################################
@@ -41,3 +43,4 @@ android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version
 android-application = { id = "com.android.application", version.ref = "agp" }
 vanniktech-publish = { id = "com.vanniktech.maven.publish", version.ref = "vanniktechPublish" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
+kitecodec = { id = "io.github.yuroyami.kitecodec", version.ref = "kitecodec" }

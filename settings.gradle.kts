@@ -62,17 +62,20 @@ include(":kiteplayer-rt")
 include(":kiteplayer-ffmpeg")
 include(":kiteplayer-output")
 
-// :kiteplayer-phone is the aggregate a phone app depends on: one coordinate that carries the
-// FFmpeg backend, the output backends and the two reusable views, KitePlayerView for Android
-// and KitePlayerUIView for iOS. It holds no playback policy and no Compose (S1.d).
+// The mobile stack is split by capability. Native views remain Compose-free and work from Android
+// XML/UIKit directly; mobile assembles the default FFmpeg/output/view stack; Compose interop only
+// hosts those views; Compose video draws frames through Compose itself.
+include(":kiteplayer-view")
+include(":kiteplayer-mobile")
+include(":kiteplayer-compose-interop")
+include(":kiteplayer-compose-video")
+
+// Source-compatibility umbrellas for the local 0.0.2 coordinates. New modules never depend on
+// these leaves, so the old packaging cannot dictate the clean target matrices.
 include(":kiteplayer-phone")
-// :kiteplayer-compose is the optional Compose Multiplatform surface: the baseline Composable
-// that wraps the phone views, and KiteVideo, the Compose-true renderer (D-6, 17.9). A
-// non-Compose consumer never pulls it (S1.d).
 include(":kiteplayer-compose")
 // include(":kiteplayer-libass")     // optional full ASS renderer
 // include(":kiteplayer")            // umbrella artifact
 include(":kiteplayer-sample")
-// The provisional Android assembly proof (S1.c.6). S1.d replaces its internals with the
-// :kiteplayer-phone aggregate; the module itself stays.
+// The Android assembly and XML-inflation proof for :kiteplayer-mobile and :kiteplayer-view.
 include(":kiteplayer-sample-android")

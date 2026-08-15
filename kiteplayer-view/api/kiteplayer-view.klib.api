@@ -1,0 +1,47 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-view>
+abstract fun interface io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory { // io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory|null[0]
+    abstract fun create(platform.QuartzCore/CALayer, platform.QuartzCore/CAMetalLayer, kotlin/Boolean): io.github.yuroyami.kiteplayer.view/PlayerViewRenderer // io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory.create|create(platform.QuartzCore.CALayer;platform.QuartzCore.CAMetalLayer;kotlin.Boolean){}[0]
+}
+
+abstract interface io.github.yuroyami.kiteplayer.view/PlayerViewRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer|null[0]
+    abstract val failedFrames // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.failedFrames|{}failedFrames[0]
+        abstract fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    abstract val presentedFrames // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.presentedFrames|{}presentedFrames[0]
+        abstract fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    abstract val supersededFrames // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.supersededFrames|{}supersededFrames[0]
+        abstract fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.view/KitePlayerUIView : platform.UIKit/UIView { // io.github.yuroyami.kiteplayer.view/KitePlayerUIView|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.<init>|<init>(){}[0]
+
+    final val failedFrames // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val hasPicture // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.hasPicture|{}hasPicture[0]
+        final fun <get-hasPicture>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.hasPicture.<get-hasPicture>|<get-hasPicture>(){}[0]
+    final val presentedFrames // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+    final val supersededFrames // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.supersededFrames|{}supersededFrames[0]
+        final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
+
+    final var player // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.player|{}player[0]
+        final fun <get-player>(): io.github.yuroyami.kiteplayer/KitePlayer? // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.player.<get-player>|<get-player>(){}[0]
+        final fun <set-player>(io.github.yuroyami.kiteplayer/KitePlayer?) // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.player.<set-player>|<set-player>(value:io.github.yuroyami.kiteplayer.KitePlayer?){}[0]
+    final var preferMetal // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.preferMetal|{}preferMetal[0]
+        final fun <get-preferMetal>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.preferMetal.<get-preferMetal>|<get-preferMetal>(){}[0]
+        final fun <set-preferMetal>(kotlin/Boolean) // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.preferMetal.<set-preferMetal>|<set-preferMetal>(<set-?>:kotlin.Boolean){}[0]
+    final var rendererFactory // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.rendererFactory|{}rendererFactory[0]
+        final fun <get-rendererFactory>(): io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory? // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.rendererFactory.<get-rendererFactory>|<get-rendererFactory>(){}[0]
+        final fun <set-rendererFactory>(io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory?) // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.rendererFactory.<set-rendererFactory>|<set-rendererFactory>(value:io.github.yuroyami.kiteplayer.view.ApplePlayerViewRendererFactory?){}[0]
+
+    final fun didMoveToWindow() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.didMoveToWindow|objc:didMoveToWindow[0]
+    final fun layoutSubviews() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.layoutSubviews|objc:layoutSubviews[0]
+    final fun release() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.release|release(){}[0]
+}

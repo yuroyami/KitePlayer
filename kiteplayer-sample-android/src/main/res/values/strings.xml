@@ -5,4 +5,12 @@
     <string name="pause">Pause</string>
     <string name="seek_five">Seek 5s</string>
     <string name="perf_waiting">presented=0 decoded=0 engineDrop=0 outputFail=0 superseded=0</string>
+    <string name="choose_renderer">Choose a rendering path</string>
+    <string name="choose_renderer_detail">Each screen owns a separate player and demonstrates one public integration API.</string>
+    <string name="demo_direct_xml">Direct XML native View</string>
+    <string name="demo_direct_xml_detail">KitePlayerView inflated from an Android XML layout.</string>
+    <string name="demo_compose_interop">Compose/native-View interop</string>
+    <string name="demo_compose_interop_detail">KitePlayerSurface hosts the native KitePlayerView through AndroidView.</string>
+    <string name="demo_compose_native">GPU Compose</string>
+    <string name="demo_compose_native_detail">KiteVideo draws GPU-backed frames inside Compose so modifiers affect the pixels.</string>
 </resources>

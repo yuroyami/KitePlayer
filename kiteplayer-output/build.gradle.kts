@@ -14,7 +14,9 @@ plugins {
  * heard; a renderer draws a frame at a time it is told. Neither decides anything.
  *
  * Targets are added as backends land. Apple first, because CoreAudio and Metal are reachable and
- * testable on the development machine, and because iOS then shares the same code.
+ * testable on the development machine, and because iOS then shares the same code. The JVM target
+ * publishes the common surface only, no backend: it exists so a consumer whose commonMain depends
+ * on this module still resolves when that consumer also compiles a desktop target.
  */
 kotlin {
     explicitApi()
@@ -28,6 +30,7 @@ kotlin {
     macosArm64()
     iosArm64()
     iosSimulatorArm64()
+    jvm()
 
     /* S1.c.4 step 1. Output depends only on core and its existing portable libraries: no
      * KiteCodec, no FFmpeg, no NDK, no Android media support library (the boundary scans of

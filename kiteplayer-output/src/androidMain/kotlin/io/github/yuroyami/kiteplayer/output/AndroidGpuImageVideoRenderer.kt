@@ -7,6 +7,7 @@ import android.graphics.SurfaceTexture
 import android.hardware.HardwareBuffer
 import android.media.Image
 import android.media.ImageReader
+import android.media.MediaFormat
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
@@ -52,6 +53,10 @@ import java.util.TreeMap
 private const val RGBA_OUTPUT_USAGE: Long =
     HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT
 
+/** An accepted timed release keeps its terminal outcome even if renderer close wins the race. */
+internal fun acceptedTimedReleaseCompletion(recordFailure: () -> Unit): (Boolean) -> Unit =
+    { rendered -> if (!rendered) recordFailure() }
+
 /**
  * Turns direct MediaCodec output into immutable RGBA hardware [Bitmap] frames for a GPU client.
  *
@@ -59,9 +64,11 @@ private const val RGBA_OUTPUT_USAGE: Long =
  * RGBA_8888 into an [ImageReader], and [Bitmap.wrapHardwareBuffer] gives the client a Skia-readable
  * hardware image. No video pixels enter Kotlin or CPU memory.
  *
- * This renderer is SDR-only. Its decoder factory rejects HDR before codec creation rather than
- * clipping it into an 8-bit target. The client callback may run on the renderer's GL thread and
- * must return promptly. Subtitle composition remains the client's job.
+ * The composited target preserves Android's exact SDR RGB spaces. Android 12+ decoders may feed it
+ * 10-bit/HDR sources by performing the platform's hardware HDR-to-SDR tone map first. The decoder
+ * must accept that request, and any recognized contradictory output metadata is rejected before a
+ * frame is exposed. The client callback may run on the renderer's GL thread and must return
+ * promptly. Subtitle composition remains the client's job.
  */
 public class AndroidGpuImageVideoRenderer(
     private val onImage: (AndroidGpuImageFrame) -> Unit,
@@ -75,17 +82,16 @@ public class AndroidGpuImageVideoRenderer(
     private val presented = atomic(0L)
     private val superseded = atomic(0L)
     private val failed = atomic(0L)
+    private val releaseCompletion = acceptedTimedReleaseCompletion { failed.incrementAndGet() }
     private val closed = atomic(false)
     private val bridgeFailure = atomic<Throwable?>(null)
     private val eventFlow = MutableSharedFlow<RendererEvent>(replay = 4, extraBufferCapacity = 4)
-    private val bridge = OesRgbaBridge(::publishImage, ::bridgeFailed)
+    private val bridge = OesRgbaBridge(::publishImage, ::recordSuperseded, ::bridgeFailed)
     private val codecTarget = MediaCodecSurfaceTarget(initialSurface = bridge.surface)
     private val directFactory = MediaCodecVideoDecoderFactory(
         target = codecTarget,
         applyCodecRotation = false,
-        outputColorValidator = { detected ->
-            detected.reliable && isComposeSrgbSafeColor(detected.colorSpace)
-        },
+        outputAdmission = MediaCodecOutputAdmission(::composeMediaCodecOutputContract),
     )
     private val decoderFactory = object : VideoDecoderFactory {
         override val name: String = "Android MediaCodec Compose GPU"
@@ -94,7 +100,6 @@ public class AndroidGpuImageVideoRenderer(
             if (closed.value) return null
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
             bridgeFailure.value?.let { throw IllegalStateException("the Android GPU bridge failed", it) }
-            stream.colorSpace?.takeUnless(::isComposeSrgbSafeColor)?.let { return null }
             val size = stream.videoSize ?: return null
             if (!bridge.supports(size)) return null
             return try {
@@ -104,7 +109,8 @@ public class AndroidGpuImageVideoRenderer(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
+                if (hwdec == io.github.yuroyami.kiteplayer.HwdecPolicy.Require) throw failure
                 null
             }
         }
@@ -113,7 +119,7 @@ public class AndroidGpuImageVideoRenderer(
     /** Frames whose completed RGBA hardware image reached [onImage]. */
     public val presentedFrames: Long get() = presented.value
 
-    /** Frames replaced inside the GPU bridge. Currently zero because SurfaceTexture owns that queue. */
+    /** Frames coalesced by SurfaceTexture or skipped while no Compose viewport is active. */
     public val supersededFrames: Long get() = superseded.value
 
     /** Frames rejected or released without reaching the bridge Surface. */
@@ -144,9 +150,8 @@ public class AndroidGpuImageVideoRenderer(
             beforeRender = { timestamp ->
                 bridge.prepareFrame(timestamp, direct.size, direct.rotationDegrees, direct.colorSpace)
             },
-            onReleased = { rendered ->
-                if (!rendered && !closed.value) failed.incrementAndGet()
-            },
+            onRenderFailed = bridge::cancelFrame,
+            onReleased = releaseCompletion,
         )
         if (!accepted) failed.incrementAndGet()
         return accepted
@@ -154,7 +159,9 @@ public class AndroidGpuImageVideoRenderer(
 
     override fun vsyncIntervalNanos(): Long? = null
 
-    override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+    override fun setViewport(width: Int, height: Int, scale: Float) {
+        if (!closed.value) bridge.setViewport(width, height, scale)
+    }
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?): Unit = Unit
 
@@ -179,6 +186,7 @@ public class AndroidGpuImageVideoRenderer(
     private fun publishImage(frame: AndroidGpuImageFrame) {
         if (closed.value) {
             frame.close()
+            recordSuperseded(1L)
             return
         }
         try {
@@ -188,6 +196,10 @@ public class AndroidGpuImageVideoRenderer(
             frame.close()
             bridgeFailed(failure)
         }
+    }
+
+    private fun recordSuperseded(count: Long) {
+        if (count > 0L) superseded.addAndGet(count)
     }
 
     private fun bridgeFailed(failure: Throwable) {
@@ -207,6 +219,75 @@ internal fun isComposeSrgbSafeColor(color: ColorSpaceInfo): Boolean =
     color.matrix == ColorMatrix.Bt709 &&
         color.primaries == ColorPrimaries.Bt709 &&
         (color.transfer == ColorTransfer.Bt709 || color.transfer == ColorTransfer.Srgb)
+
+internal fun isComposeGpuColorRepresentable(color: ColorSpaceInfo): Boolean =
+    androidRgbColorSpaceOrNull(color) != null
+
+/**
+ * Shares MediaCodec parsing/probing with SurfaceView while expressing Compose's narrower target.
+ *
+ * An exactly taggable and MediaFormat-representable SDR source is preserved. Other
+ * Android-representable sources request decoder-side SDR output, including Main10 PQ/HLG. Android's
+ * tone-map contract produces limited-range BT.709 SDR; that is the trusted fallback only when the
+ * input declaration was exact. The conventional untagged-HD fallback is already BT.709 and can be
+ * represented directly; untagged SD/unspecified metadata still requires a recognized output
+ * standard before any buffer is exposed to the bridge.
+ */
+internal fun composeMediaCodecOutputContract(
+    requirement: MediaCodecStreamRequirement,
+    sdkInt: Int = Build.VERSION.SDK_INT,
+): MediaCodecOutputContract? {
+    val validatePreserved: (MediaCodecOutputColor) -> Boolean = { detected ->
+        detected.reliable && isComposeGpuColorRepresentable(detected.colorSpace)
+    }
+    val sourceColor = requirement.colorSpace
+    if (
+        sourceColor != null &&
+        !sourceColor.isConventionalUndeclaredColor() &&
+        canRepresentMediaCodecColorExactly(sourceColor) &&
+        isComposeGpuColorRepresentable(sourceColor)
+    ) {
+        return MediaCodecOutputContract(validateOutput = validatePreserved)
+    }
+    if (sdkInt < Build.VERSION_CODES.S) return null
+    val sourceCanReachCodec = sourceColor == null ||
+        canRepresentMediaCodecColorExactly(sourceColor) ||
+        sourceColor.isConventionalUndeclaredColor()
+    if (!sourceCanReachCodec) return null
+    val trustedOutputColor = sourceColor
+        ?.takeIf { color ->
+            canRepresentMediaCodecColorExactly(color) && !color.isConventionalUndeclaredColor()
+        }
+        ?.let { COMPOSE_TONE_MAPPED_OUTPUT }
+    return MediaCodecOutputContract(
+        requestedColorTransfer = MediaFormat.COLOR_TRANSFER_SDR_VIDEO,
+        requireExplicitOutputColor = trustedOutputColor == null,
+        trustedOutputColor = trustedOutputColor,
+        validateOutput = { detected ->
+            detected.reliable && detected.colorSpace.isComposeToneMappedOutput()
+        },
+    )
+}
+
+private val COMPOSE_TONE_MAPPED_OUTPUT: ColorSpaceInfo = ColorSpaceInfo()
+
+private fun ColorSpaceInfo.isComposeToneMappedOutput(): Boolean =
+    matrix == ColorMatrix.Bt709 &&
+        primaries == ColorPrimaries.Bt709 &&
+        transfer == ColorTransfer.Bt709 &&
+        rangeSpecified &&
+        !fullRange
+
+private fun ColorSpaceInfo.isConventionalUndeclaredColor(): Boolean =
+    !rangeSpecified && when {
+        matrix == ColorMatrix.Bt601 && primaries == ColorPrimaries.Bt601 &&
+            transfer == ColorTransfer.Bt601 -> true
+        matrix == ColorMatrix.Bt470bg && primaries == ColorPrimaries.Bt470bg &&
+            transfer == ColorTransfer.Bt709 -> true
+        matrix == ColorMatrix.Unspecified && primaries == ColorPrimaries.Unspecified &&
+            transfer == ColorTransfer.Unspecified -> true
+        else -> false
+    }
 
 /** Makes an asynchronous EGL/ImageReader failure observable through core's decoder recovery path. */
 private class BridgeGuardedVideoDecoder(
@@ -271,6 +352,7 @@ public class AndroidGpuImageFrame internal constructor(
 /** Owns one EGL context, its decoder input Surface, and the leased RGBA output queue. */
 private class OesRgbaBridge(
     private val publish: (AndroidGpuImageFrame) -> Unit,
+    private val recordSuperseded: (Long) -> Unit,
     private val reportFailure: (Throwable) -> Unit,
 ) : AutoCloseable {
     private val thread = HandlerThread("kiteplayer-compose-gpu").apply { start() }
@@ -281,6 +363,8 @@ private class OesRgbaBridge(
         null
     }
     private val imageHandler = imageThread?.let { Handler(it.looper) }
+    private val frameConfigurations = FrameConfigurationBook()
+    private val requestedViewport = AtomicReference<GpuViewport?>()
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -295,12 +379,25 @@ private class OesRgbaBridge(
 
     init {
         handler.post {
-            startup.set(runCatching { GlState.create(handler, imageHandler, publish, reportFailure) })
+            startup.set(
+                runCatching {
+                    GlState.create(
+                        handler,
+                        imageHandler,
+                        frameConfigurations,
+                        requestedViewport,
+                        publish,
+                        recordSuperseded,
+                        reportFailure,
+                    )
+                },
+            )
             ready.countDown()
         }
         try {
             state
         } catch (failure: Throwable) {
+            frameConfigurations.close()
             thread.quitSafely()
             imageThread?.quitSafely()
             thread.join(CLOSE_TIMEOUT_MILLIS)
@@ -319,19 +416,40 @@ private class OesRgbaBridge(
         colorSpace: ColorSpaceInfo,
     ) {
         if (closed) return
-        runOnGlThread { it.prepareFrame(timestampNanos, size, rotationDegrees, colorSpace) }
+        check(size.width > 0 && size.height > 0) {
+            "a ${size.width}x${size.height} frame has no drawable geometry"
+        }
+        check(
+            frameConfigurations.register(
+                timestampNanos,
+                FrameConfiguration(
+                    size,
+                    normalizedGpuQuarterTurn(rotationDegrees),
+                    androidRgbColorSpace(colorSpace),
+                ),
+            ),
+        ) { "Android GPU image renderer stopped accepting frame configurations" }
     }
 
-    fun supports(size: VideoSize): Boolean =
-        size.width > 0 &&
-            size.height > 0 &&
-            HardwareBuffer.isSupported(
-                size.width,
-                size.height,
-                HardwareBuffer.RGBA_8888,
-                1,
-                RGBA_OUTPUT_USAGE,
-            )
+    fun cancelFrame(timestampNanos: Long) {
+        check(frameConfigurations.cancel(timestampNanos)) {
+            "failed MediaCodec release had no registered GPU frame configuration"
+        }
+    }
+
+    fun supports(size: VideoSize): Boolean = size.width > 0 && size.height > 0
+
+    fun setViewport(width: Int, height: Int, scale: Float) {
+        if (closed) return
+        val viewport = physicalGpuViewport(width, height, scale)
+        if (requestedViewport.getAndSet(viewport) == viewport) return
+        if (!handler.post {
+                runCatching(state::viewportChanged).onFailure(reportFailure)
+            } && !closed
+        ) {
+            reportFailure(IllegalStateException("Android GPU image renderer thread is stopped"))
+        }
+    }
 
     override fun close() {
         if (closed) return
@@ -390,11 +508,14 @@ private class OesRgbaBridge(
     }
 }
 
-/** All members are confined to the bridge HandlerThread. */
+/** EGL state is bridge-Handler confined; [frameConfigurations] is the thread-safe codec handoff. */
 private class GlState private constructor(
     private val handler: Handler,
     private val imageHandler: Handler?,
+    private val frameConfigurations: FrameConfigurationBook,
+    private val requestedViewport: AtomicReference<GpuViewport?>,
     private val publish: (AndroidGpuImageFrame) -> Unit,
+    private val recordSuperseded: (Long) -> Unit,
     private val reportFailure: (Throwable) -> Unit,
     private val display: EGLDisplay,
     private val config: EGLConfig,
@@ -412,31 +533,16 @@ private class GlState private constructor(
     private val transform = FloatArray(16)
     private var outputQueue: OutputQueue? = null
     private var outputSurface: EGLSurface = EGL14.EGL_NO_SURFACE
-    private var configuredSize: VideoSize = VideoSize(DEFAULT_BUFFER_SIZE, DEFAULT_BUFFER_SIZE)
+    private var configuredSourceSize: VideoSize? = null
+    private var configuredOutputSize: VideoSize? = null
     private var configuredRotation = 0
     private var configuredColorSpace: AndroidRgbColorSpace = AndroidRgbColorSpace.Srgb
-    private val frameConfigurations = FrameConfigurationBook()
+    private var currentSurface: EGLSurface = pbuffer
+    private var hasLatchedFrame = false
+    private var lastLatchedTimestamp = 0L
     @Volatile private var closed = false
     private val queueFence = Any()
     private val allQueues = mutableSetOf<OutputQueue>()
-
-    fun prepareFrame(
-        timestampNanos: Long,
-        size: VideoSize,
-        rotationDegrees: Int,
-        colorSpace: ColorSpaceInfo,
-    ) {
-        check(!closed) { "Android GPU image renderer is closed" }
-        check(size.width > 0 && size.height > 0) { "a ${size.width}x${size.height} frame has no drawable geometry" }
-        frameConfigurations.register(
-            timestampNanos,
-            FrameConfiguration(
-                size,
-                normalizedGpuQuarterTurn(rotationDegrees),
-                androidRgbColorSpace(colorSpace),
-            ),
-        )
-    }
 
     private fun configure(
         size: VideoSize,
@@ -445,64 +551,125 @@ private class GlState private constructor(
     ) {
         if (closed || size.width <= 0 || size.height <= 0) return
         val rotation = normalizedGpuQuarterTurn(rotationDegrees)
+        val outputSize = fittedGpuOutputSize(size, rotation, requestedViewport.get())
+        val sourceChanged = size != configuredSourceSize
+        val metadataChanged =
+            sourceChanged || rotation != configuredRotation || colorSpace != configuredColorSpace
+        val outputChanged = outputSize != configuredOutputSize
+        val queuePresenceChanged = (outputSize == null) != (outputQueue == null)
         if (
-            size == configuredSize &&
-            rotation == configuredRotation &&
-            colorSpace == configuredColorSpace &&
-            outputQueue != null
+            !metadataChanged &&
+            !outputChanged &&
+            !queuePresenceChanged
         ) return
-        configuredSize = size
+        configuredSourceSize = size
+        configuredOutputSize = outputSize
         configuredRotation = rotation
         configuredColorSpace = colorSpace
-        surfaceTexture.setDefaultBufferSize(size.width, size.height)
-        rebuildOutput()
+        if (sourceChanged) surfaceTexture.setDefaultBufferSize(size.width, size.height)
+        if (outputSize == null) {
+            if (outputQueue != null) destroyOutput(force = false)
+        } else {
+            rebuildOutput()
+        }
+    }
+
+    fun viewportChanged() {
+        if (closed) return
+        val sourceSize = configuredSourceSize ?: return
+        configure(sourceSize, configuredRotation, configuredColorSpace)
     }
 
     private fun drawNewestFrame() {
         if (closed) return
-        makeCurrent(pbuffer)
         surfaceTexture.updateTexImage()
         val timestamp = surfaceTexture.timestamp
-        val frameConfiguration = checkNotNull(frameConfigurations.takeExact(timestamp)) {
-            "SurfaceTexture produced timestamp $timestamp without its MediaCodec frame configuration"
+        val matched = frameConfigurations.takeExact(timestamp)
+        if (matched == null) {
+            // SurfaceTexture may leave more than one callback queued for the buffer already latched
+            // by the first callback. A stale callback can arrive after an intervening frame, so the
+            // last timestamp alone is insufficient: retain bounded identities that already received
+            // an exact presented/superseded outcome.
+            if (
+                hasLatchedFrame && timestamp == lastLatchedTimestamp ||
+                frameConfigurations.wasResolved(timestamp)
+            ) return
+            error(
+                "SurfaceTexture produced timestamp $timestamp without its MediaCodec frame " +
+                    "configuration (${frameConfigurations.describeMissing(timestamp)})",
+            )
         }
+        hasLatchedFrame = true
+        lastLatchedTimestamp = timestamp
+        recordSuperseded(matched.skippedFrames)
+        val frameConfiguration = matched.configuration
         configure(
             frameConfiguration.size,
             frameConfiguration.rotationDegrees,
             frameConfiguration.androidColorSpace,
         )
-        if (outputQueue == null) rebuildOutput()
-        surfaceTexture.getTransformMatrix(transform)
-        makeCurrent(outputSurface)
-        GLES20.glViewport(0, 0, configuredSize.width, configuredSize.height)
-        GLES20.glUseProgram(program)
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
-        GLES20.glUniform1i(sampler, 0)
-        GLES20.glUniformMatrix4fv(texMatrixUniform, 1, false, transform, 0)
-        GLES20.glEnableVertexAttribArray(position)
-        GLES20.glEnableVertexAttribArray(texCoord)
-        VERTICES.position(0)
-        TEX_COORDS.position(0)
-        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, VERTICES)
-        GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 0, TEX_COORDS)
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        glCheck("draw external texture")
-        // API 33 exposes Image.getFence(), so that path waits on a second handler and lets this GL
-        // thread pipeline subsequent blits. API 29-32 have no public acquire-fence API for Bitmap;
-        // glFinish is the portable correctness fallback there.
-        if (imageHandler == null) {
-            GLES20.glFinish()
-            glCheck("finish RGBA output")
+        val outputSize = configuredOutputSize
+        if (outputSize == null) {
+            // The frame reached the bridge, but there is deliberately no Compose node to receive it.
+            recordSuperseded(1L)
+            return
         }
-        eglCheck(EGL14.eglSwapBuffers(display, outputSurface), "swap RGBA output")
+        val queue = checkNotNull(outputQueue) { "an active GPU viewport has no RGBA output queue" }
+        if (!queue.beginOutput()) {
+            // ImageReader would be allowed to block the GL producer while all immutable buffers are
+            // still leased by Compose. Dropping this newest latch keeps render and close bounded.
+            recordSuperseded(1L)
+            return
+        }
+        try {
+            surfaceTexture.getTransformMatrix(transform)
+            makeCurrent(outputSurface)
+            GLES20.glViewport(0, 0, outputSize.width, outputSize.height)
+            GLES20.glUseProgram(program)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
+            GLES20.glUniform1i(sampler, 0)
+            GLES20.glUniformMatrix4fv(texMatrixUniform, 1, false, transform, 0)
+            GLES20.glEnableVertexAttribArray(position)
+            GLES20.glEnableVertexAttribArray(texCoord)
+            VERTICES.position(0)
+            TEX_COORDS.position(0)
+            GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, VERTICES)
+            GLES20.glVertexAttribPointer(texCoord, 2, GLES20.GL_FLOAT, false, 0, TEX_COORDS)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            glCheck("draw external texture")
+            // API 33 exposes Image.getFence(), so that path waits on a second handler and lets this
+            // GL thread pipeline subsequent blits. API 29-32 have no public acquire-fence API for
+            // Bitmap; glFinish is the portable correctness fallback there.
+            if (imageHandler == null) {
+                GLES20.glFinish()
+                glCheck("finish RGBA output")
+            }
+            eglCheck(EGL14.eglSwapBuffers(display, outputSurface), "swap RGBA output")
+        } catch (failure: Throwable) {
+            check(queue.cancelOutput()) { "the failed RGBA swap lost its output ownership" }
+            throw failure
+        }
     }
 
     private fun rebuildOutput() {
+        val sourceSize = checkNotNull(configuredSourceSize) { "RGBA output has no source size" }
+        val outputSize = checkNotNull(configuredOutputSize) { "RGBA output has no viewport size" }
+        check(
+            HardwareBuffer.isSupported(
+                outputSize.width,
+                outputSize.height,
+                HardwareBuffer.RGBA_8888,
+                1,
+                RGBA_OUTPUT_USAGE,
+            ),
+        ) {
+            "Android cannot allocate a ${outputSize.width}x${outputSize.height} GPU RGBA output"
+        }
         destroyOutput(force = false)
         val reader = ImageReader.newInstance(
-            configuredSize.width,
-            configuredSize.height,
+            outputSize.width,
+            outputSize.height,
             PixelFormat.RGBA_8888,
             MAX_ACQUIRED_IMAGES,
             RGBA_OUTPUT_USAGE,
@@ -522,10 +689,11 @@ private class GlState private constructor(
             }
             val createdQueue = OutputQueue(
                 reader = reader,
-                size = configuredSize,
+                frameSize = sourceSize,
                 rotationDegrees = configuredRotation,
                 colorSpace = configuredColorSpace,
                 reportFailure = reportFailure,
+                recordSuperseded = recordSuperseded,
                 onCapacityAvailable = { available ->
                     (imageHandler ?: handler).post { acquireAndPublish(available) }
                 },
@@ -549,16 +717,20 @@ private class GlState private constructor(
     private fun acquireAndPublish(queue: OutputQueue) {
         if (closed || !queue.active || !queue.hasAcquisitionCapacity) return
         var image: Image? = null
+        var registered = false
         try {
             val acquired = queue.reader.acquireNextImage() ?: return
             image = acquired
             if (!queue.register(acquired)) return
+            registered = true
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) waitForAcquireFence(acquired)
             if (closed || !queue.active) return
-            val buffer = acquired.hardwareBuffer ?: return
-            val bitmap = buffer.use {
+            val buffer = checkNotNull(acquired.hardwareBuffer) {
+                "RGBA ImageReader returned an image without a HardwareBuffer"
+            }
+            val bitmap = checkNotNull(buffer.use {
                 Bitmap.wrapHardwareBuffer(it, queue.bitmapColorSpace)
-            } ?: return
+            }) { "Android could not wrap the RGBA HardwareBuffer as a Bitmap" }
             bitmap.setHasAlpha(false)
             lateinit var lease: ImageLease
             lease = ImageLease(acquired, bitmap) { queue.remove(lease) }
@@ -566,15 +738,21 @@ private class GlState private constructor(
             image = null // Ownership moved into the published lease.
             publishOnGlThread(
                 queue,
+                lease,
                 AndroidGpuImageFrame(
                     bitmap,
-                    queue.size,
+                    queue.frameSize,
                     queue.rotationDegrees,
                     lease::close,
                 ),
             )
         } catch (failure: Throwable) {
-            reportFailure(failure)
+            val outcomeWasPending = if (registered) {
+                image?.let(queue::markFailed) == true
+            } else {
+                queue.failNextUnacquired()
+            }
+            if (outcomeWasPending) reportFailure(failure)
         } finally {
             image?.let { acquired ->
                 queue.remove(acquired)
@@ -584,9 +762,9 @@ private class GlState private constructor(
     }
 
     /** Publication and force-close both run on this handler, removing their check/use race. */
-    private fun publishOnGlThread(queue: OutputQueue, frame: AndroidGpuImageFrame) {
+    private fun publishOnGlThread(queue: OutputQueue, lease: ImageLease, frame: AndroidGpuImageFrame) {
         if (!handler.post {
-                if (closed || !queue.active) frame.close() else publish(frame)
+                if (closed || !queue.markPublished(lease)) frame.close() else publish(frame)
             }
         ) {
             frame.close()
@@ -622,7 +800,7 @@ private class GlState private constructor(
         failure = cleanupFailure(failure) {
             outputQueue?.reader?.setOnImageAvailableListener(null, null)
         }
-        frameConfigurations.clear()
+        recordSuperseded(frameConfigurations.close())
         failure?.let { throw it }
     }
 
@@ -648,6 +826,7 @@ private class GlState private constructor(
                 ),
                 "clear current context",
             )
+            currentSurface = EGL14.EGL_NO_SURFACE
         }
         failure = cleanupFailure(failure) {
             eglCheck(EGL14.eglDestroySurface(display, pbuffer), "destroy pbuffer")
@@ -666,7 +845,9 @@ private class GlState private constructor(
     }
 
     private fun makeCurrent(surface: EGLSurface) {
+        if (currentSurface === surface) return
         eglCheck(EGL14.eglMakeCurrent(display, surface, surface, context), "make current")
+        currentSurface = surface
     }
 
     companion object {
@@ -697,7 +878,10 @@ private class GlState private constructor(
         fun create(
             handler: Handler,
             imageHandler: Handler?,
+            frameConfigurations: FrameConfigurationBook,
+            requestedViewport: AtomicReference<GpuViewport?>,
             publish: (AndroidGpuImageFrame) -> Unit,
+            recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
         ): GlState {
             val display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -777,7 +961,10 @@ private class GlState private constructor(
                 val state = GlState(
                     handler = handler,
                     imageHandler = imageHandler,
+                    frameConfigurations = frameConfigurations,
+                    requestedViewport = requestedViewport,
                     publish = publish,
+                    recordSuperseded = recordSuperseded,
                     reportFailure = reportFailure,
                     display = display,
                     config = config,
@@ -842,10 +1029,11 @@ private class GlState private constructor(
 /** One ImageReader generation shared by the GL producer and API-33 fence-wait handler. */
 private class OutputQueue(
     val reader: ImageReader,
-    val size: VideoSize,
+    val frameSize: VideoSize,
     val rotationDegrees: Int,
     val colorSpace: AndroidRgbColorSpace,
     private val reportFailure: (Throwable) -> Unit,
+    private val recordSuperseded: (Long) -> Unit,
     private val onCapacityAvailable: (OutputQueue) -> Unit,
     private val onClosed: (OutputQueue) -> Unit,
 ) {
@@ -853,28 +1041,45 @@ private class OutputQueue(
     val bitmapColorSpace: ColorSpace = colorSpace.toAndroidColorSpace()
 
     val active: Boolean get() = book.active
-    val hasAcquisitionCapacity: Boolean get() = book.hasCapacity
+    val hasAcquisitionCapacity: Boolean get() = book.hasAcquisitionCapacity
+
+    fun beginOutput(): Boolean = book.beginOutput()
+
+    fun cancelOutput(): Boolean = book.cancelOutput()
 
     fun register(image: Image): Boolean = book.register(image)
 
     fun promote(image: Image, lease: ImageLease): Boolean = book.promote(image, lease)
 
+    fun markPublished(lease: ImageLease): Boolean = book.markPublished(lease)
+
+    fun markFailed(image: Image): Boolean = book.markFailed(image)
+
+    fun failNextUnacquired(): Boolean = book.failNextUnacquired()
+
     fun remove(image: Image) {
-        if (book.removeImage(image)) closeReader() else if (book.active) onCapacityAvailable(this)
+        val resolution = book.removeImage(image)
+        recordSuperseded(resolution.supersededFrames)
+        if (resolution.closeReader) closeReader() else if (book.active) onCapacityAvailable(this)
     }
 
     fun remove(lease: ImageLease) {
-        if (book.removeLease(lease)) closeReader() else if (book.active) onCapacityAvailable(this)
+        val resolution = book.removeLease(lease)
+        recordSuperseded(resolution.supersededFrames)
+        if (resolution.closeReader) closeReader() else if (book.active) onCapacityAvailable(this)
     }
 
     /** Stops production but keeps the reader alive until every published lease is returned. */
     fun retire() {
-        if (book.retire()) closeReader()
+        val resolution = book.retire()
+        recordSuperseded(resolution.supersededFrames)
+        if (resolution.closeReader) closeReader()
     }
 
     /** Final renderer teardown: the producer is gone, so callbacks and leases can be forced shut. */
     fun forceClose() {
         val closure = book.forceDrain()
+        recordSuperseded(closure.supersededFrames)
         closure.images.forEach { image -> runCatching(image::close).onFailure(reportFailure) }
         closure.leases.forEach { lease -> runCatching(lease::close).onFailure(reportFailure) }
         if (closure.closeReader) closeReader()
@@ -898,51 +1103,124 @@ internal class OutputGenerationLeaseBook<I : Any, L : Any>(
     private val fence = Any()
     private var accepting = true
     private var readerClosed = false
-    private val images = mutableSetOf<I>()
-    private val leases = mutableSetOf<L>()
+    private var unacquiredFrames = 0L
+    private val images = mutableMapOf<I, Boolean>()
+    private val leases = mutableMapOf<L, Boolean>()
 
     val active: Boolean get() = synchronized(fence) { accepting && !readerClosed }
     val hasCapacity: Boolean get() = synchronized(fence) {
-        accepting && !readerClosed && images.size + leases.size < capacity
+        accepting && !readerClosed && unacquiredFrames + images.size + leases.size < capacity
+    }
+    val hasAcquisitionCapacity: Boolean get() = synchronized(fence) {
+        accepting &&
+            !readerClosed &&
+            unacquiredFrames > 0L &&
+            images.size + leases.size < capacity
     }
 
-    fun register(image: I): Boolean = synchronized(fence) {
-        accepting && !readerClosed && images.size + leases.size < capacity && images.add(image)
-    }
-
-    fun promote(image: I, lease: L): Boolean = synchronized(fence) {
-        if (!accepting) return@synchronized false
-        images.remove(image)
-        leases += lease
+    /** Registers a successful GL producer attempt before eglSwapBuffers can wake ImageReader. */
+    fun beginOutput(): Boolean = synchronized(fence) {
+        if (
+            !accepting ||
+            readerClosed ||
+            unacquiredFrames + images.size + leases.size >= capacity
+        ) return@synchronized false
+        unacquiredFrames++
         true
     }
 
-    /** Returns true exactly once when the retired generation's reader can now close. */
-    fun removeImage(image: I): Boolean = synchronized(fence) {
-        images.remove(image)
-        markReaderClosedIfDrained()
+    /** Cancels the most recent producer attempt when eglSwapBuffers itself fails. */
+    fun cancelOutput(): Boolean = synchronized(fence) {
+        if (unacquiredFrames <= 0L) return@synchronized false
+        unacquiredFrames--
+        true
     }
 
-    /** Returns true exactly once when the retired generation's reader can now close. */
-    fun removeLease(lease: L): Boolean = synchronized(fence) {
-        leases.remove(lease)
-        markReaderClosedIfDrained()
+    fun register(image: I): Boolean = synchronized(fence) {
+        if (
+            !accepting ||
+            readerClosed ||
+            unacquiredFrames <= 0L ||
+            images.size + leases.size >= capacity ||
+            images.containsKey(image)
+        ) return@synchronized false
+        unacquiredFrames--
+        images[image] = true
+        true
     }
 
-    /** Returns true when there was no outstanding image and the reader can close immediately. */
-    fun retire(): Boolean = synchronized(fence) {
+    fun promote(image: I, lease: L): Boolean = synchronized(fence) {
+        if (!accepting || leases.containsKey(lease)) return@synchronized false
+        val outcomePending = images.remove(image) ?: return@synchronized false
+        leases[lease] = outcomePending
+        true
+    }
+
+    /** Resolves the renderer outcome while retaining the lease until Compose's GPU fence retires. */
+    fun markPublished(lease: L): Boolean = synchronized(fence) {
+        if (!accepting || leases[lease] != true) return@synchronized false
+        leases[lease] = false
+        true
+    }
+
+    /** Transfers an in-flight image's renderer outcome to the failure counter. */
+    fun markFailed(image: I): Boolean = synchronized(fence) {
+        if (images[image] != true) return@synchronized false
+        images[image] = false
+        true
+    }
+
+    /** Transfers an acquire failure's oldest not-yet-acquired output to the failure counter. */
+    fun failNextUnacquired(): Boolean = synchronized(fence) {
+        if (!accepting || unacquiredFrames <= 0L) return@synchronized false
+        unacquiredFrames--
+        true
+    }
+
+    fun removeImage(image: I): OutputGenerationResolution = synchronized(fence) {
+        val superseded = if (images.remove(image) == true) 1L else 0L
+        OutputGenerationResolution(markReaderClosedIfDrained(), superseded)
+    }
+
+    fun removeLease(lease: L): OutputGenerationResolution = synchronized(fence) {
+        val superseded = if (leases.remove(lease) == true) 1L else 0L
+        OutputGenerationResolution(markReaderClosedIfDrained(), superseded)
+    }
+
+    fun retire(): OutputGenerationResolution = synchronized(fence) {
+        if (!accepting) return@synchronized OutputGenerationResolution(closeReader = false, supersededFrames = 0L)
         accepting = false
-        markReaderClosedIfDrained()
+        val superseded = resolveEveryPendingOutcome()
+        OutputGenerationResolution(markReaderClosedIfDrained(), superseded)
     }
 
     fun forceDrain(): Drain<I, L> = synchronized(fence) {
         accepting = false
         val closeReader = !readerClosed
         readerClosed = true
-        Drain(images.toList(), leases.toList(), closeReader).also {
+        val superseded = resolveEveryPendingOutcome()
+        Drain(images.keys.toList(), leases.keys.toList(), closeReader, superseded).also {
             images.clear()
             leases.clear()
         }
+    }
+
+    private fun resolveEveryPendingOutcome(): Long {
+        var resolved = unacquiredFrames
+        unacquiredFrames = 0L
+        images.entries.forEach { entry ->
+            if (entry.value) {
+                resolved++
+                entry.setValue(false)
+            }
+        }
+        leases.entries.forEach { entry ->
+            if (entry.value) {
+                resolved++
+                entry.setValue(false)
+            }
+        }
+        return resolved
     }
 
     private fun markReaderClosedIfDrained(): Boolean {
@@ -955,8 +1233,14 @@ internal class OutputGenerationLeaseBook<I : Any, L : Any>(
         val images: List<I>,
         val leases: List<L>,
         val closeReader: Boolean,
+        val supersededFrames: Long,
     )
 }
+
+internal data class OutputGenerationResolution(
+    val closeReader: Boolean,
+    val supersededFrames: Long,
+)
 
 internal data class FrameConfiguration(
     val size: VideoSize,
@@ -964,10 +1248,71 @@ internal data class FrameConfiguration(
     val androidColorSpace: AndroidRgbColorSpace = AndroidRgbColorSpace.Srgb,
 )
 
+internal data class GpuViewport(
+    val width: Int,
+    val height: Int,
+)
+
+/** Converts the renderer contract's logical extent into a safe physical-pixel bound. */
+internal fun physicalGpuViewport(width: Int, height: Int, scale: Float): GpuViewport? {
+    if (width <= 0 || height <= 0 || !scale.isFinite() || scale <= 0f) return null
+    val physicalWidth =
+        (width.toDouble() * scale.toDouble()).coerceAtMost(Int.MAX_VALUE.toDouble()).toInt()
+    val physicalHeight =
+        (height.toDouble() * scale.toDouble()).coerceAtMost(Int.MAX_VALUE.toDouble()).toInt()
+    if (physicalWidth <= 0 || physicalHeight <= 0) return null
+    return GpuViewport(physicalWidth, physicalHeight)
+}
+
+/**
+ * Fits the unrotated RGBA buffer into the physical display footprint without upscaling it.
+ *
+ * Pixel aspect is reflected in the target footprint, while the original [VideoSize] remains frame
+ * metadata for Compose layout. A quarter turn swaps the fitted footprint back into the unrotated
+ * buffer's axes. Each axis is capped independently: the original frame metadata makes Compose
+ * restore pixel aspect, so forcing this intermediate RGBA buffer back to display aspect would
+ * unnecessarily discard resolution on the other axis at native anamorphic size.
+ */
+internal fun fittedGpuOutputSize(
+    sourceSize: VideoSize,
+    rotationDegrees: Int,
+    viewport: GpuViewport?,
+): VideoSize? {
+    if (sourceSize.width <= 0 || sourceSize.height <= 0) return null
+    if (viewport == null || viewport.width <= 0 || viewport.height <= 0) return null
+    val displayWidth = sourceSize.displayWidth.takeIf { it > 0 } ?: sourceSize.width
+    val rotation = normalizedGpuQuarterTurn(rotationDegrees)
+    val quarterTurned = rotation == 90 || rotation == 270
+    val contentWidth = (if (quarterTurned) sourceSize.height else displayWidth).toLong()
+    val contentHeight = (if (quarterTurned) displayWidth else sourceSize.height).toLong()
+    val fitsByHeight = contentWidth * viewport.height <= contentHeight * viewport.width
+    val footprintWidth: Int
+    val footprintHeight: Int
+    if (fitsByHeight) {
+        footprintHeight = viewport.height
+        footprintWidth = (contentWidth * viewport.height / contentHeight).toInt().coerceAtLeast(1)
+    } else {
+        footprintWidth = viewport.width
+        footprintHeight = (contentHeight * viewport.width / contentWidth).toInt().coerceAtLeast(1)
+    }
+    val desiredWidth = if (quarterTurned) footprintHeight else footprintWidth
+    val desiredHeight = if (quarterTurned) footprintWidth else footprintHeight
+    return VideoSize(
+        width = minOf(sourceSize.width, desiredWidth).coerceAtLeast(1),
+        height = minOf(sourceSize.height, desiredHeight).coerceAtLeast(1),
+    )
+}
+
+internal data class MatchedFrameConfiguration(
+    val configuration: FrameConfiguration,
+    val skippedFrames: Long,
+)
+
 /**
  * Configurations are registered immediately before MediaCodec releases each buffer. The exact
  * release timestamp becomes SurfaceTexture's timestamp; skipped older buffers are discarded when
- * the newest texture is latched, so a format change cannot relabel an older queued frame.
+ * the newest texture is latched, so a format change cannot relabel an older queued frame. Codec
+ * registration races GL consumption and close, so every operation is one bounded critical section.
  */
 internal class FrameConfigurationBook(
     private val capacity: Int = DEFAULT_CAPACITY,
@@ -976,31 +1321,91 @@ internal class FrameConfigurationBook(
         require(capacity > 0)
     }
 
+    private val fence = Any()
     private val configurations = TreeMap<Long, FrameConfiguration>()
+    private val resolvedTimestamps = linkedSetOf<Long>()
+    private var accepting = true
+    private var prunedFrames = 0L
 
-    internal val size: Int get() = configurations.size
+    internal val size: Int get() = synchronized(fence) { configurations.size }
 
-    fun register(timestampNanos: Long, configuration: FrameConfiguration) {
-        configurations[timestampNanos] = configuration
+    fun describeMissing(timestampNanos: Long): String = synchronized(fence) {
+            "requested=$timestampNanos pending=${configurations.size} " +
+            "first=${configurations.firstKeyOrNull()} last=${configurations.lastKeyOrNull()} " +
+            "pruned=$prunedFrames resolved=${timestampNanos in resolvedTimestamps}/" +
+            "${resolvedTimestamps.size} accepting=$accepting"
+    }
+
+    fun wasResolved(timestampNanos: Long): Boolean = synchronized(fence) {
+        timestampNanos in resolvedTimestamps
+    }
+
+    fun register(timestampNanos: Long, configuration: FrameConfiguration): Boolean = synchronized(fence) {
+        if (!accepting) return@synchronized false
+        if (configurations.put(timestampNanos, configuration) != null) prunedFrames++
         // SurfaceTexture updateTexImage normally latches the newest queued buffer, so stale entries
         // are useful only across a bounded producer pipeline. Exact matching remains mandatory:
         // if a device ever latches a timestamp older than this generous bound, takeExact returns
         // null and the bridge fails into software recovery rather than applying wrong geometry.
-        while (configurations.size > capacity) configurations.pollFirstEntry()
+        while (configurations.size > capacity) {
+            configurations.pollFirstEntry()
+            prunedFrames++
+        }
+        true
     }
 
-    fun takeExact(timestampNanos: Long): FrameConfiguration? {
-        val exact = configurations[timestampNanos] ?: return null
+    fun takeExact(timestampNanos: Long): MatchedFrameConfiguration? = synchronized(fence) {
+        val exact = configurations[timestampNanos] ?: return@synchronized null
+        val resolved = configurations.headMap(timestampNanos, true).keys.toList()
+        val skippedFrames = prunedFrames + (resolved.size - 1).toLong()
         configurations.headMap(timestampNanos, true).clear()
-        return exact
+        rememberResolved(resolved)
+        prunedFrames = 0L
+        MatchedFrameConfiguration(exact, skippedFrames)
     }
 
-    fun clear() = configurations.clear()
+    /** Removes a configuration whose matching MediaCodec release failed before reaching Surface. */
+    fun cancel(timestampNanos: Long): Boolean = synchronized(fence) {
+        if (configurations.remove(timestampNanos) != null) return@synchronized true
+        // The only absent registered value can be an out-of-order insertion immediately pruned by
+        // the capacity bound. Release/cancel are serialized on MediaCodec's one decoder thread.
+        if (prunedFrames <= 0L) return@synchronized false
+        prunedFrames--
+        true
+    }
+
+    /** Returns every accepted frame that close prevents SurfaceTexture from consuming. */
+    fun close(): Long = synchronized(fence) {
+        if (!accepting) return@synchronized 0L
+        accepting = false
+        val pendingFrames = prunedFrames + configurations.size.toLong()
+        configurations.clear()
+        resolvedTimestamps.clear()
+        prunedFrames = 0L
+        pendingFrames
+    }
+
+    private fun rememberResolved(timestamps: List<Long>) {
+        timestamps.forEach { timestamp ->
+            resolvedTimestamps.remove(timestamp)
+            resolvedTimestamps += timestamp
+        }
+        while (resolvedTimestamps.size > RESOLVED_HISTORY_CAPACITY) {
+            val oldest = resolvedTimestamps.iterator()
+            oldest.next()
+            oldest.remove()
+        }
+    }
 
     private companion object {
         const val DEFAULT_CAPACITY = 64
+        const val RESOLVED_HISTORY_CAPACITY = DEFAULT_CAPACITY * 2
     }
 }
+
+private fun <V> TreeMap<Long, V>.firstKeyOrNull(): Long? = if (isEmpty()) null else firstKey()
+
+private fun <V> TreeMap<Long, V>.lastKeyOrNull(): Long? = if (isEmpty()) null else lastKey()
 
 /** Holds the BufferQueue slot until the display lease expires. */
 private class ImageLease(
@@ -1034,19 +1439,52 @@ private fun waitForAcquireFence(image: Image) {
 internal enum class AndroidRgbColorSpace {
     Srgb,
     Bt709,
+    SmpteC,
+    Bt601Pal,
+    Bt2020,
 }
 
-internal fun androidRgbColorSpace(color: ColorSpaceInfo): AndroidRgbColorSpace = when (color.transfer) {
-    ColorTransfer.Bt709 -> AndroidRgbColorSpace.Bt709
-    ColorTransfer.Srgb -> AndroidRgbColorSpace.Srgb
-    else -> error("Compose GPU output cannot tag ${color.transfer} as BT.709 RGB")
+internal fun androidRgbColorSpace(color: ColorSpaceInfo): AndroidRgbColorSpace =
+    requireNotNull(androidRgbColorSpaceOrNull(color)) {
+        "Compose GPU output cannot tag $color as an Android RGB color space"
+    }
+
+internal fun androidRgbColorSpaceOrNull(color: ColorSpaceInfo): AndroidRgbColorSpace? = when {
+    color.matrix == ColorMatrix.Bt709 && color.primaries == ColorPrimaries.Bt709 &&
+        color.transfer == ColorTransfer.Srgb -> AndroidRgbColorSpace.Srgb
+    color.matrix == ColorMatrix.Bt709 && color.primaries == ColorPrimaries.Bt709 &&
+        color.transfer == ColorTransfer.Bt709 -> AndroidRgbColorSpace.Bt709
+    color.matrix == ColorMatrix.Smpte170m && color.primaries == ColorPrimaries.Smpte170m &&
+        (color.transfer == ColorTransfer.Bt601 || color.transfer == ColorTransfer.Bt709) ->
+        AndroidRgbColorSpace.SmpteC
+    color.matrix == ColorMatrix.Bt470bg && color.primaries == ColorPrimaries.Bt470bg &&
+        (color.transfer == ColorTransfer.Bt601 || color.transfer == ColorTransfer.Bt709) ->
+        AndroidRgbColorSpace.Bt601Pal
+    color.matrix == ColorMatrix.Bt2020Ncl && color.primaries == ColorPrimaries.Bt2020 &&
+        (color.transfer == ColorTransfer.Bt2020Ten || color.transfer == ColorTransfer.Bt2020Twelve) ->
+        AndroidRgbColorSpace.Bt2020
+    else -> null
 }
 
-private fun AndroidRgbColorSpace.toAndroidColorSpace(): ColorSpace = ColorSpace.get(
-    when (this) {
-        AndroidRgbColorSpace.Srgb -> ColorSpace.Named.SRGB
-        AndroidRgbColorSpace.Bt709 -> ColorSpace.Named.BT709
-    },
+private fun AndroidRgbColorSpace.toAndroidColorSpace(): ColorSpace = when (this) {
+    AndroidRgbColorSpace.Srgb -> ColorSpace.get(ColorSpace.Named.SRGB)
+    AndroidRgbColorSpace.Bt709 -> ColorSpace.get(ColorSpace.Named.BT709)
+    AndroidRgbColorSpace.SmpteC -> ColorSpace.get(ColorSpace.Named.SMPTE_C)
+    AndroidRgbColorSpace.Bt601Pal -> BT601_PAL_COLOR_SPACE
+    AndroidRgbColorSpace.Bt2020 -> ColorSpace.get(ColorSpace.Named.BT2020)
+}
+
+private val BT601_PAL_COLOR_SPACE: ColorSpace = ColorSpace.Rgb(
+    "Rec. ITU-R BT.601 PAL",
+    floatArrayOf(0.640f, 0.330f, 0.290f, 0.600f, 0.150f, 0.060f),
+    ColorSpace.ILLUMINANT_D65,
+    ColorSpace.Rgb.TransferParameters(
+        1.0 / 1.099,
+        0.099 / 1.099,
+        1.0 / 4.5,
+        0.081,
+        1.0 / 0.45,
+    ),
 )
 
 private const val ACQUIRE_FENCE_TIMEOUT_MILLIS = 2_000L

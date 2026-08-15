@@ -103,11 +103,13 @@ internal interface DirectSurfaceVideoFrame : io.github.yuroyami.kiteplayer.spi.V
 
     /**
      * Consumes this frame and enqueues presentation for [targetNanos]. False means it enqueued a
-     * discard because no live display Surface existed.
+     * discard because no live display Surface existed. [onRenderFailed] rolls back work performed
+     * by [beforeRender] only when MediaCodec's timed Surface release itself throws.
      */
     fun renderAt(
         targetNanos: Long,
         beforeRender: (renderTimestampNanos: Long) -> Unit = {},
+        onRenderFailed: (renderTimestampNanos: Long) -> Unit = {},
         onReleased: (rendered: Boolean) -> Unit,
     ): Boolean
 }

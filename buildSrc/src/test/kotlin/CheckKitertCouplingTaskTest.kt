@@ -218,15 +218,21 @@ class CheckKitertCouplingTaskTest {
     }
 
     @Test
-    fun `module selector excludes only the two decided owners and includes a future module`() {
+    fun `module selector covers the split artifacts and excludes only the two decided owners`() {
         val selected = CheckKitertCouplingTask.selectIncludedModulePaths(
             listOf(
                 ":kiteplayer-sample",
+                ":kiteplayer-sample-android",
                 ":kiteplayer-output",
                 ":kiteplayer-core",
                 ":kiteplayer-rt",
                 ":kiteplayer-subtitles",
                 ":kiteplayer-ffmpeg",
+                ":kiteplayer-view",
+                ":kiteplayer-mobile",
+                ":kiteplayer-compose-interop",
+                ":kiteplayer-compose-video",
+                ":kiteplayer-phone",
                 ":kiteplayer-compose",
                 ":kiteplayer-core",
             ),
@@ -235,10 +241,16 @@ class CheckKitertCouplingTaskTest {
         assertEquals(
             listOf(
                 ":kiteplayer-compose",
+                ":kiteplayer-compose-interop",
+                ":kiteplayer-compose-video",
                 ":kiteplayer-core",
                 ":kiteplayer-ffmpeg",
+                ":kiteplayer-mobile",
+                ":kiteplayer-phone",
                 ":kiteplayer-sample",
+                ":kiteplayer-sample-android",
                 ":kiteplayer-subtitles",
+                ":kiteplayer-view",
             ),
             selected,
         )

@@ -1,85 +1,51 @@
 package io.github.yuroyami.kiteplayer.sample.android
 
 import android.app.Activity
-import android.graphics.Color
 import android.os.Bundle
-import android.view.Gravity
+import android.view.View
 import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.TextView
-import io.github.yuroyami.kiteplayer.phone.KitePlayerView
+import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
+import io.github.yuroyami.kiteplayer.view.KitePlayerView
 
 /**
- * The whole user interface, built programmatically: one [KitePlayerView] and three buttons.
- * Since S1.d.4 the surface lifecycle lives inside the reusable view; this Activity holds no
- * SurfaceHolder callback, no renderer and no Surface, which is the shape an ordinary consumer's
- * Activity actually has.
+ * Direct native-view demo: one [KitePlayerView] inflated from XML and three ordinary buttons.
+ * The XML path is deliberate:
+ * it proves the native-view artifact is usable without Compose or a programmatic factory. The
+ * surface lifecycle still lives entirely inside the reusable view, so this Activity owns no
+ * SurfaceHolder callback, renderer or Surface.
  */
 internal class MainActivity : Activity() {
 
     private lateinit var controller: SampleController
+    private lateinit var playerView: KitePlayerView
     private var smoke = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        controller = SampleController(applicationContext)
         smoke = intent.getBooleanExtra("s1c_smoke", false)
+        controller = SampleController(
+            context = applicationContext,
+            hardwareDecode = if (smoke) HwdecPolicy.Require else HwdecPolicy.Auto,
+        )
 
-        val playerView = KitePlayerView(this)
+        setContentView(R.layout.activity_main)
+
+        playerView = findViewById<KitePlayerView>(R.id.player_view).apply { installMobileRenderer() }
+        val controls = findViewById<View>(R.id.controls)
+        val perfOverlay = findViewById<TextView>(R.id.performance)
         val showPerfOverlay = true
-        val video = FrameLayout(this).apply {
-            addView(
-                playerView,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                ),
-            )
-        }
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(
-                video,
-                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f),
-            )
-            if (!smoke) {
-                val controls = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    addView(Button(this@MainActivity).apply {
-                        text = getString(R.string.play)
-                        setOnClickListener { controller.play() }
-                    })
-                    addView(Button(this@MainActivity).apply {
-                        text = getString(R.string.pause)
-                        setOnClickListener { controller.pause() }
-                    })
-                    addView(Button(this@MainActivity).apply {
-                        text = getString(R.string.seek_five)
-                        setOnClickListener { controller.seekToFiveSeconds() }
-                    })
-                }
-                addView(controls)
-            }
-        }
-        if (!smoke && showPerfOverlay) {
-            val perfOverlay = TextView(this).apply {
-                setTextColor(Color.WHITE)
-                setBackgroundColor(0x99000000.toInt())
-                setPadding(12, 8, 12, 8)
-                text = getString(R.string.perf_waiting)
-            }
-            video.addView(
-                perfOverlay,
-                FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    Gravity.TOP or Gravity.END,
-                ),
-            )
+
+        findViewById<Button>(R.id.play).setOnClickListener { controller.play() }
+        findViewById<Button>(R.id.pause).setOnClickListener { controller.pause() }
+        findViewById<Button>(R.id.seek_five).setOnClickListener { controller.seekToFiveSeconds() }
+
+        controls.visibility = if (smoke) View.GONE else View.VISIBLE
+        perfOverlay.visibility = if (!smoke && showPerfOverlay) View.VISIBLE else View.GONE
+        if (perfOverlay.visibility == View.VISIBLE) {
             controller.observePerformance(playerView) { perfOverlay.text = it }
         }
-        setContentView(root, FrameLayout.LayoutParams(-1, -1))
 
         // No surface wait: the view attaches its headless-capable renderer before open, then forwards
         // Surface lifecycle changes without rebuilding the decoder.
@@ -93,7 +59,14 @@ internal class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        controller.shutdown()
-        super.onDestroy()
+        try {
+            playerView.release()
+        } finally {
+            try {
+                controller.shutdown()
+            } finally {
+                super.onDestroy()
+            }
+        }
     }
 }

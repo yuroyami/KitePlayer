@@ -25,17 +25,22 @@ Completed implementation ledger:
 - [x] Owned codec extradata from KiteCodec through the KitePlayer source SPI.
 - [x] Renderer-provided decoder factories, selected without putting Android types in the common engine.
 - [x] API 29+ direct Surface MediaCodec path with no per-frame CPU video-pixel conversion.
-- [x] Strict hardware admission for self-describing 8-bit AVC, HEVC, VP9, and AV1 configurations.
+- [x] Target-aware parser and host-contract admission for self-describing AVC High 10, HEVC Main 10,
+  VP9 Profiles 0 through 3, and AV1 Main 8/Main 10 in addition to the original 8-bit profiles. AV1
+  high-tier syntax is parsed but hardware admission is refused until peak or maximum bitrate is available.
 - [x] Output-buffer presentation at the engine's target `System.nanoTime()` timestamp.
 - [x] Synchronous Surface replacement, fallback Surface ownership, flush/CSD replay, EOS final-frame handling, packet-size guards, dynamic output geometry, and frame ownership tests.
 - [x] Seekable `HwdecPolicy.Auto` recovery by closing the failed session and reopening the backend with `HwdecPolicy.Off` at the current position.
 - [x] API 31+ Compose OES-to-RGBA GPU bridge with explicit ImageReader leases and exact `FrameMetrics` GPU-completion fencing.
+- [x] Nonblocking codec-to-GL frame metadata handoff and viewport-sized RGBA output for true Compose video.
+- [x] Bounded resolved-timestamp identity deduplication for stale queued `SurfaceTexture` callbacks, with a host regression covering a duplicate after an intervening latch.
 - [x] Immutable software fallback images, so no mutable Bitmap is overwritten while HWUI may still sample it.
 - [x] Headless renderer attachment before open, Surface recreation without renderer replacement, aspect-correct SurfaceView layout, and a separate subtitle overlay view.
-- [x] Sample diagnostics for presented FPS, decode FPS, dropped frames, and `KitePerf` logcat output.
+- [x] Sample diagnostics for RGBA publication FPS, decode FPS, dropped frames, and `KitePerf` logcat output.
 - [x] API 36 arm64 emulator functional smoke and direct-Surface performance observation.
 - [ ] Physical-device before/after benchmark, rapid-seek and lifecycle checks, and the 30-minute graphics-memory soak. No physical Android device was available.
-- [x] Final Compose instrumentation rerun after the exact GPU-completion fence landed.
+- [x] Current-source cold-install Compose instrumentation passes after the exact GPU-completion fence,
+  stale-callback fix, color/tier policy, teardown bound, and decoded-frame accounting correction landed.
 
 Physical FPS measurement is not checked off because no physical Android device was connected. Host tests, Android compilation, and emulator runs do not substitute for the 30-second physical-device run.
 
@@ -50,22 +55,84 @@ hardware-kind order across renderer and backend factories. `Off` and API 26 to 2
 software decoder.
 
 The MediaCodec path accepts only a container configuration it can validate before opening a codec:
-8-bit AVC Baseline, Constrained Baseline, Main, Extended, High, or Constrained High; 8-bit HEVC Main
-with monochrome or 4:2:0 chroma; VP9 Profile 0 with a complete WebM CodecPrivate or `vpcC` record; and
-AV1 Main 8 with a valid `av1C` record and sequence-header OBU. The declared profile and level must be
-covered by the selected MediaCodec. Ambiguous, malformed, wider, or unsupported declarations stay on
-software under `Auto` and fail admission under `Require`.
+AVC through High 10; HEVC Main and Main 10 with monochrome or 4:2:0 chroma; VP9 Profiles 0 through 3
+with profile-consistent 8 or 10-bit depth; and AV1 Main 8/Main 10 with a valid `av1C` record plus optional
+well-framed configuration OBUs. Optional AV1 OBU payload semantics are not independently validated. The
+selected MediaCodec must advertise either the required profile itself or a documented compatible superset
+profile, at a level covering the stream. Admission is shared, but each output target adds its own color
+contract. Every matching accelerated codec is tried until one accepts that contract. SurfaceView preserves
+exact Android color declarations. AV1 main-tier records may proceed through that admission. High-tier
+records are parsed but refused because `PlayerStreamInfo` exposes no peak or maximum bitrate, and average
+bitrate does not prove the high-tier capability bound.
 
-Measured evidence is recorded in `ANDROID_GPU_WORK.baseline.txt`. The API 36 arm64 emulator direct
-Surface path stabilized at 29 to 31 presented FPS on the generated 1080p30 AVC fixture, with zero
-renderer failures or superseded frames after warm-up. A separate smoke reached `Ended` with 151 decoded
+Compose preserves exact SDR RGB tags and, on API 31+, requests hardware HDR-to-SDR output for PQ/HLG
+or another Android-representable source outside that set. It verifies that MediaCodec accepted the
+requested SDR transfer and rejects recognized output metadata which remains HDR or is not representable.
+Untagged conventional HD follows the documented height-based BT.709 default and remains eligible for the
+direct GPU path. Generic unspecified color and real-SD guesses remain ambiguous and require explicit,
+recognized codec output evidence; this requirement does not apply to every height-based guess.
+That protocol cannot independently prove pixels from an OEM codec which echoes the request while omitting
+or misreporting its output metadata. Ambiguous, malformed, or unsupported declarations stay on software
+under `Auto` and fail admission under `Require`.
+
+This breadth is parser, admission and host-contract evidence. Successful Android runtime evidence in this
+record is limited to the generated 1080p30, 8-bit AVC Constrained Baseline fixture with unspecified colour
+metadata. No successful device fixture has yet covered AVC High 10, HEVC Main/Main 10, VP9 Profiles 0
+through 3, AV1 Main 8/Main 10, the wider SDR tags, PQ or HLG.
+
+Measured evidence is recorded in `ANDROID_GPU_WORK.baseline.txt`, including the fixture SHA-256 and
+instrumentation command form. The API 36 arm64 emulator direct Surface path stabilized at 29 to 31
+presented FPS on the generated 1080p30 AVC fixture, with zero renderer failures or superseded frames
+after warm-up. A separate smoke reached `Ended` with 151 decoded
 and presented frames, a precise seek, zero audio underruns, and causal teardown. A preliminary Compose
 run decoded 290 frames, submitted 273, published 277, reported zero CPU conversion samples and zero
 renderer failures, and reached `Ended`. That Compose run predates the final completion-fence hardening,
 so it is not the final performance result. The final frozen-source run decoded 278 frames, submitted
 194, published 205 RGBA hardware frames, reported zero failed and superseded frames, zero audio
 underruns, and zero CPU conversion samples, selected `HardwareZeroCopy(MediaCodec)`, and reached
-`Ended` in 14.272 seconds. None of these numbers is physical-device qualification.
+`Ended` in 14.272 seconds. After removing the per-frame codec-to-GL wait and sizing the RGBA output
+to the measured Compose viewport, three consecutive API 36 runs each decoded, submitted, and published
+all 300 frames. Their 29.559, 29.637, and 29.568 FPS values are RGBA publication rates, not Compose
+presentation rates. The exact-proof gate counts each hardware image once only after its exact VSYNC-matched
+`FrameMetrics.GPU_DURATION` proof. Historical measured runs proved 295 to 300 of 300 unique images at
+29.403 to 29.852 FPS draw cadence. This is the cadence of draw VSYNCs which later gained exact GPU proof,
+not wall-clock completion-callback throughput. The current cold-start gate exposed a stale queued
+`SurfaceTexture` callback which could repeat an already resolved timestamp after an intervening frame.
+The bridge now retains bounded resolved-timestamp identities to deduplicate that callback without weakening
+exact timestamp-to-frame matching; a host test covers the intervening-latch case.
+
+Two consecutive current-source cold-install API 36 reruns passed the emulator profile. Run one decoded,
+submitted, and published 300/300/300 frames, proved 297 unique draws at 29.550 FPS across 10.017 seconds,
+played in 10.084 seconds, drained post-`Ended` proof and outcomes in 1.322 seconds, and tore down in
+178.352 milliseconds. Run two reached 300/300/300, proved 299 at 29.602 FPS across 10.067 seconds, played
+in 10.148 seconds, drained in 1.273 seconds, and tore down in 184.871 milliseconds. Both had zero
+superseded or failed renderer frames, late or decode drops, audio underruns, or CPU conversion samples.
+An additional clean post-policy run reached 300/300/300 and proved 297 at 29.403 FPS, with a 1.279 second
+post-`Ended` proof drain and 232.109 millisecond teardown. A diagnostic repeat then decoded 300, submitted
+and presented 299, late-dropped one scheduler frame, and proved 296 at 29.696 FPS with zero renderer
+supersedes, failures, or CPU conversion samples. That healthy zero-copy repeat exposed that requiring
+exactly 300 submissions contradicted the gate's own allowed late-drop budget.
+
+The corrected gate's newest cold-install run passed in 13.497 seconds. It decoded, submitted, and presented
+300/300/300, proved 299 unique draws across 10.017 seconds at 29.749 FPS (99.2% of native rate and 99.7%
+coverage), played in 10.125 seconds, drained post-`Ended` proof and outcomes in 1.319 seconds, and tore down
+in 178.274 milliseconds. Headless frames, late and decode drops, renderer supersedes and failures, repeats,
+rebuffers, audio underruns, and CPU conversion samples were all zero. Final A/V drift was +3.275 milliseconds,
+hardware status was `HardwareZeroCopy(MediaCodec)`, and terminal state was `Ended`.
+Earlier forced physical-profile reruns on the emulator proved 295 and 296 and correctly failed that
+profile's 99% coverage threshold; they are not physical-device evidence. None of these numbers is
+physical-device qualification.
+The same emulator cannot qualify Main10: its accelerated `c2.goldfish.hevc.decoder` advertises Main
+and MainStill only. A real 4K30 HEVC Main10 fixture was therefore refused before open rather than routed
+through the software codec under a GPU label. The parser and target admission cover Main10, but a
+physical device advertising Main10 or a documented compatible superset at a covering level is required
+for runtime evidence. The current performance gate verifies the fixture SHA-256 and exactly 300 decoded
+frames, then requires the exact partition `decoded = submitted + headless + late-dropped`. Renderer outcomes
+must exactly equal submissions, after which the profile's drop-ratio budget applies. It measures `Ended` to
+stable GPU-proof and renderer-outcome state and requires that drain within 2.0 seconds under the emulator
+profile or 1.0 second under the physical profile. Teardown has the same profile-specific bounds. The newest
+corrected-gate run passed every emulator assertion; neither it nor any earlier run used the physical profile
+on physical hardware. The older historical run did not capture drain time.
 
 ## Global Constraints
 
@@ -91,7 +158,7 @@ You have zero context for this codebase. Every task that names an SPI symbol sta
   - `AudioFormat.durationOf(frames: Int): Pts` at about line 169.
 - The engine iterates video factories in `PlaybackCore.createVideoDecoder` (`kiteplayer-core/.../internal/PlaybackCore.kt`, search for `createVideoDecoder`): `factory.create(stream, config.hardwareDecode)` inside `withContext(dispatchers.videoDecode)`, first non-null decoder wins, refusals warn `HardwareDecodeUnavailable` when hardware was requested.
 - `VideoFrame` implementations must provide: `pts: Pts`, `duration: Pts?`, `generation: Generation`, `rotationDegrees: Int`, `size: VideoSize`, `pixelFormat: PlayerPixelFormat`, `colorSpace: ColorSpaceInfo`, `hardwareSurface: HwSurfaceKind?`, `close()`. Reference implementation: `KiteCodecVideoFrame` in `kiteplayer-ffmpeg/src/commonMain/kotlin/io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSource.kt` around line 624.
-- The Compose bridge on Android is `kiteplayer-compose/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/compose/ImageBitmaps.android.kt` (the audit flagged its mutable-bitmap reuse at line 11).
+- The true Compose renderer on Android is `kiteplayer-compose-video/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/compose/ImageBitmaps.android.kt` (the audit flagged its mutable-bitmap reuse at line 11). `kiteplayer-compose-interop` only hosts the native view and does not own this path.
 - Factories come from `BackendSession` (`spi/MediaBackend.kt`). Task 5 adds an engine-side injection point for extra factories so the output module can contribute one without the FFmpeg backend knowing.
 
 ---
@@ -101,8 +168,9 @@ You have zero context for this codebase. Every task that names an SPI symbol sta
 You cannot claim a performance win without a before number. The sample app is the measurement vehicle.
 
 **Files:**
-- Inspect: `kiteplayer-sample-android/` (module layout, main activity)
-- Modify: the sample's player screen composable (grep for `KiteVideo` usage inside `kiteplayer-sample-android/src`)
+- Inspect: `kiteplayer-sample-android/` (module layout and its three playback Activities)
+- Modify: `MainActivity` for the measured direct-Surface overlay, or `ComposeVideoActivity` for
+  true-Compose GPU telemetry; do not mix the two presentation paths in one Activity.
 
 **Interfaces:**
 - Consumes: `KitePlayer.state` (a `StateFlow<PlayerSnapshot>`; grep `PlayerSnapshot` for the statistics fields, the audit made `framesPresented`/dropped counters non-negative and monotonic)
@@ -742,13 +810,13 @@ history. The implemented Compose tier performs one GPU conversion to RGBA and ho
 lease through an exact GPU-completion fence.
 
 **Files:**
-- Modify: `kiteplayer-compose/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/compose/ImageBitmaps.android.kt`
+- Modify: `kiteplayer-compose-video/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/compose/ImageBitmaps.android.kt`
 
 **Interfaces:**
 - Consumes: `HardwareVideoFrame.bitmap` (Task 3).
 - Produces: the existing android actual conversion function (grep its exact name; it is the function the audit flagged at line 11) returns `frame.bitmap.asImageBitmap()` for hardware frames, preserving its current behavior for every other frame type.
 
-- [ ] **Step 1: Reality check.** Read the whole file (it is short) and the caller in `KiteVideoRenderer` (grep `ImageBitmaps` or the actual function name in kiteplayer-compose commonMain). Understand the frame-to-ImageBitmap flow and where frames get closed. Critical ownership question to answer from the code: does the renderer close the `VideoFrame` after conversion? If yes, the hardware `Bitmap` must survive the frame close while the ImageBitmap is still on screen. Resolve by having `HardwareVideoFrame.close()` NOT recycle when the bitmap was handed out; instead hand out the bitmap and let the next conversion recycle the previous one, mirroring however the current code manages its reused software bitmaps. Implement whichever ownership rule the surrounding code actually uses; document it in a comment at the conversion site.
+- [ ] **Step 1: Reality check.** Read the whole file (it is short) and the caller in `KiteVideoRenderer` (grep `ImageBitmaps` or the actual function name in `kiteplayer-compose-video` commonMain). Understand the frame-to-ImageBitmap flow and where frames get closed. Critical ownership question to answer from the code: does the renderer close the `VideoFrame` after conversion? If yes, the hardware `Bitmap` must survive the frame close while the ImageBitmap is still on screen. Resolve by having `HardwareVideoFrame.close()` NOT recycle when the bitmap was handed out; instead hand out the bitmap and let the next conversion recycle the previous one, mirroring however the current code manages its reused software bitmaps. Implement whichever ownership rule the surrounding code actually uses; document it in a comment at the conversion site.
 
 - [ ] **Step 2: Implement.** At the top of the android conversion function:
 
@@ -759,11 +827,11 @@ if (frame is io.github.yuroyami.kiteplayer.output.HardwareVideoFrame) {
 }
 ```
 
-Where `takeBitmap()` is a new method on `HardwareVideoFrame` transferring bitmap ownership (frame.close() then skips recycle when taken; the consumer recycles the previous bitmap when the next frame replaces it, or leans on the GC if the surrounding code does). Match the module dependency direction: kiteplayer-compose must already depend on kiteplayer-output for this cast; check its build.gradle.kts, and if the dependency is absent, add it the same way the module declares its other project dependencies.
+Where `takeBitmap()` is a new method on `HardwareVideoFrame` transferring bitmap ownership (frame.close() then skips recycle when taken; the consumer recycles the previous bitmap when the next frame replaces it, or leans on the GC if the surrounding code does). Match the module dependency direction: `kiteplayer-compose-video` must already depend on `kiteplayer-output` for this cast; check its build.gradle.kts, and if the dependency is absent, add it the same way the module declares its other project dependencies.
 
 - [ ] **Step 3: While in the file, fix the audit's fence finding for the software path.** The flagged pattern reuses ONE mutable bitmap for every frame. Change to a two-bitmap flip (allocate two, write into the one not last handed to Compose, alternate). Keep the software path otherwise untouched.
 
-- [ ] **Step 4: Compile everything.** Global Constraints suites plus `:kiteplayer-compose:compileAndroidMain`.
+- [ ] **Step 4: Compile everything.** Global Constraints suites plus `:kiteplayer-compose-video:compileAndroidMain`.
 
 - [ ] **Step 5: Commit.**
 

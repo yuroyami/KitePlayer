@@ -9,10 +9,12 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.SeekMode
-import io.github.yuroyami.kiteplayer.phone.KitePlayerView
-import io.github.yuroyami.kiteplayer.phone.phoneBackends
+import io.github.yuroyami.kiteplayer.mobile.mobileBackends
+import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import io.github.yuroyami.kiteplayer.view.KitePlayerView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -23,18 +25,25 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Sample-private glue, re-consumed through the phone aggregate (S1.d.4): the player assembled
- * from `phoneBackends()`, the picture handled entirely by [KitePlayerView], and the smoke
- * workflow the plan's jq oracle reads. The surface lifecycle code this class carried in S1.c.6
- * is gone, because owning that lifecycle is exactly what the reusable view is for.
+ * Sample-private glue for the mobile stack: one Activity-scoped player assembled from
+ * `mobileBackends()`, renderer-neutral controls, and the direct-view smoke workflow the plan's jq
+ * oracle reads. Each Activity deliberately owns and installs its own presentation API.
  */
-internal class SampleController(private val context: Context) {
+internal class SampleController(
+    private val context: Context,
+    hardwareDecode: HwdecPolicy = HwdecPolicy.Auto,
+) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var player: KitePlayer? = null
+    private val openStarted = AtomicBoolean()
+    private val closed = AtomicBoolean()
+
+    /** One Activity-scoped player. Presentation ownership remains visible in each Activity. */
+    val player: KitePlayer = createPlayer(hardwareDecode)
 
     /** Copies the bundled clip to app-private storage and returns its path. */
     private fun materialiseClip(): File {
@@ -47,34 +56,44 @@ internal class SampleController(private val context: Context) {
         return out
     }
 
-    private fun createPlayer(): KitePlayer = KitePlayer.create(
+    private fun createPlayer(hardwareDecode: HwdecPolicy): KitePlayer = KitePlayer.create(
         PlayerConfig(
-            hardwareDecode = HwdecPolicy.Require,
-            backends = phoneBackends(),
+            hardwareDecode = hardwareDecode,
+            backends = mobileBackends(),
         ),
     )
 
     /** The ordinary controls: open the private copy paused, with the picture on [view]. */
     fun openNormally(view: KitePlayerView) {
+        if (!openStarted.compareAndSet(false, true)) return
         scope.launch {
-            val p = createPlayer()
-            player = p
             // The view's members are main-thread only, like every Android view.
-            withContext(Dispatchers.Main) { view.player = p }
-            p.open(MediaItem(uri = materialiseClip().absolutePath))
+            withContext(Dispatchers.Main) { view.player = player }
+            player.open(MediaItem(uri = materialiseClip().absolutePath))
+        }
+    }
+
+    /** Opens after a Compose host has installed its presentation path. */
+    fun openNormally(renderer: VideoRenderer? = null) {
+        if (!openStarted.compareAndSet(false, true)) return
+        scope.launch {
+            renderer?.let(player::attachRenderer)
+            player.open(MediaItem(uri = materialiseClip().absolutePath))
         }
     }
 
     fun play() {
-        player?.play()
+        if (openStarted.get()) player.play()
     }
 
     fun pause() {
-        player?.pause()
+        if (openStarted.get()) player.pause()
     }
 
     fun seekToFiveSeconds() {
-        scope.launch { player?.seek(5_000.milliseconds, SeekMode.Precise) }
+        if (openStarted.get()) {
+            scope.launch { player.seek(5_000.milliseconds, SeekMode.Precise) }
+        }
     }
 
     fun onBackground() {
@@ -88,12 +107,7 @@ internal class SampleController(private val context: Context) {
             var previousSampleNanos: Long? = null
             while (isActive) {
                 delay(1_000)
-                val currentPlayer = player ?: run {
-                    previousPresented = null
-                    previousSampleNanos = null
-                    continue
-                }
-                val stats = currentPlayer.stats.value
+                val stats = player.stats.value
                 val renderer = withContext(Dispatchers.Main) {
                     Triple(view.presentedFrames, view.failedFrames, view.supersededFrames)
                 }
@@ -125,14 +139,18 @@ internal class SampleController(private val context: Context) {
     }
 
     /**
-     * Activity teardown. The view detaches itself when its window goes; the player is the one
-     * thing left to close.
+     * Activity teardown after MainActivity has released the view-owned renderer. The player is
+     * independently caller-owned and closes here.
      */
     fun shutdown() {
-        val p = player
-        player = null
-        p?.close()
-        scope.cancel()
+        if (!closed.compareAndSet(false, true)) return
+        // Close first. In particular, cancellation must never strand the smoke player's workers
+        // before its non-cancellable finally block can await teardown and write the oracle.
+        try {
+            player.close()
+        } finally {
+            scope.cancel()
+        }
     }
 
     /**
@@ -142,13 +160,14 @@ internal class SampleController(private val context: Context) {
      * cumulative counters instead of a hand-built renderer.
      */
     fun runSmoke(view: KitePlayerView) {
+        if (!openStarted.compareAndSet(false, true)) return
         scope.launch {
             var seekRequested = false
             var seekLanded = false
             var surfaceFrame = false
             var terminal = "Failed"
             var teardownCompleted = false
-            val p = createPlayer()
+            val p = player
             try {
                 withTimeout(45_000) {
                     withContext(Dispatchers.Main) { view.player = p }
@@ -178,23 +197,31 @@ internal class SampleController(private val context: Context) {
             } catch (_: Throwable) {
                 terminal = p.state.value.status.toString()
             } finally {
-                val stats = p.stats.value
-                val presented = withContext(Dispatchers.Main) { view.presentedFrames }
-                runCatching { withTimeout(12_000) { p.closeAndAwait() } }
-                    .onSuccess { teardownCompleted = true }
-                runCatching { withContext(Dispatchers.Main) { view.player = null } }
-                SmokeResult(
-                    seekRequested = seekRequested,
-                    seekLanded = seekLanded,
-                    terminalState = terminal,
-                    decodedFrames = stats.decodedVideoFrames,
-                    submittedFrames = stats.submittedFrames,
-                    presentedFrames = presented,
-                    surfaceFrame = surfaceFrame,
-                    audioUnderruns = stats.audioUnderruns,
-                    hardwareDecode = SmokeResult.label(stats.hardwareDecode),
-                    teardownCompleted = teardownCompleted,
-                ).writeAtomically(context.filesDir)
+                withContext(NonCancellable) {
+                    val stats = p.stats.value
+                    val presented = withContext(Dispatchers.Main) { view.presentedFrames }
+                    // Renderer/view ownership ends before player ownership. The oracle calls
+                    // teardown complete only if both boundaries actually completed.
+                    val rendererReleased = runCatching {
+                        withContext(Dispatchers.Main) { view.player = null }
+                    }.isSuccess
+                    val playerReleased = runCatching {
+                        withTimeout(12_000) { p.closeAndAwait() }
+                    }.isSuccess
+                    teardownCompleted = rendererReleased && playerReleased
+                    SmokeResult(
+                        seekRequested = seekRequested,
+                        seekLanded = seekLanded,
+                        terminalState = terminal,
+                        decodedFrames = stats.decodedVideoFrames,
+                        submittedFrames = stats.submittedFrames,
+                        presentedFrames = presented,
+                        surfaceFrame = surfaceFrame,
+                        audioUnderruns = stats.audioUnderruns,
+                        hardwareDecode = SmokeResult.label(stats.hardwareDecode),
+                        teardownCompleted = teardownCompleted,
+                    ).writeAtomically(context.filesDir)
+                }
             }
         }
     }

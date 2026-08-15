@@ -1,0 +1,26 @@
+public final class io/github/yuroyami/kiteplayer/compose/KiteVideoFrameCost {
+	public static final field $stable I
+	public final fun getAverageNanos ()J
+	public final fun getLastNanos ()J
+	public final fun getSamples ()J
+	public final fun getWorstNanos ()J
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/compose/KiteVideoKt {
+	public static final fun KiteVideo (Lio/github/yuroyami/kiteplayer/compose/KiteVideoState;Landroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class io/github/yuroyami/kiteplayer/compose/KiteVideoState {
+	public static final field $stable I
+	public final fun getFailedFrames ()J
+	public final fun getFrameCost ()Lio/github/yuroyami/kiteplayer/compose/KiteVideoFrameCost;
+	public final fun getPresentedFrames ()J
+	public final fun getRenderer ()Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;
+	public final fun getSupersededFrames ()J
+}
+
+public final class io/github/yuroyami/kiteplayer/compose/KiteVideoStateKt {
+	public static final fun rememberKiteVideoState (Landroidx/compose/runtime/Composer;I)Lio/github/yuroyami/kiteplayer/compose/KiteVideoState;
+}
+

@@ -1,3 +1,4 @@
+import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import io.github.yuroyami.kiteplayer.buildtools.CheckKitertCouplingTask
 import io.github.yuroyami.kiteplayer.buildtools.CheckPublicationReadinessTask
 import org.gradle.api.artifacts.ProjectDependency
@@ -12,7 +13,8 @@ plugins {
     alias(libs.plugins.android.kmp.library).apply(false)
     // The plain application plugin, for :kiteplayer-sample-android only (S1.c.6 step 1).
     alias(libs.plugins.android.application).apply(false)
-    // The two Compose plugins, for :kiteplayer-compose only (S1.d.2).
+    // Shared by the native-view interop and true Compose-rendering artifacts. The deprecated
+    // :kiteplayer-compose umbrella applies neither plugin because it only re-exports them.
     alias(libs.plugins.kotlin.compose).apply(false)
     alias(libs.plugins.compose.multiplatform).apply(false)
     // Applied at the root so dokkaGenerate aggregates every library module into one API site
@@ -60,6 +62,26 @@ subprojects {
     val publishingDirectory = projectDir.relativeTo(rootProject.projectDir).invariantSeparatorsPath
 
     pluginManager.withPlugin("com.vanniktech.maven.publish") {
+        extensions.configure<MavenPublishBaseExtension> {
+            pom {
+                name.set(publishingProject.name)
+                description.set(rootProject.providers.gradleProperty("DESCRIPTION"))
+                url.set("https://github.com/yuroyami/KitePlayer")
+                licenses {
+                    license {
+                        name.set("Apache License 2.0")
+                        url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                        distribution.set("repo")
+                    }
+                }
+                scm {
+                    connection.set("scm:git:https://github.com/yuroyami/KitePlayer.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/yuroyami/KitePlayer.git")
+                    url.set("https://github.com/yuroyami/KitePlayer")
+                }
+            }
+        }
+
         val pomTasks = publishingProject.tasks.withType(GenerateMavenPom::class.java)
         publicationReadiness.configure {
             publishingModules.add(publishingPath)
@@ -84,7 +106,15 @@ subprojects {
 
 dependencies {
     dokka(project(":kiteplayer-core"))
+    dokka(project(":kiteplayer-ffmpeg"))
+    dokka(project(":kiteplayer-output"))
     dokka(project(":kiteplayer-subtitles"))
+    dokka(project(":kiteplayer-view"))
+    dokka(project(":kiteplayer-mobile"))
+    dokka(project(":kiteplayer-compose-interop"))
+    dokka(project(":kiteplayer-compose-video"))
+    dokka(project(":kiteplayer-phone"))
+    dokka(project(":kiteplayer-compose"))
 }
 
 dokka {

@@ -48,6 +48,10 @@ private class FakeAudioTrackDriver(
 
     /** When set, write blocks until pause/stop; models WRITE_BLOCKING against a full buffer. */
     @Volatile var blockWrites = false
+
+    /** When >= 0, writes from that call index on block like [blockWrites]. */
+    @Volatile var blockFromWriteCall = -1
+    private var writeCalls = 0
     private val writeGate = Object()
     @Volatile private var interrupted = false
     val writeEntered = CountDownLatch(1)
@@ -82,7 +86,8 @@ private class FakeAudioTrackDriver(
     override fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int {
         record("write")
         writeEntered.countDown()
-        if (blockWrites) {
+        val call = writeCalls++
+        if (blockWrites || (blockFromWriteCall in 0..call)) {
             synchronized(writeGate) {
                 while (!interrupted) writeGate.wait()
             }
@@ -215,6 +220,89 @@ class AudioTrackSinkTest {
         val floats = synchronized(driver.writtenFloats) { driver.writtenFloats.size }
         assertTrue(floats >= totalFloats, "three partial writes must still deliver the whole block")
         s.close()
+    }
+
+
+    @Test
+    fun `a pause interrupting a blocking write counts only the frames actually written`() = runBlocking {
+        val driver = FakeAudioTrackDriver()
+        /* First write hands over 100 floats, the second blocks until pause interrupts it. */
+        driver.writeResults.add(100)
+        driver.blockFromWriteCall = 1
+        val s = sink(driver)
+        s.open(stereo48k, FullBlockCallback())
+        s.start()
+        driver.writeEntered.await()
+        while (synchronized(driver.calls) { driver.calls.count { it == "write" } } < 2) Thread.sleep(1)
+        s.setPaused(true)
+        /* 100 floats stereo is 50 frames; the old arithmetic claimed the whole 512-frame block.
+         * Latency against a zero head position exposes the count directly. */
+        driver.timestampAnswer = null
+        driver.headAnswer = 0
+        val latency = s.latencyNanos()
+        val fiftyFrames = AudioTrackSink.framesToNanos(50, 48_000)
+        val wholeBlock = AudioTrackSink.framesToNanos(512, 48_000)
+        assertEquals(fiftyFrames, latency, "an interrupted block must count its written part, not $wholeBlock")
+        s.close()
+    }
+
+    @Test
+    fun `a duplicate resume never starts a second writer thread`() = runBlocking {
+        val driver = FakeAudioTrackDriver()
+        val s = sink(driver)
+        s.open(stereo48k, FullBlockCallback())
+        s.start()
+        driver.writeEntered.await()
+        s.setPaused(false) /* resume while already running: the duplicate */
+        s.setPaused(false)
+        Thread.sleep(20)
+        val starts = synchronized(driver.calls) { driver.calls.count { it == "threadStart" } }
+        assertEquals(1, starts, "a duplicate resume must not create a second writer over the same buffer")
+        s.close()
+    }
+
+    @Test
+    fun `after a device failure the next start reopens the device and plays again`() = runBlocking {
+        var opens = 0
+        val drivers = mutableListOf<FakeAudioTrackDriver>()
+        val factory = AudioTrackDriverFactory {
+            opens++
+            FakeAudioTrackDriver().also { drivers += it }
+        }
+        val s = AudioTrackSink(factory, FixedClock())
+        s.open(stereo48k, FullBlockCallback())
+        drivers.single().writeResults.add(0) /* first block dies */
+        /* Subscribe BEFORE starting: no replay on the event flow, and the failure fires on the
+         * writer's first block (the standing rule of this suite). */
+        val lost = async { s.events.first { it is AudioSinkEvent.DeviceLost } }
+        yield()
+        s.start()
+        withTimeout(5_000) { lost.await() }
+
+        s.start() /* SOL-A2's recovery arm */
+        withTimeout(5_000) {
+            while (drivers.size < 2 || synchronized(drivers[1].calls) { drivers[1].calls.none { it == "write" } }) {
+                Thread.sleep(1)
+            }
+        }
+        assertEquals(2, opens, "recovery must open a fresh device, the dead one is released")
+        assertTrue(
+            synchronized(drivers[0].calls) { drivers[0].calls.contains("release") },
+            "the dead device must be released",
+        )
+        s.close()
+    }
+
+    @Test
+    fun `the timestamp frame position wrap-extends exactly like the head`() {
+        val state = AudioTrackSink.WrapState()
+        assertEquals(0xFFFF_FF00L, AudioTrackSink.extendTimestampFrames(0xFFFF_FF00L, state))
+        /* The counter wraps: a small raw after a huge one is the next epoch. */
+        assertEquals(0x1_0000_0100L, AudioTrackSink.extendTimestampFrames(0x100L, state))
+        assertEquals(0x1_0000_0200L, AudioTrackSink.extendTimestampFrames(0x200L, state))
+        /* A genuinely 64-bit position passes through untouched. */
+        val big = AudioTrackSink.WrapState()
+        assertEquals(0x2_0000_0000L, AudioTrackSink.extendTimestampFrames(0x2_0000_0000L, big))
     }
 
     @Test

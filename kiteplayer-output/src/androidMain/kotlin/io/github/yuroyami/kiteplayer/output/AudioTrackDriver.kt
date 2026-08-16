@@ -59,7 +59,12 @@ internal interface AudioTrackDriver {
     fun playbackHeadPosition(): Int
 }
 
-internal class DriverTimestamp(val framePosition: Long, val nanoTime: Long)
+/**
+ * SCRATCH holder by contract (SOL-A3): a driver may reuse one instance across polls, so the
+ * caller reads the fields before its next driver call and never retains the object. Mutable
+ * for the same reason; the sink's wrap extension writes framePosition in place.
+ */
+internal class DriverTimestamp(var framePosition: Long = 0L, var nanoTime: Long = 0L)
 
 internal fun interface AudioTrackDriverFactory {
     /** Opens a device for [accepted]. Throwing here is the only failure shape open handles. */
@@ -126,9 +131,15 @@ internal class PlatformAudioTrackDriver(accepted: AudioFormat) : AudioTrackDrive
     override fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int =
         track.write(source, offsetFloats, sizeFloats, AudioTrack.WRITE_BLOCKING)
 
+    /* SOL-A3: one holder for the life of the driver; the ~94-per-second poll allocated two
+     * objects per call before (the AudioTimestamp was already reused, this one was not). */
+    private val out = DriverTimestamp()
+
     override fun timestamp(): DriverTimestamp? =
         if (track.getTimestamp(timestamp)) {
-            DriverTimestamp(timestamp.framePosition, timestamp.nanoTime)
+            out.framePosition = timestamp.framePosition
+            out.nanoTime = timestamp.nanoTime
+            out
         } else {
             null
         }

@@ -65,6 +65,9 @@ public class AudioTrackSink internal constructor(
     /** Frames handed to the device since the last stop, written only by the writer thread. */
     @Volatile private var submittedFrames = 0L
 
+    /** SOL-A2: set by the writer on device failure, cleared by the recovery arm of start. */
+    private var writerFailed = false
+
     /* Timestamp acceptance state (S1.c.4 step 6), written only by the writer thread. */
     @Volatile private var lastAcceptedTimestampFrames = -1L
     @Volatile private var lastAcceptedTimestampNanos = Long.MIN_VALUE
@@ -129,11 +132,35 @@ public class AudioTrackSink internal constructor(
     }
 
     override suspend fun start() {
+        recoverIfFailed()
         synchronized(lifecycle) {
             val d = driver ?: error("start before open")
             if (writerRun) return
             d.play()
             startWriterLocked()
+        }
+    }
+
+    /**
+     * SOL-A2's recovery arm: after a device failure the old AudioTrack is dead, so the next
+     * start releases it and opens a fresh one for the accepted format. The submitted count and
+     * timestamp state restart with the new device; the DeviceLost event already told the
+     * application WHY. Outside [lifecycle] for the join, like every writer join here.
+     */
+    private fun recoverIfFailed() {
+        val dead = synchronized(lifecycle) {
+            if (!writerFailed) return
+            driver
+        }
+        joinWriterOutsideLock()
+        synchronized(lifecycle) {
+            if (!writerFailed) return
+            val format = accepted ?: return
+            dead?.release()
+            driver = driverFactory.open(format)
+            submittedFrames = 0L
+            resetTimestampState()
+            writerFailed = false
         }
     }
 
@@ -194,6 +221,7 @@ public class AudioTrackSink internal constructor(
             }
             joinWriterOutsideLock()
         } else {
+            recoverIfFailed()
             synchronized(lifecycle) {
                 val d = driver ?: return true
                 d.play()
@@ -235,6 +263,9 @@ public class AudioTrackSink internal constructor(
     /* ── The writer (step 5) ────────────────────────────────────────────────────────────── */
 
     private fun startWriterLocked() {
+        /* SOL-A2: one writer, ever. A duplicate resume used to start a second thread over the
+         * same driver and block buffer. */
+        if (writer?.isAlive == true && writerRun) return
         writerRun = true
         val thread = Thread({ writerLoop() }, "kiteplayer-audiotrack-writer")
         writer = thread
@@ -274,14 +305,26 @@ public class AudioTrackSink internal constructor(
                 if (!writerRun) break /* pause or stop interrupted the blocking write */
                 /* Zero or negative with the writer still live is a device failure, never a
                  * busy loop (step 5). */
+                /* SOL-A2: a dead device marks the machine FAILED and drops writerRun, so the
+                 * sink is startable again (start recovers) instead of wedged behind a true
+                 * writerRun with no writer. State BEFORE the event: the event is what wakes a
+                 * listener that immediately calls start, and start must see the failure. */
+                synchronized(lifecycle) {
+                    writerFailed = true
+                    writerRun = false
+                }
                 eventFlow.tryEmit(
                     AudioSinkEvent.DeviceLost("AudioTrack.write returned $n mid-block"),
                 )
                 failed = true
                 break
             }
+            /* SOL-A1: count what the device actually took. A pause or stop that interrupts
+             * the blocking write mid-block, and a device failure partway, both leave a partial
+             * count; claiming the whole block made latency and the head fallback lie by up to
+             * one block. Full blocks land on exactly the old arithmetic. */
+            submittedFrames += (offsetFloats / channels).toLong()
             if (failed) break
-            submittedFrames += blockFrames
             if (draining && short) {
                 /* The drain contract: keep pulling until the callback's first short return,
                  * silence and submit that final tail, then exit (step 7). */
@@ -293,7 +336,7 @@ public class AudioTrackSink internal constructor(
     /* ── Deadline and clock arithmetic (step 6), package-private for the host clock suite. ─ */
 
     private fun deadlineForBlock(d: AudioTrackDriver, format: AudioFormat): Long {
-        val ts = d.timestamp()
+        val ts = readTimestamp(d)
         if (ts != null && acceptTimestamp(ts)) {
             timestampSourceObserved = "timestamp"
             return timestampDeadline(
@@ -308,6 +351,21 @@ public class AudioTrackSink internal constructor(
         val queued = submittedFrames - extendedHead(d)
         return clock.nanos() + framesToNanos(queued.coerceAtLeast(0) + blockFrames, format.sampleRate)
     }
+
+    /**
+     * SOL-A3: the one place a driver timestamp is read. Legacy HALs feed AudioTimestamp from a
+     * 32-bit counter, so the position wraps at about 24.85 hours at 48 kHz exactly like the
+     * playback head; the same extension law covers it. A position already past 32 bits is a
+     * genuine 64-bit counter and passes through untouched. The driver's holder is scratch by
+     * contract, so the extension writes in place and nothing allocates per poll.
+     */
+    private fun readTimestamp(d: AudioTrackDriver): DriverTimestamp? {
+        val ts = d.timestamp() ?: return null
+        ts.framePosition = extendTimestampFrames(ts.framePosition, tsState)
+        return ts
+    }
+
+    private val tsState = WrapState()
 
     private fun acceptTimestamp(ts: DriverTimestamp): Boolean {
         /* Reject a timestamp ahead of submitted data or behind the prior accepted one: either
@@ -332,7 +390,7 @@ public class AudioTrackSink internal constructor(
     }
 
     private fun newestPlayedPosition(d: AudioTrackDriver): Long {
-        val ts = d.timestamp()
+        val ts = readTimestamp(d)
         return if (ts != null && ts.framePosition in 0..submittedFrames) {
             ts.framePosition
         } else {
@@ -343,6 +401,8 @@ public class AudioTrackSink internal constructor(
     private fun resetTimestampState() {
         lastAcceptedTimestampFrames = -1L
         lastAcceptedTimestampNanos = Long.MIN_VALUE
+        tsState.lastRaw = 0L
+        tsState.wrapBase = 0L
         synchronized(headLock) {
             headLastRaw = 0L
             headWrapBase = 0L
@@ -365,6 +425,22 @@ public class AudioTrackSink internal constructor(
 
         internal fun framesToNanos(frames: Long, sampleRate: Int): Long =
             if (sampleRate <= 0) 0 else frames * 1_000_000_000L / sampleRate
+
+        /** SOL-A3's wrap law, pure for the host suite: same shape as the head extension. */
+        internal fun extendTimestampFrames(raw: Long, state: WrapState): Long {
+            if (raw > 0xFFFF_FFFFL || raw < 0) return raw
+            if (raw < state.lastRaw && state.lastRaw - raw > 0x8000_0000L) {
+                state.wrapBase += 1L shl 32
+            }
+            state.lastRaw = raw
+            return state.wrapBase + raw
+        }
+    }
+
+    /** Mutable wrap-extension state for [extendTimestampFrames]; writer-thread confined. */
+    internal class WrapState {
+        var lastRaw: Long = 0
+        var wrapBase: Long = 0
     }
 
     /**

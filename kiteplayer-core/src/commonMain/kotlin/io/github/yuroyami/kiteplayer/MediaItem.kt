@@ -17,9 +17,8 @@ public data class MediaItem(
      */
     val headers: Map<String, String> = emptyMap(),
     /**
-     * Subtitle files to load alongside the media.
-     *
-     * Nothing loads them. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Subtitle files to load alongside the media (S4.e). Local SubRip and WebVTT files become
+     * selectable synthetic subtitle tracks; see [SubtitleSource] for the exact contract.
      */
     val externalSubtitles: List<SubtitleSource> = emptyList(),
     /**
@@ -94,10 +93,13 @@ public interface MediaIo : AutoCloseable {
 }
 
 /**
- * An external subtitle file or stream, added alongside a media item.
+ * An external subtitle file added alongside a media item (S4.e).
  *
- * Nothing opens one, and no cue reaches a screen.
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * LOCAL SubRip and WebVTT files load at open: each becomes a selectable synthetic subtitle
+ * track (a negative [io.github.yuroyami.kiteplayer.TrackId], labelled by [title] or the file
+ * name) whose cues run through the same engine timing path container cues use. A file that
+ * cannot be read or parsed warns typed and is skipped rather than failing the open. Network
+ * URLs stay parked with KPKMP 17.8, and [io] is not wired yet: both warn typed today.
  */
 public data class SubtitleSource(
     val uri: String,

@@ -9,6 +9,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecMediaBackend : 
 	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Ljava/util/Map;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun describeForDiagnostics ()Ljava/lang/String;
 	public fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun subtitleFileParser ()Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource {

@@ -177,6 +177,114 @@ internal class PlaybackCore(
 
     /** The chapter the last ChapterChanged named, as an index; MIN_VALUE forces the first emit. */
     private var lastChapterIndex: Int = Int.MIN_VALUE
+
+    /** One parsed external subtitle file (S4.e): a synthetic track and its ready cue table. */
+    private class ExternalSubtitleTrack(
+        val id: TrackId,
+        val info: TrackInfo,
+        val cues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+    )
+
+    /** The media item's parsed external subtitle files, in declaration order. */
+    private var externalSubtitleTracks: List<ExternalSubtitleTrack> = emptyList()
+
+    /** The external track currently timing cues, or null when none is. */
+    private var selectedExternalSubtitle: TrackId? = null
+
+    /** An external selection waiting for handleTrackChanges to finish its container rebuild. */
+    private var pendingExternalSubtitle: TrackId? = null
+
+    private fun isExternalSubtitle(track: TrackId?): Boolean =
+        track != null && externalSubtitleTracks.any { it.id == track }
+
+    /**
+     * Parses the media item's external subtitle files (S4.e): each becomes a selectable
+     * synthetic subtitle track whose cues run through the SAME timing path container cues use.
+     * A file that cannot be read or parsed warns typed and is skipped; the open never fails
+     * over a subtitle.
+     */
+    private fun loadExternalSubtitles(item: MediaItem) {
+        externalSubtitleTracks = item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
+            // TrackId's own convention: external ids are negative, printed external1, external2...
+            val id = TrackId(-(index + 1))
+            if (sourceFile.io != null) {
+                warn(
+                    PlaybackWarning.TrackDeselected(
+                        id,
+                        "custom subtitle IO is not wired; external subtitles read local paths (17.8 owns the rest)",
+                    ),
+                )
+                return@mapIndexedNotNull null
+            }
+            val parser = backend.subtitleFileParser()
+            if (parser == null) {
+                warn(
+                    PlaybackWarning.TrackDeselected(
+                        id,
+                        "this backend supplies no subtitle file parser, so external files cannot load",
+                    ),
+                )
+                return@mapIndexedNotNull null
+            }
+            val text = readExternalTextOrNull(sourceFile.uri)
+            if (text == null) {
+                warn(
+                    PlaybackWarning.TrackDeselected(
+                        id,
+                        "the external subtitle file could not be read: ${sourceFile.uri}",
+                    ),
+                )
+                return@mapIndexedNotNull null
+            }
+            val trimmed = text.removePrefix("﻿")
+            val isVtt = trimmed.startsWith("WEBVTT") || sourceFile.uri.endsWith(".vtt", ignoreCase = true)
+            val cues = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
+                warn(
+                    PlaybackWarning.TrackDeselected(
+                        id,
+                        "the external subtitle file failed to parse: ${sourceFile.uri}${causeDetail(failure)}",
+                    ),
+                )
+                return@mapIndexedNotNull null
+            }
+            if (cues.isEmpty()) {
+                warn(
+                    PlaybackWarning.TrackDeselected(
+                        id,
+                        "the external subtitle file parsed to no cues: ${sourceFile.uri}",
+                    ),
+                )
+                return@mapIndexedNotNull null
+            }
+            ExternalSubtitleTrack(
+                id = id,
+                info = TrackInfo(
+                    id = id,
+                    kind = TrackKind.Subtitle,
+                    codec = if (isVtt) "external/webvtt" else "external/subrip",
+                    language = sourceFile.language,
+                    title = sourceFile.title ?: sourceFile.uri.substringAfterLast('/'),
+                ),
+                cues = cues.sortedBy { cue -> cue.startMicros },
+            )
+        }
+        if (externalSubtitleTracks.isNotEmpty()) {
+            tracks = tracks.copy(all = tracks.all + externalSubtitleTracks.map { it.info })
+        }
+    }
+
+    /** Swaps the timed cue table in place (S4.e): no container reopen, one publish. */
+    private fun applyExternalSubtitle(target: TrackId?) {
+        val active = session ?: return
+        selectedExternalSubtitle = target
+        active.subtitleCues.clear()
+        target
+            ?.let { id -> externalSubtitleTracks.firstOrNull { it.id == id } }
+            ?.cues
+            ?.let(active.subtitleCues::addAll)
+        tracks = tracks.withSelection(TrackKind.Subtitle, target)
+        publishSnapshot()
+    }
     private var session: OpenSession? = null
     private var tracks: Tracks = Tracks.Empty
     private var lastError: PlaybackError? = null
@@ -735,11 +843,13 @@ internal class PlaybackCore(
             is CoreCommand.SelectTrack -> when {
                 session == null && pendingVideoRecovery == null ->
                     IllegalStateException("selectTrack needs an open media item")
-                session != null && session?.source?.seekable != true -> UnsupportedOperationException(
+                session != null && session?.source?.seekable != true &&
+                    !inPlaceExternalSubtitleChange(command) -> UnsupportedOperationException(
                     "this source is not seekable, so a track switch cannot reopen it and seek back to " +
                         "where playback was; see KPKMP.md digest 8.3",
                 )
                 command.kind == TrackKind.Subtitle &&
+                    !isExternalSubtitle(command.track) &&
                     session?.backendSession?.subtitleDecoders.isNullOrEmpty() &&
                     pendingVideoRecovery?.subtitleSelectionAvailable != true -> UnsupportedOperationException(
                     "this backend decodes no subtitle format, so a subtitle track cannot be selected",
@@ -774,6 +884,12 @@ internal class PlaybackCore(
             else -> null
         }
     }
+
+    /** True when a subtitle change swaps cue tables in place, needing no container reopen (S4.e). */
+    private fun inPlaceExternalSubtitleChange(command: CoreCommand.SelectTrack): Boolean =
+        command.kind == TrackKind.Subtitle &&
+            session?.subtitleStream == null &&
+            (isExternalSubtitle(command.track) || (command.track == null && selectedExternalSubtitle != null))
 
     private fun seekRejection(): Throwable? = when {
         pendingVideoRecovery != null -> null
@@ -826,9 +942,34 @@ internal class PlaybackCore(
             }
             is CoreCommand.Close -> runClose(command.reply)
             is CoreCommand.SelectTrack -> {
-                // Applied by its own handler, so one pass never reopens the graph twice.
-                pendingTrackChange?.reply?.complete(Unit)
-                pendingTrackChange = command
+                val externalTarget = command.track?.takeIf { isExternalSubtitle(it) }
+                val externalActive = selectedExternalSubtitle != null
+                if (command.kind == TrackKind.Subtitle &&
+                    (externalTarget != null || (command.track == null && externalActive))
+                ) {
+                    if (session?.subtitleStream != null) {
+                        // A container stream is timing cues: the ordinary rebuild deselects it,
+                        // and the external table applies once the new graph stands (S4.e).
+                        pendingExternalSubtitle = externalTarget
+                        pendingTrackChange?.reply?.complete(Unit)
+                        pendingTrackChange = command
+                    } else {
+                        // No container stream involved: the swap is a cue-table replacement, in
+                        // place, with no reopen and no seek.
+                        applyExternalSubtitle(externalTarget)
+                        command.reply.complete(Unit)
+                    }
+                } else {
+                    // A container selection while an external track times cues clears it: one
+                    // subtitle selection exists, whoever owns it.
+                    if (command.kind == TrackKind.Subtitle && externalActive) {
+                        selectedExternalSubtitle = null
+                        session?.subtitleCues?.clear()
+                    }
+                    // Applied by its own handler, so one pass never reopens the graph twice.
+                    pendingTrackChange?.reply?.complete(Unit)
+                    pendingTrackChange = command
+                }
             }
             is CoreCommand.AttachRenderer -> {
                 if (setRenderer(command.renderer)) command.reply.complete(Unit)
@@ -942,6 +1083,9 @@ internal class PlaybackCore(
         if (session != null) teardownSession()
         media = command.media
         lastChapterIndex = Int.MIN_VALUE
+        externalSubtitleTracks = emptyList()
+        selectedExternalSubtitle = null
+        pendingExternalSubtitle = null
         // An open ends paused by contract, whatever was asked for before it. A play issued while this one
         // is still running arrives after this line and is honoured, which is what queueing it means.
         playRequested = false
@@ -992,6 +1136,14 @@ internal class PlaybackCore(
                     return
                 }
                 built = recovered.session
+            }
+            // External subtitle files (S4.e): parsed AFTER the session stands, so their synthetic
+            // tracks merge into the container's table and a flagged one starts timing at once.
+            loadExternalSubtitles(command.media)
+            externalSubtitleTracks.firstOrNull { track ->
+                command.media.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true
+            }?.let { immediate ->
+                if (session?.subtitleStream == null) applyExternalSubtitle(immediate.id)
             }
             setStatus(PlaybackStatus.Paused)
             eventSink.tryEmit(PlayerEvent.Opened(command.media, tracks))
@@ -1499,7 +1651,13 @@ internal class PlaybackCore(
         // the automatic choice is what an open does rather than what a change to one track does.
         val video = choiceFor(change, TrackKind.Video, current.videoStream?.index)
         val audio = choiceFor(change, TrackKind.Audio, current.audioStream?.index)
-        val subtitle = choiceFor(change, TrackKind.Subtitle, current.subtitleStream?.index)
+        // An external subtitle target means NO container stream (S4.e): the rebuild deselects
+        // whatever container track was timing cues, and the external table applies afterwards.
+        val subtitle = if (change.kind == TrackKind.Subtitle && isExternalSubtitle(change.track)) {
+            StreamChoice.None
+        } else {
+            choiceFor(change, TrackKind.Subtitle, current.subtitleStream?.index)
+        }
         try {
             teardownSession()
             requestedEpoch = requestedEpoch.next()
@@ -1529,6 +1687,15 @@ internal class PlaybackCore(
                 pendingSeek = SeekRequest(SeekTarget.Absolute(at), SeekMode.Precise)
             }
             playRequested = wasPlaying
+            // The rebuild replaced the track table; the synthetic external rows and any waiting
+            // external selection re-apply on top of it (S4.e).
+            if (externalSubtitleTracks.isNotEmpty()) {
+                tracks = tracks.copy(all = tracks.all + externalSubtitleTracks.map { it.info })
+            }
+            pendingExternalSubtitle?.let { waiting ->
+                pendingExternalSubtitle = null
+                applyExternalSubtitle(waiting)
+            }
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
             change.reply.complete(Unit)
         } catch (cancellation: CancellationException) {
@@ -1976,8 +2143,16 @@ internal class PlaybackCore(
      */
     private suspend fun handleSubtitles() {
         val session = this.session ?: return
-        val decoder = session.subtitleDecoder ?: return
-        val queue = session.subtitleQueue ?: return
+        val decoder = session.subtitleDecoder
+        val queue = session.subtitleQueue
+
+        // The drain half needs a container stream; the timing half below does not: an external
+        // cue table (S4.e) times and publishes through the same selector with no decoder at all.
+        if (decoder == null || queue == null) {
+            if (session.subtitleCues.isEmpty() && session.publishedCueKey.isNullOrEmpty()) return
+            timeAndPublishCues(session)
+            return
+        }
 
         // Text decode is parsing; it runs inline. The send contract is the decoder SPI's: false
         // means full and the caller must drain before retrying the SAME packet. A packet the
@@ -2012,6 +2187,11 @@ internal class PlaybackCore(
             }
         }
 
+        timeAndPublishCues(session)
+    }
+
+    /** The timing half of handleSubtitles, shared by container and external cue tables (S4.e). */
+    private suspend fun timeAndPublishCues(session: OpenSession) {
         val positionUs = currentPosition().micros - config.subtitles.delay.inWholeMicroseconds
         val active = CueSelector.activeAt(session.subtitleCues, positionUs)
         // The cues themselves are the identity, not their timestamps: two different texts or
@@ -2587,6 +2767,12 @@ internal class PlaybackCore(
         // The pure selector makes seek reconstruction trivial: clear, re-decode from the landing
         // point, and the next pass's activeAt IS the rebuilt state, in either direction.
         session.subtitleCues.clear()
+        // External cues are position-independent facts about the file beside the media: a flush
+        // that empties the table must put them back, or every seek silences them (S4.e).
+        selectedExternalSubtitle
+            ?.let { id -> externalSubtitleTracks.firstOrNull { it.id == id } }
+            ?.cues
+            ?.let(session.subtitleCues::addAll)
         session.publishedCueKey = null
         session.subtitleDecoder?.flush(epoch)
         while (true) {
@@ -2648,6 +2834,9 @@ internal class PlaybackCore(
         teardownSession()
         media = null
         tracks = Tracks.Empty
+        externalSubtitleTracks = emptyList()
+        selectedExternalSubtitle = null
+        pendingExternalSubtitle = null
         endOfStream.reset()
         seekPhase = SeekPhase.Idle
         // Idle publishes Idle's numbers: a position and progress left over from the stopped
@@ -3798,6 +3987,7 @@ internal class PlaybackCore(
 
         /** Warnings kept for the dump (S4.d): enough for a session's story, bounded by contract. */
         const val WARNING_HISTORY_LIMIT = 64
+
 
         const val DEMUX_WORKER = "demux"
         const val VIDEO_DECODE_WORKER = "video decode"

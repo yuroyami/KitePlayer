@@ -254,6 +254,32 @@ internal class ScriptedBackend(
     /** Thrown by [open] instead of returning a session. */
     var openFailure: Throwable? = null
 
+    /**
+     * A ten-line SRT-only parser for the external-subtitle tests (S4.e). The real WebVTT and
+     * SubRip parsers live in kiteplayer-subtitles, above this module's dependency arrow; the
+     * engine's contract only needs A parser here, and the format goldens live with the real ones.
+     */
+    override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
+        io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, _ ->
+            val timing = Regex("""(\d{2}):(\d{2}):(\d{2})[,.](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[,.](\d{3})""")
+            text.split(Regex("\r?\n\r?\n")).mapNotNull { block ->
+                val lines = block.trim().lines()
+                val at = lines.indexOfFirst { timing.matches(it.trim()) }
+                if (at < 0 || at + 1 > lines.lastIndex) return@mapNotNull null
+                val m = timing.matchEntire(lines[at].trim())!!.groupValues.drop(1).map { it.toLong() }
+                fun micros(h: Long, min: Long, s: Long, ms: Long) = ((h * 3600 + min * 60 + s) * 1000 + ms) * 1000
+                io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(
+                    startMicros = micros(m[0], m[1], m[2], m[3]),
+                    endMicros = micros(m[4], m[5], m[6], m[7]),
+                    spans = listOf(
+                        io.github.yuroyami.kiteplayer.subtitle.StyledSpan(
+                            lines.drop(at + 1).joinToString("\n"),
+                        ),
+                    ),
+                )
+            }
+        }
+
     override suspend fun open(media: MediaItem): BackendSession {
         openCalls++
         openGate?.await()

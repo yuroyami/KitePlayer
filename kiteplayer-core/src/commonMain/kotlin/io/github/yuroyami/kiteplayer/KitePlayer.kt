@@ -304,14 +304,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Selects a track, or deselects the kind entirely with a null [track].
      *
-     * Video and audio only. Switching reopens the container and seeks back to where playback was, because
-     * the demuxer permits its stream selection to be set once before the first read, so it is legal only
-     * while a media item is open and only when the source reports itself seekable. Seamless switching is
-     * on the roadmap in KPKMP.md section 11.
+     * Switching a CONTAINER track reopens the container and seeks back to where playback was,
+     * because the demuxer permits its stream selection to be set once before the first read, so
+     * that path needs a seekable source. Selecting an EXTERNAL subtitle track (S4.e, a negative
+     * [TrackId] from [MediaItem.externalSubtitles]) while no container subtitle stream is
+     * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
+     * switching is on the roadmap in KPKMP.md section 11.
      *
      * @throws IllegalStateException when nothing is open.
-     * @throws UnsupportedOperationException for [TrackKind.Subtitle], which no decoder in this build can
-     *         produce, and for a source that cannot seek.
+     * @throws UnsupportedOperationException for a container switch on a source that cannot seek,
+     *         and for a container subtitle track when the backend decodes no subtitle format.
      */
     public suspend fun selectTrack(kind: TrackKind, track: TrackId?) {
         core.selectTrack(kind, track)

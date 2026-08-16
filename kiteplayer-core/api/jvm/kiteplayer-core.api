@@ -1444,10 +1444,12 @@ public final class io/github/yuroyami/kiteplayer/spi/HwSurfaceKind : java/lang/E
 public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaBackend {
 	public fun describeForDiagnostics ()Ljava/lang/String;
 	public abstract fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun subtitleFileParser ()Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/MediaBackend$DefaultImpls {
 	public static fun describeForDiagnostics (Lio/github/yuroyami/kiteplayer/spi/MediaBackend;)Ljava/lang/String;
+	public static fun subtitleFileParser (Lio/github/yuroyami/kiteplayer/spi/MediaBackend;)Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaSourceFactory {
@@ -1651,6 +1653,10 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleDecode
 public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleDecoderFactory {
 	public abstract fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun getName ()Ljava/lang/String;
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleFileParser {
+	public abstract fun parse (Ljava/lang/String;Z)Ljava/util/List;
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/SubtitleOverlay {

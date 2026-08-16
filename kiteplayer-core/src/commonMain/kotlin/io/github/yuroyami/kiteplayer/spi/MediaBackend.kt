@@ -35,6 +35,22 @@ public interface MediaBackend {
      * the dump without the engine knowing any backend's shape.
      */
     public fun describeForDiagnostics(): String = this::class.simpleName ?: "backend"
+
+    /**
+     * The parser for external subtitle FILES (S4.e), or null when this backend brings none.
+     *
+     * The engine owns reading the file and timing the cues; the parsing lives above the core
+     * (the `kiteplayer-subtitles` module cannot be a core dependency, because it already depends
+     * on the core for the cue model), so the backend supplies it exactly like it supplies
+     * decoders. With null, external subtitle entries warn typed and are skipped.
+     */
+    public fun subtitleFileParser(): SubtitleFileParser? = null
+}
+
+/** Parses one subtitle file's whole text into timed cues. See [MediaBackend.subtitleFileParser]. */
+public fun interface SubtitleFileParser {
+    /** [vttHint] is true when the file names or opens itself as WebVTT; SubRip otherwise. */
+    public fun parse(text: String, vttHint: Boolean): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>
 }
 
 /**

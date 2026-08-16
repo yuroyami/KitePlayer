@@ -41,6 +41,16 @@ public class KiteCodecMediaBackend(
     override fun describeForDiagnostics(): String =
         "KiteCodecMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
+    /** External subtitle files (S4.e): the text parsers this module already ships. */
+    override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
+        io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, vttHint ->
+            if (vttHint) {
+                io.github.yuroyami.kiteplayer.subtitle.WebVttParser.parse(text)
+            } else {
+                io.github.yuroyami.kiteplayer.subtitle.SubRipParser.parse(text)
+            }
+        }
+
     override suspend fun open(media: MediaItem): BackendSession {
         require(media.io == null) {
             "Custom I/O is not wired yet. KiteCodec has no custom-input path."

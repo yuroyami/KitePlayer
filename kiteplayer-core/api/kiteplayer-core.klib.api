@@ -407,6 +407,10 @@ abstract fun interface io.github.yuroyami.kiteplayer.spi/AudioRenderCallback { /
     abstract fun onRender(io.github.yuroyami.kiteplayer.spi/AudioSinkBuffer, kotlin/Int, kotlin/Long): kotlin/Int // io.github.yuroyami.kiteplayer.spi/AudioRenderCallback.onRender|onRender(io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer;kotlin.Int;kotlin.Long){}[0]
 }
 
+abstract fun interface io.github.yuroyami.kiteplayer.spi/SubtitleFileParser { // io.github.yuroyami.kiteplayer.spi/SubtitleFileParser|null[0]
+    abstract fun parse(kotlin/String, kotlin/Boolean): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.spi/SubtitleFileParser.parse|parse(kotlin.String;kotlin.Boolean){}[0]
+}
+
 abstract fun interface io.github.yuroyami.kiteplayer/PlayerLogger { // io.github.yuroyami.kiteplayer/PlayerLogger|null[0]
     abstract fun log(io.github.yuroyami.kiteplayer/LogLevel, kotlin/String, kotlin/String, kotlin/Throwable?) // io.github.yuroyami.kiteplayer/PlayerLogger.log|log(io.github.yuroyami.kiteplayer.LogLevel;kotlin.String;kotlin.String;kotlin.Throwable?){}[0]
 }
@@ -490,6 +494,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/BackendSession : kotlin/Aut
 abstract interface io.github.yuroyami.kiteplayer.spi/MediaBackend { // io.github.yuroyami.kiteplayer.spi/MediaBackend|null[0]
     abstract suspend fun open(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.spi/BackendSession // io.github.yuroyami.kiteplayer.spi/MediaBackend.open|open(io.github.yuroyami.kiteplayer.MediaItem){}[0]
     open fun describeForDiagnostics(): kotlin/String // io.github.yuroyami.kiteplayer.spi/MediaBackend.describeForDiagnostics|describeForDiagnostics(){}[0]
+    open fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi/SubtitleFileParser? // io.github.yuroyami.kiteplayer.spi/MediaBackend.subtitleFileParser|subtitleFileParser(){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/MediaSourceFactory { // io.github.yuroyami.kiteplayer.spi/MediaSourceFactory|null[0]

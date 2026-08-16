@@ -247,9 +247,20 @@ public class VideoPlayback(
      * at a time (a display link, a present-time extension) needs the intended one: given the current
      * instant it draws every frame as late as the scheduler happened to be.
      */
+    /** One-shot: the next presented frame is plane-copied for captureFrame (S4.e). */
+    internal val captureRequest: kotlinx.atomicfu.AtomicRef<kotlinx.coroutines.CompletableDeferred<CapturedFrame>?> =
+        kotlinx.atomicfu.atomic(null)
+
     private suspend fun present(targetNanos: Long, masterClock: Pts?): Duration {
         val frame = queue.advance() ?: return IDLE_WAIT
         videoClock.set(frame.pts, generation)
+        // The capture copies BEFORE ownership moves: from the renderer's first instruction the
+        // frame may be recycled into a decoder pool, and a headless present closes it outright.
+        captureRequest.getAndSet(null)?.let { request ->
+            runCatching { CapturedFrame.of(frame) }
+                .onSuccess(request::complete)
+                .onFailure(request::completeExceptionally)
+        }
         masterClock?.let { lastDriftUs = frame.pts.micros - it.micros }
 
         val renderer = this.renderer

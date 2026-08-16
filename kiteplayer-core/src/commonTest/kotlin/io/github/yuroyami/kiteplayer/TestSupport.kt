@@ -91,11 +91,27 @@ internal class FakeVideoFrame(
     override val colorSpace: ColorSpaceInfo = ColorSpaceInfo.guessFor(1080),
     override val hardwareSurface: Nothing? = null,
     private val ledger: LeakLedger? = null,
-) : VideoFrame {
+) : io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame {
     private var isClosed = false
 
     init {
         ledger?.onOpen()
+    }
+
+    /**
+     * Readable planes for the captureFrame path (S4.e): tiny deterministic 2x2 content whose
+     * luma bytes derive from the pts, so a capture test can prove WHICH frame it copied.
+     */
+    override val planeCount: Int get() = 3
+
+    override fun planeStride(index: Int): Int = if (index == 0) 2 else 1
+
+    override fun planeHeight(index: Int): Int = if (index == 0) 2 else 1
+
+    override fun copyPlane(index: Int, into: ByteArray, offset: Int) {
+        val value = if (index == 0) (pts.micros % 251).toByte() else 128.toByte()
+        val bytes = planeStride(index) * planeHeight(index)
+        for (at in 0 until bytes) into[offset + at] = value
     }
 
     override fun close() {

@@ -360,6 +360,18 @@ internal class PlaybackCore(
         awaitReply(reply, stopOnCancellation = true)
     }
 
+    suspend fun stepFrame() {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.StepFrame(reply))
+        awaitReply(reply, stopOnCancellation = true)
+    }
+
+    suspend fun captureFrame(): io.github.yuroyami.kiteplayer.CapturedFrame {
+        val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
+        send(CoreCommand.CaptureFrame(reply))
+        return awaitReply(reply, stopOnCancellation = true)
+    }
+
     /**
      * Asks for playback. Idempotent, and queued rather than refused during an open or a seek.
      *
@@ -788,6 +800,8 @@ internal class PlaybackCore(
             }
             is CoreCommand.QueueNext -> jumpQueue(queueIndex + 1, command.reply, "next")
             is CoreCommand.QueuePrevious -> jumpQueue(queueIndex - 1, command.reply, "previous")
+            is CoreCommand.StepFrame -> stepOneFrame(command.reply)
+            is CoreCommand.CaptureFrame -> requestCapture(command.reply)
             is CoreCommand.Play -> {
                 // Idempotent in its own state, and queued rather than refused while opening or seeking:
                 // the restart handler applies it as soon as the pipeline can honour it.
@@ -2155,6 +2169,75 @@ internal class PlaybackCore(
         runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
         // An open ends paused by contract; a queue that was playing keeps playing through it.
         playRequested = true
+    }
+
+    /** One nominal frame period, from the stream's own rate, for stepFrame's target (S4.e). */
+    private fun frameStepUs(active: OpenSession): Long {
+        val rate = active.videoStream?.frameRate?.takeIf { it > 0.0 } ?: return 33_333
+        return (1_000_000.0 / rate).toLong().coerceAtLeast(1_000)
+    }
+
+    /**
+     * Steps a PAUSED player forward by one frame (S4.e): a precise seek to the current position
+     * plus one nominal frame period, which decodes exactly what is needed and presents the
+     * landing frame, video-only media included. Stepping a playing player is a caller mistake.
+     */
+    private fun stepOneFrame(reply: CompletableDeferred<Unit>) {
+        val active = session
+        when {
+            active == null ->
+                reply.completeExceptionally(IllegalStateException("stepFrame needs an open media item"))
+            playRequested ->
+                reply.completeExceptionally(IllegalStateException("stepFrame steps a PAUSED player; pause first"))
+            active.videoStream == null ->
+                reply.completeExceptionally(UnsupportedOperationException("stepFrame needs a selected video track"))
+            !active.source.seekable ->
+                reply.completeExceptionally(
+                    UnsupportedOperationException("stepFrame precise-seeks, and this source is not seekable"),
+                )
+            else -> {
+                val target = Pts(currentPosition().micros + frameStepUs(active))
+                val seekReply = CompletableDeferred<SeekResult>()
+                scope.launch {
+                    when (val result = seekReply.await()) {
+                        is SeekResult.Applied, is SeekResult.Superseded -> reply.complete(Unit)
+                        is SeekResult.Rejected -> reply.completeExceptionally(IllegalStateException(result.reason))
+                    }
+                }
+                queueSeek(SeekRequest(SeekTarget.Absolute(target), SeekMode.Precise), seekReply)
+            }
+        }
+    }
+
+    /**
+     * Arms the schedule's one-shot capture (S4.e). Playing, the very next presented frame
+     * fulfils it; paused, a precise seek to the current position pushes one frame through the
+     * same gate, so the copy is always taken at the presentation boundary, before ownership
+     * moves to the renderer.
+     */
+    private fun requestCapture(reply: CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>) {
+        val active = session
+        val video = active?.video
+        when {
+            active == null || video == null ->
+                reply.completeExceptionally(IllegalStateException("captureFrame needs an open media item with video"))
+            active.videoStream == null ->
+                reply.completeExceptionally(UnsupportedOperationException("captureFrame needs a selected video track"))
+            !playRequested && !active.source.seekable ->
+                reply.completeExceptionally(
+                    UnsupportedOperationException(
+                        "a paused capture re-presents its frame by precise seek, and this source is not seekable",
+                    ),
+                )
+            else -> {
+                video.captureRequest.getAndSet(reply)?.completeExceptionally(
+                    IllegalStateException("superseded by a newer captureFrame"),
+                )
+                if (!playRequested) {
+                    queueSeek(SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise), null)
+                }
+            }
+        }
     }
 
     /** Explicit queue movement, refused typed when there is nowhere to go (S4.e). */
@@ -3913,6 +3996,12 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
 
     class QueueNext(val reply: CompletableDeferred<Unit>) : CoreCommand("queueNext", reply)
     class QueuePrevious(val reply: CompletableDeferred<Unit>) : CoreCommand("queuePrevious", reply)
+
+    class StepFrame(val reply: CompletableDeferred<Unit>) : CoreCommand("stepFrame", reply)
+
+    class CaptureFrame(
+        val reply: CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>,
+    ) : CoreCommand("captureFrame", reply)
     class Play(val reply: CompletableDeferred<Unit>) : CoreCommand("play", reply)
     class Pause(val reply: CompletableDeferred<Unit>) : CoreCommand("pause", reply)
     class Seek(val request: SeekRequest, val reply: CompletableDeferred<SeekResult>) : CoreCommand("seek", reply)

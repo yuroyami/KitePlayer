@@ -245,6 +245,37 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Steps a PAUSED player forward by exactly one frame and returns with it on screen (S4.e).
+     *
+     * The step is a precise seek to the current position plus one nominal frame period, so it
+     * decodes only what it needs and works for video-only media. Held down in a UI it produces
+     * deterministic single-frame advances; the engine's seek coalescing keeps a burst cheap.
+     *
+     * @throws IllegalStateException when nothing is open, or while playing: a playing player is
+     *         already stepping sixty times a second.
+     * @throws UnsupportedOperationException with no selected video track, or when the source
+     *         cannot seek.
+     */
+    public suspend fun stepFrame() {
+        core.stepFrame()
+    }
+
+    /**
+     * Returns the newest presented frame as an owned, software-readable copy (S4.e): the
+     * documented use of [io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame].
+     *
+     * Playing, the copy is taken from the very next frame the schedule presents; paused, the
+     * current frame is re-presented through a precise seek and copied at the same boundary. The
+     * copy is taken before the renderer ever owns the frame, so it is always coherent.
+     *
+     * @throws IllegalStateException when nothing is open.
+     * @throws UnsupportedOperationException with no selected video track, when a paused source
+     *         cannot seek, or when the presented frame is hardware-opaque with no readable
+     *         planes (the direct MediaCodec tier; the software and download paths both capture).
+     */
+    public suspend fun captureFrame(): CapturedFrame = core.captureFrame()
+
+    /**
      * Selects a track, or deselects the kind entirely with a null [track].
      *
      * Video and audio only. Switching reopens the container and seeks back to where playback was, because

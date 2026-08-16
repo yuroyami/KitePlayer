@@ -105,7 +105,13 @@ public class AudioTrackSink internal constructor(
             require(request.channels >= 1) { "a request with no channels cannot be opened" }
             val format = AudioFormat(
                 sampleRate = request.sampleRate,
-                channels = if (request.channels == 1) 1 else 2,
+                /* SOL-A6: the counts AudioTrack has masks for pass through unchanged, so a 5.1
+                 * or 7.1 source plays every channel instead of a forced downmix; anything else
+                 * falls to stereo, which the pipeline's mixer can always produce. */
+                channels = when (request.channels) {
+                    1, 2, 6, 8 -> request.channels
+                    else -> 2
+                },
                 sampleFormat = SampleFormat.F32,
             )
             val opened = driverFactory.open(format)

@@ -155,7 +155,7 @@ class AudioTrackSinkTest {
         s.close()
         val s2 = sink(FakeAudioTrackDriver())
         val surround = s2.open(AudioFormat(44_100, 6, SampleFormat.F32)) { _, _, _ -> 0 }
-        assertEquals(2, surround.channels, "anything beyond mono is negotiated to stereo; downmix is the engine's")
+        assertEquals(6, surround.channels, "5.1 passes through since SOL-A6; only unmapped counts fall to stereo")
         s2.close()
     }
 
@@ -303,6 +303,16 @@ class AudioTrackSinkTest {
         /* A genuinely 64-bit position passes through untouched. */
         val big = AudioTrackSink.WrapState()
         assertEquals(0x2_0000_0000L, AudioTrackSink.extendTimestampFrames(0x2_0000_0000L, big))
+    }
+
+    @Test
+    fun `multichannel counts the platform has masks for pass through and others fall to stereo`() = runBlocking {
+        for ((requested, expected) in listOf(1 to 1, 2 to 2, 6 to 6, 8 to 8, 3 to 2, 5 to 2, 7 to 2, 12 to 2)) {
+            val s = sink(FakeAudioTrackDriver())
+            val accepted = s.open(AudioFormat(48_000, requested, SampleFormat.F32), FullBlockCallback())
+            assertEquals(expected, accepted.channels, "requested $requested channels")
+            s.close()
+        }
     }
 
     @Test

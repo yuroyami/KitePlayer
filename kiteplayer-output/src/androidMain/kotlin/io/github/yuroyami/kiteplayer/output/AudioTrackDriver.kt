@@ -84,10 +84,15 @@ internal class PlatformAudioTrackDriver(accepted: AudioFormat) : AudioTrackDrive
     private val timestamp = AudioTimestamp()
 
     init {
-        val channelMask = if (accepted.channels == 1) {
-            PlatformAudioFormat.CHANNEL_OUT_MONO
-        } else {
-            PlatformAudioFormat.CHANNEL_OUT_STEREO
+        /* SOL-A6: the four masks this sink speaks. 5.1 and 7.1-surround use the platform
+         * orders that MATCH FFmpeg's native interleave (FL FR FC LFE BL BR [SL SR]), so the
+         * engine's samples reach the right speakers without a remap. */
+        val channelMask = when (accepted.channels) {
+            1 -> PlatformAudioFormat.CHANNEL_OUT_MONO
+            2 -> PlatformAudioFormat.CHANNEL_OUT_STEREO
+            6 -> PlatformAudioFormat.CHANNEL_OUT_5POINT1
+            8 -> PlatformAudioFormat.CHANNEL_OUT_7POINT1_SURROUND
+            else -> PlatformAudioFormat.CHANNEL_OUT_STEREO
         }
         val minBytes = AudioTrack.getMinBufferSize(
             accepted.sampleRate,

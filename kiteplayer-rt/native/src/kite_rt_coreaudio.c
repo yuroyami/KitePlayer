@@ -64,12 +64,14 @@
  * surface than the number is worth. */
 #define KPRT_DEFAULT_DEVICE_BUFFER_FRAMES 512
 
-/* Channels this sink will accept. Both Apple output units take interleaved 32 bit float at common
- * rates, so the engine's own internal format passes through unchanged and neither side converts
- * anything; the channel count is clamped because everything above the mono and stereo case needs a
- * real channel map, which is defect D30's business and not this file's. */
+/* Channels this sink will accept (SOL-A6). Both Apple output units take interleaved 32 bit
+ * float, and above stereo the layout is DECLARED rather than assumed: 3 to 6 channels carry
+ * the MPEG 5.1 A layout tag (L R C LFE Ls Rs), which is FFmpeg's own native 5.1 order, so the
+ * engine's interleave reaches the right speakers without a remap. Counts above 6 clamp to 2
+ * rather than 6, because the pipeline's mixer downmixes to stereo but cannot yet fold 8 into
+ * 6 (SOL-P8); stereo is the honest fallback that always sounds right. */
 #define KPRT_MIN_CHANNELS 1
-#define KPRT_MAX_CHANNELS 2
+#define KPRT_MAX_CHANNELS 6
 
 static void report_status(int32_t *out_os_status, OSStatus status)
 {
@@ -315,7 +317,7 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     if (accepted_channels < KPRT_MIN_CHANNELS)
         accepted_channels = KPRT_MIN_CHANNELS;
     if (accepted_channels > KPRT_MAX_CHANNELS)
-        accepted_channels = KPRT_MAX_CHANNELS;
+        accepted_channels = 2; /* not 6: see the KPRT_MAX_CHANNELS note (SOL-A6, SOL-P8) */
 
     /* The sample rate is deliberately NOT validated here. A rate the device refuses must be refused
      * BY THE DEVICE, after the instance exists, because that is the window in which a half open used
@@ -361,6 +363,17 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     status = AudioUnitSetProperty(instance, kAudioUnitProperty_StreamFormat,
                                   kAudioUnitScope_Input, KPRT_OUTPUT_BUS,
                                   &asbd, (UInt32)sizeof(asbd));
+    /* SOL-A6: above stereo the speaker order is a CONTRACT, not a guess. MPEG 5.1 A is
+     * L R C LFE Ls Rs, exactly FFmpeg's native 5.1 interleave. Best effort: a unit that
+     * refuses the layout still plays, it just resolves ambiguity its own way. */
+    if (status == noErr && accepted_channels > 2) {
+        AudioChannelLayout layout;
+        memset(&layout, 0, sizeof(layout));
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_MPEG_5_1_A;
+        (void)AudioUnitSetProperty(instance, kAudioUnitProperty_AudioChannelLayout,
+                                   kAudioUnitScope_Input, KPRT_OUTPUT_BUS,
+                                   &layout, (UInt32)sizeof(layout));
+    }
     if (status != noErr) {
         free(sink);
         AudioComponentInstanceDispose(instance);

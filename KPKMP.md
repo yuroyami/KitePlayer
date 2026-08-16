@@ -8077,6 +8077,52 @@ is no other.
   slideshow's layer is not yet proven; a stats-line diagnostic went into Syncplay's KiteImpl so
   the next device run bisects decoder, schedule, or drawing in one log read.
 
+- **2026-08-16, the retroactive record of 2026-08-13 to 2026-08-15, written late.** A deviation
+  from this log's own append-at-the-time rule, recorded as such: three days of landings ran
+  against SOL_REVIEW.md and ANDROID_GPU_WORK.md instead of this section, and this entry repays
+  the debt. WHAT LANDED. (a) The SOL implementation audit was authored and committed (KiteCodec
+  6c7a3d3, 1118 lines), and its whole P0 and P1 registers were verified claim by claim (zero
+  false positives) and fixed: KitePlayer 6a74344, KiteCodec 2e60bf3, every fix carrying a
+  greppable `audit P0-x`/`audit P1-x` comment. Two P1 deferrals recorded: first-class
+  ChannelLayout through FilterGraph/EncoderSpec, and the tri-state colour range. (b) minSdk
+  settled at 26 by owner decision after a brief 29 (KitePlayer 39edb53 then 2332ea9; KiteCodec
+  1bfd87c then 008c100); the direct MediaCodec tier itself gates at API 29, and 26 to 28 falls
+  back to software automatically. (c) The Android GPU video path, the audit's perf blocker 1,
+  landed as a renderer-coupled MediaCodecVideoDecoderFactory over the existing SPI: pure-Kotlin
+  Annex B conversion and avcC/hvcC parsing (a83de2a), owned codec extradata through the source
+  SPI (4e24f28; KiteCodec 15f8b0c), packet payload copies (9452385), renderer-provided decoder
+  factories with no Android types in the common engine (931edd6), decoder readiness tolerance
+  (d9af1bf), the API 29+ direct-to-SurfaceView tier with zero per-frame CPU pixel work
+  (65625e8), sample telemetry (83aac14), seekable Auto recovery by reopen-with-software
+  (ca4c408), and the API 31+ Compose OES-to-RGBA bridge with explicit ImageReader leases and
+  exact FrameMetrics GPU-completion fencing (4c4e23a). Emulator evidence, API 36 arm64 with
+  16 KiB pages: 300 of 300 decoded, submitted and presented, 299 unique draws proved at 29.749
+  FPS (99.2 percent of native rate), final A/V drift +3.275 ms, zero underruns, superseded,
+  failed, repeats or CPU conversion samples, HardwareZeroCopy(MediaCodec), teardown 178 ms; the
+  full run ledger and fixture SHA-256 live in ANDROID_GPU_WORK.baseline.txt, which stays. NONE
+  of that is physical-device qualification: no physical Android device was available, so the
+  before/after benchmark, rapid-seek and lifecycle checks, the 30-minute graphics-memory soak
+  and every wider-profile fixture (High 10, HEVC Main/Main 10, VP9, AV1, PQ/HLG) remain owed to
+  the owner device session, and the emulator cannot qualify Main10 at all (its HEVC decoder
+  advertises Main only). (d) The mobile stack split (b56b4a8, 0.0.4): kiteplayer-phone and
+  kiteplayer-compose retired in favour of kiteplayer-view (the platform views),
+  kiteplayer-mobile (the batteries-included platform aggregate), kiteplayer-compose-interop
+  (the hosted-view Composable) and kiteplayer-compose-video (KiteVideo), so a non-Compose
+  consumer pulls no Compose and a Compose consumer picks interop or the true renderer
+  explicitly. (e) KiteCodec grew stream codec metadata (2b35911) and, at 3f0f1e3, always-on
+  portable JVM, JS and Wasm variants backed by explicit unavailable placeholders, with the AGP
+  KMP plugin applied only under phoneTargetsOnly so portable publication configures without an
+  Android SDK; KiteCodec stands at 0.0.6.
+
+- **2026-08-16, the distillation: one source of truth.** By owner order, SOL_REVIEW.md
+  (KiteCodec) and ANDROID_GPU_WORK.md (KitePlayer) were distilled into this document and
+  deleted; git history retains both, and ANDROID_GPU_WORK.baseline.txt survives as the
+  measurement record the README already cites. Everything still open from either document now
+  lives in ONE place, the register at 17.11, each row carrying its verification mark from a
+  fresh sweep of both trees on this date and a proposed stage home. The closed rows are named
+  there once, with their commits, and nowhere else. This plan is again the sole planning
+  document, per the pre-A0 precedent.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10772,17 +10818,19 @@ and linux FFmpeg triples become consumable artifacts. KiteVideo rides here (17.9
 the desktop per-frame upload path IS the Compose Desktop rendering named above, and the Android
 software path lands as an explicit exit rider (one copy per frame over the S1.c converter, days
 of work once KV-1/KV-2 exist; this is the stage where the JVM rendering paths mature). Exit rider:
-the KiteVideo modifier demo runs on the S1 Android device.
+the KiteVideo modifier demo runs on the S1 Android device. Absorbs the 17.11
+renderer-lifecycle, audio-sink, hot-path and capability-negotiation rows.
 
 **S4. IT EXPLAINS ITSELF.** Exit: subtitles per old B3, the debuggability register (diagnostics
 dump API, logging policy, typed warning audit, SPI cookbook with a worked custom backend), facade
 completion absorbed from old B11, and the KD piloting package (17.10): the typed filter DSL,
 decoder and encoder option layers, playback profiles and their goldens, with KD's two C funnels
-arriving earlier inside KiteCodec window 3.
+arriving earlier inside KiteCodec window 3. Absorbs the 17.11 subtitle and API-truth rows.
 
 **S5. ANYONE CAN HAVE IT.** Exit: public artifacts. Size tiers of 17.6 measured per target; the
 umbrella artifact; POMs, licences, readiness checks (named steps HERE, never in Tier 1 earlier);
-publication PREPARED by the executor, EXECUTED by the owner per D-3. Absorbs draft C-32 to C-42.
+publication PREPARED by the executor, EXECUTED by the owner per D-3. Absorbs draft C-32 to C-42
+and the 17.11 build and publication rows.
 
 **S6. IT PLAYS ON THE WEB.** Spike first, timeboxed, measured (FFmpeg-to-wasm size and decode
 throughput, threads and SIMD, the JS interop shape over the same C ABI); build only if the spike
@@ -15256,6 +15304,206 @@ lean and standard tiers cannot carry without a capability check (law 6).
 
 **Cost.** S4 grows by 30 to 45 hours (the 17.3 table carries it); the two C funnels add 3 to 5
 hours inside KiteCodec window 3. Nothing else moves.
+
+### 17.11 The distilled audit register
+
+Born 2026-08-16 when SOL_REVIEW.md (the 2026-08-13 twin-repository implementation audit) and
+ANDROID_GPU_WORK.md (the Android GPU path record) were distilled here and deleted. This register
+is the only surviving copy of their open findings. Every open row carries a mark from the
+2026-08-16 verification sweep: [V] means the defect was re-verified against the tree on that
+date, [C] means the audit's claim is carried but its anchor was not re-verified line by line
+(the audit's P0/P1 sections scored zero false positives when they were verified claim by claim,
+so a [C] is a debt to check at pickup, not a doubt). Homes are proposals: a stage adopts its
+rows at entry through the ordinary 17.1 expansion ritual, and the owner may move any row.
+
+**Closed, with the commits that closed them.** All 9 P0 and all verified P1 rows (KitePlayer
+6a74344, KiteCodec 2e60bf3). Perf blocker 1, the CPU-bound Android path (65625e8 direct
+MediaCodec tier, 4c4e23a Compose GPU bridge; evidence in ANDROID_GPU_WORK.baseline.txt). The
+sws half of perf blocker 3 (helpers_frame.c converts through a thread-local
+sws_getCachedContext). The Android multi-image subtitle cursor (index-ordered overlay bitmap
+cache in AndroidSurfaceVideoRenderer). Metal odd-size chroma (ceil division in
+MetalFrameComposer). The Android mutable-bitmap reuse under HWUI sampling (immutable fallback
+images). Overlay redraw on a paused frame for the Android view path (the split's separate
+subtitle overlay view) and for KiteVideo (S2.d draw-phase overlays). The fd protocol and
+content:// opening (0.0.6). The unconditional Android KMP plugin and the missing portable
+JVM/JS/Wasm variants (3f0f1e3). The kitecodec plugin version pin (now the catalog's 0.0.6).
+Backend-origin hardware decode recovery (ced6030). minSdk 26 by owner decision.
+
+**Superseded by decision, not open.** Subtitle overlays composite in OUTPUT space on every
+renderer (KiteVideo and Metal agree by law; the audit wanted fitted-video space). CoreAudioSink's
+plain open() throwing is documented contract: the ring protocol is the real seam. The C
+real-time island stays C (the audit's own keep-list, adopted below as the C-reduction charter).
+
+**Open rows.**
+
+Rendering and views:
+- SOL-R1 [V] Overlay changes still do not redraw a paused frame on Metal, UIKit and AppKit
+  (Metal defers to the next frame by comment). Home: S4.f.
+- SOL-R2 [V] KiteVideo draws no overlay before the first frame or for audio-only media
+  (KiteVideo.kt returns at the null frame before the overlay read). Home: S4.f.
+- SOL-R3 [C] KiteVideoRenderer overlay work can race close, and a per-image build failure still
+  advances the overlay hash (the failed image is skipped and never retried). Home: S4.f.
+- SOL-R4 [V] MetalFrameComposer calls GetWidthOfPlane/GetHeightOfPlane even when the buffer is
+  non-planar (BGRA, planeCount 0), which sizes textures at zero. Home: S2.e.
+- SOL-R5 [V] The CVMetalTextureCache is flushed in every hardware frame's release closure,
+  defeating the cache. Home: S2.e.
+- SOL-R6 [V] The texture cache and its nativeHeap holder are never released: the composer has no
+  close path that fences the GPU and frees them. Home: S2.e.
+- SOL-R7 [C] A pre-commit encode failure can leak wrapped CVMetalTextures (release rides the
+  completed handler, which a throw before commit never installs). Home: S2.e.
+- SOL-R8 [V] Metal rotation handles literal 90/270 only (MetalVideoSupport quarter-turn test);
+  -90, 270+360 and friends render unrotated. Normalize through one shared helper. Home: S2.e.
+- SOL-R9 [V] KitePlayerUIView keeps both video layers visible across a renderer switch (stale
+  Metal content can cover CG frames) and hasPicture answers from cumulative counters rather
+  than the current generation. Home: S3.
+- SOL-R10 [C] PlayerViewBinding stores the renderer before attach succeeds and detach is not
+  finally-safe. Home: S3.
+- SOL-R11 [V] Renderer closes run runBlocking on the caller's thread (Metal, Android surface,
+  UIKit), which can freeze UI lifecycle callbacks behind conversion or drawable waits. Home: S3.
+- SOL-R12 [C] AppKit's Metal drawable size may not follow live resize and backing-scale changes
+  (a resize path exists since S2.c; verify at pickup). Home: S3.
+- SOL-R13 [V] UIKit and AppKit fallback renderers reject RgbaBitmap storage larger than the
+  minimum (exact-size equality); either require exact size everywhere or honour a stride.
+  Home: S3.
+
+Audio:
+- SOL-A1 [V] AudioTrackSink counts a whole block as submitted even when pause or stop
+  interrupts the blocking write partway. Home: S3.
+- SOL-A2 [C] AudioTrack writer lifecycle: duplicate resume can create two writer threads, and a
+  writer failure can leave the sink unstartable; wants one locked state machine with recovery
+  and device-lost events. Home: S3.
+- SOL-A3 [C] AudioTimestamp is polled and allocated roughly 94 times a second, and the
+  timestamp frame position is not wrap-extended (32-bit wrap at about 24.85 hours at 48 kHz).
+  Home: S3.
+- SOL-A4 [V] CoreAudio reports a hardcoded 512-frame device period instead of querying and
+  tracking route changes. Home: S3.
+- SOL-A5 [C] CoreAudio drain can observe an empty ring paired with the previous callback
+  deadline (publication order), and the stats `running` field is an ordinary C field read
+  concurrently. Home: S3.
+- SOL-A6 [C] Both sinks speak mono/stereo F32 only: no multichannel output, passthrough,
+  offload, device selection or full route recovery. Home: S3, with B4's swresample adoption.
+
+Subtitles:
+- SOL-S1 [V] The straight-alpha cue contract is violated by both rasterizers (premultiplied
+  pixels, already the recorded S4.f honest limit); premultiply exactly once or carry an alpha
+  kind. Home: S4.f.
+- SOL-S2 [C] AppleSubtitleRasterizer creates CoreFoundation and CoreText objects under one
+  broad try; balance every Create-rule object and leak-test cue churn. Home: S4.f.
+- SOL-S3 [C] OverlayImage region dimensions are ignored: position is scaled from authoring
+  space while source bitmap dimensions are kept. Home: S4.f.
+- SOL-S4 [C] A malformed or backwards SRT cue is parsed as end == start and the selector
+  requires time strictly before end, so the cue never displays. Home: S4.f.
+- SOL-S5 [V] WebVTT treats any line starting with NOTE/STYLE/REGION as a block keyword, eating
+  identifiers that begin with those words. Home: S4.f.
+- SOL-S6 [V] SRT and WebVTT never decode character entities (amp, lt, gt, nbsp render
+  literally). Home: S4.f.
+- SOL-S7 [C] Public cue styling exceeds what the rasterizers apply (first span chooses global
+  properties; family, shadow, wrapping, decoration and stroke are partial). Implement per-span
+  layout or narrow the claims. Home: S4.f.
+- SOL-S8 [C] Explicitly positioned bottom cues still consume implicit stacking space, shifting
+  later implicit cues. Home: S4.f.
+
+API truth:
+- SOL-API1 [V] MediaItem still carries unused surface: headers, externalSubtitles,
+  startPosition, formatHint (openOptions is real). Wire them or remove them. Home: S4.e, with
+  headers waiting on 17.8.
+- SOL-API2 [C] PlayerConfig logger, liveBackBuffer, liveMaxLag, preservePitch and startDisabled
+  are accepted and unused (several KDocs already say so; the fields still invite configuration
+  that does nothing). Home: S4.e.
+- SOL-API3 [C] SeekMode.KeyframeThenRefine merges correctly but lands like Precise; give it its
+  two-phase behaviour or fold it. Home: S4.e.
+- SOL-API4 [V] The snapshot placeholders are already honestly KDoc'd as not implemented
+  (bufferedRanges, droppedFramesDecode, audioLatency, containerBitrate, ExternalMaster,
+  LateAndDecode); they stay open as section 11 roadmap facts, not silent lies. Home: their
+  section 11 items.
+- SOL-API5 [V] RendererEvent is published by every renderer and collected by nothing in the
+  engine (verified again during the 2026-08-16 defect session). Wire SurfaceLost/Failed into
+  warnings and the diagnostics dump. Home: S4.d.
+- SOL-API6 [V] NativeRingAudioSink exposes CPointer<kprt_ring> on the core ABI, dragging the
+  cinterop klib into core. Hide it behind an opaque writer owned by rt/output. Home: S3.
+- SOL-API7 [C] View and Compose surfaces hard-cast frames to FFmpeg types; an unsupported
+  backend/renderer pairing fails at runtime instead of as a typed capability error. Wants the
+  sealed hardware-surface model plus renderer capability negotiation. Home: S3.
+
+Performance (the open remainder):
+- SOL-P1 [V] Apple's software-frame Compose path still reads Metal output back to CPU and
+  re-uploads (ImageBitmaps.ios raster; MetalPictureReader). S2.d's zero-copy covers hardware
+  frames in KiteVideo; the software tier and interop stills remain. Home: S3 (KV maturation).
+- SOL-P2 [C] Audio copies: native audio lands in ByteArray then FloatArray, and the pipeline
+  copies identity transforms. Home: S3.
+- SOL-P3 [C] KiteCodec frame access: native scratch plus second ByteArray on Native, copy
+  before JNI's own copy on JVM, and per-access plane list boxing in nominally zero-copy reads.
+  Home: the next KiteCodec window.
+- SOL-P4 [V] One OS thread per lane, roughly six per player, on every platform actual. Shared
+  executors with serial lanes, pinned threads only where the platform demands. Home: S3.
+- SOL-P5 [C] Cue history still grows and rasterisation still runs on the core actor (S4.c
+  improved timing; a raster worker and pruning cursor remain). Home: S4.d.
+- SOL-P6 [C] Core passes allocate queue/worker lists and publish full snapshots per pass;
+  wants dirty flags and cached samples. Home: S3.
+- SOL-P7 [C] Metal pipelines compile per renderer/composer rather than caching per device, and
+  the UIKit/AppKit CPU fallbacks recreate transformed frames and subtitle CGImages for identity
+  geometry. Home: S3.
+- SOL-P8 [V] LinearResampler aliases under real rate changes and ChannelMixer cannot remap
+  equal-count layouts nor limit surround downmix (both already KDoc'd interim). Home: B4's
+  swresample adoption, pulled by S3 if audio work lands there first.
+- SOL-P9 [C] Track changes reopen the whole backend session (digest 8.3's recorded limit),
+  which reconnects network inputs and cannot serve live media. Home: rides 17.8 when network
+  reopens; until then it stays the documented limit.
+- SOL-P10 [C] The swr half of perf blocker 3: persistent SwrContext owners for KiteCodec's
+  conversion surfaces (the sws half is closed). Home: the next KiteCodec window.
+
+C-reduction (the charter, owner-scheduled, earliest after S4):
+- SOL-C1 [C] Replace the one-line helper C (packet, codecpar, stream, error, trivial frame and
+  codec, most of format and playback) with direct cinterop on Kotlin/Native. KEEP: the JNI
+  adapter, the ABI/identity probe, the get_format callback, FFmpeg itself, and the whole
+  real-time C island (callback, ring, anchors, atomics). The goal is no redundant C, not no C.
+- SOL-C2 [C] Move non-real-time CoreAudio setup, session policy, route/interruption handling,
+  capability queries and error mapping to Kotlin; unsupported-platform C stubs become
+  expect/actual. Home: S3.
+- SOL-C3 [C] Filter-description composition moves to common Kotlin, retiring the fixed C
+  buffer (P0 closed the overflow; the composition itself is still C). Home: with SOL-C1.
+
+Kotlin modernization (hygiene, no schedule, no syntax churn before ownership work):
+- SOL-K1 [V] kitecodec-core still passes -Xcontext-parameters, redundant on Kotlin 2.4. Drop at
+  the next KiteCodec window.
+- SOL-K2 [C] The adopted guidance: context parameters only for the worker helper cluster and a
+  codec execution context; higher-value moves are sealed transactional outcomes, structured
+  finalizer scopes, ownership-aware lease APIs, inline plane iteration, checked-size helpers
+  and resource ledgers. Not a stage; a style the stages apply.
+
+Build and publication:
+- SOL-B1 [V] KiteCodec buildSrc:test fails on stale BuildFFmpegTask goldens today. Fix at the
+  next KiteCodec window; until then that suite cannot gate.
+- SOL-B2 [V] Static macOS link still omits -llzma (StaticLinkFlags), so
+  kitecodec macosArm64Test cannot link. Same window.
+- SOL-B3 [C] hostTargetsOnly configuration previously failed on Android compileSdk; 3f0f1e3's
+  conditional plugin should have closed it. Verify at the same window and record the outcome.
+- SOL-B4 [C] Vendored archives carry a macOS 26 deployment version while Kotlin/Native links
+  macOS 12 (and the shim uses 11); pin one deployment floor in BuildFFmpegTask. Same window.
+- SOL-B5 [C] JNI packaging omits armeabi-v7a. Owner decision required: either it is a target
+  (add it) or it is not (record the refusal in 17.6). Home: S5 entry.
+- SOL-B6 [C] The twin repos are not one atomic graph: mavenLocal-first resolution can shadow
+  the sibling checkout with stale artifacts; the audit proposes a composite build or shared
+  root plus cross-repo CI. Home: S5, with S7's CI.
+- SOL-B7 [C] Both builds emit deprecated Gradle API warnings that become Gradle 10 breaks.
+  Home: S5.
+- SOL-B8 [C] Remote publication still lacks the ordinary JVM and Android artifacts (the
+  portable placeholders exist locally since 3f0f1e3). Home: S5, windows 4.
+- AGW-1 [V] The Android GPU path's physical qualification is owed in full: before/after
+  benchmark against ANDROID_GPU_WORK.baseline.txt, rapid-seek and lifecycle checks, the
+  30-minute graphics-memory soak, the perf gate's physical profile, and wider-profile fixtures
+  on real silicon including a Main10-capable device. Home: the owner device session, first
+  hardware available.
+
+Test debt (the audit's missing-regression list, adopted where each row lands): cached
+Frame.info after close, filter-callback frame retention, concurrent JNI op and close, 32-bit
+near-boundary ring allocation under ASan, failed quiescence during renderer replacement,
+cancellation after partial audio submission, device-sleep clock epochs, the 24-hour AudioTrack
+wrap simulation, simultaneous subtitle images, alpha golden tests, non-planar and odd-sized
+Metal frames, failed CoreAudio shutdown with a live callback, attached-picture-first media,
+negative start times, foreign StreamInfo, decoder output diverging from codec parameters,
+empty-output MediaSink finalization, midstream format changes, and secure-protocol link
+smokes. Each stage's expansion names the ones it owes.
 
 ## 18. The skeleton, for any executor
 

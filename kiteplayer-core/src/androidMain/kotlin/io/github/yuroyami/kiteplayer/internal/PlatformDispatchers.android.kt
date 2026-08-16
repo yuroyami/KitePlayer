@@ -1,19 +1,14 @@
-@file:OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+@file:OptIn(ExperimentalCoroutinesApi::class)
 
 package io.github.yuroyami.kiteplayer.internal
 
-import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.newSingleThreadContext
 
 /**
- * One real thread per worker.
- *
- * The same answer as the JVM's, and separate from it because this target has no shared source set with
- * it. Android's main thread is never one of these: nothing in the engine touches it, and a renderer that
- * needs it hops there itself.
+ * SOL-P4: serial lanes over the shared pools. Suspend-only lanes ride Default; the lanes that
+ * enter blocking C or a blocking bridge ride IO, whose whole purpose is parked threads. The
+ * confinement contract is [SharedLaneDispatchers]'s, identical on every threaded target.
  */
-internal actual fun platformPlaybackDispatchers(): PlaybackDispatchers = PerWorkerDispatchers { name ->
-    val dispatcher = newSingleThreadContext(name)
-    WorkerContext(dispatcher) { dispatcher.close() }
-}
+internal actual fun platformPlaybackDispatchers(): PlaybackDispatchers =
+    SharedLaneDispatchers(calm = Dispatchers.Default, blocking = Dispatchers.IO)

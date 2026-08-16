@@ -29,33 +29,44 @@ internal class WorkerContext(val context: CoroutineContext, private val shutdown
 }
 
 /**
- * One context per worker, built by [create], released together.
+ * SOL-P4: six SERIAL LANES over the runtime's shared pools instead of six owned OS threads.
  *
- * The names are passed through to the platform so a thread dump reads as the pipeline rather than as six
- * anonymous workers. Diagnosing a stalled player starts with knowing which of them is not running.
+ * The engine's contracts are about CONFINEMENT, and `limitedParallelism(1)` is confinement:
+ * one task at a time per lane, happens-before between consecutive tasks, exactly the mutual
+ * exclusion the per-worker threads provided, without a player costing six threads and six
+ * players costing thirty-six. The split is by BEHAVIOUR: lanes that only suspend (the session
+ * actor, the video scheduler) ride [calm], the pool for computation; lanes that enter blocking
+ * C or a blocking network bridge (demux, both decoders, the audio feeder) ride [blocking], the
+ * pool built for exactly that, so a stall in FFmpeg or a slow socket parks an elastic IO
+ * thread and never starves computation.
+ *
+ * The one pinned thread the platform genuinely demands, the audio DEVICE callback, was never
+ * one of these six: the C ring owns it.
+ *
+ * close() releases nothing because nothing here is owned; the pools are the runtime's.
  */
-internal class PerWorkerDispatchers(create: (String) -> WorkerContext) : PlaybackDispatchers {
+internal class SharedLaneDispatchers(
+    calm: kotlinx.coroutines.CoroutineDispatcher,
+    blocking: kotlinx.coroutines.CoroutineDispatcher,
+) : PlaybackDispatchers {
 
-    private val sessionWorker = create("kiteplayer-session")
-    private val demuxWorker = create("kiteplayer-demux")
-    private val videoDecodeWorker = create("kiteplayer-video-decode")
-    private val audioDecodeWorker = create("kiteplayer-audio-decode")
-    private val audioFeedWorker = create("kiteplayer-audio-feed")
-    private val videoScheduleWorker = create("kiteplayer-video-schedule")
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val session: CoroutineContext = calm.limitedParallelism(1)
 
-    override val session: CoroutineContext get() = sessionWorker.context
-    override val demux: CoroutineContext get() = demuxWorker.context
-    override val videoDecode: CoroutineContext get() = videoDecodeWorker.context
-    override val audioDecode: CoroutineContext get() = audioDecodeWorker.context
-    override val audioFeed: CoroutineContext get() = audioFeedWorker.context
-    override val videoSchedule: CoroutineContext get() = videoScheduleWorker.context
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val videoSchedule: CoroutineContext = calm.limitedParallelism(1)
 
-    override fun close() {
-        sessionWorker.close()
-        demuxWorker.close()
-        videoDecodeWorker.close()
-        audioDecodeWorker.close()
-        audioFeedWorker.close()
-        videoScheduleWorker.close()
-    }
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val demux: CoroutineContext = blocking.limitedParallelism(1)
+
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val videoDecode: CoroutineContext = blocking.limitedParallelism(1)
+
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val audioDecode: CoroutineContext = blocking.limitedParallelism(1)
+
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val audioFeed: CoroutineContext = blocking.limitedParallelism(1)
+
+    override fun close() {}
 }

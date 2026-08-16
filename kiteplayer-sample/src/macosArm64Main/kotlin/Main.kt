@@ -3,7 +3,9 @@
 package io.github.yuroyami.kiteplayer.sample
 
 import io.github.yuroyami.kiteplayer.Backends
+import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStats
@@ -61,13 +63,18 @@ fun main(args: Array<String>) {
     val path = args.firstOrNull { !it.startsWith("--") }
     if (path == null || args.contains("-h") || args.contains("--help")) {
         println("usage: kiteplayer <media file> [--window] [--no-video] [--seek=<seconds>]")
+        println("                 [--loop-for=<seconds>] [--hwdec=off] [--hold-4k]")
         println()
         println("Plays the file and reports the position, the audio to video drift, and the frame")
         println("accounting, all taken from the player's own flows.")
         println()
-        println("  --window        open a window and draw the video in it")
-        println("  --no-video      play the audio track only")
-        println("  --seek=<sec>    once playing, seek to that position and carry on from there")
+        println("  --window          open a window and draw the video in it")
+        println("  --no-video        play the audio track only")
+        println("  --seek=<sec>      once playing, seek to that position and carry on from there")
+        println("  --loop-for=<sec>  loop the media (LoopMode.One) and stop after that long")
+        println("  --hwdec=off       decode in software, the measured download-path leg")
+        println("  --hold-4k         S2.e verdict: exit 1 unless failed frames are zero and late")
+        println("                    drops stay under one percent of decoded (needs --window)")
         exitProcess(if (path == null) 2 else 0)
     }
     val videoEnabled = !args.contains("--no-video")
@@ -76,6 +83,18 @@ fun main(args: Array<String>) {
     val seekTo = seekArgument?.removePrefix("--seek=")?.toDoubleOrNull()?.seconds
     if (seekArgument != null && seekTo == null) {
         println("--seek takes a number of seconds, as in --seek=5")
+        exitProcess(2)
+    }
+    val loopArgument = args.firstOrNull { it.startsWith("--loop-for=") }
+    val loopFor = loopArgument?.removePrefix("--loop-for=")?.toDoubleOrNull()?.seconds
+    if (loopArgument != null && loopFor == null) {
+        println("--loop-for takes a number of seconds, as in --loop-for=120")
+        exitProcess(2)
+    }
+    val softwareDecode = args.contains("--hwdec=off")
+    val hold4k = args.contains("--hold-4k")
+    if (hold4k && !wantWindow) {
+        println("--hold-4k judges the Metal window path, so it needs --window")
         exitProcess(2)
     }
 
@@ -94,6 +113,7 @@ fun main(args: Array<String>) {
                 output = AppleOutputBackend,
             ),
             statsInterval = STATS_INTERVAL,
+            hardwareDecode = if (softwareDecode) HwdecPolicy.Off else HwdecPolicy.Auto,
         ),
     )
 
@@ -136,9 +156,13 @@ fun main(args: Array<String>) {
         // Closing the window means the viewer is done. Without this the run loop keeps going with
         // nothing on screen and the file plays to its end headless, audio and all.
         window.onCloseRequested = { session.cancel() }
+        // The S2.e verdict, judged after the renderer closed so every frame is accounted for.
+        // The thresholds were committed before any measurement ran: zero frames failed at the
+        // renderer, and late drops under one percent of decoded frames.
+        var holdVerdict: Int? = null
         session.launch {
             try {
-                playToEnd(player, path, report, renderer = null, seekTo = seekTo)
+                playToEnd(player, path, report, renderer = null, seekTo = seekTo, runFor = loopFor)
             } finally {
                 // Closed before its counters are read, so an image still on its way to the window is
                 // accounted for one way or the other rather than being missed.
@@ -146,10 +170,34 @@ fun main(args: Array<String>) {
                 println("  window drew       ${renderer.presentedFrames} frames")
                 println("  superseded        ${renderer.supersededFrames} (the renderer was the bottleneck)")
                 println("  never drawn       ${renderer.failedFrames}")
+                if (hold4k) {
+                    val stats = player.stats.value
+                    val decoded = stats.decodedVideoFrames
+                    val dropped = stats.droppedFramesLate
+                    val failed = renderer.failedFrames
+                    val held = failed == 0L && (decoded == 0L || dropped * 100 < decoded)
+                    println(
+                        "  4k hold           ${if (held) "PASS" else "FAIL"} " +
+                            "(failed=$failed, dropped=$dropped of $decoded decoded)",
+                    )
+                    holdVerdict = if (held) 0 else 1
+                }
                 window.stop()
             }
         }
         window.runEventLoop()
+        closeAndWait(player)
+        holdVerdict?.let { exitProcess(it) }
+        return
+    }
+
+    if (loopFor != null) {
+        val counting = CountingRenderer(AppleHostClock)
+        runBlocking {
+            player.attachRenderer(counting)
+            openOrExit(player, path, report, videoEnabled)
+            playToEnd(player, path, report, counting, seekTo, runFor = loopFor)
+        }
         closeAndWait(player)
         return
     }
@@ -246,8 +294,15 @@ private suspend fun playToEnd(
     report: SessionReport,
     renderer: CountingRenderer?,
     seekTo: Duration? = null,
+    /** Non-null makes this a sustained run: the media loops and the run stops after this long. */
+    runFor: Duration? = null,
 ) {
-    println("playing. press ctrl-c to stop.")
+    if (runFor != null) {
+        player.setLoop(LoopMode.One)
+        println("playing looped for $runFor. press ctrl-c to stop.")
+    } else {
+        println("playing. press ctrl-c to stop.")
+    }
     player.play()
 
     val startedAt = AppleHostClock.nanos()
@@ -258,6 +313,10 @@ private suspend fun playToEnd(
     while (true) {
         val snapshot = player.state.value
         if (snapshot.status == PlaybackStatus.Ended || snapshot.status == PlaybackStatus.Failed) break
+        if (runFor != null && (AppleHostClock.nanos() - startedAt).nanoseconds >= runFor) {
+            player.pause()
+            break
+        }
         val stats = player.stats.value
         val position = player.position()
 

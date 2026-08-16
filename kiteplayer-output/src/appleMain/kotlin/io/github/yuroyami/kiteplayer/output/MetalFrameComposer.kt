@@ -20,9 +20,11 @@ import platform.CoreVideo.CVMetalTextureCacheFlush
 import platform.CoreVideo.CVMetalTextureCacheRefVar
 import platform.CoreVideo.CVMetalTextureGetTexture
 import platform.CoreVideo.CVMetalTextureRefVar
+import platform.CoreVideo.CVPixelBufferGetHeight
 import platform.CoreVideo.CVPixelBufferGetHeightOfPlane
 import platform.CoreVideo.CVPixelBufferGetPixelFormatType
 import platform.CoreVideo.CVPixelBufferGetPlaneCount
+import platform.CoreVideo.CVPixelBufferGetWidth
 import platform.CoreVideo.CVPixelBufferGetWidthOfPlane
 import platform.CoreVideo.CVPixelBufferRef
 import platform.CoreVideo.kCVPixelFormatType_32BGRA
@@ -116,46 +118,77 @@ internal class MetalFrameComposer(
         val encoder = checkNotNull(commands.renderCommandEncoderWithDescriptor(pass)) {
             "Metal refused a render encoder"
         }
+        // Until the completed handler owns it, this function owns the wrapped textures' release:
+        // a throw anywhere between wrapping and commit (an encoder refusal, a bad overlay bitmap)
+        // must not orphan CVMetalTextureRefs the GPU will never read (17.11 SOL-R7).
+        var releaseHandedOff = false
         try {
-            encoder.setRenderPipelineState(picturePipeline)
-            val quad = quadOverride ?: quadUniformsFor(frame, viewportWidth, viewportHeight)
-            quad.usePinned { pinned ->
-                encoder.setVertexBytes(pinned.addressOf(0), (quad.size * 4).toULong(), atIndex = 0u)
-            }
-            val colors = inputs.uniforms
-            colors.usePinned { pinned ->
-                encoder.setFragmentBytes(pinned.addressOf(0), (colors.size * 4).toULong(), atIndex = 0u)
-            }
-            inputs.textures.forEachIndexed { index, texture ->
-                encoder.setFragmentTexture(texture, atIndex = index.toULong())
-            }
-            // Unused plane slots still need a bound texture on some GPUs; bind the first again.
-            for (index in inputs.textures.size until 3) {
-                encoder.setFragmentTexture(inputs.textures.first(), atIndex = index.toULong())
-            }
-            encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
-
-            if (overlay != null && overlay.images.isNotEmpty()) {
-                refreshOverlayTextures(overlay, viewportWidth, viewportHeight)
-                encoder.setRenderPipelineState(overlayPipeline)
-                overlayTextures.forEach { (quadUniforms, texture) ->
-                    quadUniforms.usePinned { pinned ->
-                        encoder.setVertexBytes(pinned.addressOf(0), (quadUniforms.size * 4).toULong(), atIndex = 0u)
-                    }
-                    encoder.setFragmentTexture(texture, atIndex = 0u)
-                    encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
+            try {
+                encoder.setRenderPipelineState(picturePipeline)
+                val quad = quadOverride ?: quadUniformsFor(frame, viewportWidth, viewportHeight)
+                quad.usePinned { pinned ->
+                    encoder.setVertexBytes(pinned.addressOf(0), (quad.size * 4).toULong(), atIndex = 0u)
                 }
+                val colors = inputs.uniforms
+                colors.usePinned { pinned ->
+                    encoder.setFragmentBytes(pinned.addressOf(0), (colors.size * 4).toULong(), atIndex = 0u)
+                }
+                inputs.textures.forEachIndexed { index, texture ->
+                    encoder.setFragmentTexture(texture, atIndex = index.toULong())
+                }
+                // Unused plane slots still need a bound texture on some GPUs; bind the first again.
+                for (index in inputs.textures.size until 3) {
+                    encoder.setFragmentTexture(inputs.textures.first(), atIndex = index.toULong())
+                }
+                encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
+
+                if (overlay != null && overlay.images.isNotEmpty()) {
+                    refreshOverlayTextures(overlay, viewportWidth, viewportHeight)
+                    encoder.setRenderPipelineState(overlayPipeline)
+                    overlayTextures.forEach { (quadUniforms, texture) ->
+                        quadUniforms.usePinned { pinned ->
+                            encoder.setVertexBytes(pinned.addressOf(0), (quadUniforms.size * 4).toULong(), atIndex = 0u)
+                        }
+                        encoder.setFragmentTexture(texture, atIndex = 0u)
+                        encoder.drawPrimitives(MTLPrimitiveTypeTriangleStrip, vertexStart = 0u, vertexCount = 4u)
+                    }
+                }
+            } finally {
+                encoder.endEncoding()
             }
+            if (presentDrawable != null) commands.presentDrawable(presentDrawable)
+            // The wrapped CVMetalTextures must outlive the GPU's read of them: releasing on commit
+            // was a use-after-free the first offscreen run crashed on. The completed handler is the
+            // moment the GPU is provably done.
+            commands.addCompletedHandler { inputs.release() }
+            releaseHandedOff = true
+            commands.commit()
         } finally {
-            encoder.endEncoding()
+            if (!releaseHandedOff) inputs.release()
         }
-        if (presentDrawable != null) commands.presentDrawable(presentDrawable)
-        // The wrapped CVMetalTextures must outlive the GPU's read of them: releasing on commit
-        // was a use-after-free the first offscreen run crashed on. The completed handler is the
-        // moment the GPU is provably done.
-        commands.addCompletedHandler { inputs.release() }
-        commands.commit()
+        lastCommands = commands
         return commands
+    }
+
+    /** The most recently committed buffer; the serial queue makes waiting on it wait on all. */
+    private var lastCommands: MTLCommandBufferProtocol? = null
+
+    /**
+     * Releases what the composer owns natively: the CVMetalTextureCache and its nativeHeap
+     * holder (17.11 SOL-R6). The GPU is fenced first by waiting on the last committed buffer,
+     * which on this serial queue proves every earlier buffer, and therefore every wrapped
+     * texture's completed handler, has run. Idempotent; encode after close is a caller bug the
+     * texture-cache check will surface.
+     */
+    fun close() {
+        lastCommands?.waitUntilCompleted()
+        lastCommands = null
+        textureCache?.let { holder ->
+            CVMetalTextureCacheFlush(holder.pointed.value, 0uL)
+            holder.pointed.value?.let { CFRelease(it) }
+            kotlinx.cinterop.nativeHeap.free(holder.rawValue)
+        }
+        textureCache = null
     }
 
     private class PictureInputs(
@@ -211,37 +244,50 @@ internal class MetalFrameComposer(
         }
 
         val wrapped = ArrayList<Pair<platform.CoreVideo.CVMetalTextureRef?, MTLTextureProtocol>>(formats.size)
-        memScoped {
-            formats.forEachIndexed { index, format ->
-                val planeIndex = if (planes == 0) 0 else index
-                val width = CVPixelBufferGetWidthOfPlane(buffer, planeIndex.toULong())
-                val height = CVPixelBufferGetHeightOfPlane(buffer, planeIndex.toULong())
-                val out = alloc<CVMetalTextureRefVar>()
-                val rc = CVMetalTextureCacheCreateTextureFromImage(
-                    allocator = null,
-                    textureCache = cache.pointed.value,
-                    sourceImage = buffer,
-                    textureAttributes = null,
-                    pixelFormat = format,
-                    width = width,
-                    height = height,
-                    planeIndex = planeIndex.toULong(),
-                    textureOut = out.ptr,
-                )
-                check(rc == kCVReturnSuccess) { "CVMetalTextureCacheCreateTextureFromImage failed: $rc" }
-                val texture = checkNotNull(CVMetalTextureGetTexture(out.value)) {
-                    "a wrapped CVMetalTexture carried no MTLTexture"
-                } as MTLTextureProtocol
-                wrapped += out.value to texture
+        try {
+            memScoped {
+                formats.forEachIndexed { index, format ->
+                    val planeIndex = if (planes == 0) 0 else index
+                    // A non-planar buffer (packed BGRA) answers zero to the per-plane size
+                    // functions, which sized its texture at nothing (17.11 SOL-R4). The
+                    // buffer-level functions are the documented non-planar reading.
+                    val width = if (planes == 0) CVPixelBufferGetWidth(buffer)
+                        else CVPixelBufferGetWidthOfPlane(buffer, planeIndex.toULong())
+                    val height = if (planes == 0) CVPixelBufferGetHeight(buffer)
+                        else CVPixelBufferGetHeightOfPlane(buffer, planeIndex.toULong())
+                    val out = alloc<CVMetalTextureRefVar>()
+                    val rc = CVMetalTextureCacheCreateTextureFromImage(
+                        allocator = null,
+                        textureCache = cache.pointed.value,
+                        sourceImage = buffer,
+                        textureAttributes = null,
+                        pixelFormat = format,
+                        width = width,
+                        height = height,
+                        planeIndex = planeIndex.toULong(),
+                        textureOut = out.ptr,
+                    )
+                    check(rc == kCVReturnSuccess) { "CVMetalTextureCacheCreateTextureFromImage failed: $rc" }
+                    val texture = checkNotNull(CVMetalTextureGetTexture(out.value)) {
+                        "a wrapped CVMetalTexture carried no MTLTexture"
+                    } as MTLTextureProtocol
+                    wrapped += out.value to texture
+                }
             }
+        } catch (failure: Throwable) {
+            // A failure halfway through wrapping owns whatever it already wrapped (SOL-R7).
+            wrapped.forEach { (cv, _) -> if (cv != null) CFRelease(cv) }
+            throw failure
         }
         val frameColor = MetalColorUniforms.of(pictureColor)
         return PictureInputs(
             textures = wrapped.map { it.second },
             uniforms = frameColor.packWith(sampleScale, mode),
+            // No cache flush here: flushing after every frame defeated the cache's whole point
+            // (17.11 SOL-R5). The cache is flushed once, at close, or by CoreVideo itself on
+            // real invalidation.
             release = {
                 wrapped.forEach { (cv, _) -> if (cv != null) CFRelease(cv) }
-                textureCache?.let { CVMetalTextureCacheFlush(it.pointed.value, 0uL) }
             },
         )
     }

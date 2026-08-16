@@ -8123,6 +8123,42 @@ is no other.
   there once, with their commits, and nowhere else. This plan is again the sole planning
   document, per the pre-A0 precedent.
 
+- **2026-08-16, S2.e completed: the colour instrument and sustained 4K, plus the five absorbed
+  17.11 Metal rows.** THE INSTRUMENT (ColourInstrumentTest, macosArm64Test, real Metal
+  offscreen): programmatic NV12 frames at known YUV values through the full
+  upload-shader-readback pipeline, judged against a hand-written INDEPENDENT reference (the
+  coefficients are never read from the production tables). Corners: BT.601, BT.709 and BT.2020
+  NCL, each in studio and full range, four probes each (neutral, saturated, near-black,
+  near-white), all 24 within the stated tolerance of 2 per channel; one P010 high-aligned
+  10-bit probe within the same tolerance; one packed-BGRA passthrough corner. THE FALSIFYING
+  ARM: a saturated frame rendered as BT.709 and judged against the BT.601 truth lands OUTSIDE
+  tolerance, so a wrong matrix cannot pass, which is what makes the green corners evidence.
+  THE FIVE ROWS (17.11): SOL-R4, a non-planar BGRA buffer now sizes its texture from the
+  buffer itself (the per-plane functions answer zero for it; the new BGRA corner fails without
+  the fix); SOL-R5, the CVMetalTextureCache is no longer flushed per frame; SOL-R6, the
+  composer gained close(), which fences the GPU on the serial queue's last buffer, flushes and
+  CFReleases the cache and frees its nativeHeap holder, wired into MetalVideoRenderer.close
+  after the worker join, idempotent by test; SOL-R7, encode owns the wrapped textures' release
+  until the completed handler is installed, and a half-wrapped failure releases what it
+  wrapped; SOL-R8, rotation normalizes modulo 360 through normalizedQuarterTurn (the law
+  KiteVideo's geometry already applied), with -90 proved identical to 270. SUSTAINED 4K, the
+  thresholds committed before any run (zero renderer-failed frames, late drops under one
+  percent of decoded): the sample gained --loop-for, --hwdec=off and --hold-4k (the verdict
+  lives in the harness, exit 1 on breach), and the 120-second looped run of
+  testmedia/hevc4k10.mp4 (3840x2160, 30 fps, yuv420p10le, VideoToolbox to P010 zero-copy to
+  Metal on this Mac's glass) PASSED: 3472 decoded, 3466 submitted and ALL 3466 drawn, zero
+  superseded, zero failed, zero late drops, zero repeats, final a/v drift 0 ms (video master;
+  the fixture carries no audio), one headless frame at the attach boundary. THE
+  SOFTWARE-DOWNLOAD LEG, measured beside it with no threshold, 60 seconds under HwdecPolicy.Off:
+  1747 decoded (software 10-bit 4K HEVC decode holds real time on this Mac), 1741 submitted,
+  1219 drawn with 522 superseded (the per-frame plane upload is the honest bottleneck, about
+  20 fps on the glass), zero late drops and zero failures. One harness truth recorded: the
+  sample's wall-clock drift column reads nonsense during looped runs (the position resets per
+  loop while elapsed does not); cosmetic, the a/v column is the real figure and held 0 ms.
+  Gates: the colour instrument suite green with its falsifying arm, the S2.c composer proofs
+  green untouched, the standard KitePlayer suites green. S2.f remains: the matrix re-runs, the
+  README truth, the register line, and this stage's exit.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -15343,16 +15379,9 @@ Rendering and views:
   (KiteVideo.kt returns at the null frame before the overlay read). Home: S4.f.
 - SOL-R3 [C] KiteVideoRenderer overlay work can race close, and a per-image build failure still
   advances the overlay hash (the failed image is skipped and never retried). Home: S4.f.
-- SOL-R4 [V] MetalFrameComposer calls GetWidthOfPlane/GetHeightOfPlane even when the buffer is
-  non-planar (BGRA, planeCount 0), which sizes textures at zero. Home: S2.e.
-- SOL-R5 [V] The CVMetalTextureCache is flushed in every hardware frame's release closure,
-  defeating the cache. Home: S2.e.
-- SOL-R6 [V] The texture cache and its nativeHeap holder are never released: the composer has no
-  close path that fences the GPU and frees them. Home: S2.e.
-- SOL-R7 [C] A pre-commit encode failure can leak wrapped CVMetalTextures (release rides the
-  completed handler, which a throw before commit never installs). Home: S2.e.
-- SOL-R8 [V] Metal rotation handles literal 90/270 only (MetalVideoSupport quarter-turn test);
-  -90, 270+360 and friends render unrotated. Normalize through one shared helper. Home: S2.e.
+- SOL-R4 to SOL-R8: CLOSED by S2.e (non-planar BGRA sizing, the per-frame cache flush, the
+  missing composer close path, pre-commit texture ownership, rotation normalization). The log's
+  S2.e entry carries the proofs.
 - SOL-R9 [V] KitePlayerUIView keeps both video layers visible across a renderer switch (stale
   Metal content can cover CG frames) and hasPicture answers from cumulative counters rather
   than the current generation. Home: S3.

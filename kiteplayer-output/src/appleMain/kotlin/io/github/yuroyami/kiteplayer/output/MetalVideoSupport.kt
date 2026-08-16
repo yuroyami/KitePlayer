@@ -384,20 +384,31 @@ internal fun quadUniformsFor(
     val sarDen = size.pixelAspectDenominator.takeIf { it > 0 } ?: 1
     val storedWidth = size.width.toFloat() * sarNum / sarDen
     val storedHeight = size.height.toFloat()
-    val quarterTurn = frame.rotationDegrees == 90 || frame.rotationDegrees == 270
+    val turn = normalizedQuarterTurn(frame.rotationDegrees)
+    val quarterTurn = turn == 90 || turn == 270
     val displayWidth = if (quarterTurn) storedHeight else storedWidth
     val displayHeight = if (quarterTurn) storedWidth else storedHeight
     val scale = minOf(viewportWidth / displayWidth, viewportHeight / displayHeight)
     val ndcX = displayWidth * scale / viewportWidth
     val ndcY = displayHeight * scale / viewportHeight
     // Clockwise picture rotation = sampling basis turned the opposite way.
-    val basis = when (frame.rotationDegrees) {
+    val basis = when (turn) {
         90 -> floatArrayOf(0f, -1f, 1f, 0f)
         180 -> floatArrayOf(-1f, 0f, 0f, -1f)
         270 -> floatArrayOf(0f, 1f, -1f, 0f)
         else -> floatArrayOf(1f, 0f, 0f, 1f)
     }
     return floatArrayOf(ndcX, ndcY, basis[0], basis[1], basis[2], basis[3], 0f, 0f)
+}
+
+/**
+ * Container rotation reduced to one of 0, 90, 180, 270. The same law KiteVideo's geometry
+ * applies: normalize modulo 360 first (so -90 means 270 and 450 means 90), and read anything
+ * that is not a quarter turn as unrotated (17.11 SOL-R8).
+ */
+internal fun normalizedQuarterTurn(rotationDegrees: Int): Int {
+    val normalised = ((rotationDegrees % 360) + 360) % 360
+    return if (normalised == 90 || normalised == 180 || normalised == 270) normalised else 0
 }
 
 /** Overlay quad placement in viewport pixels, converted to the same NDC space. */

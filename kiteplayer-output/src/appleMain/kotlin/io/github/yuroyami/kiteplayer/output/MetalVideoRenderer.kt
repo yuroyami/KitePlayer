@@ -193,6 +193,9 @@ public class MetalVideoRenderer public constructor(
         drainPending()
         runBlocking { workerJob.join() }
         worker.cancel()
+        // After the join no draw is in flight from this renderer, so the composer can fence the
+        // GPU and give back its texture cache and native holder (17.11 SOL-R6).
+        composer.close()
         dispatcher.close()
     }
 

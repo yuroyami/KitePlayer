@@ -152,29 +152,27 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Sets the playback rate as a multiplier of real time.
+     * Sets the playback rate as a multiplier of real time, within [SPEED_MIN] to [SPEED_MAX].
      *
-     * **The only accepted value in this build is 1.0.** There is no tempo stage for audio, so any
-     * other rate would move the clock without moving the sound, and the video frame scheduler has
-     * no scaled timer, so video-only playback would keep pacing at 1.0 while claiming another
-     * rate. A player that accepts a value and does nothing with it is worse than one that
-     * refuses, because the caller cannot tell which it got. Real speed control with pitch
-     * preserved is on the roadmap in KPKMP.md section 11; when it lands, this method will accept
-     * the range it implements.
+     * Real, on both halves. Audio runs through a pitch-synchronous tempo stage, so 2x is twice
+     * as fast at the same pitch rather than a chipmunk; the video schedule divides its frame
+     * durations by the rate; and the shared clock extrapolates at the rate, so audio, video and
+     * the reported position agree at every speed, including for video-only media.
      *
-     * @param value finite and greater than zero.
-     * @throws IllegalArgumentException when [value] is not finite and positive. Infinity passes a plain
-     *         positivity test, which is why the check is explicit.
-     * @throws UnsupportedOperationException when [value] is not 1.0.
+     * A change while media is playing re-anchors through an internal precise seek at the current
+     * position, which sounds like the small rebuffer it is. That is also why a live change on an
+     * UNSEEKABLE source is refused rather than half-applied: without a seek there is no boundary
+     * at which the queued audio at the old rate ends and the new rate begins. On such sources
+     * set the speed before [open].
+     *
+     * @param value finite, within [SPEED_MIN] to [SPEED_MAX].
+     * @throws IllegalArgumentException outside that range. Below and above it, time-stretch
+     *         splices dominate the signal, and a player that pretends otherwise is lying.
+     * @throws UnsupportedOperationException for a live change on an unseekable source.
      */
     public fun setSpeed(value: Double) {
-        require(value.isFinite() && value > 0.0) { "speed must be finite and positive, was $value" }
-        if (value != 1.0) {
-            throw UnsupportedOperationException(
-                "playback runs at 1.0 only in this build: there is no tempo stage for audio and no " +
-                    "scaled frame timer for video, so a rate of $value would either desync or do " +
-                    "nothing; see KPKMP.md section 11",
-            )
+        require(value.isFinite() && value >= SPEED_MIN && value <= SPEED_MAX) {
+            "speed must be within $SPEED_MIN..$SPEED_MAX, was $value"
         }
         core.post(CoreCommand.SetSpeed(value, CompletableDeferred()))
     }
@@ -207,6 +205,62 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public fun setLoop(mode: LoopMode) {
         core.post(CoreCommand.SetLoop(mode, CompletableDeferred()))
     }
+
+    /**
+     * Sets how the picture occupies its surface: whole picture letterboxed ([VideoScale.Fit],
+     * the default), viewport filled with the overhang cropped ([VideoScale.Fill]), or both axes
+     * stretched independently ([VideoScale.Stretch]).
+     *
+     * Legal at any time, renderer attached or not; the mode belongs to the player and every
+     * renderer is told it on attach. Pixel aspect and container rotation are honoured in every
+     * mode. The current mode is published as [PlayerSnapshot.videoScale].
+     */
+    public fun setVideoScale(mode: VideoScale) {
+        core.post(CoreCommand.SetVideoScale(mode, CompletableDeferred()))
+    }
+
+    /**
+     * Shifts subtitle timing by [value]. Positive shows cues later. Applies to the cues already
+     * on screen at the next pass, no reopen and no reselection.
+     */
+    public fun setSubtitleDelay(value: Duration) {
+        core.post(CoreCommand.SetSubtitleDelay(value, CompletableDeferred()))
+    }
+
+    /**
+     * Scales subtitle text over the authored size. The active cues re-rasterise at the new size
+     * immediately; 1.0 is the authored size.
+     *
+     * @throws IllegalArgumentException unless finite and greater than zero.
+     */
+    public fun setSubtitleScale(value: Float) {
+        require(value.isFinite() && value > 0f) { "subtitle scale must be finite and positive, was $value" }
+        core.post(CoreCommand.SetSubtitleScale(value, CompletableDeferred()))
+    }
+
+    /**
+     * Compensates for sound that reaches the ear late: with a positive [value] every video frame
+     * is presented that much earlier, which is the whole of what a Bluetooth latency slider
+     * needs. The audio samples are never touched, so the change is instant and free, and the
+     * picture walks over smoothly within a frame or two rather than jumping.
+     */
+    public fun setAudioDelay(value: Duration) {
+        core.post(CoreCommand.SetAudioDelay(value, CompletableDeferred()))
+    }
+
+    /**
+     * Loads a subtitle FILE during playback, appends it to [PlayerSnapshot.tracks] as an
+     * external track, selects it, and returns its id. The complement of
+     * [MediaItem.externalSubtitles] for the file a viewer picks after playback started.
+     *
+     * SubRip and WebVTT, the same text path the open-time route reads.
+     *
+     * @throws IllegalStateException when nothing is open.
+     * @throws IllegalArgumentException when the file cannot be read, cannot be parsed, or
+     *         parses to no cues; the message says which.
+     */
+    public suspend fun addExternalSubtitle(source: SubtitleSource): TrackId =
+        core.addExternalSubtitle(source)
 
     /**
      * Opens [items] as the queue, starting at [startIndex], and returns paused on its first frame
@@ -430,6 +484,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     public companion object {
+
+        /** The slowest [setSpeed] accepts. One value with [SPEED_MAX], stated once for UIs to read. */
+        public const val SPEED_MIN: Double = 0.25
+
+        /** The fastest [setSpeed] accepts. */
+        public const val SPEED_MAX: Double = 4.0
         /**
          * Builds a player from [config].
          *

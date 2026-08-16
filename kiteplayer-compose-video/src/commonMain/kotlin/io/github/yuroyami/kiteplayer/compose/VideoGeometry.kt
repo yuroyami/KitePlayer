@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.compose
 
+import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 
 /**
@@ -46,6 +47,7 @@ internal fun videoLayout(
     areaHeight: Int,
     size: VideoSize,
     rotationDegrees: Int,
+    mode: VideoScale = VideoScale.Fit,
 ): VideoLayout? {
     if (areaWidth <= 0 || areaHeight <= 0) return null
     if (size.width <= 0 || size.height <= 0) return null
@@ -58,10 +60,16 @@ internal fun videoLayout(
     val contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
     val contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
 
+    // Fit letterboxes, Fill overhangs (the caller clips), Stretch takes the area whole; the
+    // pixel aspect and the turn are already folded into the content shape for all three.
     val fitsByHeight = contentWidth * areaHeight <= contentHeight * areaWidth
+    val heightBound = if (mode == VideoScale.Fill) !fitsByHeight else fitsByHeight
     val destinationWidth: Int
     val destinationHeight: Int
-    if (fitsByHeight) {
+    if (mode == VideoScale.Stretch) {
+        destinationWidth = areaWidth
+        destinationHeight = areaHeight
+    } else if (heightBound) {
         destinationHeight = areaHeight
         destinationWidth = (contentWidth * areaHeight / contentHeight).toInt().coerceAtLeast(1)
     } else {

@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
@@ -54,25 +55,38 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                 }
                 var recorded = false
                 try {
+                    // The mode is the third sanctioned draw-phase read: it changes on a user's
+                    // setting, so its invalidations are rarer than the overlay's.
+                    val mode = state.scaleMode.value
                     val layout = videoLayout(
                         areaWidth = size.width.toInt(),
                         areaHeight = size.height.toInt(),
                         size = frame.size,
                         rotationDegrees = frame.rotationDegrees,
+                        mode = mode,
                     ) ?: return@drawBehind
-                    rotate(
-                        degrees = layout.rotationDegrees.toFloat(),
-                        pivot = androidx.compose.ui.geometry.Offset(layout.centerX, layout.centerY),
-                    ) {
-                        drawImage(
-                            image = frame.image,
-                            dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
-                            dstSize = IntSize(
-                                layout.drawWidth.roundToInt().coerceAtLeast(1),
-                                layout.drawHeight.roundToInt().coerceAtLeast(1),
-                            ),
-                            filterQuality = FilterQuality.Low,
-                        )
+                    // Fill overhangs the component by design; the clip keeps the crop inside it.
+                    // Fit and Stretch never overhang, so they keep the unclipped fast path.
+                    val draw: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit = {
+                        rotate(
+                            degrees = layout.rotationDegrees.toFloat(),
+                            pivot = androidx.compose.ui.geometry.Offset(layout.centerX, layout.centerY),
+                        ) {
+                            drawImage(
+                                image = frame.image,
+                                dstOffset = IntOffset(layout.drawLeft.roundToInt(), layout.drawTop.roundToInt()),
+                                dstSize = IntSize(
+                                    layout.drawWidth.roundToInt().coerceAtLeast(1),
+                                    layout.drawHeight.roundToInt().coerceAtLeast(1),
+                                ),
+                                filterQuality = FilterQuality.Low,
+                            )
+                        }
+                    }
+                    if (mode == io.github.yuroyami.kiteplayer.VideoScale.Fill) {
+                        clipRect { draw() }
+                    } else {
+                        draw()
                     }
                     recorded = true
                 } finally {

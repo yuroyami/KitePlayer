@@ -7,12 +7,15 @@ import kotlin.time.Duration
 /**
  * Everything that happens to decoded audio between the decoder and the ring.
  *
- * Three stages, in this order, and the order is the design:
+ * Four stages, in this order, and the order is the design:
  *
  * 1. [ChannelMixer] puts the channels in the speakers the device has. Downmixing first means the rate
  *    conversion runs on two channels instead of eight.
  * 2. [LinearResampler] makes the rate the one the device accepted.
- * 3. [GainStage] applies volume and mute, last, so a mute is silent immediately and no later stage
+ * 3. [TempoStage] makes the sound take `1/speed` as long without moving its pitch. After the
+ *    resampler, so pitch detection runs at one known rate; before the gain, so mute stays the
+ *    last word.
+ * 4. [GainStage] applies volume and mute, last, so a mute is silent immediately and no later stage
  *    smears it.
  *
  * A stage that has nothing to do costs nothing beyond a copy: matching layouts copy channels,
@@ -48,6 +51,7 @@ internal class AudioPipeline(
         targetRate = targetFormat.sampleRate,
         channels = targetFormat.channels,
     )
+    private val tempo = TempoStage(targetFormat.channels, targetFormat.sampleRate)
     private val gain = GainStage(targetFormat.sampleRate, targetFormat.channels, rampDuration)
 
     private val targetChannels = targetFormat.channels
@@ -77,6 +81,21 @@ internal class AudioPipeline(
             gain.muted = value
         }
 
+    /**
+     * The playback rate, applied by the tempo stage. 1.0 bypasses it entirely.
+     *
+     * Owned by the feeder like [volume]: the engine routes a change here through a flush, so one
+     * buffer is never spliced from two speeds.
+     */
+    var speed: Double
+        get() = tempo.speed
+        set(value) {
+            tempo.speed = value
+        }
+
+    /** Frames the tempo stage has emitted since the last [reset]. The pts law reads this. */
+    val tempoEmittedFrames: Long get() = tempo.emittedFrames
+
     /** True when this pipeline was built for exactly the format [decoderFormat] describes. */
     fun matches(decoderFormat: AudioFormat): Boolean = decoderFormat == sourceFormat
 
@@ -91,6 +110,7 @@ internal class AudioPipeline(
         AudioPipeline(decoderFormat, targetFormat, onWarning, rampDuration).also {
             it.volume = volume
             it.muted = muted
+            it.speed = speed
         }
 
     /**
@@ -115,6 +135,17 @@ internal class AudioPipeline(
             result = resampled
         }
 
+        // The tempo stage owns lookahead, so at speeds other than 1.0 it may answer zero while it
+        // accumulates, and its output buffer replaces ours. At 1.0 with nothing queued the stage
+        // is skipped outright, so normal playback pays not even a copy for it; the counters are
+        // advanced so the pts law upstairs never notices which branch ran.
+        if (tempo.speed != 1.0 || tempo.hasQueuedInput) {
+            produced = tempo.process(result, produced)
+            result = tempo.output
+        } else {
+            tempo.countBypassed(produced)
+        }
+
         gain.apply(result, produced)
         output = result
         return produced
@@ -128,6 +159,7 @@ internal class AudioPipeline(
      */
     fun reset() {
         resampler.reset()
+        tempo.reset()
     }
 
     private fun grown(buffer: FloatArray, values: Int): FloatArray =

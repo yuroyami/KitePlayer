@@ -56,6 +56,12 @@ public interface VideoRenderer : AutoCloseable {
     /** The output surface changed size. Subtitles are laid out again after this. */
     public fun setViewport(width: Int, height: Int, scale: Float)
 
+    /**
+     * How the picture should occupy the surface. Defaulted so an existing renderer keeps
+     * compiling and keeps its Fit behaviour; a renderer that can crop or stretch overrides it.
+     */
+    public fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {}
+
     /** Composited above the video. Replaced wholesale rather than diffed. */
     public suspend fun setOverlay(overlay: SubtitleOverlay?)
 

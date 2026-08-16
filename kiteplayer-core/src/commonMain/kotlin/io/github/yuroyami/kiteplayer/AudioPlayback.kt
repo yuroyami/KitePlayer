@@ -3,6 +3,8 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.internal.AudioPipeline
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
 import io.github.yuroyami.kiteplayer.internal.MediaClock
+import io.github.yuroyami.kiteplayer.internal.TempoStage
+import io.github.yuroyami.kiteplayer.internal.framesToMicros
 import io.github.yuroyami.kiteplayer.internal.openAudioPath
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSink
@@ -101,6 +103,33 @@ public class AudioPlayback(
     private var warnedAboutLatency = false
     private var closed = false
 
+    /**
+     * The rate the NEXT epoch will run at. An epoch is the stretch between two flushes, and speed
+     * changes ride the flush: the engine spells a live change as a precise seek to the current
+     * position, so one epoch never mixes two rates. Written under the lock by [speed], read at
+     * [open] and [flush] where the epoch turns over.
+     */
+    private var wantedSpeed: Double = 1.0
+
+    /**
+     * The rate of the CURRENT epoch, the one every sample in the ring belongs to.
+     *
+     * At any rate other than 1.0 the ring is fed on a scaled time axis: each buffer's pts is
+     * `media pts / epochSpeed`, dated purely by counting tempo-stage output frames. On that axis
+     * one ring frame is exactly one device frame of wall time, so the ring's own interpolation
+     * between segments, which assumes precisely that, stays sample-exact at every speed. The two
+     * conversions back to media time are [anchorLocked] multiplying the anchor out, and the
+     * media clock extrapolating at [MediaClock.speed] between anchors.
+     */
+    private var epochSpeed: Double = 1.0
+
+    /**
+     * Where the scaled axis is anchored: the first timestamped buffer of the epoch fixes it as
+     * `media pts / epochSpeed` minus the scaled duration of whatever the tempo stage had already
+     * emitted this epoch. Null until that buffer arrives, exactly like a fresh clock.
+     */
+    private var scaledBaseUs: Long? = null
+
     /** The format the device accepted. Null before [open]. */
     public val negotiatedFormat: AudioFormat? get() = format
 
@@ -140,6 +169,12 @@ public class AudioPlayback(
         val negotiated = opened.format
         ring = opened.ring
         format = negotiated
+        // A fresh path is a fresh epoch: the rate wanted now is the rate this ring plays at.
+        synchronized(lock) {
+            epochSpeed = wantedSpeed
+            scaledBaseUs = null
+            mediaClock.speed = epochSpeed
+        }
 
         if (sink.latencyQuality == LatencyQuality.Unreliable && !warnedAboutLatency) {
             warnedAboutLatency = true
@@ -240,11 +275,36 @@ public class AudioPlayback(
         // is what makes a change arriving mid-buffer inaudible rather than a click.
         stage.volume = wantedVolume.value
         stage.muted = wantedMute.value
+        // The epoch's rate, reasserted per buffer for the same one-owner reason. It only ever
+        // differs across a flush, so mid-epoch this is an assignment of the value it already has.
+        val speedNow = synchronized(lock) { epochSpeed }
+        stage.speed = speedNow
 
+        val emittedBefore = stage.tempoEmittedFrames
         // Converted exactly once: the mixer, resampler and gain ramp all carry state, so running
         // process twice over the same input is audible, not just wasteful (audit P1-3).
         val produced = stage.process(interleaved, frames)
-        if (produced > 0) submit(pts, stage.output, produced, abort)
+
+        if (speedNow == 1.0) {
+            // The exact pre-speed path: media pts straight through, byte for byte.
+            if (produced > 0) submit(pts, stage.output, produced, abort)
+            return
+        }
+
+        // The scaled axis. Anchor it on the first timestamped buffer of the epoch, then date
+        // every chunk by the tempo stage's own output count: continuity on this axis is exact by
+        // construction, so the ring never opens a spurious segment and never interpolates wrong.
+        val rate = negotiated.sampleRate
+        if (scaledBaseUs == null && pts != null) {
+            synchronized(lock) {
+                scaledBaseUs = (pts.micros / speedNow).toLong() - framesToMicros(emittedBefore, rate)
+            }
+        }
+        if (produced > 0) {
+            val base = scaledBaseUs
+            val scaledPts = base?.let { Pts(it + framesToMicros(emittedBefore, rate)) }
+            submit(scaledPts, stage.output, produced, abort)
+        }
     }
 
     /**
@@ -275,7 +335,12 @@ public class AudioPlayback(
 
     private fun anchorLocked() {
         val anchor = ring?.anchor() ?: return
-        mediaClock.setAt(anchor.pts, generation, anchor.audibleAtNanos)
+        // The ring speaks the scaled axis at any epoch rate other than 1.0; multiplying out here
+        // is the one place playout time turns back into media time.
+        val mediaPts =
+            if (epochSpeed == 1.0) anchor.pts
+            else Pts((anchor.pts.micros * epochSpeed).toLong())
+        mediaClock.setAt(mediaPts, generation, anchor.audibleAtNanos)
     }
 
     /** Starts the device and lets the clock run. Belongs to the session owner. */
@@ -308,12 +373,21 @@ public class AudioPlayback(
         // nothing excluded a progress report from interleaving with the clearing. The C contract
         // now names the anchor reader in its quiescence sentence; this lock is how this class
         // honours it.
-        synchronized(lock) { ring?.flush() }
+        //
+        // The epoch turns over here too: the flush is the boundary a speed change rides, so the
+        // wanted rate becomes the ruling one, the scaled axis drops its base for the new epoch,
+        // and the clock adopts the new extrapolation rate while it is invalid anyway.
+        synchronized(lock) {
+            ring?.flush()
+            epochSpeed = wantedSpeed
+            scaledBaseUs = null
+            mediaClock.invalidate()
+            mediaClock.speed = epochSpeed
+        }
         // The conversion stage holds one sample frame across buffers. After a seek that frame belongs
         // to the position that was abandoned, so interpolating the new position out of it would mix
         // the two.
         pipeline?.reset()
-        mediaClock.invalidate()
         generation = newGeneration
     }
 
@@ -369,39 +443,31 @@ public class AudioPlayback(
         }
 
     /**
-     * The playback rate as a multiplier of real time. Finite and positive.
+     * The playback rate as a multiplier of real time, within [TempoStage.MIN_SPEED] to
+     * [TempoStage.MAX_SPEED]. Real: the tempo stage in the pipeline makes the sound take
+     * `1/speed` as long at its own pitch, and the clock runs to match.
      *
-     * **While audio is open the only accepted value is 1.0.** Anything else throws
-     * [UnsupportedOperationException], because there is no tempo stage: the samples would still reach
-     * the device at the device's rate, so the sound would play at normal speed while this clock, and
-     * every frame timed against it, ran at another. A player that accepts the value and does nothing
-     * with it is worse than one that refuses, because the caller cannot tell which it got.
+     * The value rules from the NEXT flush onward, because a rate change and the samples already
+     * queued at the old rate cannot share a ring: the engine spells a live change as this
+     * assignment followed by a precise seek to the current position, which is one brief,
+     * gapless-sounding rebuffer, the same trade mpv makes. A caller driving this class directly
+     * follows the same recipe with [flush].
      *
-     * With no ring open the value is stored and nothing refuses it, which is what keeps the rate a
-     * property of the clock rather than of the device. That is not a working speed control on its own:
-     * the video scheduler still paces frames by their own durations. A real one needs the tempo stage
-     * and a scaled frame timer, and both are Horizon B; see KPKMP.md section 11.
+     * Setting it takes the lock because [flush] and [open] read it under the same lock from other
+     * threads. Reading it reports the wanted rate.
      *
-     * Setting it takes the lock, because a rate change re-anchors the clock and because it asks
-     * whether an audio path is open, so it is safe from any thread. Reading it is a plain read of one
-     * value.
+     * @throws IllegalArgumentException outside the supported range: below and above it, splice
+     *         artifacts dominate the signal and pretending otherwise would be a lie.
      */
     public var speed: Double
-        get() = mediaClock.speed
+        get() = synchronized(lock) { wantedSpeed }
         set(value) {
-            // The null test is inside the lock with every other cross-thread read of this field, so
-            // the rule is one sentence rather than a case analysis: a member that may be called from
-            // another thread touches `ring` only under `lock`. This one never dereferences it, so it
-            // was not part of the use-after-free the B1.8 verification found, and an exception to a
-            // rule about a freed pointer is not worth the reader's time.
-            val open = synchronized(lock) { ring != null }
-            if (open && value != 1.0) {
-                throw UnsupportedOperationException(
-                    "audio playback runs at 1.0 only: there is no tempo stage, so a rate of $value " +
-                        "would move the clock without moving the sound",
-                )
+            require(
+                value.isFinite() && value >= TempoStage.MIN_SPEED && value <= TempoStage.MAX_SPEED,
+            ) {
+                "speed must be within ${TempoStage.MIN_SPEED}..${TempoStage.MAX_SPEED}, was $value"
             }
-            synchronized(lock) { mediaClock.speed = value }
+            synchronized(lock) { wantedSpeed = value }
         }
 
     /**

@@ -93,4 +93,25 @@ class AndroidSurfaceGeometryTest {
             }
         }
     }
+
+    @Test
+    fun `fill covers the canvas and crops the overhanging axis symmetrically`() {
+        // 4:3 content on a 16:9 canvas: width fills, height overhangs and splits evenly.
+        val layout = frameLayout(1920, 1080, VideoSize(640, 480), 0, io.github.yuroyami.kiteplayer.VideoScale.Fill)!!
+        assertEquals(0, layout.left)
+        assertEquals(1920, layout.right)
+        assertEquals(1440, layout.height)
+        assertEquals(-180, layout.top)
+        assertEquals(1260, layout.bottom)
+    }
+
+    @Test
+    fun `stretch takes the canvas whole and keeps the turn`() {
+        val layout = frameLayout(1920, 1080, VideoSize(640, 480), 180, io.github.yuroyami.kiteplayer.VideoScale.Stretch)!!
+        assertEquals(0, layout.left)
+        assertEquals(0, layout.top)
+        assertEquals(1920, layout.width)
+        assertEquals(1080, layout.height)
+        assertEquals(180, layout.rotationDegrees)
+    }
 }

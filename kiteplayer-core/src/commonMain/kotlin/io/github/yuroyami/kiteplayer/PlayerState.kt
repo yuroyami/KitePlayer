@@ -28,6 +28,14 @@ public data class PlayerSnapshot(
     val volume: Float = 1.0f,
     val muted: Boolean = false,
     val loop: LoopMode = LoopMode.Off,
+    /** How the picture occupies its surface. The engine's choice; renderers honour it. */
+    val videoScale: VideoScale = VideoScale.Fit,
+    /** The runtime subtitle timing shift. Positive shows cues later. */
+    val subtitleDelay: Duration = Duration.ZERO,
+    /** The runtime subtitle size multiplier over the authored size. */
+    val subtitleScale: Float = 1.0f,
+    /** The runtime audio timing shift. Positive presents video earlier to meet late sound. */
+    val audioDelay: Duration = Duration.ZERO,
     /**
      * The last failure, retained until another one replaces it or the player is opened again.
      *

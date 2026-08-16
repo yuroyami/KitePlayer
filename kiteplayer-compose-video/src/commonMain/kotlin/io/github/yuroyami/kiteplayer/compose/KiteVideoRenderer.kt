@@ -101,9 +101,15 @@ internal class KiteVideoRenderer(
         { rgba, width, height -> overlayImageBitmap(rgba, width, height) },
     /** Publishes the active overlay, or null when it clears or the renderer closes. */
     private val publishOverlay: (KiteVideoOverlay?) -> Unit = {},
+    /** Publishes the engine's scale mode into the draw-phase state. */
+    private val publishScaleMode: (io.github.yuroyami.kiteplayer.VideoScale) -> Unit = {},
     /** Optional platform GPU tier. Software frames still use this renderer's worker. */
     private val hardwareRenderer: KiteVideoHardwareRenderer? = null,
 ) : VideoRenderer {
+
+    override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
+        publishScaleMode(mode)
+    }
 
     /** The contentHash the published overlay was built from, so an unchanged one is not rebuilt. */
     private var overlayHash: Long = Long.MIN_VALUE

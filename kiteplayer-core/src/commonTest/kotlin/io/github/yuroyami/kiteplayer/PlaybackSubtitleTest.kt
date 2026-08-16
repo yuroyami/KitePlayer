@@ -118,11 +118,29 @@ class PlaybackSubtitleTest {
     }
 
     @Test
-    fun noPreferredLanguageMeansNoAutomaticSubtitles() = runTest {
+    fun subtitledMediaShowsItsSubtitlesByDefault() = runTest {
+        // The contract turned around with SubtitleConfig.autoSelect: a viewer who opens
+        // subtitled media expects subtitles, so with no language preference the default track
+        // is selected rather than none.
         val harness = CoreHarness(
             this,
             script = MediaScript(subtitleCues = listOf(cue(100, 200, "x"))),
             config = PlayerConfig(),
+        )
+        harness.openWithRenderer()
+        assertTrue(
+            harness.core.snapshots.value.tracks.selectedSubtitle != null,
+            "the default configuration selects the subtitle track the media carries",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun autoSelectOffRestoresNoPreferenceNoSubtitles() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(subtitleCues = listOf(cue(100, 200, "x"))),
+            config = PlayerConfig(subtitles = SubtitleConfig(autoSelect = false)),
         )
         harness.openWithRenderer()
         assertEquals(null, harness.core.snapshots.value.tracks.selectedSubtitle)

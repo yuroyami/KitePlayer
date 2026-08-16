@@ -48,7 +48,9 @@ import platform.CoreGraphics.CGImageRelease
 import platform.CoreGraphics.CGRectMake
 import platform.QuartzCore.CALayer
 import platform.QuartzCore.CATransaction
+import platform.QuartzCore.kCAGravityResize
 import platform.QuartzCore.kCAGravityResizeAspect
+import platform.QuartzCore.kCAGravityResizeAspectFill
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 import platform.posix.memcpy
@@ -78,14 +80,25 @@ public class UIKitVideoRenderer internal constructor(
                 CATransaction.begin()
                 try {
                     CATransaction.setDisableActions(true)
-                    layer.contentsGravity = kCAGravityResizeAspect
                     layer.contents = interpretObjCPointer<Any>(image.rawValue)
                 } finally {
                     CATransaction.commit()
                 }
             }
         },
-    )
+    ) {
+        // Gravity is set once here and thereafter only by [setScaleMode], so a mode choice is
+        // never overwritten by the next delivered frame.
+        gravityLayer = layer
+        dispatch_async(dispatch_get_main_queue()) { layer.contentsGravity = kCAGravityResizeAspect }
+    }
+
+    /**
+     * The layer whose gravity [setScaleMode] drives, known only on the layer-owning constructor.
+     * A renderer built on the raw delivery constructor scales inside whatever the caller does
+     * with the delivered image, so for it the call is a documented no-op.
+     */
+    private var gravityLayer: CALayer? = null
 
     private val presented = atomic(0L)
     private val superseded = atomic(0L)
@@ -390,6 +403,27 @@ public class UIKitVideoRenderer internal constructor(
     override fun vsyncIntervalNanos(): Long? = null
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+
+    override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
+        val layer = gravityLayer ?: return
+        val gravity = when (mode) {
+            io.github.yuroyami.kiteplayer.VideoScale.Fit -> kCAGravityResizeAspect
+            io.github.yuroyami.kiteplayer.VideoScale.Fill -> kCAGravityResizeAspectFill
+            io.github.yuroyami.kiteplayer.VideoScale.Stretch -> kCAGravityResize
+        }
+        enqueueOnMain {
+            CATransaction.begin()
+            try {
+                CATransaction.setDisableActions(true)
+                layer.contentsGravity = gravity
+                // Fill overhangs the layer's bounds by design; without the mask the crop would
+                // paint over whatever sits beside the video.
+                layer.masksToBounds = mode == io.github.yuroyami.kiteplayer.VideoScale.Fill
+            } finally {
+                CATransaction.commit()
+            }
+        }
+    }
 
     /**
      * Stored wholesale and drawn above every later frame. A paused picture shows the change on

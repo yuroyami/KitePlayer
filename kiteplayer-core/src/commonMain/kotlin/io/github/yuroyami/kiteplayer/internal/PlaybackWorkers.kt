@@ -215,6 +215,10 @@ internal class AttachableRenderer : VideoRenderer {
         delegate?.setViewport(width, height, scale)
     }
 
+    override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
+        delegate?.setScaleMode(mode)
+    }
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         delegate?.setOverlay(overlay)
     }

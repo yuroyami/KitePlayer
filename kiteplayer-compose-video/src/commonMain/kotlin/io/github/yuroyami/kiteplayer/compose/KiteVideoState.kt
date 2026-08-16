@@ -60,6 +60,14 @@ public class KiteVideoState internal constructor(
     internal val overlay: MutableState<KiteVideoOverlay?> = mutableStateOf(null)
 
     /**
+     * How the picture occupies the component, driven by the engine through the renderer's
+     * `setScaleMode`. Same draw-phase law as [overlay]: it changes on a user's setting, so its
+     * invalidations are rarer still.
+     */
+    internal val scaleMode: MutableState<io.github.yuroyami.kiteplayer.VideoScale> =
+        mutableStateOf(io.github.yuroyami.kiteplayer.VideoScale.Fit)
+
+    /**
      * A dropped Window metric needs a newly recorded Compose draw before a later exact metric can
      * prove completion. This state is observed only through [acquireFrameForDraw], so incrementing
      * it invalidates the draw scope without recomposition or layout.
@@ -91,6 +99,7 @@ public class KiteVideoState internal constructor(
         releaseImages = releaseImages,
         releasePublishedFrames = ::releaseFramesAfterRendererClosed,
         publishOverlay = { newest -> overlay.value = newest },
+        publishScaleMode = { mode -> scaleMode.value = mode },
         hardwareRenderer = hardwareRenderer,
     )
 

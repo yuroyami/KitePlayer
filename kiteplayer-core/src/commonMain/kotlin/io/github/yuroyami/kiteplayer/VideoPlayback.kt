@@ -65,6 +65,40 @@ public class VideoPlayback(
     private var generation: Generation = Generation.Initial
 
     /**
+     * The rate the NEXT generation will pace at. Like the audio path, a speed change rides a
+     * flush: the engine spells a live change as a precise seek, whose flush is the only moment
+     * the schedule is quiescent, so [appliedSpeed] can never tear mid-tick.
+     */
+    private var wantedSpeed: Double = 1.0
+
+    /**
+     * The rate of the current generation. Read by [tick] on the scheduler; written by [flush]
+     * while the scheduler is quiescent, which is the whole synchronisation story.
+     */
+    private var appliedSpeed: Double = 1.0
+
+    /**
+     * The playback rate as a multiplier of real time. Frame durations and sync corrections are
+     * computed in media time and divided by this into wall time, and the video clock
+     * extrapolates at the same rate, so a video-only file paces correctly with no audio to
+     * follow.
+     *
+     * Before the schedule's first frame the value applies immediately, which is what a freshly
+     * built playback needs. Once frames are flowing it applies from the next [flush], because
+     * the flush is the one moment the scheduler is quiescent and nothing can tear.
+     */
+    public var speed: Double
+        get() = wantedSpeed
+        set(value) {
+            require(value.isFinite() && value > 0.0) { "speed must be finite and positive, was $value" }
+            wantedSpeed = value
+            if (!started) {
+                appliedSpeed = value
+                videoClock.speed = value
+            }
+        }
+
+    /**
      * The wall time at which the frame currently on screen was nominally shown.
      *
      * One scalar is the whole presentation schedule. Advancing it by each frame's corrected duration
@@ -201,10 +235,14 @@ public class VideoPlayback(
         val videoNow = videoClock.nowOrNull()
         val delayUs = SyncLaw.targetDelayUs(nominalUs, videoNow, masterClock, maxFrameDurationUs)
 
-        val targetNanos = frameTimerNanos + delayUs * 1_000
+        // The one media-to-wall conversion in the schedule. SyncLaw thinks entirely in media
+        // time; at 2x a 40ms frame occupies the screen for 20ms of wall time, so the wall wait
+        // is the media delay divided by the rate.
+        val delayNanos = (delayUs * 1_000L / appliedSpeed).toLong()
+        val targetNanos = frameTimerNanos + delayNanos
         if (now < targetNanos) return (targetNanos - now).nanosAsDuration()
 
-        frameTimerNanos += delayUs * 1_000
+        frameTimerNanos += delayNanos
         // A schedule that has fallen far behind wall time is meaningless. Re-anchoring it is the
         // difference between recovering from a stall and presenting a burst of frames to catch up.
         if (delayUs > 0 && now - frameTimerNanos > SyncLaw.FRAME_TIMER_RESYNC_US * 1_000) {
@@ -223,7 +261,7 @@ public class VideoPlayback(
                 val candidateUs = (following.pts.micros - next.pts.micros)
                     .takeIf { following.generation == generation && it > 0 && it <= maxFrameDurationUs }
                     ?: nominalUs
-                if (now > frameTimerNanos + candidateUs * 1_000) {
+                if (now > frameTimerNanos + (candidateUs * 1_000L / appliedSpeed).toLong()) {
                     queue.dropNext()
                     droppedLate++
                     return Duration.ZERO
@@ -314,6 +352,10 @@ public class VideoPlayback(
         durations.reset()
         generation = newGeneration
         started = false
+        // The speed epoch turns over with the generation, while the scheduler is quiescent and
+        // the clock is invalid anyway; see [speed].
+        appliedSpeed = wantedSpeed
+        videoClock.speed = wantedSpeed
     }
 
     override fun close() {

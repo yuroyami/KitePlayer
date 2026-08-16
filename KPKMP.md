@@ -8282,6 +8282,64 @@ is no other.
   are clean, nothing is pushed. S4's estimates held except S4.f, which closed at its slice;
   the register rows it owns remain the honest remainder.
 
+- **2026-08-16, the owner's feature mandate: an out-of-stage surge, logged as one.** The owner
+  ordered, in one overnight directive, that KitePlayer must beat libmpv and libvlc on exposed
+  capability, that no format may be hard-blocked, that subtitles and tracks must work inside
+  the consumer app, and that the pure-Compose path must dominate the interop one. This work
+  cut across stage boundaries by explicit owner order (fence rule 4 suspended by the owner for
+  this run), and every piece landed with its tests on the S1 gate discipline. What landed, all
+  in the working tree of 0.0.5:
+  1. **Speed, real, 0.25x to 4x, pitch preserved.** A pitch-synchronous overlap-add tempo
+     stage (`TempoStage`, pure commonMain Kotlin, the Sonic/scaletempo family) sits between
+     the resampler and the gain; the ring is fed on a scaled playout axis (pts divided by the
+     epoch rate, dated purely by tempo-output frame counting) so the ring's own interpolation
+     stays sample-exact at every rate; the media clocks extrapolate at the rate; the video
+     schedule divides media delays by the rate into wall time; a live change rides an internal
+     precise seek (the epoch boundary), and on an unseekable source it is refused typed rather
+     than half-applied. Video-only media paces at the rate with no audio to follow. Bypass at
+     1.0 costs zero copies. Tests: five TempoStage tests (ratio under adversarial chunking at
+     eight speeds within 2 percent, pitch preserved by zero-crossing count at 2x where a
+     resampler would double it, bit-exact unity bypass, reset, range refusal) and the facade
+     test proving position advances at the published rate on BOTH clock masters. The old
+     refusal tests fell red first, the falsification this landing rode.
+  2. **Video scale modes.** `VideoScale` (Fit, Fill, Stretch) on the facade, snapshot and SPI
+     (defaulted, so foreign renderers keep compiling); honoured by all four renderers: the
+     Metal quad (NDC scale choice, viewport clip crops Fill), the Android canvas layout
+     (integer fit generalised, surface bounds crop Fill), the UIKit layer (contentsGravity,
+     masksToBounds on Fill, gravity ownership moved off the delivery path so a mode is never
+     overwritten per frame), and KiteVideo's draw-phase geometry (clipRect only on Fill).
+     Pixel aspect and rotation precede every mode by construction.
+  3. **Subtitles that behave like a player's.** `SubtitleConfig.autoSelect` (on by default:
+     subtitled media shows its subtitles; the old no-preference-no-subtitles behaviour is one
+     flag away), runtime `addExternalSubtitle` (loads, appends, selects, typed failures),
+     runtime `setSubtitleScale` and `setSubtitleDelay` (both re-rasterise/retime the active
+     cues by dropping the published key), all on the snapshot.
+  4. **Audio delay.** `setAudioDelay`: the video schedule reads the master clock biased ahead
+     by the delay, so late sound (Bluetooth) meets its picture; samples untouched, instant.
+  5. **No format hard-blocks (the KiteCodec half).** The Android FFmpeg archives predated the
+     wide-profile commit (ea00800 in KiteCodec) and still carried the old allowlist build:
+     rebuilt tonight with the wide profile plus `av1_mediacodec,vp9_mediacodec,vp8_mediacodec`
+     (FFmpeg has NO native software AV1 decoder; av1dec.c is a hwaccel shell, so on Android
+     the MediaCodec wrapper is the only AV1 route this LGPL no-third-party profile can offer).
+     Verified in the archive: 1090 decoder entries. macOS proof: `av1.mkv` played 121 frames,
+     zero warnings, through the sample. NEW REGISTER ROW below for the honest remainder:
+     software AV1 needs vendored dav1d.
+  6. **The 32-bit publish defect.** Publishing 0.0.5 tripped K2's width check in the
+     nativeMain `readExternalTextOrNull` (watch targets are 32-bit; fseek/ftell/fread speak
+     platform widths). Rewritten on fgetc alone, which is Int on every libc. The lesson is a
+     sentence: intermediate-source-set posix must be width-free.
+  7. **Versions.** KiteCodec 0.0.7 published local (phone scope); KitePlayer 0.0.5 published
+     local against it; Synkplay bumped to both, its `KiteImpl` wired to everything above
+     (chapters, speed, aspect cycle, external subtitles through the resolver, subtitle size,
+     and a seven-entry KitePlayer settings category), and its engine wheel already redesigned
+     earlier tonight. Deviation, reported louder than the successes: `takeScreenshot` stays
+     false in Synkplay (captureFrame exists; the gallery-save leg does not), and the
+     `KITE_DEBUG_STATS` setting now gates the KiteStats diagnostic lines, so the iPhone
+     background-slideshow evidence run must enable it first.
+
+- **2026-08-16, register addition from the surge (17.11):**
+  | KC-AV1SW | KiteCodec | Software AV1 on Android and iOS needs vendored dav1d (BSD-2, LGPL-compatible): FFmpeg's av1 decoder is hwaccel-only, so a device without an AV1 MediaCodec/VideoToolbox session has no AV1 route today. Meson cross-build per ABI, wired as an FFmpeg external. | Open, S3-adjacent |
+
 ---
 
 ## 15. Horizon B execution: B1

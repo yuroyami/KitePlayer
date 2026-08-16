@@ -183,6 +183,13 @@ public data class SubtitleConfig(
     val preferredLanguages: List<String> = emptyList(),
     /** Select a forced-subtitles track when the audio language is not a preferred one. */
     val autoSelectForced: Boolean = true,
+    /**
+     * With no language preference matched, select the container's default-flagged subtitle
+     * track, or its first one, rather than none. On, because a viewer who opens subtitled media
+     * expects to see the subtitles; a player wanting mpv's stricter no-preference-no-subtitles
+     * behaviour turns this off.
+     */
+    val autoSelect: Boolean = true,
     /** Shift every cue by this much. Positive shows cues later. */
     val delay: Duration = Duration.ZERO,
     /** How far ahead cues are parsed and held. */

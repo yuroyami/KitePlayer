@@ -106,34 +106,106 @@ class KitePlayerTest {
     }
 
     @Test
-    fun `speed refuses every non-unity rate until a real rate control exists`() = runTest {
-        val withAudio = CoreHarness(this)
-        val player = player(withAudio)
+    fun `speed is real and the position runs at the published rate`() = runTest {
+        // Long enough that four media seconds of advance sit nowhere near the end.
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000))
+        val player = player(harness)
         player.open(MediaItem("scripted://audio"))
 
-        val refusal = assertFailsWith<UnsupportedOperationException> { player.setSpeed(2.0) }
-        assertTrue(
-            refusal.message?.contains("tempo") == true,
-            "the refusal names the missing stage rather than pretending: ${refusal.message}",
-        )
-        player.setSpeed(1.0)
-        withAudio.run(100.milliseconds)
-        assertEquals(1.0, player.state.value.speed, "and unity is always legal")
-        withAudio.close()
+        // The live change rides an internal precise seek, so the window covers the seek's own
+        // quiescence and landing, not just one actor pass.
+        player.setSpeed(2.0)
+        harness.run(3.seconds)
+        assertEquals(2.0, player.state.value.speed, "an accepted rate is published")
 
-        // Video-only is refused too: the frame scheduler has no scaled timer, so a stored 2.0
-        // would report a rate the picture provably does not play at (audit P1-11).
-        val videoOnly = CoreHarness(this, script = MediaScript(hasAudio = false))
+        player.play()
+        harness.run(500.milliseconds)
+        val before = player.position()
+        harness.run(2.seconds)
+        val advanced = player.position() - before
+        // Two wall seconds at 2x is four media seconds. The bound is loose on purpose: the
+        // tempo stage holds splice lookahead and none of that belongs to this assertion. What
+        // can never happen at a REAL 2x is 1x's advance.
+        assertTrue(
+            advanced >= 3.seconds,
+            "two wall seconds at 2x advanced only $advanced of media",
+        )
+        harness.close()
+
+        // Video-only runs at the rate too: with no audio to follow, the schedule itself paces at
+        // the rate and the video clock extrapolates at it (the old build refused exactly this).
+        val videoOnly = CoreHarness(
+            this,
+            script = MediaScript(hasAudio = false, durationUs = 30_000_000),
+        )
         val silentPlayer = player(videoOnly)
         silentPlayer.open(MediaItem("scripted://video-only"))
-        assertFailsWith<UnsupportedOperationException> { silentPlayer.setSpeed(2.0) }
-        videoOnly.run(100.milliseconds)
-        assertEquals(
-            1.0,
-            silentPlayer.state.value.speed,
-            "a refused rate must not leak into published state",
+        silentPlayer.setSpeed(2.0)
+        videoOnly.run(3.seconds)
+        silentPlayer.play()
+        videoOnly.run(500.milliseconds)
+        val silentBefore = silentPlayer.position()
+        videoOnly.run(2.seconds)
+        val silentAdvanced = silentPlayer.position() - silentBefore
+        assertTrue(
+            silentAdvanced >= 3.seconds,
+            "video-only at 2x advanced only $silentAdvanced of media",
         )
         videoOnly.close()
+    }
+
+    @Test
+    fun `the scale mode is published and reaches the attached renderer`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        harness.attachRenderer()
+        player.open(MediaItem("scripted://scale"))
+        harness.run(100.milliseconds)
+        assertEquals(VideoScale.Fit, player.state.value.videoScale, "Fit is the default")
+        assertEquals(VideoScale.Fit, harness.renderer?.scaleMode, "told on attach, before any change")
+
+        player.setVideoScale(VideoScale.Fill)
+        harness.run(100.milliseconds)
+        assertEquals(VideoScale.Fill, player.state.value.videoScale)
+        assertEquals(VideoScale.Fill, harness.renderer?.scaleMode, "the live renderer is told immediately")
+
+        player.setVideoScale(VideoScale.Stretch)
+        harness.run(100.milliseconds)
+        assertEquals(VideoScale.Stretch, harness.renderer?.scaleMode)
+        harness.close()
+    }
+
+    @Test
+    fun `the runtime subtitle and audio adjustments are published`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        player.open(MediaItem("scripted://adjust"))
+
+        player.setSubtitleDelay(250.milliseconds)
+        player.setSubtitleScale(1.5f)
+        player.setAudioDelay(80.milliseconds)
+        harness.run(100.milliseconds)
+
+        val state = player.state.value
+        assertEquals(250.milliseconds, state.subtitleDelay)
+        assertEquals(1.5f, state.subtitleScale)
+        assertEquals(80.milliseconds, state.audioDelay)
+
+        assertFailsWith<IllegalArgumentException> { player.setSubtitleScale(0f) }
+        assertFailsWith<IllegalArgumentException> { player.setSubtitleScale(Float.NaN) }
+        harness.close()
+    }
+
+    @Test
+    fun `speed outside the supported range is refused at the door`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        player.open(MediaItem("scripted://audio"))
+        assertFailsWith<IllegalArgumentException> { player.setSpeed(0.1) }
+        assertFailsWith<IllegalArgumentException> { player.setSpeed(4.5) }
+        harness.run(100.milliseconds)
+        assertEquals(1.0, player.state.value.speed, "a refused rate must not leak into published state")
+        harness.close()
     }
 
     // ---------------------------------------------------------------------------------------------

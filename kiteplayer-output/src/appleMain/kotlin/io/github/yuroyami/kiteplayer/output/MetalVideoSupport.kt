@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.output
 
+import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
@@ -373,11 +374,17 @@ internal fun MTLTextureProtocol.uploadPlane(plane: MetalPicture.SoftwarePlanes.P
  * The letterbox and rotation arithmetic, one place, pure. The quad scale is the picture's NDC
  * half-extent inside the viewport; the texcoord basis turns the sampling by the frame's own
  * clockwise rotation, so the stored picture is read turned rather than the geometry rebuilt.
+ *
+ * [mode] decides only what happens between the display shape and the viewport shape: Fit takes
+ * the smaller axis ratio and letterboxes, Fill takes the larger and lets the viewport's own
+ * scissor crop the overhang, Stretch takes both axes whole. Pixel aspect and rotation are
+ * applied before any of them, so no mode can draw the pixels the wrong shape by accident.
  */
 internal fun quadUniformsFor(
     frame: VideoFrame,
     viewportWidth: Int,
     viewportHeight: Int,
+    mode: VideoScale = VideoScale.Fit,
 ): FloatArray {
     val size = frame.size
     val sarNum = size.pixelAspectNumerator.takeIf { it > 0 } ?: 1
@@ -388,9 +395,21 @@ internal fun quadUniformsFor(
     val quarterTurn = turn == 90 || turn == 270
     val displayWidth = if (quarterTurn) storedHeight else storedWidth
     val displayHeight = if (quarterTurn) storedWidth else storedHeight
-    val scale = minOf(viewportWidth / displayWidth, viewportHeight / displayHeight)
-    val ndcX = displayWidth * scale / viewportWidth
-    val ndcY = displayHeight * scale / viewportHeight
+    val ndcX: Float
+    val ndcY: Float
+    when (mode) {
+        VideoScale.Stretch -> {
+            ndcX = 1f
+            ndcY = 1f
+        }
+        else -> {
+            val fitScale = minOf(viewportWidth / displayWidth, viewportHeight / displayHeight)
+            val fillScale = maxOf(viewportWidth / displayWidth, viewportHeight / displayHeight)
+            val scale = if (mode == VideoScale.Fill) fillScale else fitScale
+            ndcX = displayWidth * scale / viewportWidth
+            ndcY = displayHeight * scale / viewportHeight
+        }
+    }
     // Clockwise picture rotation = sampling basis turned the opposite way.
     val basis = when (turn) {
         90 -> floatArrayOf(0f, -1f, 1f, 0f)

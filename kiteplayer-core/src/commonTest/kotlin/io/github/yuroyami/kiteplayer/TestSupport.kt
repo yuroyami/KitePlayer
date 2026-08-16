@@ -143,6 +143,14 @@ internal class RecordingRenderer(
 
     private val received = mutableListOf<Presentation>()
 
+    /** The last scale mode the engine told this renderer, or null when it never did. */
+    var scaleMode: VideoScale? = null
+        private set
+
+    override fun setScaleMode(mode: VideoScale) {
+        scaleMode = mode
+    }
+
     val presentations: List<Presentation> get() = received
     val count: Int get() = received.size
     val timestamps: List<Pts> get() = received.map { it.pts }

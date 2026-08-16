@@ -47,15 +47,22 @@ alternative would be a reflective search that fails differently on every platfor
 a typed configuration error on every target instead of a surprise at the first frame.
 
 The surface is small on purpose: `open`, `openQueue` with `next`/`previous`, `play`, `pause`,
-`seek`, `seekLater`, `stepFrame`, `stop`, `setSpeed`, `setVolume`, `setMuted`, `setLoop`
-(LoopMode.All wraps the queue), `selectTrack` (container tracks and the synthetic tracks
-`MediaItem.externalSubtitles` creates), `chapterAt` and `seekToChapter`, `captureFrame`,
-`attachRenderer`, `detachRenderer`, the debuggability trio `diagnosticsDump`, `warningHistory`
-and `supportBundle` (with `KiteLog` as the one silent-by-default logging seam), non-suspending
+`seek`, `seekLater`, `stepFrame`, `stop`, `setSpeed` (REAL, 0.25x to 4x, pitch preserved by a
+time-domain tempo stage, one clock law across audio, video and position), `setVolume`,
+`setMuted`, `setLoop` (LoopMode.All wraps the queue), `setVideoScale` (Fit, Fill, Stretch,
+honoured by every renderer with pixel aspect and rotation applied first), `selectTrack`
+(container tracks and the synthetic tracks `MediaItem.externalSubtitles` creates),
+`addExternalSubtitle` (a SubRip or WebVTT FILE loaded during playback, appended and selected),
+`setSubtitleScale`, `setSubtitleDelay` and `setAudioDelay` (all live, all published on the
+snapshot), `chapterAt` and `seekToChapter`, `captureFrame`, `attachRenderer`,
+`detachRenderer`, the debuggability trio `diagnosticsDump`, `warningHistory` and
+`supportBundle` (with `KiteLog` as the one silent-by-default logging seam), non-suspending
 `close` and awaited `closeAndAwait`, plus four flows (`state`, `progress`, `stats`, `events`)
-and `position()`. A video filter chain attaches at open through `MediaItem.videoFilter`.
+and `position()`. A video filter chain attaches at open through `MediaItem.videoFilter`, and
+`SubtitleConfig.autoSelect` (on by default) makes subtitled media show its subtitles.
 Anything a member cannot honour is refused with a typed error rather than accepted and ignored:
-`editions()` and `programs()` say exactly which container reader is missing.
+`editions()` and `programs()` say exactly which container reader is missing, and a live speed
+change on an unseekable source explains why it needs a seekable one.
 
 ## Support today
 
@@ -305,16 +312,17 @@ enough to call any platform supported.
 
 ## What does not exist yet
 
-- **No queue and no playlist.** One media item at a time. Asking to loop a queue is refused rather than
-  quietly treated as looping the item.
-- **No tempo stage.** A playback speed other than 1.0 is refused while audio is open, because the
-  samples would still reach the device at the device's rate. Video-only speed is legal.
 - **The rate conversion is interim quality.** Channel downmixing and rate conversion exist and are
   compared against FFmpeg, but the conversion is linear interpolation, which dulls the top end of
   music. libswresample replaces it before 1.0. There is no normalisation on the downmix either, so a
   source that is loud in several channels at once can clip.
-- **Subtitles are one parser.** `kiteplayer-subtitles` reads SubRip. Nothing times, positions or draws
-  a cue, and the player never reads a subtitle track. SubRip parsing is not subtitle support.
+- **Software AV1 on the phones.** FFmpeg carries no native software AV1 decoder (its av1 decoder is
+  a hardware-acceleration shell), so AV1 plays through VideoToolbox on Apple and MediaCodec on
+  Android; a device with no AV1 hardware session has no AV1 route until dav1d is vendored
+  (KPKMP 17.11, KC-AV1SW).
+- **Styled ASS subtitles are seen, not drawn.** The text path (SubRip and WebVTT, embedded or
+  external, timed, positioned, rasterised and composited) is complete; ASS tracks appear in the
+  track list and their libass rendering is the recorded S4.f remainder.
 - **Android's GPU tiers are not physically qualified, and their runtime codec breadth is narrow.** API 29+
   has parser and target-admission support for admitted 8 and 10-bit AVC, HEVC, VP9, and AV1 configurations
   headed to `KitePlayerView`'s SurfaceView. Android's VP9

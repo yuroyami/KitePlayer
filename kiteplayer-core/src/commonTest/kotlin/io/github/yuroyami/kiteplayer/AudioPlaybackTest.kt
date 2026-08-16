@@ -52,20 +52,22 @@ class AudioPlaybackTest {
     )
 
     @Test
-    fun `a rate other than one is refused while audio is open`() = runTest {
+    fun `a rate within the tempo range is accepted while audio is open`() = runTest {
         val audio = AudioPlayback(FakeAudioSink(), TestClock())
         audio.open(format(2))
 
-        val failure = assertFailsWith<UnsupportedOperationException> { audio.speed = 2.0 }
-        assertTrue(
-            failure.message?.contains("tempo") == true,
-            "the message must say why rather than just refusing: ${failure.message}",
-        )
-        assertEquals(1.0, audio.speed, "a refused rate leaves the clock where it was")
+        // A real tempo stage sits in the pipeline now, so the setter's old open-path refusal
+        // would itself be the lie. The value rules from the next flush, which is how the engine
+        // routes every live change.
+        audio.speed = 2.0
+        assertEquals(2.0, audio.speed)
+        audio.speed = 0.5
+        assertEquals(0.5, audio.speed)
 
-        // The one rate that is honest stays legal, so a caller resetting to normal is not an error.
-        audio.speed = 1.0
-        assertEquals(1.0, audio.speed)
+        // The honesty moved to the range boundary: outside it, splices dominate the signal.
+        assertFailsWith<IllegalArgumentException> { audio.speed = 0.1 }
+        assertFailsWith<IllegalArgumentException> { audio.speed = 8.0 }
+        assertEquals(0.5, audio.speed, "a refused rate leaves the wanted rate where it was")
         audio.close()
     }
 

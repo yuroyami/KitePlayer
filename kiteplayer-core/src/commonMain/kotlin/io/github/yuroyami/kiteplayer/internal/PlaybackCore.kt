@@ -13,6 +13,7 @@ import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.SubtitleSource
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStats
@@ -32,6 +33,7 @@ import io.github.yuroyami.kiteplayer.TrackInfo
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.Tracks
 import io.github.yuroyami.kiteplayer.VideoPlayback
+import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioDecoder
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
@@ -207,55 +209,52 @@ internal class PlaybackCore(
         externalSubtitleTracks = item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
             // TrackId's own convention: external ids are negative, printed external1, external2...
             val id = TrackId(-(index + 1))
-            if (sourceFile.io != null) {
-                warn(
-                    PlaybackWarning.TrackDeselected(
-                        id,
-                        "custom subtitle IO is not wired; external subtitles read local paths (17.8 owns the rest)",
-                    ),
-                )
-                return@mapIndexedNotNull null
+            when (val parsed = parseExternalSubtitle(sourceFile, id)) {
+                is ExternalSubtitleParse.Loaded -> parsed.track
+                is ExternalSubtitleParse.Failed -> {
+                    warn(PlaybackWarning.TrackDeselected(id, parsed.reason))
+                    null
+                }
             }
-            val parser = backend.subtitleFileParser()
-            if (parser == null) {
-                warn(
-                    PlaybackWarning.TrackDeselected(
-                        id,
-                        "this backend supplies no subtitle file parser, so external files cannot load",
-                    ),
-                )
-                return@mapIndexedNotNull null
-            }
-            val text = readExternalTextOrNull(sourceFile.uri)
-            if (text == null) {
-                warn(
-                    PlaybackWarning.TrackDeselected(
-                        id,
-                        "the external subtitle file could not be read: ${sourceFile.uri}",
-                    ),
-                )
-                return@mapIndexedNotNull null
-            }
-            val trimmed = text.removePrefix("﻿")
-            val isVtt = trimmed.startsWith("WEBVTT") || sourceFile.uri.endsWith(".vtt", ignoreCase = true)
-            val cues = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
-                warn(
-                    PlaybackWarning.TrackDeselected(
-                        id,
-                        "the external subtitle file failed to parse: ${sourceFile.uri}${causeDetail(failure)}",
-                    ),
-                )
-                return@mapIndexedNotNull null
-            }
-            if (cues.isEmpty()) {
-                warn(
-                    PlaybackWarning.TrackDeselected(
-                        id,
-                        "the external subtitle file parsed to no cues: ${sourceFile.uri}",
-                    ),
-                )
-                return@mapIndexedNotNull null
-            }
+        }
+        if (externalSubtitleTracks.isNotEmpty()) {
+            tracks = tracks.copy(all = tracks.all + externalSubtitleTracks.map { it.info })
+        }
+    }
+
+    private sealed interface ExternalSubtitleParse {
+        class Loaded(val track: ExternalSubtitleTrack) : ExternalSubtitleParse
+        class Failed(val reason: String) : ExternalSubtitleParse
+    }
+
+    /** One external subtitle file to one synthetic track, or the sentence saying why not. */
+    private fun parseExternalSubtitle(sourceFile: SubtitleSource, id: TrackId): ExternalSubtitleParse {
+        if (sourceFile.io != null) {
+            return ExternalSubtitleParse.Failed(
+                "custom subtitle IO is not wired; external subtitles read local paths (17.8 owns the rest)",
+            )
+        }
+        val parser = backend.subtitleFileParser()
+            ?: return ExternalSubtitleParse.Failed(
+                "this backend supplies no subtitle file parser, so external files cannot load",
+            )
+        val text = readExternalTextOrNull(sourceFile.uri)
+            ?: return ExternalSubtitleParse.Failed(
+                "the external subtitle file could not be read: ${sourceFile.uri}",
+            )
+        val trimmed = text.removePrefix("﻿")
+        val isVtt = trimmed.startsWith("WEBVTT") || sourceFile.uri.endsWith(".vtt", ignoreCase = true)
+        val cues = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
+            return ExternalSubtitleParse.Failed(
+                "the external subtitle file failed to parse: ${sourceFile.uri}${causeDetail(failure)}",
+            )
+        }
+        if (cues.isEmpty()) {
+            return ExternalSubtitleParse.Failed(
+                "the external subtitle file parsed to no cues: ${sourceFile.uri}",
+            )
+        }
+        return ExternalSubtitleParse.Loaded(
             ExternalSubtitleTrack(
                 id = id,
                 info = TrackInfo(
@@ -266,10 +265,43 @@ internal class PlaybackCore(
                     title = sourceFile.title ?: sourceFile.uri.substringAfterLast('/'),
                 ),
                 cues = cues.sortedBy { cue -> cue.startMicros },
+            ),
+        )
+    }
+
+    /**
+     * Loads one subtitle file DURING playback, appends it as a selectable external track, and
+     * selects it, because a viewer who just picked a file wants to see it, not to find it in a
+     * menu. Unlike the open path, a file that cannot load fails the call typed and loudly: this
+     * is a direct answer to a direct request, not a best-effort side dish of an open.
+     */
+    private fun addExternalSubtitle(command: CoreCommand.AddExternalSubtitle) {
+        val active = session
+        if (active == null) {
+            command.reply.completeExceptionally(
+                IllegalStateException("addExternalSubtitle needs an open media item"),
             )
+            return
         }
-        if (externalSubtitleTracks.isNotEmpty()) {
-            tracks = tracks.copy(all = tracks.all + externalSubtitleTracks.map { it.info })
+        val id = TrackId(-(externalSubtitleTracks.size + 1))
+        when (val parsed = parseExternalSubtitle(command.source, id)) {
+            is ExternalSubtitleParse.Failed -> command.reply.completeExceptionally(
+                IllegalArgumentException(parsed.reason),
+            )
+            is ExternalSubtitleParse.Loaded -> {
+                externalSubtitleTracks = externalSubtitleTracks + parsed.track
+                tracks = tracks.copy(all = tracks.all + parsed.track.info)
+                if (active.subtitleStream != null) {
+                    // A container stream is timing cues: route through the same rebuild the
+                    // ordinary selection path takes, so one selection owner survives.
+                    pendingExternalSubtitle = id
+                    pendingTrackChange?.reply?.complete(Unit)
+                    pendingTrackChange = CoreCommand.SelectTrack(TrackKind.Subtitle, id, CompletableDeferred())
+                } else {
+                    applyExternalSubtitle(id)
+                }
+                command.reply.complete(id)
+            }
         }
     }
 
@@ -293,6 +325,21 @@ internal class PlaybackCore(
     private var speed: Double = 1.0
     private var volume: Float = 1.0f
     private var muted: Boolean = false
+    private var videoScale: VideoScale = VideoScale.Fit
+
+    /** Runtime subtitle timing shift, seeded from config. Positive shows cues later. */
+    private var subtitleDelay: Duration = config.subtitles.delay
+
+    /** Runtime subtitle size, seeded from config, applied at the next rasterisation. */
+    private var subtitleScale: Float = config.subtitles.fontScale
+
+    /**
+     * Runtime audio timing shift. Positive means the sound reaches the ear late (a Bluetooth
+     * stack, a receiver), so the master clock the video chases is read that much AHEAD and every
+     * frame is presented earlier by the same amount. The audio samples themselves are never
+     * touched, which is what makes the setting cheap and instant.
+     */
+    private var audioDelay: Duration = Duration.ZERO
     private var closed = false
     private var terminated = false
 
@@ -575,6 +622,12 @@ internal class PlaybackCore(
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.SetSpeed(value, reply))
         awaitReply(reply)
+    }
+
+    suspend fun addExternalSubtitle(source: SubtitleSource): TrackId {
+        val reply = CompletableDeferred<TrackId>()
+        send(CoreCommand.AddExternalSubtitle(source, reply))
+        return awaitReply(reply)
     }
 
     suspend fun setVolume(value: Float) {
@@ -984,14 +1037,38 @@ internal class PlaybackCore(
                 )
             }
             is CoreCommand.SetSpeed -> {
-                // Committed only after the pipeline accepted it: storing first published a rate
+                // Committed only after the pipelines accepted it: storing first published a rate
                 // the audio path then refused, so state claimed a speed nothing played at.
-                val failure = runCatching { session?.audio?.speed = command.value }.exceptionOrNull()
-                if (failure != null) {
-                    command.reply.completeExceptionally(failure)
-                } else {
-                    speed = command.value
-                    command.reply.complete(Unit)
+                val active = session
+                val failure = runCatching {
+                    active?.audio?.speed = command.value
+                    active?.video?.speed = command.value
+                }.exceptionOrNull()
+                when {
+                    failure != null -> command.reply.completeExceptionally(failure)
+                    // A live change rides a precise seek to the current position: the seek's own
+                    // flush is the epoch boundary both pipelines apply their new rate at, and the
+                    // seek machine already preserves play intent, status and selection. On an
+                    // unseekable source there is no such boundary to ride, and pretending the
+                    // rate changed while every queued sample kept the old one would be a lie.
+                    active != null && command.value != speed && !active.source.seekable -> {
+                        command.reply.completeExceptionally(
+                            UnsupportedOperationException(
+                                "a live speed change re-anchors by precise seek, and this source is not seekable",
+                            ),
+                        )
+                    }
+                    else -> {
+                        val changedLive = active != null && command.value != speed
+                        speed = command.value
+                        if (changedLive) {
+                            queueSeek(
+                                SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise),
+                                null,
+                            )
+                        }
+                        command.reply.complete(Unit)
+                    }
                 }
             }
             is CoreCommand.SetVolume -> {
@@ -1004,6 +1081,33 @@ internal class PlaybackCore(
                 session?.audio?.muted = command.value
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetVideoScale -> {
+                videoScale = command.mode
+                // Whichever renderer is live learns immediately; the pending one learns so the
+                // session that adopts it starts right; setRenderer re-tells any future one.
+                session?.renderer?.setScaleMode(command.mode)
+                if (session == null) pendingRenderer?.setScaleMode(command.mode)
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetSubtitleDelay -> {
+                subtitleDelay = command.value
+                // Retimed on the very next pass: dropping the published key forces the selector
+                // to answer again and the overlay to republish at the shifted timing.
+                session?.publishedCueKey = null
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetSubtitleScale -> {
+                subtitleScale = command.value
+                session?.publishedCueKey = null
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetAudioDelay -> {
+                audioDelay = command.value
+                // Nothing else to touch: the video schedule reads the biased master on its next
+                // tick and SyncLaw walks the picture over within a frame or two, smoothly.
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.AddExternalSubtitle -> addExternalSubtitle(command)
             is CoreCommand.SetLoop -> {
                 loop = command.mode
                 command.reply.complete(Unit)
@@ -1021,6 +1125,9 @@ internal class PlaybackCore(
      * renderer stays attached and the caller gets an explicit failure.
      */
     private suspend fun setRenderer(renderer: VideoRenderer?): Boolean {
+        // The scale mode survives renderer swaps: the mode belongs to the player, so whichever
+        // renderer arrives is told the ruling mode before it draws a first frame.
+        renderer?.setScaleMode(videoScale)
         val session = this.session
         if (session == null) {
             pendingRenderer = renderer
@@ -1289,6 +1396,9 @@ internal class PlaybackCore(
             }
             if (videoPlayback != null) {
                 rollback += { videoPlayback.close() }
+                // Pre-start, so it applies immediately; the scheduler for this playback does not
+                // exist yet, which is what makes the immediate path of the setter safe.
+                videoPlayback.speed = speed
             }
 
             var sink: AudioSink? = null
@@ -1305,10 +1415,12 @@ internal class PlaybackCore(
                 val createdPlayback = AudioPlayback(createdSink, clock, onWarning = { warn(it) })
                 audioPlayback = createdPlayback
                 rollback += { createdPlayback.close() }
+                // Before open: open() captures the wanted rate as the fresh path's epoch, so a
+                // player already at 2x opens its next file at 2x rather than at 1x until a seek.
+                createdPlayback.speed = speed
                 negotiated = createdPlayback.open(audioDecoder.outputFormat)
                 createdPlayback.volume = volume
                 createdPlayback.muted = muted
-                createdPlayback.speed = speed
                 eventSink.tryEmit(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
 
@@ -1570,6 +1682,13 @@ internal class PlaybackCore(
             if (preferred.isNotEmpty() && !audioPreferred) {
                 subtitles.firstOrNull { it.isForced && matches(it) }?.let { return it }
             }
+        }
+        // The plain default: subtitled media shows its subtitles. Default-flagged first, and a
+        // forced-only track never wins here, because forced tracks exist for foreign lines
+        // inside otherwise-understood audio, not as the default face of the media.
+        if (config.subtitles.autoSelect) {
+            subtitles.filter { !it.isForced }.sortedByDescending { it.isDefault }.firstOrNull()
+                ?.let { return it }
         }
         return null
     }
@@ -2192,7 +2311,7 @@ internal class PlaybackCore(
 
     /** The timing half of handleSubtitles, shared by container and external cue tables (S4.e). */
     private suspend fun timeAndPublishCues(session: OpenSession) {
-        val positionUs = currentPosition().micros - config.subtitles.delay.inWholeMicroseconds
+        val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
         val active = CueSelector.activeAt(session.subtitleCues, positionUs)
         // The cues themselves are the identity, not their timestamps: two different texts or
         // styles over the same interval are different overlays, and a (start, end) key republished
@@ -2230,7 +2349,7 @@ internal class PlaybackCore(
         val images = if (active.isEmpty()) {
             emptyList()
         } else {
-            rasterizer.rasterize(active, width, height, config.subtitles.fontScale)
+            rasterizer.rasterize(active, width, height, subtitleScale)
         }
         session.renderer.setOverlay(
             SubtitleOverlay(
@@ -2986,6 +3105,10 @@ internal class PlaybackCore(
             volume = volume,
             muted = muted,
             loop = loop,
+            videoScale = videoScale,
+            subtitleDelay = subtitleDelay,
+            subtitleScale = subtitleScale,
+            audioDelay = audioDelay,
             error = lastError,
             generation = requestedEpoch,
             queue = queueItems,
@@ -3120,6 +3243,10 @@ internal class PlaybackCore(
             volume = volume,
             muted = muted,
             loop = loop,
+            videoScale = videoScale,
+            subtitleDelay = subtitleDelay,
+            subtitleScale = subtitleScale,
+            audioDelay = audioDelay,
             error = lastError,
             generation = requestedEpoch,
             queue = queueItems,
@@ -3825,7 +3952,9 @@ internal class PlaybackCore(
      */
     private fun masterPosition(session: OpenSession): Pts? = when {
         config.syncMode == SyncMode.VideoMaster -> null
-        else -> session.audio?.position()
+        // The audio-delay bias: reading the master AHEAD by the delay presents every frame that
+        // much earlier, which is exactly what a sound that arrives late at the ear needs.
+        else -> session.audio?.position()?.let { Pts(it.micros + audioDelay.inWholeMicroseconds) }
     }
 
     /** Publishes what the scheduler alone may read, so the actor never touches the video clock. */
@@ -4226,6 +4355,12 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
     class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply)
     class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
+    class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply)
+    class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply)
+    class SetSubtitleScale(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleScale", reply)
+    class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)
+    class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
+        CoreCommand("addExternalSubtitle", reply)
 
     class SelectTrack(
         val kind: TrackKind,

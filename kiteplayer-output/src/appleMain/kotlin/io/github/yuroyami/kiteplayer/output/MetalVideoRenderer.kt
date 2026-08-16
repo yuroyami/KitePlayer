@@ -70,6 +70,9 @@ public class MetalVideoRenderer public constructor(
     /** Replaced wholesale by [setOverlay]; read by the render thread on every draw. */
     private val overlay = atomic<SubtitleOverlay?>(null)
 
+    /** The ruling scale mode; written by the engine, read by the render thread per draw. */
+    private val scaleMode = atomic(io.github.yuroyami.kiteplayer.VideoScale.Fit)
+
     private val viewportWidth = atomic(0)
     private val viewportHeight = atomic(0)
 
@@ -162,6 +165,7 @@ public class MetalVideoRenderer public constructor(
                 viewportWidth = width,
                 viewportHeight = height,
                 presentDrawable = drawable,
+                scaleMode = scaleMode.value,
             )
             presented.incrementAndGet()
         } catch (failure: Throwable) {
@@ -173,6 +177,10 @@ public class MetalVideoRenderer public constructor(
     }
 
     override fun vsyncIntervalNanos(): Long? = null
+
+    override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
+        scaleMode.value = mode
+    }
 
     override fun setViewport(width: Int, height: Int, scale: Float) {
         viewportWidth.value = (width * scale).toInt()

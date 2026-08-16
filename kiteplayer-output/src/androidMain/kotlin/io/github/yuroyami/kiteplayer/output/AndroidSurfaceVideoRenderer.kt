@@ -155,6 +155,9 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /** The overlay to composite above the picture. Written by the engine, read by the worker. */
     private val overlay = atomic<SubtitleOverlay?>(null)
 
+    /** The ruling scale mode; written by the engine, read at each draw. */
+    private val scaleMode = atomic(io.github.yuroyami.kiteplayer.VideoScale.Fit)
+
 
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
     private val signal = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -407,7 +410,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             // a lock holds whatever was drawn into it two frames ago, and a letterbox that is not
             // cleared shows it.
             canvas.clearToBlack()
-            val layout = frameLayout(canvas.width, canvas.height, size, rotationDegrees)
+            val layout = frameLayout(canvas.width, canvas.height, size, rotationDegrees, scaleMode.value)
             if (layout == null) {
                 drawFailure = IllegalStateException(
                     "a ${size.width}x${size.height} frame has no place on a ${canvas.width}x${canvas.height} canvas",
@@ -504,6 +507,10 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     override fun vsyncIntervalNanos(): Long? = null
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
+
+    override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
+        scaleMode.value = mode
+    }
 
     /**
      * Stores the overlay for the worker to composite above every following picture. The engine
@@ -890,6 +897,7 @@ internal fun frameLayout(
     canvasHeight: Int,
     size: VideoSize,
     rotationDegrees: Int,
+    mode: io.github.yuroyami.kiteplayer.VideoScale = io.github.yuroyami.kiteplayer.VideoScale.Fit,
 ): FrameLayout? {
     if (canvasWidth <= 0 || canvasHeight <= 0) return null
     if (size.width <= 0 || size.height <= 0) return null
@@ -903,10 +911,20 @@ internal fun frameLayout(
     val contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
     val contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
 
+    // Fit keeps the smaller axis ratio and letterboxes; Fill keeps the larger and overhangs the
+    // canvas, which the Surface's own bounds crop; Stretch takes the canvas as it is. The pixel
+    // aspect and rotation above are already folded into the content shape for all three.
     val fitsByHeight = contentWidth * canvasHeight <= contentHeight * canvasWidth
+    val fillAxisFlipped = when (mode) {
+        io.github.yuroyami.kiteplayer.VideoScale.Fill -> !fitsByHeight
+        else -> fitsByHeight
+    }
     val destinationWidth: Int
     val destinationHeight: Int
-    if (fitsByHeight) {
+    if (mode == io.github.yuroyami.kiteplayer.VideoScale.Stretch) {
+        destinationWidth = canvasWidth
+        destinationHeight = canvasHeight
+    } else if (fillAxisFlipped) {
         destinationHeight = canvasHeight
         destinationWidth = (contentWidth * canvasHeight / contentHeight).toInt().coerceAtLeast(1)
     } else {

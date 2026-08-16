@@ -101,6 +101,8 @@ internal class MetalFrameComposer(
          * identity quad to get the STORED picture back raw; a renderer leaves this null.
          */
         quadOverride: FloatArray? = null,
+        /** How the picture occupies the target when no [quadOverride] is given. */
+        scaleMode: io.github.yuroyami.kiteplayer.VideoScale = io.github.yuroyami.kiteplayer.VideoScale.Fit,
     ): MTLCommandBufferProtocol {
         pictureColor = frame.colorSpace
         val inputs = when (picture) {
@@ -125,7 +127,7 @@ internal class MetalFrameComposer(
         try {
             try {
                 encoder.setRenderPipelineState(picturePipeline)
-                val quad = quadOverride ?: quadUniformsFor(frame, viewportWidth, viewportHeight)
+                val quad = quadOverride ?: quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode)
                 quad.usePinned { pinned ->
                     encoder.setVertexBytes(pinned.addressOf(0), (quad.size * 4).toULong(), atIndex = 0u)
                 }

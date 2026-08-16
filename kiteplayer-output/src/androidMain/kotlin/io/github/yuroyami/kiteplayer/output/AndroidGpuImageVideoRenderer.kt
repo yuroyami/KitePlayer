@@ -87,6 +87,13 @@ public class AndroidGpuImageVideoRenderer(
     private val bridgeFailure = atomic<Throwable?>(null)
     private val eventFlow = MutableSharedFlow<RendererEvent>(replay = 4, extraBufferCapacity = 4)
     private val bridge = OesRgbaBridge(::publishImage, ::recordSuperseded, ::bridgeFailed)
+
+    override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
+        // SOL-R14's Android half: the OES-to-RGBA blit is the ONE hook this tier has, and it
+        // now applies the same unit-domain law every other renderer does. A paused picture
+        // keeps its old colours until the next latch; that narrower limit stays recorded.
+        bridge.adjust.set(GlState.packGlAdjust(adjustments))
+    }
     private val codecTarget = MediaCodecSurfaceTarget(initialSurface = bridge.surface)
     private val directFactory = MediaCodecVideoDecoderFactory(
         target = codecTarget,
@@ -365,6 +372,9 @@ private class OesRgbaBridge(
     private val imageHandler = imageThread?.let { Handler(it.looper) }
     private val frameConfigurations = FrameConfigurationBook()
     private val requestedViewport = AtomicReference<GpuViewport?>()
+
+    /** SOL-R14: the packed colour law the blit reads per draw; null is bit-exact off. */
+    val adjust = AtomicReference<FloatArray?>()
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -386,6 +396,7 @@ private class OesRgbaBridge(
                         imageHandler,
                         frameConfigurations,
                         requestedViewport,
+                        adjust,
                         publish,
                         recordSuperseded,
                         reportFailure,
@@ -529,6 +540,11 @@ private class GlState private constructor(
     private val texCoord: Int,
     private val sampler: Int,
     private val texMatrixUniform: Int,
+    private val colorMatrixUniform: Int,
+    private val colorOffsetUniform: Int,
+    private val colorEnabledUniform: Int,
+    /** SOL-R14: the packed colour law, written by setAdjustments on any thread. */
+    private val adjust: AtomicReference<FloatArray?>,
 ) : AutoCloseable {
     private val transform = FloatArray(16)
     private var outputQueue: OutputQueue? = null
@@ -630,6 +646,15 @@ private class GlState private constructor(
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
             GLES20.glUniform1i(sampler, 0)
             GLES20.glUniformMatrix4fv(texMatrixUniform, 1, false, transform, 0)
+            // SOL-R14: the picture controls at the one hook the direct-to-Surface tier has.
+            val packed = adjust.get()
+            if (packed == null) {
+                GLES20.glUniform1f(colorEnabledUniform, 0f)
+            } else {
+                GLES20.glUniformMatrix3fv(colorMatrixUniform, 1, false, packed, 0)
+                GLES20.glUniform3f(colorOffsetUniform, packed[9], packed[10], packed[11])
+                GLES20.glUniform1f(colorEnabledUniform, 1f)
+            }
             GLES20.glEnableVertexAttribArray(position)
             GLES20.glEnableVertexAttribArray(texCoord)
             VERTICES.position(0)
@@ -869,17 +894,42 @@ private class GlState private constructor(
             #extension GL_OES_EGL_image_external : require
             precision mediump float;
             uniform samplerExternalOES uTexture;
+            uniform mat3 uColorMatrix;
+            uniform vec3 uColorOffset;
+            uniform float uColorEnabled;
             varying vec2 vTexCoord;
             void main() {
-                gl_FragColor = texture2D(uTexture, vTexCoord);
+                vec4 c = texture2D(uTexture, vTexCoord);
+                if (uColorEnabled > 0.5) {
+                    c.rgb = clamp(uColorMatrix * c.rgb + uColorOffset, 0.0, 1.0);
+                }
+                gl_FragColor = c;
             }
         """
+
+        /**
+         * SOL-R14's Android half: the engine's ONE colour-matrix law, packed for the blit.
+         * Nine COLUMN-major 3x3 values plus three unit-domain offsets, exactly the Metal
+         * pack transposed, because GLES2 refuses transpose=true. Null means disabled, which
+         * keeps the untouched path bit-exact.
+         */
+        fun packGlAdjust(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments): FloatArray? {
+            if (adjustments.isIdentity) return null
+            val m = adjustments.toColorMatrix()
+            return floatArrayOf(
+                m[0], m[5], m[10],
+                m[1], m[6], m[11],
+                m[2], m[7], m[12],
+                m[4], m[9], m[14],
+            )
+        }
 
         fun create(
             handler: Handler,
             imageHandler: Handler?,
             frameConfigurations: FrameConfigurationBook,
             requestedViewport: AtomicReference<GpuViewport?>,
+            adjust: AtomicReference<FloatArray?>,
             publish: (AndroidGpuImageFrame) -> Unit,
             recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
@@ -955,6 +1005,9 @@ private class GlState private constructor(
                 val texCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
                 val sampler = GLES20.glGetUniformLocation(program, "uTexture")
                 val texMatrixUniform = GLES20.glGetUniformLocation(program, "uTexMatrix")
+                val colorMatrixUniform = GLES20.glGetUniformLocation(program, "uColorMatrix")
+                val colorOffsetUniform = GLES20.glGetUniformLocation(program, "uColorOffset")
+                val colorEnabledUniform = GLES20.glGetUniformLocation(program, "uColorEnabled")
                 check(position >= 0 && texCoord >= 0 && sampler >= 0 && texMatrixUniform >= 0) {
                     "Android GPU image shader interface was optimized away"
                 }
@@ -978,6 +1031,10 @@ private class GlState private constructor(
                     texCoord = texCoord,
                     sampler = sampler,
                     texMatrixUniform = texMatrixUniform,
+                    colorMatrixUniform = colorMatrixUniform,
+                    colorOffsetUniform = colorOffsetUniform,
+                    colorEnabledUniform = colorEnabledUniform,
+                    adjust = adjust,
                 )
                 surfaceTexture.setOnFrameAvailableListener(
                     {

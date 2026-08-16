@@ -48,6 +48,8 @@ internal class MediaScript(
     val durationUs: Long = 4_000_000,
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
+    /** The chapter table the scripted container declares (S4.e). */
+    val chapters: List<Chapter> = emptyList(),
     /** 40 ms, which is 25 frames a second. */
     val videoFrameDurationUs: Long = 40_000,
     val sampleRate: Int = 48_000,
@@ -360,7 +362,7 @@ internal class ScriptedSource(
     override val duration: Pts = Pts(script.durationUs)
     override val seekable: Boolean = script.seekable
     override val metadata: Map<String, String> = mapOf("title" to "scripted")
-    override val chapters: List<Chapter> = emptyList()
+    override val chapters: List<Chapter> = script.chapters
     override val timestampsMayJump: Boolean = false
 
     private var selected: Set<Int> = emptySet()

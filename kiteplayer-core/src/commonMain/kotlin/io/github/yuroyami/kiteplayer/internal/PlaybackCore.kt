@@ -174,6 +174,9 @@ internal class PlaybackCore(
     /** The queue (S4.e): the items and the cursor. Empty and -1 outside queue playback. */
     private var queueItems: List<MediaItem> = emptyList()
     private var queueIndex: Int = -1
+
+    /** The chapter the last ChapterChanged named, as an index; MIN_VALUE forces the first emit. */
+    private var lastChapterIndex: Int = Int.MIN_VALUE
     private var session: OpenSession? = null
     private var tracks: Tracks = Tracks.Empty
     private var lastError: PlaybackError? = null
@@ -938,6 +941,7 @@ internal class PlaybackCore(
         // but unreachable (audit P1-1).
         if (session != null) teardownSession()
         media = command.media
+        lastChapterIndex = Int.MIN_VALUE
         // An open ends paused by contract, whatever was asked for before it. A play issued while this one
         // is still running arrives after this line and is honoured, which is what queueing it means.
         playRequested = false
@@ -1921,6 +1925,17 @@ internal class PlaybackCore(
         if (pendingSeek == null) {
             maskedSeekTargetMicros.value = NO_SEEK_MASK
             publishedPositionMicros.value = currentPosition().micros
+        }
+        // Chapter crossings (S4.e): compared on the published reading, so a seek and ordinary
+        // playback announce a boundary the same way. Media with no table emits nothing.
+        val chapters = session.source.chapters
+        if (chapters.isNotEmpty()) {
+            val positionUs = publishedPositionMicros.value
+            val index = chapters.indexOfLast { it.start.inWholeMicroseconds <= positionUs }
+            if (index != lastChapterIndex) {
+                lastChapterIndex = index
+                eventSink.tryEmit(PlayerEvent.ChapterChanged(chapters.getOrNull(index)))
+            }
         }
         if (session.isStillImage && session.framesOut(session.video) > 0) {
             if (stillImageShownSinceNanos == 0L) stillImageShownSinceNanos = clock.nanos()

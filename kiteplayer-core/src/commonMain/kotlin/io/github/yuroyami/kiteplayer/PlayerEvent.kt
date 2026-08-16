@@ -59,10 +59,11 @@ public sealed interface PlayerEvent {
     public data class Failed(val error: PlaybackError) : PlayerEvent
 
     /**
-     * A chapter boundary was crossed.
+     * A chapter boundary was crossed (S4.e).
      *
-     * Never emitted: no source produces a [Chapter].
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Emitted whenever the published position moves from one chapter's span into another's,
+     * whether playback carried it there or a seek did. Null means the position sits before the
+     * first chapter of a chaptered file. Media with no chapter table emits nothing.
      */
     public data class ChapterChanged(val chapter: Chapter?) : PlayerEvent
 }

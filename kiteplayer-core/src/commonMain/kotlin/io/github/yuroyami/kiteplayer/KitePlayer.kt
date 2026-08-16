@@ -276,6 +276,32 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public suspend fun captureFrame(): CapturedFrame = core.captureFrame()
 
     /**
+     * The chapter whose span holds [position], or null before the first chapter or in media with
+     * no chapter table (S4.e). Pure over the published snapshot; pair it with [position] for the
+     * chapter now playing.
+     */
+    public fun chapterAt(position: Duration): Chapter? {
+        val chapters = state.value.chapters
+        val positionUs = position.inWholeMicroseconds
+        return chapters.lastOrNull { it.start.inWholeMicroseconds <= positionUs }
+    }
+
+    /**
+     * Seeks to the start of chapter [index] and returns when its first frame is on screen, with
+     * [seek]'s exact contract (S4.e).
+     *
+     * @throws IllegalArgumentException when [index] is outside the chapter table, including for
+     *         media with no chapters.
+     */
+    public suspend fun seekToChapter(index: Int) {
+        val chapters = state.value.chapters
+        require(index in chapters.indices) {
+            "chapter $index does not exist: this media has ${chapters.size} chapter(s)"
+        }
+        seek(chapters[index].start)
+    }
+
+    /**
      * Selects a track, or deselects the kind entirely with a null [track].
      *
      * Video and audio only. Switching reopens the container and seeks back to where playback was, because

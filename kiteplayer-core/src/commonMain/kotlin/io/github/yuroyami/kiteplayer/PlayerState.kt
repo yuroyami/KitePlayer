@@ -20,10 +20,8 @@ public data class PlayerSnapshot(
     val videoSize: VideoSize? = null,
     val tracks: Tracks = Tracks.Empty,
     /**
-     * The chapters of the current media item.
-     *
-     * Always empty: no source reads a chapter list out of a container.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * The chapters of the current media item, in container order (S4.b read them, S4.e surfaced
+     * them). Empty for media with no chapter table.
      */
     val chapters: List<Chapter> = emptyList(),
     val speed: Double = 1.0,
@@ -306,10 +304,9 @@ public enum class FrameDropPolicy {
 }
 
 /**
- * One chapter of the current media item.
- *
- * Nothing produces one: no source reads a container's chapter list, and no boundary is ever crossed.
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * One chapter of the current media item, read from the container's own table (S4.b) and
+ * surfaced on the facade with [io.github.yuroyami.kiteplayer.KitePlayer.chapterAt],
+ * seekToChapter and [PlayerEvent.ChapterChanged] (S4.e).
  */
 public data class Chapter(
     val index: Int,

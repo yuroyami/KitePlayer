@@ -174,6 +174,7 @@ public class MetalVideoRenderer public constructor(
                 scaleMode = scaleMode.value,
                 videoTransform = videoTransform.value,
                 adjustUniforms = adjustUniforms.value,
+                toneMapped = true,
             )
             presented.incrementAndGet()
         } catch (failure: Throwable) {

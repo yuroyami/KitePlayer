@@ -30,6 +30,8 @@ import kotlinx.cinterop.value
 import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.Metal.MTLRegionMake2D
 import kotlin.math.abs
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -92,11 +94,13 @@ class MetalFrameComposerTest {
         targetWidth: Int = 64,
         targetHeight: Int = 64,
         adjustUniforms: FloatArray = DISABLED_ADJUST_UNIFORMS,
+        toneMapped: Boolean = false,
     ): ByteArray {
         val target = composer.device.makeTargetTexture(targetWidth, targetHeight)
         val commands = composer.encode(
             target, frame, picture, overlay, targetWidth, targetHeight,
             adjustUniforms = adjustUniforms,
+            toneMapped = toneMapped,
         )
         commands.waitUntilCompleted()
         val bytes = ByteArray(targetWidth * targetHeight * 4)
@@ -324,6 +328,83 @@ class MetalFrameComposerTest {
         assertTrue(
             abs(desaturated[0] - desaturated[1]) <= 2 && abs(desaturated[1] - desaturated[2]) <= 2,
             "saturation 0 must land red on grey, got ${desaturated.toList()}",
+        )
+    }
+
+    // The Kotlin mirror of the shader's tone-mapping law, for expected values.
+    private fun pqEncode1(y: Double): Double {
+        val p = y.coerceAtLeast(0.0).pow(0.1593017578125)
+        return ((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p)).pow(78.84375)
+    }
+
+    private fun pqDecode1(e: Double): Double {
+        val p = e.coerceAtLeast(0.0).pow(1.0 / 78.84375)
+        return ((p - 0.8359375).coerceAtLeast(0.0) / (18.8515625 - 18.6875 * p)).pow(1.0 / 0.1593017578125)
+    }
+
+    /** BT.2390 EETF at srcPeak 1000 on a PQ grey, exactly the shader's arithmetic. */
+    private fun expectedToneMappedGrey(electrical: Double): Int {
+        val nits = pqDecode1(electrical) * 10000.0
+        val srcPq = pqEncode1(1000.0 / 10000.0)
+        val dstPq = pqEncode1(203.0 / 10000.0)
+        val e1 = (pqEncode1(nits / 10000.0) / srcPq).coerceIn(0.0, 1.0)
+        val maxLum = dstPq / srcPq
+        val ks = 1.5 * maxLum - 0.5
+        val e2 = if (e1 <= ks) e1 else {
+            val t = (e1 - ks) / (1.0 - ks)
+            val t2 = t * t
+            val t3 = t2 * t
+            (2 * t3 - 3 * t2 + 1) * ks + (t3 - 2 * t2 + t) * (1 - ks) + (-2 * t3 + 3 * t2) * maxLum
+        }
+        val mapped = pqDecode1(e2 * srcPq) * 10000.0
+        val ratio = if (nits > 1e-4) mapped / nits else 1.0
+        val sdr = (nits * ratio / 203.0).coerceIn(0.0, 1.0)
+        return (sdr.pow(1.0 / 2.2) * 255.0).roundToInt()
+    }
+
+    private fun hdrPq() = ColorSpaceInfo(
+        matrix = ColorMatrix.Bt2020Ncl,
+        primaries = ColorPrimaries.Bt2020,
+        transfer = ColorTransfer.Pq,
+        fullRange = true,
+    )
+
+    @Test
+    fun aPqFrameToneMapsToTheExpectedSdrAndSdrStaysBitExact() {
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+
+        // Full-range PQ grey: Y=160, neutral chroma. Electrical 160/255 is about 314 nits,
+        // above the EETF knee but below peak, so the spline shape is what renders.
+        val pqFrame = TestFrame(64, 64, hdrPq())
+        val pqGrey = { solidNv12(64, 64, y = 160, cb = 128, cr = 128) }
+
+        val raw = render(composer, pqFrame, pqGrey())
+        val mapped = render(composer, pqFrame, pqGrey(), toneMapped = true)
+        assertTrue(
+            !raw.contentEquals(mapped),
+            "tone mapping a 314-nit PQ grey must change the picture; identical bytes mean the uniform is dead",
+        )
+
+        val got = bgraAt(mapped, 64, 32, 32)
+        val expected = expectedToneMappedGrey(160.0 / 255.0)
+        for (channel in 0..2) {
+            assertTrue(
+                abs(got[channel] - expected) <= 3,
+                "tone-mapped grey expected about $expected on every channel, got ${got.toList()}",
+            )
+        }
+
+        // An SDR frame through the tone-mapped path packs mode 0 and must stay bit-exact.
+        val sdrFrame = TestFrame(64, 64, bt(ColorMatrix.Bt709))
+        val sdrPlain = render(composer, sdrFrame, solidNv12(64, 64, y = 126, cb = 128, cr = 128))
+        val sdrToneMapped = render(
+            composer, sdrFrame, solidNv12(64, 64, y = 126, cb = 128, cr = 128),
+            toneMapped = true,
+        )
+        assertTrue(
+            sdrPlain.contentEquals(sdrToneMapped),
+            "an SDR transfer must pack mode 0 and stay bit-exact through the tone-mapped path",
         )
     }
 }

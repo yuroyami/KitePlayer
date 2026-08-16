@@ -128,6 +128,86 @@ struct AdjustUniforms {
     int   enabled;      // 0 skips the multiply entirely, keeping identity bit-exact for the instrument
 };
 
+struct ToneUniforms {
+    int   mode;         // 0 off (bit-exact SDR path), 1 PQ, 2 HLG
+    float srcPeak;      // source peak in nits; the EETF's source anchor
+    int   gamut2020;    // 1 converts BT.2020 primaries to BT.709 in linear light
+    float pad;
+};
+
+// SMPTE ST 2084 (PQ) constants.
+constant float KP_PQ_M1 = 0.1593017578125;
+constant float KP_PQ_M2 = 78.84375;
+constant float KP_PQ_C1 = 0.8359375;
+constant float KP_PQ_C2 = 18.8515625;
+constant float KP_PQ_C3 = 18.6875;
+
+// PQ electrical 0..1 -> linear luminance as a fraction of 10000 nits.
+static inline float3 kp_pq_decode(float3 e) {
+    float3 p = pow(max(e, 0.0), float3(1.0 / KP_PQ_M2));
+    return pow(max(p - KP_PQ_C1, 0.0) / (KP_PQ_C2 - KP_PQ_C3 * p), float3(1.0 / KP_PQ_M1));
+}
+
+static inline float kp_pq_encode1(float y) {
+    float p = pow(max(y, 0.0), KP_PQ_M1);
+    return pow((KP_PQ_C1 + KP_PQ_C2 * p) / (1.0 + KP_PQ_C3 * p), KP_PQ_M2);
+}
+
+static inline float kp_pq_decode1(float e) {
+    float p = pow(max(e, 0.0), 1.0 / KP_PQ_M2);
+    return pow(max(p - KP_PQ_C1, 0.0) / (KP_PQ_C2 - KP_PQ_C3 * p), 1.0 / KP_PQ_M1);
+}
+
+// BT.2390 EETF: maps one luminance in nits from [0, srcPeak] into [0, 203] (SDR reference
+// white per BT.2408), working in normalized PQ space. This is the same operator mpv defaults
+// to; below the knee luminance passes through unchanged, above it a Hermite spline rolls off.
+static float kp_eetf_nits(float nits, float srcPeak) {
+    float srcPq = kp_pq_encode1(srcPeak / 10000.0);
+    float dstPq = kp_pq_encode1(203.0 / 10000.0);
+    float e1 = clamp(kp_pq_encode1(nits / 10000.0) / srcPq, 0.0, 1.0);
+    float maxLum = dstPq / srcPq;
+    float ks = 1.5 * maxLum - 0.5;
+    float e2 = e1;
+    if (e1 > ks) {
+        float t = (e1 - ks) / (1.0 - ks);
+        float t2 = t * t;
+        float t3 = t2 * t;
+        e2 = (2.0 * t3 - 3.0 * t2 + 1.0) * ks
+           + (t3 - 2.0 * t2 + t) * (1.0 - ks)
+           + (-2.0 * t3 + 3.0 * t2) * maxLum;
+    }
+    return kp_pq_decode1(e2 * srcPq) * 10000.0;
+}
+
+// Applies the HDR-to-SDR law to one gamma-domain RGB sample. Returns SDR gamma 2.2 RGB.
+static float3 kp_tone_map(float3 rgb, constant ToneUniforms &tone) {
+    float3 nits;
+    if (tone.mode == 1) {
+        nits = kp_pq_decode(rgb) * 10000.0;
+    } else {
+        // HLG inverse OETF to scene light, then the BT.2100 OOTF at Lw = 1000 nits.
+        float3 e = max(rgb, 0.0);
+        float3 lo = e * e * (1.0 / 3.0);
+        float3 hi = (exp((e - 0.55991073) / 0.17883277) + 0.28466892) * (1.0 / 12.0);
+        float3 scene = select(hi, lo, e <= float3(0.5));
+        float ys = dot(scene, float3(0.2627, 0.6780, 0.0593));
+        nits = scene * pow(max(ys, 1e-6), 0.2) * 1000.0;
+    }
+    if (tone.gamut2020 != 0) {
+        // BT.2020 -> BT.709 primaries in linear light (columns of the standard matrix).
+        const float3x3 to709 = float3x3(
+            float3(1.6605, -0.1246, -0.0182),
+            float3(-0.5876, 1.1329, -0.1006),
+            float3(-0.0728, -0.0083, 1.1187));
+        nits = max(to709 * nits, 0.0);
+    }
+    float luma = dot(nits, float3(0.2126, 0.7152, 0.0722));
+    float mapped = kp_eetf_nits(luma, tone.srcPeak);
+    float ratio = luma > 1e-4 ? mapped / luma : 1.0;
+    float3 sdr = clamp(nits * ratio * (1.0 / 203.0), 0.0, 1.0);
+    return pow(sdr, float3(1.0 / 2.2));
+}
+
 vertex VertexOut kp_vertex(uint id [[vertex_id]], constant QuadUniforms &quad [[buffer(0)]]) {
     // One triangle strip: (-1,-1) (1,-1) (-1,1) (1,1), texcoords with y down.
     float2 corners[4] = { float2(-1.0, -1.0), float2(1.0, -1.0), float2(-1.0, 1.0), float2(1.0, 1.0) };
@@ -148,7 +228,8 @@ fragment float4 kp_picture(
     texture2d<float> planeB [[texture(1)]],
     texture2d<float> planeC [[texture(2)]],
     constant ColorUniforms &c [[buffer(0)]],
-    constant AdjustUniforms &adj [[buffer(1)]]
+    constant AdjustUniforms &adj [[buffer(1)]],
+    constant ToneUniforms &tone [[buffer(2)]]
 ) {
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
     float3 rgb;
@@ -176,6 +257,9 @@ fragment float4 kp_picture(
         float b = y + c.bCb * cb;
         rgb = clamp(float3(r, g, b) / 255.0, 0.0, 1.0);
     }
+    if (tone.mode != 0) {
+        rgb = kp_tone_map(rgb, tone);
+    }
     if (adj.enabled != 0) {
         float3 p = rgb;
         rgb = clamp(float3(
@@ -201,6 +285,32 @@ fragment float4 kp_overlay(
  * bit-exact for the colour instrument. One shared array, because it never changes.
  */
 internal val DISABLED_ADJUST_UNIFORMS: FloatArray = FloatArray(13)
+
+/** ToneUniforms with mode=0: the SDR path skips tone mapping entirely, bit-exact. */
+internal val DISABLED_TONE_UNIFORMS: FloatArray = FloatArray(4)
+
+/**
+ * Packs the HDR-to-SDR law's uniforms from the frame's declared colour. SDR transfers return
+ * the disabled block, which is what keeps every existing SDR pixel bit-exact.
+ *
+ * srcPeak is 1000 nits for both transfers: PQ mastering metadata (SMPTE ST 2086 / CTA-861.3)
+ * is not plumbed through [ColorSpaceInfo] yet, and 1000 is both HLG's nominal peak and the
+ * commonest PQ mastering level. Recorded as the honest limit of this first tone-mapping pass.
+ */
+internal fun packToneUniforms(colorSpace: ColorSpaceInfo): FloatArray {
+    val mode = when (colorSpace.transfer) {
+        io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq -> 1
+        io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg -> 2
+        else -> return DISABLED_TONE_UNIFORMS
+    }
+    val gamut = if (colorSpace.primaries == io.github.yuroyami.kiteplayer.spi.ColorPrimaries.Bt2020) 1 else 0
+    return floatArrayOf(
+        Float.fromBits(mode),
+        1000f,
+        Float.fromBits(gamut),
+        0f,
+    )
+}
 
 /**
  * Packs the engine's one colour-matrix law into the shader's AdjustUniforms layout: nine

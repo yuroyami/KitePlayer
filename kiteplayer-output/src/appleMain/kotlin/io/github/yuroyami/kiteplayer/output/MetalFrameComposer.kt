@@ -110,8 +110,16 @@ internal class MetalFrameComposer(
          * the offscreen reader and the instrument keep reading the stored picture untouched.
          */
         adjustUniforms: FloatArray = DISABLED_ADJUST_UNIFORMS,
+        /**
+         * True applies the HDR-to-SDR law when the frame declares a PQ or HLG transfer. False
+         * (the default) keeps the stored picture raw, which is what the offscreen reader and
+         * the colour instrument compare against the CPU converter. SDR frames are bit-exact
+         * either way: the packed mode is 0 and the shader skips the whole block.
+         */
+        toneMapped: Boolean = false,
     ): MTLCommandBufferProtocol {
         pictureColor = frame.colorSpace
+        val toneUniforms = if (toneMapped) packToneUniforms(frame.colorSpace) else DISABLED_TONE_UNIFORMS
         val inputs = when (picture) {
             is MetalPicture.SoftwarePlanes -> softwareInputs(picture)
             is MetalPicture.CorePixelBuffer -> hardwareInputs(picture, frame)
@@ -147,6 +155,9 @@ internal class MetalFrameComposer(
                 // behaviour on some GPUs, and the disabled flag costs the shader one compare.
                 adjustUniforms.usePinned { pinned ->
                     encoder.setFragmentBytes(pinned.addressOf(0), (adjustUniforms.size * 4).toULong(), atIndex = 1u)
+                }
+                toneUniforms.usePinned { pinned ->
+                    encoder.setFragmentBytes(pinned.addressOf(0), (toneUniforms.size * 4).toULong(), atIndex = 2u)
                 }
                 inputs.textures.forEachIndexed { index, texture ->
                     encoder.setFragmentTexture(texture, atIndex = index.toULong())

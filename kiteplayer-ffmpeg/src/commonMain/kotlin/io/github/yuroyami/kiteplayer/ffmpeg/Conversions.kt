@@ -152,6 +152,9 @@ internal fun tightlyPackedToRgba(
                 "and an unusual software format needs a filter graph first.",
         )
     }
+    // The software half of the HDR-to-SDR law (17.12 M3). SDR frames return null here, which
+    // keeps every existing SDR pixel bit-exact.
+    HdrToneMap.forColorSpaceOrNull(colorSpace)?.mapInPlace(out)
     return out
 }
 

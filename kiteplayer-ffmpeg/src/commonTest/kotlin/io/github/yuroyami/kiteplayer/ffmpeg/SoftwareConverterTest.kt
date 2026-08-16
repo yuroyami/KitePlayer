@@ -63,6 +63,43 @@ class SoftwareConverterTest {
         assertContentEquals(left, centre)
     }
 
+    @Test
+    fun aPqFrameToneMapsAndAnSdrFrameStaysBitExact() {
+        val pq = ColorSpaceInfo(
+            matrix = ColorMatrix.Bt2020Ncl,
+            primaries = ColorPrimaries.Bt2020,
+            transfer = ColorTransfer.Pq,
+            fullRange = true,
+        )
+        // Full-range PQ grey Y=160, neutral chroma: about 314 nits, above the EETF knee
+        // but well below peak, so the spline shape itself is what the assertion proves.
+        val bytes = byteArrayOf(160.toByte(), 128.toByte(), 128.toByte())
+        val mapped = convert(bytes, 1, 1, PlayerPixelFormat.Yuv444p, pq)
+
+        // The Kotlin mirror of the law, exact arithmetic without the LUT warp.
+        val nits = HdrToneMap.pqDecode(160.0 / 255.0) * 10000.0
+        val expected = ((HdrToneMap.eetfNits(nits) / 203.0)
+            .coerceIn(0.0, 1.0)
+            .let { sdr -> kotlin.math.exp(kotlin.math.ln(sdr) / 2.2) } * 255.0 + 0.5).toInt()
+        for (channel in 0..2) {
+            val got = mapped[channel].toInt() and 0xFF
+            check(kotlin.math.abs(got - expected) <= 2) {
+                "tone-mapped PQ grey expected about $expected, channel $channel was $got"
+            }
+        }
+        check(mapped[3].toInt() == -1) { "alpha must stay opaque" }
+
+        // Same electricals declared SDR must be untouched by the tone-map hook.
+        val sdrColor = ColorSpaceInfo(
+            matrix = ColorMatrix.Bt709,
+            primaries = ColorPrimaries.Bt709,
+            transfer = ColorTransfer.Bt709,
+            fullRange = true,
+        )
+        val sdr = convert(bytes, 1, 1, PlayerPixelFormat.Yuv444p, sdrColor)
+        check(!sdr.contentEquals(mapped)) { "an SDR declaration must skip the tone map entirely" }
+    }
+
     private fun convert(
         bytes: ByteArray,
         width: Int,

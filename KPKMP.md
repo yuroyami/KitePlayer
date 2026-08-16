@@ -8206,6 +8206,32 @@ is no other.
   the raster worker off the actor) stays open; adopting it here would have been engine surgery
   mid-stage, and its home remains S4.d's row in the register for a later order.
 
+- **2026-08-16, S4.e in progress: three landings down, with one honest correction.**
+  LANDING ONE, the queue (1cc242a): openQueue(items, startIndex), Ended advancing to the next
+  item with the play intent preserved, LoopMode.All unlocked and wrapping (a queue of one or
+  none repeats the current item, which is what a whole queue of one means), next() and
+  previous() with typed refusals at the ends, the queue and its moving index on the snapshot,
+  and a plain open replacing the queue by contract; the advance is its own actor handler after
+  handleLoop, and four virtual-clock tests pin play-through, wrapping, movement and
+  replacement. LANDING TWO, stepping and screenshots (98c51dd): stepFrame() advances a PAUSED
+  player one nominal frame period by precise seek (video-only included; playing refuses
+  typed), and captureFrame() returns the newest presented frame as an owned CapturedFrame, the
+  documented use of SoftwareReadableFrame, plane-copied at the presentation boundary through
+  the schedule's one-shot gate (playing captures the next present; paused pushes one frame
+  through by a position-preserving precise seek; hardware-opaque frames refuse typed, naming
+  the tiers that do capture); five tests pin the step size, the refusals and that both shapes
+  copy the presented frame's own bytes. LANDING THREE'S FIRST HALF, chapters (0b3a700):
+  chapterAt(position), seekToChapter(index), and ChapterChanged finally emitting once per
+  boundary for playback and seeks alike, with the stale never-emitted KDocs corrected to
+  S4.b's truth and three tests over a scripted chapter table. THE CORRECTION (dbee0af): the
+  queue landing outdated two older tests that asserted All's refusal, and the landing runs'
+  grep-shaped gate MASKED the red suite for three commits; the tests now assert the new
+  contract and the suite is verified green by its own exit status. The lesson is recorded
+  here: a gate reads the exit code, never a grep of the output. STILL OWED IN S4.e: external
+  local subtitle files, typed filter attachment on open, and the fourth landing (the
+  openOptions echo, supportBundle, editions and programs typed-rejected, and the API truth
+  ledger sweep).
+
 ---
 
 ## 15. Horizon B execution: B1

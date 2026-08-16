@@ -8537,6 +8537,49 @@ to end). Later the same day; closes what the phase-M surge's item 7 owed except 
      ONLY phase-M content standing. Live https against the public internet is owner
      device-session fare. HLS (m3u8, not XML) was never in this order and is not pretended.
 
+**2026-08-16/17, the M4 surge (Fable 5, owner order: finish all that is left in phase M).
+Fifteen register rows plus the audit, executed by file locality; every closure is written on
+its own row in 17.11 and the audit table is 17.11.a. Per-piece commits 9f259fb, ff98d5f,
+628d899, a5b9fcb, f63cb60, 6abf146, 9852ac3, 5130cae, 549caf5, c9a63e7 and this entry's.**
+
+  1. **Audio (A1 to A6).** AudioTrack: honest partial-block counts (falsified in place), the
+     one-writer guard, FAILED-state recovery that reopens a fresh device (state before event,
+     caught by the suite's own race), the reusable timestamp holder and the wrap-extension law
+     (unit-proven). CoreAudio: the real device period queried at open and start with a
+     format-change listener, the deadline released BEFORE the ring consume, atomics for the
+     concurrently read fields; C suites, the render-path disassembly audit and source
+     discipline all green. Multichannel PCM landed on both sinks with FFmpeg-order masks and
+     the MPEG 5.1 A layout on Apple; A6's passthrough/offload/device-selection stay OPEN as
+     recorded.
+  2. **Hot path (P1, P2, P4, P5, P6).** Zero pipeline copies for pass-through audio (the old
+     never-alias pin inverted, both directions tested); iOS software frames convert once on
+     the CPU instead of the Metal roundtrip; six serial lanes over shared pools replace six
+     owned threads per player (suspend lanes on Default, blocking lanes on IO), stress suite
+     green; cue history prunes behind the position and rasterisation runs on its own lane
+     with a generation guard; snapshots publish on dirty passes only and the queue list is
+     cached.
+  3. **Rendering (R1, R2, R3, R14's Android half).** All three Apple renderers retain the
+     newest picture and redraw it when overlays OR picture controls change during a pause
+     (the Metal setAdjustments/setTransform paused limit retired with it); KiteVideo draws
+     overlays for audio-only media and before the first frame; a failed overlay image build
+     retries instead of advancing the hash, and close beats a racing build; the Compose GPU
+     tier's blit applies the one colour-matrix law (GLES column-major pack, unit-proven).
+  4. **The audit (17.11.a).** One real loss surfaced: KiteVideo's Apple HARDWARE readback
+     ignored tone mapping, so HDR through the zero-copy handoff washed out where the software
+     path did not. Closed in-surge: the display readback tone-maps (the instrument's raw read
+     stays the default). The remaining interop win, sustained-fullscreen power, is D-6's own
+     division of labour, not a loss. KiteVideo loses nowhere else.
+  5. **Deviations.** (a) Two superseded test pins updated WITH their registers' blessing: the
+     stereo-clamp pin (A6) and the never-alias pin (P2), both now stating the new law. (b)
+     SOL-A6 and SOL-P1/P2/R14 close PARTIAL with their remainders named on the rows. (c) The
+     GLES colour matrix has its pack unit-proven on the host; the on-device pixel proof rides
+     the owner's AGW-1 session like every Android GPU behaviour. (d) One commit (549caf5)
+     landed with its test compile red and was fixed forward in c9a63e7, recorded rather than
+     hidden.
+
+**PHASE M: COMPLETE except the owner riders (the iPhone KiteStats run and AGW-1) and the
+rows that closed PARTIAL with named remainders. The road's next phase by owner order is W.**
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -15761,12 +15804,13 @@ real-time island stays C (the audit's own keep-list, adopted below as the C-redu
 **Open rows.**
 
 Rendering and views:
-- SOL-R1 [V] Overlay changes still do not redraw a paused frame on Metal, UIKit and AppKit
-  (Metal defers to the next frame by comment). Home: S4.f.
-- SOL-R2 [V] KiteVideo draws no overlay before the first frame or for audio-only media
-  (KiteVideo.kt returns at the null frame before the overlay read). Home: S4.f.
-- SOL-R3 [C] KiteVideoRenderer overlay work can race close, and a per-image build failure still
-  advances the overlay hash (the failed image is skipped and never retried). Home: S4.f.
+- SOL-R1: CLOSED by the M4 surge (2026-08-17). All three Apple renderers retain the newest
+  picture (a retained CVPixelBuffer or the converted pixels) and re-encode it on overlay AND
+  picture-control changes; the render worker owns the redraw, so no lock was added.
+- SOL-R2: CLOSED by the M4 surge. The overlay pass is shared by the with-picture and
+  no-picture draws; audio-only media shows its subtitles.
+- SOL-R3: CLOSED by the M4 surge. A failed image build keeps the old hash so the next
+  publication retries, and a close that raced the build wins before publication.
 - SOL-R4 to SOL-R8: CLOSED by S2.e (non-planar BGRA sizing, the per-frame cache flush, the
   missing composer close path, pre-commit texture ownership, rotation normalization). The log's
   S2.e entry carries the proofs.
@@ -15782,28 +15826,35 @@ Rendering and views:
 - SOL-R13 [V] UIKit and AppKit fallback renderers reject RgbaBitmap storage larger than the
   minimum (exact-size equality); either require exact size everywhere or honour a stride.
   Home: S3.
-- SOL-R14 [V] (born S4.g) The picture controls (VideoAdjustments) and framing (VideoTransform)
-  are not applied by the UIKit/AppKit CPU fallback renderers, and Android's MediaCodec
-  direct-to-Surface tier CANNOT apply the colour matrix (the codec owns the Surface; no canvas
-  or shader touches those pixels; the Compose GPU tier's OES-to-RGBA blit is the natural hook).
-  Gamma is absent from VideoAdjustments by design (not affine). Home: S3.
+- SOL-R14 [V] REDUCED by the M4 surge: the Compose GPU tier's OES-to-RGBA blit now applies
+  the one colour-matrix law (column-major GLES pack, unit-proven; identity is bit-exact off),
+  and the Metal renderer's paused-picture limit for the controls is retired by SOL-R1's
+  retained redraw. REMAINING: the UIKit/AppKit CPU fallbacks still apply neither controls nor
+  framing, and the MediaCodec direct-to-SurfaceView tier still cannot by construction. Gamma
+  stays absent by design. Home: S3.
 
 Audio:
-- SOL-A1 [V] AudioTrackSink counts a whole block as submitted even when pause or stop
-  interrupts the blocking write partway. Home: S3.
-- SOL-A2 [C] AudioTrack writer lifecycle: duplicate resume can create two writer threads, and a
-  writer failure can leave the sink unstartable; wants one locked state machine with recovery
-  and device-lost events. Home: S3.
-- SOL-A3 [C] AudioTimestamp is polled and allocated roughly 94 times a second, and the
-  timestamp frame position is not wrap-extended (32-bit wrap at about 24.85 hours at 48 kHz).
-  Home: S3.
-- SOL-A4 [V] CoreAudio reports a hardcoded 512-frame device period instead of querying and
-  tracking route changes. Home: S3.
-- SOL-A5 [C] CoreAudio drain can observe an empty ring paired with the previous callback
-  deadline (publication order), and the stats `running` field is an ordinary C field read
-  concurrently. Home: S3.
-- SOL-A6 [C] Both sinks speak mono/stereo F32 only: no multichannel output, passthrough,
-  offload, device selection or full route recovery. Home: S3, with B4's swresample adoption.
+- SOL-A1: CLOSED by the M4 surge. The submitted count is what the device actually took,
+  partial blocks included; proven by an interrupted-write host test and falsified in place.
+- SOL-A2: CLOSED by the M4 surge. One writer ever (alive-writer guard), failure marks the
+  machine FAILED with writerRun dropped (state before the event, so a listener's immediate
+  start sees it), and the next start RECOVERS by releasing the dead device and opening a
+  fresh one. All three proven by host tests.
+- SOL-A3: CLOSED by the M4 surge. One DriverTimestamp holder for the driver's life (scratch
+  by contract), and the frame position wrap-extends by the head's own law, unit-proven; a
+  genuinely 64-bit position passes through untouched.
+- SOL-A4: CLOSED by the M4 surge. MaximumFramesPerSlice is queried at open and re-queried at
+  every start, and a stream-format property listener re-queries on CoreAudio's notification
+  thread; 512 remains only as the query-refused fallback.
+- SOL-A5: CLOSED by the M4 surge. The deadline publishes with release BEFORE the render
+  consumes the ring, so an observer that sees this callback's consumption sees its deadline;
+  `running` and the device period are atomics now. C suites, render audit and source
+  discipline all green after.
+- SOL-A6: PARTIAL by the M4 surge, deliberately. Multichannel PCM is REAL: AudioTrack
+  accepts 1/2/6/8 with the masks that match FFmpeg's interleave, CoreAudio accepts up to 6
+  with the MPEG 5.1 A layout declared, and unmapped counts fall to stereo (the mixer's safe
+  landing; 8-into-6 folding is SOL-P8's business). Passthrough, offload, device selection and
+  full route recovery remain OPEN here, each its own project. Home stays with B4.
 
 Subtitles:
 - SOL-S1 [V] The straight-alpha cue contract is violated by both rasterizers (premultiplied
@@ -15849,20 +15900,28 @@ API truth:
   sealed hardware-surface model plus renderer capability negotiation. Home: S3.
 
 Performance (the open remainder):
-- SOL-P1 [V] Apple's software-frame Compose path still reads Metal output back to CPU and
-  re-uploads (ImageBitmaps.ios raster; MetalPictureReader). S2.d's zero-copy covers hardware
-  frames in KiteVideo; the software tier and interop stills remain. Home: S3 (KV maturation).
-- SOL-P2 [C] Audio copies: native audio lands in ByteArray then FloatArray, and the pipeline
-  copies identity transforms. Home: S3.
+- SOL-P1: CLOSED for the software tier by the M4 surge: software planes convert on the CPU
+  in one pass (tone mapping included) instead of upload-readback-reupload; the Metal reader
+  serves hardware frames only, now tone-mapped for the display path. Interop stills stay
+  with KV maturation in W.
+- SOL-P2: CLOSED for the pipeline half by the M4 surge: a pass-through mixer aliases the
+  caller's scratch instead of copying, so plain playback runs zero pipeline copies before
+  the ring write (the aliasing is the documented output contract now). The native-to-
+  ByteArray half belongs to SOL-P3's KiteCodec window, unchanged.
 - SOL-P3 [C] KiteCodec frame access: native scratch plus second ByteArray on Native, copy
   before JNI's own copy on JVM, and per-access plane list boxing in nominally zero-copy reads.
   Home: the next KiteCodec window.
-- SOL-P4 [V] One OS thread per lane, roughly six per player, on every platform actual. Shared
-  executors with serial lanes, pinned threads only where the platform demands. Home: S3.
-- SOL-P5 [C] Cue history still grows and rasterisation still runs on the core actor (S4.c
-  improved timing; a raster worker and pruning cursor remain). Home: S4.d.
-- SOL-P6 [C] Core passes allocate queue/worker lists and publish full snapshots per pass;
-  wants dirty flags and cached samples. Home: S3.
+- SOL-P4: CLOSED by the M4 surge. SharedLaneDispatchers: limitedParallelism(1) lanes over
+  the shared pools, suspend-only lanes on Default, blocking lanes (demux, decoders, feeder)
+  on IO; the one platform-demanded pinned thread, the device callback, was never the
+  engine's. Full suites including the real-thread stress run green over it.
+- SOL-P5: CLOSED by the M4 surge. Container cues prune 30 seconds behind the position (a
+  backward seek re-decodes them; external tables are never pruned because nothing re-supplies
+  them), and rasterisation runs on its own serial lane with a generation guard so only the
+  newest publication lands; the job rides session.jobs for teardown.
+- SOL-P6: CLOSED by the M4 surge. The snapshot publishes only when a command, outcome or
+  explicit site marked the pass dirty (progress and stats keep their own intervals either
+  way), and the selected-queues list is cached for the session's life.
 - SOL-P7 [C] Metal pipelines compile per renderer/composer rather than caching per device, and
   the UIKit/AppKit CPU fallbacks recreate transformed frames and subtitle CGImages for identity
   geometry. Home: S3.
@@ -15939,6 +15998,29 @@ smokes. Each stage's expansion names the ones it owes.
   the same code with the engine's TLS beneath it); a live-https device run remains the owner's
   ordinary device-session fare, not a blocker.
 
+### 17.11.a The pure-Compose audit (M4's exit, run 2026-08-17)
+
+The feature table M4 demanded: KiteVideo (the Compose-true renderer) against the interop
+wrapper (platform view hosting the native renderers), per user-visible capability, after the
+M4 fixes landed. The rule was "KiteVideo loses nowhere"; one loss was found DURING the audit
+and closed in the same surge (the HDR row).
+
+| Capability | Interop (native renderers) | KiteVideo | Verdict |
+|---|---|---|---|
+| Scale modes (Fit/Fill/Stretch) | yes | yes, draw-phase | even |
+| Picture controls (eq) | yes, incl. paused redraw (R1) | yes; state change invalidates draw, paused included | even |
+| Framing (zoom/pan/aspect) | yes | yes, clipped draw | even |
+| Subtitle overlays | yes, paused redraw (R1) | yes; audio-only and pre-first-frame too (R2) | even |
+| HDR tone mapping | Metal shader (M3) | CPU law on software frames; the hardware readback now tone-maps for display (closed 2026-08-17) | even |
+| Rotation | yes | yes, draw-phase rotate | even |
+| Compose modifiers on the video itself (clip, alpha, shared elements) | no; a platform view hole | yes | KiteVideo wins |
+| Zero-copy hardware path | CVPixelBuffer to CAMetalLayer | Android API 31+ HardwareBuffer images; Apple zero-copy rides S2.d | even, per-platform |
+| Sustained fullscreen power | display controller presents; GPU idles | GPU lightly awake per frame | interop wins, RECORDED (17.9's honest cost, unchanged by design) |
+
+The one deliberate non-goal stands as designed: sustained fullscreen belongs to the baseline
+wrapper (D-6 keeps both paths for exactly this reason), so it is not a loss against the
+audit's rule but the division of labour the register chose. KiteVideo loses nowhere else.
+
 ### 17.12 The renewed road, 2026-08-16
 
 Written by Fable 5 at the owner's direction after the two 0.0.5/0.0.6 feature surges and the
@@ -15987,12 +16069,12 @@ iPhone, KitePlayer streams https media, shows styled dialogue-grade ASS, present
 washout, and survives the robustness rows below; no new mandatory native libraries entered the
 default artifact. Contents, in build order:
 
-**Progress 2026-08-16 (the phase-M and network surges, section 14):** M1, M2, M3 and M5
-CLOSED; KP-TLS closed by design (Ktor byte suppliers, OS TLS); the adaptive layer's first
-tier (Kotlin XML, DASH VOD, segment streaming) landed end to end; dav1d executed out of
-KC-AV1SW into both phone-flagship trees behind its DSL toggle; phase L's chain and module
-opened early by owner pull (Android JNI bridge and per-frame hook remain). M4 is the one
-phase-M content standing, plus the owner riders.
+**Progress 2026-08-17 (the phase-M, network and M4 surges, section 14):** M1, M2, M3, M4 and
+M5 CLOSED (A6 and a few M4 rows PARTIAL with named remainders); KP-TLS closed by design; the
+adaptive layer's first tier landed end to end; dav1d in both phone-flagship trees behind its
+DSL toggle; phase L's chain and module opened early (Android JNI bridge and per-frame hook
+remain). PHASE M IS COMPLETE except the owner riders (iPhone KiteStats, AGW-1). Next by the
+road's order: W.
   - **M1, the network trust layer.** Verify KP-TLS, then the custom AVIO bridge: one C callback
     surface in KiteCodec (avio read/seek into the engine), cinterop and JNI actuals, wired to
     `MediaIo` so the SPI stops being unimplemented surface, with Ktor engines supplying bytes

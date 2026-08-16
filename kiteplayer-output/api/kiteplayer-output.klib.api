@@ -67,7 +67,7 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.githu
 final class io.github.yuroyami.kiteplayer.output/MetalPictureReader { // io.github.yuroyami.kiteplayer.output/MetalPictureReader|null[0]
     constructor <init>() // io.github.yuroyami.kiteplayer.output/MetalPictureReader.<init>|<init>(){}[0]
 
-    final fun readRgba(io.github.yuroyami.kiteplayer.spi/VideoFrame, io.github.yuroyami.kiteplayer.output/MetalPicture): kotlin/ByteArray // io.github.yuroyami.kiteplayer.output/MetalPictureReader.readRgba|readRgba(io.github.yuroyami.kiteplayer.spi.VideoFrame;io.github.yuroyami.kiteplayer.output.MetalPicture){}[0]
+    final fun readRgba(io.github.yuroyami.kiteplayer.spi/VideoFrame, io.github.yuroyami.kiteplayer.output/MetalPicture, kotlin/Boolean = ...): kotlin/ByteArray // io.github.yuroyami.kiteplayer.output/MetalPictureReader.readRgba|readRgba(io.github.yuroyami.kiteplayer.spi.VideoFrame;io.github.yuroyami.kiteplayer.output.MetalPicture;kotlin.Boolean){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer|null[0]

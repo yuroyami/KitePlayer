@@ -43,7 +43,16 @@ public class MetalPictureReader public constructor() {
      * Renders [picture] and returns `width * height * 4` tightly packed RGBA bytes at the
      * frame's stored size.
      */
-    public fun readRgba(frame: VideoFrame, picture: MetalPicture): ByteArray {
+    public fun readRgba(
+        frame: VideoFrame,
+        picture: MetalPicture,
+        /**
+         * True runs the HDR-to-SDR law on an HDR frame (KiteVideo's display path wants what
+         * the viewer should SEE); false reads the stored picture raw, which is what the colour
+         * instrument compares against the CPU converter. SDR frames are bit-exact either way.
+         */
+        toneMapped: Boolean = false,
+    ): ByteArray {
         val width = frame.size.width
         val height = frame.size.height
         require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
@@ -64,6 +73,7 @@ public class MetalPictureReader public constructor() {
             viewportWidth = width,
             viewportHeight = height,
             quadOverride = identityQuad,
+            toneMapped = toneMapped,
         )
         commands.waitUntilCompleted()
         val bytes = ByteArray(width * height * 4)

@@ -55,7 +55,9 @@ internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
     if (reader != null) {
         val hardware = decoded.corePixelBufferOrNull()
             ?.let { io.github.yuroyami.kiteplayer.output.MetalPicture.CorePixelBuffer(it) }
-        if (hardware != null) return reader.readRgba(frame, hardware)
+        // toneMapped: this is the DISPLAY path, so an HDR CVPixelBuffer reads back as the SDR
+        // the viewer should see (M3's law); SDR frames stay bit-exact through the same flag.
+        if (hardware != null) return reader.readRgba(frame, hardware, toneMapped = true)
     }
     return SoftwareConverter.toRgba(decoded)
 }

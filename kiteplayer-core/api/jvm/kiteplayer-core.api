@@ -231,6 +231,25 @@ public final class io/github/yuroyami/kiteplayer/HwdecStatus$Software : io/githu
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/IoCachePolicy {
+	public fun <init> ()V
+	public fun <init> (ZIJJ)V
+	public synthetic fun <init> (ZIJJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()I
+	public final fun component3 ()J
+	public final fun component4 ()J
+	public final fun copy (ZIJJ)Lio/github/yuroyami/kiteplayer/IoCachePolicy;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/IoCachePolicy;ZIJJILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/IoCachePolicy;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackWindowBytes ()J
+	public final fun getEnabled ()Z
+	public final fun getForwardWindowBytes ()J
+	public final fun getReadChunkBytes ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/KiteLog {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/KiteLog;
 	public final fun install (Lio/github/yuroyami/kiteplayer/KiteLog$Sink;)V
@@ -343,6 +362,10 @@ public abstract interface class io/github/yuroyami/kiteplayer/MediaIo : java/lan
 	public abstract fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public abstract interface class io/github/yuroyami/kiteplayer/MediaIoResolver {
+	public abstract fun resolve (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public final class io/github/yuroyami/kiteplayer/MediaItem {
 	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -377,6 +400,21 @@ public abstract interface class io/github/yuroyami/kiteplayer/MonotonicClock {
 
 public final class io/github/yuroyami/kiteplayer/MonotonicClock$Companion {
 	public final fun getSystem ()Lio/github/yuroyami/kiteplayer/MonotonicClock;
+}
+
+public final class io/github/yuroyami/kiteplayer/NetworkConfig {
+	public fun <init> ()V
+	public fun <init> (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/MediaIoResolver;
+	public final fun component2 ()Lio/github/yuroyami/kiteplayer/IoCachePolicy;
+	public final fun copy (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;)Lio/github/yuroyami/kiteplayer/NetworkConfig;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/NetworkConfig;Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/NetworkConfig;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getIoCache ()Lio/github/yuroyami/kiteplayer/IoCachePolicy;
+	public final fun getIoResolver ()Lio/github/yuroyami/kiteplayer/MediaIoResolver;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public abstract class io/github/yuroyami/kiteplayer/PlaybackError {
@@ -797,10 +835,11 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TrackDeselected
 }
 
 public final class io/github/yuroyami/kiteplayer/PlayerConfig {
-	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;Lio/github/yuroyami/kiteplayer/NetworkConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;Lio/github/yuroyami/kiteplayer/NetworkConfig;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lio/github/yuroyami/kiteplayer/SyncMode;
 	public final fun component10 ()Lio/github/yuroyami/kiteplayer/Backends;
+	public final fun component11 ()Lio/github/yuroyami/kiteplayer/NetworkConfig;
 	public final fun component2 ()Lio/github/yuroyami/kiteplayer/HwdecPolicy;
 	public final fun component3 ()Lio/github/yuroyami/kiteplayer/FrameDropPolicy;
 	public final fun component4 ()Lio/github/yuroyami/kiteplayer/BufferPolicy;
@@ -809,8 +848,8 @@ public final class io/github/yuroyami/kiteplayer/PlayerConfig {
 	public final fun component7-UwyO8pc ()J
 	public final fun component8-UwyO8pc ()J
 	public final fun component9 ()Lio/github/yuroyami/kiteplayer/PlayerLogger;
-	public final fun copy-PLKeYGg (Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;)Lio/github/yuroyami/kiteplayer/PlayerConfig;
-	public static synthetic fun copy-PLKeYGg$default (Lio/github/yuroyami/kiteplayer/PlayerConfig;Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerConfig;
+	public final fun copy-fLLorI4 (Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;Lio/github/yuroyami/kiteplayer/NetworkConfig;)Lio/github/yuroyami/kiteplayer/PlayerConfig;
+	public static synthetic fun copy-fLLorI4$default (Lio/github/yuroyami/kiteplayer/PlayerConfig;Lio/github/yuroyami/kiteplayer/SyncMode;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lio/github/yuroyami/kiteplayer/FrameDropPolicy;Lio/github/yuroyami/kiteplayer/BufferPolicy;Lio/github/yuroyami/kiteplayer/AudioConfig;Lio/github/yuroyami/kiteplayer/SubtitleConfig;JJLio/github/yuroyami/kiteplayer/PlayerLogger;Lio/github/yuroyami/kiteplayer/Backends;Lio/github/yuroyami/kiteplayer/NetworkConfig;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlayerConfig;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAudio ()Lio/github/yuroyami/kiteplayer/AudioConfig;
 	public final fun getBackends ()Lio/github/yuroyami/kiteplayer/Backends;
@@ -818,6 +857,7 @@ public final class io/github/yuroyami/kiteplayer/PlayerConfig {
 	public final fun getFrameDrop ()Lio/github/yuroyami/kiteplayer/FrameDropPolicy;
 	public final fun getHardwareDecode ()Lio/github/yuroyami/kiteplayer/HwdecPolicy;
 	public final fun getLogger ()Lio/github/yuroyami/kiteplayer/PlayerLogger;
+	public final fun getNetwork ()Lio/github/yuroyami/kiteplayer/NetworkConfig;
 	public final fun getProgressInterval-UwyO8pc ()J
 	public final fun getStatsInterval-UwyO8pc ()J
 	public final fun getSubtitles ()Lio/github/yuroyami/kiteplayer/SubtitleConfig;

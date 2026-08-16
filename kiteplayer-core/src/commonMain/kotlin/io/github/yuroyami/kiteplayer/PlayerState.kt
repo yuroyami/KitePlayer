@@ -94,11 +94,13 @@ public data class Progress(
     /** How far ahead of [position] the demuxer has read, as a duration of media. */
     val bufferedAhead: Duration = ZERO,
     /**
-     * Contiguous ranges held in the read cache. One entry for a plain linear read.
+     * Contiguous ranges held by the engine's byte cache (KPKMP 17.12 M5). One entry today: the
+     * cache keeps a single window over the bytes, so one range covers the free seek-back span
+     * plus what has been read ahead. Byte positions map to time PROPORTIONALLY (byte fraction
+     * times duration), which is exact for constant bitrate and approximate for variable.
      *
-     * Always empty. There is no read cache to describe: the demuxer reads forward into per-stream packet
-     * queues and a seek clears them, so the only range that ever exists is the one [bufferedAhead]
-     * already reports. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Empty for opens that read through no [MediaIo] (a local file on FFmpeg's own path), when
+     * the cache is disabled, or when the source declares no size or duration to map against.
      */
     val bufferedRanges: List<ClosedRange<Duration>> = emptyList(),
 )

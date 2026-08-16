@@ -1410,11 +1410,32 @@ internal class PlaybackCore(
             VideoDecoderSelection.Configured
         },
     ): OpenSession {
-        val backendSession = acquireAcrossContext(
-            context = dispatchers.demux,
-            acquire = { backend.open(item) },
-            closeAbandoned = { it.close() },
-        ) ?: error("a media backend returned no session")
+        // M1's resolver and M5's cache, both at the one place every open passes. The resolver
+        // answers only for an item with a URI and no reader of its own; the cache wraps every
+        // reader-fed open. On an open FAILURE a resolver-produced reader is the engine's to
+        // close (the item's own reader stays the caller's, matching the backend's contract).
+        val resolvedIo = if (item.io == null) config.network.ioResolver?.resolve(item.uri) else null
+        val suppliedIo = item.io ?: resolvedIo
+        val cachingIo = if (suppliedIo != null && config.network.ioCache.enabled) {
+            CachingMediaIo(suppliedIo, config.network.ioCache)
+        } else {
+            null
+        }
+        val effectiveItem = when {
+            cachingIo != null -> item.copy(io = cachingIo)
+            resolvedIo != null -> item.copy(io = resolvedIo)
+            else -> item
+        }
+        val backendSession = try {
+            acquireAcrossContext(
+                context = dispatchers.demux,
+                acquire = { backend.open(effectiveItem) },
+                closeAbandoned = { it.close() },
+            ) ?: error("a media backend returned no session")
+        } catch (failure: Throwable) {
+            if (resolvedIo != null) runCatching { resolvedIo.close() }
+            throw failure
+        }
         // The reverse-order construction ledger (audit P1-2). Every resource acquired below
         // registers its undo the moment it exists; any failure runs the ledger newest-first under
         // NonCancellable, so nothing half built survives. Ownership transfers to OpenSession only
@@ -1595,6 +1616,7 @@ internal class PlaybackCore(
                 sink = sink,
                 renderer = renderer,
                 negotiatedFormat = negotiated,
+                cachingIo = cachingIo,
             )
         } catch (failure: Throwable) {
             // Newest-first, under NonCancellable: a cancelled open must still release everything
@@ -3468,6 +3490,7 @@ internal class PlaybackCore(
                 // poll position(), and the two must never disagree about which timeline is current.
                 position = position(),
                 bufferedAhead = bufferedAhead(session),
+                bufferedRanges = bufferedRanges(session),
             )
         }
         if ((now - lastStatsAtNanos).nanoseconds >= config.statsInterval) {
@@ -3502,6 +3525,24 @@ internal class PlaybackCore(
                 masterClock = masterClockKind(session),
             )
         }
+    }
+
+    /**
+     * The M5 cache window as a time range, byte-to-time mapped PROPORTIONALLY (byte fraction
+     * times duration). Exact for constant bitrate, approximate for variable, honest about both
+     * in the Progress KDoc; empty whenever size or duration is unknown or no cache is running.
+     */
+    private fun bufferedRanges(session: OpenSession?): List<ClosedRange<Duration>> {
+        val cache = session?.cachingIo ?: return emptyList()
+        val sizeBytes = cache.size ?: return emptyList()
+        if (sizeBytes <= 0L) return emptyList()
+        val durationUs = session.source.duration?.micros ?: return emptyList()
+        if (durationUs <= 0L) return emptyList()
+        val start = cache.windowStartByte.value
+        val end = cache.windowEndByte.value.coerceAtMost(sizeBytes)
+        if (end <= start) return emptyList()
+        fun toTime(byte: Long): Duration = (byte.toDouble() / sizeBytes * durationUs).toLong().microseconds
+        return listOf(toTime(start)..toTime(end))
     }
 
     private fun bufferedAhead(session: OpenSession?): Duration {
@@ -4201,6 +4242,8 @@ internal class PlaybackCore(
         val sink: AudioSink?,
         val renderer: AttachableRenderer,
         val negotiatedFormat: AudioFormat?,
+        /** Non-null when this open reads through the M5 byte cache; progress reads its window. */
+        val cachingIo: CachingMediaIo? = null,
     ) {
         /** Between the audio decoder and the feeder. Small, because the ring is the real buffer. */
         val decodedAudio: Channel<AudioBuffer> = Channel(capacity = 4)

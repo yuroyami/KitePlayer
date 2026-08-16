@@ -4,6 +4,8 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -54,6 +56,48 @@ class KitePlayerTest {
     // ---------------------------------------------------------------------------------------------
     // Input validation, D32.
     // ---------------------------------------------------------------------------------------------
+
+    @Test
+    fun `a uri open consults the resolver and the engine interposes its byte cache`() = runTest {
+        var resolvedFor: String? = null
+        val supplied = object : MediaIo {
+            override val size: Long = 1_000L
+            override val seekable: Boolean = true
+            override suspend fun read(into: ByteArray, offset: Int, length: Int): Int = -1
+            override suspend fun seek(position: Long) {}
+            override fun close() {}
+        }
+        val harness = CoreHarness(
+            this,
+            config = PlayerConfig(
+                network = NetworkConfig(
+                    ioResolver = MediaIoResolver { uri ->
+                        resolvedFor = uri
+                        if (uri.startsWith("https://")) supplied else null
+                    },
+                ),
+            ),
+        )
+        val player = player(harness)
+
+        player.open(MediaItem("https://example.test/movie.mkv"))
+        harness.run(200.milliseconds)
+        assertEquals("https://example.test/movie.mkv", resolvedFor, "the resolver never saw the uri")
+        val opened = harness.backend.lastOpenedItem
+        assertNotNull(opened?.io, "the resolved reader never reached the backend")
+        assertNotSame(supplied, opened?.io, "the engine must interpose the M5 cache, not pass the reader raw")
+
+        // A uri the resolver declines passes through untouched: local files stay on the
+        // backend's own fast path.
+        resolvedFor = null
+        player.stop()
+        harness.run(100.milliseconds)
+        player.open(MediaItem("scripted://local-file"))
+        harness.run(200.milliseconds)
+        assertEquals("scripted://local-file", resolvedFor, "the resolver is consulted for every uri open")
+        assertNull(harness.backend.lastOpenedItem?.io, "a declined uri must carry no reader")
+        harness.close()
+    }
 
     @Test
     fun `every numeric input is checked at the boundary`() = runTest {

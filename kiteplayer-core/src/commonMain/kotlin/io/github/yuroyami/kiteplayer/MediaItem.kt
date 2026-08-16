@@ -112,6 +112,22 @@ public interface MediaIo : AutoCloseable {
 }
 
 /**
+ * Turns a URI into a [MediaIo] when it knows how, at open time (KPKMP 17.12 M1, the Ktor
+ * half). Installed through [PlayerConfig.network]; the engine consults it exactly when a
+ * [MediaItem] carries a URI and no [MediaItem.io] of its own. Returning null passes the URI
+ * through to the backend untouched, which is what keeps local files on FFmpeg's own fast
+ * path.
+ *
+ * This is how https plays on phones: the engine's FFmpeg profile deliberately vendors no TLS
+ * backend (its protocol list is pinned to file/fd/pipe/data/http/tcp), so a resolver such as
+ * kiteplayer-network's Ktor one carries the bytes with the OS supplying TLS.
+ */
+public fun interface MediaIoResolver {
+    /** A new [MediaIo] for [uri], or null when this resolver does not handle it. */
+    public suspend fun resolve(uri: String): MediaIo?
+}
+
+/**
  * An external subtitle file added alongside a media item (S4.e).
  *
  * LOCAL SubRip and WebVTT files load at open: each becomes a selectable synthetic subtitle

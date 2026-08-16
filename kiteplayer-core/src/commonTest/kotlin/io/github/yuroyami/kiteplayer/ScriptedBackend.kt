@@ -280,8 +280,12 @@ internal class ScriptedBackend(
             }
         }
 
+    /** The exact item the engine handed over on the LAST open, resolver and cache applied. */
+    var lastOpenedItem: MediaItem? = null
+
     override suspend fun open(media: MediaItem): BackendSession {
         openCalls++
+        lastOpenedItem = media
         openGate?.await()
         openFailure?.let { throw it }
         return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus).also { sessions += it }

@@ -51,6 +51,12 @@ public data class PlayerConfig(
     val logger: PlayerLogger? = null,
     /** The backends to build the pipeline from. Replace them for a test or a new platform. */
     val backends: Backends = Backends(),
+    /**
+     * Network byte supply and the engine's byte cache (KPKMP 17.12 M1 and M5). The resolver
+     * turns URIs into [MediaIoResolver]-supplied readers at open; the cache wraps every
+     * [MediaIo]-fed open with a forward window and a RAM seek-back window.
+     */
+    val network: NetworkConfig = NetworkConfig(),
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive
@@ -91,6 +97,45 @@ public sealed class HwdecPolicy {
      * platform are skipped rather than treated as permission to call that platform's APIs.
      */
     public data class Prefer(val order: List<HwdecKind>) : HwdecPolicy()
+}
+
+/**
+ * How media bytes arrive over a network, and how the engine caches them (M1, M5).
+ */
+public data class NetworkConfig(
+    /**
+     * Consulted at open for a [MediaItem] that carries a URI and no [MediaItem.io]. Null (the
+     * default) means URIs go to the backend untouched. kiteplayer-network ships the Ktor
+     * resolver that makes http and https play with the OS supplying TLS.
+     */
+    val ioResolver: MediaIoResolver? = null,
+    /** The engine-owned byte cache every [MediaIo]-fed open gets. */
+    val ioCache: IoCachePolicy = IoCachePolicy(),
+)
+
+/**
+ * The M5 byte cache: one contiguous RAM window over an [MediaIo]'s bytes. Reads pull
+ * [readChunkBytes] at a time and append to the window; a seek that lands inside the window is
+ * served from RAM without touching the source, which is what makes a small seek-back free on a
+ * network stream. The window keeps at most [backWindowBytes] behind the cursor and
+ * [forwardWindowBytes] in total; [Progress.bufferedRanges] reports the window, time-mapped.
+ */
+public data class IoCachePolicy(
+    val enabled: Boolean = true,
+    /** How much one upstream read pulls. Bigger means fewer network round trips. */
+    val readChunkBytes: Int = 256 * 1024,
+    /** How many bytes behind the cursor stay in RAM for free backward seeks. */
+    val backWindowBytes: Long = 8L * 1024 * 1024,
+    /** The whole window's byte budget, back window included. */
+    val forwardWindowBytes: Long = 32L * 1024 * 1024,
+) {
+    init {
+        require(readChunkBytes > 0) { "readChunkBytes must be positive, was $readChunkBytes" }
+        require(backWindowBytes >= 0) { "backWindowBytes must not be negative, was $backWindowBytes" }
+        require(forwardWindowBytes > backWindowBytes) {
+            "forwardWindowBytes ($forwardWindowBytes) must exceed backWindowBytes ($backWindowBytes)"
+        }
+    }
 }
 
 /**

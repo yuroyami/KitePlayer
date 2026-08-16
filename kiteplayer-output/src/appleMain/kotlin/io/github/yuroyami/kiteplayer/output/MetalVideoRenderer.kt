@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.useContents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CloseableCoroutineDispatcher
@@ -101,6 +102,10 @@ public class MetalVideoRenderer public constructor(
             while (!closed.value) {
                 signal.receive()
                 drawPending()
+                // SOL-R1: overlay and picture-control changes reach a PAUSED frame by
+                // re-encoding the retained picture. A frame drawn above already carried them.
+                if (redrawWanted.getAndSet(false) && pending.value == null) drawRetained()
+                else redrawWanted.value = false
             }
         } catch (_: ClosedReceiveChannelException) {
             // close() closed the signal channel; the ordinary way out, not a fault.
@@ -177,6 +182,7 @@ public class MetalVideoRenderer public constructor(
                 toneMapped = true,
             )
             presented.incrementAndGet()
+            retainForRedraw(frame, picture)
         } catch (failure: Throwable) {
             failed.incrementAndGet()
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "Metal encode failed"))
@@ -185,23 +191,91 @@ public class MetalVideoRenderer public constructor(
         }
     }
 
+    /* ── SOL-R1: the retained last picture, render-thread confined. ─────────────────────── */
+
+    private var retainedPicture: MetalPicture? = null
+    private var retainedMeta: RetainedFrameMeta? = null
+    private val redrawWanted = kotlinx.atomicfu.atomic(false)
+
+    /** The frame facts encode() reads, kept past the frame's close. Never closed itself. */
+    private class RetainedFrameMeta(
+        override val size: io.github.yuroyami.kiteplayer.VideoSize,
+        override val rotationDegrees: Int,
+        override val colorSpace: io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo,
+    ) : VideoFrame {
+        override val pts: io.github.yuroyami.kiteplayer.Pts = io.github.yuroyami.kiteplayer.Pts.Zero
+        override val duration: io.github.yuroyami.kiteplayer.Pts? = null
+        override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Opaque
+        override val hardwareSurface: io.github.yuroyami.kiteplayer.spi.HwSurfaceKind? = null
+        override val generation: io.github.yuroyami.kiteplayer.Generation =
+            io.github.yuroyami.kiteplayer.Generation.Initial
+        override fun close() = Unit
+    }
+
+    /** A hardware picture outlives its frame only through its own retain; software planes are
+     *  plain arrays already owned by the resolved picture. */
+    private fun retainForRedraw(frame: VideoFrame, picture: MetalPicture) {
+        if (picture is MetalPicture.CorePixelBuffer) {
+            platform.CoreVideo.CVPixelBufferRetain(picture.buffer.reinterpret())
+        }
+        releaseRetained()
+        retainedPicture = picture
+        retainedMeta = RetainedFrameMeta(frame.size, frame.rotationDegrees, frame.colorSpace)
+    }
+
+    private fun releaseRetained() {
+        (retainedPicture as? MetalPicture.CorePixelBuffer)?.let {
+            platform.CoreVideo.CVPixelBufferRelease(it.buffer.reinterpret())
+        }
+        retainedPicture = null
+        retainedMeta = null
+    }
+
+    /** drawPending's shape over the retained picture; render thread only. */
+    private fun drawRetained() {
+        val picture = retainedPicture ?: return
+        val meta = retainedMeta ?: return
+        try {
+            val drawable = layer.nextDrawable() ?: return
+            val width = viewportWidth.value.takeIf { it > 0 }
+                ?: layer.drawableSize.useContents { width }.toInt().coerceAtLeast(1)
+            val height = viewportHeight.value.takeIf { it > 0 }
+                ?: layer.drawableSize.useContents { height }.toInt().coerceAtLeast(1)
+            composer.encode(
+                target = drawable.texture as platform.Metal.MTLTextureProtocol,
+                frame = meta,
+                picture = picture,
+                overlay = overlay.value,
+                viewportWidth = width,
+                viewportHeight = height,
+                presentDrawable = drawable,
+                scaleMode = scaleMode.value,
+                videoTransform = videoTransform.value,
+                adjustUniforms = adjustUniforms.value,
+                toneMapped = true,
+            )
+        } catch (failure: Throwable) {
+            eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "Metal redraw failed"))
+        }
+    }
+
     override fun vsyncIntervalNanos(): Long? = null
 
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
         scaleMode.value = mode
+        requestRedraw()
     }
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
         videoTransform.value = transform
-        // Applied at the next draw, the same recorded paused-picture limit as setAdjustments.
+        // SOL-R1 retired the old paused-picture limit: the retained picture re-encodes now.
+        requestRedraw()
     }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustUniforms.value = packAdjustUniforms(adjustments)
-        // Applied at the next draw. A PAUSED picture keeps its old colours until then: this
-        // renderer holds no drawn-frame copy to re-encode, the recorded SOL-R1 family limit,
-        // which is also why KiteVideo (which repaints its held image immediately) is the
-        // flagship. Playing content picks the change up within one frame interval.
+        // SOL-R1 retired the old paused-picture limit: the retained picture re-encodes now.
+        requestRedraw()
     }
 
     override fun setViewport(width: Int, height: Int, scale: Float) {
@@ -211,10 +285,15 @@ public class MetalVideoRenderer public constructor(
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         this.overlay.value = overlay
-        // No frame needs to arrive for a subtitle change to show; redraw is the next present's
-        // job during playback, and during a pause the newest frame has already been consumed, so
-        // the change waits for the next frame. The engine republished on cue edges, which during
-        // playback is at most one frame away. A paused-picture redraw is S2.d's KiteVideo story.
+        // SOL-R1: a paused picture shows the change too; the render worker re-encodes the
+        // retained picture when no fresh frame is on its way.
+        requestRedraw()
+    }
+
+    private fun requestRedraw() {
+        if (closed.value) return
+        redrawWanted.value = true
+        signal.trySend(Unit)
     }
 
     override fun close() {
@@ -222,6 +301,9 @@ public class MetalVideoRenderer public constructor(
         signal.close()
         drainPending()
         runBlocking { workerJob.join() }
+        // After the join the render thread is out; the retained picture's release cannot race
+        // a redraw (SOL-R1's ownership half).
+        releaseRetained()
         worker.cancel()
         // After the join no draw is in flight from this renderer, so the composer can fence the
         // GPU and give back its texture cache and native holder (17.11 SOL-R6).

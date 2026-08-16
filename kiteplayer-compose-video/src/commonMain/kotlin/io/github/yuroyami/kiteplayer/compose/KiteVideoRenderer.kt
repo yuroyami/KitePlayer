@@ -297,6 +297,7 @@ internal class KiteVideoRenderer(
             return
         }
         if (overlay.contentHash == overlayHash) return
+        var anyFailed = false
         val items = overlay.images.mapNotNull { image ->
             val bitmap = image.bitmap
             if (bitmap.width <= 0 || bitmap.height <= 0) return@mapNotNull null
@@ -308,12 +309,18 @@ internal class KiteVideoRenderer(
                 image = try {
                     makeOverlayImage(bitmap.pixels, bitmap.width, bitmap.height)
                 } catch (failure: Throwable) {
+                    anyFailed = true
                     eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "building an overlay image failed"))
                     return@mapNotNull null
                 },
             )
         }
-        overlayHash = overlay.contentHash
+        /* SOL-R3, both halves. A failed image build must NOT advance the hash: recording the
+         * content as published would skip the retry the next setOverlay call is, and the text
+         * would simply never appear. And a close that raced this build must win: publishing
+         * after close would hand a dead renderer's images to a live composition. */
+        if (closed.value) return
+        if (!anyFailed) overlayHash = overlay.contentHash
         publishOverlay(
             KiteVideoOverlay(
                 items = items,

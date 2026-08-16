@@ -124,6 +124,11 @@ public class UIKitVideoRenderer internal constructor(
             while (!closed.value) {
                 signal.receive()
                 convertPending()
+                // SOL-R1: an overlay change during a pause re-composites the retained pixels.
+                // When a frame DID convert above, the new overlay is already baked into it and
+                // the flag clears without a second draw.
+                if (redrawWanted.getAndSet(false) && pendingFrame.value == null) redrawRetained()
+                else redrawWanted.value = false
             }
         } catch (_: ClosedReceiveChannelException) {
             // close() ends the worker's wait by closing the signal.
@@ -166,7 +171,14 @@ public class UIKitVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val image = try {
-            makeImage(convert(frame), size, rotation)
+            val rgba = convert(frame)
+            // SOL-R1: the newest source pixels stay behind, worker-confined, so an overlay
+            // change during a pause can re-composite without a frame arriving. One RGBA frame
+            // of memory, exactly the paused picture the viewer is looking at.
+            retainedRgba = rgba
+            retainedSize = size
+            retainedRotation = rotation
+            makeImage(rgba, size, rotation)
         } catch (_: Throwable) {
             null
         } finally {
@@ -176,6 +188,24 @@ public class UIKitVideoRenderer internal constructor(
             failed.incrementAndGet()
             return
         }
+        deliver(image)
+    }
+
+    /* SOL-R1: worker-thread confined, like every conversion input. */
+    private var retainedRgba: ByteArray? = null
+    private var retainedSize: VideoSize? = null
+    private var retainedRotation: Int = 0
+    private val redrawWanted = kotlinx.atomicfu.atomic(false)
+
+    /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
+    private fun redrawRetained() {
+        val rgba = retainedRgba ?: return
+        val size = retainedSize ?: return
+        val image = try {
+            makeImage(rgba, size, retainedRotation)
+        } catch (_: Throwable) {
+            null
+        } ?: return
         deliver(image)
     }
 
@@ -432,6 +462,10 @@ public class UIKitVideoRenderer internal constructor(
      */
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         overlaySlot.value = overlay
+        // SOL-R1: a paused picture shows the change too; the worker re-composites from the
+        // retained pixels when no fresh frame is on its way.
+        redrawWanted.value = true
+        signal.trySend(Unit)
     }
 
     override fun close() {

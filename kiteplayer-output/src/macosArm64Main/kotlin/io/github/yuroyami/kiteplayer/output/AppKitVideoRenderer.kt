@@ -172,6 +172,10 @@ public class AppKitVideoRenderer internal constructor(
             while (!closed.value) {
                 signal.receive()
                 convertPending()
+                // SOL-R1: an overlay change during a pause re-composites the retained pixels;
+                // a converted frame above already baked the new overlay in.
+                if (redrawWanted.getAndSet(false) && pending.value == null) redrawRetained()
+                else redrawWanted.value = false
             }
         } catch (_: ClosedReceiveChannelException) {
             // close() closed the signal channel. That is the ordinary way out of this loop, not a fault:
@@ -242,7 +246,18 @@ public class AppKitVideoRenderer internal constructor(
         val displayWidth = frame.size.displayWidth
         val rotation = quarterTurn(frame.rotationDegrees)
         val image = try {
-            if (width <= 0 || height <= 0) null else makeImage(convert(frame), width, height, displayWidth, rotation)
+            if (width <= 0 || height <= 0) {
+                null
+            } else {
+                val rgba = convert(frame)
+                // SOL-R1: retained for paused-overlay re-composites, worker-confined.
+                retainedRgba = rgba
+                retainedWidth = width
+                retainedHeight = height
+                retainedDisplayWidth = displayWidth
+                retainedRotation = rotation
+                makeImage(rgba, width, height, displayWidth, rotation)
+            }
         } catch (failure: Throwable) {
             eventFlow.tryEmit(RendererEvent.Failed(failure.message ?: "conversion failed"))
             null
@@ -496,8 +511,30 @@ public class AppKitVideoRenderer internal constructor(
      * the next frame, the same honest note as the Metal renderer; cue edges republish during
      * playback at most one frame away.
      */
+    /* SOL-R1: worker-thread confined. */
+    private var retainedRgba: ByteArray? = null
+    private var retainedWidth: Int = 0
+    private var retainedHeight: Int = 0
+    private var retainedDisplayWidth: Int = 0
+    private var retainedRotation: Int = 0
+    private val redrawWanted = kotlinx.atomicfu.atomic(false)
+
+    /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
+    private fun redrawRetained() {
+        val rgba = retainedRgba ?: return
+        val image = try {
+            makeImage(rgba, retainedWidth, retainedHeight, retainedDisplayWidth, retainedRotation)
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        deliver(image)
+    }
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         overlaySlot.value = overlay
+        // SOL-R1: a paused picture shows the change too.
+        redrawWanted.value = true
+        signal.trySend(Unit)
     }
 
     /**

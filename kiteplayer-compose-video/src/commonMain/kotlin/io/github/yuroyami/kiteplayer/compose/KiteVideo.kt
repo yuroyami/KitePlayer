@@ -51,6 +51,9 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                 val frame = state.acquireFrameForDraw(frameCommitter.canDrawCommitFencedFrames)
                 if (frame == null) {
                     frameCommitter.frameRecorded(null)
+                    // SOL-R2: audio-only media and the moment before the first frame still show
+                    // their subtitles; the picture's absence is not the text's.
+                    drawOverlayItems(state)
                     return@drawBehind
                 }
                 var recorded = false
@@ -108,23 +111,28 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                 }
                 // Subtitles composite above the picture in OUTPUT space, unrotated: overlays are
                 // laid out for the output size, the same law the platform renderers obey.
-                val overlay = state.overlay.value ?: return@drawBehind
-                val scaleX = size.width / overlay.viewportWidth.coerceAtLeast(1)
-                val scaleY = size.height / overlay.viewportHeight.coerceAtLeast(1)
-                overlay.items.forEach { item ->
-                    drawImage(
-                        image = item.image,
-                        dstOffset = IntOffset(
-                            (item.x * scaleX).roundToInt(),
-                            (item.y * scaleY).roundToInt(),
-                        ),
-                        dstSize = IntSize(
-                            (item.width * scaleX).roundToInt().coerceAtLeast(1),
-                            (item.height * scaleY).roundToInt().coerceAtLeast(1),
-                        ),
-                        filterQuality = FilterQuality.Low,
-                    )
-                }
+                drawOverlayItems(state)
             },
     )
+}
+
+/** The overlay pass, shared by the with-picture and no-picture draws (SOL-R2). */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOverlayItems(state: KiteVideoState) {
+    val overlay = state.overlay.value ?: return
+    val scaleX = size.width / overlay.viewportWidth.coerceAtLeast(1)
+    val scaleY = size.height / overlay.viewportHeight.coerceAtLeast(1)
+    overlay.items.forEach { item ->
+        drawImage(
+            image = item.image,
+            dstOffset = IntOffset(
+                (item.x * scaleX).roundToInt(),
+                (item.y * scaleY).roundToInt(),
+            ),
+            dstSize = IntSize(
+                (item.width * scaleX).roundToInt().coerceAtLeast(1),
+                (item.height * scaleY).roundToInt().coerceAtLeast(1),
+            ),
+            filterQuality = FilterQuality.Low,
+        )
+    }
 }

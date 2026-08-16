@@ -73,6 +73,12 @@ public class MetalVideoRenderer public constructor(
     /** The ruling scale mode; written by the engine, read by the render thread per draw. */
     private val scaleMode = atomic(io.github.yuroyami.kiteplayer.VideoScale.Fit)
 
+    /** The picture controls, pre-packed for the shader once per setting. Read per draw. */
+    private val adjustUniforms = atomic(DISABLED_ADJUST_UNIFORMS)
+
+    /** The ruling framing controls, under the same ownership as the scale mode. */
+    private val videoTransform = atomic(io.github.yuroyami.kiteplayer.VideoTransform.Identity)
+
     private val viewportWidth = atomic(0)
     private val viewportHeight = atomic(0)
 
@@ -166,6 +172,8 @@ public class MetalVideoRenderer public constructor(
                 viewportHeight = height,
                 presentDrawable = drawable,
                 scaleMode = scaleMode.value,
+                videoTransform = videoTransform.value,
+                adjustUniforms = adjustUniforms.value,
             )
             presented.incrementAndGet()
         } catch (failure: Throwable) {
@@ -180,6 +188,19 @@ public class MetalVideoRenderer public constructor(
 
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
         scaleMode.value = mode
+    }
+
+    override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
+        videoTransform.value = transform
+        // Applied at the next draw, the same recorded paused-picture limit as setAdjustments.
+    }
+
+    override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
+        adjustUniforms.value = packAdjustUniforms(adjustments)
+        // Applied at the next draw. A PAUSED picture keeps its old colours until then: this
+        // renderer holds no drawn-frame copy to re-encode, the recorded SOL-R1 family limit,
+        // which is also why KiteVideo (which repaints its held image immediately) is the
+        // flagship. Playing content picks the change up within one frame interval.
     }
 
     override fun setViewport(width: Int, height: Int, scale: Float) {

@@ -33,7 +33,9 @@ import io.github.yuroyami.kiteplayer.TrackInfo
 import io.github.yuroyami.kiteplayer.TrackKind
 import io.github.yuroyami.kiteplayer.Tracks
 import io.github.yuroyami.kiteplayer.VideoPlayback
+import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoScale
+import io.github.yuroyami.kiteplayer.VideoTransform
 import io.github.yuroyami.kiteplayer.spi.AudioBuffer
 import io.github.yuroyami.kiteplayer.spi.AudioDecoder
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
@@ -322,16 +324,35 @@ internal class PlaybackCore(
     private var lastError: PlaybackError? = null
     private var playRequested = false
     private var loop: LoopMode = LoopMode.Off
+
+    /**
+     * The armed A-B loop (S4.g). A player property like [speed]: it survives seeks and reopen,
+     * because the caller armed the loop, not the media. With only A armed the loop wraps at the
+     * end of the media; with both armed the crossing check in [handlePlaybackTime] owns B.
+     */
+    private var abLoopA: Duration? = null
+    private var abLoopB: Duration? = null
     private var speed: Double = 1.0
+
+    /** Whether speed keeps pitch, seeded from config. A live change rides a precise seek like speed. */
+    private var preservePitch: Boolean = config.audio.preservePitch
     private var volume: Float = 1.0f
     private var muted: Boolean = false
     private var videoScale: VideoScale = VideoScale.Fit
+    private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
+    private var videoTransform: VideoTransform = VideoTransform.Identity
 
     /** Runtime subtitle timing shift, seeded from config. Positive shows cues later. */
     private var subtitleDelay: Duration = config.subtitles.delay
 
     /** Runtime subtitle size, seeded from config, applied at the next rasterisation. */
     private var subtitleScale: Float = config.subtitles.fontScale
+
+    /**
+     * Where the implicit bottom stack anchors, as a fraction of the viewport height (mpv's
+     * sub-pos over 100). 1.0 is the ordinary bottom edge; explicitly positioned cues never move.
+     */
+    private var subtitlePosition: Float = 1f
 
     /**
      * Runtime audio timing shift. Positive means the sound reaches the ear late (a Bluetooth
@@ -1089,6 +1110,20 @@ internal class PlaybackCore(
                 if (session == null) pendingRenderer?.setScaleMode(command.mode)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetVideoAdjustments -> {
+                videoAdjustments = command.value
+                // The same delivery law as the scale mode, because it is the same kind of value:
+                // the engine's, honoured by whichever renderer is or becomes attached.
+                session?.renderer?.setAdjustments(command.value)
+                if (session == null) pendingRenderer?.setAdjustments(command.value)
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetVideoTransform -> {
+                videoTransform = command.value
+                session?.renderer?.setTransform(command.value)
+                if (session == null) pendingRenderer?.setTransform(command.value)
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetSubtitleDelay -> {
                 subtitleDelay = command.value
                 // Retimed on the very next pass: dropping the published key forces the selector
@@ -1098,6 +1133,12 @@ internal class PlaybackCore(
             }
             is CoreCommand.SetSubtitleScale -> {
                 subtitleScale = command.value
+                session?.publishedCueKey = null
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetSubtitlePosition -> {
+                subtitlePosition = command.value
+                // Re-rasterised on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
                 command.reply.complete(Unit)
             }
@@ -1112,6 +1153,52 @@ internal class PlaybackCore(
                 loop = command.mode
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetPreservePitch -> {
+                val active = session
+                when {
+                    command.value == preservePitch -> command.reply.complete(Unit)
+                    // The same boundary law as SetSpeed, because it IS the same boundary: the
+                    // mechanism can only change where the ring is empty, which is a flush, which
+                    // a live change reaches by precise seek, which an unseekable source cannot make.
+                    active?.audio != null && !active.source.seekable -> {
+                        command.reply.completeExceptionally(
+                            UnsupportedOperationException(
+                                "a live pitch-law change re-anchors by precise seek, and this source is not seekable",
+                            ),
+                        )
+                    }
+                    else -> {
+                        preservePitch = command.value
+                        active?.audio?.preservePitch = command.value
+                        if (active?.audio != null && speed != 1.0) {
+                            // Audible only away from 1.0, so the rebuffer is only paid there. At
+                            // 1.0 both mechanisms are the same bypass and the flush would buy
+                            // nothing; the stored value rules the next epoch anyway.
+                            queueSeek(
+                                SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise),
+                                null,
+                            )
+                        }
+                        command.reply.complete(Unit)
+                    }
+                }
+            }
+            is CoreCommand.SetAbLoop -> {
+                val active = session
+                // The jump back is an ordinary precise seek, and an unseekable source has no way
+                // to make one: the same refusal, for the same reason, as a live speed change.
+                if (command.a != null && active != null && !active.source.seekable) {
+                    command.reply.completeExceptionally(
+                        UnsupportedOperationException(
+                            "the A-B loop jumps back by precise seek, and this source is not seekable",
+                        ),
+                    )
+                } else {
+                    abLoopA = command.a
+                    abLoopB = command.b
+                    command.reply.complete(Unit)
+                }
+            }
         }
     }
 
@@ -1125,9 +1212,11 @@ internal class PlaybackCore(
      * renderer stays attached and the caller gets an explicit failure.
      */
     private suspend fun setRenderer(renderer: VideoRenderer?): Boolean {
-        // The scale mode survives renderer swaps: the mode belongs to the player, so whichever
-        // renderer arrives is told the ruling mode before it draws a first frame.
+        // The scale mode, picture controls and framing survive renderer swaps: all belong to the
+        // player, so whichever renderer arrives is told the ruling values before its first frame.
         renderer?.setScaleMode(videoScale)
+        renderer?.setAdjustments(videoAdjustments)
+        renderer?.setTransform(videoTransform)
         val session = this.session
         if (session == null) {
             pendingRenderer = renderer
@@ -1182,6 +1271,27 @@ internal class PlaybackCore(
     // Open.
     // ---------------------------------------------------------------------------------------------
 
+    /**
+     * Where the item asks to start, in microseconds, or null when the open starts where the
+     * container does. An unhonourable request (unseekable source, position past the end) is
+     * warned typed here rather than ignored silently or failed loudly: the media still plays,
+     * from its own start, and the caller is told why.
+     */
+    private fun startPositionTargetUs(media: MediaItem, built: OpenSession): Long? {
+        val requested = media.startPosition ?: return null
+        if (requested <= Duration.ZERO) return null
+        if (!built.source.seekable) {
+            warn(PlaybackWarning.StartPositionIgnored(requested, "this source is not seekable"))
+            return null
+        }
+        val durationUs = built.source.duration?.micros
+        if (durationUs != null && requested.inWholeMicroseconds >= durationUs) {
+            warn(PlaybackWarning.StartPositionIgnored(requested, "past the end of the media"))
+            return null
+        }
+        return requested.inWholeMicroseconds
+    }
+
     private suspend fun runOpen(command: CoreCommand.Open) {
         // Open is legal from Ended, and Ended keeps its session alive so the viewer can seek back.
         // That session must be fully torn down and awaited BEFORE the new one is installed:
@@ -1213,12 +1323,22 @@ internal class PlaybackCore(
         try {
             var built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto, StreamChoice.Auto)
             session = built
+            // The item's start position (SOL-API1), first half: the SOURCE is moved before the
+            // workers start, while nothing reads it, so the initial fill decodes from the
+            // keyframe at or before the target and nothing from the beginning of the media is
+            // decoded, presented or heard. The exact landing is the second half below, made
+            // cheap by this half: the refine walks forward within one group of pictures.
+            val startTargetUs = startPositionTargetUs(command.media, built)
+            if (startTargetUs != null) {
+                withContext(dispatchers.demux) { built.source.seekToKeyframe(Pts(startTargetUs)) }
+                publishedPositionMicros.value = startTargetUs
+            }
             startWorkers(built)
             var recoveredAndPresented = false
             try {
                 when (awaitInitialFill(built)) {
                     FillOutcome.WorkerFinished -> {
-                        val observed = recoverObservedVideoFailure(built, Pts.Zero)
+                        val observed = recoverObservedVideoFailure(built, Pts(startTargetUs ?: 0L))
                         if (observed == null) throw workerOutcomeException(built, "before the initial fill completed")
                         val recovered = observed.result ?: run {
                             command.reply.completeExceptionally(CancellationException("open was preempted"))
@@ -1237,7 +1357,7 @@ internal class PlaybackCore(
                 if (!recoveredAndPresented) presentFirstFrame(built)
             } catch (failure: Throwable) {
                 if (failure is CancellationException) throw failure
-                val observed = recoverObservedVideoFailure(built, Pts.Zero) ?: throw failure
+                val observed = recoverObservedVideoFailure(built, Pts(startTargetUs ?: 0L)) ?: throw failure
                 val recovered = observed.result ?: run {
                     command.reply.completeExceptionally(CancellationException("open was preempted"))
                     return
@@ -1251,6 +1371,12 @@ internal class PlaybackCore(
                 command.media.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true
             }?.let { immediate ->
                 if (session?.subtitleStream == null) applyExternalSubtitle(immediate.id)
+            }
+            // The start position's second half: the exact landing, as an ordinary precise seek
+            // through the ordinary machine, so the masked position report, generation fencing
+            // and pause preservation all hold without a special case.
+            if (startTargetUs != null) {
+                queueSeek(SeekRequest(SeekTarget.Absolute(Pts(startTargetUs)), SeekMode.Precise), null)
             }
             setStatus(PlaybackStatus.Paused)
             eventSink.tryEmit(PlayerEvent.Opened(command.media, tracks))
@@ -1418,6 +1544,7 @@ internal class PlaybackCore(
                 // Before open: open() captures the wanted rate as the fresh path's epoch, so a
                 // player already at 2x opens its next file at 2x rather than at 1x until a seek.
                 createdPlayback.speed = speed
+                createdPlayback.preservePitch = preservePitch
                 negotiated = createdPlayback.open(audioDecoder.outputFormat)
                 createdPlayback.volume = volume
                 createdPlayback.muted = muted
@@ -2229,6 +2356,29 @@ internal class PlaybackCore(
             if (shownFor >= STILL_IMAGE_DURATION) stillImageFinished = true
             else wakeIn(STILL_IMAGE_DURATION - shownFor)
         }
+        // The A-B loop's B crossing (S4.g): compared on the published reading like the chapters,
+        // so a wrap is impossible while a seek is in flight and the pass after one starts clean.
+        // Playing only: a paused player may be seeked past B and inspected there. The wrap is an
+        // ordinary precise seek, so an unseekable source cannot wrap; arming refused the live
+        // case, and a loop armed before such an open simply never fires.
+        val loopA = abLoopA
+        val loopB = abLoopB
+        if (loopA != null && loopB != null && pendingSeek == null &&
+            status == PlaybackStatus.Playing && session.source.seekable
+        ) {
+            val positionUs = publishedPositionMicros.value
+            val bUs = loopB.inWholeMicroseconds
+            if (positionUs >= bUs) {
+                queueSeek(
+                    SeekRequest(SeekTarget.Absolute(Pts(loopA.inWholeMicroseconds)), SeekMode.Precise),
+                    null,
+                )
+            } else {
+                // Wake when B lands rather than a whole pass later. Media distance over rate is
+                // wall distance, the same division the schedule itself makes.
+                wakeIn(((bUs - positionUs) / speed).toLong().microseconds)
+            }
+        }
     }
 
     /**
@@ -2349,7 +2499,7 @@ internal class PlaybackCore(
         val images = if (active.isEmpty()) {
             emptyList()
         } else {
-            rasterizer.rasterize(active, width, height, subtitleScale)
+            rasterizer.rasterize(active, width, height, subtitleScale, subtitlePosition)
         }
         session.renderer.setOverlay(
             SubtitleOverlay(
@@ -2452,16 +2602,34 @@ internal class PlaybackCore(
 
     private fun handleLoop() {
         if (status != PlaybackStatus.Ended) return
+        // The armed A-B loop owns the end of the media (S4.g): with no B, or a B past the end,
+        // the wrap point IS the end, and the jump back to A restarts playback like a repeat,
+        // regardless of LoopMode. An A at or past the duration would land straight back on the
+        // end and restart every pass for ever, so such an A is treated as unarmed rather than
+        // spun on; an unseekable source cannot make the jump at all.
+        val loopA = abLoopA
+        val durationUs = session?.source?.duration?.micros
+        if (loopA != null && session?.source?.seekable == true &&
+            durationUs != null && loopA.inWholeMicroseconds < durationUs
+        ) {
+            restartFrom(Pts(loopA.inWholeMicroseconds))
+            return
+        }
         // One media item repeating is a seek to zero and nothing else. LoopMode.All with a queue
         // of one or none means the same thing: the whole queue IS the current item (S4.e).
         val repeatsCurrent = loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
         if (!repeatsCurrent) return
+        restartFrom(Pts.Zero)
+    }
+
+    /** The Ended-to-Buffering turnover both loop kinds share: reset EOF, keep intent, seek to [target]. */
+    private fun restartFrom(target: Pts) {
         endOfStream.reset()
         stillImageFinished = false
         stillImageShownSinceNanos = 0
         playRequested = true
         setStatus(PlaybackStatus.Buffering)
-        pendingSeek = SeekRequest(SeekTarget.Absolute(Pts.Zero), SeekMode.Precise)
+        pendingSeek = SeekRequest(SeekTarget.Absolute(target), SeekMode.Precise)
     }
 
     /**
@@ -2763,7 +2931,17 @@ internal class PlaybackCore(
 
         var attempt = 0
         var landed: Pts? = null
+        // KeyframeThenRefine runs this loop in two phases (SOL-API3, closed here): the first
+        // lands and PRESENTS the keyframe at or before the target, which is the immediate
+        // picture a seek-bar drag wants, and the second is an ordinary precise landing on the
+        // exact frame. Every other mode has exactly one phase.
+        var refining = false
         while (true) {
+            val phaseMode = when {
+                request.mode != SeekMode.KeyframeThenRefine -> request.mode
+                refining -> SeekMode.Precise
+                else -> SeekMode.Keyframe
+            }
             // 3 is implicit and is the point of step 2: the scheduler is parked, so no frame of the old
             // epoch can reach the renderer from here on.
             val backoff = SeekTiming.OVERSHOOT_BACKOFF_US[attempt]
@@ -2777,12 +2955,12 @@ internal class PlaybackCore(
             withContext(dispatchers.demux) { session.source.seekToKeyframe(aim) }
 
             // 7
-            seekPhase = if (request.mode == SeekMode.Keyframe) SeekPhase.Filling else SeekPhase.Discarding
+            seekPhase = if (phaseMode == SeekMode.Keyframe) SeekPhase.Filling else SeekPhase.Discarding
             // The exact target, not target minus tolerance: the public promise is "the first
             // frame at or after the target", and a 5 ms allowance under it showed pre-target
             // pictures and audio the promise says cannot appear (audit P1-10). The tolerance
             // still exists where it belongs, in the overshoot judgment below.
-            session.discardBeforeUs.value = when (request.mode) {
+            session.discardBeforeUs.value = when (phaseMode) {
                 SeekMode.Keyframe -> Long.MIN_VALUE
                 else -> target.micros
             }
@@ -2798,7 +2976,26 @@ internal class PlaybackCore(
             val decoded = session.firstDecodedVideo.of(epoch) ?: session.firstAudio.of(epoch)
             val overshot = decoded != null && decoded.micros > target.micros + SeekTiming.PRECISE_TOLERANCE_US
             val laddered = attempt < SeekTiming.OVERSHOOT_BACKOFF_US.lastIndex && aim.micros > 0L
-            if (!overshot || !laddered || preempted()) break
+            if (!overshot || !laddered || preempted()) {
+                val keyframeShort = landed != null && landed.micros < target.micros
+                if (request.mode == SeekMode.KeyframeThenRefine && !refining && keyframeShort && !preempted()) {
+                    // The immediate picture: the keyframe presents NOW, before the refine pass
+                    // pays its decode-forward. The mask keeps reporting the exact target
+                    // throughout, so no observer mistakes the keyframe for the answer.
+                    presentFirstFrame(session)
+                    refining = true
+                    attempt = 0
+                    session.schedulerMode.value = SCHEDULER_IDLE
+                    // The refine repeats the flush-clear-seek pass, so it needs the same
+                    // quiescence; a refusal keeps the keyframe landing as the honest result.
+                    if (!quiesceWorkers(session)) {
+                        releaseWorkers(session, epoch)
+                        break
+                    }
+                    continue
+                }
+                break
+            }
             attempt++
             session.schedulerMode.value = SCHEDULER_IDLE
             // Same precondition as step 2: another flush pass may only run against parked
@@ -3106,9 +3303,15 @@ internal class PlaybackCore(
             muted = muted,
             loop = loop,
             videoScale = videoScale,
+            videoAdjustments = videoAdjustments,
+            videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
+            subtitlePosition = subtitlePosition,
             audioDelay = audioDelay,
+            abLoopA = abLoopA,
+            abLoopB = abLoopB,
+            preservePitch = preservePitch,
             error = lastError,
             generation = requestedEpoch,
             queue = queueItems,
@@ -3244,9 +3447,15 @@ internal class PlaybackCore(
             muted = muted,
             loop = loop,
             videoScale = videoScale,
+            videoAdjustments = videoAdjustments,
+            videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
+            subtitlePosition = subtitlePosition,
             audioDelay = audioDelay,
+            abLoopA = abLoopA,
+            abLoopB = abLoopB,
+            preservePitch = preservePitch,
             error = lastError,
             generation = requestedEpoch,
             queue = queueItems,
@@ -4355,9 +4564,17 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
     class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply)
     class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
+    class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)
+    class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply)
     class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply)
+    class SetVideoAdjustments(val value: VideoAdjustments, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setVideoAdjustments", reply)
+    class SetVideoTransform(val value: VideoTransform, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setVideoTransform", reply)
     class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply)
     class SetSubtitleScale(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleScale", reply)
+    class SetSubtitlePosition(val value: Float, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setSubtitlePosition", reply)
     class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)
     class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
         CoreCommand("addExternalSubtitle", reply)

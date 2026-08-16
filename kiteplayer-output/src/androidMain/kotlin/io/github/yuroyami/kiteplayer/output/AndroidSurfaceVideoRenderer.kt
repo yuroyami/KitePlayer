@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.view.Surface
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
+import kotlin.math.roundToInt
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -157,6 +158,16 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 
     /** The ruling scale mode; written by the engine, read at each draw. */
     private val scaleMode = atomic(io.github.yuroyami.kiteplayer.VideoScale.Fit)
+
+    /** The ruling framing controls, under the same ownership as the scale mode. */
+    private val videoTransform = atomic(io.github.yuroyami.kiteplayer.VideoTransform.Identity)
+
+    /**
+     * The engine's picture controls as Android's colour-matrix convention (offsets 0..255), or
+     * null for neutral. Baked here, once per setting; the drawing thread hands the CURRENT value
+     * to the target before each frame, and the target rebuilds its paint filter only on change.
+     */
+    private val videoColorMatrix = atomic<FloatArray?>(null)
 
 
     /** Wakes the worker. Conflated, so a signal sent before it waits is kept rather than lost. */
@@ -410,7 +421,11 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             // a lock holds whatever was drawn into it two frames ago, and a letterbox that is not
             // cleared shows it.
             canvas.clearToBlack()
-            val layout = frameLayout(canvas.width, canvas.height, size, rotationDegrees, scaleMode.value)
+            target.setVideoColorMatrix(videoColorMatrix.value)
+            val layout = frameLayout(
+                canvas.width, canvas.height, size, rotationDegrees, scaleMode.value,
+                videoTransform.value,
+            )
             if (layout == null) {
                 drawFailure = IllegalStateException(
                     "a ${size.width}x${size.height} frame has no place on a ${canvas.width}x${canvas.height} canvas",
@@ -510,6 +525,29 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
         scaleMode.value = mode
+    }
+
+    override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
+        videoColorMatrix.value = if (adjustments.isIdentity) {
+            null
+        } else {
+            // The engine's unit-domain law respelled into Android's convention: the translation
+            // column moves to the 0..255 domain, everything else is the same matrix.
+            adjustments.toColorMatrix().also { values ->
+                values[4] *= 255f
+                values[9] *= 255f
+                values[14] *= 255f
+                values[19] *= 255f
+            }
+        }
+        // Applied when the next frame draws. A PAUSED picture keeps its old colours until then:
+        // this renderer holds no drawn-frame copy to repaint, the same recorded limit as its
+        // paused-overlay behaviour (KPKMP 17.11, SOL-R1 family). KiteVideo repaints immediately.
+    }
+
+    override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
+        videoTransform.value = transform
+        // Applied at the next drawn frame, the same recorded paused-picture limit as above.
     }
 
     /**
@@ -667,6 +705,14 @@ internal interface CanvasTarget {
     /** Locks and returns a canvas, or null when the target would not give one. */
     fun lock(): TargetCanvas?
 
+    /**
+     * The colour matrix to draw VIDEO pixels through (Android's 4x5, offsets 0..255), or null
+     * for none. Applies to [TargetCanvas.drawFrame] only, never to overlay images; the engine
+     * hands the current value before each draw and a target rebuilds its filter only on change.
+     * Defaulted so the geometry test doubles keep compiling unfiltered.
+     */
+    fun setVideoColorMatrix(matrix: FloatArray?) {}
+
     /** Posts whatever was drawn into [canvas] and gives the lock back. */
     fun post(canvas: TargetCanvas)
 
@@ -723,6 +769,24 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
         isFilterBitmap = true
         isAntiAlias = false
         isDither = false
+    }
+
+    /**
+     * The video's own paint, split from [paint] so the picture controls never touch subtitles.
+     * The filter is rebuilt only when the engine hands a DIFFERENT matrix reference, which is
+     * once per user setting, not once per frame.
+     */
+    private val videoPaint = Paint().apply {
+        isFilterBitmap = true
+        isAntiAlias = false
+        isDither = false
+    }
+    private var appliedColorMatrix: FloatArray? = null
+
+    override fun setVideoColorMatrix(matrix: FloatArray?) {
+        if (matrix === appliedColorMatrix) return
+        appliedColorMatrix = matrix
+        videoPaint.colorFilter = matrix?.let { android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(it)) }
     }
 
     private var bitmap: Bitmap? = null
@@ -819,7 +883,7 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
                 if (layout.rotationDegrees != 0) {
                     canvas.rotate(layout.rotationDegrees.toFloat(), layout.centerX, layout.centerY)
                 }
-                canvas.drawBitmap(picture, null, destination, paint)
+                canvas.drawBitmap(picture, null, destination, videoPaint)
             } finally {
                 canvas.restoreToCount(saved)
             }
@@ -898,6 +962,7 @@ internal fun frameLayout(
     size: VideoSize,
     rotationDegrees: Int,
     mode: io.github.yuroyami.kiteplayer.VideoScale = io.github.yuroyami.kiteplayer.VideoScale.Fit,
+    transform: io.github.yuroyami.kiteplayer.VideoTransform = io.github.yuroyami.kiteplayer.VideoTransform.Identity,
 ): FrameLayout? {
     if (canvasWidth <= 0 || canvasHeight <= 0) return null
     if (size.width <= 0 || size.height <= 0) return null
@@ -908,8 +973,18 @@ internal fun frameLayout(
     val displayWidth = size.displayWidth.takeIf { it > 0 } ?: size.width
     val turn = quarterTurn(rotationDegrees)
     val quarterTurned = turn == 90 || turn == 270
-    val contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
-    val contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
+    val aspect = transform.aspectOverride
+    val contentWidth: Long
+    val contentHeight: Long
+    if (aspect != null && aspect > 0f && aspect.isFinite()) {
+        // The forced aspect describes the picture AS PRESENTED, after the turn, and only its
+        // ratio matters to the fit: the same words as the Compose geometry, so no drift.
+        contentWidth = (aspect * 100_000f).toLong().coerceAtLeast(1)
+        contentHeight = 100_000L
+    } else {
+        contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
+        contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
+    }
 
     // Fit keeps the smaller axis ratio and letterboxes; Fill keeps the larger and overhangs the
     // canvas, which the Surface's own bounds crop; Stretch takes the canvas as it is. The pixel
@@ -919,8 +994,8 @@ internal fun frameLayout(
         io.github.yuroyami.kiteplayer.VideoScale.Fill -> !fitsByHeight
         else -> fitsByHeight
     }
-    val destinationWidth: Int
-    val destinationHeight: Int
+    var destinationWidth: Int
+    var destinationHeight: Int
     if (mode == io.github.yuroyami.kiteplayer.VideoScale.Stretch) {
         destinationWidth = canvasWidth
         destinationHeight = canvasHeight
@@ -931,8 +1006,18 @@ internal fun frameLayout(
         destinationWidth = canvasWidth
         destinationHeight = (contentHeight * canvasWidth / contentWidth).toInt().coerceAtLeast(1)
     }
-    val left = (canvasWidth - destinationWidth) / 2
-    val top = (canvasHeight - destinationHeight) / 2
+    var left = (canvasWidth - destinationWidth) / 2
+    var top = (canvasHeight - destinationHeight) / 2
+    // Zoom about the centre, then pan by a fraction of the drawn size, after the fit so both
+    // compose with every mode. The overhang is cropped by the canvas bounds like Fill's is.
+    if (transform.zoom != 1f) {
+        destinationWidth = (destinationWidth * transform.zoom).roundToInt().coerceAtLeast(1)
+        destinationHeight = (destinationHeight * transform.zoom).roundToInt().coerceAtLeast(1)
+        left = (canvasWidth - destinationWidth) / 2
+        top = (canvasHeight - destinationHeight) / 2
+    }
+    if (transform.panX != 0f) left += (transform.panX * destinationWidth).roundToInt()
+    if (transform.panY != 0f) top += (transform.panY * destinationHeight).roundToInt()
     return FrameLayout(
         left = left,
         top = top,

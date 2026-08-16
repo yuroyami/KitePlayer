@@ -106,4 +106,24 @@ class AppleSubtitleRasterizerTest {
             "the second cue (y=${images[1].y}) does not stack above the first (y=${images[0].y})",
         )
     }
+
+    @Test
+    fun theSubPositionLiftsTheImplicitStackByTheViewportFraction() {
+        val bottom = AppleSubtitleRasterizer().rasterize(
+            cues = listOf(cue("line")),
+            viewportWidth = 640,
+            viewportHeight = 360,
+            fontScale = 1f,
+        ).single()
+        val lifted = AppleSubtitleRasterizer().rasterize(
+            cues = listOf(cue("line")),
+            viewportWidth = 640,
+            viewportHeight = 360,
+            fontScale = 1f,
+            position = 0.5f,
+        ).single()
+        // Anchoring at half the height moves the cue up by exactly half the viewport.
+        assertEquals(bottom.y - 180, lifted.y, "sub-pos 0.5 must lift the stack by half the height")
+        assertEquals(bottom.x, lifted.x, "and never touch the horizontal")
+    }
 }

@@ -122,6 +122,12 @@ struct ColorUniforms {
     int   mode;         // 0 = three planes, 1 = biplanar, 2 = packed rgba
 };
 
+struct AdjustUniforms {
+    float m[9];         // row-major 3x3 over unit-domain RGB: the engine's one colour-matrix law
+    float offset[3];    // unit-domain translation per channel
+    int   enabled;      // 0 skips the multiply entirely, keeping identity bit-exact for the instrument
+};
+
 vertex VertexOut kp_vertex(uint id [[vertex_id]], constant QuadUniforms &quad [[buffer(0)]]) {
     // One triangle strip: (-1,-1) (1,-1) (-1,1) (1,1), texcoords with y down.
     float2 corners[4] = { float2(-1.0, -1.0), float2(1.0, -1.0), float2(-1.0, 1.0), float2(1.0, 1.0) };
@@ -141,32 +147,44 @@ fragment float4 kp_picture(
     texture2d<float> planeA [[texture(0)]],
     texture2d<float> planeB [[texture(1)]],
     texture2d<float> planeC [[texture(2)]],
-    constant ColorUniforms &c [[buffer(0)]]
+    constant ColorUniforms &c [[buffer(0)]],
+    constant AdjustUniforms &adj [[buffer(1)]]
 ) {
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
+    float3 rgb;
     if (c.mode == 2) {
-        return float4(planeA.sample(s, in.texcoord).rgb, 1.0);
-    }
-    float rawY;
-    float rawCb;
-    float rawCr;
-    if (c.mode == 1) {
-        rawY = planeA.sample(s, in.texcoord).r;
-        float2 uv = planeB.sample(s, in.texcoord).rg;
-        rawCb = uv.x;
-        rawCr = uv.y;
+        rgb = planeA.sample(s, in.texcoord).rgb;
     } else {
-        rawY = planeA.sample(s, in.texcoord).r;
-        rawCb = planeB.sample(s, in.texcoord).r;
-        rawCr = planeC.sample(s, in.texcoord).r;
+        float rawY;
+        float rawCb;
+        float rawCr;
+        if (c.mode == 1) {
+            rawY = planeA.sample(s, in.texcoord).r;
+            float2 uv = planeB.sample(s, in.texcoord).rg;
+            rawCb = uv.x;
+            rawCr = uv.y;
+        } else {
+            rawY = planeA.sample(s, in.texcoord).r;
+            rawCb = planeB.sample(s, in.texcoord).r;
+            rawCr = planeC.sample(s, in.texcoord).r;
+        }
+        float y = (rawY * c.sampleScale * 255.0 - c.lumaOffset) * c.lumaScale;
+        float cb = (rawCb * c.sampleScale * 255.0 - 128.0) * c.chromaScale;
+        float cr = (rawCr * c.sampleScale * 255.0 - 128.0) * c.chromaScale;
+        float r = y + c.rCr * cr;
+        float g = y - c.gCb * cb - c.gCr * cr;
+        float b = y + c.bCb * cb;
+        rgb = clamp(float3(r, g, b) / 255.0, 0.0, 1.0);
     }
-    float y = (rawY * c.sampleScale * 255.0 - c.lumaOffset) * c.lumaScale;
-    float cb = (rawCb * c.sampleScale * 255.0 - 128.0) * c.chromaScale;
-    float cr = (rawCr * c.sampleScale * 255.0 - 128.0) * c.chromaScale;
-    float r = y + c.rCr * cr;
-    float g = y - c.gCb * cb - c.gCr * cr;
-    float b = y + c.bCb * cb;
-    return float4(clamp(float3(r, g, b) / 255.0, 0.0, 1.0), 1.0);
+    if (adj.enabled != 0) {
+        float3 p = rgb;
+        rgb = clamp(float3(
+            adj.m[0] * p.x + adj.m[1] * p.y + adj.m[2] * p.z + adj.offset[0],
+            adj.m[3] * p.x + adj.m[4] * p.y + adj.m[5] * p.z + adj.offset[1],
+            adj.m[6] * p.x + adj.m[7] * p.y + adj.m[8] * p.z + adj.offset[2]
+        ), 0.0, 1.0);
+    }
+    return float4(rgb, 1.0);
 }
 
 fragment float4 kp_overlay(
@@ -177,6 +195,27 @@ fragment float4 kp_overlay(
     return image.sample(s, in.texcoord);
 }
 """
+
+/**
+ * AdjustUniforms with enabled=0: the shader skips the multiply, keeping the unadjusted path
+ * bit-exact for the colour instrument. One shared array, because it never changes.
+ */
+internal val DISABLED_ADJUST_UNIFORMS: FloatArray = FloatArray(13)
+
+/**
+ * Packs the engine's one colour-matrix law into the shader's AdjustUniforms layout: nine
+ * row-major 3x3 coefficients, three unit-domain offsets, and the enabled flag as int bits. The
+ * 4x5 matrix's alpha row and column are dropped because the shader owns alpha as constant 1.
+ */
+internal fun packAdjustUniforms(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments): FloatArray {
+    if (adjustments.isIdentity) return DISABLED_ADJUST_UNIFORMS
+    val m = adjustments.toColorMatrix()
+    return floatArrayOf(
+        m[0], m[1], m[2], m[5], m[6], m[7], m[10], m[11], m[12],
+        m[4], m[9], m[14],
+        Float.fromBits(1),
+    )
+}
 
 /** The nine colour uniforms, mirrored from SoftwareConverter so both paths agree numerically. */
 internal class MetalColorUniforms private constructor(
@@ -385,6 +424,7 @@ internal fun quadUniformsFor(
     viewportWidth: Int,
     viewportHeight: Int,
     mode: VideoScale = VideoScale.Fit,
+    transform: io.github.yuroyami.kiteplayer.VideoTransform = io.github.yuroyami.kiteplayer.VideoTransform.Identity,
 ): FloatArray {
     val size = frame.size
     val sarNum = size.pixelAspectNumerator.takeIf { it > 0 } ?: 1
@@ -393,10 +433,13 @@ internal fun quadUniformsFor(
     val storedHeight = size.height.toFloat()
     val turn = normalizedQuarterTurn(frame.rotationDegrees)
     val quarterTurn = turn == 90 || turn == 270
-    val displayWidth = if (quarterTurn) storedHeight else storedWidth
-    val displayHeight = if (quarterTurn) storedWidth else storedHeight
-    val ndcX: Float
-    val ndcY: Float
+    // The forced aspect describes the picture AS PRESENTED, after the turn, and only its ratio
+    // matters to the fit: the same words as the other two geometries, so no drift.
+    val aspect = transform.aspectOverride?.takeIf { it > 0f && it.isFinite() }
+    val displayWidth = aspect ?: if (quarterTurn) storedHeight else storedWidth
+    val displayHeight = if (aspect != null) 1f else if (quarterTurn) storedWidth else storedHeight
+    var ndcX: Float
+    var ndcY: Float
     when (mode) {
         VideoScale.Stretch -> {
             ndcX = 1f
@@ -410,6 +453,13 @@ internal fun quadUniformsFor(
             ndcY = displayHeight * scale / viewportHeight
         }
     }
+    // Zoom about the centre, then pan by a fraction of the drawn size (2*ndc is the quad's own
+    // NDC extent). NDC y points up while the engine's pan convention is positive-down, hence
+    // the sign. The viewport clips the overhang, as it already does for Fill.
+    ndcX *= transform.zoom
+    ndcY *= transform.zoom
+    val offsetX = transform.panX * 2f * ndcX
+    val offsetY = -transform.panY * 2f * ndcY
     // Clockwise picture rotation = sampling basis turned the opposite way.
     val basis = when (turn) {
         90 -> floatArrayOf(0f, -1f, 1f, 0f)
@@ -417,7 +467,7 @@ internal fun quadUniformsFor(
         270 -> floatArrayOf(0f, 1f, -1f, 0f)
         else -> floatArrayOf(1f, 0f, 0f, 1f)
     }
-    return floatArrayOf(ndcX, ndcY, basis[0], basis[1], basis[2], basis[3], 0f, 0f)
+    return floatArrayOf(ndcX, ndcY, basis[0], basis[1], basis[2], basis[3], offsetX, offsetY)
 }
 
 /**

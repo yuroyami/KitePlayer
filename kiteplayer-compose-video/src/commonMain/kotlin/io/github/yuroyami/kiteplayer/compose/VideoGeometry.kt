@@ -2,6 +2,8 @@ package io.github.yuroyami.kiteplayer.compose
 
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
+import io.github.yuroyami.kiteplayer.VideoTransform
+import kotlin.math.roundToInt
 
 /**
  * Where one picture lands on the draw area, in output pixels. The same law the output renderers
@@ -48,6 +50,7 @@ internal fun videoLayout(
     size: VideoSize,
     rotationDegrees: Int,
     mode: VideoScale = VideoScale.Fit,
+    transform: VideoTransform = VideoTransform.Identity,
 ): VideoLayout? {
     if (areaWidth <= 0 || areaHeight <= 0) return null
     if (size.width <= 0 || size.height <= 0) return null
@@ -57,15 +60,26 @@ internal fun videoLayout(
     val displayWidth = size.displayWidth.takeIf { it > 0 } ?: size.width
     val turn = quarterTurn(rotationDegrees)
     val quarterTurned = turn == 90 || turn == 270
-    val contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
-    val contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
+    val aspect = transform.aspectOverride
+    val contentWidth: Long
+    val contentHeight: Long
+    if (aspect != null && aspect > 0f && aspect.isFinite()) {
+        // The forced aspect describes the picture AS PRESENTED, after the turn: a viewer who
+        // forces 16:9 sees 16:9 whatever the container stored. Only the ratio matters to the
+        // fit, so it is spelled over a fixed denominator.
+        contentWidth = (aspect * 100_000f).toLong().coerceAtLeast(1)
+        contentHeight = 100_000L
+    } else {
+        contentWidth = (if (quarterTurned) size.height else displayWidth).toLong()
+        contentHeight = (if (quarterTurned) displayWidth else size.height).toLong()
+    }
 
     // Fit letterboxes, Fill overhangs (the caller clips), Stretch takes the area whole; the
     // pixel aspect and the turn are already folded into the content shape for all three.
     val fitsByHeight = contentWidth * areaHeight <= contentHeight * areaWidth
     val heightBound = if (mode == VideoScale.Fill) !fitsByHeight else fitsByHeight
-    val destinationWidth: Int
-    val destinationHeight: Int
+    var destinationWidth: Int
+    var destinationHeight: Int
     if (mode == VideoScale.Stretch) {
         destinationWidth = areaWidth
         destinationHeight = areaHeight
@@ -76,8 +90,19 @@ internal fun videoLayout(
         destinationWidth = areaWidth
         destinationHeight = (contentHeight * areaWidth / contentWidth).toInt().coerceAtLeast(1)
     }
-    val left = (areaWidth - destinationWidth) / 2
-    val top = (areaHeight - destinationHeight) / 2
+    var left = (areaWidth - destinationWidth) / 2
+    var top = (areaHeight - destinationHeight) / 2
+    // The zoom scales the fitted rectangle about its centre, and the pan then moves it by a
+    // fraction of its own drawn size, mpv's own composition order. Both after the fit, so they
+    // compose with every mode, and the caller clips the overhang exactly as it does for Fill.
+    if (transform.zoom != 1f) {
+        destinationWidth = (destinationWidth * transform.zoom).roundToInt().coerceAtLeast(1)
+        destinationHeight = (destinationHeight * transform.zoom).roundToInt().coerceAtLeast(1)
+        left = (areaWidth - destinationWidth) / 2
+        top = (areaHeight - destinationHeight) / 2
+    }
+    if (transform.panX != 0f) left += (transform.panX * destinationWidth).roundToInt()
+    if (transform.panY != 0f) top += (transform.panY * destinationHeight).roundToInt()
     return VideoLayout(
         left = left,
         top = top,

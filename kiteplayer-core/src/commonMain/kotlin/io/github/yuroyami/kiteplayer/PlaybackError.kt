@@ -244,6 +244,15 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The item asked to start somewhere the open could not take it: an unseekable source, or a
+     * position past the end. Playback starts where the container does instead, and this says so
+     * rather than leaving the caller to notice the position report.
+     */
+    public data class StartPositionIgnored(val requested: kotlin.time.Duration, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "the start position $requested was ignored: $detail"
+    }
+
+    /**
      * The file is interleaved so badly that one stream had to be truncated to keep the other
      * playing.
      */

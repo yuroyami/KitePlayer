@@ -19,10 +19,16 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
  * pixels through scaled to the cue's declared canvas.
  */
 public interface SubtitleRasterizer {
+    /**
+     * @param position where the implicit bottom stack anchors, as a fraction of the viewport
+     *        height: 1.0 is the ordinary bottom edge, 0.5 mid-screen, mpv's `sub-pos` over 100.
+     *        Explicitly positioned cues are the author's word and do not move with it.
+     */
     public fun rasterize(
         cues: List<SubtitleCue>,
         viewportWidth: Int,
         viewportHeight: Int,
         fontScale: Float,
+        position: Float = 1f,
     ): List<OverlayImage>
 }

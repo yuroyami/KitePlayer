@@ -155,6 +155,155 @@ class KitePlayerTest {
     }
 
     @Test
+    fun `the armed A-B loop wraps B back to A and keeps playing`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000))
+        val player = player(harness)
+        player.open(MediaItem("scripted://abloop"))
+
+        // Arming is validated at the boundary like every other numeric input.
+        assertFailsWith<IllegalArgumentException> { player.setAbLoop(a = null, b = 2.seconds) }
+        assertFailsWith<IllegalArgumentException> { player.setAbLoop(a = (-1).seconds, b = 2.seconds) }
+        assertFailsWith<IllegalArgumentException> { player.setAbLoop(a = 2.seconds, b = 2.seconds) }
+
+        player.setAbLoop(a = 2.seconds, b = 4.seconds)
+        harness.run(100.milliseconds)
+        assertEquals(2.seconds, player.state.value.abLoopA, "the armed A is published")
+        assertEquals(4.seconds, player.state.value.abLoopB, "the armed B is published")
+
+        player.play()
+        // Ten wall seconds against a two-second region. Without the loop the position sails to
+        // ten; with it the position can never come to rest past B, wrap seeks included.
+        var maxSeen = Duration.ZERO
+        repeat(20) {
+            harness.run(500.milliseconds)
+            val at = player.position()
+            if (at > maxSeen) maxSeen = at
+        }
+        assertTrue(
+            maxSeen < 6.seconds,
+            "the loop never wrapped: after ten wall seconds the position reached $maxSeen",
+        )
+        assertTrue(
+            player.state.value.status.isActive,
+            "the loop keeps playing; instead the player is ${player.state.value.status}",
+        )
+        harness.close()
+
+        // A alone loops from A at the END of the media, which is what an armed A with no B means.
+        val tail = CoreHarness(this)
+        val tailPlayer = player(tail)
+        tailPlayer.open(MediaItem("scripted://abloop-tail"))
+        tailPlayer.setAbLoop(a = 1.seconds)
+        tailPlayer.play()
+        // Twelve wall seconds of four-second media: three wraps, and Ended can never hold.
+        repeat(24) {
+            tail.run(500.milliseconds)
+            assertTrue(
+                tailPlayer.state.value.status != PlaybackStatus.Ended,
+                "an armed A-B loop owns the end of the media, and Ended means it let go",
+            )
+        }
+
+        // Clearing gives the end of the media back to the ordinary loop mode, which is Off here.
+        tailPlayer.setAbLoop(null)
+        tail.run(6.seconds)
+        assertEquals(
+            PlaybackStatus.Ended,
+            tailPlayer.state.value.status,
+            "with the loop cleared the media ends like any other",
+        )
+        tail.close()
+    }
+
+    @Test
+    fun `startPosition opens at the asked position and unseekable media warns typed`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000))
+        val player = player(harness)
+        player.open(MediaItem("scripted://start", startPosition = 12.seconds))
+        // The exact landing rides the ordinary seek machine; give it its window.
+        harness.run(3.seconds)
+        val at = player.position()
+        assertTrue(
+            at >= 11.seconds && at <= 13.seconds,
+            "an open with startPosition=12s must sit near 12s, sat at $at",
+        )
+        // And playing from there advances from there, not from zero.
+        player.play()
+        harness.run(1.seconds)
+        assertTrue(player.position() >= 12.seconds, "playback continues from the start position")
+        harness.close()
+
+        // An unseekable source cannot start anywhere but where the container does, and says so.
+        val fixed = CoreHarness(this, script = MediaScript(seekable = false))
+        val fixedPlayer = player(fixed)
+        fixedPlayer.open(MediaItem("scripted://start-unseekable", startPosition = 2.seconds))
+        fixed.run(100.milliseconds)
+        assertTrue(
+            fixedPlayer.warningHistory().any { it.warning is PlaybackWarning.StartPositionIgnored },
+            "ignoring the start position must be said, typed, not discovered by the position report",
+        )
+        assertTrue(fixedPlayer.position() < 1.seconds, "and playback stands at the container's own start")
+        fixed.close()
+    }
+
+    @Test
+    fun `picture controls are validated and published and reach the attached renderer`() = runTest {
+        val harness = CoreHarness(this)
+        val player = player(harness)
+        harness.attachRenderer()
+        player.open(MediaItem("scripted://adjustments"))
+        harness.run(100.milliseconds)
+        assertEquals(VideoAdjustments.Identity, player.state.value.videoAdjustments, "neutral is the default")
+        assertEquals(VideoAdjustments.Identity, harness.renderer?.adjustments, "told on attach, before any change")
+
+        assertFailsWith<IllegalArgumentException> { player.setVideoAdjustments(VideoAdjustments(brightness = 1.5f)) }
+        assertFailsWith<IllegalArgumentException> { player.setVideoAdjustments(VideoAdjustments(contrast = -0.1f)) }
+        assertFailsWith<IllegalArgumentException> { player.setVideoAdjustments(VideoAdjustments(saturation = 3f)) }
+        assertFailsWith<IllegalArgumentException> { player.setVideoAdjustments(VideoAdjustments(hueDegrees = 200f)) }
+
+        val warm = VideoAdjustments(brightness = 0.1f, contrast = 1.2f, saturation = 0.8f, hueDegrees = -15f)
+        player.setVideoAdjustments(warm)
+        harness.run(100.milliseconds)
+        assertEquals(warm, player.state.value.videoAdjustments, "the accepted value is published")
+        assertEquals(warm, harness.renderer?.adjustments, "and the live renderer was told")
+
+        // The framing controls travel the same road, so they are proven in the same breath.
+        assertFailsWith<IllegalArgumentException> { player.setVideoTransform(VideoTransform(aspectOverride = 0f)) }
+        assertFailsWith<IllegalArgumentException> { player.setVideoTransform(VideoTransform(zoom = 8f)) }
+        assertFailsWith<IllegalArgumentException> { player.setVideoTransform(VideoTransform(panX = 2f)) }
+        val framed = VideoTransform(aspectOverride = 16f / 9f, zoom = 1.5f, panX = 0.1f, panY = -0.1f)
+        player.setVideoTransform(framed)
+        harness.run(100.milliseconds)
+        assertEquals(framed, player.state.value.videoTransform, "the accepted framing is published")
+        assertEquals(framed, harness.renderer?.transform, "and the live renderer was told")
+        harness.close()
+    }
+
+    @Test
+    fun `the pitch law is published and a live toggle is accepted on seekable media`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000))
+        val player = player(harness)
+        player.open(MediaItem("scripted://pitch"))
+        harness.run(100.milliseconds)
+        assertTrue(player.state.value.preservePitch, "pitch preservation is the default")
+
+        // The toggle at speed rides an internal precise seek exactly like a speed change, so the
+        // window covers that seek's quiescence and landing. The audible difference between the
+        // two mechanisms is proven at the pipeline level; what belongs here is the surface: the
+        // value is accepted, published, and survives the seek it rides.
+        player.setSpeed(2.0)
+        player.setPreservePitch(false)
+        harness.run(3.seconds)
+        assertTrue(!player.state.value.preservePitch, "the resampled law is published")
+        assertEquals(2.0, player.state.value.speed, "and the rate it applies to is untouched")
+
+        player.setPreservePitch(true)
+        harness.run(3.seconds)
+        assertTrue(player.state.value.preservePitch, "and the toggle comes back")
+        harness.close()
+    }
+
+    @Test
     fun `the scale mode is published and reaches the attached renderer`() = runTest {
         val harness = CoreHarness(this)
         val player = player(harness)
@@ -183,16 +332,56 @@ class KitePlayerTest {
 
         player.setSubtitleDelay(250.milliseconds)
         player.setSubtitleScale(1.5f)
+        player.setSubtitlePosition(0.8f)
         player.setAudioDelay(80.milliseconds)
         harness.run(100.milliseconds)
 
         val state = player.state.value
         assertEquals(250.milliseconds, state.subtitleDelay)
         assertEquals(1.5f, state.subtitleScale)
+        assertEquals(0.8f, state.subtitlePosition)
         assertEquals(80.milliseconds, state.audioDelay)
 
         assertFailsWith<IllegalArgumentException> { player.setSubtitleScale(0f) }
         assertFailsWith<IllegalArgumentException> { player.setSubtitleScale(Float.NaN) }
+        assertFailsWith<IllegalArgumentException> { player.setSubtitlePosition(0f) }
+        assertFailsWith<IllegalArgumentException> { player.setSubtitlePosition(1.2f) }
+        harness.close()
+    }
+
+    @Test
+    fun `KeyframeThenRefine shows the keyframe first and lands exactly`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 30_000_000))
+        val player = player(harness)
+        harness.attachRenderer()
+        player.open(MediaItem("scripted://two-phase"))
+        harness.run(100.milliseconds)
+        val before = harness.renderer!!.timestamps.size
+
+        // 600 ms sits between the 400 ms keyframe and the 800 ms one. The two-phase promise:
+        // the keyframe is PRESENTED first, then the exact frame lands, and the reported result
+        // is the exact landing.
+        player.seek(600.milliseconds, SeekMode.KeyframeThenRefine)
+        harness.run(500.milliseconds)
+
+        val presented = harness.renderer!!.timestamps.drop(before).map { it.micros }
+        assertTrue(
+            presented.contains(400_000L),
+            "the keyframe at 400 ms must be shown first; presented $presented",
+        )
+        assertTrue(
+            presented.contains(600_000L),
+            "and the exact frame at 600 ms must land after it; presented $presented",
+        )
+        assertTrue(
+            presented.indexOf(400_000L) < presented.indexOf(600_000L),
+            "in that order; presented $presented",
+        )
+        val at = player.position()
+        assertTrue(
+            at >= 590.milliseconds && at <= 650.milliseconds,
+            "the reported landing is the exact target, was $at",
+        )
         harness.close()
     }
 

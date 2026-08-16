@@ -103,6 +103,13 @@ internal class MetalFrameComposer(
         quadOverride: FloatArray? = null,
         /** How the picture occupies the target when no [quadOverride] is given. */
         scaleMode: io.github.yuroyami.kiteplayer.VideoScale = io.github.yuroyami.kiteplayer.VideoScale.Fit,
+        /** The framing controls, folded into the quad when no [quadOverride] is given. */
+        videoTransform: io.github.yuroyami.kiteplayer.VideoTransform = io.github.yuroyami.kiteplayer.VideoTransform.Identity,
+        /**
+         * The picture controls as [packAdjustUniforms] packs them. The default is DISABLED, so
+         * the offscreen reader and the instrument keep reading the stored picture untouched.
+         */
+        adjustUniforms: FloatArray = DISABLED_ADJUST_UNIFORMS,
     ): MTLCommandBufferProtocol {
         pictureColor = frame.colorSpace
         val inputs = when (picture) {
@@ -127,13 +134,19 @@ internal class MetalFrameComposer(
         try {
             try {
                 encoder.setRenderPipelineState(picturePipeline)
-                val quad = quadOverride ?: quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode)
+                val quad = quadOverride
+                    ?: quadUniformsFor(frame, viewportWidth, viewportHeight, scaleMode, videoTransform)
                 quad.usePinned { pinned ->
                     encoder.setVertexBytes(pinned.addressOf(0), (quad.size * 4).toULong(), atIndex = 0u)
                 }
                 val colors = inputs.uniforms
                 colors.usePinned { pinned ->
                     encoder.setFragmentBytes(pinned.addressOf(0), (colors.size * 4).toULong(), atIndex = 0u)
+                }
+                // Always bound, disabled or not: an unbound constant buffer is undefined
+                // behaviour on some GPUs, and the disabled flag costs the shader one compare.
+                adjustUniforms.usePinned { pinned ->
+                    encoder.setFragmentBytes(pinned.addressOf(0), (adjustUniforms.size * 4).toULong(), atIndex = 1u)
                 }
                 inputs.textures.forEachIndexed { index, texture ->
                     encoder.setFragmentTexture(texture, atIndex = index.toULong())

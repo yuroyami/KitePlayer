@@ -93,4 +93,44 @@ class VideoGeometryTest {
         assertEquals(100, layout.width)
         assertEquals(100, layout.height)
     }
+
+    @Test
+    fun theAspectOverrideReplacesTheContainersShape() {
+        // A square picture forced to 2:1 in a square viewport: full width, half height, centred.
+        val forced = videoLayout(
+            100, 100, VideoSize(100, 100), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(aspectOverride = 2f),
+        )!!
+        assertEquals(100, forced.width)
+        assertEquals(50, forced.height)
+        assertEquals(25, forced.top)
+    }
+
+    @Test
+    fun zoomScalesAboutTheCentreAndPanMovesByTheDrawnSize() {
+        val zoomed = videoLayout(
+            100, 100, VideoSize(100, 100), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(zoom = 2f),
+        )!!
+        assertEquals(200, zoomed.width)
+        assertEquals(200, zoomed.height)
+        assertEquals(-50, zoomed.left)
+        assertEquals(-50, zoomed.top)
+
+        // A quarter pan of an unzoomed picture moves it by a quarter of its own drawn width.
+        val panned = videoLayout(
+            100, 100, VideoSize(100, 100), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(panX = 0.25f),
+        )!!
+        assertEquals(25, panned.left)
+        assertEquals(0, panned.top)
+
+        // And the identity transform is exactly the untouched layout, field for field.
+        val plain = videoLayout(160, 90, VideoSize(1280, 720), 0)!!
+        val identity = videoLayout(
+            160, 90, VideoSize(1280, 720), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform.Identity,
+        )!!
+        assertEquals(plain, identity)
+    }
 }

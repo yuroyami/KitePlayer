@@ -12,8 +12,10 @@ public data class MediaItem(
     /**
      * Request headers, for the http and https protocols.
      *
-     * Not passed to the demuxer by any source here, so they reach nothing.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Respelled by the FFmpeg backend as the http protocol's own `headers` option, one
+     * CRLF-joined block, through the same pre-open funnel [openOptions] uses; an explicit
+     * `headers` key there wins over this field. On media no http protocol opens (a local
+     * file), the unused-option warning reports them, typed.
      */
     val headers: Map<String, String> = emptyMap(),
     /**
@@ -33,8 +35,11 @@ public data class MediaItem(
     /**
      * Where to start. Null means the beginning, or the container's own start time.
      *
-     * Nothing reads this: opening always starts where the container does.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Honoured in two halves: the source is moved to the keyframe at or before this position
+     * BEFORE the first frame is decoded, so nothing from the beginning of the media is ever
+     * shown or heard, and the exact landing then rides an ordinary precise seek. Needs a
+     * seekable source; a position that cannot be honoured (unseekable media, or past the end)
+     * starts at the beginning and warns `StartPositionIgnored`, typed.
      */
     val startPosition: Duration? = null,
     /**
@@ -48,8 +53,10 @@ public data class MediaItem(
      * A hint for the demuxer, for example "mpegts", when the bytes have no recognisable header.
      * Almost never needed. Probing is reliable.
      *
-     * Not passed to the demuxer by any source here.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Respelled by the FFmpeg backend as a `format_whitelist` of exactly this name, which is
+     * what forcing a demuxer means to libavformat: probing is confined to the named format and
+     * the open FAILS rather than falling back when the bytes are not that format. An explicit
+     * [openOptions] `format_whitelist` key wins over this field.
      */
     val formatHint: String? = null,
     /**
@@ -136,14 +143,15 @@ public enum class SeekMode {
     Precise,
 
     /**
-     * Meant to show the keyframe at once and then refine to the exact frame in the background, which is
-     * what a seek bar drag wants: the picture responds immediately and settles a moment later.
+     * Shows the keyframe at once and then refines to the exact frame, which is what a seek bar
+     * drag wants: the picture responds immediately and settles a moment later.
      *
-     * The two stages do not exist yet. The engine treats this exactly as [Precise] does, so a request
-     * lands on the right frame and the immediate keyframe is not shown first. It is a slower answer than
-     * the name promises and never a wrong one, and it is asked for by name rather than silently mapped:
-     * the coalescing rules already keep a drag responsive by showing a frame from each seek before the
-     * next one runs. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Real since the S4.g surge (SOL-API3): the seek machine lands and PRESENTS the keyframe at
+     * or before the target first, then runs an ordinary precise landing on the exact frame. The
+     * reported position and [io.github.yuroyami.kiteplayer.PlayerEvent.SeekCompleted] carry the
+     * exact landing, never the intermediate keyframe, and a keyframe that already sits on the
+     * target skips the second phase. The refine pays its decode-forward from the keyframe a
+     * second time; that cost buys the immediate picture, mpv's own trade.
      */
     KeyframeThenRefine,
 }

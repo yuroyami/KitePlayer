@@ -55,15 +55,19 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                 }
                 var recorded = false
                 try {
-                    // The mode is the third sanctioned draw-phase read: it changes on a user's
-                    // setting, so its invalidations are rarer than the overlay's.
+                    // The mode, the picture-control filter and the framing are the remaining
+                    // sanctioned draw-phase reads: all change on a user's setting, so their
+                    // invalidations are rarer than the overlay's.
                     val mode = state.scaleMode.value
+                    val videoFilter = state.videoColorFilter.value
+                    val framing = state.transform.value
                     val layout = videoLayout(
                         areaWidth = size.width.toInt(),
                         areaHeight = size.height.toInt(),
                         size = frame.size,
                         rotationDegrees = frame.rotationDegrees,
                         mode = mode,
+                        transform = framing,
                     ) ?: return@drawBehind
                     // Fill overhangs the component by design; the clip keeps the crop inside it.
                     // Fit and Stretch never overhang, so they keep the unclipped fast path.
@@ -80,10 +84,15 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                                     layout.drawHeight.roundToInt().coerceAtLeast(1),
                                 ),
                                 filterQuality = FilterQuality.Low,
+                                // The picture controls, on the VIDEO image only: subtitles below
+                                // composite unfiltered, exactly like every platform renderer.
+                                colorFilter = videoFilter,
                             )
                         }
                     }
-                    if (mode == io.github.yuroyami.kiteplayer.VideoScale.Fill) {
+                    // Fill overhangs by design; zoom and pan can overhang under ANY mode. Both
+                    // clip; the unzoomed Fit and Stretch keep the unclipped fast path.
+                    if (mode == io.github.yuroyami.kiteplayer.VideoScale.Fill || !framing.isIdentity) {
                         clipRect { draw() }
                     } else {
                         draw()

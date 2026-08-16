@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import kotlin.math.roundToInt
 import kotlin.time.Duration
 
 /**
@@ -44,13 +45,34 @@ internal class AudioPipeline(
     val targetFormat: AudioFormat,
     private val onWarning: (PlaybackWarning) -> Unit = {},
     private val rampDuration: Duration = GainStage.DEFAULT_RAMP_DURATION,
+    /**
+     * True runs [speed] through the tempo stage, which keeps pitch. False folds the rate into
+     * the resampler instead: cheaper by a whole WSOLA pass, and the pitch moves with the rate,
+     * which is mpv's `audio-pitch-correction=no` and sometimes exactly what a caller wants.
+     */
+    val preservePitch: Boolean = true,
 ) {
     private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning)
-    private val resampler = LinearResampler(
-        sourceRate = sourceFormat.sampleRate,
+
+    /**
+     * The uncorrected-pitch rate. Always 1.0 while [preservePitch] is true. When it is not,
+     * the rate is folded into the resampler below: playing S times as fast IS resampling from
+     * `source * S` to the device rate, and pitch moves with it by that same arithmetic.
+     */
+    private var resampleSpeed: Double = 1.0
+
+    private var resampler = buildResampler()
+
+    private fun buildResampler(): LinearResampler = LinearResampler(
+        sourceRate = if (resampleSpeed == 1.0) {
+            sourceFormat.sampleRate
+        } else {
+            (sourceFormat.sampleRate * resampleSpeed).roundToInt().coerceAtLeast(1)
+        },
         targetRate = targetFormat.sampleRate,
         channels = targetFormat.channels,
     )
+
     private val tempo = TempoStage(targetFormat.channels, targetFormat.sampleRate)
     private val gain = GainStage(targetFormat.sampleRate, targetFormat.channels, rampDuration)
 
@@ -82,15 +104,29 @@ internal class AudioPipeline(
         }
 
     /**
-     * The playback rate, applied by the tempo stage. 1.0 bypasses it entirely.
+     * The playback rate. 1.0 bypasses both mechanisms entirely.
      *
-     * Owned by the feeder like [volume]: the engine routes a change here through a flush, so one
-     * buffer is never spliced from two speeds.
+     * With [preservePitch] the tempo stage applies it; without, the resampler is rebuilt with
+     * the rate folded into its source rate, which is safe for exactly the reason the tempo
+     * route is: the engine routes a change here through a flush with the feeder quiescent, so
+     * no buffer is ever spliced from two speeds and the discarded carry frame was going to be
+     * dropped by [reset] anyway.
+     *
+     * Owned by the feeder like [volume].
      */
     var speed: Double
-        get() = tempo.speed
+        get() = if (preservePitch) tempo.speed else resampleSpeed
         set(value) {
-            tempo.speed = value
+            if (preservePitch) {
+                tempo.speed = value
+                return
+            }
+            require(value.isFinite() && value >= TempoStage.MIN_SPEED && value <= TempoStage.MAX_SPEED) {
+                "speed must be within ${TempoStage.MIN_SPEED}..${TempoStage.MAX_SPEED}, was $value"
+            }
+            if (resampleSpeed == value) return
+            resampleSpeed = value
+            resampler = buildResampler()
         }
 
     /** Frames the tempo stage has emitted since the last [reset]. The pts law reads this. */
@@ -106,8 +142,8 @@ internal class AudioPipeline(
      * format and interpolating it into the new one is exactly the discontinuity the new pipeline
      * exists to avoid.
      */
-    fun rebuiltFor(decoderFormat: AudioFormat): AudioPipeline =
-        AudioPipeline(decoderFormat, targetFormat, onWarning, rampDuration).also {
+    fun rebuiltFor(decoderFormat: AudioFormat, preservePitch: Boolean = this.preservePitch): AudioPipeline =
+        AudioPipeline(decoderFormat, targetFormat, onWarning, rampDuration, preservePitch).also {
             it.volume = volume
             it.muted = muted
             it.speed = speed

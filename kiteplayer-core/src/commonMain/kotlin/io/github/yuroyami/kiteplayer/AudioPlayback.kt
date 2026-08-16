@@ -112,6 +112,16 @@ public class AudioPlayback(
     private var wantedSpeed: Double = 1.0
 
     /**
+     * Whether the NEXT epoch keeps pitch at speeds other than 1.0. Rides the flush exactly as
+     * [wantedSpeed] does and for the same reason: the mechanism (tempo stage against folded
+     * resampler) may only change where the ring is empty and no buffer spans the change.
+     */
+    private var wantedPreservePitch: Boolean = true
+
+    /** The CURRENT epoch's pitch law, the one every sample in the ring was produced under. */
+    private var epochPreservePitch: Boolean = true
+
+    /**
      * The rate of the CURRENT epoch, the one every sample in the ring belongs to.
      *
      * At any rate other than 1.0 the ring is fed on a scaled time axis: each buffer's pts is
@@ -172,6 +182,7 @@ public class AudioPlayback(
         // A fresh path is a fresh epoch: the rate wanted now is the rate this ring plays at.
         synchronized(lock) {
             epochSpeed = wantedSpeed
+            epochPreservePitch = wantedPreservePitch
             scaledBaseUs = null
             mediaClock.speed = epochSpeed
         }
@@ -264,11 +275,15 @@ public class AudioPlayback(
         abort: () -> Boolean = { false },
     ) {
         val negotiated = format ?: error("submitDecoded was called before open")
+        // The epoch's pitch law, read with the rate below: both only ever change across a flush,
+        // and a pipeline built under the old law is rebuilt rather than reconfigured, the same
+        // rule a format change follows.
+        val pitchNow = synchronized(lock) { epochPreservePitch }
         val existing = pipeline
         val stage = when {
-            existing == null -> AudioPipeline(sourceFormat, negotiated, onWarning)
-            existing.matches(sourceFormat) -> existing
-            else -> existing.rebuiltFor(sourceFormat)
+            existing == null -> AudioPipeline(sourceFormat, negotiated, onWarning, preservePitch = pitchNow)
+            existing.matches(sourceFormat) && existing.preservePitch == pitchNow -> existing
+            else -> existing.rebuiltFor(sourceFormat, pitchNow)
         }
         pipeline = stage
         // Picked up here, on the feeder, because the gain stage has exactly one owner. The ramp inside it
@@ -380,6 +395,7 @@ public class AudioPlayback(
         synchronized(lock) {
             ring?.flush()
             epochSpeed = wantedSpeed
+            epochPreservePitch = wantedPreservePitch
             scaledBaseUs = null
             mediaClock.invalidate()
             mediaClock.speed = epochSpeed
@@ -468,6 +484,19 @@ public class AudioPlayback(
                 "speed must be within ${TempoStage.MIN_SPEED}..${TempoStage.MAX_SPEED}, was $value"
             }
             synchronized(lock) { wantedSpeed = value }
+        }
+
+    /**
+     * Whether [speed] keeps pitch. True runs the tempo stage; false folds the rate into the
+     * resampler, which is cheaper and shifts pitch with the rate, mpv's
+     * `audio-pitch-correction=no`. Rules from the NEXT flush onward, by exactly the recipe
+     * [speed] documents, and none of the pts arithmetic changes: both mechanisms emit the same
+     * frame count per input second, so the scaled axis cannot tell them apart.
+     */
+    public var preservePitch: Boolean
+        get() = synchronized(lock) { wantedPreservePitch }
+        set(value) {
+            synchronized(lock) { wantedPreservePitch = value }
         }
 
     /**

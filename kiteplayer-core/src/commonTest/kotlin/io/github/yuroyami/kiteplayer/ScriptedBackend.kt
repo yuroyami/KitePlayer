@@ -927,10 +927,11 @@ internal class ScriptedOutput(
                 viewportWidth: Int,
                 viewportHeight: Int,
                 fontScale: Float,
+                position: Float,
             ): List<io.github.yuroyami.kiteplayer.spi.OverlayImage> = cues.map { cue ->
                 io.github.yuroyami.kiteplayer.spi.OverlayImage(
                     x = 0,
-                    y = viewportHeight - 1,
+                    y = (viewportHeight * position).toInt() - 1,
                     bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(1, 1, ByteArray(4)),
                 )
             }

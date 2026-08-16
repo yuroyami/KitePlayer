@@ -114,4 +114,34 @@ class AndroidSurfaceGeometryTest {
         assertEquals(1080, layout.height)
         assertEquals(180, layout.rotationDegrees)
     }
+
+    @Test
+    fun `the framing transform matches the compose geometry word for word`() {
+        // The forced aspect replaces the container's shape: square content forced to 2:1.
+        val forced = frameLayout(
+            100, 100, VideoSize(100, 100), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(aspectOverride = 2f),
+        )!!
+        assertEquals(100, forced.width)
+        assertEquals(50, forced.height)
+        assertEquals(25, forced.top)
+
+        // Zoom doubles about the centre; pan moves by a fraction of the drawn size.
+        val zoomed = frameLayout(
+            100, 100, VideoSize(100, 100), 0,
+            transform = io.github.yuroyami.kiteplayer.VideoTransform(zoom = 2f, panY = -0.25f),
+        )!!
+        assertEquals(200, zoomed.width)
+        assertEquals(-50, zoomed.left)
+        assertEquals(-100, zoomed.top, "zoomed to -50, then panned up by a quarter of 200")
+
+        // The identity transform is exactly the untouched layout, field for field.
+        assertEquals(
+            frameLayout(1920, 1080, VideoSize(640, 480), 0),
+            frameLayout(
+                1920, 1080, VideoSize(640, 480), 0,
+                transform = io.github.yuroyami.kiteplayer.VideoTransform.Identity,
+            ),
+        )
+    }
 }

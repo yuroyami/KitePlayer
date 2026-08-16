@@ -128,4 +128,60 @@ class AudioPipelineTest {
         val pipeline = AudioPipeline(surround51, stereoDevice)
         assertEquals(0, pipeline.process(FloatArray(0), 0))
     }
+
+    @Test
+    fun `preservePitch false plays speed by resampling and the pitch moves with the rate`() {
+        val mono = format(1, 48_000, MixLayout.Mono.mask)
+        val device = format(1, 48_000, null)
+        // Four seconds of a 440 Hz sine, fed in decoder-sized buffers.
+        val seconds = 4
+        val input = FloatArray(48_000 * seconds) { index ->
+            kotlin.math.sin(2.0 * kotlin.math.PI * 440.0 * index / 48_000.0).toFloat()
+        }
+
+        fun crossingsPerOutputSecond(preservePitch: Boolean): Pair<Int, Int> {
+            val pipeline = AudioPipeline(mono, device, preservePitch = preservePitch)
+            pipeline.speed = 2.0
+            val produced = mutableListOf<Float>()
+            var offset = 0
+            while (offset < input.size) {
+                val chunk = minOf(1024, input.size - offset)
+                val emitted = pipeline.process(input.copyOfRange(offset, offset + chunk), chunk)
+                for (i in 0 until emitted) produced += pipeline.output[i]
+                offset += chunk
+            }
+            // Rising crossings inside one exact second of output, past the first half second
+            // where a tempo stage's initial splices are densest. The same window the tempo
+            // stage's own pitch test counts, so the two tests cannot disagree by arithmetic.
+            var crossings = 0
+            val start = 48_000 / 2
+            for (i in start until minOf(start + 48_000, produced.size - 1)) {
+                if (produced[i] <= 0f && produced[i + 1] > 0f) crossings++
+            }
+            return crossings to produced.size
+        }
+
+        // Both modes emit half the frames: speed is real on the same time axis either way.
+        val (resampledPitch, resampledFrames) = crossingsPerOutputSecond(preservePitch = false)
+        val (preservedPitch, preservedFrames) = crossingsPerOutputSecond(preservePitch = true)
+        val half = 48_000 * seconds / 2
+        assertTrue(
+            resampledFrames in (half - 4_800)..(half + 4_800),
+            "2x by resampling must emit about half the frames, emitted $resampledFrames of ${input.size}",
+        )
+        assertTrue(
+            preservedFrames in (half - 4_800)..(half + 4_800),
+            "2x by tempo must emit about half the frames, emitted $preservedFrames of ${input.size}",
+        )
+
+        // The whole point of the switch: the resampled route doubles the pitch, the tempo route keeps it.
+        assertTrue(
+            resampledPitch in 792..968,
+            "at 2x without pitch correction 440 Hz becomes about 880, counted $resampledPitch",
+        )
+        assertTrue(
+            preservedPitch in 396..484,
+            "at 2x with pitch correction 440 Hz stays about 440, counted $preservedPitch",
+        )
+    }
 }

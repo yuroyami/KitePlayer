@@ -151,6 +151,22 @@ internal class RecordingRenderer(
         scaleMode = mode
     }
 
+    /** The last picture controls the engine told this renderer, or null when it never did. */
+    var adjustments: VideoAdjustments? = null
+        private set
+
+    override fun setAdjustments(adjustments: VideoAdjustments) {
+        this.adjustments = adjustments
+    }
+
+    /** The last framing controls the engine told this renderer, or null when it never did. */
+    var transform: VideoTransform? = null
+        private set
+
+    override fun setTransform(transform: VideoTransform) {
+        this.transform = transform
+    }
+
     val presentations: List<Presentation> get() = received
     val count: Int get() = received.size
     val timestamps: List<Pts> get() = received.map { it.pts }

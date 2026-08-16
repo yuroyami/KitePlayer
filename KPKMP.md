@@ -8340,6 +8340,64 @@ is no other.
 - **2026-08-16, register addition from the surge (17.11):**
   | KC-AV1SW | KiteCodec | Software AV1 on Android and iOS needs vendored dav1d (BSD-2, LGPL-compatible): FFmpeg's av1 decoder is hwaccel-only, so a device without an AV1 MediaCodec/VideoToolbox session has no AV1 route today. Meson cross-build per ABI, wired as an FFmpeg external. | Open, S3-adjacent |
 
+- **2026-08-16, the S4.g surge (owner mandate continued: beat mpv on everything else too).**
+  Landed in 0.0.6, every feature red-first or falsified after the fact where noted, full core
+  suite (256 tests), output and compose-video host suites, Metal GPU suite and iOS/Android
+  compiles green at commit:
+  1. **A-B loop** (`setAbLoop`, mpv `ab-loop`). B crossings ride the published-position check in
+     handlePlaybackTime (chapter-crossing precedent; wakeIn to the crossing at the current
+     rate); the end of the media is owned by an armed A through handleLoop's shared
+     restartFrom, regardless of LoopMode; A at or past the duration is treated as unarmed
+     rather than spun on; unseekable arming refused typed like a live speed change. Snapshot
+     abLoopA/abLoopB.
+  2. **preservePitch, real** (`setPreservePitch`, closes SOL-API2's biggest lie). False folds
+     the rate into the resampler (source rate times speed, rebuilt per setting); the pipeline
+     picks the mechanism per epoch, adopted at flush exactly like the rate; pts arithmetic
+     identical by construction (both mechanisms emit the same frame count per input second).
+     Proven by the pipeline test: 2x resampled counts ~880 crossings per output second where
+     the tempo route keeps ~440, both emitting half the frames. Chased a false alarm first:
+     the pipeline pitch test's integer-second division read 440 as 875; the probe exonerated
+     the stage in mono AND stereo, and the windowed count from TempoStageTest is now shared.
+  3. **MediaItem's dead fields wired** (closes SOL-API1): startPosition (source moved
+     pre-workers so frame zero is never decoded, exact landing rides the ordinary precise
+     seek, recovery re-aims at the target; StartPositionIgnored warning + audit row),
+     headers (http `headers` option, CRLF-joined), formatHint (`format_whitelist` of one);
+     both through KD-4's funnel, raw openOptions keys win, preOpenOptions unit-tested pure.
+  4. **Picture controls** (`setVideoAdjustments`: brightness, contrast, saturation, hue; mpv
+     `eq` minus gamma, which is not affine and is refused a half-honoured existence). ONE
+     colour-matrix law on VideoAdjustments.toColorMatrix (unit-domain 4x5; property-tested:
+     neutral is identity, grey invariant under saturation and hue, BT.709 greyscale at zero
+     saturation, contrast pivots at mid-grey). Honoured by KiteVideo (ColorFilter baked once
+     per setting, held frame repaints immediately even paused), the Android canvas renderer
+     (split video paint, filter rebuilt only on reference change), and the Metal composer
+     (AdjustUniforms at buffer 1, always bound; REAL-GPU test proves brightness lifts by 64
+     of 255 and saturation 0 lands red on grey, and that DISABLED is bit-exact so the colour
+     instrument stands). The delegating scheduler renderer forwards it (found by the facade
+     test's live-change assertion failing while attach passed). New row SOL-R14 for the CG
+     fallbacks and the MediaCodec direct tier.
+  5. **Framing controls** (`setVideoTransform`: aspect override, zoom, pan; mpv
+     `video-aspect-override`/`video-zoom`/`video-pan`). The forced aspect replaces the
+     content shape AS PRESENTED (ratio only), zoom scales the fitted rectangle about its
+     centre, pan moves by a fraction of the drawn size; all three geometries (compose
+     videoLayout, android frameLayout, metal quadUniformsFor) carry the same words; KiteVideo
+     clips on any non-identity transform like Fill; identity is field-for-field the untouched
+     layout, pinned by tests on both host geometries.
+  6. **Subtitle position** (`setSubtitlePosition`, mpv `sub-pos` over 100). The implicit
+     bottom stack anchors at a viewport fraction through the rasterizer seam (new defaulted
+     SPI parameter); explicit positions never move; both platform rasterizers changed in the
+     same words; Apple test proves a half-height anchor lifts by exactly half the viewport.
+  7. **KeyframeThenRefine, real** (closes SOL-API3). The seek machine's ladder loop runs two
+     phases: keyframe lands and PRESENTS (the immediate picture a drag wants), then an
+     ordinary precise landing; replies and SeekCompleted carry the exact landing only; a
+     keyframe already on the target skips the refine; quiescence re-taken between phases and
+     a refusal keeps the keyframe landing as the honest result. Falsified by flattening the
+     phase switch to Precise: the two-phase test then presents only the exact frame, which IS
+     the old behaviour the register described. The coalescing test now pins one merged
+     two-phase seek at exactly two flush cycles.
+  8. **Warning census** grew StartPositionIgnored (the audit table is compile-checked, so the
+     row exists by construction). Versions: KitePlayer 0.0.6 published local; Synkplay bumped
+     and wired (A-B loop, pitch toggle, eq sliders, framing, subtitle position).
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -15579,6 +15637,11 @@ Rendering and views:
 - SOL-R13 [V] UIKit and AppKit fallback renderers reject RgbaBitmap storage larger than the
   minimum (exact-size equality); either require exact size everywhere or honour a stride.
   Home: S3.
+- SOL-R14 [V] (born S4.g) The picture controls (VideoAdjustments) and framing (VideoTransform)
+  are not applied by the UIKit/AppKit CPU fallback renderers, and Android's MediaCodec
+  direct-to-Surface tier CANNOT apply the colour matrix (the codec owns the Surface; no canvas
+  or shader touches those pixels; the Compose GPU tier's OES-to-RGBA blit is the natural hook).
+  Gamma is absent from VideoAdjustments by design (not affine). Home: S3.
 
 Audio:
 - SOL-A1 [V] AudioTrackSink counts a whole block as submitted even when pause or stop
@@ -15614,14 +15677,20 @@ Subtitles:
   later implicit cues. Home: S4.f.
 
 API truth:
-- SOL-API1 [V] MediaItem's remaining unused surface after S4.e wired externalSubtitles and
-  added videoFilter: headers (17.8's), startPosition, formatHint. Wire them or remove them at
-  the S5 ABI sweep.
-- SOL-API2 [C] PlayerConfig logger, liveBackBuffer, liveMaxLag, preservePitch and startDisabled
-  are accepted and unused (several KDocs already say so; the fields still invite configuration
-  that does nothing). Home: S4.e.
-- SOL-API3 [C] SeekMode.KeyframeThenRefine merges correctly but lands like Precise; give it its
-  two-phase behaviour or fold it. Home: S4.e.
+- SOL-API1: CLOSED by the S4.g surge. startPosition is honoured in two halves (pre-worker
+  source move, then a precise landing through the ordinary machine; unhonourable requests warn
+  StartPositionIgnored, typed). headers and formatHint ride KD-4's pre-open funnel as the http
+  `headers` option and a `format_whitelist` of one; an explicit openOptions key wins over the
+  typed sugar (preOpenOptions, unit-tested pure).
+- SOL-API2 [C] REDUCED by the S4.g surge: preservePitch is REAL (tempo stage against a
+  speed-folded resampler, epoch-adopted at flush exactly like the rate; setPreservePitch on the
+  facade). Still accepted and unused: logger (superseded by KiteLog, KDoc says so),
+  liveBackBuffer, liveMaxLag, startDisabled. Home: S4.e.
+- SOL-API3: CLOSED by the S4.g surge. KeyframeThenRefine runs the seek machine's ladder loop in
+  two phases: the keyframe lands and PRESENTS first, then an ordinary precise landing on the
+  exact frame; SeekCompleted and the replies carry the exact landing only, and a keyframe
+  already on the target skips the refine. The coalescing test now pins two flush cycles for one
+  merged two-phase seek.
 - SOL-API4 [V] The snapshot placeholders are already honestly KDoc'd as not implemented
   (bufferedRanges, droppedFramesDecode, audioLatency, containerBitrate, ExternalMaster,
   LateAndDecode); they stay open as section 11 roadmap facts, not silent lies. Home: their

@@ -1,0 +1,13 @@
+public abstract interface class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
+	public abstract fun getFailedFrames ()J
+	public abstract fun getPresentedFrames ()J
+	public abstract fun getSupersededFrames ()J
+}
+
+public final class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer$DefaultImpls {
+	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
+	public static fun setScaleMode (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoScale;)V
+	public static fun setTransform (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoTransform;)V
+	public static fun videoDecoderFactories (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Ljava/util/List;
+}
+

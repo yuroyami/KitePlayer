@@ -91,9 +91,13 @@ class MetalFrameComposerTest {
         overlay: SubtitleOverlay? = null,
         targetWidth: Int = 64,
         targetHeight: Int = 64,
+        adjustUniforms: FloatArray = DISABLED_ADJUST_UNIFORMS,
     ): ByteArray {
         val target = composer.device.makeTargetTexture(targetWidth, targetHeight)
-        val commands = composer.encode(target, frame, picture, overlay, targetWidth, targetHeight)
+        val commands = composer.encode(
+            target, frame, picture, overlay, targetWidth, targetHeight,
+            adjustUniforms = adjustUniforms,
+        )
         commands.waitUntilCompleted()
         val bytes = ByteArray(targetWidth * targetHeight * 4)
         bytes.usePinned { pinned ->
@@ -275,6 +279,51 @@ class MetalFrameComposerTest {
         assertTrue(
             overlay[0] > 200 && overlay[1] > 200 && overlay[2] > 200,
             "the overlay pixel must be white above the red picture, got ${overlay.toList()}",
+        )
+    }
+
+    @Test
+    fun theAdjustUniformsAreLiveAndDisabledIsBitExact() {
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val frame = TestFrame(64, 64, bt(ColorMatrix.Bt709))
+        // Mid-grey: limited-range Y=126 with neutral chroma is 128-ish sRGB on every channel.
+        val grey = { solidNv12(64, 64, y = 126, cb = 128, cr = 128) }
+
+        val plain = render(composer, frame, grey())
+        val disabled = render(composer, frame, grey(), adjustUniforms = DISABLED_ADJUST_UNIFORMS)
+        assertTrue(
+            plain.contentEquals(disabled),
+            "a disabled adjust uniform must not change one bit: the instrument depends on it",
+        )
+
+        val lifted = render(
+            composer, frame, grey(),
+            adjustUniforms = packAdjustUniforms(
+                io.github.yuroyami.kiteplayer.VideoAdjustments(brightness = 0.25f),
+            ),
+        )
+        val base = bgraAt(plain, 64, 32, 32)
+        val bright = bgraAt(lifted, 64, 32, 32)
+        for (channel in 0..2) {
+            val gain = bright[channel] - base[channel]
+            assertTrue(
+                gain in 56..72,
+                "brightness 0.25 lifts each channel by about 64, channel $channel moved $gain " +
+                    "(${base.toList()} -> ${bright.toList()})",
+            )
+        }
+
+        val greyscale = render(
+            composer, frame, solidNv12(64, 64, y = 81, cb = 90, cr = 240),
+            adjustUniforms = packAdjustUniforms(
+                io.github.yuroyami.kiteplayer.VideoAdjustments(saturation = 0f),
+            ),
+        )
+        val desaturated = bgraAt(greyscale, 64, 32, 32)
+        assertTrue(
+            abs(desaturated[0] - desaturated[1]) <= 2 && abs(desaturated[1] - desaturated[2]) <= 2,
+            "saturation 0 must land red on grey, got ${desaturated.toList()}",
         )
     }
 }

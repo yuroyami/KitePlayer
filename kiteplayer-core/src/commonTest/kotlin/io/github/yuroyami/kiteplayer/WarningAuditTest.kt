@@ -25,6 +25,7 @@ class WarningAuditTest {
         PlaybackWarning.BadTimestamps("x"),
         PlaybackWarning.TrackDeselected(TrackId(0), "x"),
         PlaybackWarning.StartupIncomplete("x"),
+        PlaybackWarning.StartPositionIgnored(kotlin.time.Duration.ZERO, "x"),
         PlaybackWarning.PathologicalInterleaving(TrackId(0), 1),
         PlaybackWarning.NoRenderSurface("x"),
         PlaybackWarning.OptionsUnused(listOf("x")),
@@ -68,6 +69,9 @@ class WarningAuditTest {
         )
         is PlaybackWarning.StartupIncomplete -> listOf(
             "PlaybackCore's open path, when the pipeline could not be primed before the deadline",
+        )
+        is PlaybackWarning.StartPositionIgnored -> listOf(
+            "PlaybackCore.startPositionTargetUs, when the item's startPosition cannot be honoured",
         )
         is PlaybackWarning.PathologicalInterleaving -> listOf(
             "the demux pump, when one stream starves another past the drop bound",

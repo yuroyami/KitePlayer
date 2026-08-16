@@ -821,9 +821,11 @@ class PlaybackCoreTest {
         harness.run(2.seconds)
 
         assertEquals(
-            1,
+            2,
             harness.core.seekFlushCycles,
-            "twenty requests in one pass are one merged seek, so one flush cycle",
+            "twenty requests in one pass are ONE merged seek; its KeyframeThenRefine mode runs " +
+                "that one seek's two phases (the keyframe landing, then the exact one), so " +
+                "exactly two flush cycles and never twenty",
         )
         harness.close()
     }

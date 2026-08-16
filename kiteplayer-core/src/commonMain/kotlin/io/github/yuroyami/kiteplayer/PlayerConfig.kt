@@ -143,10 +143,9 @@ public data class AudioConfig(
     /** Preferred language tags, best first, matched against the container's track languages. */
     val preferredLanguages: List<String> = emptyList(),
     /**
-     * Play at a different rate without changing pitch. False is cheaper and sounds wrong.
-     *
-     * There is no tempo stage, so pitch is never preserved at any speed.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Play at a different rate without changing pitch. True runs the tempo stage; false folds
+     * the rate into the resampler, which is cheaper and shifts pitch with the rate. The seed
+     * for [KitePlayer.setPreservePitch], which can change it at runtime.
      */
     val preservePitch: Boolean = true,
     /**

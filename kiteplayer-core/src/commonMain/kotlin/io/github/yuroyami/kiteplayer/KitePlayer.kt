@@ -178,6 +178,24 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Chooses whether [setSpeed] keeps pitch.
+     *
+     * True, the default, runs the tempo stage: 2x sounds like faster speech at its own pitch.
+     * False folds the rate into the resampler instead, which is cheaper by a whole
+     * time-stretch pass and shifts pitch with the rate, exactly mpv's
+     * `audio-pitch-correction=no`: 2x sounds a whole octave up. Musicians slowing a piece down
+     * to transcribe it often want the false setting; everyone else wants the default.
+     *
+     * Seeded from [AudioConfig.preservePitch]. A live change away from 1.0 speed rides the
+     * same internal precise seek a speed change does, for the same epoch reason, and is refused
+     * the same way on an unseekable source; at 1.0 the two mechanisms are the same bypass and
+     * the change is free. Published as [PlayerSnapshot.preservePitch].
+     */
+    public fun setPreservePitch(value: Boolean) {
+        core.post(CoreCommand.SetPreservePitch(value, CompletableDeferred()))
+    }
+
+    /**
      * Sets the volume, from silence at 0 to unity at 1.
      *
      * Applied by the audio pipeline's gain stage as one multiply per sample over a short ramp, so a change
@@ -207,6 +225,30 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Arms or clears the A-B loop: while armed, playback that reaches [b] jumps straight back to
+     * [a] and keeps going, which is how a phrase is practised and a scene is studied frame by
+     * frame. Independent of [setLoop]; while armed, the A-B loop owns the end of the region and
+     * the end of the media both.
+     *
+     * With [b] null the loop runs from [a] to the end of the media and wraps back to [a]. Both
+     * null clears the loop. The armed points are published as [PlayerSnapshot.abLoopA] and
+     * [PlayerSnapshot.abLoopB], and they belong to the player, not the media: like [setSpeed]
+     * they survive seeks and the next [open].
+     *
+     * The jump back is an ordinary precise seek, so the loop needs a seekable source; arming it
+     * while an unseekable one plays is refused.
+     *
+     * @throws IllegalArgumentException when a point is negative, when [b] alone is given, or
+     *         when [b] is not after [a].
+     */
+    public fun setAbLoop(a: Duration?, b: Duration? = null) {
+        require(a != null || b == null) { "an A-B loop needs its A; B alone is not a loop" }
+        require(a == null || a >= Duration.ZERO) { "A must not be negative, was $a" }
+        require(a == null || b == null || b > a) { "B must be after A: A=$a B=$b" }
+        core.post(CoreCommand.SetAbLoop(a, b, CompletableDeferred()))
+    }
+
+    /**
      * Sets how the picture occupies its surface: whole picture letterboxed ([VideoScale.Fit],
      * the default), viewport filled with the overhang cropped ([VideoScale.Fill]), or both axes
      * stretched independently ([VideoScale.Stretch]).
@@ -217,6 +259,59 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     public fun setVideoScale(mode: VideoScale) {
         core.post(CoreCommand.SetVideoScale(mode, CompletableDeferred()))
+    }
+
+    /**
+     * Sets the live picture controls: brightness, contrast, saturation and hue, mpv's `eq`.
+     *
+     * Legal at any time, renderer attached or not, exactly like [setVideoScale]: the value
+     * belongs to the player, every renderer is told it on attach, and a change lands on the very
+     * next drawn frame with no decoder or pipeline work at all. Pass
+     * [VideoAdjustments.Identity] to reset. Published as [PlayerSnapshot.videoAdjustments].
+     *
+     * @throws IllegalArgumentException outside the documented ranges: brightness -1..1,
+     *         contrast 0..2, saturation 0..2, hue -180..180, all finite.
+     */
+    public fun setVideoAdjustments(value: VideoAdjustments) {
+        require(value.brightness.isFinite() && value.brightness in -1f..1f) {
+            "brightness must be within -1..1, was ${value.brightness}"
+        }
+        require(value.contrast.isFinite() && value.contrast in 0f..2f) {
+            "contrast must be within 0..2, was ${value.contrast}"
+        }
+        require(value.saturation.isFinite() && value.saturation in 0f..2f) {
+            "saturation must be within 0..2, was ${value.saturation}"
+        }
+        require(value.hueDegrees.isFinite() && value.hueDegrees in -180f..180f) {
+            "hue must be within -180..180 degrees, was ${value.hueDegrees}"
+        }
+        core.post(CoreCommand.SetVideoAdjustments(value, CompletableDeferred()))
+    }
+
+    /**
+     * Sets the framing controls: a forced display aspect, magnification, and pan, mpv's
+     * `video-aspect-override`, `video-zoom` and `video-pan-x`/`-y`.
+     *
+     * Folded into the same one-pass geometry [setVideoScale] drives, so it costs nothing per
+     * frame and composes with every scale mode: the aspect override reshapes the content, the
+     * mode fits it, the zoom scales the fitted rectangle about its centre, and the pan moves it
+     * by a fraction of its own drawn size. Pass [VideoTransform.Identity] to reset. Published as
+     * [PlayerSnapshot.videoTransform].
+     *
+     * @throws IllegalArgumentException outside the documented ranges: aspect 0.1..10 (or null),
+     *         zoom 0.25..4, pan -1..1 on each axis, all finite.
+     */
+    public fun setVideoTransform(value: VideoTransform) {
+        val aspect = value.aspectOverride
+        require(aspect == null || (aspect.isFinite() && aspect in 0.1f..10f)) {
+            "aspectOverride must be within 0.1..10 or null, was $aspect"
+        }
+        require(value.zoom.isFinite() && value.zoom in 0.25f..4f) {
+            "zoom must be within 0.25..4, was ${value.zoom}"
+        }
+        require(value.panX.isFinite() && value.panX in -1f..1f) { "panX must be within -1..1, was ${value.panX}" }
+        require(value.panY.isFinite() && value.panY in -1f..1f) { "panY must be within -1..1, was ${value.panY}" }
+        core.post(CoreCommand.SetVideoTransform(value, CompletableDeferred()))
     }
 
     /**
@@ -236,6 +331,23 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public fun setSubtitleScale(value: Float) {
         require(value.isFinite() && value > 0f) { "subtitle scale must be finite and positive, was $value" }
         core.post(CoreCommand.SetSubtitleScale(value, CompletableDeferred()))
+    }
+
+    /**
+     * Moves the subtitles up the screen: [value] is where the implicit bottom stack anchors, as
+     * a fraction of the viewport height, mpv's `sub-pos` over 100. 1.0, the default, is the
+     * ordinary bottom edge; 0.9 lifts the stack a tenth of the screen, which is what a viewer
+     * with a player bar over their subtitles wants. Explicitly positioned cues are the author's
+     * word and do not move. The active cues re-rasterise immediately; published as
+     * [PlayerSnapshot.subtitlePosition].
+     *
+     * @throws IllegalArgumentException unless finite and within 0.1 to 1.
+     */
+    public fun setSubtitlePosition(value: Float) {
+        require(value.isFinite() && value in 0.1f..1f) {
+            "subtitle position must be within 0.1..1, was $value"
+        }
+        core.post(CoreCommand.SetSubtitlePosition(value, CompletableDeferred()))
     }
 
     /**

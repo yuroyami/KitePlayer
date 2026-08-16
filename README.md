@@ -47,19 +47,29 @@ alternative would be a reflective search that fails differently on every platfor
 a typed configuration error on every target instead of a surprise at the first frame.
 
 The surface is small on purpose: `open`, `openQueue` with `next`/`previous`, `play`, `pause`,
-`seek`, `seekLater`, `stepFrame`, `stop`, `setSpeed` (REAL, 0.25x to 4x, pitch preserved by a
-time-domain tempo stage, one clock law across audio, video and position), `setVolume`,
-`setMuted`, `setLoop` (LoopMode.All wraps the queue), `setVideoScale` (Fit, Fill, Stretch,
-honoured by every renderer with pixel aspect and rotation applied first), `selectTrack`
+`seek`, `seekLater` (`SeekMode.KeyframeThenRefine` is REAL two-phase: the keyframe presents at
+once and the exact frame lands after it), `stepFrame`, `stop`, `setSpeed` (REAL, 0.25x to 4x,
+pitch preserved by a time-domain tempo stage, one clock law across audio, video and position),
+`setPreservePitch` (false plays speed through the resampler, mpv's `audio-pitch-correction=no`),
+`setVolume`, `setMuted`, `setLoop` (LoopMode.All wraps the queue), `setAbLoop` (mpv's `ab-loop`:
+B wraps back to A, and A alone wraps at the end of the media), `setVideoScale` (Fit, Fill,
+Stretch, honoured by every renderer with pixel aspect and rotation applied first),
+`setVideoAdjustments` (live brightness, contrast, saturation and hue as one colour-matrix law,
+mpv's `eq`), `setVideoTransform` (a forced display aspect, zoom and pan folded into the same
+geometry pass, mpv's `video-aspect-override`/`video-zoom`/`video-pan`), `selectTrack`
 (container tracks and the synthetic tracks `MediaItem.externalSubtitles` creates),
 `addExternalSubtitle` (a SubRip or WebVTT FILE loaded during playback, appended and selected),
-`setSubtitleScale`, `setSubtitleDelay` and `setAudioDelay` (all live, all published on the
+`setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition` (mpv's `sub-pos`: the implicit
+stack lifts, authored positions never move) and `setAudioDelay` (all live, all published on the
 snapshot), `chapterAt` and `seekToChapter`, `captureFrame`, `attachRenderer`,
 `detachRenderer`, the debuggability trio `diagnosticsDump`, `warningHistory` and
 `supportBundle` (with `KiteLog` as the one silent-by-default logging seam), non-suspending
 `close` and awaited `closeAndAwait`, plus four flows (`state`, `progress`, `stats`, `events`)
-and `position()`. A video filter chain attaches at open through `MediaItem.videoFilter`, and
-`SubtitleConfig.autoSelect` (on by default) makes subtitled media show its subtitles.
+and `position()`. A video filter chain attaches at open through `MediaItem.videoFilter`;
+`MediaItem.startPosition` opens at a position without ever showing the beginning;
+`MediaItem.headers` and `MediaItem.formatHint` ride the pre-open funnel as the http `headers`
+option and a format whitelist of one; and `SubtitleConfig.autoSelect` (on by default) makes
+subtitled media show its subtitles.
 Anything a member cannot honour is refused with a typed error rather than accepted and ignored:
 `editions()` and `programs()` say exactly which container reader is missing, and a live speed
 change on an unseekable source explains why it needs a seekable one.
@@ -342,6 +352,15 @@ enough to call any platform supported.
   deliberately unqualified. There is no physical-device benchmark, release benchmark, power result, or
   soak result.
   Every non-Android platform still decodes video in software.
+- **The picture controls stop where a renderer has no colour hook.** `setVideoAdjustments` is
+  applied by KiteVideo (both tiers), the Android canvas renderer and the Metal composer (proven
+  live on real Metal, disabled-is-bit-exact for the colour instrument). The UIKit and AppKit CPU
+  fallback renderers do not apply it yet, and Android's MediaCodec direct-to-Surface tier cannot:
+  the codec writes the Surface and no canvas ever touches those pixels (KPKMP 17.11, SOL-R14).
+  Gamma is absent by design: it is not affine, so it cannot ride the one colour-matrix law, and a
+  control honoured by some renderers and ignored by others would be worse than none. The same
+  paused-picture limit as overlays applies on the platform renderers (SOL-R1): a control changed
+  while paused shows at the next drawn frame, while KiteVideo repaints its held frame at once.
 - **Rotation is four turns and no more.** The three quarter turns and no rotation are drawn. A display
   matrix that mirrors the picture or skews it by an arbitrary angle is drawn as stored, which keeps the
   picture rather than the exact transform.

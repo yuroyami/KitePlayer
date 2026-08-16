@@ -30,12 +30,24 @@ public data class PlayerSnapshot(
     val loop: LoopMode = LoopMode.Off,
     /** How the picture occupies its surface. The engine's choice; renderers honour it. */
     val videoScale: VideoScale = VideoScale.Fit,
+    /** The live picture controls (brightness, contrast, saturation, hue). Renderers honour them. */
+    val videoAdjustments: VideoAdjustments = VideoAdjustments.Identity,
+    /** The live framing controls (aspect override, zoom, pan). Renderers honour them. */
+    val videoTransform: VideoTransform = VideoTransform.Identity,
     /** The runtime subtitle timing shift. Positive shows cues later. */
     val subtitleDelay: Duration = Duration.ZERO,
     /** The runtime subtitle size multiplier over the authored size. */
     val subtitleScale: Float = 1.0f,
+    /** Where the implicit subtitle stack anchors, as a fraction of the height. 1.0 is the bottom. */
+    val subtitlePosition: Float = 1.0f,
     /** The runtime audio timing shift. Positive presents video earlier to meet late sound. */
     val audioDelay: Duration = Duration.ZERO,
+    /** The A of the armed A-B loop, or null when none is armed. */
+    val abLoopA: Duration? = null,
+    /** The B of the armed A-B loop. Null with a non-null [abLoopA] wraps at the end of the media. */
+    val abLoopB: Duration? = null,
+    /** Whether [speed] keeps pitch. False plays rate through the resampler, pitch moving with it. */
+    val preservePitch: Boolean = true,
     /**
      * The last failure, retained until another one replaces it or the player is opened again.
      *

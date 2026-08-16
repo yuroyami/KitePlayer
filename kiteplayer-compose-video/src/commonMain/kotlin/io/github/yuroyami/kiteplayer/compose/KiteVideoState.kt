@@ -68,6 +68,23 @@ public class KiteVideoState internal constructor(
         mutableStateOf(io.github.yuroyami.kiteplayer.VideoScale.Fit)
 
     /**
+     * The engine's framing controls, under the same draw-phase law as [scaleMode]: read only
+     * inside the draw phase, invalidating on a user's setting and nothing else.
+     */
+    internal val transform: MutableState<io.github.yuroyami.kiteplayer.VideoTransform> =
+        mutableStateOf(io.github.yuroyami.kiteplayer.VideoTransform.Identity)
+
+    /**
+     * The engine's picture controls, pre-baked into the one [androidx.compose.ui.graphics.ColorFilter]
+     * the draw phase applies to the video image (never to subtitles). Null is neutral, and the
+     * usual case, so normal playback pays nothing. Baked HERE, on the publishing thread, because
+     * a ColorFilter is an immutable value and building it once per SETTING beats building it once
+     * per FRAME by four orders of magnitude in event count.
+     */
+    internal val videoColorFilter: MutableState<androidx.compose.ui.graphics.ColorFilter?> =
+        mutableStateOf(null)
+
+    /**
      * A dropped Window metric needs a newly recorded Compose draw before a later exact metric can
      * prove completion. This state is observed only through [acquireFrameForDraw], so incrementing
      * it invalidates the draw scope without recomposition or layout.
@@ -100,6 +117,24 @@ public class KiteVideoState internal constructor(
         releasePublishedFrames = ::releaseFramesAfterRendererClosed,
         publishOverlay = { newest -> overlay.value = newest },
         publishScaleMode = { mode -> scaleMode.value = mode },
+        publishTransform = { newest -> transform.value = newest },
+        publishAdjustments = { adjustments ->
+            videoColorFilter.value = if (adjustments.isIdentity) {
+                null
+            } else {
+                // The engine's one matrix law, respelled into Compose's convention: same 4x5
+                // rows, translation column in the 0..255 domain instead of the unit domain.
+                val unit = adjustments.toColorMatrix()
+                val values = unit.copyOf()
+                values[4] *= 255f
+                values[9] *= 255f
+                values[14] *= 255f
+                values[19] *= 255f
+                androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                    androidx.compose.ui.graphics.ColorMatrix(values),
+                )
+            }
+        },
         hardwareRenderer = hardwareRenderer,
     )
 

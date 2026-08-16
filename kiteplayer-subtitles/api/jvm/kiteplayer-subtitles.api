@@ -1,5 +1,6 @@
 public final class io/github/yuroyami/kiteplayer/subtitle/SubRipParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/SubRipParser;
+	public static final field OPEN_CUE_DEFAULT_MICROS J
 	public final fun parse (Ljava/lang/String;)Ljava/util/List;
 	public final fun parseCueBody (Ljava/lang/String;)Ljava/util/List;
 }

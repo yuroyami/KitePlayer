@@ -103,12 +103,24 @@ internal class KiteVideoRenderer(
     private val publishOverlay: (KiteVideoOverlay?) -> Unit = {},
     /** Publishes the engine's scale mode into the draw-phase state. */
     private val publishScaleMode: (io.github.yuroyami.kiteplayer.VideoScale) -> Unit = {},
+    /** Publishes the engine's picture controls into the draw-phase state. */
+    private val publishAdjustments: (io.github.yuroyami.kiteplayer.VideoAdjustments) -> Unit = {},
+    /** Publishes the engine's framing controls into the draw-phase state. */
+    private val publishTransform: (io.github.yuroyami.kiteplayer.VideoTransform) -> Unit = {},
     /** Optional platform GPU tier. Software frames still use this renderer's worker. */
     private val hardwareRenderer: KiteVideoHardwareRenderer? = null,
 ) : VideoRenderer {
 
     override fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {
         publishScaleMode(mode)
+    }
+
+    override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
+        publishAdjustments(adjustments)
+    }
+
+    override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
+        publishTransform(transform)
     }
 
     /** The contentHash the published overlay was built from, so an unchanged one is not rebuilt. */

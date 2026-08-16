@@ -62,6 +62,19 @@ public interface VideoRenderer : AutoCloseable {
      */
     public fun setScaleMode(mode: io.github.yuroyami.kiteplayer.VideoScale) {}
 
+    /**
+     * The picture controls (brightness, contrast, saturation, hue), as the engine's one colour
+     * matrix law. Told on attach and on every change, exactly like [setScaleMode]. Defaulted so
+     * an existing renderer keeps compiling; a renderer that draws colour overrides it.
+     */
+    public fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {}
+
+    /**
+     * The framing controls (aspect override, zoom, pan), folded into the same geometry pass the
+     * scale mode drives. The same delivery law as [setScaleMode]; defaulted the same way.
+     */
+    public fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {}
+
     /** Composited above the video. Replaced wholesale rather than diffed. */
     public suspend fun setOverlay(overlay: SubtitleOverlay?)
 

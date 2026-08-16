@@ -75,13 +75,14 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         viewportWidth: Int,
         viewportHeight: Int,
         fontScale: Float,
+        position: Float,
     ): List<OverlayImage> {
         if (viewportWidth <= 0 || viewportHeight <= 0) return emptyList()
         val images = mutableListOf<OverlayImage>()
         var stackedBottom = 0
         for (cue in cues) {
             when (cue) {
-                is SubtitleCue.Text -> rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom)
+                is SubtitleCue.Text -> rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position)
                     ?.let { image ->
                         images += image
                         if (cue.layout.alignment.isBottom) {
@@ -108,6 +109,7 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         viewportHeight: Int,
         fontScale: Float,
         stackedBottom: Int,
+        position: Float,
     ): OverlayImage? {
         if (cue.spans.isEmpty() || cue.spans.all { it.text.isEmpty() }) return null
         val layoutSpec = cue.layout
@@ -205,7 +207,10 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> marginYPx
             CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
                 (viewportHeight - height) / 2
-            else -> viewportHeight - marginYPx - height - stackedBottom
+            // The implicit bottom stack anchors at the viewer's sub-position: 1.0 is the plain
+            // bottom edge, smaller lifts the stack. Explicit positions above are the author's
+            // word and never move with it, exactly mpv's sub-pos rule.
+            else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
         }
         return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, pixels))
     }

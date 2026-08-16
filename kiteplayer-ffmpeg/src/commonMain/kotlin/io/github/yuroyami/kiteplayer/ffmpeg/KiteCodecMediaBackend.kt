@@ -60,14 +60,15 @@ public class KiteCodecMediaBackend(
         // match the headers KiteCodec was compiled against, so every open fails and retrying is pointless.
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
+        val options = preOpenOptions(media)
         val source = mappingFFmpegRuntimeRejection {
             KiteCodecSource(
-                if (media.openOptions.isEmpty()) {
+                if (options.isEmpty()) {
                     MediaSource.open(media.uri)
                 } else {
                     // KD-4's pre-open funnel. Unconsumed keys are reported by KiteCodec rather
                     // than dropped, so a typo surfaces instead of quietly doing nothing.
-                    MediaSource.open(media.uri, media.openOptions)
+                    MediaSource.open(media.uri, options)
                 },
             )
         }
@@ -116,4 +117,26 @@ private class KiteCodecBackendSession(private val kiteCodec: KiteCodecSource) : 
         listOf(KiteCodecSubtitleDecoderFactory())
 
     override fun close(): Unit = kiteCodec.close()
+}
+
+/**
+ * The item's typed fields respelled as the pre-open options they are (SOL-API1): `headers` is
+ * the http protocol's own option, one CRLF-joined block exactly as the protocol documents it,
+ * and `formatHint` is a format whitelist of one, which is what forcing a demuxer means to
+ * libavformat. An explicit [MediaItem.openOptions] key wins over the typed field, because the
+ * raw funnel is the escape hatch and an escape hatch that sugar can override is not one. On
+ * media an option cannot apply to (headers on a local file), the open path's unused-option
+ * warning says so, typed.
+ *
+ * Internal rather than private for exactly one reason: its unit test, which needs no FFmpeg.
+ */
+internal fun preOpenOptions(media: MediaItem): Map<String, String> = buildMap {
+    putAll(media.openOptions)
+    if (media.headers.isNotEmpty() && !containsKey("headers")) {
+        put("headers", media.headers.entries.joinToString(separator = "") { (key, value) -> "$key: $value\r\n" })
+    }
+    val hint = media.formatHint
+    if (hint != null && !containsKey("format_whitelist")) {
+        put("format_whitelist", hint)
+    }
 }

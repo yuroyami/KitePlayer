@@ -200,16 +200,48 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Sets what happens at the end of the media.
      *
-     * @throws IllegalArgumentException for [LoopMode.All], which repeats a queue. There is no queue and no
-     *         playlist, so it is refused rather than quietly behaving like [LoopMode.Off]: a caller can
-     *         then tell the difference between the mode it asked for and the mode it got. See KPKMP.md
-     *         section 11.
+     * [LoopMode.All] repeats the open queue (S4.e), wrapping from the last item to the first.
+     * With a queue of one, or plain [open]-ed media, it repeats the current item exactly like
+     * [LoopMode.One], which is what a whole queue of one means.
      */
     public fun setLoop(mode: LoopMode) {
-        require(mode != LoopMode.All) {
-            "LoopMode.All repeats a queue and there is no queue; see KPKMP.md section 11"
-        }
         core.post(CoreCommand.SetLoop(mode, CompletableDeferred()))
+    }
+
+    /**
+     * Opens [items] as the queue, starting at [startIndex], and returns paused on its first frame
+     * exactly like [open] (S4.e).
+     *
+     * At each item's end the next opens and playback continues; [LoopMode.All] wraps the end back
+     * to the start. [PlayerEvent.Ended] still fires per item, and the snapshot carries the queue
+     * and the moving [PlayerSnapshot.queueIndex]. A plain [open] replaces the queue with the one
+     * item it names.
+     *
+     * @throws IllegalArgumentException for an empty list or a start index outside it.
+     * @throws PlaybackException when the starting item cannot be opened, exactly like [open].
+     */
+    public suspend fun openQueue(items: List<MediaItem>, startIndex: Int = 0) {
+        core.openQueue(items, startIndex)
+    }
+
+    /**
+     * Opens the next queue item, keeping the play or pause intent (S4.e).
+     *
+     * @throws IllegalStateException with no queue, or at the last item unless [LoopMode.All]
+     *         makes the ends meet.
+     */
+    public suspend fun next() {
+        core.queueNext()
+    }
+
+    /**
+     * Opens the previous queue item, keeping the play or pause intent (S4.e).
+     *
+     * @throws IllegalStateException with no queue, or at the first item unless [LoopMode.All]
+     *         makes the ends meet.
+     */
+    public suspend fun previous() {
+        core.queuePrevious()
     }
 
     /**

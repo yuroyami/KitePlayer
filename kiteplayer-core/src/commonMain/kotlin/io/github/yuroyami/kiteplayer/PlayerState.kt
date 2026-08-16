@@ -42,6 +42,10 @@ public data class PlayerSnapshot(
     val error: PlaybackError? = null,
     /** Increments on every seek and every stream reconfiguration. */
     val generation: Generation = Generation.Initial,
+    /** The open queue's items (S4.e). Empty outside queue playback. */
+    val queue: List<MediaItem> = emptyList(),
+    /** The index of [media] inside [queue], or -1 outside queue playback. */
+    val queueIndex: Int = -1,
 )
 
 /**

@@ -59,6 +59,7 @@ class PlaybackCoreTest {
             "handleSubtitles",
             "handleEof",
             "handleLoop",
+            "handleQueueAdvance",
             "handleQueuedSeek",
             "publishSnapshot",
             "awaitWork",

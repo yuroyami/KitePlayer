@@ -1,305 +1,112 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package io.github.yuroyami.kiteplayer
 
-import io.github.yuroyami.kiteplayer.internal.FrameQueue
-import io.github.yuroyami.kiteplayer.internal.PacketQueue
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertFalse
-import kotlin.test.assertNull
-import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
-class PacketQueueTest {
-
-    private fun queue(softLimitUs: Long = 5_000_000) = PacketQueue(streamIndex = 0, softLimitUs = softLimitUs)
-
-    @Test
-    fun `packets come out in order`() = runTest {
-        val q = queue()
-        repeat(3) { q.offer(FakePacket(0, pts(it * 40L)), Generation.Initial) }
-
-        assertEquals(pts(0), q.receive()?.pts)
-        assertEquals(pts(40), q.receive()?.pts)
-        assertEquals(pts(80), q.receive()?.pts)
-    }
+/**
+ * The queue (S4.e): items play through in order, LoopMode.All wraps, explicit movement keeps the
+ * play intent and refuses typed at the ends, and a plain open replaces the queue.
+ */
+class QueueTest {
 
     @Test
-    fun `accounting tracks count bytes and duration`() = runTest {
-        val q = queue()
-        q.offer(FakePacket(0, pts(0), duration = Pts(40_000), sizeBytes = 500), Generation.Initial)
-        q.offer(FakePacket(0, pts(40), duration = Pts(40_000), sizeBytes = 700), Generation.Initial)
-
-        assertEquals(2, q.count)
-        assertEquals(1_200, q.bytesBuffered)
-        assertEquals(80_000, q.bufferedUs)
-
-        q.receive()
-        assertEquals(1, q.count)
-        assertEquals(700, q.bytesBuffered)
-        assertEquals(40_000, q.bufferedUs)
-    }
-
-    @Test
-    fun `a packet from a superseded generation is dropped and closed rather than returned`() = runTest {
-        val ledger = LeakLedger()
-        val q = queue()
-
-        val stale = FakePacket(0, pts(0), ledger = ledger)
-        q.offer(stale, Generation.Initial)
-        q.flushTo(Generation(1))
-
-        // The flush already closed it. Now a late arrival from the old generation.
-        val late = FakePacket(0, pts(40), ledger = ledger)
-        q.offer(late, Generation.Initial)
-        assertTrue(late.closed, "a packet offered under an old generation must be closed at once")
-
-        val fresh = FakePacket(0, pts(1_000), ledger = ledger)
-        q.offer(fresh, Generation(1))
-        assertSame(fresh, q.receive(), "only the current generation survives")
-        assertEquals(0, ledger.doubleCloseCount)
-    }
-
-    @Test
-    fun `flush closes everything it drops`() = runTest {
-        val ledger = LeakLedger()
-        val q = queue()
-        repeat(10) { q.offer(FakePacket(0, pts(it * 40L), ledger = ledger), Generation.Initial) }
-
-        assertEquals(10, ledger.liveCount)
-        q.flushTo(Generation(1))
-        assertEquals(0, ledger.liveCount, "a flush must not leak the packets it drops")
-        assertEquals(0, q.count)
-        assertEquals(0, q.bytesBuffered)
-        assertEquals(0, q.bufferedUs)
-    }
-
-    @Test
-    fun `end of stream reads as null and does not block`() = runTest {
-        val q = queue()
-        q.offer(FakePacket(0, pts(0)), Generation.Initial)
-        q.signalEndOfStream(Generation.Initial)
-
-        assertEquals(pts(0), q.receive()?.pts)
-        assertNull(q.receive(), "after the last packet, end of stream reads as null")
-        assertNull(q.receive(), "and keeps reading as null")
-    }
-
-    @Test
-    fun `a flush clears the end of stream flag`() = runTest {
-        val q = queue()
-        q.signalEndOfStream(Generation.Initial)
-        assertTrue(q.isEndOfStream)
-
-        // Seeking backwards out of the end of the file must make the stream live again. Without
-        // this, a seek after playback ends leaves the pipeline permanently finished.
-        q.flushTo(Generation(1))
-        assertFalse(q.isEndOfStream)
-
-        q.offer(FakePacket(0, pts(0)), Generation(1))
-        assertEquals(pts(0), q.receive()?.pts)
-    }
-
-    @Test
-    fun `readiness is duration or count or end of stream`() = runTest {
-        val q = queue()
-        assertFalse(q.isReady(readyUs = 1_000_000, readyPackets = 25))
-
-        // Duration alone is enough.
-        q.offer(FakePacket(0, pts(0), duration = Pts(1_100_000)), Generation.Initial)
-        assertTrue(q.isReady(readyUs = 1_000_000, readyPackets = 25))
-
-        // So is count, for a stream whose packets carry no durations.
-        val q2 = queue()
-        repeat(25) { q2.offer(FakePacket(0, pts(it * 40L), duration = null), Generation.Initial) }
-        assertTrue(q2.isReady(readyUs = 1_000_000, readyPackets = 25))
-
-        // And so is having nothing more to give. A one-frame stream must not stall the start.
-        val q3 = queue()
-        q3.signalEndOfStream(Generation.Initial)
-        assertTrue(q3.isReady(readyUs = 1_000_000, readyPackets = 25))
-    }
-
-    @Test
-    fun `offering never blocks because a per-stream stall deadlocks a badly interleaved file`() = runTest {
-        // The video queue of a file that front-loads 5 seconds of video before any audio must be
-        // allowed to grow. If offering blocked here, the demux worker would stop, the audio decoder
-        // would starve, the audio clock would stop, and the video would never be consumed.
-        val q = queue(softLimitUs = 1_000_000)
-        repeat(10_000) { q.offer(FakePacket(0, pts(it * 40L), duration = Pts(40_000)), Generation.Initial) }
-
-        assertEquals(10_000, q.count)
-        assertTrue(q.isWellBuffered)
-    }
-
-    @Test
-    fun `dropping from the tail keeps the oldest packets`() = runTest {
-        // The pathological interleaving escape hatch. What is dropped is the newest video, because
-        // the oldest is what the decoder needs next.
-        val ledger = LeakLedger()
-        val q = queue()
-        repeat(100) { q.offer(FakePacket(0, pts(it * 40L), sizeBytes = 1_000, ledger = ledger), Generation.Initial) }
-
-        val dropped = q.dropFromTail(targetBytes = 50_000)
-        assertEquals(50, dropped)
-        assertEquals(50, q.count)
-        assertEquals(50, ledger.liveCount)
-        assertEquals(pts(0), q.receive()?.pts, "the oldest packet must still be first")
-    }
-
-    @Test
-    fun `close closes everything and reads as null`() = runTest {
-        val ledger = LeakLedger()
-        val q = queue()
-        repeat(5) { q.offer(FakePacket(0, pts(it * 40L), ledger = ledger), Generation.Initial) }
-
-        q.close()
-        assertEquals(0, ledger.liveCount)
-        assertNull(q.receive())
-    }
-}
-
-class FrameQueueTest {
-
-    @Test
-    fun `a queue needs at least two slots`() {
-        // Timing a frame requires the next frame's timestamp, so one slot cannot work.
-        assertFailsWith<IllegalArgumentException> { FrameQueue(1) }
-        FrameQueue(2)
-    }
-
-    @Test
-    fun `advance hands the frame over and keeps only what it was`() = runTest {
-        val ledger = LeakLedger()
-        val q = FrameQueue(4)
-        val a = FakeVideoFrame(pts(0), duration = Pts(40_000), ledger = ledger)
-        val b = FakeVideoFrame(pts(40), ledger = ledger)
-        q.send(a)
-        q.send(b)
-
-        assertSame(a, q.peek())
-        assertSame(b, q.peekNext())
-        assertNull(q.shown, "nothing is on screen before the first advance")
-
-        assertSame(a, q.advance())
-        assertEquals(pts(0), q.shown?.pts, "what stays behind is the metadata the schedule needs")
-        assertEquals(Pts(40_000), q.shown?.duration)
-        assertEquals(Generation.Initial, q.shown?.generation)
-        assertSame(b, q.peek())
-
-        // The queue handed the frame over, so it is not the queue's to release any more. Retaining it
-        // here and giving the same object to a renderer that closes it is how every presented frame
-        // used to be closed twice.
-        assertSame(b, q.advance())
-        assertFalse(a.closed, "an advanced frame belongs to whoever took it, and the queue leaves it alone")
-        assertFalse(b.closed)
-        assertEquals(pts(40), q.shown?.pts)
-
-        a.close()
-        b.close()
-        assertEquals(0, ledger.liveCount)
-        assertEquals(0, ledger.doubleCloseCount)
-    }
-
-    @Test
-    fun `peekNext is what makes a duration measurable`() = runTest {
-        val q = FrameQueue(4)
-        q.send(FakeVideoFrame(pts(0)))
-        assertNull(q.peekNext(), "with one frame queued there is nothing to measure against")
-
-        q.send(FakeVideoFrame(pts(41)))
-        assertEquals(pts(41), q.peekNext()?.pts)
-    }
-
-    @Test
-    fun `send suspends when the queue is full and resumes when a slot frees`() = runTest {
-        val q = FrameQueue(2)
-        assertTrue(q.send(FakeVideoFrame(pts(0))))
-        assertTrue(q.send(FakeVideoFrame(pts(40))))
-        assertTrue(q.isFull)
-
-        // A hardware decoder's surface pool is small, so this bound is what stops the decoder from
-        // starving its own pool and stalling completely.
-        var sent = false
-        val job = launch {
-            q.send(FakeVideoFrame(pts(80)))
-            sent = true
-        }
-        yield()
-        assertFalse(sent, "a full queue must hold the producer")
-
-        q.advance()
-        job.join()
-        assertTrue(sent)
-    }
-
-    @Test
-    fun `stale frames are discarded and closed`() = runTest {
-        val ledger = LeakLedger()
-        val q = FrameQueue(8)
-        q.send(FakeVideoFrame(pts(0), Generation.Initial, ledger = ledger))
-        q.send(FakeVideoFrame(pts(40), Generation(1), ledger = ledger))
-        q.send(FakeVideoFrame(pts(80), Generation.Initial, ledger = ledger))
-        q.send(FakeVideoFrame(pts(120), Generation(1), ledger = ledger))
-
-        assertEquals(2, q.discardStale(Generation(1)))
-        assertEquals(2, q.size)
-        assertEquals(2, ledger.liveCount)
-        assertEquals(pts(40), q.peek()?.pts, "the surviving frames keep their order")
-    }
-
-    @Test
-    fun `flush forgets what is on screen and releases only what it still holds`() = runTest {
-        val ledger = LeakLedger()
-        val q = FrameQueue(4)
-        q.send(FakeVideoFrame(pts(0), ledger = ledger))
-        q.send(FakeVideoFrame(pts(40), ledger = ledger))
-        val handedOver = q.advance()!!
-
-        q.flush()
-        assertNull(q.peek())
-        assertNull(
-            q.shown,
-            "a seek must forget the picture: a duration measured across the boundary is nonsense",
+    fun `a queue of two plays through both and ends after the last`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 2_000_000))
+        harness.attachRenderer()
+        harness.core.openQueue(
+            listOf(MediaItem("scripted://first"), MediaItem("scripted://second")),
+            startIndex = 0,
         )
-        assertEquals(1, ledger.liveCount, "the advanced frame is the caller's, and a flush must not close it")
+        assertEquals(0, harness.core.snapshots.value.queueIndex)
+        assertEquals(2, harness.core.snapshots.value.queue.size)
+        harness.core.play()
+        harness.run(3.seconds)
 
-        handedOver.close()
-        assertEquals(0, ledger.liveCount)
-        assertEquals(0, ledger.doubleCloseCount)
+        assertEquals(
+            "scripted://second",
+            harness.core.snapshots.value.media?.uri,
+            "the queue must have advanced to the second item",
+        )
+        assertEquals(1, harness.core.snapshots.value.queueIndex)
+        assertEquals(2, harness.backend.openCalls, "each item opens the backend once")
+
+        harness.run(4.seconds)
+        assertEquals(
+            PlaybackStatus.Ended,
+            harness.core.snapshots.value.status,
+            "after the last item the queue ends instead of wrapping",
+        )
+        assertEquals(2, harness.backend.openCalls, "Ended at the last item opens nothing more")
+        harness.close()
     }
 
     @Test
-    fun `dropNext discards without showing`() = runTest {
-        val ledger = LeakLedger()
-        val q = FrameQueue(4)
-        val late = FakeVideoFrame(pts(0), ledger = ledger)
-        q.send(late)
-        q.send(FakeVideoFrame(pts(40), ledger = ledger))
+    fun `LoopMode All wraps the queue past its end`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 1_000_000))
+        harness.attachRenderer()
+        harness.core.openQueue(
+            listOf(MediaItem("scripted://first"), MediaItem("scripted://second")),
+            startIndex = 0,
+        )
+        harness.core.setLoop(LoopMode.All)
+        harness.core.play()
+        harness.run(5.seconds)
 
-        assertTrue(q.dropNext())
-        assertTrue(late.closed)
-        assertNull(q.shown, "a dropped frame was never shown")
-        assertEquals(pts(40), q.peek()?.pts)
-        assertFalse(FrameQueue(2).dropNext(), "dropping from an empty queue is a no-op")
+        assertTrue(
+            harness.backend.openCalls >= 4,
+            "All must wrap past the last item, saw only ${harness.backend.openCalls} opens",
+        )
+        assertTrue(
+            harness.core.snapshots.value.status.isActive ||
+                harness.core.snapshots.value.status == PlaybackStatus.Paused,
+            "a wrapping queue never rests in Ended, was ${harness.core.snapshots.value.status}",
+        )
+        harness.close()
     }
 
     @Test
-    fun `close releases what it holds and nothing it handed over`() = runTest {
-        val ledger = LeakLedger()
-        val q = FrameQueue(4)
-        repeat(3) { q.send(FakeVideoFrame(pts(it * 40L), ledger = ledger)) }
-        val handedOver = q.advance()!!
+    fun `next and previous move the queue and refuse typed at the ends`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000))
+        harness.attachRenderer()
+        harness.core.openQueue(
+            listOf(MediaItem("scripted://first"), MediaItem("scripted://second")),
+            startIndex = 0,
+        )
+        assertFailsWith<IllegalStateException>("previous at the first item must refuse") {
+            harness.core.queuePrevious()
+        }
+        harness.core.queueNext()
+        assertEquals("scripted://second", harness.core.snapshots.value.media?.uri)
+        assertEquals(1, harness.core.snapshots.value.queueIndex)
+        assertFailsWith<IllegalStateException>("next at the last item must refuse") {
+            harness.core.queueNext()
+        }
+        harness.core.queuePrevious()
+        assertEquals(0, harness.core.snapshots.value.queueIndex)
+        harness.close()
+    }
 
-        q.close()
-        assertEquals(1, ledger.liveCount, "closing the queue must not close a frame it no longer owns")
-        assertFalse(q.send(FakeVideoFrame(pts(999))), "a closed queue rejects and closes what it is given")
-
-        handedOver.close()
-        assertEquals(0, ledger.liveCount)
-        assertEquals(0, ledger.doubleCloseCount)
+    @Test
+    fun `a plain open replaces the queue and next then refuses`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000))
+        harness.attachRenderer()
+        harness.core.openQueue(
+            listOf(MediaItem("scripted://first"), MediaItem("scripted://second")),
+            startIndex = 0,
+        )
+        harness.core.stop()
+        harness.core.open(MediaItem("scripted://alone"))
+        harness.run(100.milliseconds)
+        assertEquals(0, harness.core.snapshots.value.queue.size, "a plain open replaces the queue")
+        assertEquals(-1, harness.core.snapshots.value.queueIndex)
+        assertFailsWith<IllegalStateException> { harness.core.queueNext() }
+        harness.close()
     }
 }

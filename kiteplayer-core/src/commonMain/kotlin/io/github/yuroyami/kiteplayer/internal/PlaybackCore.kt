@@ -170,6 +170,10 @@ internal class PlaybackCore(
     // the one terminal snapshot exclusively; every other field is immutable to it.
     private var status: PlaybackStatus = PlaybackStatus.Idle
     private var media: MediaItem? = null
+
+    /** The queue (S4.e): the items and the cursor. Empty and -1 outside queue playback. */
+    private var queueItems: List<MediaItem> = emptyList()
+    private var queueIndex: Int = -1
     private var session: OpenSession? = null
     private var tracks: Tracks = Tracks.Empty
     private var lastError: PlaybackError? = null
@@ -305,6 +309,7 @@ internal class PlaybackCore(
         Handler("handleSubtitles") { handleSubtitles() },
         Handler("handleEof") { handleEof() },
         Handler("handleLoop") { handleLoop() },
+        Handler("handleQueueAdvance") { handleQueueAdvance() },
         Handler("handleQueuedSeek") { handleQueuedSeek() },
         Handler("publishSnapshot") { publishSnapshot() },
         Handler("awaitWork") { awaitWork() },
@@ -334,6 +339,24 @@ internal class PlaybackCore(
     suspend fun open(item: MediaItem) {
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.Open(item, reply))
+        awaitReply(reply, stopOnCancellation = true)
+    }
+
+    suspend fun openQueue(items: List<MediaItem>, startIndex: Int) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.OpenQueue(items, startIndex, reply))
+        awaitReply(reply, stopOnCancellation = true)
+    }
+
+    suspend fun queueNext() {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.QueueNext(reply))
+        awaitReply(reply, stopOnCancellation = true)
+    }
+
+    suspend fun queuePrevious() {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.QueuePrevious(reply))
         awaitReply(reply, stopOnCancellation = true)
     }
 
@@ -716,9 +739,10 @@ internal class PlaybackCore(
                     )
                 else -> null
             }
-            is CoreCommand.SetLoop -> when (command.mode) {
-                LoopMode.All -> IllegalArgumentException(
-                    "LoopMode.All repeats a queue and there is no queue; see KPKMP.md section 11",
+            is CoreCommand.OpenQueue -> when {
+                command.items.isEmpty() -> IllegalArgumentException("openQueue needs at least one item")
+                command.startIndex !in command.items.indices -> IllegalArgumentException(
+                    "startIndex ${command.startIndex} is outside the queue of ${command.items.size}",
                 )
                 else -> null
             }
@@ -751,7 +775,19 @@ internal class PlaybackCore(
             return
         }
         when (command) {
-            is CoreCommand.Open -> runOpen(command)
+            is CoreCommand.Open -> {
+                // A plain open is single-media by contract: whatever queue existed is replaced.
+                queueItems = emptyList()
+                queueIndex = -1
+                runOpen(command)
+            }
+            is CoreCommand.OpenQueue -> {
+                queueItems = command.items
+                queueIndex = command.startIndex
+                runOpen(CoreCommand.Open(command.items[command.startIndex], command.reply))
+            }
+            is CoreCommand.QueueNext -> jumpQueue(queueIndex + 1, command.reply, "next")
+            is CoreCommand.QueuePrevious -> jumpQueue(queueIndex - 1, command.reply, "previous")
             is CoreCommand.Play -> {
                 // Idempotent in its own state, and queued rather than refused while opening or seeking:
                 // the restart handler applies it as soon as the pipeline can honour it.
@@ -2088,15 +2124,62 @@ internal class PlaybackCore(
 
     private fun handleLoop() {
         if (status != PlaybackStatus.Ended) return
-        if (loop != LoopMode.One) return
-        // One media item repeating is a seek to zero and nothing else, which is why the queue-repeating
-        // mode is refused instead of pretended: there is no queue for it to move through.
+        // One media item repeating is a seek to zero and nothing else. LoopMode.All with a queue
+        // of one or none means the same thing: the whole queue IS the current item (S4.e).
+        val repeatsCurrent = loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
+        if (!repeatsCurrent) return
         endOfStream.reset()
         stillImageFinished = false
         stillImageShownSinceNanos = 0
         playRequested = true
         setStatus(PlaybackStatus.Buffering)
         pendingSeek = SeekRequest(SeekTarget.Absolute(Pts.Zero), SeekMode.Precise)
+    }
+
+    /**
+     * The queue's own advance (S4.e). At Ended with a queue behind it, the next item opens and
+     * playback continues; LoopMode.All wraps past the last item. Runs after handleLoop, which
+     * owns the repeat-current cases, and the Ended-to-Opening transition makes re-entry
+     * impossible: by the time this pass ends the status has left Ended.
+     */
+    private suspend fun handleQueueAdvance() {
+        if (status != PlaybackStatus.Ended) return
+        if (loop == LoopMode.One) return
+        if (queueItems.size <= 1) return
+        val next = when {
+            queueIndex + 1 < queueItems.size -> queueIndex + 1
+            loop == LoopMode.All -> 0
+            else -> return
+        }
+        queueIndex = next
+        runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
+        // An open ends paused by contract; a queue that was playing keeps playing through it.
+        playRequested = true
+    }
+
+    /** Explicit queue movement, refused typed when there is nowhere to go (S4.e). */
+    private suspend fun jumpQueue(target: Int, reply: CompletableDeferred<Unit>, direction: String) {
+        if (queueItems.isEmpty()) {
+            reply.completeExceptionally(IllegalStateException("no queue is open; openQueue first"))
+            return
+        }
+        val resolved = when {
+            target in queueItems.indices -> target
+            loop == LoopMode.All -> ((target % queueItems.size) + queueItems.size) % queueItems.size
+            else -> {
+                reply.completeExceptionally(
+                    IllegalStateException(
+                        "the queue has no $direction item from ${queueIndex + 1} of ${queueItems.size}; " +
+                            "LoopMode.All is what makes the ends meet",
+                    ),
+                )
+                return
+            }
+        }
+        val wasPlaying = playRequested
+        queueIndex = resolved
+        runOpen(CoreCommand.Open(queueItems[resolved], reply))
+        playRequested = wasPlaying
     }
 
     /**
@@ -2618,6 +2701,8 @@ internal class PlaybackCore(
             loop = loop,
             error = lastError,
             generation = requestedEpoch,
+            queue = queueItems,
+            queueIndex = queueIndex,
         )
     }
 
@@ -2750,6 +2835,8 @@ internal class PlaybackCore(
             loop = loop,
             error = lastError,
             generation = requestedEpoch,
+            queue = queueItems,
+            queueIndex = queueIndex,
         )
         if ((now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
@@ -3817,6 +3904,15 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     }
 
     class Open(val media: MediaItem, val reply: CompletableDeferred<Unit>) : CoreCommand("open", reply)
+
+    class OpenQueue(
+        val items: List<MediaItem>,
+        val startIndex: Int,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("openQueue", reply)
+
+    class QueueNext(val reply: CompletableDeferred<Unit>) : CoreCommand("queueNext", reply)
+    class QueuePrevious(val reply: CompletableDeferred<Unit>) : CoreCommand("queuePrevious", reply)
     class Play(val reply: CompletableDeferred<Unit>) : CoreCommand("play", reply)
     class Pause(val reply: CompletableDeferred<Unit>) : CoreCommand("pause", reply)
     class Seek(val request: SeekRequest, val reply: CompletableDeferred<SeekResult>) : CoreCommand("seek", reply)

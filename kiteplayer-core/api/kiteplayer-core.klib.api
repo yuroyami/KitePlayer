@@ -1463,7 +1463,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
 }
 
 final class io.github.yuroyami.kiteplayer/MediaItem { // io.github.yuroyami.kiteplayer/MediaItem|null[0]
-    constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIo? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer/MediaItem.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIo?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin/String? = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIo? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer/MediaItem.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.String?;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIo?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 
     final val externalSubtitles // io.github.yuroyami.kiteplayer/MediaItem.externalSubtitles|{}externalSubtitles[0]
         final fun <get-externalSubtitles>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> // io.github.yuroyami.kiteplayer/MediaItem.externalSubtitles.<get-externalSubtitles>|<get-externalSubtitles>(){}[0]
@@ -1481,15 +1481,18 @@ final class io.github.yuroyami.kiteplayer/MediaItem { // io.github.yuroyami.kite
         final fun <get-startPosition>(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer/MediaItem.startPosition.<get-startPosition>|<get-startPosition>(){}[0]
     final val uri // io.github.yuroyami.kiteplayer/MediaItem.uri|{}uri[0]
         final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/MediaItem.uri.<get-uri>|<get-uri>(){}[0]
+    final val videoFilter // io.github.yuroyami.kiteplayer/MediaItem.videoFilter|{}videoFilter[0]
+        final fun <get-videoFilter>(): kotlin/String? // io.github.yuroyami.kiteplayer/MediaItem.videoFilter.<get-videoFilter>|<get-videoFilter>(){}[0]
 
     final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/MediaItem.component1|component1(){}[0]
     final fun component2(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/MediaItem.component2|component2(){}[0]
     final fun component3(): kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> // io.github.yuroyami.kiteplayer/MediaItem.component3|component3(){}[0]
-    final fun component4(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer/MediaItem.component4|component4(){}[0]
-    final fun component5(): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaItem.component5|component5(){}[0]
-    final fun component6(): kotlin/String? // io.github.yuroyami.kiteplayer/MediaItem.component6|component6(){}[0]
-    final fun component7(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/MediaItem.component7|component7(){}[0]
-    final fun copy(kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIo? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/MediaItem.copy|copy(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIo?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    final fun component4(): kotlin/String? // io.github.yuroyami.kiteplayer/MediaItem.component4|component4(){}[0]
+    final fun component5(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer/MediaItem.component5|component5(){}[0]
+    final fun component6(): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaItem.component6|component6(){}[0]
+    final fun component7(): kotlin/String? // io.github.yuroyami.kiteplayer/MediaItem.component7|component7(){}[0]
+    final fun component8(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/MediaItem.component8|component8(){}[0]
+    final fun copy(kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin/String? = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIo? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/MediaItem.copy|copy(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.String?;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIo?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaItem.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/MediaItem.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/MediaItem.toString|toString(){}[0]

@@ -22,6 +22,15 @@ public data class MediaItem(
      */
     val externalSubtitles: List<SubtitleSource> = emptyList(),
     /**
+     * A video filter chain attached at open (S4.e): KD-1's compiled description, or a raw
+     * FFmpeg chain like `scale=1280:720,eq=brightness=0.1`. Every decoded frame runs through
+     * it before presentation. Filters run on SOFTWARE frames: under HwdecPolicy.Auto or Prefer
+     * the hardware route stands down with a warning, and under Require the video track is
+     * refused, because both demands cannot hold at once. Timebase-preserving chains only
+     * (scale, crop, eq, format and friends); runtime hot-swap is a documented non-goal.
+     */
+    val videoFilter: String? = null,
+    /**
      * Where to start. Null means the beginning, or the container's own start time.
      *
      * Nothing reads this: opening always starts where the container does.

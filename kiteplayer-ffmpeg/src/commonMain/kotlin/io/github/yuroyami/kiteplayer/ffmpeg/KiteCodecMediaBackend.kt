@@ -72,6 +72,7 @@ public class KiteCodecMediaBackend(
             )
         }
         source.onWarning = onWarning
+        source.videoFilterDescription = media.videoFilter
         source.videoDecoderOptions = decoderOptions
         source.videoLowDelay = lowDelayDecode
         return KiteCodecBackendSession(source)

@@ -160,6 +160,9 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     internal var videoDecoderOptions: Map<String, String> = emptyMap()
     internal var videoLowDelay: Boolean = false
 
+    /** S4.e: the media item's compiled KD-1 video filter chain, or null for none. */
+    internal var videoFilterDescription: String? = null
+
     internal fun openDecoder(
         index: Int,
         lowDelay: Boolean,
@@ -200,6 +203,8 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
         hardware = hardware,
         continuity = continuity,
         warn = { onWarning(it) },
+        // The graph runs on software frames only; the factory stands hardware down first (S4.e).
+        filterDescription = if (hardware == HwdecStatus.Software) videoFilterDescription else null,
     )
 
     /**
@@ -413,6 +418,19 @@ public class KiteCodecVideoDecoderFactory internal constructor(
         val selection = platformDecoderSelection(stream.codec, hwdec)
         if (selection.requiresHardware && selection.hardware == null) return null
 
+        // A video filter runs on software frames (S4.e): under Auto and Prefer the hardware
+        // route stands down with a warning; under Require the two demands cannot both hold and
+        // the refusal is this factory's null, which the engine reports typed.
+        if (source.videoFilterDescription != null && selection.hardware != null) {
+            source.onWarning(
+                PlaybackWarning.HardwareDecodeUnavailable(
+                    stream.codec,
+                    "a video filter is attached and filters run on software frames",
+                ),
+            )
+            return if (hwdec == HwdecPolicy.Require) null else source.newVideoDecoder(stream)
+        }
+
         if (selection.hardware == null) return source.newVideoDecoder(stream)
 
         val continuity = VideoDecoderContinuity()
@@ -452,18 +470,26 @@ private class KiteCodecVideoDecoder(
     override val hardware: HwdecStatus,
     private val continuity: VideoDecoderContinuity,
     private val warn: (PlaybackWarning) -> Unit,
+    /** S4.e: the compiled KD-1 chain every decoded frame runs through, or null for none. */
+    private val filterDescription: String? = null,
 ) : VideoDecoder {
 
     private var generation: Generation = Generation.Initial
+
+    /** The graph, built lazily from the FIRST decoded frame's own geometry and format (S4.e). */
+    private var filterGraph: io.github.yuroyami.kitecodec.FilterGraph? = null
+    private val filteredPending = ArrayDeque<KiteFrame>()
+    private var filterFlushed = false
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
         decoder.send((packet as KiteCodecPacket?)?.native)
 
     /** KiteCodec's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
-    override val isDrained: Boolean get() = decoder.isDrained
+    override val isDrained: Boolean
+        get() = decoder.isDrained && (filterDescription == null || (filterFlushed && filteredPending.isEmpty()))
 
     override suspend fun receive(): VideoFrame? {
-        val frame = decoder.receive() ?: return null
+        val frame = nextDecodedFrame() ?: return null
         val duration = mapper.mapDuration(frame.durationMicros)
         val info = frame.info
         val pts = continuity.timestamp(
@@ -482,6 +508,56 @@ private class KiteCodecVideoDecoder(
             throw failure
         }
         return wrapped
+    }
+
+    /**
+     * The decoder's next frame, run through the attached graph when one is attached (S4.e).
+     *
+     * The graph is built from the first frame's own width, height, format, time base and rate,
+     * which is the only honest moment to build it: the container's declared parameters can lie
+     * and the decoder's output cannot. Timestamps pass through in the stream's own time base, so
+     * the supported chains are the timebase-preserving ones (scale, crop, eq, format and
+     * friends); fps-changing chains are the KD roadmap's own next step and refuse nothing today
+     * because their output time base would silently disagree with the stream's.
+     */
+    private fun nextDecodedFrame(): KiteFrame? {
+        val description = filterDescription ?: return decoder.receive()
+        while (filteredPending.isEmpty()) {
+            val raw = decoder.receive()
+            if (raw == null) {
+                if (decoder.isDrained && filterGraph != null && !filterFlushed) {
+                    filterFlushed = true
+                    filterGraph?.flushInput(0) { out -> filteredPending.addLast(out.copy()) }
+                    continue
+                }
+                return null
+            }
+            val info = raw.info
+            val graph = filterGraph ?: io.github.yuroyami.kitecodec.FilterGraph.buildVideo(
+                description = description,
+                width = info.width,
+                height = info.height,
+                pixelFormat = info.pixelFormat,
+                timeBase = info.timeBase,
+                frameRate = frameRateRational(),
+                sampleAspectRatio = info.sampleAspectRatio,
+            ).also { filterGraph = it }
+            // feedInput owns and closes the raw frame; every output is copied out of the callback.
+            graph.feedInput(0, raw) { out -> filteredPending.addLast(out.copy()) }
+        }
+        return filteredPending.removeFirst()
+    }
+
+    private fun frameRateRational(): io.github.yuroyami.kitecodec.Rational {
+        val rate = stream.frameRate?.takeIf { it > 0.0 } ?: return io.github.yuroyami.kitecodec.Rational(25, 1)
+        return io.github.yuroyami.kitecodec.Rational((rate * 1000).toInt(), 1000)
+    }
+
+    private fun dropFilterState() {
+        while (true) filteredPending.removeFirstOrNull()?.close() ?: break
+        filterGraph?.close()
+        filterGraph = null
+        filterFlushed = false
     }
 
     /**
@@ -518,12 +594,17 @@ private class KiteCodecVideoDecoder(
         // Flush first: nothing buffered survives it, so the new epoch cannot reach an old frame. The
         // wrapper only claims the epoch once the decoder is actually in it.
         decoder.flush()
+        // The graph's internal state is the old timeline's too; it rebuilds from the next frame.
+        dropFilterState()
         generation = newGeneration
         // A timestamp measured before a seek is no base for one after it.
         continuity.resetEpoch()
     }
 
-    override fun close() = decoder.close()
+    override fun close() {
+        dropFilterState()
+        decoder.close()
+    }
 }
 
 /** Creates audio decoders. */

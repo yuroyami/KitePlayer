@@ -326,17 +326,18 @@ public abstract interface class io/github/yuroyami/kiteplayer/MediaIo : java/lan
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaItem {
-	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/util/Map;
 	public final fun component3 ()Ljava/util/List;
-	public final fun component4-FghU774 ()Lkotlin/time/Duration;
-	public final fun component5 ()Lio/github/yuroyami/kiteplayer/MediaIo;
-	public final fun component6 ()Ljava/lang/String;
-	public final fun component7 ()Ljava/util/Map;
-	public final fun copy-Tnuy9kA (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;)Lio/github/yuroyami/kiteplayer/MediaItem;
-	public static synthetic fun copy-Tnuy9kA$default (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5-FghU774 ()Lkotlin/time/Duration;
+	public final fun component6 ()Lio/github/yuroyami/kiteplayer/MediaIo;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()Ljava/util/Map;
+	public final fun copy-dp_umgU (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public static synthetic fun copy-dp_umgU$default (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIo;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItem;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getExternalSubtitles ()Ljava/util/List;
 	public final fun getFormatHint ()Ljava/lang/String;
@@ -346,6 +347,7 @@ public final class io/github/yuroyami/kiteplayer/MediaItem {
 	public final fun getOpenOptions ()Ljava/util/Map;
 	public final fun getStartPosition-FghU774 ()Lkotlin/time/Duration;
 	public final fun getUri ()Ljava/lang/String;
+	public final fun getVideoFilter ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

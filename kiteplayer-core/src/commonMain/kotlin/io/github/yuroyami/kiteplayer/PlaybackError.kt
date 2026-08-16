@@ -125,6 +125,15 @@ public class PlaybackException(public val error: PlaybackError) : Exception(erro
 public sealed class PlaybackWarning {
     public abstract val message: String
 
+    /**
+     * The attached renderer reported an unrecoverable failure through its own event feed (S4.d).
+     * Playback continues; the schedule keeps pacing and the renderer keeps refusing, so the
+     * degradation is a black or frozen picture, which is exactly why it is worth a warning.
+     */
+    public data class RendererFailed(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "the renderer failed: $detail"
+    }
+
     /** A hardware decoder was unavailable or failed and policy allowed playback to continue in software. */
     public data class HardwareDecodeUnavailable(val codec: String, val reason: String) : PlaybackWarning() {
         override val message: String get() = "hardware decode unavailable for $codec: $reason"

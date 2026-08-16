@@ -213,12 +213,22 @@ public final class io/github/yuroyami/kiteplayer/HwdecStatus$Software : io/githu
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/KiteLog {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/KiteLog;
+	public final fun install (Lio/github/yuroyami/kiteplayer/KiteLog$Sink;)V
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/KiteLog$Sink {
+	public abstract fun log (Ljava/lang/String;Ljava/lang/String;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoCloseable {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;
 	public final fun attachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public fun close ()V
 	public final fun closeAndAwait (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun detachRenderer ()V
+	public final fun diagnosticsDump ()Ljava/lang/String;
 	public final fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
 	public final fun getProgress ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
@@ -237,6 +247,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun setSpeed (D)V
 	public final fun setVolume (F)V
 	public final fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun warningHistory ()Ljava/util/List;
 }
 
 public final class io/github/yuroyami/kiteplayer/KitePlayer$Companion {
@@ -665,6 +676,18 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$PathologicalInt
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$StartupIncomplete : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -978,6 +1001,19 @@ public final class io/github/yuroyami/kiteplayer/SyncMode : java/lang/Enum {
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/SyncMode;
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/SyncMode;
+}
+
+public final class io/github/yuroyami/kiteplayer/TimedWarning {
+	public fun <init> (JLio/github/yuroyami/kiteplayer/PlaybackWarning;)V
+	public final fun component1 ()J
+	public final fun component2 ()Lio/github/yuroyami/kiteplayer/PlaybackWarning;
+	public final fun copy (JLio/github/yuroyami/kiteplayer/PlaybackWarning;)Lio/github/yuroyami/kiteplayer/TimedWarning;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/TimedWarning;JLio/github/yuroyami/kiteplayer/PlaybackWarning;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/TimedWarning;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAtNanos ()J
+	public final fun getWarning ()Lio/github/yuroyami/kiteplayer/PlaybackWarning;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/TrackId {
@@ -1378,7 +1414,12 @@ public final class io/github/yuroyami/kiteplayer/spi/HwSurfaceKind : java/lang/E
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaBackend {
+	public fun describeForDiagnostics ()Ljava/lang/String;
 	public abstract fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/MediaBackend$DefaultImpls {
+	public static fun describeForDiagnostics (Lio/github/yuroyami/kiteplayer/spi/MediaBackend;)Ljava/lang/String;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaSourceFactory {

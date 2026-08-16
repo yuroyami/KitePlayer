@@ -8178,6 +8178,34 @@ is no other.
   S2.e and S2.f landed 2026-08-16 with five 17.11 rows absorbed and closed. S4 resumes at its
   paused point: S4.c's device proofs, then S4.d, per the schedule this stage suspended.
 
+- **2026-08-16, S4 resumed; S4.c's device proofs landed (c156579).** The overlay compositing
+  proofs the S2 pause deferred: on the named Android emulator, a white cue authored against the
+  view's own viewport composites ABOVE a full-canvas picture and PixelCopy reads near-white at
+  the cue centre with the picture's red and blue halves intact beside it (17 device tests
+  green, including the new arm); on the named iOS simulator, the UIKit renderer's delivered
+  CGImage reads white at the cue centre above a red picture, pixel-checked through the
+  existing read-back harness (9 renderer tests green). S4.c is complete end to end.
+
+- **2026-08-16, S4.d completed: the debuggability register, with KD-7.** The facade gained
+  diagnosticsDump(), one string carrying the resolved configuration (backends by name through
+  the new MediaBackend.describeForDiagnostics seam, with the FFmpeg backend echoing its KD
+  decoder-option pairs exactly as configured), the tracks and selections, the three published
+  snapshots, the KD-artifact section (filters honestly reported as not-yet-attachable until
+  S4.e's landing), and the warning history. Warnings gained that bounded HISTORY (64, newest
+  survive) on the facade as warningHistory(), because the event flow replays nothing and a bug
+  report is a late collector. The logging policy is one seam, KiteLog: silent by default,
+  pluggable sink, never printing on its own, silent again on removal, proven by test. The typed
+  warning audit is the compiler's own: an exhaustive when in WarningAuditTest maps every
+  PlaybackWarning type to its named emission sites, so an undocumented new warning does not
+  compile. The renderer event feed is finally collected (17.11 SOL-API5 closed): SurfaceLost
+  becomes NoRenderSurface and Failed becomes the new typed RendererFailed, per attached
+  renderer, cancelled on replace and close, proven end to end through a scripted emitting
+  renderer. docs/spi-cookbook.md is the worked custom backend: the scripted container the
+  core's own suites run, documented contract by contract. API dumps moved by ritual; core and
+  subtitles suites green. DEFERRED, recorded: 17.11 SOL-P5 (the cue-history pruning cursor and
+  the raster worker off the actor) stays open; adopting it here would have been engine surgery
+  mid-stage, and its home remains S4.d's row in the register for a later order.
+
 ---
 
 ## 15. Horizon B execution: B1

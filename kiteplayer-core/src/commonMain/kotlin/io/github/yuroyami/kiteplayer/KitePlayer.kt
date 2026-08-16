@@ -278,6 +278,24 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.closeAndAwait()
     }
 
+    /**
+     * Everything a bug report needs, in one string (S4.d): the resolved configuration, the
+     * backends by name, tracks and selections, the three published snapshots, the KD artifacts
+     * attached to the session, and the bounded warning history. Safe from any thread at any
+     * moment, including after a failure, which is when it is usually wanted.
+     */
+    public fun diagnosticsDump(): String = core.diagnosticsDump()
+
+    /**
+     * The last warnings this player emitted, oldest first, capped (S4.d).
+     *
+     * [events] replays nothing to a late collector, and a bug report is exactly a late
+     * collector: this history is how a warning that happened before anyone listened still
+     * reaches the person debugging. The cap keeps a long session's memory bounded; the newest
+     * warnings always survive.
+     */
+    public fun warningHistory(): List<TimedWarning> = core.warningHistory()
+
     private fun validPosition(to: Duration, name: String): Duration {
         require(to.isFinite() && to >= Duration.ZERO) {
             "$name needs a finite position at or after zero, was $to"

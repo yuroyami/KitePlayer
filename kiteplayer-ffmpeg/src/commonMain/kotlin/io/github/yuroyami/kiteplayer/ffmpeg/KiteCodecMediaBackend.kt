@@ -37,6 +37,10 @@ public class KiteCodecMediaBackend(
     private val lowDelayDecode: Boolean = false,
 ) : MediaBackend {
 
+    /** KD-7's echo: the option pairs exactly as configured, printed by the diagnostics dump. */
+    override fun describeForDiagnostics(): String =
+        "KiteCodecMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
+
     override suspend fun open(media: MediaItem): BackendSession {
         require(media.io == null) {
             "Custom I/O is not wired yet. KiteCodec has no custom-input path."

@@ -18,6 +18,8 @@ import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackStats
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlaybackWarning
+import io.github.yuroyami.kiteplayer.TimedWarning
+import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
@@ -828,6 +830,7 @@ internal class PlaybackCore(
         val session = this.session
         if (session == null) {
             pendingRenderer = renderer
+            watchRendererEvents(renderer)
             return true
         }
         val scheduler = session.videoScheduler
@@ -842,11 +845,37 @@ internal class PlaybackCore(
             session.renderer.delegate = renderer
         }
         pendingRenderer = renderer
+        watchRendererEvents(renderer)
         return true
     }
 
     /** A renderer attached before anything was open, kept for the session that follows. */
     private var pendingRenderer: VideoRenderer? = null
+
+    /**
+     * The renderer's event feed, finally collected (17.11 SOL-API5): surface loss and hard
+     * failure become typed warnings, so they reach the event flow, the bounded history and the
+     * dump instead of being visible only as a frozen picture. One collector per attached
+     * renderer; replacing or detaching cancels it, and the core's own scope ends it at close.
+     */
+    private var rendererEventsJob: kotlinx.coroutines.Job? = null
+
+    private fun watchRendererEvents(renderer: VideoRenderer?) {
+        rendererEventsJob?.cancel()
+        rendererEventsJob = renderer?.let { attached ->
+            scope.launch {
+                attached.events.collect { event ->
+                    when (event) {
+                        is RendererEvent.SurfaceLost ->
+                            warn(PlaybackWarning.NoRenderSurface(event.detail))
+                        is RendererEvent.Failed ->
+                            warn(PlaybackWarning.RendererFailed(event.detail))
+                        is RendererEvent.SurfaceAvailable, is RendererEvent.VsyncChanged -> Unit
+                    }
+                }
+            }
+        }
+    }
 
     // ---------------------------------------------------------------------------------------------
     // Open.
@@ -2780,7 +2809,76 @@ internal class PlaybackCore(
     }
 
     private fun warn(warning: PlaybackWarning) {
+        // The bounded history first (S4.d): the event feed replays nothing to a late collector,
+        // and a bug report is exactly a late collector, so the record cannot live only there.
+        kotlinx.atomicfu.locks.synchronized(warningFence) {
+            warningLog.addLast(TimedWarning(clock.nanos(), warning))
+            while (warningLog.size > WARNING_HISTORY_LIMIT) warningLog.removeFirst()
+        }
+        io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", warning.message)
         eventSink.tryEmit(PlayerEvent.Warning(warning))
+    }
+
+    /** Warnings this core emitted, oldest first, capped at [WARNING_HISTORY_LIMIT]. */
+    fun warningHistory(): List<TimedWarning> =
+        kotlinx.atomicfu.locks.synchronized(warningFence) { warningLog.toList() }
+
+    private val warningFence = kotlinx.atomicfu.locks.SynchronizedObject()
+    private val warningLog = ArrayDeque<TimedWarning>()
+
+    /**
+     * Everything a bug report needs, in one string (S4.d, carrying KD-7): the resolved
+     * configuration, the backends by name, the tracks and selections, the three published
+     * snapshots, the KD artifacts attached to the session, and the warning history. Reads only
+     * published state, so it is safe from any thread at any moment, including after failure,
+     * which is when it is usually called.
+     */
+    fun diagnosticsDump(): String = buildString {
+        val snapshot = snapshotState.value
+        val liveStats = statsState.value
+        val liveProgress = progressState.value
+        appendLine("KitePlayer diagnostics")
+        appendLine("status      ${snapshot.status}")
+        appendLine("media       ${snapshot.media?.uri ?: "none"}")
+        appendLine("duration    ${snapshot.duration ?: "unknown"}")
+        appendLine("seekable    ${snapshot.seekable}")
+        appendLine("position    ${liveProgress.position} (buffered ahead ${liveProgress.bufferedAhead})")
+        appendLine("error       ${snapshot.error?.message ?: "none"}")
+        appendLine()
+        appendLine("config")
+        appendLine("  backend           ${config.backends.backend?.describeForDiagnostics() ?: "none"}")
+        appendLine("  output            ${config.backends.output?.let { it::class.simpleName } ?: "none"}")
+        appendLine("  hardwareDecode    ${config.hardwareDecode}")
+        appendLine("  frameDrop         ${config.frameDrop}")
+        appendLine("  syncMode          ${config.syncMode}")
+        appendLine("  buffer            ready=${config.buffer.readyDuration}/${config.buffer.readyPackets}p " +
+            "soft=${config.buffer.softTarget} frames=${config.buffer.videoFrameQueue}")
+        appendLine("  intervals         progress=${config.progressInterval} stats=${config.statsInterval}")
+        appendLine("  speed=${snapshot.speed} volume=${snapshot.volume} muted=${snapshot.muted} loop=${snapshot.loop}")
+        appendLine()
+        appendLine("tracks")
+        snapshot.tracks.all.forEach { track ->
+            val selected = track.id == snapshot.tracks.selectedVideo ||
+                track.id == snapshot.tracks.selectedAudio ||
+                track.id == snapshot.tracks.selectedSubtitle
+            appendLine("  ${if (selected) "*" else " "} ${track.id} ${track.kind} ${track.codec}" +
+                (track.language?.let { " lang=$it" } ?: ""))
+        }
+        appendLine()
+        appendLine("stats")
+        appendLine("  decoded=${liveStats.decodedVideoFrames} submitted=${liveStats.submittedFrames} " +
+            "headless=${liveStats.headlessFrames} droppedLate=${liveStats.droppedFramesLate} " +
+            "repeated=${liveStats.repeatedFrames}")
+        appendLine("  underruns=${liveStats.audioUnderruns} rebuffers=${liveStats.rebuffers} " +
+            "avDrift=${liveStats.avDrift} master=${liveStats.masterClock} hwdec=${liveStats.hardwareDecode}")
+        appendLine()
+        appendLine("kd artifacts")
+        appendLine("  filters: none attached (typed filter attachment is the facade's S4.e landing)")
+        appendLine()
+        appendLine("warnings (${warningHistory().size} kept, cap $WARNING_HISTORY_LIMIT)")
+        warningHistory().forEach { entry ->
+            appendLine("  [${entry.atNanos}] ${entry.warning.message}")
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -3512,6 +3610,9 @@ internal class PlaybackCore(
         const val SCHEDULER_IDLE = 0
         const val SCHEDULER_ONE_FRAME = 1
         const val SCHEDULER_RUNNING = 2
+
+        /** Warnings kept for the dump (S4.d): enough for a session's story, bounded by contract. */
+        const val WARNING_HISTORY_LIMIT = 64
 
         const val DEMUX_WORKER = "demux"
         const val VIDEO_DECODE_WORKER = "video decode"

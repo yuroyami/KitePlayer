@@ -27,6 +27,14 @@ public interface MediaBackend {
      * [io.github.yuroyami.kiteplayer.PlaybackError].
      */
     public suspend fun open(media: MediaItem): BackendSession
+
+    /**
+     * One line for the diagnostics dump (S4.d): the backend's name and whatever configuration it
+     * carries that a bug report would want. The default is the class name; a backend that takes
+     * options overrides this to echo them, which is how KD-7's "option pairs as configured" reach
+     * the dump without the engine knowing any backend's shape.
+     */
+    public fun describeForDiagnostics(): String = this::class.simpleName ?: "backend"
 }
 
 /**

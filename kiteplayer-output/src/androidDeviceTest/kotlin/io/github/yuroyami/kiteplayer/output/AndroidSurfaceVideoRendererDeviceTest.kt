@@ -94,6 +94,78 @@ class AndroidSurfaceVideoRendererDeviceTest {
         )
     }
 
+    /**
+     * S4.c's Android device proof, returned from the S2 pause: a white cue composites ABOVE the
+     * picture with non-black pixels at its spot, while the picture beside it stays the picture.
+     */
+    @Test
+    fun overlayPixelsCompositeAboveThePicture(): Unit = runBlocking {
+        val scenario = ActivityScenario.launch(RendererTestActivity::class.java)
+        try {
+            var activity: RendererTestActivity? = null
+            scenario.onActivity { activity = it }
+            val host = activity!!
+            assertTrue(host.surfaceCreated.await(10, TimeUnit.SECONDS), "the Surface must be created")
+
+            val renderer = AndroidSurfaceVideoRenderer(
+                surface = host.surfaceView.holder.surface,
+                convert = ::redLeftBlueRight,
+            )
+            val view = host.surfaceView
+            /* The cue: a white bar authored against the view's own size, sitting mid-picture. */
+            val cueWidth = view.width / 4
+            val cueHeight = view.height / 8
+            val cueX = (view.width - cueWidth) / 2
+            val cueY = view.height / 2 - cueHeight / 2
+            renderer.setOverlay(
+                io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                    images = listOf(
+                        io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                            x = cueX,
+                            y = cueY,
+                            bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(
+                                cueWidth,
+                                cueHeight,
+                                ByteArray(cueWidth * cueHeight * 4) { -1 },
+                            ),
+                        ),
+                    ),
+                    viewportWidth = view.width,
+                    viewportHeight = view.height,
+                    contentHash = 4711L,
+                ),
+            )
+            /* A full-canvas frame, so the cue provably sits ABOVE picture rather than letterbox. */
+            assertTrue(renderer.present(DeviceFrame(view.width, view.height, rotationDegrees = 0), 0))
+            val started = System.nanoTime()
+            while (renderer.presentedFrames < 1 && System.nanoTime() - started < 5_000_000_000L) {
+                Thread.sleep(10)
+            }
+            assertEquals(1L, renderer.presentedFrames)
+            Thread.sleep(100) /* one composition */
+
+            val composed = pixelCopy(view)
+            assertNear(
+                Color.WHITE,
+                composed.getPixel(view.width / 2, view.height / 2),
+                "the cue centre is white above the picture",
+            )
+            assertNear(
+                Color.RED,
+                composed.getPixel(view.width / 8, view.height / 2),
+                "the picture's red half survives beside the cue",
+            )
+            assertNear(
+                Color.BLUE,
+                composed.getPixel(view.width - view.width / 8, view.height / 2),
+                "the picture's blue half survives beside the cue",
+            )
+            renderer.close()
+        } finally {
+            scenario.close()
+        }
+    }
+
     @Test
     fun drawsAsymmetricFrameRotatesAndSurvivesSurfaceLoss(): Unit = runBlocking {
         val scenario = ActivityScenario.launch(RendererTestActivity::class.java)

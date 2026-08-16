@@ -193,6 +193,67 @@ class UIKitVideoRendererTest {
         }
     }
 
+    /**
+     * S4.c's simulator proof, returned from the S2 pause: a white cue composites ABOVE the red
+     * picture in the delivered image, in display space, and the picture survives beside it.
+     */
+    @Test
+    fun `an overlay composites above the picture in the delivered image`() = runBlocking {
+        val width = 64
+        val height = 32
+        val red = ByteArray(width * height * 4).also {
+            var at = 0
+            while (at < it.size) {
+                it[at] = -1     /* R */
+                it[at + 3] = -1 /* A */
+                at += 4
+            }
+        }
+        val ledger = LeakLedger()
+        val drawn = atomic<DrawnPixels?>(null)
+        val renderer = UIKitVideoRenderer(
+            convert = { red },
+            enqueueOnMain = { block -> block() },
+            deliverImage = { image -> drawn.value = image?.let(::readBack) },
+        )
+        try {
+            renderer.setOverlay(
+                io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                    images = listOf(
+                        io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                            x = 24,
+                            y = 12,
+                            bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(
+                                16,
+                                8,
+                                ByteArray(16 * 8 * 4) { -1 },
+                            ),
+                        ),
+                    ),
+                    viewportWidth = width,
+                    viewportHeight = height,
+                    contentHash = 4711L,
+                ),
+            )
+            assertTrue(renderer.present(FakeVideoFrame(Pts(0), VideoSize(width, height), 0, ledger), 0L))
+            awaitTrue("the composited image") { drawn.value != null }
+            val pixels = assertNotNull(drawn.value)
+            assertEquals(
+                255 to 255,
+                pixels.redAndGreenAt(31, 15),
+                "the cue centre must be white above the picture",
+            )
+            assertEquals(
+                255 to 0,
+                pixels.redAndGreenAt(2, 2),
+                "the picture must stay red beside the cue",
+            )
+        } finally {
+            renderer.close()
+        }
+        assertEquals(1, ledger.closeCount)
+    }
+
     @Test
     fun `pixel aspect is baked into image geometry before rotation`() = runBlocking {
         val size = VideoSize(width = 6, height = 4, pixelAspectNumerator = 2, pixelAspectDenominator = 1)

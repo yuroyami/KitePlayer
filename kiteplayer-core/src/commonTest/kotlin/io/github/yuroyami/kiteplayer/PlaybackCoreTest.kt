@@ -1069,10 +1069,13 @@ class PlaybackCoreTest {
     }
 
     @Test
-    fun `loop all is refused because there is no queue to repeat`() = runTest {
+    fun `loop all is accepted and stands beside one`() = runTest {
         val harness = CoreHarness(this)
         harness.open()
-        assertFailsWith<IllegalArgumentException> { harness.core.setLoop(LoopMode.All) }
+        // S4.e unlocked All: with no larger queue it repeats the current item like One, so the
+        // mode is stored rather than refused. QueueTest owns the wrapping behaviour.
+        harness.core.setLoop(LoopMode.All)
+        assertEquals(LoopMode.All, harness.core.snapshots.value.loop)
         harness.core.setLoop(LoopMode.One)
         assertEquals(LoopMode.One, harness.core.snapshots.value.loop)
         harness.close()

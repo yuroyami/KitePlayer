@@ -88,17 +88,16 @@ class KitePlayerTest {
     }
 
     @Test
-    fun `LoopMode All is refused because there is no queue to repeat`() = runTest {
+    fun `LoopMode All is accepted and repeats the current item with no larger queue`() = runTest {
         val harness = CoreHarness(this)
         val player = player(harness)
         player.open(MediaItem("scripted://loop"))
 
-        val refusal = assertFailsWith<IllegalArgumentException> { player.setLoop(LoopMode.All) }
-        assertTrue(
-            refusal.message?.contains("queue") == true,
-            "the refusal says why rather than just saying no: ${refusal.message}",
-        )
-        assertEquals(LoopMode.Off, player.state.value.loop, "and the mode did not change behind the refusal")
+        // S4.e unlocked All: with a queue of one, or plain opened media, the whole queue IS the
+        // current item, so the mode is accepted and repeats it rather than being refused.
+        player.setLoop(LoopMode.All)
+        harness.run(100.milliseconds)
+        assertEquals(LoopMode.All, player.state.value.loop)
 
         player.setLoop(LoopMode.One)
         harness.run(100.milliseconds)

@@ -31,8 +31,10 @@ public object WebVttParser {
         var i = 0
         while (i < lines.size) {
             val line = lines[i]
-            // Block skips first: NOTE/STYLE/REGION run to the next blank line.
-            if (line.startsWith("NOTE") || line.startsWith("STYLE") || line.startsWith("REGION")) {
+            // Block skips first: NOTE/STYLE/REGION run to the next blank line. The keyword must
+            // stand alone or be followed by whitespace (17.11 SOL-S5): an identifier that merely
+            // BEGINS with one of these words is a cue's own name, not a block.
+            if (isBlockKeyword(line)) {
                 i++
                 while (i < lines.size && lines[i].isNotBlank()) i++
                 continue
@@ -51,7 +53,7 @@ public object WebVttParser {
                 i++
             }
 
-            val spans = InlineMarkup.parse(stripVttOnlyTags(body.toString().trim()))
+            val spans = InlineMarkup.parse(stripVttOnlyTags(body.toString().trim())).decodeSpanEntities()
             if (spans.isNotEmpty()) {
                 cues += SubtitleCue.Text(
                     startMicros = timing.start,
@@ -62,12 +64,24 @@ public object WebVttParser {
             }
         }
 
-        return cues.sortedBy { it.startMicros }
+        val sorted = cues.sortedBy { it.startMicros }
+        // The same open-end resolution SubRip applies (17.11 SOL-S4): a clamped backwards or
+        // zero-length cue closes at the next cue's start, or after the shared default.
+        return sorted.mapIndexed { index, cue ->
+            if (cue.endMicros > cue.startMicros) {
+                cue
+            } else {
+                val nextStart = sorted.drop(index + 1)
+                    .firstOrNull { it.startMicros > cue.startMicros }
+                    ?.startMicros
+                cue.copy(endMicros = nextStart ?: (cue.startMicros + SubRipParser.OPEN_CUE_DEFAULT_MICROS))
+            }
+        }
     }
 
     /** One cue's body from a container track, timing already on the packet (S4.c). */
     public fun parseCueBody(body: String): List<StyledSpan> =
-        InlineMarkup.parse(stripVttOnlyTags(body.trim()))
+        InlineMarkup.parse(stripVttOnlyTags(body.trim())).decodeSpanEntities()
 
     private class Timing(val start: Long, val end: Long, val layout: CueLayout)
 
@@ -99,6 +113,12 @@ public object WebVttParser {
         val fraction = match.groupValues[4].padEnd(3, '0').take(3).toLongOrNull() ?: 0L
         return ((hours * 3600 + minutes * 60 + seconds) * 1000 + fraction) * 1000
     }
+
+    /** NOTE, STYLE or REGION starts a block only when the word stands alone or before space. */
+    private fun isBlockKeyword(line: String): Boolean =
+        listOf("NOTE", "STYLE", "REGION").any { keyword ->
+            line == keyword || line.startsWith("$keyword ") || line.startsWith("$keyword\t")
+        }
 
     /** Voice, class and karaoke-timestamp tags are VTT-only shapes InlineMarkup does not know. */
     private fun stripVttOnlyTags(body: String): String = body

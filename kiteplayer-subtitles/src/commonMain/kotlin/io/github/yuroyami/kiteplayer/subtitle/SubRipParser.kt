@@ -26,6 +26,13 @@ package io.github.yuroyami.kiteplayer.subtitle
  */
 public object SubRipParser {
 
+    /**
+     * A cue whose end does not follow its start would otherwise never display: the selector
+     * requires the time to sit strictly before the end (17.11 SOL-S4). The parser resolves it
+     * against the next cue's start, or holds it for this documented default when no cue follows.
+     */
+    public const val OPEN_CUE_DEFAULT_MICROS: Long = 3_000_000
+
     /** Parses [text] into cues, sorted by start time. Never throws on malformed input. */
     public fun parse(text: String): List<SubtitleCue.Text> {
         val lines = text.removePrefix("﻿").split(LINE_BREAK)
@@ -60,7 +67,7 @@ public object SubRipParser {
                 i++
             }
 
-            val spans = InlineMarkup.parse(body.toString().trim())
+            val spans = InlineMarkup.parse(body.toString().trim()).decodeSpanEntities()
             if (spans.isNotEmpty()) {
                 cues += SubtitleCue.Text(
                     startMicros = timing.first,
@@ -70,16 +77,44 @@ public object SubRipParser {
             }
         }
 
-        return cues.sortedBy { it.startMicros }
+        val sorted = cues.sortedBy { it.startMicros }
+        // The open-end resolution (17.11 SOL-S4): a clamped backwards or zero-length cue closes
+        // at the NEXT cue's start, or after the documented default when nothing follows.
+        return sorted.mapIndexed { index, cue ->
+            if (cue.endMicros > cue.startMicros) {
+                cue
+            } else {
+                val nextStart = sorted.drop(index + 1)
+                    .firstOrNull { it.startMicros > cue.startMicros }
+                    ?.startMicros
+                cue.copy(endMicros = nextStart ?: (cue.startMicros + OPEN_CUE_DEFAULT_MICROS))
+            }
+        }
     }
 
     /**
      * Parses ONE cue's body, the shape a Matroska SubRip track's packets carry: the text alone,
      * timing already on the packet (S4.c). Same markup rules as whole-file parsing.
      */
-    public fun parseCueBody(body: String): List<StyledSpan> = InlineMarkup.parse(body.trim())
+    public fun parseCueBody(body: String): List<StyledSpan> =
+        InlineMarkup.parse(body.trim()).decodeSpanEntities()
+}
 
-    private fun looksLikeIndex(line: String): Boolean =
+/**
+ * The four entities every subtitle file in the wild actually uses, decoded on each span's TEXT
+ * after markup parsing (17.11 SOL-S6): decoding first turns escaped markup into real tags. An author's
+ * literal `&amp;lt;` would double-decode.
+ */
+internal fun List<StyledSpan>.decodeSpanEntities(): List<StyledSpan> = map { span ->
+    val decoded = span.text
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+    if (decoded == span.text) span else span.copy(text = decoded)
+}
+
+private fun looksLikeIndex(line: String): Boolean =
         line.trim().let { it.isNotEmpty() && it.all { c -> c.isDigit() } }
 
     /** Returns start and end in microseconds, or null when [line] is not a timing line. */
@@ -105,7 +140,6 @@ public object SubRipParser {
     private val LINE_BREAK = Regex("\r\n|\n|\r")
     private val TIMING = Regex("""([\d:.,]+)\s*-->\s*([\d:.,]+)""")
     private val TIMESTAMP = Regex("""(?:(\d{1,3}):)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})""")
-}
 
 /**
  * Turns the HTML-like markup found in SubRip and WebVTT files into styled spans.

@@ -207,19 +207,49 @@ class SubRipParserTest {
     }
 
     @Test
-    fun `an end before its start becomes an open end`() {
+    fun `an end before its start resolves to the next cue or the documented default`() {
         // Some tools write the two timestamps the wrong way round. Throwing the text away loses
-        // dialogue, so the cue starts on time and the track state closes it at the next one.
-        val cue = parse(
+        // dialogue, and an end equal to its start never DISPLAYS either, because the selector
+        // requires the time strictly before the end (17.11 SOL-S4). The open end resolves.
+        val followed = parse(
+            """
+            1
+            00:00:10,000 --> 00:00:05,000
+            Backwards
+
+            2
+            00:00:12,000 --> 00:00:13,000
+            Next
+            """.trimIndent(),
+        )
+        assertEquals(10_000_000L, followed.first().startMicros)
+        assertEquals(12_000_000L, followed.first().endMicros, "the next cue's start closes it")
+
+        val last = parse(
             """
             1
             00:00:10,000 --> 00:00:05,000
             Backwards
             """.trimIndent(),
         ).single()
+        assertEquals(10_000_000L, last.startMicros)
+        assertEquals(
+            10_000_000L + SubRipParser.OPEN_CUE_DEFAULT_MICROS,
+            last.endMicros,
+            "with nothing following, the documented default closes it",
+        )
+        assertEquals("Backwards", last.plainText)
+    }
 
-        assertEquals(10_000_000L, cue.startMicros)
-        assertEquals(10_000_000L, cue.endMicros)
-        assertEquals("Backwards", cue.plainText)
+    @Test
+    fun `entities decode after tag handling`() {
+        val cue = parse(
+            """
+            1
+            00:00:01,000 --> 00:00:02,000
+            Tom &amp; Jerry say &lt;i&gt; is literal&nbsp;here
+            """.trimIndent(),
+        ).single()
+        assertEquals("Tom & Jerry say <i> is literal here", cue.plainText)
     }
 }

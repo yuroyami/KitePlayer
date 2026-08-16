@@ -92,6 +92,45 @@ class WebVttParserTest {
             "WEBVTT\n\n00:00:05.000 --> 00:00:01.000\nBackwards\n",
         )
         assertEquals(5_000_000L, backwards.single().startMicros)
-        assertEquals(5_000_000L, backwards.single().endMicros)
+        assertEquals(
+            5_000_000L + SubRipParser.OPEN_CUE_DEFAULT_MICROS,
+            backwards.single().endMicros,
+            "the open end resolves to the shared default when nothing follows (17.11 SOL-S4)",
+        )
+    }
+
+    @Test
+    fun `an identifier beginning with a keyword is a cue, not a block`() {
+        // NOTEWORTHY is a cue identifier; the old startsWith read it as a NOTE block and ate the
+        // cue that followed (17.11 SOL-S5).
+        val cues = WebVttParser.parse(
+            """
+            WEBVTT
+
+            NOTEWORTHY
+            00:00:01.000 --> 00:00:02.000
+            Visible
+
+            NOTE this really is a comment
+            it runs to the blank line
+
+            00:00:03.000 --> 00:00:04.000
+            Second
+            """.trimIndent(),
+        )
+        assertEquals(listOf("Visible", "Second"), cues.map { it.plainText })
+    }
+
+    @Test
+    fun `entities decode after vtt tag stripping`() {
+        val cue = WebVttParser.parse(
+            """
+            WEBVTT
+
+            00:00:01.000 --> 00:00:02.000
+            <v Tom>Tom &amp; Jerry &lt;3</v>
+            """.trimIndent(),
+        ).single()
+        assertEquals("Tom & Jerry <3", cue.plainText)
     }
 }

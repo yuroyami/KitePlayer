@@ -11035,6 +11035,9 @@ it is needed. Build order is 17.2.
 
 ### 17.2 The stages
 
+**Inter-stage ORDER superseded 2026-08-16 by 17.12 (mobile supremacy first, then desktop and
+web, then libass, then the tail). Stage contents, registers and exits below stand unchanged.**
+
 Each stage receives its section-15-style execution expansion AT ENTRY: located register items,
 decided fixes, sub-phases with files, steps, gates and commit first lines, authored against the
 tree at that time and adversarially verified before execution. Run on 2026-08-10 that ritual
@@ -15394,6 +15397,9 @@ and web claim above is level 8 until its run exists. The parked network work is 
 
 ### 17.8 Parked: network (old B6)
 
+**UN-PARKED 2026-08-16: D-4 amended by the owner; the work enters as 17.12 phase M1,
+Kotlin-first (custom AVIO bridge plus platform TLS), with the paragraph below still binding.**
+
 Everything in section 11's B6 stays specified there, unbuilt by decision D-4. Cost if it never
 happens: KitePlayer plays files, not streams; the engine's undocumented URL path remains
 unhardened (no interrupt callback, no timeout bounds: draft C-52 to C-54 record the exact holes)
@@ -15782,6 +15788,110 @@ Metal frames, failed CoreAudio shutdown with a live callback, attached-picture-f
 negative start times, foreign StreamInfo, decoder output diverging from codec parameters,
 empty-output MediaSink finalization, midstream format changes, and secure-protocol link
 smokes. Each stage's expansion names the ones it owes.
+
+**Register addition 2026-08-16 (from the mpv dependency study, 17.12):**
+- KP-TLS [C] The Android and iOS FFmpeg profiles vendor NO TLS backend (LGPL no-third-party
+  build), so `https://` media URLs almost certainly fail through the FFmpeg protocol path on
+  the phones; only plain `http://` was ever exercised (the loopback case). Not yet reproduced:
+  verify with one https open at M1 entry, then CLOSE the hole through M1's Kotlin network
+  layer rather than by vendoring crypto (decision D-7). Home: 17.12 phase M1.
+
+### 17.12 The renewed road, 2026-08-16
+
+Written by Fable 5 at the owner's direction after the two 0.0.5/0.0.6 feature surges and the
+mpv-android dependency study made the remaining gaps and their real costs visible. This
+subsection supersedes the INTER-STAGE ORDER of 17.2 exactly the way section 17 superseded
+section 11's numbering: every stage, register, expansion and exit criterion stands where it is
+written and is not restated here; what changes is which outcome is bought first. The stage law
+of 17.1 still rules: phases are named by user-visible outcomes, prerequisites live inside the
+phase that needs them, and a phase entered without its 17.1 expansion ritual is a contract
+violation. Register homes named below are owner moves under 17.11's own rule that homes are
+proposals the owner may move.
+
+**Owner decision amendments, 2026-08-16:**
+
+- **D-4 AMENDED, network un-parked.** The owner reopened network for phase M below. 17.8's
+  standing sentence applies on entry: draft items C-52 to C-54 (interrupt callback, timeout
+  bounds, the unhardened URL path) reopen before anything else. The un-parking is Kotlin-first
+  by construction: the network stack is Kotlin, not more C.
+- **D-7, NEW: no new mandatory native libraries.** The measure for every mpv-parity gap is
+  Kotlin (or shader source we author) first. A native library may arrive only as an OPTIONAL
+  separate module, and only when no Kotlin path can exist (dav1d: SIMD software decode) or when
+  correctness parity demands it after the Kotlin tier ships (libass). Applied verdicts, argued
+  on cost against benefit and closed with the owner in session:
+  - libxml2: NEVER. Adaptive-streaming manifests parse in commonMain Kotlin; the adaptive layer
+    is Kotlin segment logic feeding the decoder, the media3 shape, not FFmpeg's dash demuxer.
+  - mbedtls and curl: REJECTED. Vendored crypto is a recurring CVE duty. TLS comes from the OS
+    through the M1 bridge (Ktor: OkHttp engine on Android, NSURLSession on Apple). Fallback
+    only if an FFmpeg-native protocol Ktor cannot front is ever demanded, and then as its own
+    decision.
+  - libplacebo: REJECTED as a dependency. One feature is stolen as our own shader source: tone
+    mapping (closes D16). Scaling kernels, debanding and dithering are parked until desktop and
+    TV surfaces matter (phase W or later); their benefit on phone panels does not carry their
+    cost.
+  - libass chain (libass, freetype, harfbuzz, fribidi, fontconfig, libunibreak): DEFERRED to
+    phase L as one optional module. The Kotlin ASS dialogue tier ships first in M; the platform
+    text engines (CoreText, Android text stack) already contain the shaping, bidi, line-break
+    and font-discovery jobs of four of those six libraries.
+  - dav1d: ACCEPTED in principle, demand-driven, optional module, roughly one night (meson
+    builds clean; FFmpeg adopts it with one configure flag). Executes when the first real
+    no-AV1-hardware complaint arrives, not before. Register row KC-AV1SW keeps it.
+
+**The phase order. Each phase completes before the next begins, riders excepted.**
+
+**M. SUPREME ON MOBILE.** The owner's first market. Exit: on the named Android device and an
+iPhone, KitePlayer streams https media, shows styled dialogue-grade ASS, presents HDR without
+washout, and survives the robustness rows below; no new mandatory native libraries entered the
+default artifact. Contents, in build order:
+  - **M1, the network trust layer.** Verify KP-TLS, then the custom AVIO bridge: one C callback
+    surface in KiteCodec (avio read/seek into the engine), cinterop and JNI actuals, wired to
+    `MediaIo` so the SPI stops being unimplemented surface, with Ktor engines supplying bytes
+    and the OS supplying TLS. C-52 to C-54 reopen here per amended D-4. This bridge is the
+    strategic door: KiteTorrent, encrypted stores, caches, auth flows and M5's adaptive future
+    all pass through it. Estimate one to two focused sessions plus a KiteCodec window (golden
+    regeneration per SOL-B1/B2 included).
+  - **M2, the Kotlin ASS dialogue tier.** The S4.f remainder, evolved: an ASS parser in
+    commonMain mapping styles and the dialogue-grade override subset (fonts, colours, outline,
+    positioning, alignment, margins, bold, italic, basic fades) onto the EXISTING cue model,
+    which SOL-S7 already records as richer than what the rasterizers draw. Karaoke, vector
+    drawings and animated typesetting are phase L's, stated honestly in the track list until
+    then. Estimate one to two sessions.
+  - **M3, tone mapping.** PQ and HLG to SDR as shader source on the uniform infrastructure the
+    eq work built (Metal first, the Android GPU tier second). Closes D16's software half with
+    the same disabled-is-bit-exact discipline the adjust uniforms proved. Estimate one to two
+    sessions.
+  - **M4, the mobile robustness and dominance rows**, homes moved here from S3 by owner order:
+    the audio-sink lifecycle rows SOL-A1 to A6 (AudioTrack writer machine, timestamp wrap,
+    CoreAudio period and route), the hot-path rows SOL-P2, P4, P5, P6 (audio copies, thread
+    per lane, cue history and raster worker, snapshot allocation), SOL-P1's software tier, the
+    paused-frame overlay rows SOL-R1 to R3, and SOL-R14's Android half (the eq matrix in the
+    Compose GPU tier's OES-to-RGBA blit, the natural hook the register names). The
+    pure-Compose-beats-interop audit exits here: a feature table where KiteVideo loses nowhere.
+  - **M5, the demuxer cache.** Forward RAM cache with a seek-back window in the engine's own
+    Kotlin, `Progress.bufferedRanges` stops being the honest empty list. The one mpv advantage
+    that is core engine work rather than a dependency. Sized at entry.
+  - **M owner riders:** the iPhone KiteStats background-slideshow run and the physical device
+    session AGW-1, both owner-blocked, both unchanged.
+
+**W. REAL ON DESKTOP AND WEB.** Exactly S3 then S6 as written (S3 minus the rows M4 took),
+in that order: Windows and Linux sinks and rendering, the desktop KiteVideo maturation, then
+the timeboxed wasm spike with its stated physics. The parked libplacebo features (scaling
+kernels, debanding) become eligible HERE as shader work if the desktop picture demands them,
+still under D-7.
+
+**L. LIBASS FULL THROTTLE.** The `kiteplayer-libass` OPTIONAL module: the six-library chain
+built per target by BuildFFmpegTask-style machinery, rendering through the EXISTING bitmap-cue
+path (integration is small; the build is the work). Exit: a named typesetting-heavy corpus
+renders pixel-comparable to mpv, the Kotlin tier of M2 remains the default, and an app that
+skips the module ships not one extra native byte. After W by design: M2 covers dialogue-grade
+meanwhile, and the module's audience overlaps the desktop one.
+
+**T. THE TAIL.** Everything else this document already holds, unchanged in content: S5 (public
+artifacts, size tiers, the build and publication rows), S7 (soak, conformance, CI, 1.0), the
+C-reduction charter SOL-C1 to C3, the Kotlin modernization posture SOL-K2, section 15/16's
+remaining B-horizon obligations where stages reference them, and every register row not
+adopted by an earlier phase. Nothing here is deleted by this renewal; it is sequenced behind
+the outcomes the owner buys first.
 
 ## 18. The skeleton, for any executor
 

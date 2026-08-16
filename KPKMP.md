@@ -8398,6 +8398,84 @@ is no other.
      row exists by construction). Versions: KitePlayer 0.0.6 published local; Synkplay bumped
      and wired (A-B loop, pitch toggle, eq sliders, framing, subtitle position).
 
+**2026-08-16, the phase-M surge (Fable 5, owner order: tone mapping, AVIO, dav1d, Kotlin ASS
+plus libass, all in one go). Executed across both repos; gates were per-module suites plus
+real-GPU, real-libass and real-device-tree proofs; every feature test was proven able to fail
+(falsified in place or red on route).**
+
+  1. **M3, tone mapping.** BT.2390 EETF (mpv's default operator) with PQ and HLG
+     linearization and the BT.2020-to-709 gamut fold, twice: MSL on the Metal shader behind
+     ToneUniforms at fragment buffer 2 (disabled-is-bit-exact, proven against a Kotlin mirror
+     of the law on the real GPU, falsified by neutering the branch), and a LUT-accelerated
+     CPU pass in HdrToneMap.kt hooked at tightlyPackedToRgba (same law, SDR bit-exact,
+     falsified). The Android GPU tier needed nothing: the Compose path already requests
+     decoder-side SDR through KEY_COLOR_TRANSFER_REQUEST, verified in MediaCodecVideoDecoder.
+     Honest limit, both halves: srcPeak fixed at 1000 nits until mastering metadata plumbs
+     through ColorSpaceInfo. KitePlayer 8e2ad19.
+  2. **M1, the custom AVIO bridge.** The strategic door is open: ffkmp_fmt_open_input_io /
+     _close_input_io / _io_opaque in the C layer (read/seek trampolines, KC_IO_EOF/ERR
+     contract, AVSEEK_SIZE answered from the declared size, custom-io close frees what the
+     plain close must not), cinterop actuals over staticCFunction plus StableRef, JNI actuals
+     with upcall trampolines (GetMethodID-pinned JniByteIo, reusable global-ref transfer
+     array, consumer keep rules), MediaByteSource on the KiteCodec facade, and
+     MediaItem.io wired in the FFmpeg backend through a runBlocking adapter. Proven end to
+     end THREE times: native (in-memory mp4, read AND seek counters, ownership close,
+     unseekable mpegts refusing seeks typed), JNI (same through the upcalls), and KitePlayer
+     (a suspending MediaIo demuxing subbed.mkv). Symbol ratchets moved by procedure: exports
+     195 to 198, signatures 210 to 213. KiteCodec 284b704/043b732, KitePlayer 06a7e9d,
+     KiteCodec 0.0.8 published locally, KitePlayer consumes it.
+  3. **dav1d, pluggable (D-7, KC-AV1SW executed).** BuildDav1dTask (meson cross builds:
+     macOS host, Android arm64/x64, iOS device and simulator) into native-libs/deps/<t>/dav1d;
+     BuildFFmpegTask gained enableDav1d (configure through an isolated PKG_CONFIG_LIBDIR,
+     decoder pin, archive bundling, deps copied to scratch because pkg-config shell-escapes
+     the '#' in this repo's path and configure hands the escape to the compiler); link truth
+     is tree presence everywhere (core linkerOpts, JNI .so recipe, consumer plugin); the
+     consumer DSL grew `dav1d = true` with per-source refusals. BOTH phone-flagship trees
+     rebuilt and verified carrying libdav1d (macos-arm64, android-arm64: configure evidence
+     plus bundled archive plus Dav1dConsistencyTest's configure-vs-decoder-table law).
+     dav1d 1.5.4 vendored by tag. KiteCodec 633b704/f2a10a0.
+  4. **M2, the Kotlin ASS dialogue tier.** AssParser in kiteplayer-subtitles commonMain:
+     document AND embedded (FFmpeg-normalised event) forms against one grammar; V4+/V4
+     styles by Format-header mapping; the override subset the register names (an/a, pos,
+     move's start, fad, fn/fs/c/3c/4c/bord/shad, b/i/u/s, q, r with named styles, p-drawing
+     suppression, karaoke stripped-text-kept); &H colours alpha-inverted with SSA decimal
+     honoured (falsified through the alpha law); PlayRes-normalised margins and positions;
+     CueLayout grew fadeInMicros/fadeOutMicros. Wired both directions: external .ass files
+     self-announce past the vtt hint, and embedded ass/ssa tracks decode via extradata-fed
+     KiteCodecAssSubtitleDecoder. Proven against asssubbed.mkv end to end. ABI dumps moved.
+     KitePlayer d5dfbe0.
+  5. **Phase L opened early (owner pull): the libass chain and module.** BuildAssChainTask
+     cross-builds fribidi 1.0.16, freetype 2.14.3, harfbuzz 14.2.1 and libass 0.17.4 (meson
+     plus autotools in scratch, pcfiledir-prefixed .pc files) into deps/<t>/ass-chain for
+     macOS host, Android arm64 and BOTH iOS targets, fontconfig and libunibreak deliberately
+     absent (CoreText on Apple, ass_add_font on Android). The consumer DSL grew
+     `libass = true` (Local-only, presence-checked, Apple frameworks split from Android).
+     NEW OPTIONAL MODULE kiteplayer-libass: cinterop over libass, LibassRenderer emitting
+     the EXISTING bitmap-cue vocabulary (per-image RGBA regions, colour transparency
+     inverted once), proven on the host against real CoreText fonts (green-glyph pixel
+     census, silence renders nothing) and compiled against the cross-built chain on both
+     iOS targets. KiteCodec 71fdb1d, KitePlayer a2dc79e.
+  6. **Deviations, all named.** (a) Four PRE-EXISTING failures on this machine, proven at
+     HEAD before any change: kitecodec-c test_buffers case 20 and test_convert case 9, and
+     kitecodec-core EncoderRestampTest plus FilterGraphDrainTest on macosArm64; environment
+     drift (host FFmpeg vs vendored tree), owner attention wanted. (b) buildSrc
+     BuildFFmpegTaskTest's exact-argument helpers are STALE since the 17.4.9 wide profile
+     (pre-existing); the new dav1d tests compare on-vs-off instead of leaning on them; the
+     helpers still want their rewrite. (c) Fixed in passing because they blocked every gate:
+     the vendored tiff decoder's missing -llzma on macOS link sets (StaticLinkFlags,
+     PrebuiltLinkFlags, and the plugin functional tests' pinned sets), the plugin test's
+     stale iOS pin missing the S2.a media frameworks, and one illegal K/N test name in
+     WebVttParserTest. (d) The C suites gained no dedicated AVIO case; the three Kotlin
+     end-to-end proofs stand in. (e) libass module limits recorded in its KDoc: snapshot
+     rendering per call (the per-frame engine hook is the next slice) and no Android JNI
+     bridge yet.
+  7. **What phase M still owes.** M1's Ktor half: KP-TLS verification plus the Ktor byte
+     suppliers over MediaIo (https on phones stays UNVERIFIED until then). M4 (the moved
+     robustness rows) and M5 (the demuxer cache) untouched. The adaptive layer's Kotlin
+     manifest parsing (the un-parked D-4 work) not started. SubtitleSource.io still warns
+     typed. The libass module's Android JNI bridge and per-frame hook are phase L's next
+     slices; the L exit corpus comparison is unrun.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -15843,6 +15921,12 @@ proposals the owner may move.
 iPhone, KitePlayer streams https media, shows styled dialogue-grade ASS, presents HDR without
 washout, and survives the robustness rows below; no new mandatory native libraries entered the
 default artifact. Contents, in build order:
+
+**Progress 2026-08-16 (the phase-M surge, section 14):** M2 and M3 CLOSED; M1's bridge half
+CLOSED (the Ktor byte-supplier half and the KP-TLS verification remain, and are the phase's
+next work); dav1d executed out of KC-AV1SW into both phone-flagship trees behind its DSL
+toggle; phase L's chain and module opened early by owner pull (build machinery, host-proven
+renderer, iOS compiles; Android JNI bridge and per-frame hook remain). M4 and M5 untouched.
   - **M1, the network trust layer.** Verify KP-TLS, then the custom AVIO bridge: one C callback
     surface in KiteCodec (avio read/seek into the engine), cinterop and JNI actuals, wired to
     `MediaIo` so the SPI stops being unimplemented surface, with Ktor engines supplying bytes

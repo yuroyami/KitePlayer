@@ -49,6 +49,7 @@ class RealThreadStressTest {
         private val audioDecodeContext = newSingleThreadContext("stress-audio-decode")
         private val audioFeedContext = newSingleThreadContext("stress-audio-feed")
         private val videoScheduleContext = newSingleThreadContext("stress-video-schedule")
+        private val rasterContext = newSingleThreadContext("stress-raster")
 
         override val session: CoroutineContext get() = sessionContext
         override val demux: CoroutineContext get() = demuxContext
@@ -56,6 +57,7 @@ class RealThreadStressTest {
         override val audioDecode: CoroutineContext get() = audioDecodeContext
         override val audioFeed: CoroutineContext get() = audioFeedContext
         override val videoSchedule: CoroutineContext get() = videoScheduleContext
+        override val raster: CoroutineContext get() = rasterContext
 
         override fun close() {
             sessionContext.close()
@@ -64,6 +66,7 @@ class RealThreadStressTest {
             audioDecodeContext.close()
             audioFeedContext.close()
             videoScheduleContext.close()
+            rasterContext.close()
         }
     }
 

@@ -40,6 +40,9 @@ internal interface PlaybackDispatchers : AutoCloseable {
     val audioFeed: CoroutineContext
     val videoSchedule: CoroutineContext
 
+    /** SOL-P5: subtitle rasterisation, off the actor. Serial like every lane. */
+    val raster: CoroutineContext
+
     companion object {
         /**
          * Every worker on one context.
@@ -58,6 +61,7 @@ internal interface PlaybackDispatchers : AutoCloseable {
         override val audioDecode: CoroutineContext get() = context
         override val audioFeed: CoroutineContext get() = context
         override val videoSchedule: CoroutineContext get() = context
+        override val raster: CoroutineContext get() = context
         override fun close() = Unit
     }
 }

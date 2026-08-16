@@ -2505,6 +2505,19 @@ internal class PlaybackCore(
     private fun insertCues(session: OpenSession, decoded: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>) {
         session.subtitleCues.addAll(decoded)
         session.subtitleCues.sortBy { it.startMicros }
+        pruneCueHistory(session)
+    }
+
+    /**
+     * SOL-P5's pruning cursor. Container cues far behind the position are dropped: a backward
+     * seek flushes and re-decodes them, so keeping the whole history only grew a list forever.
+     * External cue tables (no decoder) are NEVER pruned; nothing re-supplies them.
+     */
+    private fun pruneCueHistory(session: OpenSession) {
+        if (session.subtitleDecoder == null) return
+        val cutoff = currentPosition().micros - subtitleDelay.inWholeMicroseconds - CUE_PRUNE_BEHIND_MICROS
+        if (cutoff <= 0) return
+        session.subtitleCues.removeAll { it.endMicros < cutoff }
     }
 
     /**
@@ -2520,19 +2533,31 @@ internal class PlaybackCore(
         val size = session.videoStream?.videoSize
         val width = size?.displayWidth?.takeIf { it > 0 } ?: DEFAULT_SUBTITLE_CANVAS_WIDTH
         val height = size?.height?.takeIf { it > 0 } ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT
-        val images = if (active.isEmpty()) {
-            emptyList()
-        } else {
-            rasterizer.rasterize(active, width, height, subtitleScale, subtitlePosition)
+        val generation = session.overlayGeneration.incrementAndGet()
+        if (active.isEmpty()) {
+            // A clear costs no rasterisation; publish it inline so text vanishes on time.
+            session.renderer.setOverlay(
+                SubtitleOverlay(emptyList(), width, height, contentHash = generation),
+            )
+            return
         }
-        session.renderer.setOverlay(
-            SubtitleOverlay(
-                images = images,
-                viewportWidth = width,
-                viewportHeight = height,
-                contentHash = ++session.overlayGeneration,
-            ),
-        )
+        // SOL-P5: rasterisation runs on its own serial lane, never on the actor. Only the
+        // NEWEST publication may land: a slow raster of superseded text checks the generation
+        // after drawing and drops itself. The job rides session.jobs, so teardown cancels it
+        // before the renderer it would publish to closes.
+        val cues = active.toList()
+        session.jobs += scope.launch(dispatchers.raster) {
+            val images = rasterizer.rasterize(cues, width, height, subtitleScale, subtitlePosition)
+            if (session.overlayGeneration.value != generation) return@launch
+            session.renderer.setOverlay(
+                SubtitleOverlay(
+                    images = images,
+                    viewportWidth = width,
+                    viewportHeight = height,
+                    contentHash = generation,
+                ),
+            )
+        }
     }
 
     /**
@@ -4313,7 +4338,8 @@ internal class PlaybackCore(
          * Monotonic overlay identity. A hash of the cue content is collision-prone; a counter
          * bumped on every real change can never claim two different overlays are the same.
          */
-        var overlayGeneration: Long = 0L
+        /** SOL-P5: bumped on the actor, read by the raster lane's stale-work guard. */
+        val overlayGeneration = atomic(0L)
 
         var videoStatus: StreamStatus = StreamStatus.Syncing
         var audioStatus: StreamStatus = StreamStatus.Syncing
@@ -4342,6 +4368,9 @@ internal class PlaybackCore(
     }
 
     private companion object {
+        /** SOL-P5: how far behind the position container cues survive before pruning. */
+        const val CUE_PRUNE_BEHIND_MICROS = 30_000_000L
+
         /** No seek in flight: [maskedSeekTargetMicros] defers to the published clock. */
         const val NO_SEEK_MASK: Long = Long.MIN_VALUE
 

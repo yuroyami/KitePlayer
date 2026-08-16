@@ -68,5 +68,8 @@ internal class SharedLaneDispatchers(
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     override val audioFeed: CoroutineContext = blocking.limitedParallelism(1)
 
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val raster: CoroutineContext = calm.limitedParallelism(1)
+
     override fun close() {}
 }

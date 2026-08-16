@@ -226,6 +226,7 @@ class PlaybackCoreTest {
             override val audioDecode = sharedDispatcher
             override val audioFeed = sharedDispatcher
             override val videoSchedule = sharedDispatcher
+            override val raster = sharedDispatcher
             override fun close() = Unit
         }
         val core = PlaybackCore(
@@ -1018,6 +1019,7 @@ class PlaybackCoreTest {
             override val audioDecode = context
             override val audioFeed = context
             override val videoSchedule = context
+            override val raster = context
 
             override fun close(): Nothing = error("the dispatcher set refuses to close")
         }

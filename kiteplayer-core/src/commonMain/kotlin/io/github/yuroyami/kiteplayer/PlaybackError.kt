@@ -134,6 +134,15 @@ public sealed class PlaybackWarning {
         override val message: String get() = "the renderer failed: $detail"
     }
 
+    /**
+     * Open options the demuxer never consumed (S4.e): a typo'd key, or one this protocol does
+     * not take. The open succeeded; the option did nothing, and pretending otherwise is how a
+     * configuration bug survives for months.
+     */
+    public data class OptionsUnused(val keys: List<String>) : PlaybackWarning() {
+        override val message: String get() = "open options not consumed by the demuxer: $keys"
+    }
+
     /** A hardware decoder was unavailable or failed and policy allowed playback to continue in software. */
     public data class HardwareDecodeUnavailable(val codec: String, val reason: String) : PlaybackWarning() {
         override val message: String get() = "hardware decode unavailable for $codec: $reason"

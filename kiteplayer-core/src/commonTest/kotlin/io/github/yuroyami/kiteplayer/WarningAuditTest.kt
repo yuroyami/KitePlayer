@@ -27,6 +27,7 @@ class WarningAuditTest {
         PlaybackWarning.StartupIncomplete("x"),
         PlaybackWarning.PathologicalInterleaving(TrackId(0), 1),
         PlaybackWarning.NoRenderSurface("x"),
+        PlaybackWarning.OptionsUnused(listOf("x")),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
@@ -74,6 +75,9 @@ class WarningAuditTest {
         is PlaybackWarning.NoRenderSurface -> listOf(
             "PlaybackCore.watchRendererEvents, on RendererEvent.SurfaceLost from the attached renderer",
         )
+        is PlaybackWarning.OptionsUnused -> listOf(
+            "KiteCodecMediaBackend.open, from MediaSource.unusedOpenOptions after the pre-open funnel ran",
+        )
     }
 
     @Test
@@ -86,6 +90,6 @@ class WarningAuditTest {
                 "${warning::class.simpleName} has a blank message",
             )
         }
-        assertTrue(samples.size >= 14, "the census lost a row: ${samples.size}")
+        assertTrue(samples.size >= 15, "the census lost a row: ${samples.size}")
     }
 }

@@ -163,6 +163,9 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     /** S4.e: the media item's compiled KD-1 video filter chain, or null for none. */
     internal var videoFilterDescription: String? = null
 
+    /** S4.e: the pre-open keys the demuxer never consumed, straight from KiteCodec's funnel. */
+    internal val unusedOpenOptions: List<String> get() = source.unusedOpenOptions
+
     internal fun openDecoder(
         index: Int,
         lowDelay: Boolean,

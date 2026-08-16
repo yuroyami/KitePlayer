@@ -247,6 +247,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun closeAndAwait (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun detachRenderer ()V
 	public final fun diagnosticsDump ()Ljava/lang/String;
+	public final fun editions ()Ljava/util/List;
 	public final fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;
 	public final fun getProgress ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
@@ -259,6 +260,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun play ()V
 	public final fun position-UwyO8pc ()J
 	public final fun previous (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun programs ()Ljava/util/List;
 	public final fun seek-KLykuaI (JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun seek-KLykuaI$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun seekLater-VtjQ1oo (JLio/github/yuroyami/kiteplayer/SeekMode;)V
@@ -271,6 +273,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun setVolume (F)V
 	public final fun stepFrame (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun supportBundle ()Ljava/lang/String;
 	public final fun warningHistory ()Ljava/util/List;
 }
 
@@ -683,6 +686,18 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$NoRenderSurface
 	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$NoRenderSurface;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$NoRenderSurface;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDetail ()Ljava/lang/String;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$OptionsUnused : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/util/List;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$OptionsUnused;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$OptionsUnused;Ljava/util/List;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$OptionsUnused;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getKeys ()Ljava/util/List;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

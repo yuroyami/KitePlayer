@@ -73,6 +73,11 @@ public class KiteCodecMediaBackend(
         }
         source.onWarning = onWarning
         source.videoFilterDescription = media.videoFilter
+        // The option echo's honest half (S4.e): a key the demuxer never consumed did nothing,
+        // and the caller hears that once, typed, instead of discovering it by measurement.
+        if (source.unusedOpenOptions.isNotEmpty()) {
+            onWarning(PlaybackWarning.OptionsUnused(source.unusedOpenOptions))
+        }
         source.videoDecoderOptions = decoderOptions
         source.videoLowDelay = lowDelayDecode
         return KiteCodecBackendSession(source)

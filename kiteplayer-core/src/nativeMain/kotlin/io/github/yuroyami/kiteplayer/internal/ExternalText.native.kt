@@ -35,3 +35,7 @@ internal actual fun readExternalTextOrNull(path: String): String? {
 
 /** A subtitle file is text; anything past this bound is not one. */
 private const val MAX_EXTERNAL_SUBTITLE_BYTES = 32L * 1024 * 1024
+
+/** One word per native family; the exact target is the build knows-better detail. */
+@OptIn(kotlin.experimental.ExperimentalNativeApi::class)
+internal actual val playerPlatformName: String = kotlin.native.Platform.osFamily.name.lowercase()

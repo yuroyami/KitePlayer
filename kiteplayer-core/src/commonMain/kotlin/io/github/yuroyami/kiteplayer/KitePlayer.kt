@@ -387,6 +387,41 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     public fun warningHistory(): List<TimedWarning> = core.warningHistory()
 
+    /**
+     * The dump plus a platform block, with every path trimmed to its basename (S4.e): what a
+     * user pastes into a bug report without leaking their filesystem.
+     */
+    public fun supportBundle(): String = buildString {
+        appendLine("KitePlayer support bundle")
+        appendLine("platform    ${io.github.yuroyami.kiteplayer.internal.playerPlatformName}")
+        appendLine("kotlin      ${KotlinVersion.CURRENT}")
+        append(core.diagnosticsDump(redactPaths = true))
+    }
+
+    /**
+     * The container's edition table (S4.e): typed-rejected, never silently empty, because the
+     * container reader exposes no edition table yet. When KiteCodec reads Matroska editions this
+     * member returns them; the truth-ledger rule is that an unimplemented member throws rather
+     * than answering with a lie-shaped default.
+     *
+     * @throws UnsupportedOperationException always, naming the missing reader.
+     */
+    public fun editions(): List<Nothing> = throw UnsupportedOperationException(
+        "the container reader exposes no edition table; when KiteCodec reads Matroska editions " +
+            "this member returns them (KPKMP 17.11)",
+    )
+
+    /**
+     * The container's program table (S4.e): typed-rejected for the same truth-ledger reason as
+     * [editions]. MPEG-TS programs live in the container reader, which does not expose them yet.
+     *
+     * @throws UnsupportedOperationException always, naming the missing reader.
+     */
+    public fun programs(): List<Nothing> = throw UnsupportedOperationException(
+        "the container reader exposes no program table; when KiteCodec reads MPEG-TS programs " +
+            "this member returns them (KPKMP 17.11)",
+    )
+
     private fun validPosition(to: Duration, name: String): Duration {
         require(to.isFinite() && to >= Duration.ZERO) {
             "$name needs a finite position at or after zero, was $to"

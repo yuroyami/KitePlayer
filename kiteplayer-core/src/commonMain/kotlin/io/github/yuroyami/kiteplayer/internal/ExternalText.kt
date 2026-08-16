@@ -8,3 +8,6 @@ package io.github.yuroyami.kiteplayer.internal
  * pretending. UTF-8 with an optional BOM, which is what every subtitle file in the wild is.
  */
 internal expect fun readExternalTextOrNull(path: String): String?
+
+/** One word for the support bundle's platform block (S4.e): jvm, android, native, js, wasm. */
+internal expect val playerPlatformName: String

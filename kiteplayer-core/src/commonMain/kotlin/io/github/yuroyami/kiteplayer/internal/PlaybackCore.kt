@@ -3207,13 +3207,23 @@ internal class PlaybackCore(
      * published state, so it is safe from any thread at any moment, including after failure,
      * which is when it is usually called.
      */
-    fun diagnosticsDump(): String = buildString {
+    fun diagnosticsDump(redactPaths: Boolean = false): String = buildString {
+        fun path(uri: String): String = if (redactPaths) uri.substringAfterLast('/') else uri
         val snapshot = snapshotState.value
         val liveStats = statsState.value
         val liveProgress = progressState.value
         appendLine("KitePlayer diagnostics")
         appendLine("status      ${snapshot.status}")
-        appendLine("media       ${snapshot.media?.uri ?: "none"}")
+        appendLine("media       ${snapshot.media?.uri?.let(::path) ?: "none"}")
+        snapshot.media?.openOptions?.takeIf { it.isNotEmpty() }?.let { options ->
+            appendLine("openOptions $options (unconsumed keys warn typed at open)")
+        }
+        if (snapshot.queue.isNotEmpty()) {
+            appendLine(
+                "queue       ${snapshot.queueIndex + 1} of ${snapshot.queue.size}: " +
+                    snapshot.queue.joinToString { path(it.uri) },
+            )
+        }
         appendLine("duration    ${snapshot.duration ?: "unknown"}")
         appendLine("seekable    ${snapshot.seekable}")
         appendLine("position    ${liveProgress.position} (buffered ahead ${liveProgress.bufferedAhead})")

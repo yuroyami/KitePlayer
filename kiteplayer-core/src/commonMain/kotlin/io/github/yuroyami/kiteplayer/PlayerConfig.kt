@@ -43,8 +43,10 @@ public data class PlayerConfig(
     /**
      * Where the engine's diagnostics go.
      *
-     * Nothing in the engine writes a log line, so supplying a logger shows nothing.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Superseded before it was ever read: [io.github.yuroyami.kiteplayer.KiteLog.install] is the
+     * shipped logging seam (S4.d), and nothing reads this field. It remains only because deleting
+     * a config field is an ABI break scheduled for the S5 publication sweep, and its emptiness is
+     * stated here rather than discovered.
      */
     val logger: PlayerLogger? = null,
     /** The backends to build the pipeline from. Replace them for a test or a new platform. */

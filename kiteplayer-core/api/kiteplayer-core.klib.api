@@ -1436,14 +1436,17 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final fun close() // io.github.yuroyami.kiteplayer/KitePlayer.close|close(){}[0]
     final fun detachRenderer() // io.github.yuroyami.kiteplayer/KitePlayer.detachRenderer|detachRenderer(){}[0]
     final fun diagnosticsDump(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayer.diagnosticsDump|diagnosticsDump(){}[0]
+    final fun editions(): kotlin.collections/List<kotlin/Nothing> // io.github.yuroyami.kiteplayer/KitePlayer.editions|editions(){}[0]
     final fun pause() // io.github.yuroyami.kiteplayer/KitePlayer.pause|pause(){}[0]
     final fun play() // io.github.yuroyami.kiteplayer/KitePlayer.play|play(){}[0]
     final fun position(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/KitePlayer.position|position(){}[0]
+    final fun programs(): kotlin.collections/List<kotlin/Nothing> // io.github.yuroyami.kiteplayer/KitePlayer.programs|programs(){}[0]
     final fun seekLater(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayer.seekLater|seekLater(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final fun setLoop(io.github.yuroyami.kiteplayer/LoopMode) // io.github.yuroyami.kiteplayer/KitePlayer.setLoop|setLoop(io.github.yuroyami.kiteplayer.LoopMode){}[0]
     final fun setMuted(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayer.setMuted|setMuted(kotlin.Boolean){}[0]
     final fun setSpeed(kotlin/Double) // io.github.yuroyami.kiteplayer/KitePlayer.setSpeed|setSpeed(kotlin.Double){}[0]
     final fun setVolume(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setVolume|setVolume(kotlin.Float){}[0]
+    final fun supportBundle(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayer.supportBundle|supportBundle(){}[0]
     final fun warningHistory(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TimedWarning> // io.github.yuroyami.kiteplayer/KitePlayer.warningHistory|warningHistory(){}[0]
     final suspend fun captureFrame(): io.github.yuroyami.kiteplayer/CapturedFrame // io.github.yuroyami.kiteplayer/KitePlayer.captureFrame|captureFrame(){}[0]
     final suspend fun closeAndAwait() // io.github.yuroyami.kiteplayer/KitePlayer.closeAndAwait|closeAndAwait(){}[0]
@@ -2340,6 +2343,21 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface.toString|toString(){}[0]
+    }
+
+    final class OptionsUnused : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused|null[0]
+        constructor <init>(kotlin.collections/List<kotlin/String>) // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.<init>|<init>(kotlin.collections.List<kotlin.String>){}[0]
+
+        final val keys // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.keys|{}keys[0]
+            final fun <get-keys>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.keys.<get-keys>|<get-keys>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.component1|component1(){}[0]
+        final fun copy(kotlin.collections/List<kotlin/String> = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.copy|copy(kotlin.collections.List<kotlin.String>){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.OptionsUnused.toString|toString(){}[0]
     }
 
     final class PathologicalInterleaving : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving|null[0]

@@ -8476,6 +8476,67 @@ real-GPU, real-libass and real-device-tree proofs; every feature test was proven
      typed. The libass module's Android JNI bridge and per-frame hook are phase L's next
      slices; the L exit corpus comparison is unrun.
 
+**2026-08-16, the network surge (Fable 5, owner order: finish M1 and M5 and the XML work, end
+to end). Later the same day; closes what the phase-M surge's item 7 owed except M4.**
+
+  1. **M1 CLOSED, the Ktor half.** The engine grew its one network door: MediaIoResolver (a
+     suspend URI-to-MediaIo hook beside MediaIo itself) consulted at buildSession for every
+     URI item without a reader, installed through the new PlayerConfig.network; a resolver
+     refusal passes the URI to the backend untouched, so local files never leave FFmpeg's own
+     path. kiteplayer-network (NEW optional module, pure Kotlin, Ktor 3.5.2) ships KtorMediaIo:
+     one ranged GET probes seekability and size (206 with Content-Range against 200 with
+     Content-Length, the probe's own body serving as the first stream so an open costs one
+     request), reads stream through a bounded pipe fed by an owned Default-dispatcher scope,
+     and a seek is one ranged reopen. KtorMediaIoResolver answers http and https only.
+     PROVEN: reader suites against a REAL local range-serving server on JVM and macosArm64,
+     and end to end on the host: a real mp4 over real http through the Ktor reader into real
+     FFmpeg, demuxed, seeked (one ranged request) and drained. KP-TLS closed in the register
+     with configure evidence plus this design. KitePlayer 6a57202.
+  2. **M5 CLOSED, the byte cache.** CachingMediaIo in the engine's own Kotlin: one contiguous
+     RAM window, chunked upstream pulls (256 KiB default), seek-inside-the-window served from
+     RAM with ZERO upstream traffic, front eviction honouring both the total budget and the
+     back window, and the window published through two atomics. The engine wraps EVERY
+     MediaIo-fed open (config IoCachePolicy), and Progress.bufferedRanges stops being the
+     honest empty list: the window time-mapped proportionally (byte fraction times duration),
+     exact for CBR, approximate for VBR, its KDoc saying exactly that. Honest limits recorded
+     in the class doc: one window, not a range set; no own prefetch worker (the packet queues
+     above already read ahead by BufferPolicy). Five unit laws proven and the seek-back law
+     falsified in place. KitePlayer 2d1bee9.
+  3. **The XML work, first tier, END TO END.** kiteplayer-network also carries the adaptive
+     layer's opening: XmlMini (a zero-dependency commonMain XML reader: elements, attributes,
+     entities, CDATA, comments, prefix-stripped namespaces, typed failures with offsets),
+     DashManifestParser (MPD to model: periods, adaptation sets, representations, BaseURL
+     chains, ISO 8601 durations, and all three addressing forms: SegmentTemplate with $Number$
+     and its %0Nd width form, SegmentTimeline with repeats and $Time$, SegmentList winning
+     over templates; dynamic manifests parse but refuse segment resolution typed), and
+     DashMediaIo (a representation's init-plus-segments as ONE forward stream over a fetch
+     lambda, the media3 shape: Kotlin segment logic feeding the decoder, never FFmpeg's dash
+     demuxer). Dash.mediaItemFor is the one-call door: fetch, parse, pick the video set's
+     highest bandwidth, play. PROVEN END TO END on the host: a REAL transport stream cut at
+     188-byte packet boundaries into four segments behind a REAL local server, described by an
+     MPD this parser read, fetched by Ktor in plan order, demuxed by real FFmpeg across every
+     boundary: 120 packets, the last timestamps from the final segment, each segment fetched
+     exactly once in order. Entity decoding falsified in place. KitePlayer 1fd6d8b.
+  4. **Three Kotlin/Native concurrency traps, named for the next executor.** All found by
+     evidence (sample(1) of the parked binary, then checkpoint prints read post mortem), all
+     with the same shape: a resumption that never reaches the loop that waits. (a) The Darwin
+     Ktor engine resumes onto the main queue, which a runBlocking main thread never serves:
+     every client call is confined to an owned Default-dispatcher scope (the reader's pipe
+     design, DashMediaIo's async-await fetches, Dash.manifest's withContext). (b) The same
+     confinement rule holds inside nested runBlocking (the AVIO bridge's blocking adapter).
+     (c) Ktor 3's embeddedServer, constructed inside a suspend body, captures the caller's Job
+     as parent, and the test's runBlocking then waits forever for a server whose stop runs
+     only after it returns: servers are built in plain functions. The e2e tests carry these
+     rules as comments where they bit.
+  5. **Honest limits and remainders.** DASH: separate audio and video adaptation sets play
+     video-only (merging elementary segment streams is the adaptive engine's next tier);
+     forward-only (player-level segment seeking is that same tier); live manifests refuse
+     typed. Draft items C-52 to C-54 (interrupt callback, timeout bounds, the unhardened URL
+     path) concern FFmpeg's OWN network protocols, which the resolver design makes the
+     secondary path; the rows stay open with their exposure reduced, not closed. M4 is now the
+     ONLY phase-M content standing. Live https against the public internet is owner
+     device-session fare. HLS (m3u8, not XML) was never in this order and is not pretended.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -15868,11 +15929,15 @@ empty-output MediaSink finalization, midstream format changes, and secure-protoc
 smokes. Each stage's expansion names the ones it owes.
 
 **Register addition 2026-08-16 (from the mpv dependency study, 17.12):**
-- KP-TLS [C] The Android and iOS FFmpeg profiles vendor NO TLS backend (LGPL no-third-party
-  build), so `https://` media URLs almost certainly fail through the FFmpeg protocol path on
-  the phones; only plain `http://` was ever exercised (the loopback case). Not yet reproduced:
-  verify with one https open at M1 entry, then CLOSE the hole through M1's Kotlin network
-  layer rather than by vendoring crypto (decision D-7). Home: 17.12 phase M1.
+- KP-TLS: CLOSED by the network surge (same day). VERIFIED by configure evidence rather than a
+  device run: both phone trees' protocol lists are pinned to file/fd/pipe/data/http/tcp, no
+  https, no TLS entry, so an https URL through FFmpeg's own protocol path cannot open, ever.
+  The CLOSE is the design, not a vendored backend: the engine's MediaIoResolver hands http and
+  https URIs to kiteplayer-network's Ktor reader, whose platform engine (OkHttp on Android and
+  the JVM, NSURLSession on Apple) terminates TLS in the OS, exactly as D-7's mbedtls/curl
+  verdict demanded. Proven end to end over local http through real FFmpeg (the https path is
+  the same code with the engine's TLS beneath it); a live-https device run remains the owner's
+  ordinary device-session fare, not a blocker.
 
 ### 17.12 The renewed road, 2026-08-16
 
@@ -15922,11 +15987,12 @@ iPhone, KitePlayer streams https media, shows styled dialogue-grade ASS, present
 washout, and survives the robustness rows below; no new mandatory native libraries entered the
 default artifact. Contents, in build order:
 
-**Progress 2026-08-16 (the phase-M surge, section 14):** M2 and M3 CLOSED; M1's bridge half
-CLOSED (the Ktor byte-supplier half and the KP-TLS verification remain, and are the phase's
-next work); dav1d executed out of KC-AV1SW into both phone-flagship trees behind its DSL
-toggle; phase L's chain and module opened early by owner pull (build machinery, host-proven
-renderer, iOS compiles; Android JNI bridge and per-frame hook remain). M4 and M5 untouched.
+**Progress 2026-08-16 (the phase-M and network surges, section 14):** M1, M2, M3 and M5
+CLOSED; KP-TLS closed by design (Ktor byte suppliers, OS TLS); the adaptive layer's first
+tier (Kotlin XML, DASH VOD, segment streaming) landed end to end; dav1d executed out of
+KC-AV1SW into both phone-flagship trees behind its DSL toggle; phase L's chain and module
+opened early by owner pull (Android JNI bridge and per-frame hook remain). M4 is the one
+phase-M content standing, plus the owner riders.
   - **M1, the network trust layer.** Verify KP-TLS, then the custom AVIO bridge: one C callback
     surface in KiteCodec (avio read/seek into the engine), cinterop and JNI actuals, wired to
     `MediaIo` so the SPI stops being unimplemented surface, with Ktor engines supplying bytes

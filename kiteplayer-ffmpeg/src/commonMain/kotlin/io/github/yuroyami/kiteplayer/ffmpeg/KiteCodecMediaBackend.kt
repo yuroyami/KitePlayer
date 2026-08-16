@@ -41,13 +41,15 @@ public class KiteCodecMediaBackend(
     override fun describeForDiagnostics(): String =
         "KiteCodecMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
-    /** External subtitle files (S4.e): the text parsers this module already ships. */
+    /** External subtitle files (S4.e, ASS since 17.12 M2): the pure parsers this module ships. */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
         io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, vttHint ->
-            if (vttHint) {
-                io.github.yuroyami.kiteplayer.subtitle.WebVttParser.parse(text)
-            } else {
-                io.github.yuroyami.kiteplayer.subtitle.SubRipParser.parse(text)
+            when {
+                // An ASS document announces itself; the hint flags are SRT/VTT's business.
+                text.trimStart('\uFEFF', ' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true) ->
+                    io.github.yuroyami.kiteplayer.subtitle.AssParser.parse(text)
+                vttHint -> io.github.yuroyami.kiteplayer.subtitle.WebVttParser.parse(text)
+                else -> io.github.yuroyami.kiteplayer.subtitle.SubRipParser.parse(text)
             }
         }
 
@@ -90,9 +92,9 @@ public class KiteCodecMediaBackend(
  *
  * The lists come from the source itself, because a KiteCodec decoder is opened against the very
  * container context the packets are read from. The subtitle factory decodes the TEXT formats
- * (SubRip, WebVTT) over the packet path with no C involved (S4.c); ASS and bitmap formats are
- * S4.f's, and a stream the factory refuses is deselected by the engine rather than failing the
- * open.
+ * (SubRip, WebVTT, and ASS at the M2 dialogue tier) over the packet path with no C involved
+ * (S4.c); bitmap formats still need a real engine, and a stream the factory refuses is
+ * deselected by the engine rather than failing the open.
  */
 private class KiteCodecBackendSession(private val kiteCodec: KiteCodecSource) : BackendSession {
 

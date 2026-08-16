@@ -100,7 +100,7 @@ class WebVttParserTest {
     }
 
     @Test
-    fun `an identifier beginning with a keyword is a cue, not a block`() {
+    fun `an identifier beginning with a keyword is a cue and not a block`() {
         // NOTEWORTHY is a cue identifier; the old startsWith read it as a NOTE block and ate the
         // cue that followed (17.11 SOL-S5).
         val cues = WebVttParser.parse(

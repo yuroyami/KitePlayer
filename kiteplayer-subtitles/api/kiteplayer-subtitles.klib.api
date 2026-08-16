@@ -6,6 +6,15 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-subtitles>
+final class io.github.yuroyami.kiteplayer.subtitle/AssTrackParser { // io.github.yuroyami.kiteplayer.subtitle/AssTrackParser|null[0]
+    final fun parseEvent(kotlin/String, kotlin/Long, kotlin/Long): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Text? // io.github.yuroyami.kiteplayer.subtitle/AssTrackParser.parseEvent|parseEvent(kotlin.String;kotlin.Long;kotlin.Long){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.subtitle/AssParser { // io.github.yuroyami.kiteplayer.subtitle/AssParser|null[0]
+    final fun parse(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.subtitle/AssParser.parse|parse(kotlin.String){}[0]
+    final fun trackParser(kotlin/String): io.github.yuroyami.kiteplayer.subtitle/AssTrackParser // io.github.yuroyami.kiteplayer.subtitle/AssParser.trackParser|trackParser(kotlin.String){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.yuroyami.kiteplayer.subtitle/SubRipParser|null[0]
     final const val OPEN_CUE_DEFAULT_MICROS // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.OPEN_CUE_DEFAULT_MICROS|{}OPEN_CUE_DEFAULT_MICROS[0]
         final fun <get-OPEN_CUE_DEFAULT_MICROS>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.OPEN_CUE_DEFAULT_MICROS.<get-OPEN_CUE_DEFAULT_MICROS>|<get-OPEN_CUE_DEFAULT_MICROS>(){}[0]

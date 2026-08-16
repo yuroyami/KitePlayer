@@ -7,16 +7,20 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoder
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
+import io.github.yuroyami.kiteplayer.subtitle.AssParser
+import io.github.yuroyami.kiteplayer.subtitle.AssTrackParser
 import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubRipParser
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import io.github.yuroyami.kiteplayer.subtitle.WebVttParser
 
 /**
- * Text subtitle decode over the packet path (S4.c): a Matroska SubRip or WebVTT track's packets
- * carry the cue BODY as bytes and the timing as pts/duration, so decoding is UTF-8 plus the
- * pure parsers in kiteplayer-subtitles. No C is involved, which is the whole point of the text
- * path; ASS and bitmap formats need real engines and belong to S4.f.
+ * Text subtitle decode over the packet path (S4.c): a Matroska SubRip, WebVTT or ASS track's
+ * packets carry the cue BODY as bytes and the timing as pts/duration, so decoding is UTF-8
+ * plus the pure parsers in kiteplayer-subtitles. No C is involved, which is the whole point of
+ * the text path. ASS decodes at the DIALOGUE tier (17.12 M2): styles, colours, positioning and
+ * the common override subset; typesetting-grade rendering is the optional libass module's.
+ * Bitmap formats still need real engines.
  */
 internal class KiteCodecSubtitleDecoderFactory : SubtitleDecoderFactory {
 
@@ -30,7 +34,52 @@ internal class KiteCodecSubtitleDecoderFactory : SubtitleDecoderFactory {
         // dropped for now; the text is exact.
         "mov_text" -> KiteCodecTextSubtitleDecoder(SubRipParser::parseCueBody, extractBody = ::tx3gText)
         "webvtt" -> KiteCodecTextSubtitleDecoder(WebVttParser::parseCueBody)
+        // The Kotlin ASS dialogue tier (M2). The track header, styles included, travels as
+        // codec extradata; each packet is one FFmpeg-normalised event line.
+        "ass", "ssa" -> KiteCodecAssSubtitleDecoder(
+            AssParser.trackParser(stream.codecExtradata?.decodeToString() ?: ""),
+        )
         else -> null
+    }
+}
+
+/** ASS packets against the track header's styles: one event line per packet. */
+internal class KiteCodecAssSubtitleDecoder(
+    private val track: AssTrackParser,
+) : SubtitleDecoder {
+
+    private val pending = ArrayDeque<SubtitleCue>()
+    private var closed = false
+
+    override suspend fun send(packet: PlayerPacket?): Boolean {
+        check(!closed) { "the subtitle decoder is closed" }
+        if (packet == null) return true
+        val start = packet.pts?.micros ?: return true
+        val line = (packet as KiteCodecPacket).native.copyBytes().decodeToString()
+        if (line.isEmpty()) return true
+        val durationUs = packet.duration?.micros?.takeIf { it > 0 } ?: DEFAULT_HOLD_MICROS
+        track.parseEvent(line, start, start + durationUs)?.let(pending::addLast)
+        return true
+    }
+
+    override suspend fun receive(): List<SubtitleCue> {
+        if (pending.isEmpty()) return emptyList()
+        val out = pending.toList()
+        pending.clear()
+        return out
+    }
+
+    override suspend fun flush(newGeneration: Generation) {
+        pending.clear()
+    }
+
+    override fun close() {
+        closed = true
+    }
+
+    private companion object {
+        /** An ASS event with no container duration holds five seconds, libass' own habit. */
+        private const val DEFAULT_HOLD_MICROS: Long = 5_000_000L
     }
 }
 

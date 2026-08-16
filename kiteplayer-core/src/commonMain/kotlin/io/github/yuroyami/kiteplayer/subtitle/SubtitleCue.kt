@@ -85,6 +85,12 @@ public data class CueLayout(
      */
     val authoredHeight: Int? = null,
     val wrap: CueWrap = CueWrap.Balanced,
+    /**
+     * Linear fade lengths from an ASS `\fad` tag, in microseconds from the cue's edges.
+     * Renderers that cannot animate ignore them; the cue still shows and hides on time.
+     */
+    val fadeInMicros: Long = 0,
+    val fadeOutMicros: Long = 0,
 )
 
 public enum class CueAlignment {

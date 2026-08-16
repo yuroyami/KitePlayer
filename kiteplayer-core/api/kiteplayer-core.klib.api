@@ -1178,12 +1178,16 @@ final class io.github.yuroyami.kiteplayer.subtitle/BitmapRegion { // io.github.y
 }
 
 final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuroyami.kiteplayer.subtitle/CueLayout|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ...) // io.github.yuroyami.kiteplayer.subtitle/CueLayout.<init>|<init>(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ..., kotlin/Long = ..., kotlin/Long = ...) // io.github.yuroyami.kiteplayer.subtitle/CueLayout.<init>|<init>(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap;kotlin.Long;kotlin.Long){}[0]
 
     final val alignment // io.github.yuroyami.kiteplayer.subtitle/CueLayout.alignment|{}alignment[0]
         final fun <get-alignment>(): io.github.yuroyami.kiteplayer.subtitle/CueAlignment // io.github.yuroyami.kiteplayer.subtitle/CueLayout.alignment.<get-alignment>|<get-alignment>(){}[0]
     final val authoredHeight // io.github.yuroyami.kiteplayer.subtitle/CueLayout.authoredHeight|{}authoredHeight[0]
         final fun <get-authoredHeight>(): kotlin/Int? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.authoredHeight.<get-authoredHeight>|<get-authoredHeight>(){}[0]
+    final val fadeInMicros // io.github.yuroyami.kiteplayer.subtitle/CueLayout.fadeInMicros|{}fadeInMicros[0]
+        final fun <get-fadeInMicros>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/CueLayout.fadeInMicros.<get-fadeInMicros>|<get-fadeInMicros>(){}[0]
+    final val fadeOutMicros // io.github.yuroyami.kiteplayer.subtitle/CueLayout.fadeOutMicros|{}fadeOutMicros[0]
+        final fun <get-fadeOutMicros>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/CueLayout.fadeOutMicros.<get-fadeOutMicros>|<get-fadeOutMicros>(){}[0]
     final val marginLeft // io.github.yuroyami.kiteplayer.subtitle/CueLayout.marginLeft|{}marginLeft[0]
         final fun <get-marginLeft>(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueLayout.marginLeft.<get-marginLeft>|<get-marginLeft>(){}[0]
     final val marginRight // io.github.yuroyami.kiteplayer.subtitle/CueLayout.marginRight|{}marginRight[0]
@@ -1198,6 +1202,7 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuro
         final fun <get-wrap>(): io.github.yuroyami.kiteplayer.subtitle/CueWrap // io.github.yuroyami.kiteplayer.subtitle/CueLayout.wrap.<get-wrap>|<get-wrap>(){}[0]
 
     final fun component1(): io.github.yuroyami.kiteplayer.subtitle/CueAlignment // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component1|component1(){}[0]
+    final fun component10(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component10|component10(){}[0]
     final fun component2(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component2|component2(){}[0]
     final fun component3(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component3|component3(){}[0]
     final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component4|component4(){}[0]
@@ -1205,7 +1210,8 @@ final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuro
     final fun component6(): kotlin/Float? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component6|component6(){}[0]
     final fun component7(): kotlin/Int? // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component7|component7(){}[0]
     final fun component8(): io.github.yuroyami.kiteplayer.subtitle/CueWrap // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component8|component8(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ...): io.github.yuroyami.kiteplayer.subtitle/CueLayout // io.github.yuroyami.kiteplayer.subtitle/CueLayout.copy|copy(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap){}[0]
+    final fun component9(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/CueLayout.component9|component9(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ..., kotlin/Long = ..., kotlin/Long = ...): io.github.yuroyami.kiteplayer.subtitle/CueLayout // io.github.yuroyami.kiteplayer.subtitle/CueLayout.copy|copy(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap;kotlin.Long;kotlin.Long){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.subtitle/CueLayout.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.subtitle/CueLayout.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/CueLayout.toString|toString(){}[0]

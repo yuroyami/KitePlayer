@@ -8159,6 +8159,25 @@ is no other.
   green untouched, the standard KitePlayer suites green. S2.f remains: the matrix re-runs, the
   README truth, the register line, and this stage's exit.
 
+- **2026-08-16, S2.f completed and S2 CLOSED: the stage that plays beautifully on Apple.** The
+  27-row format matrix re-ran through the new default paths on both Apple hosts. macOS, inside
+  the standard ffmpeg suite: 27 of 27 (24 MustPlay rows decoded their quotas and resumed their
+  mid-file seeks, 3 MustSurvive rows held, the two torture rows refusing with the typed
+  invalid-data error). The named iOS simulator, bare-spawn SPI-direct exactly as S1.e.3 ran it:
+  27 of 27, with the recorded one-row platform difference intact (av1.mkv refuses typed -78 on
+  the phone profile and plays on the host build). One repeatability truth recorded: the
+  simulator run REQUIRES -Pkitecodec.ffmpeg.localRoot pointing at KiteCodec's native-libs (the
+  System source has no ios-simulator FFmpeg and the configuration fails loudly without it); the
+  macOS leg needs nothing. README rows now tell the S2 truth: the macOS row carries Metal by
+  default, VideoToolbox with its proven fallback, the colour instrument's corners and
+  tolerance, the 4K hold numbers and the software leg's honest 20 fps upload ceiling; the iOS
+  simulator row carries the re-run date and keeps its provisional labels; a new Apple rendering
+  section states the shared Metal core, the zero-copy handoff, the CG fallback flag and the
+  no-physical-iPhone truth. The 17.2 register line is amended CLOSED. Stage totals against the
+  17.4.8 estimates: S2.a through S2.d landed 2026-08-13, the wide-profile order rode inside,
+  S2.e and S2.f landed 2026-08-16 with five 17.11 rows absorbed and closed. S4 resumes at its
+  paused point: S4.c's device proofs, then S4.d, per the schedule this stage suspended.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10837,7 +10856,9 @@ dependency order inside the stage:
 
 **S2. IT PLAYS BEAUTIFULLY ON APPLE.** (Expanded 17.4.8; entered 2026-08-12 by owner order,
 after S4.a to S4.c, before S4.d to S4.g. The wide-profile order 17.4.9, entered 2026-08-13,
-rode inside it between S2.d and S2.e and closed the same day, KiteCodec 0.0.5.) Exit: Metal
+rode inside it between S2.d and S2.e and closed the same day, KiteCodec 0.0.5. CLOSED
+2026-08-16: every sub-phase landed, the exit numbers live in the section 14 S2.e and S2.f
+entries, and S4 resumes at S4.c's device proofs, then S4.d.) Exit: Metal
 renderer on macOS and iOS, VideoToolbox inside
 FFmpeg per D-2 with measured software fallback, colour instrument, vsync-snapped scheduling,
 sustained 4K runs with committed thresholds. Absorbs draft items C-09 to C-31, C-33, C-48 to

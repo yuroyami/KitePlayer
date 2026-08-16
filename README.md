@@ -69,8 +69,8 @@ Today, honestly:
 
 | Platform | Tier | What that means here |
 |---|---|---|
-| macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync and seek, in a window, on one development machine. Nothing is qualified, and there is no subtitle claim at all. |
-| iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 27-row format matrix runs green on the same named simulator: every playable row decodes and resumes after a mid-file seek, and AV1 refuses with a typed error because the phone FFmpeg profile vendors no software AV1 codec. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
+| macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync, seek, and composite SubRip/WebVTT cues, in a Metal-backed window, on one development machine. The default path is VideoToolbox inside FFmpeg (with a proven software replay fallback) into a zero-copy Metal renderer. The colour instrument proves BT.601, BT.709 and BT.2020 in studio and full range within 2/255 against an independent reference, with a falsifying arm that rejects a wrong matrix. Sustained 4K, thresholds committed before the run: 120 seconds of looped 10-bit 4K HEVC drew all 3466 submitted frames with zero drops, supersedes or failures; the software-decode leg holds real-time decode with the plane upload drawing about 20 fps. The 27-row matrix re-ran green through these defaults on 2026-08-16. Nothing is qualified beyond this one machine. |
+| iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 27-row format matrix runs green on the same named simulator (re-run 2026-08-16 through the S2 defaults): every playable row decodes and resumes after a mid-file seek, and AV1 refuses with a typed error because the phone FFmpeg profile vendors no software AV1 codec. The S2.c Metal-view smoke evidence stays provisional. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
 | Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | The sample's direct-XML Activity builds its player from `mobileBackends()` and shows it in the reusable XML-capable `KitePlayerView` from `kiteplayer-view`; two sibling Activities demonstrate Compose/native-view interop and GPU Compose video separately. Runtime GPU evidence is one 1080p30, 8-bit AVC Constrained Baseline fixture whose colour metadata is unspecified. The renderer-coupled MediaCodec path reported `HardwareZeroCopy(MediaCodec)` and the direct Surface tier stabilized at 29 to 31 presented FPS after warm-up. GPU Compose evidence spans 295 to 300 unique VSYNC-matched GPU-proven draws at 29.403 to 29.852 FPS. The newest corrected-gate cold-install passed with 300 decoded/submitted/presented, 299 GPU-proven draws at 29.749 FPS, 1.319 seconds of post-Ended proof drain, 178.274 milliseconds of teardown, +3.275 milliseconds of A/V drift, and no headless frames, drops, supersedes, failures, repeats, rebuffers, underruns, or CPU conversion. An earlier clean post-policy pass proved 297 at 29.403 FPS. A diagnostic repeat remained healthy zero-copy with 299 submitted/presented, one scheduler late drop, and 296 GPU-proven draws at 29.696 FPS; it exposed that the gate must validate the exact decoded-frame partition before applying its drop budget instead of requiring 300 submissions. Forced physical-profile reruns correctly rejected the emulator's variable sub-99% proof coverage. A separate smoke landed a precise seek, reached Ended, and tore down causally. The wider 10-bit, VP9, AV1 and HDR work has parser and host-contract coverage, not successful device playback evidence. Nothing ran on a physical Android device. x86_64 is compile, link, and package qualified only. |
 | JVM (desktop) | T1, decode-proven | The FFmpeg backend's JVM arm decodes real media in tests over a test-only local JNI library. No desktop audio or video output path exists yet. |
@@ -148,6 +148,19 @@ emulator assertions with 300 decoded/submitted/presented, 299 GPU-proven draws a
 second drain, and 178.274 milliseconds of teardown. An earlier clean pass proved 297 at 29.403 FPS. A
 diagnostic repeat rendered 299 frames with one budgeted scheduler late drop and exposed why exact
 submissions must not contradict the profile drop budget.
+
+### Apple rendering
+
+Metal is the default on macOS and iOS: `KitePlayerUIView` (iOS) and the sample's window (macOS)
+draw through one shared Metal core, and KiteVideo's Apple GPU tier feeds Compose from VideoToolbox
+CVPixelBuffers through CVMetalTextureCache with no copy. VideoToolbox decodes H.264 and HEVC under
+`HwdecPolicy.Auto` with a proven head-replay software fallback; every other codec decodes in
+software and uploads its native planes (one memcpy each, no CPU colour conversion). The CG
+image-layer path stays one flag away (`preferMetal = false`) as the measured software fallback.
+Colour is proven by the offscreen instrument (BT.601/BT.709/BT.2020, studio and full range, 8-bit
+and P010 10-bit, within 2/255 of an independent reference, falsifying arm included), and the 4K
+hold numbers above are the sustained-load evidence. Simulator numbers are provisional; no physical
+iPhone has run any of it.
 
 **What the vendored FFmpeg can open.** The decode side of the vendored profile is wide by class:
 every native FFmpeg decoder, demuxer, parser and bitstream filter is compiled, so the files people

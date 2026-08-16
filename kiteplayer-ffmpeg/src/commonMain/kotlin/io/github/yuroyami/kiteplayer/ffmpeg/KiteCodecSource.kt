@@ -58,10 +58,11 @@ import kotlin.math.roundToLong
  */
 public class KiteCodecSourceFactory : MediaSourceFactory {
     override suspend fun open(media: MediaItem): PlayerMediaSource {
-        require(media.io == null) {
-            "Custom I/O is not wired yet. KiteCodec has no custom-input path."
-        }
-        return KiteCodecSource(MediaSource.open(media.uri))
+        // M1, the custom AVIO bridge: an item's own byte reader carries the media.
+        val io = media.io
+        return KiteCodecSource(
+            if (io != null) MediaSource.open(BlockingMediaIo(io)) else MediaSource.open(media.uri),
+        )
     }
 }
 

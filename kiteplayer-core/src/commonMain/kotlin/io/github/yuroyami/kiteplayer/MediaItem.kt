@@ -45,8 +45,10 @@ public data class MediaItem(
     /**
      * Read the bytes through your own code instead of through FFmpeg's protocols.
      *
-     * The FFmpeg source rejects a non-null value: KiteCodec has no custom I/O path.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Wired through the custom AVIO bridge (KPKMP 17.12 M1): when set, [uri] is a label only
+     * and every byte the demuxer touches comes from this reader. This is how an application
+     * plays through its own HTTP client with its own TLS and auth, from an encrypted store,
+     * a torrent, a cache, or bytes it already holds.
      */
     val io: MediaIo? = null,
     /**
@@ -84,9 +86,10 @@ public data class MediaItem(
  * Threading: called from the demux worker only, one call at a time, never concurrently.
  * Implementations do not need to be thread safe. They may suspend.
  *
- * No source calls any of this. It is interface surface a later backend will implement, and the one
- * backend that exists rejects a [MediaItem] that carries one.
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Implemented by the FFmpeg backend since the custom AVIO bridge (KPKMP 17.12 M1): a
+ * [MediaItem.io] carries the media's bytes; a [SubtitleSource.io] is still unwired and warns
+ * typed. The demux worker blocks on [read], so a source that never produces a byte and never
+ * returns -1 stalls playback; that is the contract, not a defect.
  */
 public interface MediaIo : AutoCloseable {
     /** Total size in bytes, or null when unknown, for example a live stream. */

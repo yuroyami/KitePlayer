@@ -52,23 +52,23 @@ public class KiteCodecMediaBackend(
         }
 
     override suspend fun open(media: MediaItem): BackendSession {
-        require(media.io == null) {
-            "Custom I/O is not wired yet. KiteCodec has no custom-input path."
-        }
         // MediaSource.open is where KiteCodec's FFmpeg identity gate runs, before its first allocation.
         // A rejection there is not about this file and never will be: it means the linked FFmpeg does not
         // match the headers KiteCodec was compiled against, so every open fails and retrying is pointless.
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
         val options = preOpenOptions(media)
+        val io = media.io
         val source = mappingFFmpegRuntimeRejection {
             KiteCodecSource(
-                if (options.isEmpty()) {
-                    MediaSource.open(media.uri)
-                } else {
+                when {
+                    // M1, the custom AVIO bridge: the item's own byte reader carries the media,
+                    // demuxed by FFmpeg with no path and no FFmpeg protocol involved.
+                    io != null -> MediaSource.open(BlockingMediaIo(io), options)
+                    options.isEmpty() -> MediaSource.open(media.uri)
                     // KD-4's pre-open funnel. Unconsumed keys are reported by KiteCodec rather
                     // than dropped, so a typo surfaces instead of quietly doing nothing.
-                    MediaSource.open(media.uri, options)
+                    else -> MediaSource.open(media.uri, options)
                 },
             )
         }

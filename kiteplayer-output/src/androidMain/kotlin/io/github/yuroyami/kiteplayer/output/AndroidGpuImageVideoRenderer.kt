@@ -520,7 +520,7 @@ private class OesRgbaBridge(
 }
 
 /** EGL state is bridge-Handler confined; [frameConfigurations] is the thread-safe codec handoff. */
-private class GlState private constructor(
+internal class GlState private constructor(
     private val handler: Handler,
     private val imageHandler: Handler?,
     private val frameConfigurations: FrameConfigurationBook,

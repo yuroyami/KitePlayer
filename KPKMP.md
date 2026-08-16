@@ -8232,6 +8232,56 @@ is no other.
   openOptions echo, supportBundle, editions and programs typed-rejected, and the API truth
   ledger sweep).
 
+- **2026-08-16, S4.e COMPLETED with its last three landings.** Landing three's second half,
+  external subtitle files (e90182f): MediaItem.externalSubtitles loads local SubRip and WebVTT
+  at open into synthetic negative-id subtitle tracks timed by the container path, in-place
+  selection with no reopen when no container stream is involved, seek-surviving cue tables, and
+  typed warnings for unreadable, unparsable or custom-IO entries; the parsing seam is
+  MediaBackend.subtitleFileParser (kiteplayer-subtitles depends on the core, so the core cannot
+  call its parsers; the backend supplies them like it supplies decoders), and reading the file
+  is one bounded expect/actual across jvm, android, posix-native and null browser actuals.
+  Landing three's close, typed filters (88ff3cf): MediaItem.videoFilter runs every decoded
+  frame through KiteCodec's FilterGraph, built lazily from the FIRST frame's own geometry,
+  flushed at drain, rebuilt after seeks; hardware stands down typed under Auto and refuses
+  under Require; two real-media arms prove the scaled output and the stand-down, and a
+  deliberate bogus-filter run proved the arms execute. Landing four, the truth sweep (ea1d9ec):
+  supportBundle() with platform block and basename redaction, the dump echoing openOptions and
+  the queue, the typed OptionsUnused warning straight from KiteCodec's unusedOpenOptions,
+  editions() and programs() refusing with the ledger sentence, and PlayerConfig.logger declared
+  superseded by KiteLog until the S5 ABI sweep deletes it.
+
+- **2026-08-16, S4.f entered, its expansion recorded, and closed PARTIAL as its register
+  allows.** THE EXPANSION, for whoever executes the rest: (1) vendored libass provisioning
+  through the KiteCodec build machinery's third-party pattern, macOS first, then iOS and
+  Android, with the same baseline-and-audit rituals the FFmpeg build carries; (2) a
+  kiteplayer-subtitles-libass module implementing the SAME renderer-overlay contract the text
+  rasterizers implement, so no renderer changes; (3) FFmpeg bitmap subtitle decode (PGS,
+  VobSub, DVB) through a NEW KiteCodec C surface for AVSubtitle, a full-ritual KiteCodec
+  window named here per 17.10 law 3; (4) the reference corpus (scripts, bidi, karaoke,
+  overlaps, palettes, seeks) matched against pinned libass output; (5) HDR-aware composition
+  stays deferred to the colour pipeline by construction. WHAT LANDED TONIGHT (7e9bb12), the
+  no-libass slice, three 17.11 rows: SOL-S4 (backwards and zero-length cues resolve their open
+  end to the next cue or a documented three-second default, both parsers), SOL-S5 (WebVTT
+  block keywords need a word boundary, so NOTEWORTHY is a cue name again), SOL-S6 (the four
+  real-world entities decode on span text AFTER markup parsing, because the first red golden
+  proved decoding before turns escaped tags into eaten ones). WHAT DID NOT: libass, the
+  bitmap-decode window, the corpus, and the remaining subtitle rows (SOL-S1 alpha contract,
+  S2 rasterizer leak balance, S3 region dimensions, S7 styling claims, S8 stacking) stay open
+  in 17.11 with S4.f as their home. The stage exit below reports exactly this state.
+
+- **2026-08-16, S4.g completed and S4 CLOSED: the stage that explains itself.** The stage's
+  whole run, across the pause S2 imposed: S4.a and S4.b landed 2026-08-12 (KD Kotlin and the
+  C funnels), S4.c's landings one to three 2026-08-12, its Apple and KiteVideo halves rode S2,
+  and its device proofs landed tonight (c156579); S4.d tonight (46ac28b); S4.e tonight in
+  six commits (1cc242a, 98c51dd, 0b3a700, dbee0af, e90182f, 88ff3cf, ea1d9ec); S4.f tonight
+  as its recorded PARTIAL (7e9bb12). The matrix stands re-run on the host inside tonight's
+  ffmpeg suite runs, 27 of 27. README tells the stage's truth: the facade surface with the
+  queue, stepping, capture, chapters, filters and the debuggability trio; subtitles named
+  EXACTLY the text path end to end with the ASS/bitmap state beside it; the KD surface on the
+  MediaItem and backend fields that carry it. The API dumps are clean by ritual, both trees
+  are clean, nothing is pushed. S4's estimates held except S4.f, which closed at its slice;
+  the register rows it owns remain the honest remainder.
+
 ---
 
 ## 15. Horizon B execution: B1
@@ -10932,7 +10982,9 @@ of work once KV-1/KV-2 exist; this is the stage where the JVM rendering paths ma
 the KiteVideo modifier demo runs on the S1 Android device. Absorbs the 17.11
 renderer-lifecycle, audio-sink, hot-path and capability-negotiation rows.
 
-**S4. IT EXPLAINS ITSELF.** Exit: subtitles per old B3, the debuggability register (diagnostics
+**S4. IT EXPLAINS ITSELF.** (CLOSED 2026-08-16: every sub-phase landed, S4.f as its recorded
+PARTIAL; the exit numbers and the remaining S4.f expansion live in the section 14 entries.)
+Exit: subtitles per old B3, the debuggability register (diagnostics
 dump API, logging policy, typed warning audit, SPI cookbook with a worked custom backend), facade
 completion absorbed from old B11, and the KD piloting package (17.10): the typed filter DSL,
 decoder and encoder option layers, playback profiles and their goldens, with KD's two C funnels
@@ -15495,12 +15547,8 @@ Subtitles:
   broad try; balance every Create-rule object and leak-test cue churn. Home: S4.f.
 - SOL-S3 [C] OverlayImage region dimensions are ignored: position is scaled from authoring
   space while source bitmap dimensions are kept. Home: S4.f.
-- SOL-S4 [C] A malformed or backwards SRT cue is parsed as end == start and the selector
-  requires time strictly before end, so the cue never displays. Home: S4.f.
-- SOL-S5 [V] WebVTT treats any line starting with NOTE/STYLE/REGION as a block keyword, eating
-  identifiers that begin with those words. Home: S4.f.
-- SOL-S6 [V] SRT and WebVTT never decode character entities (amp, lt, gt, nbsp render
-  literally). Home: S4.f.
+- SOL-S4 to SOL-S6: CLOSED by S4.f's slice (7e9bb12): open-end resolution in both parsers,
+  word-boundary block keywords, and span-text entity decoding.
 - SOL-S7 [C] Public cue styling exceeds what the rasterizers apply (first span chooses global
   properties; family, shadow, wrapping, decoration and stroke are partial). Implement per-span
   layout or narrow the claims. Home: S4.f.
@@ -15508,9 +15556,9 @@ Subtitles:
   later implicit cues. Home: S4.f.
 
 API truth:
-- SOL-API1 [V] MediaItem still carries unused surface: headers, externalSubtitles,
-  startPosition, formatHint (openOptions is real). Wire them or remove them. Home: S4.e, with
-  headers waiting on 17.8.
+- SOL-API1 [V] MediaItem's remaining unused surface after S4.e wired externalSubtitles and
+  added videoFilter: headers (17.8's), startPosition, formatHint. Wire them or remove them at
+  the S5 ABI sweep.
 - SOL-API2 [C] PlayerConfig logger, liveBackBuffer, liveMaxLag, preservePitch and startDisabled
   are accepted and unused (several KDocs already say so; the fields still invite configuration
   that does nothing). Home: S4.e.
@@ -15520,9 +15568,8 @@ API truth:
   (bufferedRanges, droppedFramesDecode, audioLatency, containerBitrate, ExternalMaster,
   LateAndDecode); they stay open as section 11 roadmap facts, not silent lies. Home: their
   section 11 items.
-- SOL-API5 [V] RendererEvent is published by every renderer and collected by nothing in the
-  engine (verified again during the 2026-08-16 defect session). Wire SurfaceLost/Failed into
-  warnings and the diagnostics dump. Home: S4.d.
+- SOL-API5: CLOSED by S4.d (46ac28b): renderer events collect into typed warnings, the bounded
+  history and the dump.
 - SOL-API6 [V] NativeRingAudioSink exposes CPointer<kprt_ring> on the core ABI, dragging the
   cinterop klib into core. Hide it behind an opaque writer owned by rt/output. Home: S3.
 - SOL-API7 [C] View and Compose surfaces hard-cast frames to FFmpeg types; an unsupported

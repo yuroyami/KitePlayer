@@ -46,11 +46,16 @@ Both backends are named rather than discovered. Kotlin/Native has no classpath s
 alternative would be a reflective search that fails differently on every platform, and a null backend is
 a typed configuration error on every target instead of a surprise at the first frame.
 
-The surface is small on purpose: `open`, `play`, `pause`, `seek`, `seekLater`, `stop`, `setSpeed`,
-`setVolume`, `setMuted`, `setLoop`, `selectTrack`, `attachRenderer`, `detachRenderer`, non-suspending
-`close` and awaited `closeAndAwait`, plus four flows (`state`, `progress`, `stats`, `events`) and
-`position()`. Anything a member cannot honour is refused with a typed error rather than accepted and
-ignored.
+The surface is small on purpose: `open`, `openQueue` with `next`/`previous`, `play`, `pause`,
+`seek`, `seekLater`, `stepFrame`, `stop`, `setSpeed`, `setVolume`, `setMuted`, `setLoop`
+(LoopMode.All wraps the queue), `selectTrack` (container tracks and the synthetic tracks
+`MediaItem.externalSubtitles` creates), `chapterAt` and `seekToChapter`, `captureFrame`,
+`attachRenderer`, `detachRenderer`, the debuggability trio `diagnosticsDump`, `warningHistory`
+and `supportBundle` (with `KiteLog` as the one silent-by-default logging seam), non-suspending
+`close` and awaited `closeAndAwait`, plus four flows (`state`, `progress`, `stats`, `events`)
+and `position()`. A video filter chain attaches at open through `MediaItem.videoFilter`.
+Anything a member cannot honour is refused with a typed error rather than accepted and ignored:
+`editions()` and `programs()` say exactly which container reader is missing.
 
 ## Support today
 
@@ -169,8 +174,12 @@ rest of FFmpeg's native menu) open and decode. The measured proof is nine matrix
 the previous profile and pass now, on the JVM host gate, the named iOS simulator and the named
 Android emulator. The named absences: https and every streaming protocol beyond plain http stay out
 (the protocol list is exactly file, pipe, data, http, tcp), software AV1 stays out on phones (FFmpeg's
-own av1 decoder is a hardware wrapper; vendoring dav1d is a separate decision), and subtitle formats
-beyond SubRip and WebVTT are parsed as streams but not yet decoded to cues.
+own av1 decoder is a hardware wrapper; vendoring dav1d is a separate decision), and the subtitle story is
+exactly the TEXT path: SubRip and WebVTT decode to cues end to end, from container tracks and
+from external local files alike, with the open-end, keyword and entity corners repaired; ASS
+renders its text through the same path without libass styling, and bitmap subtitles (PGS,
+VobSub, DVB) are not decoded at all. The libass and bitmap half is S4.f's own expansion in
+KPKMP.md, recorded there as not started.
 
 **The local iOS substrate.** `kiteplayer-output` and `kiteplayer-ffmpeg` now declare iosArm64 and
 iosSimulatorArm64 alongside macosArm64. The private S1.b.1 software-codec trees feed the FFmpeg backend,

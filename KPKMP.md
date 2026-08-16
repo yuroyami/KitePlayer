@@ -8048,6 +8048,35 @@ is no other.
   `fd:` plus the `fd` option is not an advanced feature, it is the ordinary Android path and
   belongs in the quickstart.
 
+- **2026-08-16, three defects from the owner's first physical-device session (Android 15 and an
+  iPhone Xs on iOS 18, inside Syncplay), fixed with tests that ran red against the unfixed engine
+  first.** ONE: a seek while paused published Buffering unconditionally (runSeek step 1), and every
+  honest state mirror reads Buffering as "trying to advance", so Syncplay's room broadcast a
+  momentary unpause on every paused seek. The status now follows intent: Buffering is published
+  only when play is requested, and the paused seek's whole run stays Paused (the PlaybackStatus
+  KDoc already promised exactly this). TWO: a seek issued from Ended kept the status Ended through
+  every guard in runSeek, and handlePlaybackRestart refuses Ended, so a video that reached its end
+  refused every later seek and play until a full reopen; the wedge is the pipeline's alone, since
+  flush and clearBuffers already revive the drained decoders. An APPLIED seek is now a legal exit
+  from Ended, per the StatusMachine table that always allowed it: it lands Paused when no play is
+  requested and Buffering (then Playing through the ordinary restart rendezvous) when play is
+  still requested; the failure paths keep Ended, because a seek that moved nothing proved nothing.
+  THREE: videoRecoveryFor gated the hardware-failure recovery on VideoDecoderOrigin.Renderer, so
+  the Android MediaCodec path could fall back to software mid-play but a BACKEND hardware decoder
+  failure, which is what iOS gets when backgrounding invalidates the VideoToolbox session, tore
+  the whole player down through handleWorkerOutcome. Recovery is now origin-agnostic: any
+  hardware-reporting video decoder under Auto on a seekable source reopens with backend software
+  at the current position. Tests: three in SeekMachineTest (paused seek publishes no active
+  status; seek after Ended revives and replays to Ended; paused seek after Ended lands Paused and
+  play works), one in PlaybackCoreTest (backend hardware decoder dies mid-play, recovery reopens
+  software, one warning), plus a FaultPlan knob (videoDecodeFailsAfterFrames, hardware-gated) and
+  the scripted factory now honours Off with a software status. All four ran red against the
+  pre-fix engine (4 of 69 failed) and green after; the full core jvm suite is green. NOT CLOSED by
+  this entry: the owner's iOS report of near-zero video FPS after background-return with audio
+  fine. The recovery fix removes the one death mode backgrounding is known to cause, but the
+  slideshow's layer is not yet proven; a stats-line diagnostic went into Syncplay's KiteImpl so
+  the next device run bisects decoder, schedule, or drawing in one log read.
+
 ---
 
 ## 15. Horizon B execution: B1

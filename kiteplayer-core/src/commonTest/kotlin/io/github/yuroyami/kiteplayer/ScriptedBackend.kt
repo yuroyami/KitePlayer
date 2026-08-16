@@ -141,6 +141,13 @@ internal class FaultPlan(
     /** True makes the video decoder accept every packet and never produce a frame. */
     var videoDecodeProducesNothing: Boolean = false
 
+    /**
+     * Receive throws after this many delivered frames, but only while the decoder reports a
+     * hardware status: the shape of a hardware session dying mid-play (VideoToolbox invalidated by
+     * backgrounding, a MediaCodec error). The software decoder a recovery builds stays healthy.
+     */
+    var videoDecodeFailsAfterFrames: Int? = null
+
     /** True makes opening the sink fail. */
     var sinkOpenFails: Boolean = false
 
@@ -479,7 +486,10 @@ private class ScriptedVideoDecoderFactory(
         policies += hwdec
         if (stream.kind != TrackKind.Video) return null
         if (faults.videoDecodersRefuse) return null
-        return ScriptedVideoDecoder(script, ledger, faults, trace, hardwareStatus)
+        // Off is a promise, not a preference: the decoder built under it reports Software no
+        // matter what status the test injected for the hardware attempt it is recovering from.
+        val status = if (hwdec == HwdecPolicy.Off) ScriptedVideoDecoderStatus() else hardwareStatus
+        return ScriptedVideoDecoder(script, ledger, faults, trace, status)
     }
 }
 
@@ -512,6 +522,7 @@ internal class ScriptedVideoDecoder(
     private var generation: Generation = Generation.Initial
     private var drained = false
     private var ending = false
+    private var delivered = 0
 
     var closed: Boolean = false
         private set
@@ -541,8 +552,13 @@ internal class ScriptedVideoDecoder(
     }
 
     override suspend fun receive(): VideoFrame? {
+        val failAfter = faults.videoDecodeFailsAfterFrames
+        if (failAfter != null && hardware != HwdecStatus.Software && delivered >= failAfter) {
+            error("scripted hardware video decode failed after $delivered frames")
+        }
         val frame = pending.removeFirstOrNull()
         if (frame == null && ending) drained = true
+        if (frame != null) delivered++
         return frame
     }
 

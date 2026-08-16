@@ -380,4 +380,80 @@ class SeekMachineTest {
         assertTrue(settled, "the merged seek landed at the newest target")
         harness.close()
     }
+
+    @Test
+    fun `a paused seek never publishes an active status`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.run(200.milliseconds)
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+
+        val historyBefore = harness.core.statusHistory.toList()
+        harness.core.seekLater(Pts(1_000_000), SeekMode.Precise)
+        harness.run(2.seconds)
+
+        assertTrue(
+            harness.events.filterIsInstance<PlayerEvent.SeekCompleted>().isNotEmpty(),
+            "the paused seek did not complete",
+        )
+        assertEquals(
+            historyBefore,
+            harness.core.statusHistory.toList(),
+            "a seek while paused must stay Paused for its whole run: every state mirror reads a " +
+                "transient Buffering as a momentary unpause",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun `a seek after Ended revives playback when play is still requested`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(6.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+
+        harness.core.seekLater(Pts(1_000_000), SeekMode.Precise)
+        harness.run(1.seconds)
+
+        val afterSeek = harness.core.snapshots.value.status
+        assertTrue(
+            afterSeek == PlaybackStatus.Playing || afterSeek == PlaybackStatus.Buffering,
+            "play was still requested, so the applied seek must leave Ended and resume, not sit in $afterSeek",
+        )
+        harness.run(6.seconds)
+        assertEquals(
+            PlaybackStatus.Ended,
+            harness.core.snapshots.value.status,
+            "the revived playback must reach the end again",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun `a paused seek after Ended lands Paused and play works again`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(6.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+
+        harness.core.pause()
+        harness.core.seekLater(Pts(1_000_000), SeekMode.Precise)
+        harness.run(1.seconds)
+        assertEquals(
+            PlaybackStatus.Paused,
+            harness.core.snapshots.value.status,
+            "an applied seek is a legal exit from Ended, and with no play requested it lands Paused",
+        )
+
+        harness.core.play()
+        harness.run(500.milliseconds)
+        val resumed = harness.core.snapshots.value.status
+        assertTrue(
+            resumed == PlaybackStatus.Playing || resumed == PlaybackStatus.Buffering,
+            "play after the revived seek must restart playback, not stay in $resumed",
+        )
+        harness.close()
+    }
 }

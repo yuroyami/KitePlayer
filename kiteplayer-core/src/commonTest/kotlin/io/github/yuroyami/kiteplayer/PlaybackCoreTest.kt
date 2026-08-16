@@ -247,6 +247,46 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `auto reopens in backend software when the backend hardware decoder dies mid-play`() = runTest {
+        val script = MediaScript(durationUs = 4_000_000)
+        val faults = FaultPlan().apply { videoDecodeFailsAfterFrames = 12 }
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            faults = faults,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Auto, statsInterval = 10.milliseconds),
+        )
+        harness.backend.videoDecoderStatus.value = HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox)
+
+        harness.openWithRenderer()
+        val openedGeneration = harness.core.snapshots.value.generation
+        harness.core.play()
+        harness.run(1.seconds)
+
+        val snapshot = harness.core.snapshots.value
+        assertTrue(
+            snapshot.status != PlaybackStatus.Failed,
+            "a backend hardware failure must recover, not fail the player: ${snapshot.error}",
+        )
+        assertTrue(snapshot.generation.value > openedGeneration.value, "recovery did not fence a new generation")
+        assertEquals(2, harness.backend.openCalls, "recovery must reopen the media exactly once")
+        assertEquals(
+            listOf<HwdecPolicy>(HwdecPolicy.Off),
+            harness.backend.sessions.last().videoDecoderPolicies,
+            "the replacement decoder must be backend-only and forced software",
+        )
+        assertEquals(HwdecStatus.Software, harness.core.stats.value.hardwareDecode)
+        assertTrue(harness.core.progress.value.position > Duration.ZERO, "playback did not resume")
+        val warnings = harness.events
+            .filterIsInstance<PlayerEvent.Warning>()
+            .map { it.warning }
+            .filterIsInstance<PlaybackWarning.HardwareDecodeUnavailable>()
+        assertEquals(1, warnings.size, "exactly one hardware-unavailable warning is owed: $warnings")
+        assertTrue(warnings.single().reason.contains("receive failed"), warnings.single().reason)
+        harness.close()
+    }
+
+    @Test
     fun `auto reopens in backend software after queued direct frames fail`() = runTest {
         for (policy in listOf<HwdecPolicy>(HwdecPolicy.Auto)) {
             val script = MediaScript(durationUs = 4_000_000)

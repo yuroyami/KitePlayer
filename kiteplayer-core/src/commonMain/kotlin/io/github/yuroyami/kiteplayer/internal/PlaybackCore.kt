@@ -1527,7 +1527,12 @@ internal class PlaybackCore(
             HwdecPolicy.Off, HwdecPolicy.Require, is HwdecPolicy.Prefer -> false
         }
         if (!policyAllowsRecovery || videoRecoveryAttempted) return null
-        if (active.videoDecoderOrigin != VideoDecoderOrigin.Renderer || !active.source.seekable) return null
+        // Origin-agnostic on purpose: a renderer-coupled MediaCodec session and a backend hwaccel
+        // (VideoToolbox invalidated the moment iOS backgrounds the app) die the same way, and both
+        // recover the same way, by reopening the seekable source with backend software at the
+        // current position. Gating this on the renderer origin turned every backend hardware
+        // failure into a dead player.
+        if (!active.source.seekable) return null
         val item = media ?: return null
         val stream = active.videoStream ?: return null
         return VideoRecovery(
@@ -1678,7 +1683,7 @@ internal class PlaybackCore(
         warn(
             PlaybackWarning.HardwareDecodeUnavailable(
                 recovery.codec,
-                "renderer hardware ${recovery.failure.operation} failed${causeDetail(recovery.failure.cause ?: recovery.failure)}; " +
+                "hardware video ${recovery.failure.operation} failed${causeDetail(recovery.failure.cause ?: recovery.failure)}; " +
                     "reopened the seekable source with backend software at ${applied.micros} us",
             ),
         )
@@ -1707,7 +1712,7 @@ internal class PlaybackCore(
     private fun softwareRecoveryFailure(recovery: VideoRecovery, failure: Throwable): PlaybackError.DecoderFailed =
         PlaybackError.DecoderFailed(
             codec = recovery.codec,
-            detail = "renderer hardware ${recovery.failure.operation} failed" +
+            detail = "hardware video ${recovery.failure.operation} failed" +
                 causeDetail(recovery.failure.cause ?: recovery.failure) +
                 "; reopening with backend software failed${causeDetail(failure)}",
             cause = failure,
@@ -2218,7 +2223,11 @@ internal class PlaybackCore(
         requestedEpoch = requestedEpoch.next()
         val epoch = requestedEpoch
         seekPhase = SeekPhase.Flushing
-        if (status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Buffering)
+        // Status follows intent, not machinery. Buffering means "the user asked for playback and
+        // the engine cannot supply it", so a paused seek must not visit it: every state mirror
+        // read the old unconditional Buffering as a momentary unpause. A seek that starts at
+        // Ended keeps Ended until the landing below proves the position moved.
+        if (playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Buffering)
         endOfStream.reset()
         stillImageFinished = false
         stillImageShownSinceNanos = 0
@@ -2314,7 +2323,15 @@ internal class PlaybackCore(
         presentFirstFrame(session)
         eventSink.tryEmit(PlayerEvent.SeekCompleted(epoch, (landed ?: target).asDuration))
         resolveSeekReplies(SeekResult.Applied(landed ?: target))
-        if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
+        // An applied seek is the one legal exit from Ended besides open and stop: the position
+        // moved, so "playback reached the end" is no longer true. A landing that itself ran off
+        // the end keeps Ended out of the play route, and the failure returns above keep Ended
+        // untouched because a seek that moved nothing proved nothing.
+        if (!playRequested) {
+            setStatus(PlaybackStatus.Paused)
+        } else if (status == PlaybackStatus.Ended && landed != null) {
+            setStatus(PlaybackStatus.Buffering)
+        }
     }
 
     private suspend fun quiesceWorkers(session: OpenSession): Boolean {

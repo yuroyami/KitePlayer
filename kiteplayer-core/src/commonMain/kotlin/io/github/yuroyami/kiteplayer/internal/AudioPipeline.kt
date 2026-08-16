@@ -87,6 +87,11 @@ internal class AudioPipeline(
      * Only the first `frames * targetFormat.channels` values are the answer, where `frames` is what
      * [process] returned. The array is longer than that whenever an earlier buffer was longer.
      */
+    /**
+     * The processed samples. SOL-P2: when every stage passes through, this ALIASES the last
+     * [process] call's input rather than copying it; the caller's buffer is scratch by the
+     * submit contract, consumed before the next decode reuses it.
+     */
     var output: FloatArray = FloatArray(0)
         private set
 
@@ -160,14 +165,22 @@ internal class AudioPipeline(
     fun process(input: FloatArray, frames: Int): Int {
         if (frames <= 0) return 0
 
-        mixed = grown(mixed, frames * targetChannels)
-        mixer.mix(input, mixed, frames)
-
+        /* SOL-P2: a pass-through mixer used to copy the whole buffer anyway. Skipping it means
+         * plain stereo-to-stereo playback runs zero pipeline copies until the ring write: the
+         * mixer, the resampler at equal rates and the tempo stage at 1.0 all stand aside, and
+         * the gain multiplies in place only when the volume is not unity. */
         var produced = frames
-        var result = mixed
+        var result: FloatArray
+        if (mixer.isPassThrough) {
+            result = input
+        } else {
+            mixed = grown(mixed, frames * targetChannels)
+            mixer.mix(input, mixed, frames)
+            result = mixed
+        }
         if (!resampler.isPassThrough) {
             resampled = grown(resampled, resampler.outputCapacityFor(frames) * targetChannels)
-            produced = resampler.resample(mixed, frames, resampled)
+            produced = resampler.resample(result, frames, resampled)
             result = resampled
         }
 

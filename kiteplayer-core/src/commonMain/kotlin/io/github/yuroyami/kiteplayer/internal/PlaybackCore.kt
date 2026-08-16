@@ -490,7 +490,7 @@ internal class PlaybackCore(
         Handler("handleLoop") { handleLoop() },
         Handler("handleQueueAdvance") { handleQueueAdvance() },
         Handler("handleQueuedSeek") { handleQueuedSeek() },
-        Handler("publishSnapshot") { publishSnapshot() },
+        Handler("publishSnapshot") { publishSnapshotIfDirty() },
         Handler("awaitWork") { awaitWork() },
     )
 
@@ -855,11 +855,13 @@ internal class PlaybackCore(
     private suspend fun drainCommands() {
         while (true) {
             val outcome = heldOutcomes.removeFirstOrNull() ?: outcomes.tryReceive().getOrNull() ?: break
+            snapshotDirty = true
             handleWorkerOutcome(outcome)
             if (terminated) return
         }
         while (true) {
             val command = heldCommands.removeFirstOrNull() ?: commands.tryReceive().getOrNull() ?: break
+            snapshotDirty = true
             try {
                 execute(command)
             } catch (failure: Throwable) {
@@ -3453,7 +3455,24 @@ internal class PlaybackCore(
         publishSnapshot()
     }
 
+    /**
+     * SOL-P6's dirty flag: the per-pass handler used to allocate a full snapshot EVERY pass,
+     * quiet or not. Snapshot content only moves through commands, worker outcomes, status
+     * transitions and the explicit publication sites, and every one of those marks or calls
+     * directly; a quiet pass allocates nothing. Progress and stats keep their own intervals
+     * below and publish regardless, because position moves without commands.
+     */
+    private var snapshotDirty = true
+
+    private fun publishSnapshotIfDirty() {
+        if (snapshotDirty) publishSnapshot()
+        // The progress and stats intervals live inside publishSnapshot; run them even on a
+        // quiet pass without paying the snapshot allocation.
+        else publishProgressAndStats()
+    }
+
     private fun publishSnapshot() {
+        snapshotDirty = false
         val session = session
         val now = clock.nanos()
         snapshotState.value = PlayerSnapshot(
@@ -3483,6 +3502,13 @@ internal class PlaybackCore(
             queue = queueItems,
             queueIndex = queueIndex,
         )
+        publishProgressAndStats()
+    }
+
+    /** The interval-gated halves, shared by dirty and quiet passes (SOL-P6). */
+    private fun publishProgressAndStats() {
+        val session = session
+        val now = clock.nanos()
         if ((now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
             progressState.value = Progress(
@@ -4295,7 +4321,10 @@ internal class PlaybackCore(
         val workers: List<Worker>
             get() = listOfNotNull(demuxWorker, videoDecodeWorker, audioDecodeWorker, audioFeedWorker, videoScheduler)
 
-        fun selectedQueues(): List<PacketQueue> = listOfNotNull(videoQueue, audioQueue)
+        /** SOL-P6: cached, because the queues are constructor-fixed and the hot handlers ask
+         *  every pass; the old listOfNotNull allocated a list per call. */
+        private val selectedQueuesCached: List<PacketQueue> = listOfNotNull(videoQueue, audioQueue)
+        fun selectedQueues(): List<PacketQueue> = selectedQueuesCached
 
         fun decodersDrained(): Boolean =
             (videoDecoder?.isDrained ?: true) && (audioDecoder?.isDrained ?: true)

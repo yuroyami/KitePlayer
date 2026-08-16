@@ -73,14 +73,25 @@ class AudioPipelineTest {
     }
 
     @Test
-    fun `matching formats still produce the pipeline's own buffer`() {
+    fun `matching formats alias the input instead of copying it`() {
         val pipeline = AudioPipeline(stereoDevice, stereoDevice)
         val input = floatArrayOf(0.25f, -0.25f, 0.5f, -0.5f)
         val produced = pipeline.process(input, 2)
 
         assertEquals(2, produced)
         assertEquals(input.toList(), pipeline.output.toList().take(4), "a pass through changes nothing")
-        assertTrue(pipeline.output !== input, "the caller's array is never handed back")
+        /* SOL-P2 inverted the old never-hand-back pin: an all-pass-through pipeline now runs
+         * ZERO copies, and the output deliberately ALIASES the caller's scratch, whose submit
+         * contract consumes it before the next decode reuses it. */
+        assertTrue(pipeline.output === input, "an identity pipeline must not copy the buffer")
+    }
+
+    @Test
+    fun `a real mix still lands in the pipeline's own buffer`() {
+        val pipeline = AudioPipeline(surround51, stereoDevice)
+        val input = FloatArray(6 * 2) { 0.25f }
+        pipeline.process(input, 2)
+        assertTrue(pipeline.output !== input, "a downmix cannot alias six channels as two")
     }
 
     @Test

@@ -77,6 +77,40 @@ static void report_status(int32_t *out_os_status, OSStatus status)
         *out_os_status = (int32_t)status;
 }
 
+/* SOL-A4: the REAL render granularity, asked of the unit instead of assumed. On both Apple
+ * platforms MaximumFramesPerSlice is the upper bound of one render callback, which is exactly
+ * what the engine sizes its ring against; the hardcoded 512 was only ever the common answer.
+ * The default remains the fallback when the query refuses, keeping the old behaviour as the
+ * floor rather than a lie. */
+static int32_t kprt_query_device_frames(AudioComponentInstance instance)
+{
+    UInt32 frames = 0;
+    UInt32 size = (UInt32)sizeof(frames);
+
+    if (AudioUnitGetProperty(instance, kAudioUnitProperty_MaximumFramesPerSlice,
+                             kAudioUnitScope_Global, 0, &frames, &size) == noErr &&
+        frames > 0 && frames <= INT32_MAX)
+        return (int32_t)frames;
+    return KPRT_DEFAULT_DEVICE_BUFFER_FRAMES;
+}
+
+/* SOL-A4's tracking half: a stream-format or slice-size change (a route change lands as one)
+ * re-queries the period on CoreAudio's notification thread. Relaxed atomic store; readers take
+ * snapshots and nothing orders against it. */
+static void kprt_format_listener(void *ref_con, AudioUnit unit, AudioUnitPropertyID property,
+                                 AudioUnitScope scope, AudioUnitElement element)
+{
+    kprt_sink *sink = (kprt_sink *)ref_con;
+
+    (void)property;
+    (void)scope;
+    (void)element;
+    if (sink == NULL || unit == NULL)
+        return;
+    atomic_store_explicit(&sink->device_buffer_frames, kprt_query_device_frames(unit),
+                          memory_order_relaxed);
+}
+
 /* ---- The real-time callback ----
  *
  * `static`, so it is not in the archive's exported set, is not named by `include/kite_rt.h`, is not
@@ -339,7 +373,8 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
      * called immediately would produce silence rather than noise. */
     sink->sample_rate = sample_rate;
     sink->channels = accepted_channels;
-    sink->device_buffer_frames = KPRT_DEFAULT_DEVICE_BUFFER_FRAMES;
+    atomic_store_explicit(&sink->device_buffer_frames, kprt_query_device_frames(instance),
+                          memory_order_relaxed);
     sink->unit = (void *)instance;
     atomic_store_explicit(&sink->ring, (kprt_ring *)NULL, memory_order_relaxed);
 
@@ -377,9 +412,18 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     }
     sink->initialized = 1;
 
+    /* Best effort by design: a platform that refuses the listener still plays; it only keeps
+     * the open-time period. Registered AFTER initialize so the first notification cannot see a
+     * half-built sink. */
+    (void)AudioUnitAddPropertyListener(instance, kAudioUnitProperty_StreamFormat,
+                                       kprt_format_listener, sink);
+    (void)AudioUnitAddPropertyListener(instance, kAudioUnitProperty_MaximumFramesPerSlice,
+                                       kprt_format_listener, sink);
+
     out_format->sample_rate = sink->sample_rate;
     out_format->channels = sink->channels;
-    out_format->device_buffer_frames = sink->device_buffer_frames;
+    out_format->device_buffer_frames =
+        atomic_load_explicit(&sink->device_buffer_frames, memory_order_relaxed);
     *out_sink = sink;
     return KPRT_SINK_OK;
 }
@@ -418,15 +462,21 @@ int32_t kprt_sink_start(kprt_sink *sink, int32_t *out_os_status)
     report_status(out_os_status, 0);
     if (sink == NULL || sink->unit == NULL)
         return KPRT_SINK_BAD_ARGUMENT;
-    if (sink->running)
+    if (atomic_load_explicit(&sink->running, memory_order_relaxed))
         return KPRT_SINK_OK;
+
+    /* SOL-A4: the period can have moved while stopped (a route change with no format
+     * notification delivered); one relaxed re-query at every start keeps it honest. */
+    atomic_store_explicit(&sink->device_buffer_frames,
+                          kprt_query_device_frames((AudioComponentInstance)sink->unit),
+                          memory_order_relaxed);
 
     status = AudioOutputUnitStart((AudioComponentInstance)sink->unit);
     if (status != noErr) {
         report_status(out_os_status, status);
         return KPRT_SINK_START_REFUSED;
     }
-    sink->running = 1;
+    atomic_store_explicit(&sink->running, 1, memory_order_relaxed);
     return KPRT_SINK_OK;
 }
 
@@ -437,7 +487,7 @@ int32_t kprt_sink_stop(kprt_sink *sink, int32_t *out_os_status)
     report_status(out_os_status, 0);
     if (sink == NULL || sink->unit == NULL)
         return KPRT_SINK_BAD_ARGUMENT;
-    if (!sink->running)
+    if (!atomic_load_explicit(&sink->running, memory_order_relaxed))
         return KPRT_SINK_OK;
 
     /* `AudioOutputUnitStop` does not return until the unit has stopped rendering, which is what
@@ -450,7 +500,7 @@ int32_t kprt_sink_stop(kprt_sink *sink, int32_t *out_os_status)
         report_status(out_os_status, status);
         return KPRT_SINK_STOP_REFUSED;
     }
-    sink->running = 0;
+    atomic_store_explicit(&sink->running, 0, memory_order_relaxed);
     return KPRT_SINK_OK;
 }
 
@@ -473,7 +523,13 @@ int32_t kprt_sink_destroy(kprt_sink *sink)
     if (sink->unit != NULL) {
         AudioComponentInstance instance = (AudioComponentInstance)sink->unit;
         int quiesced = 1;
-        if (sink->running && AudioOutputUnitStop(instance) != noErr)
+        (void)AudioUnitRemovePropertyListenerWithUserData(instance, kAudioUnitProperty_StreamFormat,
+                                                          kprt_format_listener, sink);
+        (void)AudioUnitRemovePropertyListenerWithUserData(instance,
+                                                          kAudioUnitProperty_MaximumFramesPerSlice,
+                                                          kprt_format_listener, sink);
+        if (atomic_load_explicit(&sink->running, memory_order_relaxed) &&
+            AudioOutputUnitStop(instance) != noErr)
             quiesced = 0;
         if (sink->initialized && AudioUnitUninitialize(instance) != noErr)
             quiesced = 0;
@@ -488,7 +544,7 @@ int32_t kprt_sink_destroy(kprt_sink *sink)
         }
         sink->unit = NULL;
     }
-    sink->running = 0;
+    atomic_store_explicit(&sink->running, 0, memory_order_relaxed);
     sink->initialized = 0;
 
     /* Only now. The callback is out and cannot be entered again, because the unit it was installed
@@ -519,7 +575,7 @@ void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)
         atomic_load_explicit(&sink->worst_callback_nanos, memory_order_relaxed);
     out->last_deadline_nanos =
         atomic_load_explicit(&sink->last_deadline_nanos, memory_order_relaxed);
-    out->running = sink->running;
+    out->running = atomic_load_explicit(&sink->running, memory_order_relaxed);
     out->has_ring = atomic_load_explicit(&sink->ring, memory_order_acquire) != NULL ? 1 : 0;
 }
 

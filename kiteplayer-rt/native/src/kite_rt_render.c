@@ -345,9 +345,14 @@ int32_t kprt_render_into(kprt_sink *sink, float *destination, int32_t frames,
     deadline = kprt_sink_ticks_to_nanos(sink, host_ticks) +
         frames_to_nanos(frames, sink->sample_rate);
 
-    real = kprt_ring_render(ring, destination, frames, deadline);
+    /* SOL-A5: the deadline publishes BEFORE the render consumes the ring, with release. A
+     * drain polls "ring empty?" and then reads this deadline; with the old order (store after
+     * the consume, relaxed) it could pair an empty ring with the PREVIOUS callback's deadline
+     * and declare the audio finished one buffer early. Store-first plus release means any
+     * observer that sees this callback's consumption also sees this callback's deadline. */
+    atomic_store_explicit(&sink->last_deadline_nanos, deadline, memory_order_release);
 
-    atomic_store_explicit(&sink->last_deadline_nanos, deadline, memory_order_relaxed);
+    real = kprt_ring_render(ring, destination, frames, deadline);
     return real;
 }
 

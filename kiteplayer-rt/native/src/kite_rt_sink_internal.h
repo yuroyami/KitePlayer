@@ -33,7 +33,7 @@ struct kprt_sink {
 
     int32_t sample_rate;
     int32_t channels;
-    int32_t device_buffer_frames;
+    _Atomic int32_t device_buffer_frames;
 
     /* `mach_timebase_info`, read once at create.
      *
@@ -71,9 +71,13 @@ struct kprt_sink {
     _Atomic int64_t worst_callback_nanos;
     _Atomic int64_t last_deadline_nanos;
 
-    /* ---- Owner-thread state. Not atomic, and not read by the callback. ---- */
-
-    int32_t running;
+    /* ---- Owner-thread lifecycle, plus the two fields other threads may read. ----
+     *
+     * SOL-A5: `running` is read by the stats path concurrently with start/stop, so it is
+     * atomic (relaxed: a boolean snapshot needs no ordering). SOL-A4: the device period is
+     * re-queried on start and updated by the format-change listener on CoreAudio's own
+     * notification thread, so it lives in `device_buffer_frames` above as an atomic too. */
+    _Atomic int32_t running;
     int32_t initialized;
 };
 

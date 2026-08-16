@@ -6,6 +6,209 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-network>
+final class io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet { // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet|null[0]
+    constructor <init>(kotlin/String?, kotlin/String?, io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate?, kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashRepresentation>) // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.<init>|<init>(kotlin.String?;kotlin.String?;io.github.yuroyami.kiteplayer.network.dash.DashSegmentTemplate?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashRepresentation>){}[0]
+
+    final val contentType // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.contentType|{}contentType[0]
+        final fun <get-contentType>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.contentType.<get-contentType>|<get-contentType>(){}[0]
+    final val mimeType // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.mimeType|{}mimeType[0]
+        final fun <get-mimeType>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.mimeType.<get-mimeType>|<get-mimeType>(){}[0]
+    final val representations // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.representations|{}representations[0]
+        final fun <get-representations>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashRepresentation> // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.representations.<get-representations>|<get-representations>(){}[0]
+    final val segmentTemplate // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.segmentTemplate|{}segmentTemplate[0]
+        final fun <get-segmentTemplate>(): io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate? // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.segmentTemplate.<get-segmentTemplate>|<get-segmentTemplate>(){}[0]
+
+    final fun component1(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.component2|component2(){}[0]
+    final fun component3(): io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate? // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.component3|component3(){}[0]
+    final fun component4(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashRepresentation> // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.component4|component4(){}[0]
+    final fun copy(kotlin/String? = ..., kotlin/String? = ..., io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate? = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashRepresentation> = ...): io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.copy|copy(kotlin.String?;kotlin.String?;io.github.yuroyami.kiteplayer.network.dash.DashSegmentTemplate?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashRepresentation>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashManifest { // io.github.yuroyami.kiteplayer.network.dash/DashManifest|null[0]
+    constructor <init>(kotlin/Boolean, kotlin/Long?, kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashPeriod>, kotlin/String) // io.github.yuroyami.kiteplayer.network.dash/DashManifest.<init>|<init>(kotlin.Boolean;kotlin.Long?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashPeriod>;kotlin.String){}[0]
+
+    final val baseUrl // io.github.yuroyami.kiteplayer.network.dash/DashManifest.baseUrl|{}baseUrl[0]
+        final fun <get-baseUrl>(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashManifest.baseUrl.<get-baseUrl>|<get-baseUrl>(){}[0]
+    final val durationMicros // io.github.yuroyami.kiteplayer.network.dash/DashManifest.durationMicros|{}durationMicros[0]
+        final fun <get-durationMicros>(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashManifest.durationMicros.<get-durationMicros>|<get-durationMicros>(){}[0]
+    final val isDynamic // io.github.yuroyami.kiteplayer.network.dash/DashManifest.isDynamic|{}isDynamic[0]
+        final fun <get-isDynamic>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashManifest.isDynamic.<get-isDynamic>|<get-isDynamic>(){}[0]
+    final val periods // io.github.yuroyami.kiteplayer.network.dash/DashManifest.periods|{}periods[0]
+        final fun <get-periods>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashPeriod> // io.github.yuroyami.kiteplayer.network.dash/DashManifest.periods.<get-periods>|<get-periods>(){}[0]
+
+    final fun component1(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashManifest.component1|component1(){}[0]
+    final fun component2(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashManifest.component2|component2(){}[0]
+    final fun component3(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashPeriod> // io.github.yuroyami.kiteplayer.network.dash/DashManifest.component3|component3(){}[0]
+    final fun component4(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashManifest.component4|component4(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin/Long? = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashPeriod> = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/DashManifest.copy|copy(kotlin.Boolean;kotlin.Long?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashPeriod>;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashManifest.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashManifest.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashManifest.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan, kotlin.coroutines/SuspendFunction1<kotlin/String, kotlin/ByteArray>) // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.<init>|<init>(io.github.yuroyami.kiteplayer.network.dash.DashSegmentPlan;kotlin.coroutines.SuspendFunction1<kotlin.String,kotlin.ByteArray>){}[0]
+
+    final val seekable // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.seekable|{}seekable[0]
+        final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
+    final val size // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.size|{}size[0]
+        final fun <get-size>(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.size.<get-size>|<get-size>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.close|close(){}[0]
+    final suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer.network.dash/DashMediaIo.seek|seek(kotlin.Long){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashPeriod { // io.github.yuroyami.kiteplayer.network.dash/DashPeriod|null[0]
+    constructor <init>(kotlin/String, kotlin/Long?, kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet>) // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.<init>|<init>(kotlin.String;kotlin.Long?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashAdaptationSet>){}[0]
+
+    final val adaptationSets // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.adaptationSets|{}adaptationSets[0]
+        final fun <get-adaptationSets>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet> // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.adaptationSets.<get-adaptationSets>|<get-adaptationSets>(){}[0]
+    final val baseUrl // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.baseUrl|{}baseUrl[0]
+        final fun <get-baseUrl>(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.baseUrl.<get-baseUrl>|<get-baseUrl>(){}[0]
+    final val durationMicros // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.durationMicros|{}durationMicros[0]
+        final fun <get-durationMicros>(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.durationMicros.<get-durationMicros>|<get-durationMicros>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.component1|component1(){}[0]
+    final fun component2(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.component2|component2(){}[0]
+    final fun component3(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet> // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.component3|component3(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/Long? = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashAdaptationSet> = ...): io.github.yuroyami.kiteplayer.network.dash/DashPeriod // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.copy|copy(kotlin.String;kotlin.Long?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashAdaptationSet>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashPeriod.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashRepresentation { // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation|null[0]
+    constructor <init>(kotlin/String?, kotlin/Long, kotlin/String?, kotlin/String?, kotlin/Int?, kotlin/Int?, kotlin/String, io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate?, kotlin.collections/List<kotlin/String>, kotlin/String?) // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.<init>|<init>(kotlin.String?;kotlin.Long;kotlin.String?;kotlin.String?;kotlin.Int?;kotlin.Int?;kotlin.String;io.github.yuroyami.kiteplayer.network.dash.DashSegmentTemplate?;kotlin.collections.List<kotlin.String>;kotlin.String?){}[0]
+
+    final val bandwidth // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.bandwidth|{}bandwidth[0]
+        final fun <get-bandwidth>(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.bandwidth.<get-bandwidth>|<get-bandwidth>(){}[0]
+    final val baseUrl // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.baseUrl|{}baseUrl[0]
+        final fun <get-baseUrl>(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.baseUrl.<get-baseUrl>|<get-baseUrl>(){}[0]
+    final val codecs // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.codecs|{}codecs[0]
+        final fun <get-codecs>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.codecs.<get-codecs>|<get-codecs>(){}[0]
+    final val height // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.height|{}height[0]
+        final fun <get-height>(): kotlin/Int? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.height.<get-height>|<get-height>(){}[0]
+    final val id // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.id|{}id[0]
+        final fun <get-id>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.id.<get-id>|<get-id>(){}[0]
+    final val initializationUrl // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.initializationUrl|{}initializationUrl[0]
+        final fun <get-initializationUrl>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.initializationUrl.<get-initializationUrl>|<get-initializationUrl>(){}[0]
+    final val mimeType // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.mimeType|{}mimeType[0]
+        final fun <get-mimeType>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.mimeType.<get-mimeType>|<get-mimeType>(){}[0]
+    final val segmentTemplate // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.segmentTemplate|{}segmentTemplate[0]
+        final fun <get-segmentTemplate>(): io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.segmentTemplate.<get-segmentTemplate>|<get-segmentTemplate>(){}[0]
+    final val segmentUrls // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.segmentUrls|{}segmentUrls[0]
+        final fun <get-segmentUrls>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.segmentUrls.<get-segmentUrls>|<get-segmentUrls>(){}[0]
+    final val width // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.width|{}width[0]
+        final fun <get-width>(): kotlin/Int? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.width.<get-width>|<get-width>(){}[0]
+
+    final fun component1(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component1|component1(){}[0]
+    final fun component10(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component10|component10(){}[0]
+    final fun component2(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component2|component2(){}[0]
+    final fun component3(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component3|component3(){}[0]
+    final fun component4(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component4|component4(){}[0]
+    final fun component5(): kotlin/Int? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component5|component5(){}[0]
+    final fun component6(): kotlin/Int? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component6|component6(){}[0]
+    final fun component7(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component7|component7(){}[0]
+    final fun component8(): io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate? // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component8|component8(){}[0]
+    final fun component9(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.component9|component9(){}[0]
+    final fun copy(kotlin/String? = ..., kotlin/Long = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Int? = ..., kotlin/Int? = ..., kotlin/String = ..., io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate? = ..., kotlin.collections/List<kotlin/String> = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer.network.dash/DashRepresentation // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.copy|copy(kotlin.String?;kotlin.Long;kotlin.String?;kotlin.String?;kotlin.Int?;kotlin.Int?;kotlin.String;io.github.yuroyami.kiteplayer.network.dash.DashSegmentTemplate?;kotlin.collections.List<kotlin.String>;kotlin.String?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan { // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan|null[0]
+    constructor <init>(kotlin/String?, kotlin.collections/List<kotlin/String>) // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.<init>|<init>(kotlin.String?;kotlin.collections.List<kotlin.String>){}[0]
+
+    final val initializationUrl // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.initializationUrl|{}initializationUrl[0]
+        final fun <get-initializationUrl>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.initializationUrl.<get-initializationUrl>|<get-initializationUrl>(){}[0]
+    final val mediaUrls // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.mediaUrls|{}mediaUrls[0]
+        final fun <get-mediaUrls>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.mediaUrls.<get-mediaUrls>|<get-mediaUrls>(){}[0]
+
+    final fun component1(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.component1|component1(){}[0]
+    final fun component2(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.component2|component2(){}[0]
+    final fun copy(kotlin/String? = ..., kotlin.collections/List<kotlin/String> = ...): io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.copy|copy(kotlin.String?;kotlin.collections.List<kotlin.String>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate { // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate|null[0]
+    constructor <init>(kotlin/String?, kotlin/String?, kotlin/Long, kotlin/Long, kotlin/Long?, kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry>) // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.<init>|<init>(kotlin.String?;kotlin.String?;kotlin.Long;kotlin.Long;kotlin.Long?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashTimelineEntry>){}[0]
+
+    final val duration // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.duration|{}duration[0]
+        final fun <get-duration>(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.duration.<get-duration>|<get-duration>(){}[0]
+    final val initialization // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.initialization|{}initialization[0]
+        final fun <get-initialization>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.initialization.<get-initialization>|<get-initialization>(){}[0]
+    final val media // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.media|{}media[0]
+        final fun <get-media>(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.media.<get-media>|<get-media>(){}[0]
+    final val startNumber // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.startNumber|{}startNumber[0]
+        final fun <get-startNumber>(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.startNumber.<get-startNumber>|<get-startNumber>(){}[0]
+    final val timeline // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.timeline|{}timeline[0]
+        final fun <get-timeline>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry> // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.timeline.<get-timeline>|<get-timeline>(){}[0]
+    final val timescale // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.timescale|{}timescale[0]
+        final fun <get-timescale>(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.timescale.<get-timescale>|<get-timescale>(){}[0]
+
+    final fun component1(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.component1|component1(){}[0]
+    final fun component2(): kotlin/String? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.component2|component2(){}[0]
+    final fun component3(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.component3|component3(){}[0]
+    final fun component4(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.component4|component4(){}[0]
+    final fun component5(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.component5|component5(){}[0]
+    final fun component6(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry> // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.component6|component6(){}[0]
+    final fun copy(kotlin/String? = ..., kotlin/String? = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Long? = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry> = ...): io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.copy|copy(kotlin.String?;kotlin.String?;kotlin.Long;kotlin.Long;kotlin.Long?;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.dash.DashTimelineEntry>){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashSegmentTemplate.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry { // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry|null[0]
+    constructor <init>(kotlin/Long?, kotlin/Long, kotlin/Long) // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.<init>|<init>(kotlin.Long?;kotlin.Long;kotlin.Long){}[0]
+
+    final val d // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.d|{}d[0]
+        final fun <get-d>(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.d.<get-d>|<get-d>(){}[0]
+    final val r // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.r|{}r[0]
+        final fun <get-r>(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.r.<get-r>|<get-r>(){}[0]
+    final val t // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.t|{}t[0]
+        final fun <get-t>(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.t.<get-t>|<get-t>(){}[0]
+
+    final fun component1(): kotlin/Long? // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.component1|component1(){}[0]
+    final fun component2(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.component2|component2(){}[0]
+    final fun component3(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.component3|component3(){}[0]
+    final fun copy(kotlin/Long? = ..., kotlin/Long = ..., kotlin/Long = ...): io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.copy|copy(kotlin.Long?;kotlin.Long;kotlin.Long){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.xml/XmlElement { // io.github.yuroyami.kiteplayer.network.xml/XmlElement|null[0]
+    constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>, kotlin.collections/List<io.github.yuroyami.kiteplayer.network.xml/XmlElement>, kotlin/String) // io.github.yuroyami.kiteplayer.network.xml/XmlElement.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.xml.XmlElement>;kotlin.String){}[0]
+
+    final val attributes // io.github.yuroyami.kiteplayer.network.xml/XmlElement.attributes|{}attributes[0]
+        final fun <get-attributes>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer.network.xml/XmlElement.attributes.<get-attributes>|<get-attributes>(){}[0]
+    final val children // io.github.yuroyami.kiteplayer.network.xml/XmlElement.children|{}children[0]
+        final fun <get-children>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.xml/XmlElement> // io.github.yuroyami.kiteplayer.network.xml/XmlElement.children.<get-children>|<get-children>(){}[0]
+    final val name // io.github.yuroyami.kiteplayer.network.xml/XmlElement.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.network.xml/XmlElement.name.<get-name>|<get-name>(){}[0]
+    final val text // io.github.yuroyami.kiteplayer.network.xml/XmlElement.text|{}text[0]
+        final fun <get-text>(): kotlin/String // io.github.yuroyami.kiteplayer.network.xml/XmlElement.text.<get-text>|<get-text>(){}[0]
+
+    final fun attr(kotlin/String): kotlin/String? // io.github.yuroyami.kiteplayer.network.xml/XmlElement.attr|attr(kotlin.String){}[0]
+    final fun child(kotlin/String): io.github.yuroyami.kiteplayer.network.xml/XmlElement? // io.github.yuroyami.kiteplayer.network.xml/XmlElement.child|child(kotlin.String){}[0]
+    final fun children(kotlin/String): kotlin.collections/List<io.github.yuroyami.kiteplayer.network.xml/XmlElement> // io.github.yuroyami.kiteplayer.network.xml/XmlElement.children|children(kotlin.String){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network.xml/XmlException : kotlin/Exception { // io.github.yuroyami.kiteplayer.network.xml/XmlException|null[0]
+    constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer.network.xml/XmlException.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+    final val offset // io.github.yuroyami.kiteplayer.network.xml/XmlException.offset|{}offset[0]
+        final fun <get-offset>(): kotlin/Int // io.github.yuroyami.kiteplayer.network.xml/XmlException.offset.<get-offset>|<get-offset>(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer.network/KtorMediaIo|null[0]
     final val seekable // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable|{}seekable[0]
         final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
@@ -29,4 +232,18 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.githu
     constructor <init>(io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.<init>|<init>(io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 
     final suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.resolve|resolve(kotlin.String){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.network.dash/Dash { // io.github.yuroyami.kiteplayer.network.dash/Dash|null[0]
+    final suspend fun manifest(kotlin/String, io.ktor.client/HttpClient): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/Dash.manifest|manifest(kotlin.String;io.ktor.client.HttpClient){}[0]
+    final suspend fun mediaItemFor(kotlin/String, io.ktor.client/HttpClient): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.network.dash/Dash.mediaItemFor|mediaItemFor(kotlin.String;io.ktor.client.HttpClient){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.network.dash/DashManifestParser { // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser|null[0]
+    final fun parse(kotlin/String, kotlin/String): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.parse|parse(kotlin.String;kotlin.String){}[0]
+    final fun segmentPlan(io.github.yuroyami.kiteplayer.network.dash/DashManifest, io.github.yuroyami.kiteplayer.network.dash/DashPeriod, io.github.yuroyami.kiteplayer.network.dash/DashRepresentation): io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.segmentPlan|segmentPlan(io.github.yuroyami.kiteplayer.network.dash.DashManifest;io.github.yuroyami.kiteplayer.network.dash.DashPeriod;io.github.yuroyami.kiteplayer.network.dash.DashRepresentation){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.network.xml/XmlMini { // io.github.yuroyami.kiteplayer.network.xml/XmlMini|null[0]
+    final fun parse(kotlin/String): io.github.yuroyami.kiteplayer.network.xml/XmlElement // io.github.yuroyami.kiteplayer.network.xml/XmlMini.parse|parse(kotlin.String){}[0]
 }

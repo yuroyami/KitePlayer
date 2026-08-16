@@ -74,7 +74,7 @@ include(":kiteplayer-compose-video")
 // these leaves, so the old packaging cannot dictate the clean target matrices.
 include(":kiteplayer-phone")
 include(":kiteplayer-compose")
-// include(":kiteplayer-libass")     // optional full ASS renderer
+include(":kiteplayer-libass")        // optional full ASS renderer (phase L, owner-pulled 2026-08-16)
 // include(":kiteplayer")            // umbrella artifact
 include(":kiteplayer-sample")
 // The Android assembly and XML-inflation proof for :kiteplayer-mobile and :kiteplayer-view.

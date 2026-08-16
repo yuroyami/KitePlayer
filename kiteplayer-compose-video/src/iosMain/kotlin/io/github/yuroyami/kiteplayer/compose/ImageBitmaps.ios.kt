@@ -46,27 +46,16 @@ private object GpuFrameReader {
 
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
     val decoded = frame as KiteCodecVideoFrame
+    // SOL-P1: the Metal reader serves HARDWARE frames only, where a GPU readback is the only
+    // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which
+    // was upload plus readback plus Skia's re-upload for pixels the CPU converter produces in
+    // ONE pass with the same arithmetic (the shader is written to match it), tone mapping
+    // included since M3. The GPU roundtrip for software frames was strictly waste.
     val reader = GpuFrameReader.reader
     if (reader != null) {
-        // The two frame truths, mapped exactly like every Metal consumer: a VideoToolbox
-        // CVPixelBuffer with no copy, or native-format planes with one memcpy each. The colour
-        // arithmetic runs in the fragment shader either way (law 2 of 17.9); the CPU pays one
-        // readback.
-        val picture = decoded.corePixelBufferOrNull()
+        val hardware = decoded.corePixelBufferOrNull()
             ?.let { io.github.yuroyami.kiteplayer.output.MetalPicture.CorePixelBuffer(it) }
-            ?: decoded.uploadPlanesOrNull()?.let { planes ->
-                io.github.yuroyami.kiteplayer.output.MetalPicture.SoftwarePlanes(
-                    width = planes.width,
-                    height = planes.height,
-                    format = planes.format,
-                    planes = planes.planes.map {
-                        io.github.yuroyami.kiteplayer.output.MetalPicture.SoftwarePlanes.Plane(
-                            it.bytes, it.bytesPerRow, it.rows,
-                        )
-                    },
-                )
-            }
-        if (picture != null) return reader.readRgba(frame, picture)
+        if (hardware != null) return reader.readRgba(frame, hardware)
     }
     return SoftwareConverter.toRgba(decoded)
 }

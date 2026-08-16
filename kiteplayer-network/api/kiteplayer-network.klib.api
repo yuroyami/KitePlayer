@@ -1,0 +1,32 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, macosArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-network>
+final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer.network/KtorMediaIo|null[0]
+    final val seekable // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable|{}seekable[0]
+        final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
+    final val size // io.github.yuroyami.kiteplayer.network/KtorMediaIo.size|{}size[0]
+        final fun <get-size>(): kotlin/Long? // io.github.yuroyami.kiteplayer.network/KtorMediaIo.size.<get-size>|<get-size>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIo.close|close(){}[0]
+    final suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.network/KtorMediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seek|seek(kotlin.Long){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.network/KtorMediaIo.Companion|null[0]
+        final suspend fun open(kotlin/String, io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): io.github.yuroyami.kiteplayer.network/KtorMediaIo // io.github.yuroyami.kiteplayer.network/KtorMediaIo.Companion.open|open(kotlin.String;io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    }
+}
+
+final class io.github.yuroyami.kiteplayer.network/KtorMediaIoException : kotlin/Exception { // io.github.yuroyami.kiteplayer.network/KtorMediaIoException|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.network/KtorMediaIoException.<init>|<init>(kotlin.String){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.github.yuroyami.kiteplayer/MediaIoResolver { // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver|null[0]
+    constructor <init>(io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.<init>|<init>(io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+
+    final suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.resolve|resolve(kotlin.String){}[0]
+}

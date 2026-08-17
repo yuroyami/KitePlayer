@@ -17765,6 +17765,40 @@ deliberately left open.
   W-20 settled for Linux: run the project's OWN suite rather than write a second, weaker one.
 - Sub-phase: X.14. Test: the matrix run itself, with its pass count recorded.
 
+#### X-15. The browser decodes in hardware and this stage never asked it to
+- Where: new, behind `:kiteplayer-core`'s existing decoder SPI; `kiteplayer-ffmpeg`'s module KDoc,
+  which already says the four interfaces exist so "WebCodecs on the web" can replace FFmpeg without
+  the engine noticing; 17.2's S7 support matrix, which already names a WebCodecs/WebAudio/MSE
+  backend as the web capability profile.
+- Problem: this expansion rebuilds the native stack in wasm and never weighs what the browser
+  ships. Two of the plan's own promises named WebCodecs before phase W began and the S6 expansion
+  dropped both. S6-D6 raised it; this item is that decision act.
+- **Measured 2026-08-17 in the in-app Chromium, by asking `VideoDecoder.isConfigSupported` rather
+  than by assuming.** `VideoDecoder`, `AudioDecoder`, `VideoFrame` and `AudioWorklet` all exist.
+  Supported: h264 High (`avc1.640028`), HEVC Main (`hev1.1.6.L93.B0`), **HEVC Main10**
+  (`hev1.2.4.L120.B0`), VP9, AV1, and audio aac, mp3 and opus. NOT supported: mpeg4 part 2
+  (`mp4v.20.9`), and flac was refused as a configuration. So the matrix splits: most rows have a
+  hardware path, and `mpeg4part2.mp4`, `avi-mpeg4.avi`, `wmv-msmpeg4.wmv` and the flac row do not.
+- Why this is the stage's largest lever, in one number: 17.9 declares 4K a v1 non-goal, and the
+  spike's evidence for that was 4K HEVC 10-bit running at exactly 1.0x in SOFTWARE. HEVC Main10
+  answers YES here, so the non-goal rests on a measurement hardware erases. A second number: hevc
+  is 20.7% of the gzipped wasm module and need not ship to a browser that decodes it.
+- Fix, decided: demux stays FFmpeg in wasm, because no browser API demuxes mkv and none serves the
+  17.5 matrix's subtitle rows. Decode goes to WebCodecs where the browser and the codec allow, and
+  falls back to the wasm decoder otherwise, chosen per stream at open time behind the decoder SPI
+  the engine already has. The engine does not learn that any of this happened, which is the
+  property `kiteplayer-ffmpeg`'s own KDoc claims and nothing has ever exercised.
+- Why not MSE and a `video` element: considered and rejected once, here. It cannot serve the 17.5
+  matrix (mkv, the subtitle formats) and it surrenders the frame-level control the engine's whole
+  contract is built on. That rejection is not revisited without a measurement.
+- Sub-phase: X.15, after X-09 gives the software floor something to fall back TO. Test: the 17.5
+  matrix run twice in a headless browser, once forced to wasm decode and once allowed hardware,
+  with the per-row decoder recorded so a silent fallback cannot look like a hardware pass.
+- Honest bound: measured in ONE browser on ONE machine. Safari and Firefox ship WebCodecs with
+  different codec sets, and codec support is a per-device, per-OS fact, not a per-spec one. The
+  fallback is therefore not a nicety, and the mpeg4 and flac rows above are proof it is load
+  bearing on the very machine that has everything else.
+
 **Sub-phases, in execution order.**
 
 - **X.1 The draw cost is measured, and the stage stops if it fails** (X-01). Commit: "Measure what
@@ -17789,6 +17823,8 @@ deliberately left open.
 - **X.13 The artifact ships** (X-13). Commit: "Say what to serve, and detect what the host
   allows".
 - **X.14 The matrix runs on the web** (X-14). Commit: "Decode the whole matrix in a browser".
+- **X.15 The browser decodes what it can in hardware** (X-15). Commit: "Let the browser decode the
+  frames it already knows how to decode".
 
 **The honest bound on this stage, written before it starts.** The spike costed this at 178 to 272
 hours against 17.3's S6 estimate of 80 to 120, and this expansion does not shrink that. It changes

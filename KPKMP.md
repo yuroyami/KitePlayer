@@ -997,6 +997,9 @@ cd ../KitePlayer
 ./gradlew :buildSrc:test
 ./gradlew :kiteplayer-core:macosArm64Test :kiteplayer-output:macosArm64Test \
           :kiteplayer-ffmpeg:macosArm64Test
+# Real UIKit, on the simulator: 22 tests since phase W gave SOL-R9 its proof there. It was never
+# named here because it had nothing in it.
+./gradlew :kiteplayer-view:iosSimulatorArm64Test
 kiteplayer-rt/native/scripts/build-host.sh asan  && kiteplayer-rt/native/scripts/run-c-tests.sh asan
 kiteplayer-rt/native/scripts/build-host.sh tsan  && kiteplayer-rt/native/scripts/run-c-tests.sh tsan
 kiteplayer-rt/native/scripts/run-c-tests.sh interpose  # plain binaries, interposer must be live
@@ -8853,6 +8856,58 @@ first non-Apple backend, not before it.
 
 ---
 
+
+**2026-08-17, sub-phases W.4 and W.7 (Opus 5).** Tier selected: TIER 2, by changed path (jvmMain
+and appleMain Kotlin, build files, a new module), plus the iOS simulator suite that W.7 made live.
+
+**W.4, KiteVideo on the desktop, measured (register item W-05, which is KV-5).**
+`:kiteplayer-sample-desktop` is a Compose Desktop application: it opens a path, plays through
+`KitePlayerPlatform.createOrNull()`, and draws with `KiteVideo`. It carries a modifier toggle
+deliberately, because that toggle IS 17.9's claim: clip, alpha, rotation and scale apply to the
+VIDEO, which a platform-view player cannot do. Verified running, four ways: the window maps and
+reports its bounds, the clip plays with the modifiers visibly applied, a bad path prints one typed
+sentence instead of a stack trace, and 3041 frames drew over 90 seconds at a steady 60 UI fps.
+
+The measurement replaces KV-5's assumption, and the assumption was wrong about the REASON. Per
+1080p frame: 11.6 ms mean, 13.1 ms p95, and the Compose modifiers cost about 10 microseconds and
+zero extra drops. But 81% of that 11.6 ms is `SoftwareConverter.toRgba`, a pure-Kotlin per-pixel
+YUV to RGBA loop over 2.07 million pixels, and only 19% is the Skia raster build. Copy bandwidth,
+which KV-5 named as the thing desktop makes cheap, was never the cost: 17.9's LAW-2 FALLBACK is.
+The path also allocates about 11 MB per frame, roughly 340 MB/s of garbage. So KV-2's YUV image
+path is the one change worth making on desktop, and the register now carries the number that says
+so instead of an adjective. Four limits are recorded in `kiteplayer-sample-desktop/MEASUREMENTS.md`
+rather than smoothed: the host was NOT idle and its load average is recorded per phase, the draw
+instrument cannot see the GPU composite, a Compose `graphicsLayer` replays cached content so the
+outer draw timer under-counts (a second timer inside the chain proves it is layer behaviour and not
+a stutter), and 4K, an idle host, Linux and Windows are unmeasured.
+
+**W.7, the S3-homed audit rows (register item W-10).** Seven rows VERIFIED against the tree before
+any edit, because 17.11 says a [C] is a debt to check and not a fact. That discipline paid for
+itself immediately: SOL-R10 was already closed and pinned, so nothing was churned. Six were open
+and are closed, each red first and falsified after: SOL-R9 (one layer on the glass, hasPicture
+about that layer, proved in a REAL iOS simulator with real UIView, CALayer, CAMetalLayer and
+UIWindow), SOL-R13 (accept at least the minimum, as the contract always said), SOL-R14's remainder
+(a shared `CpuPictureControls` gives both CPU fallbacks the colour matrix and the framing they
+never had), SOL-R11's measurable half (a close no longer waits on work started after it began; an
+AppKit close measured two deliveries and now measures one), SOL-R12 (a `MetalHostView` resizes the
+drawable on `setFrameSize` and on backing-property changes, where the code's own comment had
+admitted no live path existed), and SOL-P7's three parts (pipelines cached per device registryID,
+the UIKit identity fast path, and overlay CGImages cached by content hash: without the hash key a
+held cue built 60 images where it now builds 1). 100 tests green across `macosArm64Test` and the
+simulator suite. Four public overrides moved the output klib ratchet, zero removals.
+
+**Two rows were verified and deliberately NOT done**, which is a decision rather than an omission.
+SOL-API6 and SOL-API7 both want a design act: an opaque ring writer means moving the wrapper out of
+the module whose internal interface it implements, and typed capability negotiation means a sealed
+hardware-surface model. 18.3 rule 6 forbids authoring that plan and executing it in the same
+breath, so both rows carry a fresh [V] mark and their real anchors instead of a half-fix.
+
+**One instrument earned its place in the gate.** `:kiteplayer-view:iosSimulatorArm64Test` was never
+named in section 9 because it had nothing in it. SOL-R9's proof put 22 tests there, running real
+UIKit, so Tier 2 names it now.
+
+---
+
 **2026-08-17, sub-phase W.9: the web spike (register item W-12).** Tier selected: none; the spike
 touched no repository file. Its whole report is `docs/spikes/2026-08-17-web-spike.md` and the
 numbers below are quoted from it rather than summarised loosely.
@@ -16137,24 +16192,29 @@ Rendering and views:
 - SOL-R4 to SOL-R8: CLOSED by S2.e (non-planar BGRA sizing, the per-frame cache flush, the
   missing composer close path, pre-commit texture ownership, rotation normalization). The log's
   S2.e entry carries the proofs.
-- SOL-R9 [V] KitePlayerUIView keeps both video layers visible across a renderer switch (stale
-  Metal content can cover CG frames) and hasPicture answers from cumulative counters rather
-  than the current generation. Home: S3.
-- SOL-R10 [C] PlayerViewBinding stores the renderer before attach succeeds and detach is not
-  finally-safe. Home: S3.
-- SOL-R11 [V] Renderer closes run runBlocking on the caller's thread (Metal, Android surface,
-  UIKit), which can freeze UI lifecycle callbacks behind conversion or drawable waits. Home: S3.
-- SOL-R12 [C] AppKit's Metal drawable size may not follow live resize and backing-scale changes
-  (a resize path exists since S2.c; verify at pickup). Home: S3.
-- SOL-R13 [V] UIKit and AppKit fallback renderers reject RgbaBitmap storage larger than the
-  minimum (exact-size equality); either require exact size everywhere or honour a stride.
-  Home: S3.
-- SOL-R14 [V] REDUCED by the M4 surge: the Compose GPU tier's OES-to-RGBA blit now applies
-  the one colour-matrix law (column-major GLES pack, unit-proven; identity is bit-exact off),
-  and the Metal renderer's paused-picture limit for the controls is retired by SOL-R1's
-  retained redraw. REMAINING: the UIKit/AppKit CPU fallbacks still apply neither controls nor
-  framing, and the MediaCodec direct-to-SurfaceView tier still cannot by construction. Gamma
-  stays absent by design. Home: S3.
+- SOL-R9: CLOSED by phase W (W.7). Exactly one layer sits on the glass, chosen when the
+  generation is created, and hasPicture answers about that layer. Proved in a real iOS simulator
+  with real UIView, CALayer, CAMetalLayer and UIWindow; the falsification restored both visible
+  layers and the cumulative counter and two of three tests went red.
+- SOL-R10: ALREADY CLOSED when phase W checked it, and no work was done. PlayerViewBinding
+  clears and closes the renderer on attach failure and its detach is finally-safe with
+  suppression chained, both already pinned by PlayerViewBindingTest. A [C] is a debt to check,
+  and checking it here saved churning a file other tests pin.
+- SOL-R11: REDUCED by phase W (W.7), with the remainder stated. A close could wait on work
+  STARTED after it began; that is fixed and pinned (an AppKit close measured two deliveries, now
+  one), and Metal cancels its worker before joining like its two siblings. The runBlocking itself
+  STAYS, because PlayerViewBinding rule 1 requires a synchronous detach; Metal's own drawable wait
+  is not host-observable without a real CAMetalLayer and carries the same guard by inspection.
+- SOL-R12: CLOSED by phase W (W.7). The claim was true and the code admitted it: contentsScale
+  and drawableSize were set once at construction and a comment called the live path future polish.
+  A MetalHostView resizes the drawable on setFrameSize and on backing-property changes.
+- SOL-R13: CLOSED by phase W (W.7). Both fallbacks accept AT LEAST the minimum, which is what
+  RgbaBitmap's contract says and what the Metal composer already honoured.
+- SOL-R14: CLOSED by phase W (W.7). The M4 surge had reduced it to the two CPU fallbacks, which
+  overrode neither setAdjustments nor setTransform, so the defaulted no-ops ran. A shared
+  CpuPictureControls applies the colour matrix on the bytes and the zoom, pan and aspect on the CG
+  transform, and both renderers wire it. Two things stay out BY CONSTRUCTION rather than as debt:
+  gamma is absent by design, and the MediaCodec direct-to-SurfaceView tier cannot apply either.
 
 Audio:
 - SOL-A1: CLOSED by the M4 surge. The submitted count is what the device actually took,
@@ -16216,11 +16276,17 @@ API truth:
   section 11 items.
 - SOL-API5: CLOSED by S4.d (46ac28b): renderer events collect into typed warnings, the bounded
   history and the dump.
-- SOL-API6 [V] NativeRingAudioSink exposes CPointer<kprt_ring> on the core ABI, dragging the
-  cinterop klib into core. Hide it behind an opaque writer owned by rt/output. Home: S3.
-- SOL-API7 [C] View and Compose surfaces hard-cast frames to FFmpeg types; an unsupported
-  backend/renderer pairing fails at runtime instead of as a typed capability error. Wants the
-  sealed hardware-surface model plus renderer capability negotiation. Home: S3.
+- SOL-API6 [V] RE-VERIFIED 2026-08-17 and still OPEN: NativeRingHandoff.ring is a public
+  CPointer<kprt_ring> behind the @RawRingApi opt-in, so the marker narrows the audience without
+  removing the ABI coupling. Hiding it behind an opaque writer means moving the ring wrapper out
+  of the module whose internal interface it implements, which is a design act; phase W left it for
+  the same 18.3 rule 6 reason as SOL-API7. Home: with SOL-C2 and the first non-Apple backend.
+- SOL-API7 [V] RE-VERIFIED 2026-08-17 and still OPEN: three hard `frame as KiteCodecVideoFrame`
+  casts survive in :kiteplayer-compose-video (ios, jvm, android), so an unsupported
+  backend/renderer pairing fails at runtime instead of as a typed capability error. It wants the
+  sealed hardware-surface model plus renderer capability negotiation, which is a design act rather
+  than an edit, so phase W verified it and left it rather than improvising one (18.3 rule 6).
+  Home: the next stage that touches the surface model.
 
 Performance (the open remainder):
 - SOL-P1: CLOSED for the software tier by the M4 surge: software planes convert on the CPU
@@ -16245,9 +16311,10 @@ Performance (the open remainder):
 - SOL-P6: CLOSED by the M4 surge. The snapshot publishes only when a command, outcome or
   explicit site marked the pass dirty (progress and stats keep their own intervals either
   way), and the selected-queues list is cached for the session's life.
-- SOL-P7 [C] Metal pipelines compile per renderer/composer rather than caching per device, and
-  the UIKit/AppKit CPU fallbacks recreate transformed frames and subtitle CGImages for identity
-  geometry. Home: S3.
+- SOL-P7: CLOSED by phase W (W.7), all three parts. Pipelines cache per device registryID and
+  target format instead of compiling per composer, the UIKit fallback gained the identity fast
+  path AppKit already had, and both fallbacks cache overlay CGImages by content hash: without the
+  hash key a held cue built 60 CGImages where it now builds 1.
 - SOL-P8 [V] LinearResampler aliases under real rate changes and ChannelMixer cannot remap
   equal-count layouts nor limit surround downmix (both already KDoc'd interim). Home: B4's
   swresample adoption, pulled by S3 if audio work lands there first.

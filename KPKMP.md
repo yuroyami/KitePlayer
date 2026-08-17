@@ -17594,6 +17594,37 @@ deliberately left open.
 - Sub-phase: X.4. Test: a stale token is refused rather than honoured, proved by a test that frees
   a handle and then uses it. Because this now edits code that Android and the desktop JVM already
   ship, the existing JNI suites are the regression arm and must stay green with no baseline moved.
+  Result, 2026-08-17: the table moved to `native/kitecodec-handles/kc_handles.{c,h}` and
+  `kj_handles.c` shrank from 202 lines to the three wrappers that need a `JNIEnv` to throw. The JNI
+  library links with 10 adapter units where it linked 9, and the wasm archive compiles 12 sources
+  where it compiled 11. `LinkKiteCodecJniTask` derived its include path from `sources.first()`, which
+  breaks the moment sources live in two directories, and `kc_handles.c` sorts ahead of `kj_*.c`; it
+  now adds every distinct source directory. The corrupt-descriptor negative link stages a copy of
+  the JNI tree only, so it names the shared directory explicitly or it would fail on every
+  `kj_handle_*` symbol.
+  **The test took three attempts to become real, and the first two are worth recording because both
+  LOOKED green.** Attempt one asserted that a released token stops resolving. It passed with the
+  generation counter deliberately removed, because a closed slot has a NULL pointer and that alone
+  refuses the lookup: the assertion never reached the generation. Attempt two added a second mint
+  and called it slot reuse. It also passed sabotaged, because the free-slot scan moves FORWARD, so
+  the second mint took slot 1 and the freed slot 0 was never reused. The test's name claimed a
+  property its body could not reach.
+  Attempt three forces the reuse deterministically: the table grows in 1024-slot chunks, so filling
+  the first chunk and then freeing its first slot makes the next mint land in that exact slot. The
+  probe now asserts the reuse HAPPENED, by comparing the slot bits of the two tokens, before
+  asserting the old token is refused. Without that guard the test could go back to proving nothing
+  the next time an allocation detail changes.
+  Falsification, clean red then green: deleting the `kj_slots[slot].gen == gen` comparison from
+  `kj_resolve` fails with `a token for a FREED object resolved after its slot was reused`, and
+  restoring it passes. Two earlier sabotage attempts that did NOT produce a failure are themselves a
+  finding: the table defends the same property three ways, a NULL pointer check, an odd/even
+  free-slot rule and the generation compare, so removing any one alone does not open the hole. The
+  `-Werror` build also refused the sabotaged unit until an unused variable was silenced, which is a
+  fourth layer nobody designed and everybody benefits from.
+  **Honest bound.** No test covered the stale-token guarantee before this one, on either binding.
+  The C suites cover ownership and buffers, and the JNI JVM suites cover the AVIO bridge. This probe
+  is the first coverage of the table's own contract, and it runs on wasm only; the JNI side is
+  covered by regression, not by a new test of its own.
 
 #### X-05. The 198-entry binding is the stage's single largest item, and its shape is undecided
 - Where: `signature-baseline.txt` (213 records); `kj_*.c` as the measured JNI precedent, about

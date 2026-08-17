@@ -11521,7 +11521,10 @@ umbrella artifact; POMs, licences, readiness checks (named steps HERE, never in 
 publication PREPARED by the executor, EXECUTED by the owner per D-3. Absorbs draft C-32 to C-42
 and the 17.11 build and publication rows.
 
-**S6. IT PLAYS ON THE WEB.** Spike first, timeboxed, measured (FFmpeg-to-wasm size and decode
+**S6. IT PLAYS ON THE WEB.** (The spike RAN on 2026-08-17 and PASSED; its report is
+`docs/spikes/2026-08-17-web-spike.md` and its verdict, numbers and 178-to-272-hour cost are in the
+section 14 W.9 entry. Do not re-run it; enter S6 at the KV-6 draw-cost probe the verdict names as
+its first item.) Spike first, timeboxed, measured (FFmpeg-to-wasm size and decode
 throughput, threads and SIMD, the JS interop shape over the same C ABI); build only if the spike
 clears its bar; exit criteria carry the physics honestly (software decode, 1080p target, 4K a
 stated non-goal of v1). If the spike fails, web ships engine-only and the register says so.
@@ -16410,7 +16413,11 @@ road's order: W.
   - **M owner riders:** the iPhone KiteStats background-slideshow run and the physical device
     session AGW-1, both owner-blocked, both unchanged.
 
-**W. REAL ON DESKTOP AND WEB.** Exactly S3 then S6 as written (S3 minus the rows M4 took),
+**W. REAL ON DESKTOP AND WEB.** (ENTERED 2026-08-17. The expansion is 17.13. Progress: W.1, W.2,
+W.5, W.8 and W.9 CLOSED; W.3 and the Kotlin/Native desktop targets landed; W.6 landed its split
+half only. The desktop JVM plays the whole 17.5 matrix and Linux runs it in a container; Windows is
+a link claim; the web spike passed and S6 is scheduled by its own verdict.) Exactly S3 then S6 as
+written (S3 minus the rows M4 took),
 in that order: Windows and Linux sinks and rendering, the desktop KiteVideo maturation, then
 the timeboxed wasm spike with its stated physics. The parked libplacebo features (scaling
 kernels, debanding) become eligible HERE as shader work if the desktop picture demands them,

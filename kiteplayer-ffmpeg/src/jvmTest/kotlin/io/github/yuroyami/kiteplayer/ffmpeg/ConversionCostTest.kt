@@ -123,4 +123,84 @@ class ConversionCostTest {
             source.close()
         }
     }
+
+    /**
+     * W-15 change 2's ceiling, measured BEFORE any parallel-for seam is designed.
+     *
+     * The loop is load and store bound at roughly ten cycles per pixel, which is the argument that
+     * more cores would help. That is an argument, not a number. This splits the frame into
+     * horizontal slices and converts them concurrently with the REAL function, one slice per task,
+     * so what is measured is the actual per-pixel work and not a mirror of it. If the speedup here
+     * is small, no seam is worth building and change 2 is rejected the way change 1 was.
+     *
+     * Slice heights are all EVEN so that each slice is a valid yuv420p frame with whole chroma rows.
+     */
+    @Test
+    fun measureTheParallelCeiling() {
+        val width = 1920
+        val height = 1080
+        val space = ColorSpaceInfo()
+
+        fun sliceHeights(parts: Int): List<Int> {
+            val even = (height / parts) and 1.inv()
+            val heads = List(parts - 1) { even }
+            return heads + (height - heads.sum())
+        }
+
+        fun planesFor(sliceHeight: Int): ByteArray {
+            val chromaWidth = (width + 1) shr 1
+            val chromaHeight = (sliceHeight + 1) shr 1
+            return ByteArray(width * sliceHeight + 2 * chromaWidth * chromaHeight) {
+                (it * 31 % 255).toByte()
+            }
+        }
+
+        fun convert(planes: ByteArray, sliceHeight: Int): Int = tightlyPackedToRgba(
+            bytes = planes,
+            width = width,
+            height = sliceHeight,
+            pixelFormat = PlayerPixelFormat.Yuv420p,
+            colorSpace = space,
+        ).size
+
+        fun timeParts(parts: Int): Double {
+            val heights = sliceHeights(parts)
+            check(heights.sum() == height && heights.all { it % 2 == 0 }) { "bad split: $heights" }
+            val slices = heights.map { planesFor(it) to it }
+            val pool = java.util.concurrent.Executors.newFixedThreadPool(parts)
+            try {
+                fun once() {
+                    val futures = slices.map { (planes, sliceHeight) ->
+                        sliceHeight to pool.submit<Int> { convert(planes, sliceHeight) }
+                    }
+                    // Each slice must return its own pixel count. Without this the benchmark would
+                    // happily time tasks that converted nothing.
+                    futures.forEach { (sliceHeight, future) ->
+                        assertEquals(width * sliceHeight * 4, future.get())
+                    }
+                }
+                repeat(10) { once() }
+                val samples = DoubleArray(40)
+                for (i in samples.indices) {
+                    val start = System.nanoTime()
+                    once()
+                    samples[i] = (System.nanoTime() - start) / 1_000_000.0
+                }
+                samples.sort()
+                val mean = samples.average()
+                println("parallel x$parts: mean=${"%.2f".format(mean)} ms p95=${"%.2f".format(samples[38])} ms")
+                return mean
+            } finally {
+                pool.shutdownNow()
+            }
+        }
+
+        val one = timeParts(1)
+        val four = timeParts(4)
+        val eight = timeParts(8)
+        println(
+            "W-15 change 2 ceiling: 4 threads ${"%.2f".format(one / four)}x, " +
+                "8 threads ${"%.2f".format(one / eight)}x over one",
+        )
+    }
 }

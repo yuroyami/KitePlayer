@@ -17120,6 +17120,49 @@ it.**
   green, since neither the ring nor the sink changes behaviour. Proved able to fail by restoring the
   typed pointer, which puts the file back in the baseline and fails the ratchet.
 
+#### W-19. Row parallelism is the conversion's only remaining lever, and it MEASURES
+- Where: `kiteplayer-ffmpeg/src/commonMain/.../Conversions.kt:111 tightlyPackedToRgba`;
+  `ConversionCostTest.measureTheParallelCeiling` in this module's jvmTest.
+- Measured first, 2026-08-17, unloaded, using the REAL converter on horizontal slices of a 1080p
+  frame rather than a mirror of it, 40 timed iterations after warmup:
+
+  | tasks | mean | p95 | speedup |
+  |---|---|---|---|
+  | 1 | 6.36 ms | 7.29 ms | baseline |
+  | 4 | 1.89 ms | 2.96 ms | **3.36x** |
+  | 8 | 1.73 ms | 2.42 ms | **3.68x** |
+
+  This is the first of W-15's three candidate changes to pay, and it pays by a lot. The raster
+  shader measured 0.15x and the fixed-point rewrite 1.04x, both rejected on their numbers; this
+  one takes the conversion from 6.36 ms to 1.89 ms on four tasks. It also confirms the reason:
+  a loop that scales with cores was bound by memory throughput, not by arithmetic, exactly as
+  W-15 concluded.
+- Problem: `tightlyPackedToRgba` converts one frame on one thread. Every software path on every
+  platform pays the whole 6.36 ms serially.
+- Fix, decided: the row loop splits into slices converted concurrently, behind ONE new expect/actual
+  `parallelFor` in `kiteplayer-ffmpeg`'s commonMain. The work is embarrassingly parallel by
+  construction: each slice writes a disjoint range of output rows and reads a disjoint range of
+  input rows, so there is no shared mutable state and no ordering between slices.
+- The actuals, and the honest asymmetry between them:
+  - jvm and android: a small fixed pool, sized from the available processors.
+  - native (Apple, linux, mingw): the same, over the platform's threads.
+  - **js and wasmJs: SEQUENTIAL, and that is the correct actual, not a stub.** Those targets have
+    one thread by construction, so `parallelFor` there runs the slices in order and the conversion
+    behaves exactly as it does today. A web port loses nothing it ever had.
+- Two costs stated before the work, so neither is discovered as a surprise:
+  1. Slice heights must be EVEN for a subsampled layout, or a slice's chroma rows do not line up
+     with its luma rows. The measurement already respects this and the implementation must too.
+  2. Thread handoff is not free. At 1080p it buys 4.5 ms and is obviously worth it; on a small
+     frame it would not be. The implementation takes a threshold below which it stays sequential,
+     and the threshold is MEASURED rather than guessed.
+- Sub-phase: W.16. Test: `ConversionCostTest` for the number, and the existing colour suites for the
+  behaviour, which must not move by a single byte, since slicing changes only WHERE the same
+  arithmetic runs. Proved able to fail by forcing one slice to skip its rows, which the colour tests
+  must catch.
+- Exit: the conversion's mean falls on the JVM and every colour test stays green. If a threshold
+  cannot be found that keeps small frames from regressing, the item is recorded as
+  measured-and-rejected like its two siblings.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -17148,6 +17191,8 @@ it.**
   object whatever format it is in".
 - **W.15 The ring crosses as an address, not as a type** (W-18). Commit: "Take the C ring
   pointer off the public ABI".
+- **W.16 The conversion uses the cores it has** (W-19). Commit: "Convert the frame on more
+  than one core".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

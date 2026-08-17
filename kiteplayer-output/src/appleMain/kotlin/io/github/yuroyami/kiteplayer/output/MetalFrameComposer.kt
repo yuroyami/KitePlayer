@@ -252,6 +252,27 @@ internal class MetalFrameComposer(
     /** The colour of the picture being encoded; set by [encode]'s caller through the frame. */
     private var pictureColor = io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo.Unspecified
 
+    /**
+     * True when [encode] can draw [picture]: the cheap format gate run BEFORE a drawable is
+     * acquired (audit F-DRW1). Refusing after nextDrawable left the drawable unpresented and
+     * the command buffer uncommitted, and a layer only has about three drawables to starve.
+     */
+    fun canEncode(picture: MetalPicture): Boolean = when (picture) {
+        is MetalPicture.SoftwarePlanes -> planeRecipeFor(picture.format) != null
+        is MetalPicture.CorePixelBuffer -> {
+            val buffer: CVPixelBufferRef? = interpretCPointer(picture.buffer.rawValue)
+            when (CVPixelBufferGetPixelFormatType(buffer)) {
+                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+                kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+                kCVPixelFormatType_420YpCbCr10BiPlanarFullRange,
+                kCVPixelFormatType_32BGRA,
+                -> true
+                else -> false
+            }
+        }
+    }
+
     private fun hardwareInputs(picture: MetalPicture.CorePixelBuffer, frame: VideoFrame): PictureInputs {
         val cache = ensureTextureCache()
         val buffer: CVPixelBufferRef? = interpretCPointer(picture.buffer.rawValue)

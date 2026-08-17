@@ -432,6 +432,73 @@ class AppKitVideoRendererTest {
         }
     }
 
+    // The M4 surge's headline (SOL-R1) finally pinned (audit F-RDWT1): a cue arriving while
+    // the picture is paused must redraw the retained frame with no new present() at all.
+    @Test
+    fun `an overlay set after the last frame redraws the retained picture`() = runBlocking {
+        val storedWidth = 4
+        val storedHeight = 2
+        val red = ByteArray(storedWidth * storedHeight * 4)
+        for (index in red.indices step 4) {
+            red[index] = -1
+            red[index + 3] = -1
+        }
+        val drawn = atomic<NSImage?>(null)
+        val draws = atomic(0)
+        val renderer = AppKitVideoRenderer(
+            convert = { red },
+            enqueueOnMain = { block -> block() },
+            showImage = { image ->
+                drawn.value = image
+                draws.incrementAndGet()
+            },
+        )
+        try {
+            val ledger = LeakLedger()
+            val frame = FakeVideoFrame(
+                pts = Pts(0),
+                size = VideoSize(storedWidth, storedHeight),
+                rotationDegrees = 0,
+                ledger = ledger,
+            )
+            assertTrue(renderer.present(frame, targetNanos = 0L))
+            awaitTrue("the plain frame was drawn") { draws.value >= 1 }
+            val before = draws.value
+
+            // The pause: no further present. The cue edge alone must produce a new image.
+            renderer.setOverlay(
+                io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                    images = listOf(
+                        io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                            x = 1,
+                            y = 0,
+                            bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(
+                                2, 1, ByteArray(2 * 1 * 4) { 0xFF.toByte() },
+                            ),
+                        ),
+                    ),
+                    viewportWidth = storedWidth,
+                    viewportHeight = storedHeight,
+                    contentHash = 8L,
+                ),
+            )
+            awaitTrue("the paused picture redraws for the cue") { draws.value > before }
+            val pixels = readBack(assertNotNull(drawn.value))
+            assertEquals(
+                255 to 255,
+                pixels.redAndGreenAt(1, 0),
+                "the redraw must carry the overlay above the retained picture",
+            )
+            assertEquals(
+                255 to 0,
+                pixels.redAndGreenAt(0, 1),
+                "the retained picture itself survives the redraw",
+            )
+        } finally {
+            renderer.close()
+        }
+    }
+
     private fun readBack(image: NSImage): DrawnPixels {
         val cgImage = image.CGImageForProposedRect(null, null, null) ?: fail("the drawn image has no bitmap")
         val pixelWidth = CGImageGetWidth(cgImage).toInt()

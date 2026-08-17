@@ -128,7 +128,8 @@ public class UIKitVideoRenderer internal constructor(
                 // When a frame DID convert above, the new overlay is already baked into it and
                 // the flag clears without a second draw.
                 if (redrawWanted.getAndSet(false) && pendingFrame.value == null) redrawRetained()
-                else redrawWanted.value = false
+                // getAndSet(false) is the whole consumption (audit F-RDW1): the old else-arm
+                // blindly wrote false over a request that raced in after the read.
             }
         } catch (_: ClosedReceiveChannelException) {
             // close() ends the worker's wait by closing the signal.

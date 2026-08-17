@@ -104,8 +104,10 @@ public class MetalVideoRenderer public constructor(
                 drawPending()
                 // SOL-R1: overlay and picture-control changes reach a PAUSED frame by
                 // re-encoding the retained picture. A frame drawn above already carried them.
+                // getAndSet(false) is the whole consumption (audit F-RDW1): the old else-arm
+                // blindly wrote false over a request that raced in after the read, and that
+                // request's queued token then found the flag already spent.
                 if (redrawWanted.getAndSet(false) && pending.value == null) drawRetained()
-                else redrawWanted.value = false
             }
         } catch (_: ClosedReceiveChannelException) {
             // close() closed the signal channel; the ordinary way out, not a fault.
@@ -154,6 +156,16 @@ public class MetalVideoRenderer public constructor(
             val picture = resolver.resolve(frame)
             if (picture == null) {
                 failed.incrementAndGet()
+                return
+            }
+            // The format gate runs BEFORE a drawable is acquired (audit F-DRW1): refusing after
+            // nextDrawable left that drawable unpresented and its buffer uncommitted, and a
+            // layer holds only about three, so a stream of unwrappable frames starved the pool.
+            if (!composer.canEncode(picture)) {
+                failed.incrementAndGet()
+                eventFlow.tryEmit(
+                    RendererEvent.Failed("the Metal renderer cannot wrap this picture's pixel format"),
+                )
                 return
             }
             val drawable = layer.nextDrawable()

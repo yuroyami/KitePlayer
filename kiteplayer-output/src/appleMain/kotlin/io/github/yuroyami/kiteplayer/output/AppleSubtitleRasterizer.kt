@@ -17,6 +17,7 @@ import platform.CoreFoundation.CFRangeMake
 import platform.CoreGraphics.CGBitmapContextCreate
 import platform.CoreGraphics.CGColorCreateGenericRGB
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
+import platform.CoreFoundation.CFRelease
 import platform.CoreGraphics.CGContextRelease
 import platform.CoreGraphics.CGContextSetLineJoin
 import platform.CoreGraphics.CGContextSetLineWidth
@@ -127,7 +128,8 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             val range = NSMakeRange(cursor.toULong(), span.text.length.toULong())
             cursor += span.text.length
             val style = span.style
-            var font = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, sizePx.toDouble(), null)
+            val baseFont = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, sizePx.toDouble(), null)
+            var font = baseFont
             if (style.bold || style.italic) {
                 val traits = (if (style.bold) kCTFontBoldTrait else 0u) or
                     (if (style.italic) kCTFontItalicTrait else 0u)
@@ -136,7 +138,13 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             // CoreText's own attribute keys, bridged toll-free; string literals would be the
             // WRONG keys for a CTFramesetter (the colour key is not AppKit's "NSColor").
             text.addAttribute(cfKey(kCTFontAttributeName), objcValue(font!!), range)
-            text.addAttribute(cfKey(kCTForegroundColorAttributeName), objcValue(style.primaryColor.toCgColor()!!), range)
+            val spanColor = style.primaryColor.toCgColor()!!
+            text.addAttribute(cfKey(kCTForegroundColorAttributeName), objcValue(spanColor), range)
+            // The attributed string holds its own retains; every Create-rule reference this
+            // loop made dies here (audit F-CFL1: they used to leak, one set per span per cue).
+            if (font != baseFont) CFRelease(font)
+            CFRelease(baseFont)
+            CFRelease(spanColor)
             if (style.underline) {
                 text.addAttribute(
                     cfKey(kCTUnderlineStyleAttributeName),
@@ -148,71 +156,87 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
         if (safeWidth <= 0) return null
 
+        // Every Create-rule object below is released on every exit (audit F-CFL1): a two hour
+        // film's cue edges used to leak the framesetter, the frame with its laid-out glyph
+        // runs, the path, the colour space and one colour per styled cue, for ever.
         val framesetter = CTFramesetterCreateWithAttributedString(
             // Toll-free bridge, no ownership change: the framesetter retains what it needs.
             interpretCPointer(text.objcPtr())!!,
         )
-        val fitted = CTFramesetterSuggestFrameSizeWithConstraints(
-            framesetter,
-            CFRangeMake(0, 0),
-            null,
-            CGSizeMake(safeWidth.toDouble(), viewportHeight.toDouble()),
-            null,
-        )
-        val width = fitted.useContents { ceil(width).toInt() }.coerceIn(1, safeWidth)
-        val height = fitted.useContents { ceil(height).toInt() }.coerceAtLeast(1)
+        try {
+            val fitted = CTFramesetterSuggestFrameSizeWithConstraints(
+                framesetter,
+                CFRangeMake(0, 0),
+                null,
+                CGSizeMake(safeWidth.toDouble(), viewportHeight.toDouble()),
+                null,
+            )
+            val width = fitted.useContents { ceil(width).toInt() }.coerceIn(1, safeWidth)
+            val height = fitted.useContents { ceil(height).toInt() }.coerceAtLeast(1)
 
-        val pixels = ByteArray(width * height * 4)
-        pixels.usePinned { pinned ->
-            val colorSpace = CGColorSpaceCreateDeviceRGB()
-            val context = CGBitmapContextCreate(
-                data = pinned.addressOf(0),
-                width = width.toULong(),
-                height = height.toULong(),
-                bitsPerComponent = 8u,
-                bytesPerRow = (width * 4).toULong(),
-                space = colorSpace,
-                bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
-            ) ?: return null
-            try {
-                if (firstStyle.outlineWidthPx > 0f) {
-                    // Fill-stroke text mode: CG strokes each glyph in the outline colour and
-                    // fills it in the span colour in the same draw.
-                    CGContextSetTextDrawingMode(context, platform.CoreGraphics.CGTextDrawingMode.kCGTextFillStroke)
-                    CGContextSetLineWidth(context, (firstStyle.outlineWidthPx * fontScale).toDouble())
-                    CGContextSetLineJoin(context, CGLineJoin.kCGLineJoinRound)
-                    val outline = firstStyle.outlineColor.toCgColor()
-                    CGContextSetStrokeColorWithColor(context, interpretCPointer(outline!!.rawValue))
-                }
-                val path = CGPathCreateWithRect(
-                    CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()),
-                    null,
+            val pixels = ByteArray(width * height * 4)
+            pixels.usePinned { pinned ->
+                val colorSpace = CGColorSpaceCreateDeviceRGB()
+                val context = CGBitmapContextCreate(
+                    data = pinned.addressOf(0),
+                    width = width.toULong(),
+                    height = height.toULong(),
+                    bitsPerComponent = 8u,
+                    bytesPerRow = (width * 4).toULong(),
+                    space = colorSpace,
+                    bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
                 )
-                val frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, 0), path, null)
-                CTFrameDraw(frame, context)
-            } finally {
-                CGContextRelease(context)
+                // The context holds its own reference to the space from here (or was never made).
+                CFRelease(colorSpace)
+                if (context == null) return null
+                try {
+                    if (firstStyle.outlineWidthPx > 0f) {
+                        // Fill-stroke text mode: CG strokes each glyph in the outline colour and
+                        // fills it in the span colour in the same draw.
+                        CGContextSetTextDrawingMode(context, platform.CoreGraphics.CGTextDrawingMode.kCGTextFillStroke)
+                        CGContextSetLineWidth(context, (firstStyle.outlineWidthPx * fontScale).toDouble())
+                        CGContextSetLineJoin(context, CGLineJoin.kCGLineJoinRound)
+                        val outline = firstStyle.outlineColor.toCgColor()
+                        CGContextSetStrokeColorWithColor(context, interpretCPointer(outline!!.rawValue))
+                        CFRelease(outline)
+                    }
+                    val path = CGPathCreateWithRect(
+                        CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()),
+                        null,
+                    )
+                    val frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, 0), path, null)
+                    CFRelease(path)
+                    try {
+                        CTFrameDraw(frame, context)
+                    } finally {
+                        CFRelease(frame)
+                    }
+                } finally {
+                    CGContextRelease(context)
+                }
             }
-        }
 
-        val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
-        val marginYPx = (viewportHeight * layoutSpec.marginVertical).toInt()
-        val x = layoutSpec.positionX?.let { (it * viewportWidth).toInt() } ?: when (layoutSpec.alignment) {
-            CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> marginXPx
-            CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight ->
-                viewportWidth - marginXPx - width
-            else -> (viewportWidth - width) / 2
+            val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
+            val marginYPx = (viewportHeight * layoutSpec.marginVertical).toInt()
+            val x = layoutSpec.positionX?.let { (it * viewportWidth).toInt() } ?: when (layoutSpec.alignment) {
+                CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> marginXPx
+                CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight ->
+                    viewportWidth - marginXPx - width
+                else -> (viewportWidth - width) / 2
+            }
+            val y = layoutSpec.positionY?.let { (it * viewportHeight).toInt() } ?: when (layoutSpec.alignment) {
+                CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> marginYPx
+                CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
+                    (viewportHeight - height) / 2
+                // The implicit bottom stack anchors at the viewer's sub-position: 1.0 is the plain
+                // bottom edge, smaller lifts the stack. Explicit positions above are the author's
+                // word and never move with it, exactly mpv's sub-pos rule.
+                else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
+            }
+            return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, pixels))
+        } finally {
+            CFRelease(framesetter)
         }
-        val y = layoutSpec.positionY?.let { (it * viewportHeight).toInt() } ?: when (layoutSpec.alignment) {
-            CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> marginYPx
-            CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
-                (viewportHeight - height) / 2
-            // The implicit bottom stack anchors at the viewer's sub-position: 1.0 is the plain
-            // bottom edge, smaller lifts the stack. Explicit positions above are the author's
-            // word and never move with it, exactly mpv's sub-pos rule.
-            else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
-        }
-        return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, pixels))
     }
 
     /** A CoreText CFString attribute key as the Kotlin string NSAttributedString wants. */

@@ -499,9 +499,15 @@ private class AndroidGpuCompletionTracker(
         if (!batches.hasPending) return
         // Invalidating the Android View alone can replay Compose's existing display list without
         // executing drawBehind. Tick draw state so a new VSYNC-keyed batch is definitely recorded.
-        state.requestCompletionProofDraw()
-        bindings.values().forEach { view ->
-            if (view.isAttachedToWindow) view.postInvalidateOnAnimation()
+        // POSTED, never written inline (audit F-DRAW1): record() runs inside the Compose draw
+        // phase, and writing a draw-observed snapshot state from inside the draw that reads it
+        // is the reentrant-invalidation shape Compose forbids. The post also keeps the tick on
+        // the main thread whichever thread asked for the proof.
+        mainHandler.post {
+            state.requestCompletionProofDraw()
+            bindings.values().forEach { view ->
+                if (view.isAttachedToWindow) view.postInvalidateOnAnimation()
+            }
         }
     }
 

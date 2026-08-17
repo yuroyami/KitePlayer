@@ -131,6 +131,9 @@ internal class KiteVideoRenderer(
     private val failed = atomic(0L)
     private val closed = atomic(false)
 
+    /** Orders the overlay publications against close's final null (audit F-CLS1). */
+    private val overlayPublishLock = kotlinx.atomicfu.locks.SynchronizedObject()
+
     /** The single frame waiting to be converted. Newest wins; the displaced one is closed here. */
     private val pending = atomic<VideoFrame?>(null)
 
@@ -319,15 +322,19 @@ internal class KiteVideoRenderer(
          * content as published would skip the retry the next setOverlay call is, and the text
          * would simply never appear. And a close that raced this build must win: publishing
          * after close would hand a dead renderer's images to a live composition. */
-        if (closed.value) return
-        if (!anyFailed) overlayHash = overlay.contentHash
-        publishOverlay(
-            KiteVideoOverlay(
-                items = items,
-                viewportWidth = overlay.viewportWidth,
-                viewportHeight = overlay.viewportHeight,
-            ),
-        )
+        kotlinx.atomicfu.locks.synchronized(overlayPublishLock) {
+            // Checked and published under one lock (audit F-CLS1): the plain check let a close
+            // land between it and the publish, pinning a dead renderer's cues on screen for ever.
+            if (closed.value) return
+            if (!anyFailed) overlayHash = overlay.contentHash
+            publishOverlay(
+                KiteVideoOverlay(
+                    items = items,
+                    viewportWidth = overlay.viewportWidth,
+                    viewportHeight = overlay.viewportHeight,
+                ),
+            )
+        }
     }
 
     /**
@@ -353,7 +360,7 @@ internal class KiteVideoRenderer(
             drainPending()
             publish(null)
             releasePublishedFrames()
-            publishOverlay(null)
+            kotlinx.atomicfu.locks.synchronized(overlayPublishLock) { publishOverlay(null) }
             // After the join and the null publish: no worker can ask for an image and no reader
             // should be handed one, so the image storage goes back now.
             releaseImages()

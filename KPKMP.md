@@ -16946,6 +16946,45 @@ it.**
      CPU cost per frame FALLS; if it does not, the item is recorded as measured-and-rejected
      rather than merged, because a shader that is not faster is only more surface.
 
+#### W-15. The conversion loop is 94% of the desktop upload, and its shape is the cost
+- Where: `kiteplayer-ffmpeg/src/commonMain/.../Conversions.kt:111 tightlyPackedToRgba`, reached from
+  every software path on every platform.
+- Measured first, 2026-08-17, on an UNLOADED machine with a real decoded 1080p frame, by
+  `ConversionCostTest` in this module's jvmTest, which is kept as the rerunnable baseline:
+
+  | step | mean | p95 |
+  |---|---|---|
+  | whole `SoftwareConverter.toRgba` | 6.73 ms | 7.76 ms |
+  | JNI `copyPlanesToByteArray` alone | **0.31 ms** | 0.37 ms |
+  | the conversion loop alone | **6.33 ms** | 6.82 ms |
+
+- Problem, and TWO EARLIER GUESSES THIS KILLS. The loop is 94% of the cost, so it is the right
+  target. But the JNI plane copy was suspected of being several milliseconds and is 0.31 ms, so
+  nothing should be spent there. And W-14's note that a one-format mirror ran at 5.56 ms against a
+  presumed 9.4 ms real function was wrong twice over: the real function is 6.33 ms, not 9.4 (the
+  9.4 was W.4's LOADED host, whose load average it recorded as 5.8 to 9.2), and the mirror is
+  therefore only 14% faster, not 1.7 times. Generality is NOT what this loop is paying for, so
+  specialising it per format would buy about 14% and is not worth the duplication.
+- What the cost actually is, stated as a hypothesis to be tested rather than a conclusion: the loop
+  does 2.07 million iterations, each doing Double arithmetic, three `readPackedComponent` calls and
+  four `coerceIn` clamps, and it allocates an 8.3 MB output array per frame. Two changes are worth
+  measuring, in this order, because they are independent and the first is far cheaper to make:
+  1. **Fixed-point integer arithmetic** in place of Double, with the clamps folded into the same
+     integer step. No contract changes, no API changes, one function.
+  2. **Row parallelism.** The loop is embarrassingly parallel per output row and the machine has 8
+     cores, so this is the change with real headroom. It needs a parallel-for seam, which
+     commonMain does not have, so it costs an expect/actual and is the reason it is second rather
+     than first.
+- Fix, decided: take change 1, measure, and take change 2 only if change 1 leaves enough on the
+  table to justify a new seam. Every one of the 21 pixel-format cases and the `HdrToneMap` call
+  keep working, pinned by the colour tests that already exist.
+- Sub-phase: W.12. Test: `ConversionCostTest` re-run for the number, and the existing colour
+  correctness suites for the behaviour, which must not move by a single byte. Proved able to fail
+  by perturbing one coefficient, which the colour tests must catch.
+- Exit: the loop's mean falls. If it does not, this is recorded as measured-and-rejected like
+  W-14's raster variant, and the desktop conversion cost is accepted as the price of software
+  decode until the GPU path of W-14 is built.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -16966,6 +17005,8 @@ it.**
   once, in words a consumer can read".
 - **W.11 The desktop converts on the GPU, for the layouts that can** (W-14). Commit: "Convert
   the desktop frame where the pixels already are".
+- **W.12 The conversion loop stops paying for its shape** (W-15). Commit: "Convert the same
+  pixels with less arithmetic".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

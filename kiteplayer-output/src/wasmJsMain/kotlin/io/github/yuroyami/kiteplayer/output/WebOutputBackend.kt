@@ -54,9 +54,12 @@ private external fun performanceNow(): Double
  * something answering that contract the renderer cannot be exercised inside the engine at all, so
  * this consumes at exactly real time and writes the samples nowhere.
  *
- * What that buys is real: video plays on the web, at the right rate, with A/V sync logic running.
- * What it does not buy is any sound. The real sink is an `AudioWorklet` fed by a ring, which is
- * X-10, and it is the piece of this stage with the most real-time subtlety left in it.
+ * KNOWN DEFECT, found by the S6-D7 review before anything played through it: this sink never
+ * CALLS [render], and the engine's clock anchors only when the render callback consumes the audio
+ * ring. As written, playback through the engine would hang at position zero. What this class needs
+ * to honour its own name is a pump: a coroutine invoking onRender per deviceBufferFrames block on
+ * a wall-clock schedule, discarding the samples. Until that lands, this sink proves only that the
+ * contract is answerable on wasm. The real audible sink is an `AudioWorklet` fed by a ring (X-10).
  *
  * INTERNAL on purpose, unlike `WebOutputBackend` and `WebMonotonicClock` which mirror their public
  * desktop twins. This one is scaffolding for X-10, and publishing it would commit the library to a

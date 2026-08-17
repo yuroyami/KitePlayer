@@ -17507,6 +17507,52 @@ deliberately left open.
      decision in X-05 stands. Treat 40 to 60 hours as the ceiling, not the plan; the direct-export
      shape lands materially under it.
 
+- **S6-D7, second-seat review of the engine-wiring day, 2026-08-17, authored by Fable 5 at the
+  owner's direction.** Every finding below was verified by reading the committed tree and the
+  engine's contracts, not by trusting the day's log. The wiring itself is sound; what follows is
+  ranked most severe first.
+  1. **SHOWSTOPPER: `SilentPacedAudioSink` never drives the render callback, so the engine's clock
+     never starts.** Traced, not asserted: `AudioPath.kt` hands the sink an `AudioRenderCallback`
+     closure that reads a `KotlinAudioRing`, and the ring's `consumed` counter and
+     `anchorPtsUs`/`anchorNanos` pair, which is what the core anchors its clock from, advance ONLY
+     when the sink invokes that callback. `DesktopAudioSink` has a loop calling
+     `callback.onRender(...)` per block; the silent sink stores `render` in `open` and never calls
+     it. Consequence: the ring fills, backpressure stalls the decoder, and audio-mastered playback
+     hangs at position zero. The sink's own KDoc claimed "video plays on the web, at the right
+     rate, with A/V sync logic running"; that sentence was false as written and is corrected in the
+     same commit as this note. Its `pacedFrames()` accounting is doubly dead: nothing reads it, and
+     it discards the accumulated `framesConsumed` base on resume, so even as a helper it loses
+     position across a pause. The fix X-10's first increment actually needs: a pump, a coroutine
+     that calls `onRender` for `deviceBufferFrames`-sized blocks on a wall-clock schedule and
+     writes the result nowhere. That is the smallest thing that makes the claim true.
+  2. **`MediaSource.open(io, options)` on wasmJs silently drops the options, and then
+     `unusedOpenOptions` answers empty, which asserts they were all consumed.** The `openInputIo`
+     `@JsFun` passes 0 for keys, values and count. Every other backend forwards open options and
+     reports the genuinely unused ones. Either forward them (the C entry point already takes them)
+     or return them ALL from `unusedOpenOptions` until then; answering empty is the one wrong
+     choice, because a caller probing for option support reads it as full support.
+  3. **`StreamInfo.video.frameRate` is hardcoded `0/1` and `sampleAspectRatio` `1/1` on wasmJs**,
+     unrecorded. `ffkmp_stream_avg_frame_rate` and `ffkmp_codecpar_sample_aspect_ratio` both exist
+     in the binding and cost two out-parameter reads, the same shape `readTimeBase` already does.
+     A `0/1` frame rate feeds every pacing heuristic above; fill them or record the bound.
+  4. **X-04's shared handle table is compiled into the wasm archive and WIRED TO NOTHING.** Zero
+     `kj_handle_*` references in the wasmJs backend: Kotlin holds raw `Int` pointers with
+     per-object `alive()` guards instead. The guards are real protection, but the register reads as
+     if the generation-tagged table protects the web consumer, and today it protects only the
+     probe that tested it. Either route the backend's pointers through the table or amend X-04's
+     claim; the current state is the recorded intent and the tree disagreeing.
+  5. **`BlockingMediaIo.wasmJs` can leave a zombie coroutine.** `runWithoutSuspending` throws when
+     the body suspends, but the suspended body keeps running and its eventual resume writes into
+     the caller's `ByteArray` (read) or moves the source position (seek) AFTER the throw. For the
+     memory-backed sources this backend accepts the case is unreachable; the note belongs on the
+     function so the Worker work does not inherit it unknowingly.
+  6. **Two smalls.** `webIdentity()` re-reads the whole 2,176-byte report on every `availability`
+     touch and `createOrNull` touches it at least twice; harmless, wasteful, cache-per-load would
+     do. And `bypassedStatus` is derived as the post-bypass status, which is 0 in exactly the case
+     `bypassed` is true, so the field carries no information; the C report has no original-status
+     field, and the honest options are deriving it differently or documenting that it cannot be
+     known here.
+
 **The register.**
 
 #### X-01. The wasm draw cost is the one number S6 is gated on, and nothing has measured it

@@ -701,3 +701,57 @@ class KiteVideoRendererTest {
         h.renderer.close()
     }
 }
+
+/**
+ * W-13: a foreign frame is refused ONCE, in words a consumer can read, and the renderer stops
+ * paying for the attempt.
+ *
+ * Before this, the pairing failed on every frame forever and carried a ClassCastException message,
+ * which is a compiler implementation detail that reads differently on Kotlin/Native and the JVM.
+ */
+class UnsupportedFrameTypeTest {
+
+    private fun foreignConverter(): (VideoFrame) -> ByteArray = { frame ->
+        throw UnsupportedFrameType(actual = frame::class.simpleName ?: "an unnamed frame", expected = "KiteCodecVideoFrame")
+    }
+
+    @Test
+    fun aForeignFrameIsRefusedOnceAndNamesBothTypes() {
+        var conversions = 0
+        val harness = Harness(
+            convert = { frame ->
+                conversions += 1
+                foreignConverter()(frame)
+            },
+        )
+        val events = CopyOnWriteArrayList<RendererEvent>()
+        val collector = Thread {
+            runBlocking { harness.renderer.events.collect { events += it } }
+        }.apply { isDaemon = true; start() }
+
+        try {
+            // One at a time, each awaited: the pending slot holds ONE frame and a displaced one is
+            // counted superseded, not failed, so presenting five at once would prove nothing.
+            val frames = (1..5).map { TestFrame() }
+            frames.forEachIndexed { index, frame ->
+                runBlocking { assertTrue(harness.renderer.present(frame, 0L)) }
+                harness.awaitFailed((index + 1).toLong())
+            }
+
+            // Every frame is still counted and still closed. Silence would be worse than a count.
+            assertEquals(5L, harness.renderer.failedFrames)
+            frames.forEach { assertEquals(1, it.closes, "every refused frame is closed exactly once") }
+
+            // But the converter is asked exactly once: the pairing is dead after the first refusal.
+            assertEquals(1, conversions, "a dead pairing must not be re-attempted per frame")
+
+            val refusals = events.filterIsInstance<RendererEvent.Failed>()
+                .filter { "KiteCodecVideoFrame" in it.detail }
+            assertEquals(1, refusals.size, "the refusal must be published once, not per frame: $events")
+            assertTrue("TestFrame" in refusals.single().detail, "the refusal must name the actual type: ${refusals.single().detail}")
+        } finally {
+            collector.interrupt()
+            harness.renderer.close()
+        }
+    }
+}

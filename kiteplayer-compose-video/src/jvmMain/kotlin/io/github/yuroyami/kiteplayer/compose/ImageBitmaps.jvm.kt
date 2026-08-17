@@ -34,12 +34,12 @@ internal actual class FrameImagePool actual constructor() {
 /**
  * The measured software path and nothing else: the JVM target has no Metal or MediaCodec
  * reader, so every frame goes through KiteCodec's CPU converter. A frame from any other
- * backend fails the cast inside, which the renderer counts as a failed frame and plays on.
+ * backend is refused with UnsupportedFrameType, reported once and then not attempted again.
  */
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
     // The near end of KV-5's measured window, before any pixel is read.
     KiteVideoUploadProfiler.frameStarted()
-    val rgba = SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+    val rgba = SoftwareConverter.toRgba(frame.asKiteCodecFrame())
     KiteVideoUploadProfiler.frameConverted()
     return rgba
 }
@@ -69,3 +69,10 @@ internal actual fun rememberKiteVideoFrameCommitter(
 
     override fun frameRecorded(frame: KiteVideoFrame?) = state.frameCommitted(owner, frame)
 }
+
+/** The one place the backend pairing is checked, so all three actuals refuse the same way (W-13). */
+private fun VideoFrame.asKiteCodecFrame(): KiteCodecVideoFrame = this as? KiteCodecVideoFrame
+    ?: throw UnsupportedFrameType(
+        actual = this::class.simpleName ?: "an unnamed frame type",
+        expected = "KiteCodecVideoFrame",
+    )

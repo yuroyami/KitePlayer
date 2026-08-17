@@ -28,9 +28,25 @@ internal expect class FrameImagePool() {
 }
 
 /**
- * Converts a frame from the aggregate's own FFmpeg backend to tightly packed RGBA. A frame from
- * any other backend fails the cast inside, which the renderer counts as a failed frame and
- * plays on, exactly like the platform views' converter seams.
+ * A converter was handed a frame from a backend it cannot read (W-13).
+ *
+ * Thrown instead of letting an implicit cast fail, for two reasons. A `ClassCastException`'s
+ * message is a compiler implementation detail that reads differently on Kotlin/Native and the JVM,
+ * so nothing downstream can branch on it and no two bug reports agree. And carrying both type names
+ * is what lets the renderer say which pairing is wrong rather than that something went wrong.
+ */
+internal class UnsupportedFrameType(
+    val actual: String,
+    val expected: String,
+) : IllegalArgumentException(
+    "this renderer draws $expected frames and the backend produced $actual; " +
+        "pair the Compose video surface with the FFmpeg backend, or attach a renderer that reads $actual",
+)
+
+/**
+ * Converts a frame from the aggregate's own FFmpeg backend to tightly packed RGBA. A frame from any
+ * other backend is refused with [UnsupportedFrameType], which the renderer reports once and then
+ * stops attempting, exactly like the platform views' converter seams.
  */
 internal expect fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray
 

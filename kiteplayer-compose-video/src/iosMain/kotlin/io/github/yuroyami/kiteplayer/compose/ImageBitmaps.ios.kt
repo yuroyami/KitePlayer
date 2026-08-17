@@ -45,7 +45,7 @@ private object GpuFrameReader {
 }
 
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
-    val decoded = frame as KiteCodecVideoFrame
+    val decoded = frame.asKiteCodecFrame()
     // SOL-P1: the Metal reader serves HARDWARE frames only, where a GPU readback is the only
     // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which
     // was upload plus readback plus Skia's re-upload for pixels the CPU converter produces in
@@ -76,3 +76,10 @@ internal actual fun rememberKiteVideoFrameCommitter(
 
     override fun frameRecorded(frame: KiteVideoFrame?) = state.frameCommitted(owner, frame)
 }
+
+/** The one place the backend pairing is checked, so all three actuals refuse the same way (W-13). */
+private fun VideoFrame.asKiteCodecFrame(): KiteCodecVideoFrame = this as? KiteCodecVideoFrame
+    ?: throw UnsupportedFrameType(
+        actual = this::class.simpleName ?: "an unnamed frame type",
+        expected = "KiteCodecVideoFrame",
+    )

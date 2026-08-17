@@ -43,7 +43,7 @@ internal actual class FrameImagePool actual constructor() {
 }
 
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray =
-    SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+    SoftwareConverter.toRgba(frame.asKiteCodecFrame())
 
 internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -550,3 +550,10 @@ private class AndroidGpuCompletionTracker(
         val recordedVsyncNanos: Long?,
     )
 }
+
+/** The one place the backend pairing is checked, so all three actuals refuse the same way (W-13). */
+private fun VideoFrame.asKiteCodecFrame(): KiteCodecVideoFrame = this as? KiteCodecVideoFrame
+    ?: throw UnsupportedFrameType(
+        actual = this::class.simpleName ?: "an unnamed frame type",
+        expected = "KiteCodecVideoFrame",
+    )

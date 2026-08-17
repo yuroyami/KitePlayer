@@ -40,6 +40,9 @@ internal class KiteVideoFrame(
 ) : AutoCloseable {
     private val closed = atomic(false)
 
+    /** Set once when a converter refuses the backend's frame type; see [UnsupportedFrameType]. */
+    private val unsupportedPairing = atomic(false)
+
     /** Guarded by KiteVideoState's frame fence; one image may be drawn by several nodes. */
     internal var gpuCompletionCounted: Boolean = false
 
@@ -130,6 +133,9 @@ internal class KiteVideoRenderer(
     private val superseded = atomic(0L)
     private val failed = atomic(0L)
     private val closed = atomic(false)
+
+    /** Set once when a converter refuses the backend's frame type; see [UnsupportedFrameType]. */
+    private val unsupportedPairing = atomic(false)
 
     /** Orders the overlay publications against close's final null (audit F-CLS1). */
     private val overlayPublishLock = kotlinx.atomicfu.locks.SynchronizedObject()
@@ -223,8 +229,20 @@ internal class KiteVideoRenderer(
         // The cost clock starts before the conversion and stops after the image build, because
         // that pair is exactly the CPU work this software path pays per published frame.
         val started = kotlin.time.TimeSource.Monotonic.markNow()
+        // A refused PAIRING is refused for this renderer's whole life (W-13). Retrying it per
+        // frame pays the same doomed conversion thirty times a second and republishes the same
+        // sentence; the frame is still closed and still counted, because silence would be worse.
+        if (unsupportedPairing.value) {
+            frame.close()
+            failed.incrementAndGet()
+            return
+        }
         val rgba = try {
             convert(frame)
+        } catch (refusal: UnsupportedFrameType) {
+            unsupportedPairing.value = true
+            failFrame(refusal.message ?: "this renderer cannot read the backend's frames")
+            null
         } catch (failure: Throwable) {
             failFrame(failure.message ?: "the converter failed")
             null

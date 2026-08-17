@@ -17575,9 +17575,25 @@ deliberately left open.
 - Problem: handing JavaScript raw heap offsets makes a use-after-free indistinguishable from a
   valid handle, and heap growth invalidates every view. The JNI side already solved this with
   generation-tagged tokens and the header states why.
-- Fix, decided: port the handle table to wasm rather than invent a second scheme.
+- Fix, decided: **AMENDED 2026-08-17 by the owner, who chose sharing over porting.** The item said
+  "port", which means a second copy. The owner was asked in plain terms and answered that one
+  implementation is worth the surgery, on the ground the item itself gives: this table exists so a
+  stale token is a typed error instead of memory corruption, and two copies of memory-safety code
+  are how a fixed bug survives in the copy nobody edited.
+  What sharing means here, measured before it was proposed: only three of the table's functions
+  touch JNI at all (`kj_handle_put_checked`, `kj_handle_put_borrowed`, `kj_handle_get`), and each
+  uses `JNIEnv` for one purpose, to throw. Everything else is `int64_t` arithmetic over a static
+  table. `jlong` is a typedef for `int64_t`, so the core is already portable in fact.
+  The portable core therefore moves to its own directory, `native/kitecodec-handles/`, and the JNI
+  file keeps only the three throwing wrappers. It goes in a THIRD place rather than into
+  `native/kitecodec-c/src/` deliberately: that directory compiles into every target's
+  `libkitecodec.a`, and nothing outside `native/kitecodec-jni/*.c` calls the table, so putting it
+  there would ship dead code into every mobile binary and move the symbol-audit baseline for
+  targets this stage does not touch. The new directory is compiled into exactly two things, the JNI
+  library and the wasm archive, which are the two that need it.
 - Sub-phase: X.4. Test: a stale token is refused rather than honoured, proved by a test that frees
-  a handle and then uses it.
+  a handle and then uses it. Because this now edits code that Android and the desktop JVM already
+  ship, the existing JNI suites are the regression arm and must stay green with no baseline moved.
 
 #### X-05. The 198-entry binding is the stage's single largest item, and its shape is undecided
 - Where: `signature-baseline.txt` (213 records); `kj_*.c` as the measured JNI precedent, about

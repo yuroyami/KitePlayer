@@ -187,18 +187,28 @@ public class KtorMediaIoException(message: String) : Exception(message)
  * through [KtorMediaIo], everything else passes to the backend untouched.
  *
  * The lazily created client lives for the resolver's lifetime, which is normally the process:
- * exactly how OkHttp and NSURLSession want to be held.
+ * exactly how OkHttp and NSURLSession want to be held. A resolver with a shorter life closes
+ * the client it created through [close] (audit F-NET1: it used to leak the engine's connection
+ * and thread pools); a caller-supplied client stays the caller's to close, as everywhere else.
  */
 public class KtorMediaIoResolver(
     private val client: HttpClient? = null,
     private val headers: Map<String, String> = emptyMap(),
-) : MediaIoResolver {
+) : MediaIoResolver, AutoCloseable {
 
-    private val shared: HttpClient by lazy { client ?: HttpClient() }
+    private var created: HttpClient? = null
+
+    private val shared: HttpClient by lazy { client ?: HttpClient().also { created = it } }
 
     override suspend fun resolve(uri: String): MediaIo? {
         val lower = uri.lowercase()
         if (!lower.startsWith("http://") && !lower.startsWith("https://")) return null
         return KtorMediaIo.open(uri, shared, headers)
+    }
+
+    /** Closes the client this resolver created, if it ever created one. Idempotent. */
+    override fun close() {
+        created?.close()
+        created = null
     }
 }

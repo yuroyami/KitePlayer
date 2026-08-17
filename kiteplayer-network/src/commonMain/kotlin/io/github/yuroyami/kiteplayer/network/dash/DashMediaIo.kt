@@ -104,6 +104,14 @@ public object Dash {
      */
     public suspend fun mediaItemFor(mpdUrl: String, client: HttpClient): MediaItem {
         val manifest = manifest(mpdUrl, client)
+        // Refused, not truncated (audit F-DASH3): this tier byte-concatenates ONE period's
+        // segments, and silently playing period one of an ad-stitched presentation looked like
+        // a player that stops after the pre-roll. Period joining is the adaptive engine's next
+        // tier; until it exists the refusal is typed.
+        require(manifest.periods.size <= 1) {
+            "$mpdUrl has ${manifest.periods.size} Periods, and this tier plays exactly one; " +
+                "multi-period joining is not implemented yet"
+        }
         val period = manifest.periods.firstOrNull()
             ?: throw IllegalArgumentException("$mpdUrl has no Period")
         val adaptationSet = period.adaptationSets.firstOrNull { it.isVideo() }

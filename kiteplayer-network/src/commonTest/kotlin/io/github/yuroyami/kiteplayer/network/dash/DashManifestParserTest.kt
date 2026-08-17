@@ -156,4 +156,58 @@ class DashManifestParserTest {
             DashManifestParser.segmentPlan(manifest, period, period.adaptationSets.single().representations.single())
         }
     }
+    // Audit F-DASH1: r="-1" is DASH's compact "repeat to the end of the period", and the plan
+    // used to expand it to ZERO segments because 0..-1 is an empty range.
+    @Test
+    fun aNegativeRepeatExpandsToThePeriodEnd() {
+        val manifest = DashManifestParser.parse(
+            """
+            <?xml version="1.0"?>
+            <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT60S">
+                <Period>
+                    <AdaptationSet contentType="video" mimeType="video/mp2t">
+                        <SegmentTemplate media="seg-${'$'}Number${'$'}.ts" startNumber="1" timescale="1000">
+                            <SegmentTimeline>
+                                <S t="0" d="2000" r="-1"/>
+                            </SegmentTimeline>
+                        </SegmentTemplate>
+                        <Representation id="v" bandwidth="1"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+            """.trimIndent(),
+            "http://cdn/vod/movie.mpd",
+        )
+        val period = manifest.periods.single()
+        val rep = period.adaptationSets.single().representations.single()
+        val plan = DashManifestParser.segmentPlan(manifest, period, rep)
+        assertEquals(30, plan.mediaUrls.size, "60 s of 2 s segments is 30 segments, got ${plan.mediaUrls.size}")
+        assertEquals("http://cdn/vod/seg-1.ts", plan.mediaUrls.first())
+        assertEquals("http://cdn/vod/seg-30.ts", plan.mediaUrls.last())
+    }
+
+    // Audit F-DASH2: P0Y0M0DT0H9M56.46S is a legal xs:duration several packagers emit, and the
+    // year, month and week components used to fail the whole manifest.
+    @Test
+    fun verboseIsoDurationsParse() {
+        assertEquals(596_460_000L, DashManifestParser.parseIsoDurationMicros("P0Y0M0DT0H9M56.46S"))
+        assertEquals(3_600_000_000L, DashManifestParser.parseIsoDurationMicros("PT1H"))
+        assertEquals(7L * 86_400_000_000L, DashManifestParser.parseIsoDurationMicros("P1W"))
+        assertEquals(
+            (365L + 30 + 1) * 86_400_000_000L,
+            DashManifestParser.parseIsoDurationMicros("P1Y1M1D"),
+            "years and months use the 365 and 30 day conventions",
+        )
+    }
+
+    // Audit F-XML1: numeric character references above the basic plane must decode to a
+    // surrogate pair, not to a truncated toChar().
+    @Test
+    fun supplementaryCharacterReferencesDecodeWhole() {
+        val root = io.github.yuroyami.kiteplayer.network.xml.XmlMini.parse(
+            """<a title="&#x1F600;&#128169;">ok</a>""",
+        )
+        val title = root.attr("title")!!
+        assertEquals("\uD83D\uDE00\uD83D\uDCA9", title, "both references decode to pairs, got ${title.length} units")
+    }
 }

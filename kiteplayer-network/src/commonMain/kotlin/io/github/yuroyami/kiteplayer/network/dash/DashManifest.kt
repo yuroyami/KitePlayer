@@ -174,9 +174,23 @@ public object DashManifestParser {
         if (template.timeline.isNotEmpty()) {
             var number = template.startNumber
             var time = 0L
-            for (entry in template.timeline) {
+            val timeline = template.timeline
+            for ((index, entry) in timeline.withIndex()) {
                 entry.t?.let { time = it }
-                for (repeat in 0..entry.r) {
+                // r >= 0 is that many EXTRA segments. r = -1 is the spec's compact "repeat to
+                // the end": until the next entry's own start, or the period's end in timescale
+                // units (audit F-DASH1; 0..-1 used to expand this entry to nothing at all).
+                val repeats: Long = if (entry.r >= 0) entry.r else {
+                    require(entry.d > 0) { "degenerate segment duration" }
+                    val untilTime = timeline.getOrNull(index + 1)?.t
+                        ?: (period.durationMicros ?: manifest.durationMicros)
+                            ?.let { micros -> micros * template.timescale / 1_000_000L }
+                        ?: throw IllegalArgumentException(
+                            "SegmentTimeline r=-1 needs the next entry's t or a duration to stop at",
+                        )
+                    ((untilTime - time + entry.d - 1) / entry.d - 1).coerceAtLeast(0)
+                }
+                for (repeat in 0..repeats) {
                     mediaUrls += resolveUrl(
                         representation.baseUrl,
                         substitute(media, representation, number, time),
@@ -267,18 +281,28 @@ public object DashManifestParser {
         return if (pathStart < 0) url else url.substring(0, pathStart)
     }
 
-    /** ISO 8601 duration (the PnDTnHnMnS shapes DASH uses) to microseconds. */
+    /**
+     * ISO 8601 duration to microseconds, every component xs:duration allows plus weeks (audit
+     * F-DASH2): P0Y0M0DT0H9M56.46S is what several packagers emit, and rejecting the year and
+     * month zeros killed the whole manifest. Years and months use the 365 and 30 day
+     * conventions, which is what every player does with a calendar-free duration.
+     */
     internal fun parseIsoDurationMicros(raw: String): Long {
         val match = ISO_DURATION.matchEntire(raw.trim())
             ?: throw IllegalArgumentException("not an ISO 8601 duration: $raw")
-        val (days, hours, minutes, seconds) = match.destructured
-        val total = (days.toDoubleOrNull() ?: 0.0) * 86_400 +
-            (hours.toDoubleOrNull() ?: 0.0) * 3_600 +
-            (minutes.toDoubleOrNull() ?: 0.0) * 60 +
-            (seconds.toDoubleOrNull() ?: 0.0)
+        val g = match.groupValues
+        val total = (g[1].toDoubleOrNull() ?: 0.0) * 365 * 86_400 +
+            (g[2].toDoubleOrNull() ?: 0.0) * 30 * 86_400 +
+            (g[3].toDoubleOrNull() ?: 0.0) * 7 * 86_400 +
+            (g[4].toDoubleOrNull() ?: 0.0) * 86_400 +
+            (g[5].toDoubleOrNull() ?: 0.0) * 3_600 +
+            (g[6].toDoubleOrNull() ?: 0.0) * 60 +
+            (g[7].toDoubleOrNull() ?: 0.0)
         return (total * 1_000_000).toLong()
     }
 
-    private val ISO_DURATION =
-        Regex("""P(?:([0-9.]+)D)?(?:T(?:([0-9.]+)H)?(?:([0-9.]+)M)?(?:([0-9.]+)S)?)?""")
+    private val ISO_DURATION = Regex(
+        """P(?:([0-9.]+)Y)?(?:([0-9.]+)M)?(?:([0-9.]+)W)?(?:([0-9.]+)D)?""" +
+            """(?:T(?:([0-9.]+)H)?(?:([0-9.]+)M)?(?:([0-9.]+)S)?)?""",
+    )
 }

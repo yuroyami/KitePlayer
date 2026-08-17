@@ -9,7 +9,7 @@ package io.github.yuroyami.kiteplayer.network.xml
  * Deliberately NOT a general XML processor: namespaces are handled by stripping prefixes
  * (DASH manifests are single-namespace in practice), DOCTYPE internal subsets are skipped
  * unread, and processing instructions are ignored. A malformed document throws
- * [XmlException] with the byte offset, never a silent partial tree.
+ * [XmlException] with the UTF-16 character offset, never a silent partial tree.
  */
 public class XmlElement(
     public val name: String,
@@ -152,14 +152,31 @@ public object XmlMini {
                     entity == "quot" -> "\""
                     entity == "apos" -> "'"
                     entity.startsWith("#x") || entity.startsWith("#X") ->
-                        entity.drop(2).toIntOrNull(16)?.let { it.toChar().toString() }
+                        entity.drop(2).toIntOrNull(16)?.let(::codePointToString)
                     entity.startsWith("#") ->
-                        entity.drop(1).toIntOrNull()?.let { it.toChar().toString() }
+                        entity.drop(1).toIntOrNull()?.let(::codePointToString)
                     else -> null
                 }
                 if (decoded == null) { out.append(c); i++ } else { out.append(decoded); i = semi + 1 }
             }
             return out.toString()
+        }
+
+        /**
+         * One code point as a string, surrogate pairs included (audit F-XML1): `toChar()` used
+         * to truncate everything above the basic plane to a wrong character. Surrogate and
+         * out-of-range references answer null, which leaves the reference literal in the text.
+         */
+        private fun codePointToString(cp: Int): String? = when {
+            cp < 0 || cp > 0x10FFFF || cp in 0xD800..0xDFFF -> null
+            cp <= 0xFFFF -> cp.toChar().toString()
+            else -> {
+                val v = cp - 0x10000
+                charArrayOf(
+                    ((v shr 10) + 0xD800).toChar(),
+                    ((v and 0x3FF) + 0xDC00).toChar(),
+                ).concatToString()
+            }
         }
 
         private fun skipDoctype() {

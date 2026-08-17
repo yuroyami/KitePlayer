@@ -52,6 +52,16 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
     private var failedBefore = 0L
 
     /**
+     * Which of the two layers the NEWEST renderer generation drew into, or null before the first
+     * one (17.11 SOL-R9). Kept past that generation's close, because both layers hold their last
+     * content on the glass; it is the visible layer, and the one [hasPicture] answers about.
+     */
+    private var showingMetal: Boolean? = null
+
+    /** Presented frames of CLOSED generations that drew into the Metal layer. */
+    private var metalPresentedBefore = 0L
+
+    /**
      * Renderer adapter installed by the playback-stack module. A view with no adapter remains a
      * valid UIKit container and attaches no renderer; installing one later rebuilds immediately.
      */
@@ -64,7 +74,15 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
 
     private val binding = PlayerViewBinding<KitePlayer, PlayerViewRenderer>(
         createRenderer = {
-            rendererFactory?.create(videoLayer, metalLayer, preferMetal)
+            val useMetal = preferMetal
+            rendererFactory?.create(videoLayer, metalLayer, useMetal)?.also {
+                // 17.11 SOL-R9: exactly one layer is on the glass. Both stayed visible before,
+                // with the Metal layer on top, so its last drawable covered every CG frame a
+                // fallback generation delivered afterwards.
+                showingMetal = useMetal
+                metalLayer.hidden = !useMetal
+                videoLayer.hidden = useMetal
+            }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
         detach = { player ->
@@ -84,6 +102,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
                 presentedBefore += renderer.presentedFrames
                 supersededBefore += renderer.supersededFrames
                 failedBefore += renderer.failedFrames
+                if (showingMetal == true) metalPresentedBefore += renderer.presentedFrames
             }
         },
     )
@@ -116,21 +135,31 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
     }
 
     /**
-     * True while a video layer holds a picture. The CG layer's close never clears the last
+     * True while the VISIBLE layer holds a picture. The CG layer's close never clears the last
      * delivered contents; a CAMetalLayer keeps its last presented drawable on the glass the
      * same way. Presentation evidence, not playback state.
+     *
+     * 17.11 SOL-R9: the answer is about the layer the newest generation chose, never about the
+     * cumulative frame count, which mixes generations that drew into the other layer entirely.
      */
     public val hasPicture: Boolean
-        get() = videoLayer.contents != null || metalHasPresented
+        get() = when (showingMetal) {
+            true -> metalPresentedBefore + liveGenerationPresented > 0L
+            false -> videoLayer.contents != null
+            null -> false
+        }
 
-    /** The Metal twin of the CG layer's contents check: the renderer's own counter. */
-    private val metalHasPresented: Boolean
-        get() = presentedFrames > 0 && preferMetal
+    /** Frames the live generation has presented, or zero between generations. */
+    private val liveGenerationPresented: Long
+        get() = binding.activeRenderer?.presentedFrames ?: 0L
 
     init {
         backgroundColor = UIColor.blackColor
         layer.addSublayer(videoLayer)
         layer.addSublayer(metalLayer)
+        // Neither layer shows anything until a renderer generation claims one (17.11 SOL-R9).
+        videoLayer.hidden = true
+        metalLayer.hidden = true
     }
 
     override fun layoutSubviews() {

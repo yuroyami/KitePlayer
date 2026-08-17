@@ -432,6 +432,255 @@ class AppKitVideoRendererTest {
         }
     }
 
+    /**
+     * 17.11 SOL-R11: [close] blocks the caller, which on both platforms is the UI thread, so it
+     * must never wait on work it could have refused to start.
+     *
+     * The window driven here is the real one: a conversion is already running, a cue edge has
+     * armed the paused-picture redraw, and the close lands between them. The redraw is a full
+     * image build for a picture nobody will ever see, and the closing thread used to wait for it.
+     * One delivery, not two, is the whole assertion.
+     */
+    @Test
+    fun `a close does not wait on a redraw it could refuse to start`() = runBlocking {
+        val gate = atomic(false)
+        val converting = atomic(false)
+        val enqueued = atomic(0)
+        val ledger = LeakLedger()
+        val renderer = AppKitVideoRenderer(
+            convert = {
+                converting.value = true
+                while (!gate.value) { /* held until the close is known to have begun */ }
+                redPixels(4, 2)
+            },
+            enqueueOnMain = { block ->
+                enqueued.incrementAndGet()
+                block()
+            },
+            showImage = { },
+        )
+
+        assertTrue(
+            renderer.present(
+                FakeVideoFrame(
+                    pts = Pts(0),
+                    size = VideoSize(4, 2),
+                    rotationDegrees = 0,
+                    ledger = ledger,
+                ),
+                targetNanos = 0L,
+            ),
+        )
+        awaitTrue("the worker picked the frame up") { converting.value }
+        // Arms the paused-picture redraw while the conversion above is still held.
+        renderer.setOverlay(null)
+
+        val closeEntered = atomic(false)
+        val closeReturned = atomic(false)
+        coroutineScope {
+            launch(Dispatchers.Default) {
+                closeEntered.value = true
+                renderer.close()
+                closeReturned.value = true
+            }
+            launch(Dispatchers.Default) {
+                // Probing with a present would leave a frame in the slot and suppress the very
+                // redraw this test is about, so the handshake is the flag plus a margin: between
+                // it and `closed` being set there are three atomic writes and a channel close.
+                awaitTrue("the close was entered") { closeEntered.value }
+                delay(200)
+                gate.value = true
+            }
+        }
+        awaitTrue("close returned") { closeReturned.value }
+
+        assertEquals(
+            1,
+            enqueued.value,
+            "the conversion already running still delivers; the redraw behind it must not",
+        )
+    }
+
+    // 17.11 SOL-R14: the CPU fallback owed the one colour-matrix law. Saturation 0 is the
+    // cheapest unambiguous probe: pure red becomes its own BT.709 luma in all three channels.
+    @Test
+    fun `the CPU fallback applies the picture controls`() = runBlocking {
+        val drawn = atomic<NSImage?>(null)
+        val draws = atomic(0)
+        val renderer = AppKitVideoRenderer(
+            convert = { redPixels(4, 2) },
+            enqueueOnMain = { block -> block() },
+            showImage = { image ->
+                drawn.value = image
+                draws.incrementAndGet()
+            },
+        )
+        try {
+            renderer.setAdjustments(io.github.yuroyami.kiteplayer.VideoAdjustments(saturation = 0f))
+            assertTrue(
+                renderer.present(
+                    FakeVideoFrame(
+                        pts = Pts(0),
+                        size = VideoSize(4, 2),
+                        rotationDegrees = 0,
+                        ledger = LeakLedger(),
+                    ),
+                    targetNanos = 0L,
+                ),
+            )
+            awaitTrue("the frame was drawn") { draws.value >= 1 }
+            val pixels = readBack(assertNotNull(drawn.value))
+            // 0.2126 * 255 = 54.2, rounded to 54 on both channels.
+            assertEquals(54 to 54, pixels.redAndGreenAt(0, 0), "saturation 0 leaves BT.709 luma")
+        } finally {
+            renderer.close()
+        }
+    }
+
+    // 17.11 SOL-R14, the framing half: an aspect override reshapes the PRESENTED picture.
+    @Test
+    fun `the CPU fallback honours an aspect override`() = runBlocking {
+        val drawn = atomic<NSImage?>(null)
+        val draws = atomic(0)
+        val renderer = AppKitVideoRenderer(
+            convert = { redPixels(4, 2) },
+            enqueueOnMain = { block -> block() },
+            showImage = { image ->
+                drawn.value = image
+                draws.incrementAndGet()
+            },
+        )
+        try {
+            renderer.setTransform(io.github.yuroyami.kiteplayer.VideoTransform(aspectOverride = 4f))
+            assertTrue(
+                renderer.present(
+                    FakeVideoFrame(
+                        pts = Pts(0),
+                        size = VideoSize(4, 2),
+                        rotationDegrees = 0,
+                        ledger = LeakLedger(),
+                    ),
+                    targetNanos = 0L,
+                ),
+            )
+            awaitTrue("the frame was drawn") { draws.value >= 1 }
+            val image = assertNotNull(drawn.value)
+            assertEquals(8, image.size.useContents { width }.toInt(), "2 high at 4:1 is 8 wide")
+            assertEquals(2, image.size.useContents { height }.toInt(), "the height is untouched")
+        } finally {
+            renderer.close()
+        }
+    }
+
+    // 17.11 SOL-R14, the framing half: pan moves the drawn picture and the canvas keeps the rest.
+    @Test
+    fun `the CPU fallback honours zoom and pan`() = runBlocking {
+        val drawn = atomic<NSImage?>(null)
+        val draws = atomic(0)
+        val renderer = AppKitVideoRenderer(
+            convert = { redPixels(4, 2) },
+            enqueueOnMain = { block -> block() },
+            showImage = { image ->
+                drawn.value = image
+                draws.incrementAndGet()
+            },
+        )
+        try {
+            // Half a width to the right: the left half of the canvas is left behind empty.
+            renderer.setTransform(io.github.yuroyami.kiteplayer.VideoTransform(panX = 0.5f))
+            assertTrue(
+                renderer.present(
+                    FakeVideoFrame(
+                        pts = Pts(0),
+                        size = VideoSize(4, 2),
+                        rotationDegrees = 0,
+                        ledger = LeakLedger(),
+                    ),
+                    targetNanos = 0L,
+                ),
+            )
+            awaitTrue("the frame was drawn") { draws.value >= 1 }
+            val pixels = readBack(assertNotNull(drawn.value))
+            assertEquals(0 to 0, pixels.redAndGreenAt(0, 0), "the picture moved off this column")
+            assertEquals(255 to 0, pixels.redAndGreenAt(3, 0), "and onto this one")
+        } finally {
+            renderer.close()
+        }
+    }
+
+    /** An opaque all-red picture, the probe every colour test above draws. */
+    private fun redPixels(width: Int, height: Int): ByteArray {
+        val bytes = ByteArray(width * height * 4)
+        for (index in bytes.indices step 4) {
+            bytes[index] = -1
+            bytes[index + 3] = -1
+        }
+        return bytes
+    }
+
+    // 17.11 SOL-R13: RgbaBitmap's own contract admits storage LARGER than width*height*4, so a
+    // fallback that demands exact equality drops a legal overlay without a word.
+    @Test
+    fun `an overlay bitmap with slack storage is still drawn`() = runBlocking {
+        val storedWidth = 4
+        val storedHeight = 2
+        val red = ByteArray(storedWidth * storedHeight * 4)
+        for (index in red.indices step 4) {
+            red[index] = -1
+            red[index + 3] = -1
+        }
+        val drawn = atomic<NSImage?>(null)
+        val draws = atomic(0)
+        val renderer = AppKitVideoRenderer(
+            convert = { red },
+            enqueueOnMain = { block -> block() },
+            showImage = { image ->
+                drawn.value = image
+                draws.incrementAndGet()
+            },
+        )
+        try {
+            val ledger = LeakLedger()
+            renderer.setOverlay(
+                io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                    images = listOf(
+                        io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                            x = 1,
+                            y = 0,
+                            // Sixteen slack bytes past the minimum: legal by RgbaBitmap's require.
+                            bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(
+                                2, 1, ByteArray(2 * 1 * 4 + 16) { 0xFF.toByte() },
+                            ),
+                        ),
+                    ),
+                    viewportWidth = storedWidth,
+                    viewportHeight = storedHeight,
+                    contentHash = 13L,
+                ),
+            )
+            assertTrue(
+                renderer.present(
+                    FakeVideoFrame(
+                        pts = Pts(0),
+                        size = VideoSize(storedWidth, storedHeight),
+                        rotationDegrees = 0,
+                        ledger = ledger,
+                    ),
+                    targetNanos = 0L,
+                ),
+            )
+            awaitTrue("the frame was drawn") { draws.value >= 1 }
+            val pixels = readBack(assertNotNull(drawn.value))
+            assertEquals(
+                255 to 255,
+                pixels.redAndGreenAt(1, 0),
+                "a bitmap with slack storage carries the same pixels and must still be composited",
+            )
+        } finally {
+            renderer.close()
+        }
+    }
+
     // The M4 surge's headline (SOL-R1) finally pinned (audit F-RDWT1): a cue arriving while
     // the picture is paused must redraw the retained frame with no new present() at all.
     @Test

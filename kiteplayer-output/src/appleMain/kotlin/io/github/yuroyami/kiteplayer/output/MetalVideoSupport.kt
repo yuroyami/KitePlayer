@@ -368,6 +368,35 @@ internal class MetalColorUniforms private constructor(
     }
 }
 
+/**
+ * The compiled shader library and both pipeline states, shared per device and target format
+ * (17.11 SOL-P7).
+ *
+ * These are immutable and owned by the Metal device, so one set serves every composer on it. They
+ * are never released: a device outlives every renderer built on it, and the old per-composer
+ * compile is what this replaces.
+ */
+internal class MetalPipelines private constructor(
+    val picture: MTLRenderPipelineStateProtocol,
+    val overlay: MTLRenderPipelineStateProtocol,
+) {
+    companion object {
+        private val lock = kotlinx.atomicfu.locks.SynchronizedObject()
+        private val cache = mutableMapOf<Pair<ULong, ULong>, MetalPipelines>()
+
+        fun of(device: MTLDeviceProtocol, targetFormat: ULong): MetalPipelines =
+            kotlinx.atomicfu.locks.synchronized(lock) {
+                cache.getOrPut(device.registryID to targetFormat) {
+                    val library = device.compileKitePlayerLibrary()
+                    MetalPipelines(
+                        picture = device.makePicturePipeline(library, targetFormat),
+                        overlay = device.makeOverlayPipeline(library, targetFormat),
+                    )
+                }
+            }
+    }
+}
+
 /** Compiles [METAL_SHADER_SOURCE] and reports the compiler's own words when it refuses. */
 internal fun MTLDeviceProtocol.compileKitePlayerLibrary(): MTLLibraryProtocol = memScoped {
     val error = alloc<ObjCObjectVar<NSError?>>()

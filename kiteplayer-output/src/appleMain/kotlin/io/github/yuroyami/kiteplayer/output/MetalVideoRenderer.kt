@@ -151,6 +151,9 @@ public class MetalVideoRenderer public constructor(
 
     /** Draws whatever is in the slot. Render thread only. */
     private fun drawPending() {
+        // 17.11 SOL-R11: close() blocks its caller, which is the UI thread. A drawable wait
+        // started after the close began is time that thread spends for nothing.
+        if (closed.value) return
         val frame = pending.getAndSet(null) ?: return
         try {
             val picture = resolver.resolve(frame)
@@ -245,6 +248,8 @@ public class MetalVideoRenderer public constructor(
 
     /** drawPending's shape over the retained picture; render thread only. */
     private fun drawRetained() {
+        // 17.11 SOL-R11: nobody will ever see a picture drawn after the close began.
+        if (closed.value) return
         val picture = retainedPicture ?: return
         val meta = retainedMeta ?: return
         try {
@@ -311,12 +316,15 @@ public class MetalVideoRenderer public constructor(
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
         signal.close()
+        // 17.11 SOL-R11: cancel BEFORE the join, as both CPU fallbacks already do. A worker
+        // parked on a signal that was buffered before the close would otherwise wake and spend
+        // the closing thread's time on one more drawable wait.
+        worker.cancel()
         drainPending()
         runBlocking { workerJob.join() }
         // After the join the render thread is out; the retained picture's release cannot race
         // a redraw (SOL-R1's ownership half).
         releaseRetained()
-        worker.cancel()
         // After the join no draw is in flight from this renderer, so the composer can fence the
         // GPU and give back its texture cache and native holder (17.11 SOL-R6).
         composer.close()

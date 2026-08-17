@@ -174,7 +174,9 @@ final class io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer : io.github.
         final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.close|close(){}[0]
+    final fun setAdjustments(io.github.yuroyami.kiteplayer/VideoAdjustments) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.setAdjustments|setAdjustments(io.github.yuroyami.kiteplayer.VideoAdjustments){}[0]
     final fun setScaleMode(io.github.yuroyami.kiteplayer/VideoScale) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.setScaleMode|setScaleMode(io.github.yuroyami.kiteplayer.VideoScale){}[0]
+    final fun setTransform(io.github.yuroyami.kiteplayer/VideoTransform) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.setTransform|setTransform(io.github.yuroyami.kiteplayer.VideoTransform){}[0]
     final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
     final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
     final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
@@ -197,6 +199,8 @@ final class io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer : io.github
         final fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.close|close(){}[0]
+    final fun setAdjustments(io.github.yuroyami.kiteplayer/VideoAdjustments) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.setAdjustments|setAdjustments(io.github.yuroyami.kiteplayer.VideoAdjustments){}[0]
+    final fun setTransform(io.github.yuroyami.kiteplayer/VideoTransform) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.setTransform|setTransform(io.github.yuroyami.kiteplayer.VideoTransform){}[0]
     final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
     final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
     final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]

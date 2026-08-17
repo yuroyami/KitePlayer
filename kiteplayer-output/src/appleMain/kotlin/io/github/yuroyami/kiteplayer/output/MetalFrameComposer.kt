@@ -63,9 +63,11 @@ internal class MetalFrameComposer(
     /** The render target's pixel format: BGRA for a CAMetalLayer, RGBA for an offscreen read. */
     private val targetFormat: ULong = MTLPixelFormatBGRA8Unorm,
 ) {
-    private val library = device.compileKitePlayerLibrary()
-    private val picturePipeline = device.makePicturePipeline(library, targetFormat)
-    private val overlayPipeline = device.makeOverlayPipeline(library, targetFormat)
+    // 17.11 SOL-P7: shared per device and target format. Compiling the library and both pipelines
+    // per composer made every renderer pay for the same immutable, device-owned objects again.
+    private val pipelines = MetalPipelines.of(device, targetFormat)
+    private val picturePipeline = pipelines.picture
+    private val overlayPipeline = pipelines.overlay
 
     internal val queue: MTLCommandQueueProtocol =
         checkNotNull(device.newCommandQueue()) { "Metal refused a command queue" }

@@ -1,6 +1,8 @@
 package io.github.yuroyami.kiteplayer.output
 
+import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.useContents
 import platform.AppKit.NSApp
 import platform.AppKit.NSApplication
 import platform.AppKit.NSBackingStoreBuffered
@@ -8,6 +10,7 @@ import platform.AppKit.NSEvent
 import platform.AppKit.NSEventTypeApplicationDefined
 import platform.AppKit.NSImageScaleProportionallyUpOrDown
 import platform.AppKit.NSImageView
+import platform.AppKit.NSView
 import platform.AppKit.NSWindow
 import platform.AppKit.NSWindowDelegateProtocol
 import platform.AppKit.NSWindowStyleMaskClosable
@@ -15,7 +18,11 @@ import platform.AppKit.NSWindowStyleMaskMiniaturizable
 import platform.AppKit.NSWindowStyleMaskResizable
 import platform.AppKit.NSWindowStyleMaskTitled
 import platform.AppKit.postEvent
+import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectMake
+import platform.CoreGraphics.CGSize
+import platform.CoreGraphics.CGSizeMake
+import platform.QuartzCore.CAMetalLayer
 import platform.Foundation.NSMakePoint
 import platform.Foundation.NSMakeRect
 import platform.Foundation.NSNotification
@@ -87,14 +94,17 @@ public class AppKitWindow(
         imageView.imageScaling = NSImageScaleProportionallyUpOrDown
 
         if (useMetalLayer) {
-            // A plain layer-hosted view whose backing layer IS the CAMetalLayer. The drawable is
-            // sized in physical pixels from the screen's scale, so a Retina window is not half
-            // resolution; a live window-resize path is S2.f polish, stated rather than implied.
+            // A layer-hosted view whose backing layer IS the CAMetalLayer. The drawable is sized
+            // in physical pixels, so a Retina window is not half resolution, and the host view
+            // re-sizes it on every live resize and backing-scale change (17.11 SOL-R12).
             val layer = platform.QuartzCore.CAMetalLayer()
             val scale = window.screen?.backingScaleFactor ?: 2.0
             layer.contentsScale = scale
-            layer.drawableSize = platform.CoreGraphics.CGSizeMake(width * scale, height * scale)
-            val host = platform.AppKit.NSView(frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()))
+            layer.drawableSize = metalDrawableSize(width.toDouble(), height.toDouble(), scale)
+            val host = MetalHostView(
+                frame = CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()),
+                metalLayer = layer,
+            )
             host.wantsLayer = true
             host.layer = layer
             window.contentView = host
@@ -142,6 +152,49 @@ public class AppKitWindow(
             data2 = 0,
         ) ?: return
         NSApp?.postEvent(wake, atStart = true)
+    }
+}
+
+/**
+ * The drawable size a Metal layer of [width] by [height] points needs at [scale] (17.11 SOL-R12).
+ *
+ * A drawable is measured in physical pixels and never rounds to zero: a window dragged to nothing
+ * would otherwise ask Metal for a texture it refuses to make.
+ */
+@OptIn(ExperimentalForeignApi::class)
+internal fun metalDrawableSize(width: Double, height: Double, scale: Double): CValue<CGSize> =
+    CGSizeMake((width * scale).coerceAtLeast(1.0), (height * scale).coerceAtLeast(1.0))
+
+/**
+ * The Metal layer's host view.
+ *
+ * A [platform.QuartzCore.CAMetalLayer] does not resize its own drawable, so without these two
+ * callbacks a resized window drew a stale-sized picture that AppKit then scaled, and a window
+ * dragged onto a display with another backing scale stayed at the old one (17.11 SOL-R12).
+ */
+@OptIn(ExperimentalForeignApi::class)
+internal class MetalHostView(
+    frame: CValue<CGRect>,
+    private val metalLayer: CAMetalLayer,
+) : NSView(frame) {
+
+    override fun setFrameSize(newSize: CValue<CGSize>) {
+        super.setFrameSize(newSize)
+        resizeDrawable()
+    }
+
+    override fun viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        resizeDrawable()
+    }
+
+    /** Also called by hand at construction, so the first drawable is right too. */
+    fun resizeDrawable() {
+        val scale = window?.backingScaleFactor ?: metalLayer.contentsScale
+        metalLayer.contentsScale = scale
+        metalLayer.drawableSize = bounds.useContents {
+            metalDrawableSize(size.width, size.height, scale)
+        }
     }
 }
 

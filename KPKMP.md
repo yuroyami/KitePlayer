@@ -17051,6 +17051,42 @@ it.**
 - Not in scope: Windows. A `.dll` needs a Windows JDK's headers and a PE link, and there is no
   Windows machine here to run the resulting library on, so it stays where the rest of Windows is.
 
+#### W-17. The C audit instruments cannot see a non-Apple sink (SOL-API's W-09 half)
+- Where: `kiteplayer-rt/native/scripts/render-audit.sh` (657 lines),
+  `kiteplayer-rt/native/scripts/source-discipline.sh` (381 lines), and the `build-host.sh`
+  interposer in both repositories.
+- Problem: 17.11 records these as "Mach-O and CoreAudio shaped". Read closely, 2026-08-17, they
+  have TWO DIFFERENT problems and conflating them would produce the wrong fix.
+  1. `render-audit.sh` audits the SHIPPED OBJECT, and that half is genuinely format bound. It
+     assumes Mach-O's leading underscore in every allowlist (`_memcpy`, `_kprt_render_cb`,
+     `_mach_absolute_time`), and it pins the AudioUnit four-character subtype by reading
+     `otool -s __TEXT __literal8`, which exists only in Mach-O. Its `nm` calls are NOT a problem:
+     Xcode's `nm` is LLVM's and reads ELF, which W.5 already relied on for the FFmpeg cross build.
+  2. `source-discipline.sh` reads `kite_rt_coreaudio.c` BY NAME and pins the ordering inside
+     `kprt_sink_destroy`, the release store in `kprt_sink_attach_ring`, and so on. That is not
+     Mach-O shaped and it is not wrong: those rules are ABOUT the CoreAudio sink, and they should
+     stay about it. What is missing is not portability but a SECOND rule set, for whichever backend
+     lands next. 17.11's own words for this are "per-backend rule sets keyed by the file under
+     audit", which is exactly right and is not the same job as reading ELF.
+- Fix, decided, in that order:
+  1. `render-audit.sh` learns the object format from the object rather than assuming it: one
+     `symbol_prefix` derived once, applied to every allowlist, and the `__literal8` AudioUnit pin
+     made conditional on a Mach-O CoreAudio object instead of unconditional. All 43 checks keep
+     working on Mach-O and keep being able to fail there; the ELF arm proves the same scan runs on
+     the linux_arm64 archive `CompileKiteRtTask` already produces.
+  2. `source-discipline.sh` gains nothing until a second sink exists, and this register says so
+     rather than inventing a rule set for a backend nobody has written. When ALSA or WASAPI lands,
+     its rules arrive WITH it, in the same commit, because a device sink without its own
+     source-discipline rules is a sink with no proof.
+  3. The `build-host.sh` interposer stays Mach-O. It exists to run the host C suites on this
+     machine, and a Linux host running them would build its own; porting it now would be building
+     for a machine that does not exist (18.3 rule 4).
+- Sub-phase: W.14. Test: `render-audit.sh --prove-it-can-fail` must still refuse all of its planted
+  defects on Mach-O, and the ELF arm must run the symbol scan against the linux_arm64 archive and
+  be shown able to fail there too, by planting a forbidden symbol in an ELF object.
+- Honest bound: this makes the instrument READY for a non-Apple sink. It does not make one exist,
+  and it does not prove anything about ALSA or WASAPI, because neither is written.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -17075,6 +17111,8 @@ it.**
   pixels with less arithmetic".
 - **W.13 The jar carries a library for more than one desktop** (W-16). Commit: "Give the jar a
   Linux library, proved by running it".
+- **W.14 The render audit reads the object it is given** (W-17). Commit: "Audit the shipped
+  object whatever format it is in".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

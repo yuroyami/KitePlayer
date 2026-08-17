@@ -13,3 +13,35 @@ public final class io/github/yuroyami/kiteplayer/output/CodecSpecificData {
 	public final fun getNalLengthSize ()I
 }
 
+public final class io/github/yuroyami/kiteplayer/output/DesktopAudioSink : io/github/yuroyami/kiteplayer/spi/AudioSink {
+	public fun close ()V
+	public fun drain (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getDeviceBufferFrames ()I
+	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
+	public fun getLatencyQuality ()Lio/github/yuroyami/kiteplayer/LatencyQuality;
+	public fun latencyNanos ()J
+	public fun open (Lio/github/yuroyami/kiteplayer/spi/AudioFormat;Lio/github/yuroyami/kiteplayer/spi/AudioRenderCallback;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setPaused (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun start (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/output/DesktopAudioSinkFactory : io/github/yuroyami/kiteplayer/spi/AudioSinkFactory {
+	public fun <init> ()V
+	public fun create (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun getName ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/output/DesktopMonotonicClock : io/github/yuroyami/kiteplayer/MonotonicClock {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/output/DesktopMonotonicClock;
+	public fun nanos ()J
+}
+
+public final class io/github/yuroyami/kiteplayer/output/DesktopOutputBackend : io/github/yuroyami/kiteplayer/spi/OutputBackend {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/output/DesktopOutputBackend;
+	public fun getAudioSink ()Lio/github/yuroyami/kiteplayer/spi/AudioSinkFactory;
+	public fun getClock ()Lio/github/yuroyami/kiteplayer/MonotonicClock;
+	public fun getSubtitleRasterizer ()Lio/github/yuroyami/kiteplayer/spi/SubtitleRasterizer;
+	public fun getVideoRenderer ()Lio/github/yuroyami/kiteplayer/spi/VideoRendererFactory;
+}
+

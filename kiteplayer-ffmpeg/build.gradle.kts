@@ -68,6 +68,11 @@ kotlin {
     macosArm64()
     iosArm64()
     iosSimulatorArm64()
+    // The Kotlin/Native desktops (phase W). They link the cross-built FFmpeg that KiteCodec's
+    // W.5 tasks vendor and the desktop variants it publishes; without both, nothing here resolves.
+    linuxX64()
+    linuxArm64()
+    mingwX64()
     jvm()
     android {
         namespace = "io.github.yuroyami.kiteplayer.ffmpeg"
@@ -114,10 +119,13 @@ kotlin {
         getByName("nativeTest").dependsOn(realBackendTest)
         getByName("jvmTest").dependsOn(realBackendTest)
 
-        getByName("nativeTest").dependencies {
-            // Test only, and only for the tests that drive the whole player: it needs an output backend to
-            // have a clock and an audio device, and this module is the one place where real media, the real
-            // FFmpeg backend and a real device can all be reached at once.
+        // Test only, and only for the tests that drive the whole player: those need an output
+        // backend to have a clock and an audio device, and this module is the one place where real
+        // media, the real FFmpeg backend and a real device can all be reached at once. APPLE only,
+        // because the backend they name is CoreAudio's: phase W added the Kotlin/Native desktop
+        // targets, where no device sink exists yet (register items W-08 and W-09), and a
+        // nativeTest-wide dependency made those targets fail to compile on an Apple type name.
+        getByName("appleTest").dependencies {
             implementation(project(":kiteplayer-output"))
         }
         getByName("androidDeviceTest").dependencies {

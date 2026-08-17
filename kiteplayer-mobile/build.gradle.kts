@@ -63,6 +63,14 @@ kotlin {
             api(project(":kiteplayer-output"))
             api(project(":kiteplayer-view"))
         }
+        // The desktop JVM stopped being a placeholder in phase W: KiteCodec's jvm variant carries
+        // the JNI adapter, and :kiteplayer-output has a SourceDataLine sink and an AWT rasterizer.
+        // No view module here: a desktop consumer draws through Compose (KiteVideo), which is the
+        // only rendering path a windowing toolkit without an interop view can use.
+        jvmMain.dependencies {
+            api(project(":kiteplayer-ffmpeg"))
+            api(project(":kiteplayer-output"))
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

@@ -1,5 +1,6 @@
 // Klib ABI Dump
-// Targets: [iosArm64, iosSimulatorArm64, macosArm64]
+// Targets: [iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64]
+// Alias: apple => [iosArm64, iosSimulatorArm64, macosArm64]
 // Alias: ios => [iosArm64, iosSimulatorArm64]
 // Rendering settings:
 // - Signature version: 2
@@ -7,21 +8,6 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-output>
-final enum class io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy : kotlin/Enum<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> { // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy|null[0]
-    enum entry ApplicationManaged // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.ApplicationManaged|null[0]
-    enum entry ManagedPlayback // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.ManagedPlayback|null[0]
-
-    final val entries // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.entries|#static{}entries[0]
-        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.entries.<get-entries>|<get-entries>#static(){}[0]
-
-    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.valueOf|valueOf#static(kotlin.String){}[0]
-    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.values|values#static(){}[0]
-}
-
-abstract fun interface io.github.yuroyami.kiteplayer.output/MetalPictureResolver { // io.github.yuroyami.kiteplayer.output/MetalPictureResolver|null[0]
-    abstract fun resolve(io.github.yuroyami.kiteplayer.spi/VideoFrame): io.github.yuroyami.kiteplayer.output/MetalPicture? // io.github.yuroyami.kiteplayer.output/MetalPictureResolver.resolve|resolve(io.github.yuroyami.kiteplayer.spi.VideoFrame){}[0]
-}
-
 final class io.github.yuroyami.kiteplayer.output/CodecSpecificData { // io.github.yuroyami.kiteplayer.output/CodecSpecificData|null[0]
     constructor <init>(kotlin/ByteArray, kotlin/ByteArray?, kotlin/Int) // io.github.yuroyami.kiteplayer.output/CodecSpecificData.<init>|<init>(kotlin.ByteArray;kotlin.ByteArray?;kotlin.Int){}[0]
 
@@ -33,6 +19,31 @@ final class io.github.yuroyami.kiteplayer.output/CodecSpecificData { // io.githu
         final fun <get-nalLengthSize>(): kotlin/Int // io.github.yuroyami.kiteplayer.output/CodecSpecificData.nalLengthSize.<get-nalLengthSize>|<get-nalLengthSize>(){}[0]
 }
 
+final object io.github.yuroyami.kiteplayer.output/AnnexB { // io.github.yuroyami.kiteplayer.output/AnnexB|null[0]
+    final fun isAnnexB(kotlin/ByteArray): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/AnnexB.isAnnexB|isAnnexB(kotlin.ByteArray){}[0]
+    final fun parseAvcC(kotlin/ByteArray): io.github.yuroyami.kiteplayer.output/CodecSpecificData? // io.github.yuroyami.kiteplayer.output/AnnexB.parseAvcC|parseAvcC(kotlin.ByteArray){}[0]
+    final fun parseHvcC(kotlin/ByteArray): io.github.yuroyami.kiteplayer.output/CodecSpecificData? // io.github.yuroyami.kiteplayer.output/AnnexB.parseHvcC|parseHvcC(kotlin.ByteArray){}[0]
+    final fun toAnnexB(kotlin/ByteArray, kotlin/Int): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.output/AnnexB.toAnnexB|toAnnexB(kotlin.ByteArray;kotlin.Int){}[0]
+}
+
+// Targets: [apple]
+final enum class io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy : kotlin/Enum<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> { // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy|null[0]
+    enum entry ApplicationManaged // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.ApplicationManaged|null[0]
+    enum entry ManagedPlayback // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.ManagedPlayback|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy> // io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy.values|values#static(){}[0]
+}
+
+// Targets: [apple]
+abstract fun interface io.github.yuroyami.kiteplayer.output/MetalPictureResolver { // io.github.yuroyami.kiteplayer.output/MetalPictureResolver|null[0]
+    abstract fun resolve(io.github.yuroyami.kiteplayer.spi/VideoFrame): io.github.yuroyami.kiteplayer.output/MetalPicture? // io.github.yuroyami.kiteplayer.output/MetalPictureResolver.resolve|resolve(io.github.yuroyami.kiteplayer.spi.VideoFrame){}[0]
+}
+
+// Targets: [apple]
 final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroyami.kiteplayer.spi/AudioSink, io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink { // io.github.yuroyami.kiteplayer.output/CoreAudioSink|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy, io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppleAudioSessionPolicy;io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSink.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
@@ -54,6 +65,7 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSink : io.github.yuroy
     final suspend fun stop() // io.github.yuroyami.kiteplayer.output/CoreAudioSink.stop|stop(){}[0]
 }
 
+// Targets: [apple]
 final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.github.yuroyami.kiteplayer.spi/AudioSinkFactory { // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer.output/AppleAudioSessionPolicy, io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppleAudioSessionPolicy;io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
     constructor <init>(io.github.yuroyami.kiteplayer/MonotonicClock = ...) // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.<init>|<init>(io.github.yuroyami.kiteplayer.MonotonicClock){}[0]
@@ -64,12 +76,14 @@ final class io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory : io.githu
     final suspend fun create(): io.github.yuroyami.kiteplayer.spi/AudioSink // io.github.yuroyami.kiteplayer.output/CoreAudioSinkFactory.create|create(){}[0]
 }
 
+// Targets: [apple]
 final class io.github.yuroyami.kiteplayer.output/MetalPictureReader { // io.github.yuroyami.kiteplayer.output/MetalPictureReader|null[0]
     constructor <init>() // io.github.yuroyami.kiteplayer.output/MetalPictureReader.<init>|<init>(){}[0]
 
     final fun readRgba(io.github.yuroyami.kiteplayer.spi/VideoFrame, io.github.yuroyami.kiteplayer.output/MetalPicture, kotlin/Boolean = ...): kotlin/ByteArray // io.github.yuroyami.kiteplayer.output/MetalPictureReader.readRgba|readRgba(io.github.yuroyami.kiteplayer.spi.VideoFrame;io.github.yuroyami.kiteplayer.output.MetalPicture;kotlin.Boolean){}[0]
 }
 
+// Targets: [apple]
 final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer|null[0]
     constructor <init>(platform.QuartzCore/CAMetalLayer, io.github.yuroyami.kiteplayer.output/MetalPictureResolver) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.<init>|<init>(platform.QuartzCore.CAMetalLayer;io.github.yuroyami.kiteplayer.output.MetalPictureResolver){}[0]
 
@@ -94,6 +108,7 @@ final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.
     final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
 }
 
+// Targets: [apple]
 sealed class io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture|null[0]
     final class CorePixelBuffer : io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer|null[0]
         constructor <init>(kotlinx.cinterop/CPointer<out kotlinx.cinterop/CPointed>) // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer.<init>|<init>(kotlinx.cinterop.CPointer<out|kotlinx.cinterop.CPointed>){}[0]
@@ -127,18 +142,13 @@ sealed class io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yu
     }
 }
 
-final object io.github.yuroyami.kiteplayer.output/AnnexB { // io.github.yuroyami.kiteplayer.output/AnnexB|null[0]
-    final fun isAnnexB(kotlin/ByteArray): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/AnnexB.isAnnexB|isAnnexB(kotlin.ByteArray){}[0]
-    final fun parseAvcC(kotlin/ByteArray): io.github.yuroyami.kiteplayer.output/CodecSpecificData? // io.github.yuroyami.kiteplayer.output/AnnexB.parseAvcC|parseAvcC(kotlin.ByteArray){}[0]
-    final fun parseHvcC(kotlin/ByteArray): io.github.yuroyami.kiteplayer.output/CodecSpecificData? // io.github.yuroyami.kiteplayer.output/AnnexB.parseHvcC|parseHvcC(kotlin.ByteArray){}[0]
-    final fun toAnnexB(kotlin/ByteArray, kotlin/Int): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.output/AnnexB.toAnnexB|toAnnexB(kotlin.ByteArray;kotlin.Int){}[0]
-}
-
+// Targets: [apple]
 final object io.github.yuroyami.kiteplayer.output/AppleHostClock : io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer.output/AppleHostClock|null[0]
     final fun hostTimeToNanos(kotlin/ULong): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppleHostClock.hostTimeToNanos|hostTimeToNanos(kotlin.ULong){}[0]
     final fun nanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/AppleHostClock.nanos|nanos(){}[0]
 }
 
+// Targets: [apple]
 final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github.yuroyami.kiteplayer.spi/OutputBackend { // io.github.yuroyami.kiteplayer.output/AppleOutputBackend|null[0]
     final val audioSink // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.audioSink|{}audioSink[0]
         final fun <get-audioSink>(): io.github.yuroyami.kiteplayer.spi/AudioSinkFactory // io.github.yuroyami.kiteplayer.output/AppleOutputBackend.audioSink.<get-audioSink>|<get-audioSink>(){}[0]

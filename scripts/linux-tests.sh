@@ -22,7 +22,7 @@ esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="${KITE_LINUX_IMAGE:-debian:bookworm-slim}"
-MODULES=(kiteplayer-core kiteplayer-subtitles)
+MODULES=(kiteplayer-core kiteplayer-subtitles kiteplayer-ffmpeg)
 
 # Docker Desktop's credential helper blocks on the login keychain in a headless session, which
 # hangs every pull. An empty config skips it; these are public images and need no credentials.
@@ -34,15 +34,21 @@ GRADLE_TASKS=()
 for module in "${MODULES[@]}"; do
   GRADLE_TASKS+=(":$module:linkDebugTest$LINK_SUFFIX")
 done
+# kiteplayer-ffmpeg links the cross-built FFmpeg from the sibling KiteCodec checkout. Without the
+# localRoot the kitecodec plugin looks for a SYSTEM FFmpeg and no host has a linux one.
+FFMPEG_ROOT="${KITE_FFMPEG_ROOT:-$ROOT/../KiteCodec/native-libs}"
 echo "== linking ${GRADLE_TASKS[*]}"
-"$ROOT/gradlew" -p "$ROOT" "${GRADLE_TASKS[@]}"
+"$ROOT/gradlew" -p "$ROOT" "${GRADLE_TASKS[@]}" "-Pkitecodec.ffmpeg.localRoot=$FFMPEG_ROOT"
 
 status=0
 for module in "${MODULES[@]}"; do
   binary="$module/build/bin/$TARGET/debugTest/test.kexe"
   [ -f "$ROOT/$binary" ] || { echo "MISSING $binary"; status=1; continue; }
   echo "== running $binary on $PLATFORM"
-  if docker run --rm --platform "$PLATFORM" -v "$ROOT:/w" -w /w "$IMAGE" "./$binary" | tail -3; then
+  # TMPDIR is unset in a bare container and the suites refuse to guess; the media path is passed
+  # explicitly for the same reason the native Gradle tasks pass it.
+  if docker run --rm --platform "$PLATFORM" -e TMPDIR=/tmp -e KITEPLAYER_TESTMEDIA=/w/testmedia \
+      -v "$ROOT:/w" -w /w "$IMAGE" "./$binary" | tail -3; then
     :
   else
     status=1

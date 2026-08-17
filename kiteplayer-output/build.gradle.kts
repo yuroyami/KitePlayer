@@ -14,9 +14,11 @@ plugins {
  * heard; a renderer draws a frame at a time it is told. Neither decides anything.
  *
  * Targets are added as backends land. Apple first, because CoreAudio and Metal are reachable and
- * testable on the development machine, and because iOS then shares the same code. The JVM target
- * publishes the common surface only, no backend: it exists so a consumer whose commonMain depends
- * on this module still resolves when that consumer also compiles a desktop target.
+ * testable on the development machine, and because iOS then shares the same code. The desktop JVM
+ * came next in phase W: SourceDataLine for audio and the JDK's own text engine for subtitles, which
+ * is decision W-D2, Kotlin first under D-7. The Kotlin/Native desktops publish the common surface
+ * only for now, so a consumer that compiles them still resolves; their C device sinks are register
+ * items W-08 and W-09.
  */
 kotlin {
     explicitApi()
@@ -30,6 +32,14 @@ kotlin {
     macosArm64()
     iosArm64()
     iosSimulatorArm64()
+    // The Kotlin/Native desktops (phase W). They publish the common surface plus whatever backend
+    // exists for them, which today is none: a Kotlin/Native desktop consumer has the engine and
+    // the FFmpeg backend but no device sink yet, and register items W-08 and W-09 are where that
+    // lands. Declaring the targets is what lets :kiteplayer-ffmpeg's real-media tests resolve this
+    // module on Linux at all.
+    linuxX64()
+    linuxArm64()
+    mingwX64()
     jvm()
 
     /* S1.c.4 step 1. Output depends only on core and its existing portable libraries: no

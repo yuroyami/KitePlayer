@@ -5,7 +5,7 @@ import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kitecodec.HardwareAccel
 
 /**
- * The project's native targets are all Apple, so the native axis is VideoToolbox (S2.b): an
+ * The Apple native axis is VideoToolbox (S2.b): an
  * HWACCEL behind the ordinary decoders, eligible for exactly the codecs whose hwaccels the
  * FFmpeg build carries. Whether THIS machine honours the attach is FFmpeg's runtime answer, and
  * a refusal is one more cause the measured fallback path already handles.

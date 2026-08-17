@@ -23,8 +23,8 @@ public sealed interface KitePlayerAvailability {
 /**
  * The default KitePlayer stack for the current target.
  *
- * Android and iOS provide real backends. Desktop JVM, JavaScript and Wasm deliberately publish
- * unavailable placeholders until their media and output implementations land. That lets an
+ * Android, iOS and the desktop JVM provide real backends. JavaScript and Wasm deliberately
+ * publish unavailable placeholders until their media and output implementations land. That lets an
  * application keep one common dependency and one common integration without pretending those
  * targets can play media.
  *

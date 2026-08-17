@@ -17772,6 +17772,24 @@ deliberately left open.
 - Problem: `Playback`, `Frame`, `MediaSource` and the rest throw `AVERROR_PATCHWELCOME`.
 - Fix, decided: real actuals over X-05's binding, keeping the placeholder rule intact for `js`,
   which is a separate target that this stage does not light up.
+  **Amended 2026-08-17, before any code: the web needs an explicit initialise and the common API
+  has nowhere to put one.** `kitecodec-core`'s surface is synchronous by design. `FFmpeg.identity`
+  is a property, `MediaSource.streams` is a property, and every native target can answer them the
+  moment the process starts because its codec is linked into the same binary. A browser cannot:
+  the codec is a SECOND wasm module fetched over the network and instantiated asynchronously, and
+  nothing can be answered before that resolves. There is no way to block for it either, because
+  blocking the main thread is exactly what a browser forbids.
+  Decided: a web-only entry point, `KiteCodecWeb.load()`, suspending, that must complete before any
+  `kitecodec-core` call on wasmJs. Until it does, every actual throws ONE typed error that names the
+  cause and the fix rather than failing as a null dereference somewhere inside a getter. This is
+  additive and web-only: it appears in no common source set and no other target's ABI, and the `js`
+  target keeps the placeholder rule.
+  Why not the alternatives. Making the common API suspend would change every platform's ABI to
+  serve one platform's constraint. Auto-loading on first touch would put a network fetch behind a
+  property read, so a getter would sometimes take 200 ms and sometimes throw, which is worse than
+  an explicit step. Loading the module inside the Worker of X-08 and hiding it behind a message
+  protocol is the eventual shape, but the Worker still has to await the same instantiation, so the
+  explicit load is required either way and is better proved here first.
 - Sub-phase: X.7. Test: KiteCodec's own suites, run in a headless browser.
 
 #### X-08. Nothing runs the player in a Worker, and X-06 depends on it

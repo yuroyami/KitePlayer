@@ -17976,6 +17976,25 @@ deliberately left open.
 - Problem: X-10 and X-11 are not reachable by a consumer until something wires them.
 - Fix, decided: a web `OutputBackend` joining the two, and real defaults.
 - Sub-phase: X.12. Test: a consumer building a player with no platform-specific code.
+  **Decision act, 2026-08-17, two questions the item did not answer.**
+  1. **How a web consumer supplies a surface.** Every other `OutputBackend` is an `object` with no
+     argument, because its renderer gets a surface from the platform: Compose hands one over on
+     desktop, a `UIView` on iOS. A browser has neither. Decided: `KitePlayerWeb.outputBackend(
+     canvasId)` names an existing `<canvas>` in the DOM. Web only, additive, no common ABI touched,
+     and it mirrors `KiteCodecWeb.load`, which the web already needs for the same reason: the
+     browser cannot answer at construction what other platforms answer for free.
+  2. **What the audio sink is in this increment, said plainly rather than implied.** The SPI wants a
+     pull sink: `open(format, render)` and a callback the device drives. Doing that properly on the
+     web means an `AudioWorklet`, a ring, and a message protocol to reach a callback that lives on
+     another thread, which is X-10 and is the piece with the most real-time subtlety in the whole
+     stage. This increment ships `SilentPacedAudioSink` instead: it advances the engine's clock at
+     exactly real time and writes no samples anywhere. That is a REAL sink by the contract, and it
+     is what makes video play and A/V sync work on the web today, but nothing is audible and the
+     class name says so. X-10 remains open and this is not a substitute for it.
+  Why a silent sink rather than no backend at all: this engine is audio-mastered, so the clock and
+  the video path cannot be exercised without something answering the sink contract. A paced silence
+  is the smallest thing that makes the rest testable, and its absence would have left the renderer
+  unprovable inside the engine.
 
 #### X-13. There is no artifact layout and no deployment story
 - Where: new; 17.6 for the tier sizes.

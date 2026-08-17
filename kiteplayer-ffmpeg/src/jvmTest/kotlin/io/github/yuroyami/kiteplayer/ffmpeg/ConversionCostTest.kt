@@ -203,4 +203,50 @@ class ConversionCostTest {
                 "8 threads ${"%.2f".format(one / eight)}x over one",
         )
     }
+
+    /**
+     * W-19's threshold, measured rather than guessed: what does a SMALL frame cost?
+     *
+     * Dispatching four coroutines is tens of microseconds. A 1080p frame repays that many times
+     * over; a thumbnail does not. This times frames on both sides of PARALLEL_ROW_THRESHOLD so the
+     * constant rests on a number.
+     */
+    @Test
+    fun measureSmallFrameCost() {
+        val space = ColorSpaceInfo()
+        fun timeFrame(width: Int, height: Int): Double {
+            val chromaWidth = (width + 1) shr 1
+            val chromaHeight = (height + 1) shr 1
+            val planes = ByteArray(width * height + 2 * chromaWidth * chromaHeight) {
+                (it * 31 % 255).toByte()
+            }
+            fun once() = tightlyPackedToRgba(
+                bytes = planes, width = width, height = height,
+                pixelFormat = PlayerPixelFormat.Yuv420p, colorSpace = space,
+            ).size
+            assertEquals(width * height * 4, once())
+            repeat(50) { once() }
+            val samples = DoubleArray(200)
+            for (i in samples.indices) {
+                val start = System.nanoTime()
+                once()
+                samples[i] = (System.nanoTime() - start) / 1_000_000.0
+            }
+            samples.sort()
+            val mean = samples.average()
+            println(
+                "${width}x$height (slices=${parallelSliceCount(width, height)}): " +
+                    "mean=${"%.3f".format(mean)} ms p50=${"%.3f".format(samples[100])} ms",
+            )
+            return mean
+        }
+        timeFrame(64, 64)
+        timeFrame(160, 120)
+        timeFrame(256, 144)
+        timeFrame(320, 180)
+        timeFrame(426, 238)
+        timeFrame(640, 240)
+        timeFrame(640, 360)
+        println("threshold in force: $PARALLEL_PIXEL_THRESHOLD pixels")
+    }
 }

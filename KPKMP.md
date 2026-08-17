@@ -17162,6 +17162,23 @@ it.**
 - Exit: the conversion's mean falls on the JVM and every colour test stays green. If a threshold
   cannot be found that keeps small frames from regressing, the item is recorded as
   measured-and-rejected like its two siblings.
+- **DONE 2026-08-17, with three corrections to this item's own text.**
+  1. There is no expect/actual. This module compiles for no js or wasmJs target, so the sequential
+     web actual this item promised has nothing to be an actual FOR, and every target it does have
+     carries a multi-threaded `Dispatchers.Default`. One `runBlocking` plus `coroutineScope` in
+     commonMain does the whole job, and the module already used `runBlocking` on this side of the
+     code. A seam that buys nothing is surface, so it was not built.
+  2. The threshold is on PIXELS, not rows, and the measurement forced that: 640x240 in parallel
+     beat 426x238 sequentially despite carrying half again as many pixels, so height alone was the
+     wrong axis and a wide short frame would have been stranded on one core.
+  3. The threshold's value is measured on both sides rather than assumed. Sequential against four
+     slices, in mean milliseconds: 64x64 0.013 against 0.116, 160x120 0.068 against 0.201, 256x144
+     0.134 against 0.099, 320x180 0.210 against 0.156, 640x360 0.765 against 0.416. The crossover
+     is between 19k and 37k pixels and the constant is 65536, above it with margin.
+  Result on a real 1080p frame: the conversion loop falls from 6.33 ms to about 2.1 ms and the whole
+  `SoftwareConverter.toRgba` from 6.73 ms to about 2.3 ms. Every colour suite stays green on the JVM
+  and on macOS native, and the pins are proved able to catch this exact class of bug: making one
+  slice skip its rows fails `ColorPolicyTest`.
 
 **Sub-phases, in execution order.**
 

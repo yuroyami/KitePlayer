@@ -3,6 +3,10 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
@@ -108,6 +112,75 @@ internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pi
 }
 
 /** Converts the tightly packed plane layout returned by KiteCodec's copying API to RGBA. */
+/**
+ * Runs a row range on every core there is (W-19), or on this one when that would cost more.
+ *
+ * The conversion loop is load and store bound, so it scales with cores: measured on a 1080p frame,
+ * one task takes 6.36 ms and four take 1.89 ms. Each slice writes a DISJOINT range of output rows
+ * and reads a disjoint range of input rows, so there is no shared mutable state and no ordering
+ * between slices; that is what makes this safe without a lock.
+ *
+ * Two rules the caller does not get to break. Slice boundaries are always EVEN rows, because a
+ * subsampled layout's chroma row serves two luma rows and a slice that started on an odd row would
+ * read the wrong one. And below [PARALLEL_PIXEL_THRESHOLD] pixels of work the whole thing runs inline,
+ * because dispatching costs more than a small frame's conversion saves.
+ *
+ * No expect/actual: every target this module compiles for has a multi-threaded `Dispatchers.Default`,
+ * and the module already calls `runBlocking` on this side of the code for the same kind of reason.
+ */
+internal inline fun parallelRowSlices(
+    width: Int,
+    height: Int,
+    crossinline body: (startRow: Int, endRowExclusive: Int) -> Unit,
+) {
+    val slices = parallelSliceCount(width, height)
+    if (slices <= 1) {
+        body(0, height)
+        return
+    }
+    val rowsPerSlice = ((height + slices - 1) / slices + 1) and 1.inv()
+    runBlocking {
+        coroutineScope {
+            var start = 0
+            while (start < height) {
+                val from = start
+                val to = minOf(start + rowsPerSlice, height)
+                launch(Dispatchers.Default) { body(from, to) }
+                start = to
+            }
+        }
+    }
+}
+
+/** How many slices this frame is worth. One means stay on this thread. */
+internal fun parallelSliceCount(width: Int, height: Int): Int {
+    if (width.toLong() * height < PARALLEL_PIXEL_THRESHOLD) return 1
+    // Four is where the measured ladder flattens: 3.36x at four tasks, 3.68x at eight, so tasks
+    // five to eight together buy less than a tenth of what the first three did.
+    return 4
+}
+
+/**
+ * Below this much WORK the conversion stays on one thread.
+ *
+ * On pixels rather than rows, and that is a correction the measurement forced: a 640x240 frame ran
+ * FASTER in parallel than a 426x238 one ran sequentially despite having half again as many pixels,
+ * so height alone was the wrong axis and a wide short frame would have been left on one core.
+ *
+ * MEASURED, not guessed. Mean milliseconds per frame on this machine, sequential against four
+ * slices, which puts the crossover between 19k and 37k pixels:
+ *
+ *     64x64     4k px   0.013 seq   0.116 par   sequential wins by 9x
+ *     160x120  19k px   0.068 seq   0.201 par   sequential wins by 3x
+ *     256x144  37k px   0.134 seq   0.099 par   parallel wins
+ *     320x180  58k px   0.210 seq   0.156 par   parallel wins
+ *     640x360 230k px   0.765 seq   0.416 par   parallel wins by 1.8x
+ *
+ * 65536 sits above the crossover with margin, so nothing measured regresses, and every real video
+ * frame is far above it: even 640x360 carries three and a half times this.
+ */
+internal const val PARALLEL_PIXEL_THRESHOLD: Long = 65_536L
+
 internal fun tightlyPackedToRgba(
     bytes: ByteArray,
     width: Int,
@@ -186,7 +259,8 @@ private fun ByteArray.convertPlanarYuv(
     }
     val coefficients = PackedCoefficients.of(colorSpace)
     val chromaShift = packedChromaSampleShift(colorSpace.chromaLocation, subsampleX)
-    for (row in 0 until height) {
+    parallelRowSlices(width, height) { startRow, endRow ->
+    for (row in startRow until endRow) {
         val chromaRow = row shr subsampleY
         var outIndex = row * width * 4
         for (column in 0 until width) {
@@ -196,6 +270,7 @@ private fun ByteArray.convertPlanarYuv(
             val chromaR = readPackedComponent(vOffset + chromaRow * chromaStride + chromaColumn * step, layout)
             outIndex = writePackedRgba(out, outIndex, coefficients, luma, chromaB, chromaR)
         }
+    }
     }
 }
 
@@ -217,7 +292,8 @@ private fun ByteArray.convertNv12(
     }
     val coefficients = PackedCoefficients.of(colorSpace)
     val chromaShift = packedChromaSampleShift(colorSpace.chromaLocation, subsampleX = 1)
-    for (row in 0 until height) {
+    parallelRowSlices(width, height) { startRow, endRow ->
+    for (row in startRow until endRow) {
         var outIndex = row * width * 4
         for (column in 0 until width) {
             val chromaColumn = ((column + chromaShift) shr 1).coerceIn(0, chromaWidth - 1)
@@ -227,6 +303,7 @@ private fun ByteArray.convertNv12(
             val chromaR = readPackedComponent(uv + step, layout)
             outIndex = writePackedRgba(out, outIndex, coefficients, luma, chromaB, chromaR)
         }
+    }
     }
 }
 
@@ -239,7 +316,8 @@ private fun ByteArray.copyPackedRgba(
 ) {
     val stride = width * components
     require(size >= stride * height) { "short packed frame: $size bytes for ${width}x$height" }
-    for (row in 0 until height) {
+    parallelRowSlices(width, height) { startRow, endRow ->
+    for (row in startRow until endRow) {
         var outIndex = row * width * 4
         for (column in 0 until width) {
             val at = row * stride + column * components
@@ -252,6 +330,7 @@ private fun ByteArray.copyPackedRgba(
             out[outIndex++] = (if (redFirst) third else first).toByte()
             out[outIndex++] = alpha.toByte()
         }
+    }
     }
 }
 

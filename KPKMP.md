@@ -8761,6 +8761,98 @@ this machine to run the Linux containers, and its credential helper blocks on th
 in a headless session, so both scripts supply an empty docker config; these are public images.
 
 
+
+**2026-08-17, phase W continued: W.3, the Kotlin/Native desktops, W.6's split, and the desktop
+end-to-end proof (Opus 5).** Tier selected: TIER 2 in both repositories, by changed path (C sources
+under `native/`, buildSrc, build.gradle.kts, jvmMain and nativeMain Kotlin), plus both container
+runs. Tier 3 not selected: `kite_rt_render.c` is untouched, the callback body is untouched, and no
+teardown ordering moved; the sink split moved the REFUSING arm out of the CoreAudio file and the
+render audit's 43 checks are green over the result.
+
+**W.3, the desktop output backend.** `:kiteplayer-output` gains a JVM backend that is Kotlin only
+and adds no dependency, which is decision W-D2 under D-7. `DesktopAudioSink` wraps
+`javax.sound.sampled`'s `SourceDataLine`, a PUSH device, in the one writer coroutine the AudioSink
+KDoc prescribes for exactly that shape, and it carries the Android sink's hard-won rows rather than
+rediscovering them: SOL-A1's taken-not-offered count, SOL-A2's single writer with the failure state
+published BEFORE the event and recovery on the next start, F-AUD1's short-write signal and
+F-AUD2's held tail. SOL-A3's wrap extension is deliberately NOT copied, and a test proves copying
+it would invent a 277 ms queue out of a real 8-billion-frame position, because
+`getLongFramePosition` is already 64 bit. `latencyQuality` is `Estimated` and its KDoc says why:
+the counter measures what the Java mixer consumed, not what the DAC played, so everything below the
+mixer is invisible. `DesktopSubtitleRasterizer` uses `java.awt`, the JVM's own text engine, and
+emits premultiplied RGBA to match what both existing rasterizers actually produce (F-ALPHA1's
+corrected contract), read from the raster rather than through `getRGB`, which un-premultiplies.
+52 tests, 34 of them observed RED before the implementation existed, and 17 behaviours falsified one
+at a time by neutering the fix. Three deviations reported by the implementer rather than hidden:
+two of those tests were vacuous until the falsification pass caught them and were rewritten; one
+falsification run wedged for 900 seconds on a `withTimeout` around a non-suspending loop copied from
+`AudioTrackSinkTest`, which still carries that shape and will hang rather than fail; and F-AUD4's
+lock discipline has no pin on either platform.
+
+**The Kotlin/Native desktops.** `:kiteplayer-ffmpeg` and `:kiteplayer-output` gain linuxX64,
+linuxArm64 and mingwX64. One thing had to be corrected first: `platformDecoderSelection` claimed
+`HardwareRoute.Accel(VideoToolbox)` for h264 and hevc on EVERY native target, which would have been
+a lie on Linux and Windows. Apple keeps that actual; the two desktops answer software honestly and
+their KDoc names where VAAPI and D3D11VA will arrive. Two Apple-only test files moved to
+`appleTest` for the same reason, and the output-module test dependency narrowed from `nativeTest`
+to `appleTest`, since the backend it names is CoreAudio's.
+
+**Measured on Linux, in a container, both architectures.** kiteplayer-ffmpeg: 86 tests, including
+EVERY row of the 17.5 matrix, on linuxArm64 and on linuxX64. kitecodec-core: 109 native tests on
+both. kiteplayer-core and kiteplayer-subtitles: 272 and 28 on both.
+
+**One real profile gap that only a second surface could find.** The P010 alignment test builds its
+graph with `setparams`, which the vendored profile never enabled. It passes on macOS only because
+the host gate resolves FFmpeg from HOMEBREW, so the VENDORED profile had only ever been exercised on
+phones. Enabled now, three desktop trees rebuilt. Two more of the same class followed when the
+Windows link was attempted: the msys2 sysroot DOES carry zlib (at the package root, not under the
+triple directory, which is where a first reading looked) and iconv, FFmpeg's configure autodetected
+both, and the consumer link line never learned to name them. Fixed at the root: zlib is now
+REQUESTED for every portable desktop triple so the configure flag and the link flags are written
+from one list and cannot disagree again.
+
+**Windows, honestly.** `:kiteplayer-ffmpeg:linkDebugTestMingwX64` produces a 30 MB PE32+ console
+executable carrying the engine, the FFmpeg backend and FFmpeg n8.0. Nothing has been RUN. There is
+no Windows machine here and that run is an owner rider like the physical iPhone one.
+
+**W.6, the split half only.** `kite_rt_sink_unsupported.c` holds the eight refusing entry points
+under a guard that is the exact complement of the CoreAudio one, so a new backend arrives as its
+own file rather than as one more arm of a conditional inside a file named after another platform.
+Verified by symbol placement: in the linux_arm64 archive all eight `kprt_sink_` entries come from
+the new object and `kite_rt_coreaudio.o` has no text symbols at all. The clock field is documented
+as what it always was, a tick-to-nanosecond RATIO, so a Linux backend fills it 1 over 1 and a
+Windows one 1000000000 over `QueryPerformanceFrequency` and neither needs new arithmetic. What this
+does NOT do is stated on the commit: there is still no ALSA and no WASAPI sink, the konan linux
+sysroot carries no ALSA headers, and W-09 (the audits are Mach-O and CoreAudio shaped) is untouched
+and must land WITH the first real non-Apple backend, because a device sink without `render-audit.sh`
+is a sink with no proof.
+
+**The end-to-end desktop proof.** Everything above tests a layer. `DesktopPlaybackTest` tests the
+assembly the way a consumer meets it: `KitePlayerPlatform.createOrNull()`, open
+`testmedia/sync1080p30.mp4`, play, watch the engine's own position advance. It reports two tracks,
+a 1920x1080 picture, a selected audio track, and reaches one second of position through a real
+`SourceDataLine` on a real device. Falsified by raising the threshold past the clip length, which
+fails with the position it actually reached, 10.005s.
+
+**Three more pre-existing failures surfaced and were fixed rather than routed around.**
+`kitecodec-gradle-plugin:test` asserted a Local linuxX64 consumer gets the full desktop third-party
+stack, which is the twin of the StaticLinkFlags branch W-D4 reduced, and is exactly the drift the
+KEEP IN SYNC note in both files exists to catch. `kitecodec-sample` computed its link flags with
+the dav1d switch at its default and therefore could not link against any tree BuildFFmpegTask had
+bundled dav1d into, which is every current macOS tree, so `scripts/e2e.sh` had no binary to run;
+it passes again, A/V transcode, remux, trim and audio-only, through h264_videotoolbox.
+
+**Still open in this phase, named so their absence is not read as an oversight.** SOL-API6 (the
+`CPointer<kprt_ring>` on core's public ABI) needs a design act, not an edit: hiding it behind an
+opaque writer means moving the ring wrapper out of the module whose internal interface it
+implements, and 18.3 rule 6 forbids authoring that plan and executing it in the same breath.
+SOL-API7 is CONFIRMED against the tree today (three hard `frame as KiteCodecVideoFrame` casts in
+`:kiteplayer-compose-video`) and wants the sealed hardware-surface model, which is the same kind of
+act. SOL-C2 is a refactor of the most safety-critical file in the project and belongs with the
+first non-Apple backend, not before it.
+
+---
+
 **2026-08-17, sub-phase W.9: the web spike (register item W-12).** Tier selected: none; the spike
 touched no repository file. Its whole report is `docs/spikes/2026-08-17-web-spike.md` and the
 numbers below are quoted from it rather than summarised loosely.

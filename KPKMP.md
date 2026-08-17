@@ -17692,6 +17692,33 @@ deliberately left open.
   a function pointer) still have to be written by hand. The 40-to-60-hour estimate stands.
 - Sub-phase: X.5. Test: whatever the decision act selects, plus the existing signature gate, which
   is what keeps a generated binding honest against future ABI drift.
+  Result, 2026-08-17, first increment of X.5: `:kitecodec-core:generateWasmBinding` parses the
+  gated baseline and emits an emcc export list. **196 exported, 2 left hand-written**
+  (`ffkmp_fmt_open_input_io`, which takes two function pointers and is X-06's whole subject, and
+  `kc_jvm_attach`, which takes a `JavaVM *` that does not exist in a browser). The hand-written set
+  is a named constant that the tests assert really appears in the baseline, so the boundary is
+  visible rather than inferred.
+  **Proved by CALLING it, not by counting names.** `scripts/wasm-binding-probe.sh` links the real
+  archives with the generated list and exercises one call of every shape the ABI uses: `int(void)`
+  (`ffkmp_averror_eof` returns -541478725), `const char*(void)` decoded as UTF-8 (the configuration
+  string contains `wasm32`), `int(const char*)` with the string marshalled INTO wasm memory
+  (`ffkmp_filter_exists` answers 1 for `buffersink` and 0 for a name that does not exist),
+  pointer-returning alloc then `int64_t` getter then free (a fresh frame's pts is
+  -9223372036854775808, which is `AV_NOPTS_VALUE` and therefore the right answer rather than a
+  plausible one), a setter/getter round trip through the frame, and two `int(void)` constants
+  asserted distinct because a collision there is silent corruption.
+  Falsification: removing a single name from the export list still LINKS and then fails at the
+  call, exit 1. That is the failure mode this probe exists for, since a missing export is invisible
+  until something calls it.
+  **The size question, measured rather than feared.** Exporting 196 functions defeats dead-code
+  elimination: the module is 3,548,363 bytes raw against 877 KB for the minimal five-symbol probe.
+  Gzipped it is **1,115,338 bytes, 1.06 MiB, against the spike's 1.00 MiB lean budget**, so binding
+  the whole surface costs about 6% of download rather than the 4x the raw number suggests, because
+  what the exports retain is largely redundant FFmpeg tables that compress well. That is a further
+  argument for the bind-everything decision and it is now a number rather than an expectation.
+  Still ahead in X.5, and not claimed: the Kotlin/wasmJs external declarations and the JS shim.
+  This increment proves the export surface is real and callable, which is what everything above it
+  stands on.
 
 #### X-06. There is no AVIO bridge that can block on a Worker
 - Where: `kj_format.c:450-660` as the reference; `ffkmp_fmt_open_input_io`.

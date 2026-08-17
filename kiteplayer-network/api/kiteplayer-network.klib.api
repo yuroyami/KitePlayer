@@ -228,9 +228,10 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIoException : kotlin/
     constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.network/KtorMediaIoException.<init>|<init>(kotlin.String){}[0]
 }
 
-final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.github.yuroyami.kiteplayer/MediaIoResolver { // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver|null[0]
+final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.github.yuroyami.kiteplayer/MediaIoResolver, kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver|null[0]
     constructor <init>(io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.<init>|<init>(io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 
+    final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.close|close(){}[0]
     final suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.resolve|resolve(kotlin.String){}[0]
 }
 

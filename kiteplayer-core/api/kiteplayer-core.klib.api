@@ -1318,6 +1318,8 @@ final class io.github.yuroyami.kiteplayer/AudioPlayback : kotlin/AutoCloseable {
 
     final val buffered // io.github.yuroyami.kiteplayer/AudioPlayback.buffered|{}buffered[0]
         final fun <get-buffered>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/AudioPlayback.buffered.<get-buffered>|<get-buffered>(){}[0]
+    final val events // io.github.yuroyami.kiteplayer/AudioPlayback.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/AudioSinkEvent> // io.github.yuroyami.kiteplayer/AudioPlayback.events.<get-events>|<get-events>(){}[0]
     final val latencyQuality // io.github.yuroyami.kiteplayer/AudioPlayback.latencyQuality|{}latencyQuality[0]
         final fun <get-latencyQuality>(): io.github.yuroyami.kiteplayer/LatencyQuality // io.github.yuroyami.kiteplayer/AudioPlayback.latencyQuality.<get-latencyQuality>|<get-latencyQuality>(){}[0]
     final val negotiatedFormat // io.github.yuroyami.kiteplayer/AudioPlayback.negotiatedFormat|{}negotiatedFormat[0]
@@ -2475,6 +2477,24 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.toString|toString(){}[0]
+    }
+
+    final class CommandRefused : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.detail.<get-detail>|<get-detail>(){}[0]
+        final val member // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.member|{}member[0]
+            final fun <get-member>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.member.<get-member>|<get-member>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.toString|toString(){}[0]
     }
 
     final class FrameDropping : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping|null[0]

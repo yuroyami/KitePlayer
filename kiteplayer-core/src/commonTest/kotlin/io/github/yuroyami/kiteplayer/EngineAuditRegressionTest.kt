@@ -190,4 +190,23 @@ class EngineAuditRegressionTest {
             "a muted pipeline rebuilt mid-stream must stay silent, but the first buffer peaked at $peak",
         )
     }
+    // F-WRN1: AudioUnderrun was a documented public type wired to nothing. A demuxer slower
+    // than real time starves the ring, and the starvation must reach the warning history.
+    @Test
+    fun `a starved ring says AudioUnderrun out loud`() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(hasVideo = false, durationUs = 3_000_000, readDelayUs = 60_000),
+            renderer = null,
+        )
+        harness.open()
+        harness.core.play()
+        harness.run(3.seconds)
+        assertTrue(
+            harness.core.warningHistory().any { it.warning is PlaybackWarning.AudioUnderrun },
+            "a device running dry is worth a typed warning, history: " +
+                harness.core.warningHistory().map { it.warning::class.simpleName }.toString(),
+        )
+        harness.close()
+    }
 }

@@ -414,6 +414,11 @@ internal class PlaybackCore(
     private var lastStatsAtNanos: Long = 0
     private var lastStatsDecoded: Long = 0
 
+    /* Rising-edge state for the two counter-backed warnings (audit F-WRN1): warned when the
+     * counter MOVED this stats interval, so the history records onsets rather than flooding. */
+    private var lastStatsUnderruns = 0L
+    private var lastStatsDroppedLate = 0L
+
     /** The deadline this pass may sleep until. Handlers lower it; nothing raises it. */
     private var wakeAtNanos: Long = 0
 
@@ -3622,6 +3627,19 @@ internal class PlaybackCore(
                 0.0
             }
             lastStatsDecoded = decoded
+            // F-WRN1: the audit found these two documented warnings wired to nothing. The
+            // counters restart with the session, so a shrink just re-baselines silently.
+            val underrunsNow = session?.audio?.underruns ?: 0
+            if (underrunsNow > lastStatsUnderruns) {
+                warn(PlaybackWarning.AudioUnderrun(underrunsNow))
+            }
+            lastStatsUnderruns = underrunsNow
+            val droppedLateNow = session?.video?.droppedFrames ?: 0
+            val droppedDelta = (droppedLateNow - lastStatsDroppedLate).coerceAtLeast(0)
+            if (droppedDelta >= FRAME_DROP_WARN_PER_INTERVAL) {
+                warn(PlaybackWarning.FrameDropping(droppedDelta.toInt()))
+            }
+            lastStatsDroppedLate = droppedLateNow
             statsState.value = PlaybackStats(
                 decodedVideoFrames = decoded,
                 submittedFrames = session?.renderer?.submittedFrames ?: 0,
@@ -3859,6 +3877,21 @@ internal class PlaybackCore(
         }
         session.videoScheduler?.let { worker ->
             session.jobs += launchWorker(session, worker, dispatchers.videoSchedule) { runVideoSchedule(session, worker) }
+        }
+        // F-WRN1: the sink's device events finally reach a listener. warn() is fence-locked,
+        // so collecting on the session lane is safe from wherever the sink emits.
+        session.audio?.let { audio ->
+            session.jobs += scope.launch(dispatchers.session) {
+                audio.events.collect { event ->
+                    when (event) {
+                        is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.DeviceLost ->
+                            warn(PlaybackWarning.AudioDeviceChanged("device lost: " + event.detail))
+                        is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.DeviceChanged ->
+                            warn(PlaybackWarning.AudioDeviceChanged(event.detail))
+                        else -> Unit
+                    }
+                }
+            }
         }
     }
 
@@ -4486,6 +4519,9 @@ internal class PlaybackCore(
 
         /** How long the device is given to play out what it holds. */
         val DRAIN_DEADLINE: Duration = 5.seconds
+
+        /** Late drops in one stats interval that make dropping worth SAYING, not just counting. */
+        const val FRAME_DROP_WARN_PER_INTERVAL: Long = 5L
 
         /** How long teardown may take before close reports a compromised runtime. */
         val CLOSE_DEADLINE: Duration = 10.seconds

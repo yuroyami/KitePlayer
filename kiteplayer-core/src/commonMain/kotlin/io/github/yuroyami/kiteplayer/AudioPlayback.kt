@@ -158,6 +158,10 @@ public class AudioPlayback(
 
     public val latencyQuality: LatencyQuality get() = sink.latencyQuality
 
+    /** The sink's own event feed, surfaced so the engine can warn on device loss (F-WRN1). */
+    public val events: kotlinx.coroutines.flow.Flow<io.github.yuroyami.kiteplayer.spi.AudioSinkEvent>
+        get() = sink.events
+
     /**
      * Opens the device and sizes the ring for it.
      *

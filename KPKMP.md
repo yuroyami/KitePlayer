@@ -8582,6 +8582,41 @@ rows that closed PARTIAL with named remainders. The road's next phase by owner o
 
 ---
 
+**2026-08-17, the audit surge (Fable 5, owner order: confirm the audit results and fix all of
+them end to end).** A 69-agent code-only audit (15 dimensions, adversarial verification, run
+under Opus with the code as the only source of truth) confirmed 42 findings and refuted 11;
+the owner then ordered every confirmed row fixed. Executed single-threaded in seven module
+surges, one commit each: engine (4620f93), FFmpeg bridge (035c935), network (16bc094),
+Android output (55a0d60), Apple output (3078eb8), compose-video (2b681f3), C core and its
+instruments (e7cbc57), plus this closing commit for the warning wiring, the register and the
+gate. The whole account, row by row with fix commits, is the new register section 17.11.b.
+
+1. The falsification rule held everywhere the host can observe: eleven pins proven RED before
+   their fixes (stale seek across open 2s-not-0, loop seeking the unseekable 3 seeks, the
+   drain wait Playing-for-ever, muted rebuild peaking 0.996, DASH r=-1 zero segments, verbose
+   durations throwing, astral references truncating, the ffmpeg converters disagreeing at
+   byte 0, AudioTrack re-entering write 11 times, the dropped pause tail playing block one
+   where block zero's remainder belonged, the rotated overlay at 84.375 where glued is 115),
+   and four more falsified in place by neutering (the filter drain guard, the retained-redraw
+   arm, the underrun warning, all sixteen source-discipline controls via --prove-it-can-fail).
+2. Two audit claims were narrowed DURING fixing, both recorded on their rows: the channel
+   alias defect lived in AudioPipeline's alias condition, not in the mixer whose pass-through
+   restride was always correct (two existing pins forced the narrower fix); and the refused
+   speed change is latent on unseekable sources because no flush path exists to promote it,
+   so its pin guards the law rather than a reproduction.
+3. One contract CHANGED rather than repaired: RgbaBitmap now documents premultiplied alpha,
+   which is what both platform rasterizers produce and both Compose consumers upload; the
+   three consumers that converted again became raw copies, Metal's overlay blend moved to
+   BlendFactorOne, and the libass renderer premultiplies at emit. The device-visible halves
+   ride the owner's emulator checklist.
+4. The three dead warning types were wired rather than deleted: underruns and frame-drop
+   bursts warn from the stats pass on rising edges, device loss and route changes warn from a
+   new sink-event collection, and the warning audit table's rows are true sentences again.
+5. Still open, stated in 17.11.b: the Android ABI dump gap (KGP cannot cover Android
+   publications yet) and the sixteen never-tested target surfaces, both owner-decision rows.
+
+---
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two
@@ -16020,6 +16055,82 @@ and closed in the same surge (the HDR row).
 The one deliberate non-goal stands as designed: sustained fullscreen belongs to the baseline
 wrapper (D-6 keeps both paths for exactly this reason), so it is not a loss against the
 audit's rule but the division of labour the register chose. KiteVideo loses nowhere else.
+
+### 17.11.b The deep audit and its fix surge (2026-08-17)
+
+Born from a 69-agent, 15-dimension code-only audit run against fa02a18 (comments, KDoc and
+this file treated as hearsay; every non-trivial finding adversarially verified) followed by a
+single-threaded fix surge that answered every confirmed row end to end. The falsification rule
+held: every host-observable fix is pinned by a test proven RED first or falsified in place by
+neutering the fix; the pins live in EngineAuditRegressionTest, ExternalSubtitleTest,
+ColorPolicyTest, FilterAttachmentTest, DashManifestParserTest, DashRefusalTest,
+AudioTrackSinkTest, AndroidSurfaceOverlayTest and AppKitVideoRendererTest.
+
+**CLOSED, with their commits.**
+
+| Row | Defect | Fix commit |
+| --- | --- | --- |
+| F-LOOP1 | LoopMode.One seeked an unseekable source and failed the session | 4620f93 |
+| F-SEEK1 | a pending seek survived runOpen and ran against the new media | 4620f93 |
+| F-EOS1 | the end-of-stream ring wait was unbounded when the device stopped pulling | 4620f93 |
+| F-SP1 | SetSpeed wrote both pipelines before deciding to refuse | 4620f93 |
+| F-API1 | refusals of fire-and-forget members were invisible; PlaybackWarning.CommandRefused | 4620f93 |
+| F-MIX1 | the SOL-P2 alias keyed on isPassThrough and aliased unequal channel counts | 4620f93 |
+| F-GAIN1 | rebuiltFor lost the gain ramp position, un-muting a rebuild for one ramp | 4620f93 |
+| F-TS1 | a rebuild kept the scaled-axis base while the emitted counter restarted | 4620f93 |
+| F-QSC1 | quiesce trusted a parkedNow the worker was already leaving | 4620f93 |
+| F-LANE1 | the session lane made blocking joins on the computation pool | 4620f93 |
+| F-CFG1 | BufferPolicy accepted videoFrameQueue = 1 and crashed the first open | 4620f93 |
+| F-JOB1 | one completed raster Job per cue edge grew session.jobs for the whole film | 4620f93 |
+| F-EXT1 | addExternalSubtitle minted an id a declared track already owned | 4620f93 |
+| F-EXT2 | external ASS files were labelled external/subrip | 4620f93 |
+| F-HDR1 | the native SoftwareConverter skipped the HDR-to-SDR hook the jvm path runs | 035c935 |
+| F-FLT1 | a never-built filter graph held isDrained false for ever | 035c935 |
+| F-FACT1 | KiteCodecSourceFactory dropped headers, options, formatHint and videoFilter | 035c935 |
+| F-TSTL1 | the tone-map test computed its expected value with the production functions | 035c935 |
+| F-DASH1 | SegmentTimeline r=-1 expanded to zero segments | 16bc094 |
+| F-DASH2 | xs:duration year, month and week components killed the manifest | 16bc094 |
+| F-DASH3 | multi-period manifests silently played period one | 16bc094 |
+| F-XML1 | numeric character references above the basic plane truncated through toChar | 16bc094 |
+| F-NET1 | KtorMediaIoResolver leaked the HttpClient it lazily created | 16bc094 |
+| F-AUD1 | a short positive write return re-entered the blocking write past the signal | 55a0d60 |
+| F-AUD2 | a pause mid-write dropped the interrupted block's ring-consumed tail | 55a0d60 |
+| F-AUD3 | drain left submittedFrames and the wrap state stale | 55a0d60 |
+| F-AUD4 | the timestamp wrap state was mutated without the head's lock | 55a0d60 |
+| F-ALPHA1 | the cue alpha contract said straight while producers premultiplied; three consumers premultiplied again (canvas target, overlay view, Metal blend) | 55a0d60 |
+| F-DDRW1 | a delegated overlay was also burned into the video canvas | 55a0d60 |
+| F-ROT1 | the burned overlay ignored the picture's quarter turn | 55a0d60 |
+| F-POS1 | an authored \pos hung the safe-width layout's top-left off the anchor | 55a0d60 |
+| F-CFL1 | AppleSubtitleRasterizer leaked every Create-rule object per cue | 3078eb8 |
+| F-DRW1 | an unwrappable picture was refused after the drawable was acquired | 3078eb8 |
+| F-RDW1 | the redraw flag's else-arm clobbered a racing request, three renderers | 3078eb8 |
+| F-RDWT1 | the retained-picture redraw had no pin; now falsified by neutering | 3078eb8 |
+| F-DRAW1 | requestProofFrame wrote draw-observed state inside the draw phase | 2b681f3 |
+| F-CLS1 | setOverlay could publish after close's final null and pin dead cues | 2b681f3 |
+| F-DBF1 | device_buffer_frames was write-only; now in kprt_sink_stats, read live | e7cbc57 |
+| F-CTRL1 | 13 of 16 negative controls in source-discipline.sh had drifted off their lines; all sixteen re-anchored on unique text and re-proven able to fail | e7cbc57 |
+| F-WRN1 | FrameDropping, AudioUnderrun and AudioDeviceChanged were documented types wired to nothing; all three now emit (stats-pass edges and the new sink-event collection) | this commit |
+| F-CFG2 | dead knobs: WorkerContext deleted; lookahead and the cache back-window KDocs now say what the code does; setSpeed and the facade KDocs match the refusal law | 4620f93 |
+
+**Register corrections from the audit's refutation pass.** Eleven findings were killed by
+adversarial verification and are NOT rows above; the strongest refutations are recorded here
+because they name guards worth keeping: BlockingMediaIo's runBlocking is safe because close
+never queues behind the demux lane; the ratchet tasks ARE invoked by their documented
+commands; the shipped-object audit in render-audit.sh covers what flag parity alone cannot.
+
+**OPEN, honestly.**
+
+- F-ABI1: the built-in abiValidation covers no Android target surface (KGP reports Android
+  publications unsupported), so KitePlayerView and the other androidMain public APIs have no
+  dump to disagree with. Needs either a KGP release that supports it or a hand-rolled
+  classes.jar signature check. Owner decision on the mechanism.
+- F-COV1: tests have only ever executed on four of the twenty declared surfaces (jvm,
+  macosArm64, iosSimulatorArm64, the Android host). linux and mingw need their hosts; tvos
+  and watchos need simulator runs; js and wasm need their node toolchains resolved once with
+  the network on. Recorded as reachable, not blocked.
+- The device-only halves of F-ALPHA1, F-ROT1 and F-POS1 (real pixels on a real screen) ride
+  the owner's existing emulator checklist, which already carries the three manual checks from
+  the M4 surge.
 
 ### 17.12 The renewed road, 2026-08-16
 

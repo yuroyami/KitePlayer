@@ -25,6 +25,7 @@ public final class io/github/yuroyami/kiteplayer/AudioPlayback : java/lang/AutoC
 	public final fun endOfStream ()V
 	public final fun flush-zBfWXis (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun getBuffered-UwyO8pc ()J
+	public final fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public final fun getLatencyQuality ()Lio/github/yuroyami/kiteplayer/LatencyQuality;
 	public final fun getMuted ()Z
 	public final fun getNegotiatedFormat ()Lio/github/yuroyami/kiteplayer/spi/AudioFormat;
@@ -701,6 +702,20 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ChannelLayoutUn
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getChannels ()I
 	public final fun getDetail ()Ljava/lang/String;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$CommandRefused : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$CommandRefused;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$CommandRefused;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$CommandRefused;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public final fun getMember ()Ljava/lang/String;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

@@ -44,7 +44,7 @@ class WarningAuditTest {
             "PlaybackCore's stats pass, when late drops in the last second cross the threshold",
         )
         is PlaybackWarning.AudioDeviceChanged -> listOf(
-            "AudioPlayback, when the sink reports a device or route change",
+            "PlaybackCore's sink-event collection, on AudioSinkEvent.DeviceLost and DeviceChanged",
         )
         is PlaybackWarning.AudioUnderrun -> listOf(
             "PlaybackCore's stats pass, when the sink's underrun total moves",

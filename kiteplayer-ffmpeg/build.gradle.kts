@@ -137,6 +137,17 @@ kotlin {
     }
 }
 
+// The jvm TEST runtime classpath, printed for the same reason :kiteplayer-sample-desktop prints its
+// run classpath: the Linux container that runs this suite (W-20) has no Gradle to ask.
+val jvmTestFiles = kotlin.jvm().compilations.getByName("test")
+    .let { test -> test.output.allOutputs + test.runtimeDependencyFiles }
+
+tasks.register("printJvmTestRuntimeClasspath") {
+    dependsOn("jvmTestClasses")
+    val classpath = jvmTestFiles
+    doLast { println(classpath.joinToString(File.pathSeparator) { it.absolutePath }) }
+}
+
 kitecodec {
     ffmpeg {
         // The standing host gate uses Homebrew. Phone links pass a complete local tree explicitly;

@@ -1010,6 +1010,9 @@ kiteplayer-rt/native/scripts/run-c-tests.sh interpose  # plain binaries, interpo
 # evidence. mingw has no run line on purpose: a PE binary needs Windows, and the link is the claim.
 ./gradlew :kiteplayer-output:jvmTest :kiteplayer-mobile:jvmTest :kiteplayer-ffmpeg:jvmTest
 ./scripts/linux-tests.sh                              # core, subtitles and ffmpeg, in a container
+# The same jvm suite the line above ran natively, on a Linux JVM against the jar's own bundled
+# library: 60 tests and all 27 matrix rows. Pass linux/amd64 for the emulated second arm (W-20).
+./scripts/linux-jvm-tests.sh
 # Windows stays a link claim, and the FFmpeg backend is the strong form of it: a PE32+ binary
 # carrying the engine, the backend and FFmpeg itself.
 ./gradlew :kiteplayer-ffmpeg:linkDebugTestMingwX64 \
@@ -8954,6 +8957,45 @@ plus a 190-row manifest) is the measured precedent for what that phrase costs. T
 back, both owner decisions rather than silent choices: bind a playback-only subset instead of all
 198, or GENERATE the binding from `signature-baseline.txt`, whose 213 normalized records already
 exist and are already gated.
+
+---
+
+**2026-08-17, sub-phase W.17: the matrix decodes on a Linux JVM (register item W-20).** Tier
+selected: Tier 2, by section 9's rule that a change touching a shipped artifact's proof runs the
+full host gate. Rule that selected it: 18.2 rule 5, reproduction first. The gap was reproduced by
+naming it exactly: W-16 asserted that the jar's Linux library LOADS, and no test had ever decoded a
+frame on Linux through the JVM.
+
+**What shipped.** `:kiteplayer-ffmpeg` gained `printJvmTestRuntimeClasspath`, the test-side twin of
+the `printRunClasspath` task `:kiteplayer-sample-desktop` already carried for the KV-5 measurement,
+and `scripts/linux-jvm-tests.sh` runs the module's OWN jvm suite inside `eclipse-temurin:21-jdk`.
+Not a probe: the same `FormatMatrixTest` that guards macOS guards Linux, which is what keeps one
+definition of "plays all formats" instead of two.
+
+**The numbers.** 60 tests green and all 27 matrix rows PASS on linux/arm64. The emulated linux/amd64
+arm was not required by the register item and was run anyway, because the jar ships two Linux
+libraries and only one of them would otherwise have decoded anything: also 60 green, 27 rows. The
+library under test is the one in the published jar, extracted by the loader's own bundle path with no
+`kitecodec.jni.path` override, so this exercises what a consumer gets.
+
+**Falsification.** A 4 KiB zero-filled `libkitecodec_jni.so` passed through
+`-Dkitecodec.jni.path`, which the loader honours above everything else, makes the run FAIL rather
+than skip: 60 run, 7 failed on `invalid ELF header`, `FormatMatrixTest` among them. The script
+asserts both halves of that, non-zero exit AND at least one test actually run, because a JVM that
+died before starting would also exit non-zero and would prove nothing.
+
+**Three guards on the script itself, each paid for by an earlier mistake in this phase.** The
+classpath is mounted at its own absolute paths rather than rewritten, and the script refuses to run
+when an entry falls outside the three mounted roots, so a silently-dropped jar cannot look like a
+pass. It refuses when `FormatMatrixTest` is not among the discovered classes. And the class list is
+discovered from the compiled output rather than listed, so a suite added later is picked up instead
+of quietly skipped.
+
+**Honest bound, unchanged from the register item.** A container has no audio device. This proves
+DECODE on Linux and says nothing about the desktop audio sink, which stays proved against a fake
+device seam exactly as W.3 recorded. One incidental number worth keeping: the same 1080p conversion
+measures 2.0 ms on native arm64 and 8.4 ms under qemu, so the emulated arm is a correctness
+instrument and never a performance one.
 
 ---
 
@@ -17221,6 +17263,18 @@ it.**
 - Honest bound: a container has no audio device, so this proves DECODE across the matrix on Linux
   and says nothing about the desktop audio sink there. The `javax.sound.sampled` sink stays proved
   against a fake device seam only, exactly as W.3 recorded.
+  Result: `scripts/linux-jvm-tests.sh` runs the module's whole jvm suite in an `eclipse-temurin:21-jdk`
+  container against the jar's own bundled Linux library, with no `kitecodec.jni.path` override.
+  **60 tests green and all 27 matrix rows PASS on linux/arm64, and 60 green with 27 rows on
+  linux/amd64 as well**, so both shipped JNI libraries decode, not just the native-speed one. The
+  classpath comes from a new `:kiteplayer-ffmpeg:printJvmTestRuntimeClasspath` task and is mounted at
+  its own absolute paths, so nothing rewrites it; the script refuses to run if any entry falls
+  outside the three mounted roots, and refuses if `FormatMatrixTest` is not among the classes it
+  discovers. Falsification: with a 4 KiB zero-filled `libkitecodec_jni.so` handed to
+  `-Dkitecodec.jni.path`, the run FAILS rather than skipping, 60 run and 7 failed on
+  `invalid ELF header`, `FormatMatrixTest` among them. The x86_64 run also puts a number on emulation
+  rather than leaving it as folklore: the same 1080p conversion measures 2.0 ms on arm64 and 8.4 ms
+  under qemu.
 
 **Sub-phases, in execution order.**
 

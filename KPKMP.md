@@ -17888,6 +17888,25 @@ deliberately left open.
   different codec sets, and codec support is a per-device, per-OS fact, not a per-spec one. The
   fallback is therefore not a nicety, and the mpeg4 and flac rows above are proof it is load
   bearing on the very machine that has everything else.
+  Result, 2026-08-17, THE HYBRID RUNS. `native/kitecodec-c/probe/browser/hardware.html` demuxes
+  `sync1080p30.mp4` with FFmpeg in wasm and hands the packets to the browser's own `VideoDecoder`.
+  It builds the codec string from what the stream says rather than hardcoding one
+  (profile 578, level 40, giving `avc1.420028`) and passes the 40-byte avcC extradata as the
+  `description` WebCodecs needs for length-prefixed h264. `isConfigSupported` answered true and the
+  decoder produced a picture on the canvas.
+  **120 chunks in, 120 frames out, 168 ms: 715 fps.** Against the spike's software wasm figure of
+  182 fps on comparable 1080p, hardware is about 3.9 times faster and roughly 24 times real time.
+  First frame cost 121.5 ms, which is hardware decoder initialisation and is a real startup number
+  a player must hide, not a throughput one.
+  **This is the measurement that reopens the 4K non-goal.** 17.9 declared 4K out of scope because
+  4K HEVC 10-bit ran at exactly 1.0x in software. 4K is about four times 1080p's pixels, so 715 fps
+  at 1080p leaves a wide margin at 4K, and the capability probe above already answered YES for HEVC
+  Main10. The non-goal should be re-decided against a hardware measurement rather than inherited;
+  that re-decision is not taken here because it needs a 4K clip run through this path, which is a
+  measurement and not an opinion.
+  Honest bounds on the 715: decode throughput with no display pacing, no audio, no sync, and
+  frames closed immediately rather than presented. One browser, one machine. It says the decoder
+  can keep up, and says nothing about a player keeping up.
 
 **Sub-phases, in execution order.**
 

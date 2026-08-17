@@ -17459,6 +17459,46 @@ deliberately left open.
   that because a number nobody can re-derive is a number nobody can trust, so it lands as a real
   module whose only job is the measurement, exactly as `:kiteplayer-sample-desktop` did for KV-5.
 
+- **S6-D6, second-seat review, 2026-08-17, authored by Fable 5 at the owner's direction.** The
+  expansion above is execution-sound and its measurements hold. It inherits one narrowness from the
+  spike it was built on: it treats the web as a place to REBUILD the native stack and never weighs
+  what the browser already ships. Three corrections, each anchored to the item it changes, none of
+  which discards work already landed (X-01 through X-04 stand as they are).
+  1. **WebCodecs is absent from this expansion, and the project already promised it twice.** The S7
+     support matrix names a "WebCodecs/WebAudio/MSE backend" as the web capability profile, and
+     `kiteplayer-ffmpeg/build.gradle.kts` says in its own module doc that the engine's four
+     interfaces exist so "WebCodecs on the web" can replace FFmpeg without the engine noticing.
+     Current Chrome, Edge, Safari and Firefox all ship it, with hardware decode for h264 and most
+     of the matrix's video codecs. It is the largest single lever this stage has: 4K measured 1.0x
+     in SOFTWARE and was declared a non-goal on that number alone; hardware decode reopens it for
+     nothing. It also shrinks the download, because hevc is 20.7% of the gzipped wasm module and
+     need not ship where the platform decodes it. Decision: X-07 and X-09 proceed as written, as
+     the always-available software floor. A register item X-15 must be authored, as its own act per
+     18.3 rule 6, before this stage claims decode parity: demux stays FFmpeg, decode goes WebCodecs
+     where the browser and codec allow, wasm decode is the fallback, all behind the decoder SPI the
+     engine already has. If X-15 is instead rejected, it is rejected with measurements, the way
+     W-14 and W-15 were. MSE with a `video` element is considered once here and rejected: it cannot
+     serve the 17.5 matrix (mkv, the subtitle formats) and it surrenders the frame-level control
+     the engine's contract is built on.
+  2. **X-11's FIRST candidate is not a Skiko path.** X-01's own numbers already contain the fast
+     route: `putImageData` moves the same 8.3 MB in 1.4 ms, and after X-09 the converted RGBA lives
+     in emscripten linear memory, which IS a JS-visible ArrayBuffer. The frame never needs to touch
+     the Kotlin heap. So X-11 tier one is a browser canvas (2d first, texture upload if 2d falls
+     short) layered with the Compose canvas, Compose keeping the controls; the expansion's premise
+     that "no interop view can exist on wasm" is true for platform views and false for DOM
+     layering. Tier two, and only after tier one plays, is the Compose-true single-surface path
+     that D-6 promises, where clip, alpha and rotation apply to the video pixels; that is what
+     "KV-6 proper" measures and it stays the target. What tier one costs is exactly D-6's promise,
+     and the register must say so on the item rather than let the layered canvas quietly become the
+     end state.
+  3. **X-05's cost analogy overstates wasm glue.** The JNI adapter is 13 lines per function because
+     JNI demands env ceremony, string conversion and reference management. A `KC_API` function is
+     already extern C with a fixed ABI: emscripten exports it directly, and the generator's real
+     output is Kotlin/wasmJs externals plus a thin JS shim, with hand-written C reserved for the
+     callback shapes (the AVIO bridge above all), string returns and struct-outs. The GENERATE
+     decision in X-05 stands. Treat 40 to 60 hours as the ceiling, not the plan; the direct-export
+     shape lands materially under it.
+
 **The register.**
 
 #### X-01. The wasm draw cost is the one number S6 is gated on, and nothing has measured it

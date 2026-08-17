@@ -161,8 +161,14 @@ private fun Probe() {
         val rgba = ByteArray(WIDTH * HEIGHT * 4)
         val report = Report()
         report.add("KV-6 probe, ${WIDTH}x$HEIGHT yuv420p, one thread")
-        // X-05: the generated binding, called from Kotlin rather than from JS.
-        runBindingProof { line -> report.add(line) }
+        // X-07: the real kitecodec-core web backend, driven through the API every platform uses.
+        val clip = fetchClip("./clip.mp4")
+        if (clip == null) {
+            report.add("backend: no ./clip.mp4 beside the page, skipping the decode proof")
+        } else {
+            runCatching { runBackendProof(clip) { line -> report.add("backend: $line") } }
+                .onFailure { report.add("backend FAILED: ${it.message}") }
+        }
         report.add("hardwareConcurrency=${hardwareConcurrency()} crossOriginIsolated=${crossOriginIsolated()}")
 
         // Phase 1, the conversion, serial per S6-D2.

@@ -1015,7 +1015,15 @@ cd ../KiteCodec
 ./gradlew :kitecodec-core:macosArm64Test
 ./gradlew :kitecodec-core:jvmTest -Pkitecodec.hostTargetsOnly=true   # the real JNI backend, W-01
 ./scripts/linux-tests.sh                                             # the cross-built FFmpeg, W-06
-./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true   # when KitePlayer must see changes
+# When KitePlayer must see KiteCodec changes. All three flags, and NOT hostTargetsOnly alone:
+# a publish regenerates the root module metadata, so -Pkitecodec.hostTargetsOnly=true DELETES the
+# ios, linux and mingw variants from it and the linux and Windows lines further down this same
+# gate then fail to resolve. -Pkitecodec.jni.linux=true is the third because the Linux JNI
+# libraries the jvm jar carries (W-16) are opt-in, and without them linux-jvm-tests.sh fails all
+# 26 matrix rows on "kitecodec_jni is neither on java.library.path nor bundled". Found the hard
+# way on 2026-08-17: one host-only publish broke four unrelated gate steps at once.
+./gradlew publishToMavenLocal \
+  -Pkitecodec.phoneTargetsOnly=true -Pkitecodec.withDesktopTargets=true -Pkitecodec.jni.linux=true
 
 # KitePlayer. Media generation comes FIRST, not with the sample runs where it used to sit:
 # kiteplayer-ffmpeg's native tests read testmedia/, which is gitignored and generated, so a clean
@@ -17805,6 +17813,51 @@ deliberately left open.
   extended.
   The refusing actuals move to a source set both `js` and `wasmJs` use, so there is one copy of
   each refusal rather than two that drift.
+  **Result, 2026-08-17: the playback backend is real and a browser decodes through it.** `wasmJs`
+  came off `unsupportedMain` and got `FFmpeg`, `MediaSource`, `Frame`, `Packet`, `PacketReader`,
+  `StreamDecoder`, `SeekDirection` and `rescaleQ`. Proved by driving the ordinary API from Kotlin in
+  a real browser, the same API Android and iOS use, over a 10-bit HEVC clip:
+  `identity acceptable` / `build n8.0, abi 2.6, 6 libraries` / `container mov,mp4,m4a, 1 streams,
+  200ms, seekable true` / `video hevc 320x240 timeBase 1/12800` / `frame 320x240 yuv420p10le,
+  230400 plane bytes` / `DECODED 3 frames through kitecodec-core, first pts 0`.
+  Two of those numbers are the ones that say it is CORRECT rather than merely running. Six
+  libraries means the `kc_ffmpeg_report` struct read landed on the right fields, and 230400 is
+  exactly 320x240 10-bit 4:2:0, so the plane copy sized itself from the real format.
+  **The struct problem, and how it was solved.** `FFmpeg.identity` comes from a C struct, and
+  JavaScript cannot see one: it needs a byte offset per field, and a wrong offset reads the
+  NEIGHBOURING field and answers something plausible. So `native/kitecodec-c/probe/report_offsets.c`
+  emits `offsetof()` for every field, `scripts/wasm-report-offsets.sh` turns that into a committed
+  `ReportLayout.kt` and re-derives it on demand, failing when the struct moves underneath it. The
+  numbers are the compiler's, never a human's.
+  **Three defects the API ratchet and the browser caught, each fixed rather than dumped over.**
+  First, `apiDump` showed the 196 generated externals were PUBLIC, which would have committed the
+  library forever to a surface that exists only because the codec lives in a second wasm module;
+  they are `internal` now, and the web adds 15 lines of public API instead of 610. Second, the
+  module handle leaked as a public mutable `var`; it is internal. Third, a bundler rewrites
+  `import(url)` at BUILD time, so `KiteCodecWeb.load()` fails inside webpack with "Cannot find
+  module" even though the file serves correctly; `attach()` was added for that and is what a
+  bundled application should use.
+  **One cryptic failure turned into an instruction.** A module linked without `HEAP32` failed with
+  `Cannot read properties of undefined (reading '4597710')`, naming neither the cause nor the fix.
+  `attach()` now checks the ten runtime pieces this backend reads and throws `IncompleteModule`
+  naming the missing ones and the exact `-sEXPORTED_RUNTIME_METHODS` line that supplies them.
+  **Honest bounds.** `MediaSource.open(path)` refuses, because a browser has no filesystem. The
+  byte source is staged whole into codec memory, capped at 512 MB, so streaming and range requests
+  are refused explicitly and wait for the Worker of X-08. Container metadata and chapters answer
+  empty pending the dictionary walk. Encode, mux and filter remain refused. And the staging copies
+  byte by byte in both directions, because Kotlin/Wasm has no bulk typed-array move, which is why
+  the proof uses a 39 KB clip and why a real page needs the fetch to land straight in codec memory.
+  **One environment defect this work exposed, in the GATE itself.** Section 9's Tier 2 said
+  `publishToMavenLocal -Pkitecodec.hostTargetsOnly=true` when KitePlayer must see KiteCodec
+  changes. A publish REGENERATES the root module metadata, so that line deletes the ios, linux and
+  mingw variants from it, and the linux and Windows lines further down the SAME gate then fail to
+  resolve. Running it broke four unrelated steps at once: `checkKotlinAbi`, both linux scripts and
+  the mingw link. A second publish with the target flags fixed three and left the fourth, because
+  the Linux JNI libraries in the jvm jar are opt-in behind `-Pkitecodec.jni.linux=true`, and
+  without them every matrix row fails on "kitecodec_jni is neither on java.library.path nor
+  bundled". Section 9 now carries all three flags and says why. Worth stating plainly: none of the
+  four failures were in the web code. The gate caught a machine-state drift no test in either
+  repository would have seen, which is what a heavy gate is for.
 - Sub-phase: X.7. Test: KiteCodec's own suites, run in a headless browser.
 
 #### X-08. Nothing runs the player in a Worker, and X-06 depends on it

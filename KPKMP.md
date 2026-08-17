@@ -16111,6 +16111,7 @@ AudioTrackSinkTest, AndroidSurfaceOverlayTest and AppKitVideoRendererTest.
 | F-CTRL1 | 13 of 16 negative controls in source-discipline.sh had drifted off their lines; all sixteen re-anchored on unique text and re-proven able to fail | e7cbc57 |
 | F-WRN1 | FrameDropping, AudioUnderrun and AudioDeviceChanged were documented types wired to nothing; all three now emit (stats-pass edges and the new sink-event collection) | this commit |
 | F-CFG2 | dead knobs: WorkerContext deleted; lookahead and the cache back-window KDocs now say what the code does; setSpeed and the facade KDocs match the refusal law | 4620f93 |
+| F-FD1 | an fd: item could not be opened twice: FFmpeg's fd protocol dups but never rewinds, a dup shares the file offset, and the track-change rebuild reopens the same MediaItem, so the second open probed mid-file bytes and died AVERROR_INVALIDDATA. Both backend doors now rewind the descriptor before every open (Android through a dup's shared offset, native through lseek); red-proven by FdReopenTest with the exact device error | post-audit, found by the owner's device run |
 
 **Register corrections from the audit's refutation pass.** Eleven findings were killed by
 adversarial verification and are NOT rows above; the strongest refutations are recorded here

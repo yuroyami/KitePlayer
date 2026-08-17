@@ -63,6 +63,7 @@ public class KiteCodecSourceFactory : MediaSourceFactory {
         // FFmpeg identity mapping, so the documented SPI door behaved differently from the
         // backend door for the same MediaItem.
         val options = preOpenOptions(media)
+        rewindFdOption(options)
         val io = media.io
         val source = mappingFFmpegRuntimeRejection {
             KiteCodecSource(

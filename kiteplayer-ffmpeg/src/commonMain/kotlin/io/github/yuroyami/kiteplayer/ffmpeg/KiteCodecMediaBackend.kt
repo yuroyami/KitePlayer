@@ -60,6 +60,7 @@ public class KiteCodecMediaBackend(
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
         val options = preOpenOptions(media)
+        rewindFdOption(options)
         val io = media.io
         val source = mappingFFmpegRuntimeRejection {
             KiteCodecSource(

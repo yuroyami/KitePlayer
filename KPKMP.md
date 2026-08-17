@@ -17195,6 +17195,33 @@ it.**
   and on macOS native, and the pins are proved able to catch this exact class of bug: making one
   slice skip its rows fails `ColorPolicyTest`.
 
+#### W-20. The Linux JVM library is proved to LOAD, not to PLAY
+- Where: `../KiteCodec/scripts/linux-jni-probe.sh`; the jvm arm of `:kiteplayer-ffmpeg`, whose
+  `FormatMatrixTest` runs the whole 17.5 matrix but only ever on this macOS host.
+- Problem: W-16 put linux-arm64 and linux-x64 JNI libraries in the published jar and proved them by
+  running a real JVM in a container, which is genuinely more than "the file exists". But what it
+  asserts is narrow: the identity gate is acceptable, and h264 and hevc are present. Nothing has
+  DECODED on Linux through the JVM path. Meanwhile the macOS JVM runs all 27 matrix rows, and the
+  Kotlin/Native Linux path runs 86 tests including the matrix in a container. The one combination
+  with a real shipped artifact and no real playback evidence is the one a desktop Linux consumer
+  would actually use.
+- Fix, decided: run the module's own jvm test suite inside the Linux container rather than writing a
+  second, weaker probe beside it. That needs the test runtime classpath, which Gradle knows and a
+  container does not, so the build gains a task that prints it, the way `:kiteplayer-sample-desktop`
+  already prints its run classpath for the KV-5 measurement. The script then mounts the repository,
+  the testmedia tree and that classpath into an `eclipse-temurin` container and runs the JUnit
+  console over it. Nothing about the tests changes: the same `FormatMatrixTest` that guards macOS
+  guards Linux.
+- Why not the simpler thing: a hand-written "open each file and decode a frame" probe would be
+  quicker and would prove less, and it would drift from the matrix the moment a row was added. The
+  matrix is already the project's one definition of "plays all formats" (17.5), and a second
+  definition is worse than none.
+- Sub-phase: W.17. Test: the container run itself, with its pass count recorded, and a falsification
+  arm that stages a truncated JNI library and confirms the run fails rather than skipping.
+- Honest bound: a container has no audio device, so this proves DECODE across the matrix on Linux
+  and says nothing about the desktop audio sink there. The `javax.sound.sampled` sink stays proved
+  against a fake device seam only, exactly as W.3 recorded.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -17225,6 +17252,8 @@ it.**
   pointer off the public ABI".
 - **W.16 The conversion uses the cores it has** (W-19). Commit: "Convert the frame on more
   than one core".
+- **W.17 The matrix runs on the Linux JVM** (W-20). Commit: "Decode the whole matrix on a
+  Linux JVM".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

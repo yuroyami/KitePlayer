@@ -17,9 +17,9 @@ plugins {
  * interfaces in :kiteplayer-core, which is what lets a completely different backend (WebCodecs on
  * the web, a platform decoder, a test fake) take its place without the engine noticing.
  *
- * Kotlin/Native links KiteCodec directly, while Android consumes the JNI libraries from KiteCodec's
- * published AAR. Public JVM is deliberately a placeholder until a supported desktop backend ships:
- * it compiles the common API and fails backend operations with KiteCodec's typed Unsupported error.
+ * Kotlin/Native links KiteCodec directly, while Android and the desktop JVM consume the JNI
+ * adapter from KiteCodec's published artifacts. The JVM was a placeholder until phase W: it now
+ * carries a real FFmpeg backend and runs the same real-media suites the native targets run.
  */
 // The media fixtures live at the repo root and a native test's working directory is not something
 // to rely on, so the location is passed in explicitly.
@@ -28,6 +28,11 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     // `simctl spawn` forwards only SIMCTL_CHILD_-prefixed variables to the spawned binary, so a
     // simulator test sees the plain name only through this twin (S1.e.3).
     environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}
+
+// Same reason for the JVM: a Test task's working directory is the module, not the repo root.
+tasks.withType<Test>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
 
 val transcriptRoot = layout.buildDirectory.dir("s1c-transcripts")
@@ -85,7 +90,7 @@ kotlin {
             // api, not implementation: KiteCodecVideoFrame publicly exposes kitecodec.Frame, and
             // the phone/compose modules cast to it. Hiding the dependency made that public type
             // invisible to consumers compiling against this module's ABI (audit P1-25).
-            api("io.github.yuroyami:kitecodec-core:0.0.8")
+            api("io.github.yuroyami:kitecodec-core:0.0.9")
             implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {
@@ -98,14 +103,16 @@ kotlin {
         getByName("jvmMain").dependsOn(jvmAndAndroidMain)
         getByName("androidMain").dependsOn(jvmAndAndroidMain)
 
-        // Real-media and FFmpeg-runtime tests belong only to direct-link native. Public JVM consumes
-        // KiteCodec's unavailable placeholder, while Android host tests use fake drivers and never load
-        // a device JNI library.
+        // Real-media and FFmpeg-runtime tests belong to every source set that reaches a REAL
+        // backend. That is direct-link native and, since phase W gave KiteCodec's jvm variant its
+        // JNI adapter, the desktop JVM as well. Android host tests stay out: they use fake drivers
+        // and never load a device JNI library.
         val commonTest = getByName("commonTest")
-        val nativeBackendTest = maybeCreate("nativeBackendTest").apply {
+        val realBackendTest = maybeCreate("realBackendTest").apply {
             dependsOn(commonTest)
         }
-        getByName("nativeTest").dependsOn(nativeBackendTest)
+        getByName("nativeTest").dependsOn(realBackendTest)
+        getByName("jvmTest").dependsOn(realBackendTest)
 
         getByName("nativeTest").dependencies {
             // Test only, and only for the tests that drive the whole player: it needs an output backend to

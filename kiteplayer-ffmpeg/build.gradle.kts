@@ -74,6 +74,13 @@ kotlin {
     linuxArm64()
     mingwX64()
     jvm()
+    // The web (17.14 X-09). kitecodec-core carries a real wasmJs backend now, so this module can
+    // implement the engine's SPI there the same way it does everywhere else.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+        nodejs()
+    }
     android {
         namespace = "io.github.yuroyami.kiteplayer.ffmpeg"
         compileSdk = 36
@@ -102,6 +109,11 @@ kotlin {
             implementation(kotlin("test"))
         }
         val commonMain = getByName("commonMain")
+        // Everything that can block, which is everything except the web (17.14 X-09).
+        val jvmAndNativeMain = maybeCreate("jvmAndNativeMain").apply { dependsOn(commonMain) }
+        getByName("jvmMain").dependsOn(jvmAndNativeMain)
+        getByName("nativeMain").dependsOn(jvmAndNativeMain)
+        getByName("androidMain").dependsOn(jvmAndNativeMain)
         val jvmAndAndroidMain = maybeCreate("jvmAndAndroidMain").apply {
             dependsOn(commonMain)
         }

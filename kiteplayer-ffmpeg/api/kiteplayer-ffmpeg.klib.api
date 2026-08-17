@@ -1,5 +1,6 @@
 // Klib ABI Dump
-// Targets: [iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64]
+// Targets: [iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Alias: native => [iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
@@ -89,6 +90,9 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame : io.github
     final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.close|close(){}[0]
 }
 
+final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]
+
+// Targets: [native]
 final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes { // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes|null[0]
     constructor <init>(kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat, kotlin.collections/List<io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.UploadPlane>) // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes.<init>|<init>(kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat;kotlin.collections.List<io.github.yuroyami.kiteplayer.ffmpeg.UploadPlanes.UploadPlane>){}[0]
 
@@ -113,10 +117,13 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes { // io.github.yur
     }
 }
 
+// Targets: [native]
 final object io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter { // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter|null[0]
     final fun toRgba(io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter.toRgba|toRgba(io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame){}[0]
 }
 
+// Targets: [native]
 final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame).io.github.yuroyami.kiteplayer.ffmpeg/corePixelBufferOrNull(): kotlinx.cinterop/CPointer<out kotlinx.cinterop/CPointed>? // io.github.yuroyami.kiteplayer.ffmpeg/corePixelBufferOrNull|corePixelBufferOrNull@io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame(){}[0]
+
+// Targets: [native]
 final fun (io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame).io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull(): io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes? // io.github.yuroyami.kiteplayer.ffmpeg/uploadPlanesOrNull|uploadPlanesOrNull@io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame(){}[0]
-final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]

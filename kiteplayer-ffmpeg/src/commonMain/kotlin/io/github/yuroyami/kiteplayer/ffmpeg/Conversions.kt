@@ -3,10 +3,6 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
@@ -125,32 +121,17 @@ internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pi
  * read the wrong one. And below [PARALLEL_PIXEL_THRESHOLD] pixels of work the whole thing runs inline,
  * because dispatching costs more than a small frame's conversion saves.
  *
- * No expect/actual: every target this module compiles for has a multi-threaded `Dispatchers.Default`,
- * and the module already calls `runBlocking` on this side of the code for the same kind of reason.
+ * EXPECT/ACTUAL since 17.14 X-09, and the note this replaced is worth keeping visible because it
+ * was true when written and stopped being true: it said "no expect/actual: every target this module
+ * compiles for has a multi-threaded `Dispatchers.Default`". Adding wasmJs falsified both halves at
+ * once. The web has no `runBlocking` at all, and its `Dispatchers.Default` is one event loop, so the
+ * web actual runs the body serially and the 3.36x this buys elsewhere is simply not available there.
  */
-internal inline fun parallelRowSlices(
+internal expect inline fun parallelRowSlices(
     width: Int,
     height: Int,
     crossinline body: (startRow: Int, endRowExclusive: Int) -> Unit,
-) {
-    val slices = parallelSliceCount(width, height)
-    if (slices <= 1) {
-        body(0, height)
-        return
-    }
-    val rowsPerSlice = ((height + slices - 1) / slices + 1) and 1.inv()
-    runBlocking {
-        coroutineScope {
-            var start = 0
-            while (start < height) {
-                val from = start
-                val to = minOf(start + rowsPerSlice, height)
-                launch(Dispatchers.Default) { body(from, to) }
-                start = to
-            }
-        }
-    }
-}
+)
 
 /** How many slices this frame is worth. One means stay on this thread. */
 internal fun parallelSliceCount(width: Int, height: Int): Int {

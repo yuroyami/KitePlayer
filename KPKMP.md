@@ -17878,6 +17878,42 @@ deliberately left open.
   wasm module beside FFmpeg instead.
 - Sub-phase: X.9. Test: the existing colour suites, which W-19 already proved able to catch a
   slice that skips its rows.
+  Result, 2026-08-17: `:kiteplayer-ffmpeg` compiles for wasmJs. The module turned out to have a
+  very small platform surface, two `expect` functions, and adding the target named exactly the two
+  blockers entry fact 5 predicted and nothing else. Both were `runBlocking`, which does not exist
+  in Kotlin/Wasm.
+  **`parallelRowSlices` became expect/actual, and the comment it replaced is kept visible on the
+  declaration because it was true when written and stopped being true.** It said "no expect/actual:
+  every target this module compiles for has a multi-threaded `Dispatchers.Default`". Adding wasmJs
+  falsified both halves at once. The web actual runs the body serially, and the note says plainly
+  that the 3.36x W-19 measured is not available there, with X-01's 50-to-87 ms against about 2.1 ms
+  on four desktop cores as the number. It also says why the serial path is not the one a web player
+  should take: the conversion belongs in C beside the decoder (X-11 measured 6.0 to 6.8 ms), so this
+  actual exists mainly so the module COMPILES for wasm.
+  **`BlockingMediaIo` became expect/actual too, and its web actual refuses rather than spins.**
+  Every other target parks the demux worker with `runBlocking`, which is legitimate because
+  `MediaIo`'s contract already confines FFmpeg's synchronous pull to that one thread. The web has no
+  such primitive at all. The wasmJs actual runs the suspending read through
+  `startCoroutineUninterceptedOrReturn` and accepts the result ONLY if the body completed without
+  suspending, which is what a memory-backed source does and a network-backed one does not. A source
+  that suspends gets a typed refusal naming the two shapes that work and pointing at the Worker
+  (X-08), instead of a busy-wait that would freeze the page.
+  `platformDecoderSelection` answers software-only, with the reason on it: the wasm decoder has no
+  hardware route, the BROWSER does, and that is X-15's subject and belongs in this exact function
+  when it lands. `rewindFdOption` is empty because a browser has no file descriptors.
+  Regression: the other targets still compile and `:kiteplayer-ffmpeg:jvmTest` is 60 tests, 0
+  failures, so moving the blocking bridge and the parallel loop into a shared source set changed no
+  behaviour on the platforms that already had them.
+  Not claimed: nothing in this module has RUN on the web. It compiles, and the engine's SPI is not
+  yet wired to a web `OutputBackend` (X-12) or renderer, which is what X.12 is for.
+  **Ratchet move, named as section 9 requires.** `:kiteplayer-ffmpeg`'s klib ABI dump moved, 9
+  insertions and 2 deletions, and NO declaration was added or removed. Adding a target changes how
+  the dump annotates the ones already there: the target list gained `wasmJs`, a `native` alias
+  appeared for the six Kotlin/Native targets, and the cinterop-only declarations
+  (`SoftwareConverter`, `corePixelBufferOrNull`, `uploadPlanesOrNull`) are now labelled
+  `// Targets: [native]` instead of being unannotated. `interleavedFloat` GAINED wasmJs and
+  therefore moved out of the native-only section, which the diff shows as a delete and an insert of
+  the same line. Verified by pairing every changed declaration line: none is unpaired.
 
 #### X-10. There is no web `AudioSink`
 - Where: `spi/AudioSink.kt`, already all-`suspend`.

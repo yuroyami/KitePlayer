@@ -13,10 +13,19 @@ plugins {
  * not one extra native byte; the Kotlin dialogue tier in :kiteplayer-subtitles remains the
  * default everywhere.
  *
- * Targets are deliberately narrow today: the macOS host (Homebrew's libass, the proving
- * ground) always, and the iOS pair only when -Pkiteplayer.libass.root points at a KiteCodec
+ * Targets: the macOS host always (Homebrew's libass, the proving ground), and every other
+ * Kotlin/Native target this project ships when -Pkiteplayer.libass.root points at a KiteCodec
  * `native-libs/deps` tree holding cross-built ass-chain installs (buildAssChainFor<Target>).
- * The Android half needs a JNI bridge exactly like KiteCodec's and is the recorded next slice.
+ * That now means the iOS pair AND the Linux and Windows desktop triples.
+ *
+ * The renderer itself is plain Kotlin/Native over the cinterop bindings, which is why widening
+ * this list cost a link line and not a rewrite: it lived in appleMain only because that was the
+ * only place targets existed, and it moved to nativeMain unchanged.
+ *
+ * Android and the JVM are the ones still missing, and for a reason no link line fixes: this module
+ * reaches libass through Kotlin/Native cinterop, and both of those are JVM targets that would need
+ * a JNI bridge (a C shim, per-ABI .so packaging) exactly like KiteCodec's. wasm needs libass built
+ * to emscripten and a binding besides. Those stay the recorded next slices.
  */
 
 val libassDepsRoot: File? = providers.gradleProperty("kiteplayer.libass.root")
@@ -30,22 +39,49 @@ kotlin {
     applyDefaultHierarchyTemplate()
 
     macosArm64()
-    if (libassDepsRoot != null) {
-        iosArm64()
-        iosSimulatorArm64()
-    } else {
+
+    // A cross target appears only when its chain is actually ON DISK, not merely when a deps root
+    // was named. Declaring a target whose ass-chain is missing produces a link failure at the far
+    // end of a long build, naming -lass rather than the absent directory; this way an unbuilt
+    // chain is a target that quietly is not there, which is what "optional module" should mean.
+    fun chainPresent(dirName: String): Boolean =
+        libassDepsRoot?.resolve("$dirName/ass-chain/lib/libass.a")?.isFile == true
+
+    val optionalTargets = mapOf(
+        "ios-arm64" to { iosArm64(); Unit },
+        "ios-simulator-arm64" to { iosSimulatorArm64(); Unit },
+        "linux-x64" to { linuxX64(); Unit },
+        "linux-arm64" to { linuxArm64(); Unit },
+        "mingw-x64" to { mingwX64(); Unit },
+    )
+    val missing = optionalTargets.keys.filterNot(::chainPresent)
+    optionalTargets.filterKeys(::chainPresent).values.forEach { it() }
+    if (libassDepsRoot == null) {
         logger.lifecycle(
-            "[kiteplayer-libass] iOS targets skipped: set -Pkiteplayer.libass.root to a KiteCodec " +
-                "native-libs/deps tree with ass-chain installs to enable them.",
+            "[kiteplayer-libass] cross targets skipped: set -Pkiteplayer.libass.root to a " +
+                "KiteCodec native-libs/deps tree with ass-chain installs to enable them.",
+        )
+    } else if (missing.isNotEmpty()) {
+        logger.lifecycle(
+            "[kiteplayer-libass] no ass-chain under $libassDepsRoot for: ${missing.joinToString()}. " +
+                "Run :kitecodec-core:buildAssChainFor<Target> for each to enable them.",
         )
     }
 
+    /** The `deps/<target>/ass-chain` directory name for a konan target, or null for the host. */
+    fun chainDirName(konanTargetName: String): String? = when (konanTargetName) {
+        "ios_arm64" -> "ios-arm64"
+        "ios_simulator_arm64" -> "ios-simulator-arm64"
+        "linux_x64" -> "linux-x64"
+        "linux_arm64" -> "linux-arm64"
+        "mingw_x64" -> "mingw-x64"
+        else -> null
+    }
+
     targets.withType(KotlinNativeTarget::class.java).configureEach {
-        val chainDir = when (konanTarget.name) {
-            "ios_arm64" -> libassDepsRoot?.resolve("ios-arm64/ass-chain")
-            "ios_simulator_arm64" -> libassDepsRoot?.resolve("ios-simulator-arm64/ass-chain")
-            else -> null
-        }
+        val chainDir = chainDirName(konanTarget.name)
+            ?.let { libassDepsRoot?.resolve("$it/ass-chain") }
+        val isApple = konanTarget.name.startsWith("ios_") || konanTarget.name.startsWith("macos_")
         compilations.getByName("main").cinterops.create("libass") {
             defFile(project.file("src/nativeInterop/cinterop/libass.def"))
             if (chainDir != null) {
@@ -57,17 +93,32 @@ kotlin {
             }
         }
         binaries.all {
-            if (chainDir != null) {
+            if (chainDir == null) {
+                linkerOpts("-L/opt/homebrew/lib", "-lass")
+                return@all
+            }
+            // The chain itself is the same four archives everywhere, dependents first: GNU ld
+            // resolves static archives left to right and libass draws from all three below it.
+            linkerOpts(
+                "-L${chainDir.resolve("lib")}",
+                "-lass", "-lharfbuzz", "-lfreetype", "-lfribidi",
+            )
+            // What differs per platform is only what the C++ half of harfbuzz and the text stack
+            // need underneath: Apple ships its font provider as frameworks and its C++ runtime as
+            // libc++, the GNU targets link libstdc++ and their own math library.
+            if (isApple) {
                 linkerOpts(
-                    "-L${chainDir.resolve("lib")}",
-                    "-lass", "-lharfbuzz", "-lfreetype", "-lfribidi",
                     "-lz", "-liconv", "-lc++",
                     "-framework", "CoreText",
                     "-framework", "CoreFoundation",
                     "-framework", "CoreGraphics",
                 )
             } else {
-                linkerOpts("-L/opt/homebrew/lib", "-lass")
+                // -lz is not optional and the linkage test is what proved it: freetype is built
+                // against the system zlib, so libfreetype.a carries undefined `inflate*` that
+                // nothing else in the chain resolves. -lstdc++ is harfbuzz's, which is the only
+                // C++ member; -lm is freetype's.
+                linkerOpts("-lz", "-lstdc++", "-lm")
             }
         }
     }

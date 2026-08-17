@@ -17790,6 +17790,21 @@ deliberately left open.
   an explicit step. Loading the module inside the Worker of X-08 and hiding it behind a message
   protocol is the eventual shape, but the Worker still has to await the same instantiation, so the
   explicit load is required either way and is better proved here first.
+  **Second amendment, same day: the web gets the PLAYBACK actuals and keeps a typed refusal for
+  encode, mux and filter.** Compiling wasmJs against commonMain names exactly 14 missing actuals,
+  and they split without argument: `MediaSource`, `Frame`, `Packet`, `PacketReader`,
+  `StreamDecoder`, `SeekDirection` and `rescaleQ` are what a player needs, while `MediaSink`,
+  `CopyStream`, `VideoEncoder`, `AudioEncoder`, `Remuxer`, `Transcoder` and `FilterGraph` are what
+  a transcoder needs. S6 is "IT PLAYS ON THE WEB", so the first seven get real implementations and
+  the second seven keep the placeholder that names what is missing and why.
+  This is NOT the X-05 subset question returning. That one asked what to BIND, and the answer was
+  everything, because generation made the subset saving worthless. This asks what to IMPLEMENT in
+  Kotlin by hand, where each class is real work and none of it is generated. Encoding on the web is
+  also the case with the strongest platform alternative, since `VideoEncoder` is a WebCodecs
+  interface too, so hand-writing an FFmpeg encode path here would likely be replaced rather than
+  extended.
+  The refusing actuals move to a source set both `js` and `wasmJs` use, so there is one copy of
+  each refusal rather than two that drift.
 - Sub-phase: X.7. Test: KiteCodec's own suites, run in a headless browser.
 
 #### X-08. Nothing runs the player in a Worker, and X-06 depends on it

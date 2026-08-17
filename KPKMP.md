@@ -1047,6 +1047,10 @@ kiteplayer-rt/native/scripts/run-c-tests.sh interpose  # plain binaries, interpo
 # permanently disables them, so naming those tasks would be green by definition rather than by
 # evidence. mingw has no run line on purpose: a PE binary needs Windows, and the link is the claim.
 ./gradlew :kiteplayer-output:jvmTest :kiteplayer-mobile:jvmTest :kiteplayer-ffmpeg:jvmTest
+# The web output side (17.14 X-12). Named because the web sink is a PUMP and its defect mode is
+# silence: the first version held the render callback and never called it, which compiled, resolved
+# a player and would have hung playback at position zero. These tests assert the calling.
+./gradlew :kiteplayer-output:wasmJsNodeTest
 ./scripts/linux-tests.sh                              # core, subtitles and ffmpeg, in a container
 # The same jvm suite the line above ran natively, on a Linux JVM against the jar's own bundled
 # library: 60 tests and all 27 matrix rows. Pass linux/amd64 for the emulated second arm (W-20).
@@ -17552,6 +17556,41 @@ deliberately left open.
      `bypassed` is true, so the field carries no information; the C report has no original-status
      field, and the honest options are deriving it differently or documenting that it cannot be
      known here.
+
+- **S6-D7 RESOLVED, 2026-08-17, all six by the executor Fable reviewed.** Outcome per finding, in
+  the reviewer's order.
+  1. **The sink now pumps, and the test proves the pump.** `SilentPacedAudioSink` runs a coroutine
+     calling `onRender` for one `deviceBufferFrames` block per block-duration and discards the
+     samples through a bounds-checking `DiscardBuffer`. The review was right that playback would
+     have hung: the ring's `consumed` counter and clock anchor move only on that call. The scope
+     and the clock became CONSTRUCTOR PARAMETERS while fixing it, which is what made the tests
+     exact instead of timing-dependent: `SilentPacedAudioSinkTest` drives it with a `TestScope` and
+     a clock reading virtual time, so block counts and deadlines are arithmetic. `AudioPath.kt`
+     makes the same choice for the same reason. Falsification: restoring the empty pump fails 3 of
+     the 4 new tests; the fix passes all of them.
+  2. **Open options are forwarded and the unused set is real.** `CStringArrays` stages the two
+     `char *` arrays in codec memory, `ffkmp_fmt_open_input_io` takes them, and the surviving
+     non-NULL keys become `unusedOpenOptions`. The C side NULLs each consumed entry IN PLACE, so
+     the leftovers are read before the arrays are freed, which is now stated on the class.
+  3. **`frameRate` and `sampleAspectRatio` are read from the stream.** Both were hardcoded. The
+     three out-parameter pairs now share one `readRational` helper with a per-caller fallback, so
+     an undeclared rate is 0/1, an undeclared aspect 1/1 and an undeclared time base microseconds.
+  4. **The review's mildest-looking finding was the most serious, and it was a live defect rather
+     than a documentation mismatch.** Chasing "the handle table protects nothing here" found that
+     `PacketReader` and `StreamDecoder` hold the `AVFormatContext` as a raw address while
+     `MediaSource.close()` frees it: a reader outliving its source read released memory and would
+     have answered plausible nonsense. The web backend now owes the same guarantee the table gives
+     the JNI side and pays it in Kotlin: one `SourceLifetime` the container clears and every child
+     checks, with a typed error naming what outlived what. X-04's claim stands corrected here
+     rather than in prose: the table guards the JNI binding and its probe, and the web backend
+     guards itself.
+  5. **The zombie-coroutine limit is written on the function that has it.** A suspended body is not
+     cancelled and its resume can still write into the caller's array after the throw. Unreachable
+     for every source this backend accepts, and named so X-08's Worker does not inherit it blind.
+  6. **Both smalls.** `FFmpeg.identity` caches per loaded module, keyed on the module so a reload
+     cannot serve a stale answer. `bypassedStatus` is 0 with a comment saying it is a limit of
+     `kc_ffmpeg_report`, which carries no original status, rather than a derived value that looked
+     populated while carrying nothing.
 
 **The register.**
 

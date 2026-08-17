@@ -65,6 +65,13 @@ internal actual class BlockingMediaIo actual constructor(
  * on the spot, which is exactly the distinction this backend needs: a memory-backed source finishes
  * immediately and a network-backed one does not. The continuation is only reached if the body
  * completes asynchronously, and that counts as suspended too, so its result is discarded.
+ *
+ * KNOWN LIMIT, and it belongs to whoever takes X-08. A suspended body is NOT cancelled: it keeps
+ * running after the caller has already thrown, and its eventual resume writes into the caller's
+ * `ByteArray` or moves the source position. That is harmless for every source this backend accepts,
+ * because those never suspend, and it is exactly the hazard a Worker implementation must not
+ * inherit unknowingly. Cancelling properly needs a `Job` around the call, which is worth doing when
+ * a suspending source becomes legal rather than now, when reaching this path is already an error.
  */
 @Suppress("UNCHECKED_CAST")
 private fun runWithoutSuspending(block: suspend () -> Int): Int? {

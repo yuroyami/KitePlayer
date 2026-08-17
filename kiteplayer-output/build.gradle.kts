@@ -76,6 +76,10 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        // The web sink is a pump, so its tests need a coroutine scope to run it in.
+        getByName("wasmJsTest").dependencies {
+            implementation(libs.kotlinx.coroutines.test)
+        }
         getByName("androidDeviceTest").dependencies {
             implementation(kotlin("test"))
             implementation(libs.androidx.test.core)

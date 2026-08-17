@@ -24,3 +24,18 @@ public final class io/github/yuroyami/kiteplayer/compose/KiteVideoStateKt {
 	public static final fun rememberKiteVideoState (Landroidx/compose/runtime/Composer;I)Lio/github/yuroyami/kiteplayer/compose/KiteVideoState;
 }
 
+public final class io/github/yuroyami/kiteplayer/compose/KiteVideoUploadProfiler {
+	public static final field $stable I
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/compose/KiteVideoUploadProfiler;
+	public final fun start (I)V
+	public final fun stop ()Lio/github/yuroyami/kiteplayer/compose/KiteVideoUploadSamples;
+}
+
+public final class io/github/yuroyami/kiteplayer/compose/KiteVideoUploadSamples {
+	public static final field $stable I
+	public final fun getConvertNanos ()[J
+	public final fun getImageNanos ()[J
+	public final fun getSize ()I
+	public final fun totalNanos ()[J
+}
+

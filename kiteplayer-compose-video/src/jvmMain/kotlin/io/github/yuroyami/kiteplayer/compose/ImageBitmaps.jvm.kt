@@ -20,7 +20,10 @@ internal actual class FrameImagePool actual constructor() {
 
     actual fun imageFor(rgba: ByteArray, width: Int, height: Int): FrameImage {
         val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.OPAQUE)
-        return FrameImage(Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap())
+        val image = Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap()
+        // The far end of KV-5's measured window. Off, this is one volatile read.
+        KiteVideoUploadProfiler.frameFinished()
+        return FrameImage(image)
     }
 
     actual fun release() {
@@ -33,8 +36,13 @@ internal actual class FrameImagePool actual constructor() {
  * reader, so every frame goes through KiteCodec's CPU converter. A frame from any other
  * backend fails the cast inside, which the renderer counts as a failed frame and plays on.
  */
-internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray =
-    SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
+    // The near end of KV-5's measured window, before any pixel is read.
+    KiteVideoUploadProfiler.frameStarted()
+    val rgba = SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+    KiteVideoUploadProfiler.frameConverted()
+    return rgba
+}
 
 internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
     val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.PREMUL)

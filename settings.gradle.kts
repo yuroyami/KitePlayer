@@ -82,3 +82,7 @@ include(":kiteplayer-network")
 include(":kiteplayer-sample")
 // The Android assembly and XML-inflation proof for :kiteplayer-mobile and :kiteplayer-view.
 include(":kiteplayer-sample-android")
+// The Compose Desktop assembly and the KV-5 measurement harness (17.13 W-05). It is the only
+// place where the desktop JVM backend, the desktop output half and KiteVideo all run at once,
+// which is what makes the per-frame upload cost measurable instead of assumed.
+include(":kiteplayer-sample-desktop")

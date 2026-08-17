@@ -17870,6 +17870,29 @@ deliberately left open.
 - Fix, decided: the 17.5 matrix in a headless browser, plus the size checks, on the same principle
   W-20 settled for Linux: run the project's OWN suite rather than write a second, weaker one.
 - Sub-phase: X.14. Test: the matrix run itself, with its pass count recorded.
+  Interim result, 2026-08-17. `../KiteCodec/scripts/wasm-matrix-probe.sh` runs all 26 present
+  matrix fixtures through the wasm demux-and-decode path in node and reports PER ROW. It is NOT
+  the project's own suite and says so in its own header: that suite is Kotlin and needs the engine,
+  which the web does not have yet, so this is the honest interim and X-14 still stands.
+  **It found three real defects on its first run, which is what a conformance pass is for.**
+  `vp9.webm` failed with "no decoder for vp9": the lean web tier had never included vp9, while 17.5
+  lists that row as MustPlay. And `audio-mp3.mp3` and `audio-flac.flac` both failed at open with
+  -29, because the tier carried the mp3 and flac DECODERS but only the `mov` and `matroska`
+  demuxers, so a bare elementary stream could not be opened at all. A decoder without its demuxer
+  is a codec nobody can reach.
+  Fixed by widening the tier rather than by narrowing the matrix, because 17.5 is the project's one
+  definition of playing all formats: vp9 joins the decoder and parser sets, and `mp3` and `flac`
+  join the demuxers. **After the fix: 13 rows PLAY, 11 are omitted by the lean web tier by design,
+  2 torture rows SURVIVE without crashing, and there are 0 unexpected failures.**
+  **The cost, measured and NOT hidden: the module went from 1.06 MiB gzipped to 1.22 MiB, which is
+  22.3% over the spike's 1.00 MiB budget.** That budget was set when the tier omitted three things
+  the matrix requires, so the honest reading is that the original budget was measured against a set
+  that could not serve the matrix. Whether 1.22 MiB is acceptable, or whether vp9 should ride on
+  WebCodecs alone (X-15 measured the browser decoding vp9 in hardware) and leave the wasm build
+  leaner, is a tier decision for 17.6 and is NOT taken here.
+  The eleven omitted rows are mpeg4 part 2, mpeg-ts, av1, avi, wmv, flv, vob, eac3, dts, truehd and
+  alac. X-15's capability probe already showed the browser decodes av1 in hardware, so some of that
+  list is recoverable through the hardware path rather than by growing the download.
 
 #### X-15. The browser decodes in hardware and this stage never asked it to
 - Where: new, behind `:kiteplayer-core`'s existing decoder SPI; `kiteplayer-ffmpeg`'s module KDoc,

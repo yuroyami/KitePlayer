@@ -16826,6 +16826,36 @@ it.**
 - Sub-phase: W.9. Test: the spike's own measurements, or the recorded reason a measurement could
   not be taken.
 
+#### W-13. The frame/renderer pairing fails per frame, late, and untyped (SOL-API7, narrowed)
+- Where: `kiteplayer-compose-video/src/commonMain/.../ImageBitmaps.kt:35` (the `expect`), its three
+  actuals (`ImageBitmaps.jvm.kt:39`, `.ios.kt:48`, `.android.kt:46`), and the call site
+  `KiteVideoRenderer.kt:219-230`.
+- Problem: SOL-API7 says an unsupported backend/renderer pairing "fails at runtime instead of as a
+  typed capability error". Verified 2026-08-17 against the tree, and the row is BROADER than the
+  defect. The cast is already caught: `convertPending` wraps `convert(frame)` in a try and calls
+  `failFrame(failure.message)`, so a mismatched pairing degrades to black video with a rising
+  `failedFrames` count rather than crashing. What is actually wrong is three narrower things.
+  (a) The failure is discovered PER FRAME, at draw time, after the session is already running,
+  so the cost is paid thirty times a second forever. (b) The detail carried is a
+  `ClassCastException` message, which is a compiler implementation detail and differs between
+  Kotlin/Native and the JVM, so no consumer can branch on it and no bug report reads the same
+  twice. (c) Nothing reaches the typed warning channel that already exists for exactly this
+  (`PlaybackWarning.RendererFailed`), so a consumer watching warnings sees silence while the
+  picture is black.
+- Fix, decided: the converter seam gains a typed refusal instead of an implicit cast. A new
+  internal `UnsupportedFrameType` failure carries the frame's actual type name and the converter's
+  expectation, each actual throws it rather than letting the cast throw, and `convertPending`
+  publishes it ONCE per renderer generation through `RendererFailed` rather than per frame. The
+  first refusal also marks the pairing dead for that generation, so the per-frame conversion
+  attempt stops instead of repeating. NOT in scope, deliberately: the sealed hardware-surface model
+  and full capability negotiation the original row imagines. That is a larger design act with no
+  demonstrated defect behind it once (a), (b) and (c) are closed, and inventing it here would be
+  exactly the over-building 18.3 rule 2 forbids.
+- Sub-phase: W.10. Test: a KiteVideo renderer fed a foreign `VideoFrame` publishes exactly one
+  `RendererFailed` naming both type names, stops attempting conversion, and keeps the session
+  alive. Proved able to fail by restoring the implicit cast, which produces a per-frame failure and
+  no warning.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -16842,6 +16872,8 @@ it.**
 - **W.7 The S3 register rows** (W-10). Commit: one per row group.
 - **W.8 The Linux run** (W-11). Commit: "Run the engine's own tests on Linux, and say so".
 - **W.9 The web spike** (W-12). Commit: "Measure the web, and record the verdict".
+- **W.10 The pairing refuses in one typed sentence** (W-13). Commit: "Refuse a foreign frame
+  once, in words a consumer can read".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

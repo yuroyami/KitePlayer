@@ -85,6 +85,11 @@ public object SoftwareConverter {
                     "renderer, and an unusual software format needs a filter graph first.",
             )
         }
+        // The software half of the HDR-to-SDR law (17.12 M3), the same hook the packed common
+        // path runs (audit F-HDR1): this converter used to skip it, so the same public API
+        // returned washed-out pixels here and tone-mapped ones on the JVM. SDR frames answer
+        // null and stay bit-exact.
+        HdrToneMap.forColorSpaceOrNull(frame.colorSpace)?.mapInPlace(out)
         return out
     }
 

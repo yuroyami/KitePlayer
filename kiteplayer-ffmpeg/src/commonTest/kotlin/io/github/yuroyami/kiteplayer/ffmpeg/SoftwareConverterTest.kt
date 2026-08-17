@@ -6,6 +6,8 @@ import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 
@@ -76,11 +78,10 @@ class SoftwareConverterTest {
         val bytes = byteArrayOf(160.toByte(), 128.toByte(), 128.toByte())
         val mapped = convert(bytes, 1, 1, PlayerPixelFormat.Yuv444p, pq)
 
-        // The Kotlin mirror of the law, exact arithmetic without the LUT warp.
-        val nits = HdrToneMap.pqDecode(160.0 / 255.0) * 10000.0
-        val expected = ((HdrToneMap.eetfNits(nits) / 203.0)
-            .coerceIn(0.0, 1.0)
-            .let { sdr -> kotlin.math.exp(kotlin.math.ln(sdr) / 2.2) } * 255.0 + 0.5).toInt()
+        // The law written out in ST 2084 and BT.2390 CONSTANTS, never through the production
+        // functions (audit F-TSTL1): an expected value recomputed by the code under test could
+        // not fail however wrong that code became. Same style as MetalFrameComposerTest.
+        val expected = independentToneMappedGrey(160.0 / 255.0)
         for (channel in 0..2) {
             val got = mapped[channel].toInt() and 0xFF
             check(kotlin.math.abs(got - expected) <= 2) {
@@ -135,4 +136,34 @@ class SoftwareConverterTest {
         -1, 99, 70, -1,
         -1, 203.toByte(), 175.toByte(), -1,
     )
+    // ST 2084 and BT.2390 written as literals, deliberately independent of HdrToneMap: the
+    // whole point of this expected value is that it can disagree with production.
+    private fun pqEncode1(y: Double): Double {
+        val p = y.coerceAtLeast(0.0).pow(0.1593017578125)
+        return ((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p)).pow(78.84375)
+    }
+
+    private fun pqDecode1(e: Double): Double {
+        val p = e.coerceAtLeast(0.0).pow(1.0 / 78.84375)
+        return ((p - 0.8359375).coerceAtLeast(0.0) / (18.8515625 - 18.6875 * p)).pow(1.0 / 0.1593017578125)
+    }
+
+    private fun independentToneMappedGrey(electrical: Double): Int {
+        val nits = pqDecode1(electrical) * 10000.0
+        val srcPq = pqEncode1(1000.0 / 10000.0)
+        val dstPq = pqEncode1(203.0 / 10000.0)
+        val e1 = (pqEncode1(nits / 10000.0) / srcPq).coerceIn(0.0, 1.0)
+        val maxLum = dstPq / srcPq
+        val ks = 1.5 * maxLum - 0.5
+        val e2 = if (e1 <= ks) e1 else {
+            val t = (e1 - ks) / (1.0 - ks)
+            val t2 = t * t
+            val t3 = t2 * t
+            (2 * t3 - 3 * t2 + 1) * ks + (t3 - 2 * t2 + t) * (1 - ks) + (-2 * t3 + 3 * t2) * maxLum
+        }
+        val mapped = pqDecode1(e2 * srcPq) * 10000.0
+        val ratio = if (nits > 1e-4) mapped / nits else 1.0
+        val sdr = (nits * ratio / 203.0).coerceIn(0.0, 1.0)
+        return (sdr.pow(1.0 / 2.2) * 255.0).roundToInt()
+    }
 }

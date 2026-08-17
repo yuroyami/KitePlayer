@@ -58,11 +58,24 @@ import kotlin.math.roundToLong
  */
 public class KiteCodecSourceFactory : MediaSourceFactory {
     override suspend fun open(media: MediaItem): PlayerMediaSource {
-        // M1, the custom AVIO bridge: an item's own byte reader carries the media.
+        // The same funnel KiteCodecMediaBackend.open runs (audit F-FACT1): this factory used to
+        // drop headers, openOptions, formatHint and videoFilter on the floor and skip the
+        // FFmpeg identity mapping, so the documented SPI door behaved differently from the
+        // backend door for the same MediaItem.
+        val options = preOpenOptions(media)
         val io = media.io
-        return KiteCodecSource(
-            if (io != null) MediaSource.open(BlockingMediaIo(io)) else MediaSource.open(media.uri),
-        )
+        val source = mappingFFmpegRuntimeRejection {
+            KiteCodecSource(
+                when {
+                    // M1, the custom AVIO bridge: an item's own byte reader carries the media.
+                    io != null -> MediaSource.open(BlockingMediaIo(io), options)
+                    options.isEmpty() -> MediaSource.open(media.uri)
+                    else -> MediaSource.open(media.uri, options)
+                },
+            )
+        }
+        source.videoFilterDescription = media.videoFilter
+        return source
     }
 }
 
@@ -490,7 +503,11 @@ private class KiteCodecVideoDecoder(
 
     /** KiteCodec's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
     override val isDrained: Boolean
-        get() = decoder.isDrained && (filterDescription == null || (filterFlushed && filteredPending.isEmpty()))
+        // A graph that was never built has nothing to flush (audit F-FLT1): the lazy build waits
+        // for the first decoded frame, and a stream that never produced one used to hold the
+        // whole end of stream off for ever through the filterFlushed flag it could never set.
+        get() = decoder.isDrained &&
+            (filterDescription == null || filterGraph == null || (filterFlushed && filteredPending.isEmpty()))
 
     override suspend fun receive(): VideoFrame? {
         val frame = nextDecodedFrame() ?: return null

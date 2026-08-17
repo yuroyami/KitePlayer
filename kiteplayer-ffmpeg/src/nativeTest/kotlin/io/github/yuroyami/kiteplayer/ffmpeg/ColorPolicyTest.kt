@@ -141,4 +141,31 @@ class ColorPolicyTest {
             frames.forEach { it.close() }
         }
     }
+    // Audit F-HDR1: the native converter must run the same HDR-to-SDR law the packed common
+    // path runs. It used to skip the hook entirely, so the same public API returned washed-out
+    // pixels on Apple and tone-mapped ones on the JVM.
+    @Test
+    fun `the native converter tone maps a pq frame exactly like the packed law`() = runBlocking {
+        val (_, frames) = warningsFromDecodingAll("colors-pq.mp4")
+        try {
+            val frame = frames.first() as KiteCodecVideoFrame
+            val native = SoftwareConverter.toRgba(frame)
+            val readable = frame.readableFrame()
+            val packed = tightlyPackedToRgba(
+                bytes = readable.copyPlanesToByteArray(),
+                width = frame.size.width,
+                height = frame.size.height,
+                pixelFormat = readable.info.pixelFormat.toPlayerFormat(),
+                colorSpace = frame.colorSpace,
+            )
+            assertTrue(
+                native.contentEquals(packed),
+                "the two software converters must agree byte for byte on an HDR frame; " +
+                    "first difference at index " +
+                    native.indices.firstOrNull { native[it] != packed[it] }.toString(),
+            )
+        } finally {
+            frames.forEach { it.close() }
+        }
+    }
 }

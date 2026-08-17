@@ -97,4 +97,29 @@ class FilterAttachmentTest {
             source.close()
         }
     }
+    // Audit F-FLT1: a filtered decoder that never decoded a frame has no graph to flush, and
+    // isDrained must say so instead of holding the whole end of stream off for ever.
+    @Test
+    fun aFilteredDecoderThatNeverDecodedStillDrains() = runBlocking {
+        val mediaDir = formatMatrixMediaDir() ?: return@runBlocking
+        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteCodecSource
+        source.videoFilterDescription = "scale=160:90"
+        try {
+            val video = source.streams.first { it.kind == TrackKind.Video }
+            source.selectStreams(setOf(video.index))
+            val decoder = assertNotNull(source.videoDecoderFactories().first().create(video, HwdecPolicy.Off))
+            try {
+                decoder.send(null)
+                while (decoder.receive() != null) { /* drain whatever the flush yields */ }
+                assertTrue(
+                    decoder.isDrained,
+                    "no frame ever entered the graph, so there is nothing left to flush",
+                )
+            } finally {
+                decoder.close()
+            }
+        } finally {
+            source.close()
+        }
+    }
 }

@@ -97,12 +97,27 @@ kotlin {
                 linkerOpts("-L/opt/homebrew/lib", "-lass")
                 return@all
             }
-            // The chain itself is the same four archives everywhere, dependents first: GNU ld
-            // resolves static archives left to right and libass draws from all three below it.
-            linkerOpts(
-                "-L${chainDir.resolve("lib")}",
-                "-lass", "-lharfbuzz", "-lfreetype", "-lfribidi",
-            )
+            // The chain is the same four archives everywhere, dependents first, because a GNU
+            // linker resolves static archives left to right and libass draws from all three below
+            // it. On the GNU targets they additionally go in a GROUP: harfbuzz and freetype
+            // reference each other, and a single left-to-right pass cannot close a cycle. Apple's
+            // ld needs no group (it re-scans) and does not understand the flag.
+            linkerOpts("-L${chainDir.resolve("lib")}")
+            if (isApple) {
+                linkerOpts("-lass", "-lharfbuzz", "-lfreetype", "-lfribidi")
+            } else {
+                // Named by ABSOLUTE PATH rather than -l, and inside a group. `-l` left the GNU
+                // targets resolving `FT_*` against nothing at all while reporting no missing
+                // library, which is what a lookup that quietly picked something else looks like.
+                // A path cannot be mistaken for another file, and the group closes the
+                // harfbuzz/freetype cycle that one left-to-right pass cannot.
+                val lib = chainDir.resolve("lib")
+                linkerOpts("-Wl,--start-group")
+                listOf("libass.a", "libharfbuzz.a", "libfreetype.a", "libfribidi.a").forEach {
+                    linkerOpts(lib.resolve(it).absolutePath)
+                }
+                linkerOpts("-Wl,--end-group")
+            }
             // What differs per platform is only what the C++ half of harfbuzz and the text stack
             // need underneath: Apple ships its font provider as frameworks and its C++ runtime as
             // libc++, the GNU targets link libstdc++ and their own math library.
@@ -119,6 +134,16 @@ kotlin {
                 // nothing else in the chain resolves. -lstdc++ is harfbuzz's, which is the only
                 // C++ member; -lm is freetype's.
                 linkerOpts("-lz", "-lstdc++", "-lm")
+                if (konanTarget.name == "mingw_x64") {
+                    // Windows is the one platform where libass HAS a system font provider, so
+                    // unlike the Linux build it is not font-less: it enumerates through GDI and
+                    // shapes through DirectWrite, and those are OS libraries rather than chain
+                    // members. Without them the link ends on CreateFontIndirectW and friends.
+                    linkerOpts("-lgdi32", "-ldwrite", "-lole32", "-luuid", "-luser32")
+                    // libass recodes legacy-encoded scripts through GNU libiconv here, exactly as
+                    // it does on Apple; the GNU spelling of the symbols is `libiconv_*`.
+                    linkerOpts("-liconv")
+                }
             }
         }
     }

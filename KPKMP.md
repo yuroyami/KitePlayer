@@ -16978,6 +16978,28 @@ it.**
 - Fix, decided: take change 1, measure, and take change 2 only if change 1 leaves enough on the
   table to justify a new seam. Every one of the 21 pixel-format cases and the `HdrToneMap` call
   keep working, pinned by the colour tests that already exist.
+- **CHANGE 1 IS MEASURED AND REJECTED, 2026-08-17.** It was built (16.16 fixed point, then 32.32 in
+  Long) and timed: the conversion loop ran at 6.07 ms against a 6.33 to 6.49 ms baseline measured
+  either side of it. Run-to-run variance on this machine is about 0.4 ms, so a 4% difference is
+  not a result. The Double law is restored byte for byte and the working tree carries no trace.
+  Two hard findings came out of it and are why this is closed rather than retried:
+  1. **Byte-exact equivalence with the old law is IMPOSSIBLE, not merely hard.** At 16 bits the
+     equivalence walk found bt601 limited range at y=3, cb=0, cr=13, whose true green is 128.4937,
+     six thousandths below the rounding boundary. Widening to 32 bits fixed that and found a
+     harder one: bt601 FULL range at y=222, cb=3, cr=0, whose true blue is EXACTLY 0.5, because
+     1.772 times 125 is exactly 221.5. There the Double oracle's own answer comes from IEEE
+     representation artifacts (its 1.772 is 1.77199999999999997, so it lands a hair above the half
+     and rounds up), and no finite fixed point reproduces that. Any integer rewrite therefore
+     changes some pixels by one, which is a silent picture change this project does not take for
+     4%.
+  2. **Arithmetic is not what this loop pays for.** 2.07 million pixels in 6.3 ms is about 3
+     nanoseconds each, roughly 10 cycles at 3 GHz, for six multiplies, three loads and four stores.
+     Ten cycles does not buy six multiplies plus the memory traffic; the loop is load and store
+     bound. That is also why change 1 could not have won, and it is a direct argument FOR change 2:
+     a throughput-bound loop is exactly what more cores help.
+- **The remaining lever is change 2, row parallelism**, and it now has evidence behind it rather
+  than a hunch. Whoever takes it should expect the seam (an expect/actual parallel-for in
+  commonMain) to be most of the work, and should measure before believing.
 - Sub-phase: W.12. Test: `ConversionCostTest` re-run for the number, and the existing colour
   correctness suites for the behaviour, which must not move by a single byte. Proved able to fail
   by perturbing one coefficient, which the colour tests must catch.

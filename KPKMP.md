@@ -16916,6 +16916,24 @@ it.**
   `androidx.compose.ui.graphics.ColorFilter` on `drawImage`. On the native-canvas path they have to
   become a Skia colour filter on the `Paint`, or the eq controls silently stop applying to desktop
   video. Whichever way that resolves, it needs its own assertion in arm 1.
+- **MEASURED 2026-08-17, and one variant is REJECTED.** Before touching the shared pipeline, the
+  cheap variant was built and timed: run the shader into a RASTER surface inside the existing
+  `convert` seam, which needs no pipeline change at all. One JVM, identical synthetic 1080p
+  yuv420p planes, 60 timed iterations after warmup. The scalar Kotlin loop runs at 5.56 ms mean;
+  the SkSL raster path runs at 37.56 ms, SIX AND A HALF TIMES SLOWER, because Skia's raster backend
+  interprets SkSL on the CPU. That variant is rejected on its number, exactly as this item's exit
+  said it would be. The benchmark and its rerun command live in
+  `kiteplayer-sample-desktop/MEASUREMENTS.md`. The GPU-surface design is NOT settled by this and
+  remains unmeasured, because it cannot be measured without first making the pipeline change; what
+  the probe bought is the knowledge that the investment has no cheap shortcut.
+- **A third option appeared and is now the recommended next move.** The benchmark's scalar mirror
+  runs at 5.56 ms while W.4 measured the real `SoftwareConverter.toRgba` at about 9.4 ms for the
+  same frame size. The mirror is not the real function (one format, and it reuses its output buffer
+  rather than allocating 8.3 MB per call), so this is a lead rather than a like-for-like claim. But
+  it is a large enough gap to cost first: making the existing scalar path cheaper needs no
+  architecture change, carries none of the shared-pipeline risk, and would help Android as well as
+  desktop. W-14 should not proceed to the pipeline change until that is measured and either taken
+  or ruled out.
 - Sub-phase: W.11. Test, three arms, each proved able to fail:
   1. CORRECTNESS. The shader's output is compared against `tightlyPackedToRgba` for the same
      synthetic frames the colour instrument uses, within the tolerance `ColourInstrumentTest`

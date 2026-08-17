@@ -274,3 +274,38 @@ The cross-check line is `KiteVideoFrameCost`, the existing commonMain instrument
 frames of the run including both warm-up phases and the JIT-cold first round. Its 12.827 ms mean
 sits between the cold rounds and the warm ones, which is what it should be if the new profiler and
 the old tracker are measuring the same window.
+
+## W-14's decisive experiment: is SkSL faster than the scalar loop?
+
+Run 2026-08-17, same machine as above, `ShaderBenchmark.kt` in this module. One JVM, identical
+synthetic 1080p yuv420p planes, 10 warmup iterations then 60 timed, both paths BT.709 limited
+range. Rerun it with:
+
+```
+java -cp "$(./gradlew -q :kiteplayer-sample-desktop:printRunClasspath)" \
+     io.github.yuroyami.kiteplayer.sample.desktop.ShaderBenchmarkKt
+```
+
+| path | mean | p95 |
+|---|---|---|
+| scalar Kotlin loop (a faithful mirror of `convertPlanarYuv`) | **5.56 ms** | 5.60 ms |
+| Skia SkSL into a RASTER surface, including readback | **37.56 ms** | 37.98 ms |
+
+**The shader is 6.7 times SLOWER.** Skia's raster backend runs SkSL through its CPU interpreter,
+which is far slower than straight-line Kotlin over a byte array.
+
+What this does and does not settle:
+
+- It KILLS the cheap variant outright: running the shader into a raster surface inside the existing
+  `convert` seam, which would have needed no pipeline change. That idea is measured and rejected.
+- It does NOT settle the real design, where the shader draws to a GPU-backed surface in the draw
+  phase and the pixels never come back to the CPU. That path cannot be measured without first
+  making the shared frame-pipeline change W-14's amendment describes, which is the point: the
+  cheap probe was supposed to tell us whether that investment is worth starting, and it says the
+  answer does not come for free.
+- It surfaced a THIRD option nobody had costed. The mirror runs at 5.56 ms while W.4 measured the
+  real `SoftwareConverter.toRgba` at about 9.4 ms on the same size of frame. The mirror is not the
+  real function (it handles one format, and it reuses its output buffer instead of allocating 8.3
+  MB per call), so the gap is not a like-for-like claim. But it is large enough to be worth its own
+  measurement: making the existing scalar path cheaper may buy more than a shader would, with no
+  architecture change, and it would help Android too.

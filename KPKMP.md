@@ -511,6 +511,12 @@ corrected by that audit; the corrected text below is authoritative.
   default test harness plus one ASan-enabled local run recorded in the log.
 
 ### D28. FilterGraph: multi-input can spin forever, and the drain landing frame is not always released
+
+**Corrected 2026-08-17 (phase W).** The fix below says "always `av_frame_unref` the landing frame
+in a finally block". The code went FURTHER under audit P0-2 and closes the callback WRAPPER
+instead: the wrapper is non-owning, so closing it both performs the unref and invalidates the
+handle for a callback that retained it, which unreffing alone did not. A reader following only the
+text below would conclude the tree is wrong.
 - Where: `../KiteCodec/.../FilterGraph.native.kt`. Verified: `feedInput` retries the same
   pad after EAGAIN plus a synchronous drain; in a multi-input graph (overlay, amix) the
   sink's EAGAIN can mean "need the OTHER input", so the loop can spin without progress.
@@ -527,6 +533,12 @@ corrected by that audit; the corrected text below is authoritative.
   instead of hanging.
 
 ### D29. MediaSink advances missing audio timestamps by the wrong frame's samples
+
+**Corrected 2026-08-17 (phase W).** The encoder half below is still accurate, but nothing here
+recorded that `EncoderCore.outputMicros` changed meaning under audit P1-14: it is where the output
+timeline ENDS, the last frame's own extent included, not that frame's start. The test that read it
+as a start had been red since 2e60bf3 without anyone seeing it, because `macosArm64Test` could not
+link until phase W.
 - Where: `../KiteCodec/.../MediaSink.native.kt`, `restampPts`. Verified: the NOPTS path
   and the monotonic-force path both step by the CURRENT frame's `nb_samples`; the correct
   step is the PREVIOUS frame's duration (960 then 1024 must start at 0 and 960, not 0 and
@@ -8617,6 +8629,123 @@ gate. The whole account, row by row with fix commits, is the new register sectio
 
 ---
 
+---
+
+**2026-08-17, phase W entry and sub-phases W.1, W.2, W.5, W.8 (Opus 5, owner order: execute the
+desktop and web phase end to end, judgement calls taken by the executor and reported).**
+
+Tier selected: TIER 2 in both repositories, by changed path (build.gradle.kts, buildSrc, def-level
+link flags, jvmMain and nativeTest Kotlin), plus the new container runs. Tier 3 not selected: no
+line of the render path, the device callback or teardown ordering changed.
+
+**Entry, before any phase work.** Tier 1 was RED on a clean tree and had been for some time.
+Three cases in KiteCodec's C suites pinned contracts that deliberate changes had already replaced,
+and one tracked file carried an em dash. Repaired first (KiteCodec 9b33480), because 18.2 item 4
+does not permit building on an ungated tree: `ffkmp_graph_build_video` refuses an unknown pixel
+format with EINVAL rather than substituting yuv420p (its own comment says why), the pixel-format
+conversion carries frame properties through `av_frame_copy_props` instead of dropping all but pts,
+and the allocation baseline now describes a world WITH the thread-local SwsContext cache: 4
+allocating calls on a cache hit against 9 for a shape change, one context held per thread, a shape
+change swapping it, and a refusal that reaches the cache releasing it, so a refusal window ends
+negative rather than balanced.
+
+**The expansion (54697ac).** Phase W entered through 17.2's ritual: section 17.13, twelve register
+items, nine sub-phases, six recorded decisions, written against a seven-dimension survey that read
+code and treated this file as hearsay. Two survey findings changed the phase's shape: the engine,
+the subtitles and the real-time C already cross-compile for linuxX64, linuxArm64 and mingwX64, so
+nothing here had to port the engine; and KiteCodec's JVM variant was a placeholder by BUILD WIRING,
+not by missing code.
+
+**W.1, the JVM variant becomes real (KiteCodec 2a087b4).** `jvmMain` depended on
+`unsupportedMain`, so every JVM consumer got a library whose every entry point threw, while the
+working JNI implementation sat in `jvmAndAndroidMain` compiled only for Android and for an
+unpublished harness. That one line was the whole reason Compose Desktop could not open a file.
+Measured: 41 jvm tests pass including the full codec contract and the VideoToolbox hwaccel
+contract. The falsifiability arm lives in the build rather than in prose:
+`-Pkitecodec.jni.falsify=true` points the loader at a path that cannot exist, and exactly the 4
+backend-touching tests fail while the 37 pure-Kotlin ones stay green. The library also had to be
+FINDABLE, so `BundleHostJniTask` makes it self-contained: the three Homebrew libraries the link
+pulls in (SvtAv1Enc, graphite2, lzma, two of which ship no static archive) travel inside the jar
+with their load commands rewritten to `@loader_path` and every rewritten Mach-O re-signed ad hoc,
+because Apple silicon refuses an invalidated signature with SIGKILL and no Java exception, which
+reads as an out-of-memory kill and cost half an hour to diagnose.
+
+Two ratchets moved. The JVM api dump gains `MediaByteSource` and the `MediaSource.open` overload
+that takes one, zero removals, because the AVIO byte source is real on the JVM and the placeholder
+never had it. The klib metadata baseline gains 9 declarations and 3 direct bindings, all the
+io-opaque AVIO helpers (`ffkmp_fmt_open_input_io`, `ffkmp_fmt_close_input_io`,
+`ffkmp_fmt_io_opaque`) that KiteCodec 13d97df added to the symbol and signature ratchets without
+moving this one; zero declarations lost.
+
+Two native tests that had NEVER RUN came green in the same commit. `macosArm64Test` could not link
+until this phase, so `EncoderRestampTest` and `FilterGraphDrainTest` had been red since 2e60bf3
+with nobody able to see it. Both were stale tests rather than defects, and both rewrites were
+proved by re-injecting the original defect and watching the new assertion catch it, so they are
+stronger than what they replaced. This also corrects two drifted register entries: D29's
+`outputMicros` measures the timeline END since audit P1-14, not the last frame's start, and D28's
+`drainTo` closes the callback WRAPPER since audit P0-2 rather than unreffing the landing frame.
+
+**W.2, the player's JVM backend (efb8144).** No backend code was needed: `KiteCodecMediaBackend`
+is commonMain and the jvm target always compiled it. `nativeBackendTest` becomes `realBackendTest`
+and jvmTest depends on it, because that set was never about being native. Measured: 56 jvm tests
+pass and EVERY ROW of the 17.5 format conformance matrix PASSES on the desktop JVM. All fifteen
+MustPlay rows including hevc4k10, truevfr720, tsoffset1400, surround51 and the ass-subtitled mkv;
+all three MustSurvive torture rows; the nine wide-profile rows down to vob-mpeg2 and audio-truehd.
+FFmpeg reports avcodec 62.11.100 through JNI. Goal 3's exit criterion is therefore met for macOS
+desktop on the JVM path, which is the path Compose Desktop uses.
+
+**W.5, the Linux and Windows trees (KiteCodec e7a8868).** The Linux and Windows configure paths
+had existed since BuildFFmpegTask was written and had never once run. FFmpeg n8.0 now builds for
+linux-arm64, linux-x64 and mingw-x64 from konan's own clang over konan's own sysroots, which is
+decision W-D3 and not a preference: FFmpeg built by any other toolchain can reference a glibc
+symbol the konan sysroot does not carry, and that failure would arrive at link time in a
+consumer's build. Four things had to be true that were not, each recorded in the code that fixes
+it: the konan gcc packages are not compilers on this host, Apple's ld cannot link ELF or PE so
+`-fuse-ld=lld` is mandatory, konan keeps the gcc runtime beside the sysroot rather than inside it,
+and the konan LLVM package is the essentials set with no llvm-nm, llvm-ranlib or llvm-strip.
+
+The profile is reduced by decision W-D4 and its contents were MEASURED per sysroot rather than
+assumed: the konan linux sysroots carry zlib and neither bzlib nor lzma, the msys2 mingw sysroot
+carries none of the three, Windows takes w32threads instead of pthreads, and FFmpeg refuses a
+configure that requests a library it cannot find. Decoding is untouched because the read side is
+wide by class, so the whole matrix still plays. `StaticLinkFlags` follows the profile; leaving it
+alone failed every link with `unable to find library -lass`.
+
+Measured: 109 kitecodec-core native tests pass on linuxArm64 in a container over the freshly
+cross-built FFmpeg, covering demux, decode, encode, filter and transcode. Windows stays a
+compile-and-link claim (PE32+ verified) because there is no Windows machine here; that run is an
+owner rider exactly like the iPhone one.
+
+Also closes SOL-B1. `buildSrc:test` had three goldens pinning the pre-17.4.9 configure lines, so
+that suite could gate nothing; it is 59 tests green now, with two new goldens pinning the desktop
+cross flags and proving the reduced profile cannot silently regrow its third-party stack. SOL-B2
+is closed by observation rather than by a fix: `macosArm64Test` links and runs, 113 tests green.
+
+**W.7's publication half (W-07).** `-Pkitecodec.withDesktopTargets=true` ADDS the three desktop
+triples to the phone scope rather than replacing it, because a desktop publication that dropped
+the Apple and Android variants would break every mobile consumer resolving the same version.
+KiteCodec 0.0.9 is published locally with macos, ios, android, jvm, js, wasm AND linuxx64,
+linuxarm64, mingwx64 variants.
+
+**W.8, the Linux run (5193a4a).** F-COV1 records tests executing on four of twenty declared
+surfaces, and two of the missing ones were reachable from this machine while being counted as
+covered: Gradle creates linuxX64Test and linuxArm64Test and then permanently disables them on a
+macOS host, so a gate naming those tasks is green by definition. `scripts/linux-tests.sh` in both
+repositories cross-links and then EXECUTES them in a container. Measured: kiteplayer-core 272
+tests and kiteplayer-subtitles 28 tests pass on BOTH linuxArm64 and linuxX64, including
+AudioRingDifferentialTest, which compares the C ring against its Kotlin twin and therefore also
+proves the cross-compiled linux archives of kiteplayer-rt are real rather than merely linked.
+
+**Deviations and judgement calls, reported rather than buried.** (a) Tier 1 was repaired before
+the phase began; that repair is a KiteCodec commit of its own and is described above. (b) Two
+KiteCodec native tests and three buildSrc goldens were rewritten rather than the code, each with
+the production comment or register row that states the replacing contract quoted in the commit.
+(c) The klib metadata baseline was moved for drift that this phase did not cause; the declarations
+are named above. (d) emscripten was installed for the W.9 spike, which is a new toolchain and is
+authorized by register item W-12 rather than taken silently. (e) Docker Desktop was started on
+this machine to run the Linux containers, and its credential helper blocks on the login keychain
+in a headless session, so both scripts supply an empty docker config; these are public images.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two
@@ -15989,10 +16118,12 @@ Kotlin modernization (hygiene, no schedule, no syntax churn before ownership wor
   and resource ledgers. Not a stage; a style the stages apply.
 
 Build and publication:
-- SOL-B1 [V] KiteCodec buildSrc:test fails on stale BuildFFmpegTask goldens today. Fix at the
-  next KiteCodec window; until then that suite cannot gate.
-- SOL-B2 [V] Static macOS link still omits -llzma (StaticLinkFlags), so
-  kitecodec macosArm64Test cannot link. Same window.
+- SOL-B1: CLOSED by phase W (KiteCodec e7a8868). The three stale goldens now pin the wide
+  read-side class policy, the VideoToolbox hwaccel pins and the MediaCodec AV1 decoder, and two
+  new goldens pin the desktop cross flags. 59 tests green, so the suite gates again.
+- SOL-B2: CLOSED, by observation at phase W entry rather than by a fix: StaticLinkFlags carries
+  -llzma today and macosArm64Test links and runs, 113 tests green. Two tests it had been hiding
+  since 2e60bf3 were red and are fixed in KiteCodec 2a087b4.
 - SOL-B3 [C] hostTargetsOnly configuration previously failed on Android compileSdk; 3f0f1e3's
   conditional plugin should have closed it. Verify at the same window and record the outcome.
 - SOL-B4 [C] Vendored archives carry a macOS 26 deployment version while Kotlin/Native links

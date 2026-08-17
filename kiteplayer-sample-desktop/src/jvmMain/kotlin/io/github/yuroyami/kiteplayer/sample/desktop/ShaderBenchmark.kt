@@ -162,4 +162,13 @@ fun main() {
     val gpu = time("skia-sksl-raster", 60) { skiaYuv420ToRgba(planes, WIDTH, HEIGHT, surface, effect, readback) }
 
     println("verdict: skia is ${"%.2f".format(cpu / gpu)}x the scalar loop")
+
+    // W-14's re-decision after W-19. The upload path is two costs: the YUV to RGBA conversion,
+    // which row parallelism cut from 6.3 ms to about 2.1, and the Skia raster build that turns
+    // those bytes into an image. This times the second half, so the verdict rests on both.
+    val rgba = ByteArray(WIDTH * HEIGHT * 4) { (it and 0xFF).toByte() }
+    val rasterInfo = ImageInfo(WIDTH, HEIGHT, ColorType.RGBA_8888, ColorAlphaType.OPAQUE)
+    time("skia-raster-image-build", 60) {
+        Image.makeRaster(rasterInfo, rgba, WIDTH * 4).close()
+    }
 }

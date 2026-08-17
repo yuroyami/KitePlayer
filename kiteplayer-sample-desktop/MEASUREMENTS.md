@@ -309,3 +309,21 @@ What this does and does not settle:
   MB per call), so the gap is not a like-for-like claim. But it is large enough to be worth its own
   measurement: making the existing scalar path cheaper may buy more than a shader would, with no
   architecture change, and it would help Android too.
+
+## After W-19: what the upload actually costs now
+
+Measured 2026-08-17, same machine, same benchmark harness.
+
+| half of the upload | before | after |
+|---|---|---|
+| YUV to RGBA conversion | 6.33 ms | **about 2.1 ms** (W-19 row parallelism) |
+| Skia raster image build | assumed about 2.2 ms | **0.44 ms**, measured |
+| whole path | 11.6 ms under load | **about 2.5 ms** |
+
+The 2.2 ms figure was never measured. It came from applying W.4's 19 percent split to a number
+taken on a loaded host, and it was wrong by a factor of five. The raster build was always cheap;
+the conversion was always the cost.
+
+This is why W-14, the desktop GPU conversion path, is closed as superseded rather than parked: at
+about 7 percent of a 33 ms frame budget, it does not justify moving FrameImage and the draw call in
+commonMain, shared with Android and iOS.

@@ -16934,6 +16934,21 @@ it.**
   architecture change, carries none of the shared-pipeline risk, and would help Android as well as
   desktop. W-14 should not proceed to the pipeline change until that is measured and either taken
   or ruled out.
+- **SUPERSEDED 2026-08-17 by W-19, and closed rather than left open.** This item existed because the
+  desktop upload cost 11.6 ms per 1080p frame with 81% of it in the CPU conversion. W-19's row
+  parallelism took the conversion from 6.33 ms to about 2.1, and the OTHER half was then measured
+  directly rather than inferred: the Skia raster image build is **0.44 ms**, not the roughly 2.2 ms
+  a percentage split of the loaded W.4 number implied. The whole upload path is therefore about
+  2.5 ms now.
+  Against a 33 ms budget at 1080p30 that is about 7% of a frame, and the price of taking it is the
+  shared frame-pipeline change this item's own amendment describes: `FrameImage` and the draw call
+  both move, in commonMain, shared with Android and iOS whose paths are working and pinned. That is
+  not a trade worth making for 2.5 ms, so W-14 is CLOSED as superseded rather than parked.
+  What it leaves behind is worth keeping and is not lost: the amendment's verified route (the
+  native canvas with a Skia Paint, since ShaderBrush refuses a skia Shader on this Compose version),
+  the API notes, and the measured fact that SkSL on a RASTER surface is 6.7x slower than the scalar
+  loop. If 4K or a high-refresh display ever makes 2.5 ms matter, this item is the starting point
+  and none of its findings need rediscovering.
 - Sub-phase: W.11. Test, three arms, each proved able to fail:
   1. CORRECTNESS. The shader's output is compared against `tightlyPackedToRgba` for the same
      synthetic frames the colour instrument uses, within the tolerance `ColourInstrumentTest`
@@ -17198,8 +17213,8 @@ it.**
 - **W.9 The web spike** (W-12). Commit: "Measure the web, and record the verdict".
 - **W.10 The pairing refuses in one typed sentence** (W-13). Commit: "Refuse a foreign frame
   once, in words a consumer can read".
-- **W.11 The desktop converts on the GPU, for the layouts that can** (W-14). Commit: "Convert
-  the desktop frame where the pixels already are".
+- **W.11 The desktop converts on the GPU, for the layouts that can** (W-14). CLOSED as superseded
+  by W-19; no commit, and the reason is on the item.
 - **W.12 The conversion loop stops paying for its shape** (W-15). Commit: "Convert the same
   pixels with less arithmetic".
 - **W.13 The jar carries a library for more than one desktop** (W-16). Commit: "Give the jar a

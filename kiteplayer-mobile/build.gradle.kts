@@ -18,6 +18,12 @@ plugins {
  * consumer can keep this dependency in commonMain without inventing an application-side target
  * hierarchy. Rendering widgets and Compose adapters still live in their own modules.
  */
+// The desktop end-to-end test plays a real file, and a Test task's working directory is the module
+// rather than the repo root, so the location is passed in explicitly like the native tasks do.
+tasks.withType<Test>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}
+
 kotlin {
     explicitApi()
     jvmToolchain(21)

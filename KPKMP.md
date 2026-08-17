@@ -1007,7 +1007,10 @@ kiteplayer-rt/native/scripts/run-c-tests.sh interpose  # plain binaries, interpo
 # evidence. mingw has no run line on purpose: a PE binary needs Windows, and the link is the claim.
 ./gradlew :kiteplayer-output:jvmTest :kiteplayer-mobile:jvmTest :kiteplayer-ffmpeg:jvmTest
 ./scripts/linux-tests.sh                              # core, subtitles and ffmpeg, in a container
-./gradlew :kiteplayer-core:linkDebugTestMingwX64      # Windows stays a link claim
+# Windows stays a link claim, and the FFmpeg backend is the strong form of it: a PE32+ binary
+# carrying the engine, the backend and FFmpeg itself.
+./gradlew :kiteplayer-ffmpeg:linkDebugTestMingwX64 \
+          -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs"
 
 # Cross-target compile spot checks
 ./gradlew :kiteplayer-core:compileKotlinJs :kiteplayer-core:compileKotlinWasmJs \

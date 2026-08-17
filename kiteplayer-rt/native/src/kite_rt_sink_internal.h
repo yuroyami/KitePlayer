@@ -35,7 +35,13 @@ struct kprt_sink {
     int32_t channels;
     _Atomic int32_t device_buffer_frames;
 
-    /* `mach_timebase_info`, read once at create.
+    /* The device clock's tick-to-nanosecond ratio, read once at create.
+     *
+     * A RATIO rather than a platform type, and that is what makes the field portable (phase W,
+     * register item W-08). Apple fills it from `mach_timebase_info`. A Linux backend would fill it
+     * 1 over 1, because `clock_gettime(CLOCK_MONOTONIC)` already counts nanoseconds. A Windows one
+     * would fill it 1000000000 over `QueryPerformanceFrequency`. `kprt_sink_ticks_to_nanos` needs
+     * nothing else from any of them, so a new backend brings its clock and no new arithmetic.
      *
      * Cached rather than converted through `AudioConvertHostTimeToNanos` in the callback, which is
      * what plan section 15.2 B1.8 step 1 asks for and what `scripts/render-audit.sh` enforces by

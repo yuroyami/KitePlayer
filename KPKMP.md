@@ -17519,6 +17519,28 @@ deliberately left open.
   exist on n8.0 and that `--disable-asm` silently kills SIMD.
 - Sub-phase: X.2. Test: a built tree whose configure banner is captured, plus the size numbers the
   spike recorded reproduced within tolerance.
+  Result, 2026-08-17: `:kitecodec-core:buildFFmpegForWasm` (plus `...Simd` and `...Mt`) builds all
+  six archives into `native-libs/lgpl/wasm32`, and the objects are confirmed
+  `WebAssembly (wasm) binary module version 0x1` rather than host code. Sizes reproduce the spike
+  within a few hundred bytes per archive.
+  **One correction the spike's recipe needed, found before the build rather than at link time.**
+  The spike disabled avfilter, which its bare harness never used. `libkitecodec.a` DOES use it:
+  `helpers_filter.c` looks up `abuffer`, `abuffersink`, `anull`, `buffer` and `buffersink` BY NAME
+  and calls `avfilter_graph_parse_ptr`. A build without them links and fails at the first filter
+  call. The web tree therefore enables avfilter plus those five and four negotiation filters, which
+  costs 220 KB of archive. `libavfilter.a` is present and `av_buffersink_get_frame` resolves in it.
+  **Also corrected: the scratch root.** The sibling task builds in the system temp dir because this
+  repository lives under a `#Kite` directory and FFmpeg's configure cannot handle a `#` anywhere in
+  its path. The first draft used Gradle's `temporaryDir`, which is INSIDE the project, and the task
+  refused with exactly that message. Fixed to match the sibling.
+  **Tests: `BuildFFmpegWasmTaskTest`, six cases, all proved able to fail.** They pin the three
+  things that are silent when wrong: every filter the C library names is enabled, `--disable-asm`
+  is absent from the simd variant (it turns SIMD off with it, so a simd build would silently be a
+  base build and its measurement a lie), and `--disable-postproc` appears nowhere (it does not exist
+  on n8.0). Falsification: reintroducing the missing-`buffersink` bug and the `--disable-asm`-in-simd
+  bug fails 2 of 6; restoring returns green. A seventh behaviour was changed BY a test rather than
+  pinned by it: an unknown variant used to fail with "property `sourceDir` has no value", which
+  names the wrong thing, so the variant is now validated before any other input is read.
 
 #### X-03. `libkitecodec.a` has never been compiled for wasm
 - Where: `native/kitecodec-c/`; the KiteCodec repository.

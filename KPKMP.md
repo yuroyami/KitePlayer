@@ -16856,6 +16856,48 @@ it.**
   alive. Proved able to fail by restoring the implicit cast, which produces a per-frame failure and
   no warning.
 
+#### W-14. The desktop upload converts on the CPU, and that is 81% of its cost (KV-2's desktop half)
+- Where: `kiteplayer-compose-video/src/jvmMain/.../ImageBitmaps.jvm.kt:39` calling
+  `SoftwareConverter.toRgba`, which reaches
+  `kiteplayer-ffmpeg/src/commonMain/.../Conversions.kt:111 tightlyPackedToRgba`.
+- Problem: W.4 measured the desktop upload at 11.6 ms mean and 13.1 ms p95 per 1080p frame, and
+  81% of that is `tightlyPackedToRgba`, a pure-Kotlin per-pixel YUV to RGBA loop over 2.07 million
+  pixels. Only 19% is the Skia raster build. That loop is exactly the last-resort fallback 17.9's
+  law 2 names, running as the default on every desktop frame, and it also allocates an 8.3 MB RGBA
+  array per frame against the 3.1 MB the planes actually occupy, which is roughly 340 MB/s of
+  garbage at 30 fps.
+- Facts established before deciding, so the fix is not guesswork:
+  1. Skiko 0.150.1 exposes `RuntimeEffect` and NO YUV image type (no `YUVAPixmaps`, no
+     `makeFromYUVAPixmaps`). Law 2 anticipates exactly this and names the answer: "a Skia YUV image
+     where Skiko exposes it, a RUNTIME-EFFECT SHADER where it does not". Desktop takes the shader.
+  2. The JVM frame already reaches its planes. `Frame.copyPlanesToByteArray()` is a JVM actual
+     today, and it is `av_image_copy_to_buffer` at align 1, so the planes arrive tightly packed,
+     plane after plane, in the frame's own pixel format. KV-2 on desktop therefore needs NO
+     KiteCodec change and no new C, which is what makes it a KitePlayer-only item.
+  3. The CPU path covers 21 pixel-format cases and finishes with
+     `HdrToneMap.forColorSpaceOrNull(colorSpace)?.mapInPlace(out)`, which is M3's tone mapping.
+     A shader that silently skipped that would wash out HDR, which is the exact defect the M4
+     surge closed for the Apple hardware readback.
+- Fix, decided: the desktop draw uploads PLANES and converts in a `RuntimeEffect` shader, for the
+  four dominant 8-bit planar layouts only: yuv420p, yuv422p, yuv444p and nv12. Each plane becomes a
+  single-channel Skia image; the shader samples them and applies the same matrix and range law
+  `Conversions.kt` applies, read from the frame's own `ColorSpaceInfo` rather than assumed.
+  EVERYTHING ELSE FALLS BACK to the existing CPU converter unchanged, explicitly including every
+  10-bit layout and every frame whose colour space asks for tone mapping. That boundary is the
+  point: it is the smallest change that moves the measured number (18.3 rule 2), it cannot regress
+  HDR because HDR does not enter it, and the fallback is the code that is already proven.
+- Sub-phase: W.11. Test, three arms, each proved able to fail:
+  1. CORRECTNESS. The shader's output is compared against `tightlyPackedToRgba` for the same
+     synthetic frames the colour instrument uses, within the tolerance `ColourInstrumentTest`
+     already pins. A wrong matrix or a wrong range must fail it.
+  2. THE BOUNDARY. A 10-bit frame and a PQ/HLG frame take the CPU path, asserted by observing the
+     converter being called, so a future widening of the shader cannot silently swallow HDR.
+  3. THE NUMBER. `KiteVideoUploadProfiler` re-measures the same 320-frame alternating phases W.4
+     used, on the same clip, and the mean and p95 are written into
+     `kiteplayer-sample-desktop/MEASUREMENTS.md` beside the existing ones. The exit is that the
+     CPU cost per frame FALLS; if it does not, the item is recorded as measured-and-rejected
+     rather than merged, because a shader that is not faster is only more surface.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -16874,6 +16916,8 @@ it.**
 - **W.9 The web spike** (W-12). Commit: "Measure the web, and record the verdict".
 - **W.10 The pairing refuses in one typed sentence** (W-13). Commit: "Refuse a foreign frame
   once, in words a consumer can read".
+- **W.11 The desktop converts on the GPU, for the layouts that can** (W-14). Commit: "Convert
+  the desktop frame where the pixels already are".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

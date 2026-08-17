@@ -285,6 +285,12 @@ public class AudioPlayback(
             existing.matches(sourceFormat) && existing.preservePitch == pitchNow -> existing
             else -> existing.rebuiltFor(sourceFormat, pitchNow)
         }
+        if (stage !== existing && existing != null) {
+            // A fresh stage counts its emitted frames from zero, so the scaled axis must drop
+            // its base and re-anchor on the next timestamped buffer (audit F-TS1). Keeping the
+            // old base dated every post-rebuild buffer back at the start of the epoch.
+            synchronized(lock) { scaledBaseUs = null }
+        }
         pipeline = stage
         // Picked up here, on the feeder, because the gain stage has exactly one owner. The ramp inside it
         // is what makes a change arriving mid-buffer inaudible rather than a click.

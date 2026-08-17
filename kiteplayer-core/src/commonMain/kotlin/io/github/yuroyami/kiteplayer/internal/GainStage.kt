@@ -61,6 +61,15 @@ internal class GainStage(
     var current: Float = 1f
         private set
 
+    /**
+     * Continues [from]'s ramp instead of starting at unity (audit F-GAIN1): a pipeline rebuilt
+     * mid-stream while muted used to play up to one whole ramp of near-full-scale samples,
+     * because its fresh gain stage began at 1 and only then walked down.
+     */
+    fun adoptRamp(from: GainStage) {
+        current = from.current.coerceIn(0f, 1f)
+    }
+
     /** Multiplies [frames] sample frames of interleaved [samples] in place. */
     fun apply(samples: FloatArray, frames: Int) {
         if (frames <= 0) return

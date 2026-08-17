@@ -117,14 +117,15 @@ public data class NetworkConfig(
  * The M5 byte cache: one contiguous RAM window over an [MediaIo]'s bytes. Reads pull
  * [readChunkBytes] at a time and append to the window; a seek that lands inside the window is
  * served from RAM without touching the source, which is what makes a small seek-back free on a
- * network stream. The window keeps at most [backWindowBytes] behind the cursor and
- * [forwardWindowBytes] in total; [Progress.bufferedRanges] reports the window, time-mapped.
+ * network stream. The window keeps at least [backWindowBytes] behind the cursor before anything
+ * is evicted, and [forwardWindowBytes] in total; [Progress.bufferedRanges] reports the window,
+ * time-mapped.
  */
 public data class IoCachePolicy(
     val enabled: Boolean = true,
     /** How much one upstream read pulls. Bigger means fewer network round trips. */
     val readChunkBytes: Int = 256 * 1024,
-    /** How many bytes behind the cursor stay in RAM for free backward seeks. */
+    /** How many bytes behind the cursor stay in RAM, at least, for free backward seeks. */
     val backWindowBytes: Long = 8L * 1024 * 1024,
     /** The whole window's byte budget, back window included. */
     val forwardWindowBytes: Long = 32L * 1024 * 1024,
@@ -178,7 +179,9 @@ public data class BufferPolicy(
         require(softTarget > Duration.ZERO) { "softTarget must be positive, was $softTarget" }
         require(totalBytes > 0) { "totalBytes must be positive, was $totalBytes" }
         require(totalDuration > Duration.ZERO) { "totalDuration must be positive, was $totalDuration" }
-        require(videoFrameQueue >= 1) { "videoFrameQueue must hold at least one frame, was $videoFrameQueue" }
+        // Two, not one: timing a frame needs the NEXT frame's timestamp, which is FrameQueue's
+        // own bound. One slot passed here and crashed the first open instead (audit F-CFG1).
+        require(videoFrameQueue >= 2) { "videoFrameQueue must hold at least two frames, was $videoFrameQueue" }
         require(liveBackBuffer >= Duration.ZERO) { "liveBackBuffer must not be negative, was $liveBackBuffer" }
         require(liveMaxLag >= Duration.ZERO) { "liveMaxLag must not be negative, was $liveMaxLag" }
     }
@@ -236,7 +239,13 @@ public data class SubtitleConfig(
     val autoSelect: Boolean = true,
     /** Shift every cue by this much. Positive shows cues later. */
     val delay: Duration = Duration.ZERO,
-    /** How far ahead cues are parsed and held. */
+    /**
+     * How far ahead cues would be parsed and held.
+     *
+     * Not implemented yet: no code reads this value, and the cue store currently holds every
+     * parsed cue with a fixed prune window behind the position. Stated here rather than
+     * discovered, like the other unread knobs in this file.
+     */
     val lookahead: Duration = 5.seconds,
     /** Scale applied to the authored font size. */
     val fontScale: Float = 1.0f,

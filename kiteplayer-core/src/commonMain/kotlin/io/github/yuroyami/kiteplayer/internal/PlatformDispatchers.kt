@@ -18,27 +18,17 @@ import kotlin.coroutines.CoroutineContext
 internal expect fun platformPlaybackDispatchers(): PlaybackDispatchers
 
 /**
- * One worker's context, and how to give its thread back.
- *
- * The pair exists because the type a platform's dispatcher factory returns is not the same type on every
- * platform, while "close this when the player closes" is the same idea everywhere. Naming the shutdown
- * explicitly also makes it impossible to build a set whose threads nothing releases.
- */
-internal class WorkerContext(val context: CoroutineContext, private val shutdown: () -> Unit) {
-    fun close(): Unit = shutdown()
-}
-
-/**
  * SOL-P4: six SERIAL LANES over the runtime's shared pools instead of six owned OS threads.
  *
  * The engine's contracts are about CONFINEMENT, and `limitedParallelism(1)` is confinement:
  * one task at a time per lane, happens-before between consecutive tasks, exactly the mutual
  * exclusion the per-worker threads provided, without a player costing six threads and six
- * players costing thirty-six. The split is by BEHAVIOUR: lanes that only suspend (the session
- * actor, the video scheduler) ride [calm], the pool for computation; lanes that enter blocking
- * C or a blocking network bridge (demux, both decoders, the audio feeder) ride [blocking], the
- * pool built for exactly that, so a stall in FFmpeg or a slow socket parks an elastic IO
- * thread and never starves computation.
+ * players costing thirty-six. The split is by BEHAVIOUR: lanes that only suspend (the video
+ * scheduler, the raster lane) ride [calm], the pool for computation; lanes that can BLOCK ride
+ * [blocking], the pool built for exactly that, so a stall parks an elastic IO thread and never
+ * starves computation. The session actor rides [blocking] too (audit F-LANE1): its teardown
+ * and seek paths call `sink.stop()`, and on Android that joins the writer thread, a real block
+ * that on a two-core Default pool could sit on half the computation budget.
  *
  * The one pinned thread the platform genuinely demands, the audio DEVICE callback, was never
  * one of these six: the C ring owns it.
@@ -51,7 +41,7 @@ internal class SharedLaneDispatchers(
 ) : PlaybackDispatchers {
 
     @kotlinx.coroutines.ExperimentalCoroutinesApi
-    override val session: CoroutineContext = calm.limitedParallelism(1)
+    override val session: CoroutineContext = blocking.limitedParallelism(1)
 
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     override val videoSchedule: CoroutineContext = calm.limitedParallelism(1)

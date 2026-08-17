@@ -168,7 +168,10 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @param value finite, within [SPEED_MIN] to [SPEED_MAX].
      * @throws IllegalArgumentException outside that range. Below and above it, time-stretch
      *         splices dominate the signal, and a player that pretends otherwise is lying.
-     * @throws UnsupportedOperationException for a live change on an unseekable source.
+     *
+     * A live change on an unseekable source is refused and the refusal is published as a
+     * [PlaybackWarning.CommandRefused] on [events] and the warning history: this member does
+     * not wait for the engine, so a throw could never reach its caller.
      */
     public fun setSpeed(value: Double) {
         require(value.isFinite() && value >= SPEED_MIN && value <= SPEED_MAX) {

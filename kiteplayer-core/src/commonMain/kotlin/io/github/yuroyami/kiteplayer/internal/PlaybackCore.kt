@@ -208,6 +208,10 @@ internal class PlaybackCore(
      * over a subtitle.
      */
     private fun loadExternalSubtitles(item: MediaItem) {
+        // Every DECLARED file mints an id, loaded or not (F-EXT1): the count of loaded tracks
+        // used to seed addExternalSubtitle's next id, which collided with a declared track as
+        // soon as one earlier declaration had failed to load.
+        externalSubtitleIdsMinted = item.externalSubtitles.size
         externalSubtitleTracks = item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
             // TrackId's own convention: external ids are negative, printed external1, external2...
             val id = TrackId(-(index + 1))
@@ -246,6 +250,9 @@ internal class PlaybackCore(
             )
         val trimmed = text.removePrefix("﻿")
         val isVtt = trimmed.startsWith("WEBVTT") || sourceFile.uri.endsWith(".vtt", ignoreCase = true)
+        // The same self-announcement the backend's parser routes on (F-EXT2): labelling every
+        // non-VTT file SubRip told a track list that an ASS script was something it is not.
+        val isAss = trimmed.trimStart(' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true)
         val cues = runCatching { parser.parse(trimmed, isVtt) }.getOrElse { failure ->
             return ExternalSubtitleParse.Failed(
                 "the external subtitle file failed to parse: ${sourceFile.uri}${causeDetail(failure)}",
@@ -262,7 +269,11 @@ internal class PlaybackCore(
                 info = TrackInfo(
                     id = id,
                     kind = TrackKind.Subtitle,
-                    codec = if (isVtt) "external/webvtt" else "external/subrip",
+                    codec = when {
+                        isVtt -> "external/webvtt"
+                        isAss -> "external/ass"
+                        else -> "external/subrip"
+                    },
                     language = sourceFile.language,
                     title = sourceFile.title ?: sourceFile.uri.substringAfterLast('/'),
                 ),
@@ -285,7 +296,8 @@ internal class PlaybackCore(
             )
             return
         }
-        val id = TrackId(-(externalSubtitleTracks.size + 1))
+        externalSubtitleIdsMinted++
+        val id = TrackId(-externalSubtitleIdsMinted)
         when (val parsed = parseExternalSubtitle(command.source, id)) {
             is ExternalSubtitleParse.Failed -> command.reply.completeExceptionally(
                 IllegalArgumentException(parsed.reason),
@@ -324,6 +336,12 @@ internal class PlaybackCore(
     private var lastError: PlaybackError? = null
     private var playRequested = false
     private var loop: LoopMode = LoopMode.Off
+
+    /** Once per media: handleLoop refusing an unseekable repeat runs on every Ended pass. */
+    private var loopRefusalWarned = false
+
+    /** Ids ever minted for external subtitle tracks this media, failed loads included (F-EXT1). */
+    private var externalSubtitleIdsMinted = 0
 
     /**
      * The armed A-B loop (S4.g). A player property like [speed]: it survives seeks and reopen,
@@ -1049,39 +1067,48 @@ internal class PlaybackCore(
             }
             is CoreCommand.AttachRenderer -> {
                 if (setRenderer(command.renderer)) command.reply.complete(Unit)
-                else command.reply.completeExceptionally(
-                    IllegalStateException("renderer attach aborted: the video scheduler did not quiesce within $QUIESCE_DEADLINE"),
-                )
+                else {
+                    // Warned as well as thrown (audit F-API1): the facade's fire-and-forget form
+                    // discards the reply, and a refused attach with no trace is a permanently
+                    // black surface nothing explains.
+                    val reason = "the video scheduler did not quiesce within $QUIESCE_DEADLINE"
+                    warn(PlaybackWarning.CommandRefused("attachRenderer", reason))
+                    command.reply.completeExceptionally(
+                        IllegalStateException("renderer attach aborted: $reason"),
+                    )
+                }
             }
             is CoreCommand.DetachRenderer -> {
                 if (setRenderer(null)) command.reply.complete(Unit)
-                else command.reply.completeExceptionally(
-                    IllegalStateException("renderer detach aborted: the video scheduler did not quiesce within $QUIESCE_DEADLINE"),
-                )
+                else {
+                    val reason = "the video scheduler did not quiesce within $QUIESCE_DEADLINE"
+                    warn(PlaybackWarning.CommandRefused("detachRenderer", reason))
+                    command.reply.completeExceptionally(
+                        IllegalStateException("renderer detach aborted: $reason"),
+                    )
+                }
             }
             is CoreCommand.SetSpeed -> {
-                // Committed only after the pipelines accepted it: storing first published a rate
-                // the audio path then refused, so state claimed a speed nothing played at.
                 val active = session
-                val failure = runCatching {
-                    active?.audio?.speed = command.value
-                    active?.video?.speed = command.value
-                }.exceptionOrNull()
-                when {
-                    failure != null -> command.reply.completeExceptionally(failure)
-                    // A live change rides a precise seek to the current position: the seek's own
-                    // flush is the epoch boundary both pipelines apply their new rate at, and the
-                    // seek machine already preserves play intent, status and selection. On an
-                    // unseekable source there is no such boundary to ride, and pretending the
-                    // rate changed while every queued sample kept the old one would be a lie.
-                    active != null && command.value != speed && !active.source.seekable -> {
-                        command.reply.completeExceptionally(
-                            UnsupportedOperationException(
-                                "a live speed change re-anchors by precise seek, and this source is not seekable",
-                            ),
-                        )
-                    }
-                    else -> {
+                // The refusal is decided BEFORE any pipeline sees the value (audit F-SP1): the
+                // old order wrote the rate into both pipelines and refused afterwards, so a
+                // later flush promoted a rate the caller was told did not apply. A live change
+                // rides a precise seek to the current position: the seek's own flush is the
+                // epoch boundary both pipelines apply their new rate at. On an unseekable source
+                // there is no such boundary to ride, and pretending the rate changed while every
+                // queued sample kept the old one would be a lie.
+                if (active != null && command.value != speed && !active.source.seekable) {
+                    val reason = "a live speed change re-anchors by precise seek, and this source is not seekable"
+                    warn(PlaybackWarning.CommandRefused("setSpeed", reason))
+                    command.reply.completeExceptionally(UnsupportedOperationException(reason))
+                } else {
+                    val failure = runCatching {
+                        active?.audio?.speed = command.value
+                        active?.video?.speed = command.value
+                    }.exceptionOrNull()
+                    if (failure != null) {
+                        command.reply.completeExceptionally(failure)
+                    } else {
                         val changedLive = active != null && command.value != speed
                         speed = command.value
                         if (changedLive) {
@@ -1163,11 +1190,9 @@ internal class PlaybackCore(
                     // mechanism can only change where the ring is empty, which is a flush, which
                     // a live change reaches by precise seek, which an unseekable source cannot make.
                     active?.audio != null && !active.source.seekable -> {
-                        command.reply.completeExceptionally(
-                            UnsupportedOperationException(
-                                "a live pitch-law change re-anchors by precise seek, and this source is not seekable",
-                            ),
-                        )
+                        val reason = "a live pitch-law change re-anchors by precise seek, and this source is not seekable"
+                        warn(PlaybackWarning.CommandRefused("setPreservePitch", reason))
+                        command.reply.completeExceptionally(UnsupportedOperationException(reason))
                     }
                     else -> {
                         preservePitch = command.value
@@ -1308,10 +1333,21 @@ internal class PlaybackCore(
         // An open ends paused by contract, whatever was asked for before it. A play issued while this one
         // is still running arrives after this line and is honoured, which is what queueing it means.
         playRequested = false
+        loopRefusalWarned = false
         pendingVideoRecovery = null
         videoRecoveryAttempted = false
         forceBackendSoftwareForMedia = false
         seekPhase = SeekPhase.Idle
+        // A pending request aims at the PREVIOUS timeline (audit F-SEEK1). Left in place, the
+        // handler pass that follows this open would run it against the fresh media: a bar drag
+        // on the finished episode became a jump into the next one. Its callers are answered
+        // Superseded, exactly as runStop answers them, and the hold state dies with it so the
+        // frame barrier never compares the new session against the old session's counters.
+        pendingSeek = null
+        seekHeldSinceNanos = 0
+        lastSeekAtNanos = 0
+        framesShownAtLastSeek = 0
+        resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
         maskedSeekTargetMicros.value = NO_SEEK_MASK
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
@@ -2543,10 +2579,13 @@ internal class PlaybackCore(
         }
         // SOL-P5: rasterisation runs on its own serial lane, never on the actor. Only the
         // NEWEST publication may land: a slow raster of superseded text checks the generation
-        // after drawing and drops itself. The job rides session.jobs, so teardown cancels it
-        // before the renderer it would publish to closes.
+        // after drawing and drops itself. The job rides a SINGLE slot rather than the session's
+        // job list (audit F-JOB1): one Job per cue edge appended for a whole film grew that list
+        // by thousands of completed coroutines teardown then had to walk. The superseded raster
+        // is cancelled outright, and teardown joins the one live slot.
         val cues = active.toList()
-        session.jobs += scope.launch(dispatchers.raster) {
+        session.rasterJob?.cancel()
+        session.rasterJob = scope.launch(dispatchers.raster) {
             val images = rasterizer.rasterize(cues, width, height, subtitleScale, subtitlePosition)
             if (session.overlayGeneration.value != generation) return@launch
             session.renderer.setOverlay(
@@ -2604,6 +2643,7 @@ internal class PlaybackCore(
 
         if (!endOfStream.draining) {
             endOfStream.draining = true
+            endOfStream.drainStartedNanos = clock.nanos()
             // Said as soon as the decoder is done, not when the ring empties: the silence between those
             // two moments is the end of the media and must not be counted as a failure to keep up.
             session.audio?.endOfStream()
@@ -2611,7 +2651,14 @@ internal class PlaybackCore(
 
         if (!endOfStream.sinkDrained) {
             val audio = session.audio
-            if (audio != null && audio.buffered > Duration.ZERO && !endOfStream.drainFailed) {
+            // Bounded (audit F-EOS1): a device that stopped pulling freezes the ring's fill, and
+            // an unconditional wait here parked the player one poll before Ended for ever. The
+            // grace is the buffered tail itself plus the same deadline the drain call gets; past
+            // it, the drain below runs and completes as failed rather than being polled again.
+            val drainGraceNanos = audio?.buffered?.inWholeNanoseconds?.plus(DRAIN_DEADLINE.inWholeNanoseconds)
+            if (audio != null && audio.buffered > Duration.ZERO && !endOfStream.drainFailed &&
+                clock.nanos() - endOfStream.drainStartedNanos < (drainGraceNanos ?: 0L)
+            ) {
                 wakeIn(WORKER_POLL)
                 return
             }
@@ -2668,6 +2715,21 @@ internal class PlaybackCore(
         // of one or none means the same thing: the whole queue IS the current item (S4.e).
         val repeatsCurrent = loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
         if (!repeatsCurrent) return
+        // The same guard the A-B branch above has (audit F-LOOP1): the repeat is a precise seek,
+        // and this was the one seek path that never asked. Seeking an unseekable source killed
+        // the session with an Internal error; staying Ended with a typed warning is the truth.
+        if (session?.source?.seekable != true) {
+            if (!loopRefusalWarned) {
+                loopRefusalWarned = true
+                warn(
+                    PlaybackWarning.CommandRefused(
+                        "setLoop",
+                        "the repeat seeks back to the start, and this source is not seekable",
+                    ),
+                )
+            }
+            return
+        }
         restartFrom(Pts.Zero)
     }
 
@@ -3390,7 +3452,9 @@ internal class PlaybackCore(
             runCatching { session.sink?.stop() }
             session.workers.forEach { worker -> runCatching { worker.quiesce(QUIESCE_DEADLINE) } }
             session.jobs.forEach { it.cancel() }
+            session.rasterJob?.cancel()
             session.jobs.forEach { runCatching { it.join() } }
+            session.rasterJob?.let { runCatching { it.join() } }
             // Direct hardware frames retain codec output slots. Release the playback queue while the
             // codec owner is still alive; closing MediaCodec first invalidates queued frame handles.
             runCatching { session.video?.close() }
@@ -4318,6 +4382,9 @@ internal class PlaybackCore(
         var videoScheduler: Worker? = null
         val jobs: MutableList<Job> = mutableListOf()
 
+        /** The one in-flight subtitle rasterisation; a newer cue edge cancels and replaces it. */
+        var rasterJob: Job? = null
+
         /** Said once: the condition lasts as long as the file does. */
         var warnedAboutInterleaving: Boolean = false
 
@@ -4499,6 +4566,9 @@ internal class EndOfStreamState {
     /** The decoders are done and the device is playing out what it already holds. */
     var draining: Boolean = false
 
+    /** When [draining] flipped, so the wait for the ring to empty is bounded (F-EOS1). */
+    var drainStartedNanos: Long = 0
+
     /** The device has finished, or its drain was bounded out. */
     var sinkDrained: Boolean = false
 
@@ -4513,6 +4583,7 @@ internal class EndOfStreamState {
         audioDecoderDrained = false
         videoDecoderDrained = false
         draining = false
+        drainStartedNanos = 0
         sinkDrained = false
         drainFailed = false
         keepOpen = false

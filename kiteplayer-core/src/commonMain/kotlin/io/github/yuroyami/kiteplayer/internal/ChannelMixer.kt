@@ -152,9 +152,18 @@ internal class ChannelMixer(
 
     /**
      * True when the channels are copied rather than mixed, which is either a target that already has
-     * the source's channel count or a layout pair with no matrix.
+     * the source's channel count or a layout pair with no matrix. A pass-through with UNEQUAL counts
+     * still restrides frame by frame in [mix]; only [isIdentity] may skip this stage entirely.
      */
     val isPassThrough: Boolean get() = matrix == null
+
+    /**
+     * True when the output would be byte-for-byte the input, so a caller may alias instead of
+     * calling [mix] (audit F-MIX1). This is NOT [isPassThrough]: a pass-through with unequal
+     * counts must still run [mix] for its frame-wise restride, and aliasing it handed a
+     * three-channel interleave to a stereo consumer with every sample on the wrong speaker.
+     */
+    val isIdentity: Boolean get() = matrix == null && sourceChannels == targetChannels
 
     init {
         layoutWarning()?.let(onWarning)
@@ -303,5 +312,6 @@ internal class ChannelMixer(
                 )
             }
         }
+
     }
 }

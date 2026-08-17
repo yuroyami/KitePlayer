@@ -29,6 +29,7 @@ class WarningAuditTest {
         PlaybackWarning.PathologicalInterleaving(TrackId(0), 1),
         PlaybackWarning.NoRenderSurface("x"),
         PlaybackWarning.OptionsUnused(listOf("x")),
+        PlaybackWarning.CommandRefused("setSpeed", "x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
@@ -81,6 +82,11 @@ class WarningAuditTest {
         )
         is PlaybackWarning.OptionsUnused -> listOf(
             "KiteCodecMediaBackend.open, from MediaSource.unusedOpenOptions after the pre-open funnel ran",
+        )
+        is PlaybackWarning.CommandRefused -> listOf(
+            "PlaybackCore's SetSpeed and SetPreservePitch handlers, refusing a live change on an unseekable source",
+            "PlaybackCore's AttachRenderer and DetachRenderer handlers, when the scheduler never quiesced",
+            "PlaybackCore.handleLoop, skipping the repeat an unseekable source cannot make",
         )
     }
 

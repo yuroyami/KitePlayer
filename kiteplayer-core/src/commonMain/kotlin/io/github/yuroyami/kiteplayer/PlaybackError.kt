@@ -235,6 +235,18 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * A control the engine could not honour, named so a fire-and-forget caller still finds out
+     * (2026-08-17 audit, F-API1). The suspending form of the same member throws instead; this
+     * warning is how the refusal reaches [KitePlayer.events] and the warning history when the
+     * caller never awaited a reply: a refused loop repeat on an unseekable source, a speed or
+     * pitch-law change such a source cannot anchor, or a renderer swap whose scheduler never
+     * quiesced.
+     */
+    public data class CommandRefused(val member: String, val detail: String) : PlaybackWarning() {
+        override val message: String get() = "$member refused: $detail"
+    }
+
+    /**
      * Open completed before the initial fill reached readiness: the source is slow, so playback
      * will begin in Buffering instead of with a ready pipeline. Opened is still truthful about
      * the session existing; this says the pipeline behind it is not yet primed.

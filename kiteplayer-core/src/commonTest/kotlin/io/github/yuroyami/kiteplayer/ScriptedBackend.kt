@@ -261,6 +261,22 @@ internal class ScriptedBackend(
      */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
         io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, _ ->
+            // A two-line ASS branch so the engine's format LABELLING is testable here: real ASS
+            // parsing lives in kiteplayer-subtitles, above this module's dependency arrow.
+            if (text.trimStart('﻿', ' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true)) {
+                return@SubtitleFileParser text.lineSequence()
+                    .filter { it.startsWith("Dialogue:") }
+                    .map { line ->
+                        io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(
+                            startMicros = 500_000,
+                            endMicros = 2_000_000,
+                            spans = listOf(
+                                io.github.yuroyami.kiteplayer.subtitle.StyledSpan(line.substringAfterLast(',')),
+                            ),
+                        )
+                    }
+                    .toList()
+            }
             val timing = Regex("""(\d{2}):(\d{2}):(\d{2})[,.](\d{3}) --> (\d{2}):(\d{2}):(\d{2})[,.](\d{3})""")
             text.split(Regex("\r?\n\r?\n")).mapNotNull { block ->
                 val lines = block.trim().lines()

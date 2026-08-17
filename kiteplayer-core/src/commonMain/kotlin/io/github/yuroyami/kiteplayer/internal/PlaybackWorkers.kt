@@ -118,10 +118,17 @@ internal class Worker(val name: String) {
     /** Worker side. Parks here when the actor asked, and returns when it is released. */
     suspend fun checkpoint() {
         if (!pauseRequested.value) return
-        parkedNow.value = true
-        acked.trySend(Unit)
         try {
-            while (pauseRequested.value) {
+            while (true) {
+                // parkedNow drops BEFORE the flag's deciding re-read (audit F-QSC1). The old
+                // shape read the flag first and dropped the park in a finally, so a quiesce that
+                // landed in that gap saw a parked worker whose decision to run was already made.
+                // With this order, a quiesce that observes parkedNow true wrote pauseRequested
+                // true beforehand, and this worker's next deciding read must see it.
+                parkedNow.value = false
+                if (!pauseRequested.value) return
+                parkedNow.value = true
+                acked.trySend(Unit)
                 // Bounded, so a release that raced the park is noticed even if its token was consumed.
                 withTimeoutOrNull(PARK_POLL) { released.receive() }
             }

@@ -152,6 +152,9 @@ internal class AudioPipeline(
             it.volume = volume
             it.muted = muted
             it.speed = speed
+            // The ramp POSITION crosses too (F-GAIN1): the wanted values above only set the
+            // target, and a stage that restarts at unity un-mutes the swap for one whole ramp.
+            it.gain.adoptRamp(gain)
         }
 
     /**
@@ -165,13 +168,16 @@ internal class AudioPipeline(
     fun process(input: FloatArray, frames: Int): Int {
         if (frames <= 0) return 0
 
-        /* SOL-P2: a pass-through mixer used to copy the whole buffer anyway. Skipping it means
+        /* SOL-P2: an identity mixer used to copy the whole buffer anyway. Skipping it means
          * plain stereo-to-stereo playback runs zero pipeline copies until the ring write: the
          * mixer, the resampler at equal rates and the tempo stage at 1.0 all stand aside, and
-         * the gain multiplies in place only when the volume is not unity. */
+         * the gain multiplies in place only when the volume is not unity. The alias keys on
+         * isIdentity, NOT isPassThrough (audit F-MIX1): a pass-through with unequal counts
+         * still restrides frame by frame, and aliasing it played raw interleave on the wrong
+         * speakers. */
         var produced = frames
         var result: FloatArray
-        if (mixer.isPassThrough) {
+        if (mixer.isIdentity) {
             result = input
         } else {
             mixed = grown(mixed, frames * targetChannels)

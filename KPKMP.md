@@ -11716,7 +11716,7 @@ and the 17.11 build and publication rows.
 **S6. IT PLAYS ON THE WEB.** (The spike RAN on 2026-08-17 and PASSED; its report is
 `docs/spikes/2026-08-17-web-spike.md` and its verdict, numbers and 178-to-272-hour cost are in the
 section 14 W.9 entry. Do not re-run it; enter S6 at the KV-6 draw-cost probe the verdict names as
-its first item.) Spike first, timeboxed, measured (FFmpeg-to-wasm size and decode
+its first item. EXPANDED in 17.14, where that probe is register item X-01 and a stop gate.) Spike first, timeboxed, measured (FFmpeg-to-wasm size and decode
 throughput, threads and SIMD, the JS interop shape over the same C ABI); build only if the spike
 clears its bar; exit criteria carry the physics honestly (software decode, 1080p target, 4K a
 stated non-goal of v1). If the spike fails, web ships engine-only and the register says so.
@@ -17316,6 +17316,241 @@ Execution log entry for each says what it measured and what it did not. Two exit
 by construction and are named here so no reader mistakes their absence for an oversight: the
 Windows matrix run needs a Windows machine, and the physical-device halves of the desktop
 measurements need machines that are not this one.
+
+### 17.14 The S6 expansion, decision complete
+
+Authored 2026-08-17 by Opus 5 at the owner's direction, entering stage S6 (17.2: IT PLAYS ON THE
+WEB). Written against the tree at KitePlayer 11a6167 and KiteCodec 3da948b. The spike this stage
+was gated on RAN on 2026-08-17 and PASSED; its report is `docs/spikes/2026-08-17-web-spike.md` and
+its verdict, numbers and 178-to-272-hour cost are in the section 14 W.9 entry. This subsection does
+NOT re-argue the spike. It converts the spike's dependency-ordered cost table into register items
+that carry Where, Problem, Fix, Sub-phase and Test, and it records the decisions the spike
+deliberately left open.
+
+**The entry facts, measured on 2026-08-17 against the tree above, not assumed.**
+
+1. Four modules already declare `wasmJs` and publish real klibs: `:kiteplayer-core`,
+   `:kiteplayer-subtitles`, `:kiteplayer-mobile` and `:kiteplayer-compose-interop`. They compile
+   from `unsupportedMain`, so the surface is honest and empty rather than absent.
+2. `:kiteplayer-compose-video`, which is the ONLY Compose rendering story on web because no
+   interop view can exist there, declares `iosArm64`, `iosSimulatorArm64`, `jvm` and `android` and
+   nothing else. It has no web target and no macOS target either.
+3. `:kiteplayer-ffmpeg` and `:kiteplayer-output` declare no web target, which is why items X-07
+   through X-12 exist at all.
+4. The toolchain is present and is NOT the risk. `emcc 6.0.6-git` resolves at
+   `/opt/homebrew/bin/emcc` and `node v26.7.0` runs the spike's own benchmarks. Compose
+   Multiplatform is `1.12.0-rc01`, which carries a wasmJs target.
+5. **W-19's row parallelism cannot follow the engine to the web, and the code says so in a comment
+   that is about to become false.** `Conversions.kt:128` states "No expect/actual: every target
+   this module compiles for has a multi-threaded `Dispatchers.Default`, and the module already
+   calls `runBlocking` on this side of the code for the same kind of reason." Both halves of that
+   premise fail on wasmJs: `runBlocking` does not exist there, and `Dispatchers.Default` is one
+   event loop. The comment is true for every target the module compiles for TODAY, which is
+   exactly why it must be re-decided by X-09 rather than discovered by a compile error. The
+   measured consequence is the whole reason X-01 goes first: desktop pays about 2.1 ms per 1080p
+   frame for the conversion only because four cores share it, and the pre-W-19 single-threaded
+   number on the same machine was 6.33 ms.
+6. `signature-baseline.txt` carries 213 normalized `KC_API` declaration records and is already
+   gated, which is what makes X-05's generator a review problem instead of an authorship problem.
+
+**Decisions taken for this stage, and why. Executor judgement calls under the owner's standing
+17.11 rule that homes and order are proposals; each is recorded so the owner can reverse it.**
+
+- **S6-D1, the KV-6 draw probe goes first and is a STOP GATE, not a formality.** The spike's own
+  verdict says the codec half passed and the renderer half is unmeasured, and 17.9's KV-6 line says
+  the same. Decode is proven at 6.1x real time; the draw path is proven at nothing. Every item
+  after X-01 is wasted if the draw cannot hold 1080p30, so X-01 is built, measured and REPORTED
+  before any binding work is committed to. If it fails, web ships engine-only and this expansion
+  says so rather than being quietly re-scoped.
+- **S6-D2, the probe measures the SINGLE-THREADED conversion, because that is what the default web
+  artifact gets.** Entry fact 5. Measuring the parallel path would flatter the number by a factor
+  the web cannot buy. The threaded artifact is an optional second build (spike order item 2) and
+  is not what v1 ships.
+- **S6-D3, the default artifact is single-threaded, no SIMD, no cross-origin isolation, everything
+  in one Worker.** Straight from the spike's build order, and the reason is deployment, not
+  performance: threads need COOP and COEP on whoever embeds the player, and the spike proved in a
+  real browser that the failure mode without those headers is a HANG rather than an error. A
+  player that hangs on an embedder's site is worse than a player that is 3x slower.
+- **S6-D4, the two binding questions the spike flagged are deferred to X-05's own decision point,
+  not answered here.** Whether to bind a playback-only subset instead of all 198 entry points, and
+  whether to generate the wrappers from `signature-baseline.txt`, together move 40 to 60 hours.
+  They are also moot if X-01 fails. Deciding them now would be deciding them blind, and 18.3 rule 6
+  forbids folding a design act into an execution act. X-05 carries them as its first step.
+- **S6-D5, no repository file is written by X-01 outside a probe module that is allowed to be
+  thrown away.** The spike wrote to neither repository. The probe is one step less throwaway than
+  that because a number nobody can re-derive is a number nobody can trust, so it lands as a real
+  module whose only job is the measurement, exactly as `:kiteplayer-sample-desktop` did for KV-5.
+
+**The register.**
+
+#### X-01. The wasm draw cost is the one number S6 is gated on, and nothing has measured it
+- Where: a new `:kiteplayer-sample-web` module; `kiteplayer-compose-video` for the shape being
+  imitated; `Conversions.kt` for the conversion whose single-threaded cost is half the answer.
+- Problem: the spike proved decode at 6.1x real time and measured the draw path at nothing,
+  because no wasm renderer exists to measure. Desktop's KV-5 measurement is not transferable: it
+  ran on a JVM with a JIT and four cores sharing the conversion, and web has one thread and a
+  different Skia binding. The gap is not small enough to reason about, so it is measured.
+- Fix, decided: a Compose for Web page that holds a synthetic 1080p yuv420p frame, converts it to
+  RGBA with the SAME arithmetic `Conversions.kt` uses on one thread, builds a Skia image from the
+  result and draws it, once per frame, reporting mean and p95 milliseconds over a warmed run. Two
+  numbers reported separately, conversion and draw, because they have different fixes: a slow
+  conversion moves into the wasm module beside FFmpeg, and a slow draw is a renderer problem.
+- Why not the simpler thing: measuring only the draw would answer half the question and would
+  answer the cheap half. The conversion is what desktop measured at 6.33 ms single-threaded, and
+  33 ms is the whole 30 fps budget.
+- Sub-phase: X.1. Test: the measurement itself, run in a real browser, with the numbers recorded
+  in the module's own MEASUREMENTS.md and in the section 14 entry. Falsification: a run whose
+  reported frame count does not match the frames actually drawn is rejected, the same trap KV-5's
+  `graphicsLayer` arm already paid for once.
+- Honest bound: a synthetic frame, not a decoded one. Real decoded frames arrive only after X-07,
+  and the conversion cost depends on pixel VALUES not at all, which is why the synthetic frame is
+  honest here and would not be for a decode measurement.
+
+#### X-02. FFmpeg has no wasm build task, only a proven shell recipe
+- Where: `buildSrc/src/main/kotlin/BuildFFmpegTask.kt`; the spike's `build-lean.sh`.
+- Problem: the spike built four full FFmpeg trees for wasm in 5 minutes 20 seconds, but it did it
+  with a shell script in a scratch directory. konan has no wasm target, so there is no
+  `TargetTriple` entry to extend and the existing task's target plumbing does not reach.
+- Fix, decided: a new Gradle task rather than a `TargetTriple` row. The configure shape is already
+  proven and is not the work; the work is output layout, provenance evidence, up-to-date checking
+  and the two n8.0 corrections the spike found the hard way, that `--disable-postproc` does not
+  exist on n8.0 and that `--disable-asm` silently kills SIMD.
+- Sub-phase: X.2. Test: a built tree whose configure banner is captured, plus the size numbers the
+  spike recorded reproduced within tolerance.
+
+#### X-03. `libkitecodec.a` has never been compiled for wasm
+- Where: `native/kitecodec-c/`; the KiteCodec repository.
+- Problem: the C library is portable and makes no platform calls, so this is expected to be near
+  mechanical, but "expected" is not "measured" and the archive does not exist.
+- Fix, decided: compile the existing sources with `emcc` and link against X-02's archives.
+- Sub-phase: X.3. Test: the archive links into a module that really calls `avformat_open_input`,
+  which is the same bar the spike's `harness/minimal.c` already cleared.
+
+#### X-04. JS would get raw heap offsets, which `kj_internal.h` already forbids for JNI
+- Where: `native/kitecodec-c/kj_handles.c`, 202 lines; `kj_internal.h:16-20` for the reason.
+- Problem: handing JavaScript raw heap offsets makes a use-after-free indistinguishable from a
+  valid handle, and heap growth invalidates every view. The JNI side already solved this with
+  generation-tagged tokens and the header states why.
+- Fix, decided: port the handle table to wasm rather than invent a second scheme.
+- Sub-phase: X.4. Test: a stale token is refused rather than honoured, proved by a test that frees
+  a handle and then uses it.
+
+#### X-05. The 198-entry binding is the stage's single largest item, and its shape is undecided
+- Where: `signature-baseline.txt` (213 records); `kj_*.c` as the measured JNI precedent, about
+  2,560 lines of C plus a 190-row manifest.
+- Problem: 40 to 60 hours, which is where S6's original 80-to-120 estimate broke. The original S6
+  sentence compressed this into "the JS interop shape over the same C ABI".
+- Fix, decided: NOT decided here, by S6-D4. X-05 opens with its own decision act on the two
+  questions the spike raised, playback-only subset versus all 198, and generated versus
+  hand-written, and that act is committed separately from the code it authorizes.
+- Sub-phase: X.5. Test: whatever the decision act selects, plus the existing signature gate, which
+  is what keeps a generated binding honest against future ABI drift.
+
+#### X-06. There is no AVIO bridge that can block on a Worker
+- Where: `kj_format.c:450-660` as the reference; `ffkmp_fmt_open_input_io`.
+- Problem: FFmpeg's IO callbacks are synchronous and the browser main thread cannot block.
+- Fix, decided: a Worker-resident blocking source, buffered first, then `FileReaderSync`, then
+  synchronous XHR. The spike proved in a real browser that a Worker CAN block this way, which is
+  why this does not force cross-origin isolation.
+- Sub-phase: X.6. Test: a seek that crosses a buffer boundary on a real file served over HTTP.
+
+#### X-07. `kitecodec-core`'s wasmJs actuals are `unsupportedMain` stubs
+- Where: `kitecodec-core/build.gradle.kts:204-205` and its placeholder rule.
+- Problem: `Playback`, `Frame`, `MediaSource` and the rest throw `AVERROR_PATCHWELCOME`.
+- Fix, decided: real actuals over X-05's binding, keeping the placeholder rule intact for `js`,
+  which is a separate target that this stage does not light up.
+- Sub-phase: X.7. Test: KiteCodec's own suites, run in a headless browser.
+
+#### X-08. Nothing runs the player in a Worker, and X-06 depends on it
+- Where: new; `:kiteplayer-mobile`'s web surface.
+- Problem: the blocking IO of X-06 is only legal off the main thread, and every user-facing item
+  after this one needs a main-thread facade that does not block.
+- Fix, decided: Worker bootstrap, main-thread facade, message protocol and lifecycle.
+- Sub-phase: X.8. Test: a player driven entirely through the facade, with the main thread proved
+  responsive during decode.
+
+#### X-09. `:kiteplayer-ffmpeg` has no web target, and its conversion assumes threads
+- Where: `Conversions.kt:128`; `BlockingMediaIo.kt`.
+- Problem: entry fact 5. Adding wasmJs to this module breaks on `runBlocking` at compile time, and
+  the comment that explains why no expect/actual exists becomes false in the same commit.
+- Fix, decided: an expect/actual split for `parallelRowSlices` whose wasm actual is the serial
+  body, with the comment rewritten to say which targets have threads and which do not. X-01's
+  number decides whether that serial body is acceptable or whether the conversion moves into the
+  wasm module beside FFmpeg instead.
+- Sub-phase: X.9. Test: the existing colour suites, which W-19 already proved able to catch a
+  slice that skips its rows.
+
+#### X-10. There is no web `AudioSink`
+- Where: `spi/AudioSink.kt`, already all-`suspend`.
+- Problem: no AudioWorklet sink exists, and without `SharedArrayBuffer` the ring must be
+  `postMessage`-fed, which raises the latency floor.
+- Fix, decided: AudioWorklet plus a ring over the existing contract, with the latency floor
+  MEASURED and stated the way W-D2 states the `SourceDataLine` floor rather than left implicit.
+- Sub-phase: X.10. Test: an underrun count over a sustained run, plus the stated floor.
+
+#### X-11. There is no web `VideoRenderer`, which is KV-6 proper
+- Where: `KiteVideoRenderer.kt`, about 375 lines.
+- Problem: no renderer exists for web, and the existing one carries threading web does not have.
+- Fix, decided: a new renderer, not a port. `present` is already `suspend`, so it runs on the event
+  loop with no worker, no dispatcher and no `runBlocking`.
+- Sub-phase: X.11. Test: X-01's probe re-run against the real renderer, so the gate number and the
+  shipped number are comparable by construction.
+
+#### X-12. `platformKitePlayerDefaults` is `Unavailable` on wasmJs
+- Where: `:kiteplayer-mobile`'s wasmJs source set.
+- Problem: X-10 and X-11 are not reachable by a consumer until something wires them.
+- Fix, decided: a web `OutputBackend` joining the two, and real defaults.
+- Sub-phase: X.12. Test: a consumer building a player with no platform-specific code.
+
+#### X-13. There is no artifact layout and no deployment story
+- Where: new; 17.6 for the tier sizes.
+- Problem: an embedder needs to know what to serve, and the threaded artifact needs a feature
+  detect BEFORE import because the failure without COOP and COEP is a hang.
+- Fix, decided: artifact layout, a `self.crossOriginIsolated` detect before importing the threaded
+  module, embedder documentation, and the 17.6 web tier sizes measured and written down.
+- Sub-phase: X.13. Test: both artifacts served from the spike's own dual-mode server, with the
+  detect proved to pick correctly in both modes.
+
+#### X-14. Every web claim is level 8 until the matrix runs there
+- Where: 17.5; CI.
+- Problem: no headless browser run, no conformance suite, no size check.
+- Fix, decided: the 17.5 matrix in a headless browser, plus the size checks, on the same principle
+  W-20 settled for Linux: run the project's OWN suite rather than write a second, weaker one.
+- Sub-phase: X.14. Test: the matrix run itself, with its pass count recorded.
+
+**Sub-phases, in execution order.**
+
+- **X.1 The draw cost is measured, and the stage stops if it fails** (X-01). Commit: "Measure what
+  a web frame costs before building the thing that draws it".
+- **X.2 FFmpeg builds for wasm from Gradle** (X-02). Commit: "Build FFmpeg for the web from the
+  build, not from a script".
+- **X.3 The C library compiles for wasm** (X-03). Commit: "Compile the codec library for the web".
+- **X.4 Handles cross as tokens, not offsets** (X-04). Commit: "Give JavaScript a handle it cannot
+  forge".
+- **X.5 The binding, decided then built** (X-05). Commits: one decision act, then one per group.
+- **X.6 IO blocks where blocking is legal** (X-06). Commit: "Read media on the thread allowed to
+  wait".
+- **X.7 The wasm actuals become real** (X-07). Commit: "Let the web variant carry the codec it
+  now has".
+- **X.8 The player runs in a Worker** (X-08). Commit: "Run the player off the thread the page
+  draws on".
+- **X.9 The backend reaches the web** (X-09). Commit: "Convert the frame without the threads the
+  web does not have".
+- **X.10 The web hears** (X-10). Commit: "Hear the picture in a browser, and say what it costs".
+- **X.11 The web draws** (X-11). Commit: "Draw the frame through Compose on the web".
+- **X.12 A consumer can build a web player** (X-12). Commit: "Let the web defaults be real".
+- **X.13 The artifact ships** (X-13). Commit: "Say what to serve, and detect what the host
+  allows".
+- **X.14 The matrix runs on the web** (X-14). Commit: "Decode the whole matrix in a browser".
+
+**The honest bound on this stage, written before it starts.** The spike costed this at 178 to 272
+hours against 17.3's S6 estimate of 80 to 120, and this expansion does not shrink that. It changes
+only the order and the honesty: X-01 is a stop gate rather than a step, X-05 opens with a decision
+act rather than a keyboard, and X-09 carries a named compile-time blocker that entry fact 5 found
+in the tree instead of leaving it to be discovered. Three things are NOT in this stage and are
+named so their absence is not read as an oversight: the `js` target stays a placeholder and only
+`wasmJs` is lit, the threaded artifact is optional and behind a feature detect rather than default,
+and 4K stays the non-goal 17.9 already declared, now with the spike's measured 1.0x behind it.
 
 ## 18. The skeleton, for any executor
 

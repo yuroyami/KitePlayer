@@ -425,6 +425,11 @@ typedef struct {
     int64_t last_deadline_nanos;
     int32_t running;
     int32_t has_ring;
+    /* The device's CURRENT period in sample frames, re-queried at every start and updated by
+     * the format listener (SOL-A4). Read it here rather than caching the open-time value: a
+     * route change moves it, and before this field existed nothing could observe the move
+     * (2026-08-17 audit). */
+    int32_t device_buffer_frames;
 } kprt_sink_stats;
 
 /* Opens the device and installs the render callback, transactionally.

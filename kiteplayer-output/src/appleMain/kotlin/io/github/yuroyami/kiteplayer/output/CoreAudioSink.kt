@@ -222,7 +222,11 @@ public class CoreAudioSink private constructor(
      * 48 kHz. Being wrong here is harmless, because the ring is sized at the larger of a multiple of
      * this and the engine's own buffer duration.
      */
-    override val deviceBufferFrames: Int get() = deviceBufferFramesOrDefault
+    override val deviceBufferFrames: Int
+        // Live from the C sink's stats (2026-08-17 audit): the period moves with the route and
+        // the format listener re-queries it, and the open-time cache made that unobservable.
+        // A closed or unopened sink reads zero from the zeroed struct and falls to the default.
+        get() = readStats { it.device_buffer_frames }.takeIf { it > 0 } ?: deviceBufferFramesOrDefault
 
     private var deviceBufferFramesOrDefault: Int = DEFAULT_DEVICE_BUFFER_FRAMES
 

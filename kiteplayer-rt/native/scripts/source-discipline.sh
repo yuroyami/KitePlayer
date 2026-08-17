@@ -339,32 +339,37 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     # planted are among them: begin_write's consumed acquire, render's consumed release, and
     # attach's sink->ring release, each of which passed the WHOLE gate including TSan before
     # these checks existed.
+    # Re-anchored 2026-08-17 (audit F-CTRL1): the absolute line numbers these once carried had
+    # drifted with every edit above them, and the runner's own --prove-it-can-fail reported 13
+    # controls planting nothing or planting a no-op. Each mutant now anchors on the UNIQUE text
+    # of its target, scoped to its owning function where the same fence text exists elsewhere,
+    # so the controls survive unrelated edits and fail loudly if the target itself disappears.
     plant_and_check "retire-consumed-acquire-relaxed" pinned kite_rt_ring.c \
-        '144s/memory_order_acquire/memory_order_relaxed/'
+        '/^static void retire_consumed_segments/,/^}/s|(&ring->consumed, memory_order_acquire)|(\&ring->consumed, memory_order_relaxed)|'
     plant_and_check "segments-retired-release-relaxed" pinned kite_rt_ring.c \
-        '158s/memory_order_release/memory_order_relaxed/'
+        's|(&ring->segments_retired, still_needed, memory_order_release)|(\&ring->segments_retired, still_needed, memory_order_relaxed)|'
     plant_and_check "seq-opening-store-hoisted" pinned kite_rt_ring.c \
-        '185s/memory_order_relaxed/memory_order_seq_cst/'
+        's|(&ring->segments\[slot\].seq, seq + 1, memory_order_relaxed)|(\&ring->segments[slot].seq, seq + 1, memory_order_seq_cst)|'
     plant_and_check "append-release-fence-deleted" pinned kite_rt_ring.c \
-        '186d'
+        '/^static int append_segment/,/^}/{/atomic_thread_fence(memory_order_release)/d;}'
     plant_and_check "segments-appended-release-relaxed" pinned kite_rt_ring.c \
-        '191s/memory_order_release/memory_order_relaxed/'
+        's|(&ring->segments_appended, appended + 1, memory_order_release)|(\&ring->segments_appended, appended + 1, memory_order_relaxed)|'
     plant_and_check "begin-write-consumed-acquire-relaxed" pinned kite_rt_ring.c \
-        '286s/memory_order_acquire/memory_order_relaxed/'
+        '/^int32_t kprt_ring_begin_write/,/^}/s|(&ring->consumed, memory_order_acquire)|(\&ring->consumed, memory_order_relaxed)|'
     plant_and_check "anchor-opening-acquire-relaxed" pinned kite_rt_ring.c \
-        '368s/memory_order_acquire/memory_order_relaxed/'
+        '/^void kprt_ring_anchor/,/^}/s|(&ring->anchor_seq, memory_order_acquire)|(\&ring->anchor_seq, memory_order_relaxed)|'
     plant_and_check "anchor-acquire-fence-deleted" pinned kite_rt_ring.c \
-        '379d'
+        '/^void kprt_ring_anchor/,/^}/{/atomic_thread_fence(memory_order_acquire)/d;}'
     plant_and_check "segment-scan-opening-acquire-relaxed" pinned kite_rt_render.c \
-        '132s/memory_order_acquire/memory_order_relaxed/'
+        '/^static void publish_anchor/,/^}/s|(&ring->segments\[slot\].seq, memory_order_acquire)|(\&ring->segments[slot].seq, memory_order_relaxed)|'
     plant_and_check "segment-scan-acquire-fence-deleted" pinned kite_rt_render.c \
-        '143d'
+        '/^static void publish_anchor/,/^}/{/atomic_thread_fence(memory_order_acquire)/d;}'
     plant_and_check "render-consumed-release-relaxed" pinned kite_rt_render.c \
-        '228s/memory_order_release/memory_order_relaxed/'
+        's|(&ring->consumed, start + to_read, memory_order_release)|(\&ring->consumed, start + to_read, memory_order_relaxed)|'
     plant_and_check "render-ring-acquire-relaxed" pinned kite_rt_render.c \
-        '310s/memory_order_acquire/memory_order_relaxed/'
+        '/^int32_t kprt_render_into/,/^}/s|(&sink->ring, memory_order_acquire)|(\&sink->ring, memory_order_relaxed)|'
     plant_and_check "attach-ring-release-relaxed" pinned kite_rt_coreaudio.c \
-        '403s/memory_order_release/memory_order_relaxed/'
+        's|(&sink->ring, ring, memory_order_release)|(\&sink->ring, ring, memory_order_relaxed)|'
 fi
 
 say ""

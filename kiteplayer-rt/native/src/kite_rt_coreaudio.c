@@ -590,6 +590,8 @@ void kprt_sink_read_stats(const kprt_sink *sink, kprt_sink_stats *out)
         atomic_load_explicit(&sink->last_deadline_nanos, memory_order_relaxed);
     out->running = atomic_load_explicit(&sink->running, memory_order_relaxed);
     out->has_ring = atomic_load_explicit(&sink->ring, memory_order_acquire) != NULL ? 1 : 0;
+    out->device_buffer_frames =
+        atomic_load_explicit(&sink->device_buffer_frames, memory_order_relaxed);
 }
 
 #else /* neither macOS nor iOS */

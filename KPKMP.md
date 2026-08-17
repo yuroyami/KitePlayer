@@ -17007,6 +17007,50 @@ it.**
   W-14's raster variant, and the desktop conversion cost is accepted as the price of software
   decode until the GPU path of W-14 is built.
 
+#### W-16. The JVM jar carries a macOS library only, so the desktop JVM is macOS only
+- Where: `../KiteCodec/kitecodec-core/build.gradle.kts` `stageHostJniForJvm`, guarded on an arm64
+  Mac host; `buildSrc/src/main/kotlin/BundleHostJniTask.kt`;
+  `kitecodec-core/src/jvmMain/.../JniLibrary.jvm.kt`.
+- Problem: W-01 and W-02 made the JVM variant real and self-contained, but only for `macos-arm64`.
+  A Linux or Windows JVM resolves the artifact and then finds no library for its platform. The
+  loader already handles that honestly (it reads `kitecodec-native/<os>-<arch>/manifest.txt` for
+  ANY platform and says in one sentence what is missing), so the gap is entirely in what the build
+  produces, not in what the runtime can consume.
+- **PROVED END TO END BEFORE BEING WRITTEN, 2026-08-17.** The whole path was walked by hand and the
+  recipe below is what worked, not what should work:
+  1. JNI headers come from a JDK CONTAINER at build time and are never committed:
+     `docker run --platform linux/arm64 -v <out>:/out eclipse-temurin:21-jdk sh -c 'cp -r
+     $JAVA_HOME/include/. /out/'` yields `jni.h` and `linux/jni_md.h`. A macOS JDK has
+     `include/darwin` and cannot supply these. Extracting rather than vendoring keeps an
+     OpenJDK-licensed header out of this repository, which is a licence decision the owner has not
+     been asked for and does not need to be.
+  2. The C helper layer and the JNI adapter cross-compile with konan's clang over konan's linux
+     sysroot, exactly as `CompileKiteCodecCTask` already does for other targets: 11 helper objects
+     and 9 adapter objects, `-O2 -std=c11 -fvisibility=hidden -fPIC -Wall -Wextra -Werror`, with
+     `KC_BUILD_FFMPEG_REF`, `KC_BUILD_FFMPEG_LICENSE` and `KC_BUILD_FFMPEG_DIR` defined.
+  3. The link needs `-fuse-ld=lld`, both `-B` directories (konan LLVM and the gcc runtime beside
+     the sysroot) and `--version-script=native/kitecodec-jni/exports.map`, against
+     `native-libs/lgpl/linux-arm64` plus `-lz -lm -ldl -lpthread`. Output: a 16 MB ELF aarch64
+     shared object.
+  4. VERIFIED BY RUNNING IT, not by asserting it exists. In an arm64 Linux container with a real
+     JVM and the published `kitecodec-core-jvm` jar on the classpath, the library loads and the
+     ordinary Kotlin API answers: identity acceptable, avcodec 62.11.100, h264 decoder present,
+     on `Linux/aarch64`.
+- **A property worth keeping**: because the link uses konan's glibc 2.25 sysroot rather than a
+  modern distro's, the result runs on glibc 2.25 and newer. Building it inside a bookworm container
+  would have pinned the floor at 2.36 and quietly excluded older distributions.
+- **A trap that cost time and is written down so it does not cost it twice**: mounting the output
+  directory at `/lib` inside the container shadows the container's own libc and loader, and every
+  dynamic binary then fails with `no such file or directory`, which reads like a missing file or an
+  architecture mismatch and is neither. Mount anywhere else.
+- Fix, decided: a `linkKiteCodecJniLinuxArm64` and `...LinuxX64` beside the macOS and Android arms,
+  a header-extraction task feeding them, and `BundleHostJniTask` extended to stage every built
+  platform into the jar rather than only the host's. The loader needs no change at all.
+- Sub-phase: W.13. Test: the container probe above, promoted from a hand-run to a script, asserting
+  the three answers rather than printing them. Proved able to fail by staging a truncated library.
+- Not in scope: Windows. A `.dll` needs a Windows JDK's headers and a PE link, and there is no
+  Windows machine here to run the resulting library on, so it stays where the rest of Windows is.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -17029,6 +17073,8 @@ it.**
   the desktop frame where the pixels already are".
 - **W.12 The conversion loop stops paying for its shape** (W-15). Commit: "Convert the same
   pixels with less arithmetic".
+- **W.13 The jar carries a library for more than one desktop** (W-16). Commit: "Give the jar a
+  Linux library, proved by running it".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

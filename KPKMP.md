@@ -17087,6 +17087,39 @@ it.**
 - Honest bound: this makes the instrument READY for a non-Apple sink. It does not make one exist,
   and it does not prove anything about ALSA or WASAPI, because neither is written.
 
+#### W-18. The ring pointer is on core's PUBLIC ABI, which is the half of SOL-API6 that is wrong
+- Where: `kiteplayer-core/src/nativeMain/.../spi/NativeRingAudioSink.kt:91` (`NativeRingHandoff.ring`
+  is a `CPointer<kprt_ring>`), its one producer
+  `kiteplayer-output/src/appleMain/.../CoreAudioSink.kt:325`, its one consumer
+  `kiteplayer-core/src/nativeMain/.../internal/AudioPath.native.kt:35`, and the ratchet
+  `kitert-coupling-baseline.txt`.
+- Problem, narrowed by reading the ratchet rather than the row. SOL-API6 says the pointer is on the
+  core ABI AND that this drags the cinterop klib into core, and asks for an opaque writer owned by
+  rt or output. The second half is ALREADY A DECIDED MATTER: the coupling baseline names three core
+  files that may spell `cnames.structs.kprt_`, and two of them are deliberate and permanent.
+  `NativeAudioRing.kt` is the C ring's Kotlin wrapper, which register item B1-17 requires to exist
+  in core, and `AudioRingDifferentialTest.kt` is the oracle that B1-20 says is the only thing
+  keeping the C ring and the Kotlin ring from drifting apart. Moving either out would move the
+  oracle away from the module it tests and invert the layering, for no gain the row asks for. The
+  third file is the only one that is actually wrong, and it is wrong for the FIRST reason only:
+  `NativeRingHandoff` puts a cinterop type on core's PUBLIC surface, so every consumer of the SPI
+  reads a `CPointer<kprt_ring>` in the API dump whether it wants the raw ring or not.
+- Fix, decided: the handoff carries the ring's ADDRESS in an opaque value class rather than a typed
+  pointer. `NativeAudioRing`, which is already allowed to name the C type, converts the address back
+  to a pointer at the one place that adopts it, and `CoreAudioSink`, in a module the baseline
+  excludes by design because it owns the C sink pointer, converts its pointer to an address at the
+  one place that produces it. Nothing moves modules, the oracle stays where it is, and no cinterop
+  type appears in core's public API dump.
+  What this deliberately does NOT claim: an address behind `@RawRingApi` is no safer to misuse than
+  a typed pointer was. It was never the type that made this safe; the opt-in marker and the fact
+  that exactly one producer and one consumer exist are what make it safe, and both stay true.
+- Sub-phase: W.15. Test: `checkKitertCoupling` goes from three allowed files to two, with
+  `NativeRingAudioSink.kt` removed from the baseline, which is the mechanical proof the cinterop
+  name left that file. `checkKotlinAbi` moves the core klib dump, and the moved declarations are
+  named in the log. The existing `AudioRingDifferentialTest` and the CoreAudio host suites must stay
+  green, since neither the ring nor the sink changes behaviour. Proved able to fail by restoring the
+  typed pointer, which puts the file back in the baseline and fails the ratchet.
+
 **Sub-phases, in execution order.**
 
 - **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
@@ -17113,6 +17146,8 @@ it.**
   Linux library, proved by running it".
 - **W.14 The render audit reads the object it is given** (W-17). Commit: "Audit the shipped
   object whatever format it is in".
+- **W.15 The ring crosses as an address, not as a type** (W-18). Commit: "Take the C ring
+  pointer off the public ABI".
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase

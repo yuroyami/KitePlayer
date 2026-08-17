@@ -16886,6 +16886,13 @@ it.**
   10-bit layout and every frame whose colour space asks for tone mapping. That boundary is the
   point: it is the smallest change that moves the measured number (18.3 rule 2), it cannot regress
   HDR because HDR does not enter it, and the fallback is the code that is already proven.
+- API availability, verified against `skiko-awt-0.150.1.jar` on 2026-08-17 so the next executor
+  does not re-derive it: `RuntimeEffect.Companion.makeForShader(String)` compiles SkSL;
+  `RuntimeEffect.makeShader(Data, Shader[], float[])` takes CHILD shaders, which is how the three
+  planes reach it; `Image.makeRaster(ImageInfo, ByteArray, rowBytes)` with `ColorType.ALPHA_8` or
+  `GRAY_8` uploads a single-channel plane. One better than the plan assumed: `ColorType.R8G8_UNORM`
+  exists, so NV12's interleaved UV plane maps DIRECTLY with no CPU de-interleave, which is the
+  layout Android and VideoToolbox both hand over.
 - Sub-phase: W.11. Test, three arms, each proved able to fail:
   1. CORRECTNESS. The shader's output is compared against `tightlyPackedToRgba` for the same
      synthetic frames the colour instrument uses, within the tolerance `ColourInstrumentTest`

@@ -54,6 +54,17 @@ internal actual fun rememberKiteVideoFrameCommitter(
     state: KiteVideoState,
 ): KiteVideoFrameCommitter = object : KiteVideoFrameCommitter {
     private val owner = Any()
+
+    /**
+     * True, and on desktop the reason is not the one the name suggests (W-05).
+     *
+     * There is no hardware image on this path: `kiteCodecFrameToRgba` converts on the CPU and
+     * `Image.makeRaster` COPIES those bytes into Skia, so the decoded frame is free the instant the
+     * image exists and there is nothing left for a fence to wait on. The Apple twin answers true
+     * because it really can obtain a completion proof; this one answers true because the question
+     * does not arise. When KV-2's YUV image path lands and a frame's planes are uploaded rather
+     * than copied, this has to be re-decided rather than inherited.
+     */
     override val canDrawCommitFencedFrames: Boolean get() = true
 
     override fun frameRecorded(frame: KiteVideoFrame?) = state.frameCommitted(owner, frame)

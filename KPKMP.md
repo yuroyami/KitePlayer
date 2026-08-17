@@ -16893,6 +16893,29 @@ it.**
   `GRAY_8` uploads a single-channel plane. One better than the plan assumed: `ColorType.R8G8_UNORM`
   exists, so NV12's interleaved UV plane maps DIRECTLY with no CPU de-interleave, which is the
   layout Android and VideoToolbox both hand over.
+- **AMENDED 2026-08-17, before any code, under 18.3 rule 5.** The Fix above says "the desktop draw
+  uploads PLANES and converts in a RuntimeEffect shader" as though it were a swap of the jvm
+  converter. It is not, and the tree says so: the whole pipeline is `convert(frame) -> ByteArray`
+  then `makeImage(bytes) -> ImageBitmap`, and `KiteVideo.kt:82` draws that with `drawImage(image =
+  frame.image, colorFilter = videoFilter)`. A shader is not an `ImageBitmap`, and the conversion
+  cannot happen at convert time anyway, because the GPU context lives on the draw thread and the
+  converter runs on the renderer's worker. So the planes have to REACH the draw phase, which means
+  `FrameImage` and the draw call change, and both live in commonMain shared with Android and iOS,
+  whose paths are working and pinned. That is a change to the shared frame pipeline, not a jvm-only
+  edit, and the estimate and the risk both move with it.
+- **The revised design, its route verified by compiling it rather than assumed.** `ShaderBrush`
+  REFUSES an `org.jetbrains.skia.Shader` on this Compose version (checked: one skiko on the
+  classpath, 0.150.1, so this is an API shape and not a version clash). The route that does compile
+  is the native canvas: `drawIntoCanvas { it.nativeCanvas.drawRect(rect, paint) }` with an
+  `org.jetbrains.skia.Paint` carrying the RuntimeEffect shader. To keep that out of Android's and
+  iOS's way, the draw call becomes one new expect/actual (`DrawScope.drawFrameImage`), whose Android
+  and iOS actuals are today's `drawImage` unchanged and whose jvm actual branches: planar frames
+  take the shader, everything else takes `drawImage` exactly as now. `FrameImage` gains an optional
+  planar variant beside its image rather than replacing it.
+- **One detail named rather than discovered later**: the picture controls arrive as an
+  `androidx.compose.ui.graphics.ColorFilter` on `drawImage`. On the native-canvas path they have to
+  become a Skia colour filter on the `Paint`, or the eq controls silently stop applying to desktop
+  video. Whichever way that resolves, it needs its own assertion in arm 1.
 - Sub-phase: W.11. Test, three arms, each proved able to fail:
   1. CORRECTNESS. The shader's output is compared against `tightlyPackedToRgba` for the same
      synthetic frames the colour instrument uses, within the tolerance `ColourInstrumentTest`

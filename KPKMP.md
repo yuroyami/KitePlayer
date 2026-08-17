@@ -17977,12 +17977,15 @@ deliberately left open.
 - Fix, decided: a web `OutputBackend` joining the two, and real defaults.
 - Sub-phase: X.12. Test: a consumer building a player with no platform-specific code.
   **Decision act, 2026-08-17, two questions the item did not answer.**
-  1. **How a web consumer supplies a surface.** Every other `OutputBackend` is an `object` with no
-     argument, because its renderer gets a surface from the platform: Compose hands one over on
-     desktop, a `UIView` on iOS. A browser has neither. Decided: `KitePlayerWeb.outputBackend(
-     canvasId)` names an existing `<canvas>` in the DOM. Web only, additive, no common ABI touched,
-     and it mirrors `KiteCodecWeb.load`, which the web already needs for the same reason: the
-     browser cannot answer at construction what other platforms answer for free.
+  1. **How a web consumer supplies a surface: it does not, and the tree said so before any code was
+     written.** The first draft of this decision invented `KitePlayerWeb.outputBackend(canvasId)` so
+     a consumer could name a `<canvas>`. Checking `DesktopOutputBackend` before implementing it
+     killed the idea: that backend answers `videoRenderer = null`, because on desktop Compose draws
+     the frames and the backend supplies only the clock and the sink. The web is the same shape, and
+     X-11 tier one is a canvas layered with Compose for exactly that reason. So `WebOutputBackend`
+     is a plain `object` like every other one, no argument and no new API. Recorded as a correction
+     rather than quietly dropped, per 18.3 rule 5: the register proposed something the tree
+     contradicts, and the tree wins.
   2. **What the audio sink is in this increment, said plainly rather than implied.** The SPI wants a
      pull sink: `open(format, render)` and a callback the device drives. Doing that properly on the
      web means an `AudioWorklet`, a ring, and a message protocol to reach a callback that lives on
@@ -17995,6 +17998,29 @@ deliberately left open.
   the video path cannot be exercised without something answering the sink contract. A paced silence
   is the smallest thing that makes the rest testable, and its absence would have left the renderer
   unprovable inside the engine.
+  **Result, 2026-08-17: `KitePlayerPlatform.createOrNull()` returns a real player in a browser.**
+  Four layers went web-capable in order and each compiled before the next was touched:
+  `kitecodec-core` (X-07), `:kiteplayer-ffmpeg` (X-09), `:kiteplayer-output` with `WebOutputBackend`,
+  and `:kiteplayer-mobile`'s `platformKitePlayerDefaults`, which was a hardcoded
+  "not implemented yet" until now. The page reports `player availability: Available` and
+  `player: CREATED through KitePlayerPlatform, backends resolved`, and the player closes cleanly.
+  That is the call a consumer makes on Android and iOS, answered on the web by the same code path.
+  **Availability is computed, never cached, and that is deliberate.** Every other platform can read
+  `FFmpeg.identity` whenever it likes because the codec is in the binary; the web's is a module the
+  page fetches. So the web defaults report Unavailable with the fix in the message until
+  `KiteCodecWeb.load` or `attach` completes, and then report Available. A lazily cached answer, which
+  is what the desktop defaults do, would have been wrong forever for a consumer who asked before
+  loading.
+  Not claimed, and the class name says the first one out loud: nothing is audible, because
+  `SilentPacedAudioSink` writes samples nowhere. No frame has been presented THROUGH the engine on
+  the web either; the renderer is proved standalone at 8.5 ms per frame (X-11) and the engine
+  resolves a backend, but the two have not been joined by a Compose surface yet.
+  **Ratchet move.** `:kiteplayer-output`'s klib dump gains two public objects, `WebOutputBackend`
+  and `WebMonotonicClock`, both `// Targets: [wasmJs]`, both mirroring the public desktop twins
+  `DesktopOutputBackend` and `DesktopMonotonicClock`. A third, `SilentPacedAudioSinkFactory`, was
+  public in the first draft and was made INTERNAL before the dump was accepted: it is scaffolding
+  for X-10, publishing it would commit the library to a silent sink as API, and a consumer reaches
+  it through `WebOutputBackend.audioSink` without needing the name. Nothing was removed.
 
 #### X-13. There is no artifact layout and no deployment story
 - Where: new; 17.6 for the tier sizes.

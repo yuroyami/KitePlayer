@@ -41,6 +41,12 @@ kotlin {
     linuxArm64()
     mingwX64()
     jvm()
+    // The web (17.14 X-12): a clock and a sink, no renderer, exactly like the desktop backend.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+        nodejs()
+    }
 
     /* S1.c.4 step 1. Output depends only on core and its existing portable libraries: no
      * KiteCodec, no FFmpeg, no NDK, no Android media support library (the boundary scans of

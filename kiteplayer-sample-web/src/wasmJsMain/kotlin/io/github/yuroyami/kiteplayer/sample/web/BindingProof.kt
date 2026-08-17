@@ -66,6 +66,27 @@ internal suspend fun runBackendProof(clip: ByteArray, report: (String) -> Unit) 
         }
         report(if (frames > 0) "DECODED $frames frames through kitecodec-core, first pts $firstPts" else "FAILED: no frames")
     }
+
+    // X-12: the engine's own entry point, which is what a consumer actually calls.
+    reportPlayerWiring(report)
+}
+
+/**
+ * Asks the ENGINE whether the web is playable, which is the question a consumer asks.
+ *
+ * Everything above proves the codec works. This proves the player agrees: availability must flip
+ * once the codec module is loaded, and `createOrNull` must return a real player rather than null.
+ */
+private suspend fun reportPlayerWiring(report: (String) -> Unit) {
+    val availability = io.github.yuroyami.kiteplayer.KitePlayerPlatform.availability
+    report("player availability: $availability")
+    val player = io.github.yuroyami.kiteplayer.KitePlayerPlatform.createOrNull()
+    if (player == null) {
+        report("player: createOrNull returned NULL, the web stack is not wired")
+    } else {
+        report("player: CREATED through KitePlayerPlatform, backends resolved")
+        player.closeAndAwait()
+    }
 }
 
 @OptIn(kotlin.js.ExperimentalWasmJsInterop::class)

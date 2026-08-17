@@ -1,5 +1,5 @@
 // Klib ABI Dump
-// Targets: [iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64]
+// Targets: [iosArm64, iosSimulatorArm64, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
 // Alias: apple => [iosArm64, iosSimulatorArm64, macosArm64]
 // Alias: ios => [iosArm64, iosSimulatorArm64]
 // Rendering settings:
@@ -222,4 +222,21 @@ final class io.github.yuroyami.kiteplayer.output/AppKitWindow { // io.github.yur
 
     final fun runEventLoop() // io.github.yuroyami.kiteplayer.output/AppKitWindow.runEventLoop|runEventLoop(){}[0]
     final fun stop() // io.github.yuroyami.kiteplayer.output/AppKitWindow.stop|stop(){}[0]
+}
+
+// Targets: [wasmJs]
+final object io.github.yuroyami.kiteplayer.output/WebMonotonicClock : io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer.output/WebMonotonicClock|null[0]
+    final fun nanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/WebMonotonicClock.nanos|nanos(){}[0]
+}
+
+// Targets: [wasmJs]
+final object io.github.yuroyami.kiteplayer.output/WebOutputBackend : io.github.yuroyami.kiteplayer.spi/OutputBackend { // io.github.yuroyami.kiteplayer.output/WebOutputBackend|null[0]
+    final val audioSink // io.github.yuroyami.kiteplayer.output/WebOutputBackend.audioSink|{}audioSink[0]
+        final fun <get-audioSink>(): io.github.yuroyami.kiteplayer.spi/AudioSinkFactory // io.github.yuroyami.kiteplayer.output/WebOutputBackend.audioSink.<get-audioSink>|<get-audioSink>(){}[0]
+    final val clock // io.github.yuroyami.kiteplayer.output/WebOutputBackend.clock|{}clock[0]
+        final fun <get-clock>(): io.github.yuroyami.kiteplayer/MonotonicClock // io.github.yuroyami.kiteplayer.output/WebOutputBackend.clock.<get-clock>|<get-clock>(){}[0]
+    final val subtitleRasterizer // io.github.yuroyami.kiteplayer.output/WebOutputBackend.subtitleRasterizer|{}subtitleRasterizer[0]
+        final fun <get-subtitleRasterizer>(): io.github.yuroyami.kiteplayer.spi/SubtitleRasterizer? // io.github.yuroyami.kiteplayer.output/WebOutputBackend.subtitleRasterizer.<get-subtitleRasterizer>|<get-subtitleRasterizer>(){}[0]
+    final val videoRenderer // io.github.yuroyami.kiteplayer.output/WebOutputBackend.videoRenderer|{}videoRenderer[0]
+        final fun <get-videoRenderer>(): io.github.yuroyami.kiteplayer.spi/VideoRendererFactory? // io.github.yuroyami.kiteplayer.output/WebOutputBackend.videoRenderer.<get-videoRenderer>|<get-videoRenderer>(){}[0]
 }

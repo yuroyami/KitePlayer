@@ -77,6 +77,11 @@ kotlin {
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))
         }
+        // The web carries the same two, now that both have a wasmJs target (17.14 X-12).
+        wasmJsMain.dependencies {
+            api(project(":kiteplayer-ffmpeg"))
+            api(project(":kiteplayer-output"))
+        }
         commonTest.dependencies {
             implementation(kotlin("test"))
         }

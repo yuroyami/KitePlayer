@@ -8757,6 +8757,56 @@ authorized by register item W-12 rather than taken silently. (e) Docker Desktop 
 this machine to run the Linux containers, and its credential helper blocks on the login keychain
 in a headless session, so both scripts supply an empty docker config; these are public images.
 
+
+**2026-08-17, sub-phase W.9: the web spike (register item W-12).** Tier selected: none; the spike
+touched no repository file. Its whole report is `docs/spikes/2026-08-17-web-spike.md` and the
+numbers below are quoted from it rather than summarised loosely.
+
+**VERDICT: BUILD S6.** The spike clears its bar on every axis it was given, and one of the two
+blockers this document named turns out not to exist.
+
+1. **Size passes.** The 17.6 LEAN set (h264, hevc, aac, mp3, flac, pcm; mp4/mov/matroska/webm)
+   builds for emscripten and links into a module that really calls `avformat_open_input` and
+   `avcodec_send_packet`, at **1.00 MiB gzipped**, 748 KiB brotli. hevc alone is 20.7% of that,
+   which is the biggest lever if a sub-lean web tier is ever wanted.
+2. **Throughput passes with room.** Software, single-threaded, no SIMD, no SharedArrayBuffer:
+   **182 fps on real-world High profile 1080p30**, which is 6.1 times real time, and 328 fps on
+   this document's own `sync1080p30.mp4`. Chromium agrees with node within 3%. 4K HEVC 10-bit runs
+   at exactly 1.0x, so 17.9's 4K non-goal now has a measurement behind it instead of a judgement.
+3. **Threads and SIMD both build, and neither belongs in v1.** SIMD costs +15.5% of the download
+   and buys +3% on h264, because FFmpeg n8.0's entire wasm SIMD tree is four files and all four are
+   HEVC. Threads cost +1.1% and buy roughly 3x, but they need SharedArrayBuffer, which needs
+   COOP/COEP on whoever HOSTS the app, and the spike proved in a real browser that without those
+   headers the module HANGS rather than erroring. Threads are therefore an optional second artifact
+   behind a `self.crossOriginIsolated` feature detect, never the default.
+4. **The engine blocker was not real.** W-12 stated that the renderer worker shape
+   (`newSingleThreadContext`, `runBlocking`) was a harder blocker than the codec build. Verified
+   false: `kiteplayer-core` already compiles to wasmJs, its actuals already exist and none of them
+   throw, its SPI is already suspend-based (`VideoRenderer.present` is `suspend`), and every one of
+   those sites lives in a module that declares no web target. Engine rework: **zero hours**. The
+   blocking-read contract is also answerable: a Worker can block through `FileReaderSync` or
+   synchronous XHR, so it does not force cross-origin isolation either.
+5. **The build is cheap.** Four full FFmpeg trees in 5 minutes 20 seconds against a 90 minute
+   timebox. The thing S6 assumed was the risk is the cheapest item in the phase.
+
+**What the spike did NOT measure, and it is the remaining risk.** KV-6: the per-frame draw cost of
+KiteVideo on wasm through Skiko. No wasm renderer exists, so nothing was measured. Decode is proven
+6 times faster than needed; whether the draw keeps up is open. The honest S6 entry condition is
+therefore: **build and measure the draw-cost probe FIRST, before any binding work is committed to,
+and stop if it fails.**
+
+**The cost, which the owner should see before S6 is scheduled.** The spike's dependency-ordered
+list totals **178 to 272 hours** against 17.3's S6 estimate of 80 to 120. The overrun is not where
+S6 expected it: the codec build is 8 to 12 hours and the engine rework is zero. It is the JS binding
+over the 198-entry `kc_`/`ffkmp_` ABI, 40 to 60 hours on its own, which S6's original sentence
+compressed into "the JS interop shape over the same C ABI". The JNI adapter (about 2,560 lines of C
+plus a 190-row manifest) is the measured precedent for what that phrase costs. Two ways to bring it
+back, both owner decisions rather than silent choices: bind a playback-only subset instead of all
+198, or GENERATE the binding from `signature-baseline.txt`, whose 213 normalized records already
+exist and are already gated.
+
+---
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

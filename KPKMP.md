@@ -17549,6 +17549,26 @@ deliberately left open.
 - Fix, decided: compile the existing sources with `emcc` and link against X-02's archives.
 - Sub-phase: X.3. Test: the archive links into a module that really calls `avformat_open_input`,
   which is the same bar the spike's `harness/minimal.c` already cleared.
+  Result, 2026-08-17: `:kitecodec-core:compileKiteCodecCForWasm` compiles all 11 C sources with
+  emscripten and `-Werror` into a 44,524 byte `libkitecodec.a`. The "portable C" claim held: not one
+  source needed an `#ifdef __EMSCRIPTEN__`, and the only flag that had to go was `-fPIC`, which
+  emscripten warns is meaningless for wasm.
+  **Proved by running, not by compiling.** `scripts/wasm-link-probe.sh` links the archive against
+  the six wasm FFmpeg archives into 877 KB of wasm and executes it under node. It reports the
+  FFmpeg configuration string and then asks `ffkmp_filter_exists` for each of the five filters
+  `helpers_filter.c` looks up by name: all five answer 1. That is the assertion the X-02 avfilter
+  correction rests on, now measured rather than argued.
+  Falsification: `--falsify` links the same probe WITHOUT `libavfilter.a` and the link fails with 3
+  undefined symbols, so the probe cannot pass by accident.
+  **One build-wiring mistake, found and fixed here.** The archive was first written to
+  `native-libs/lgpl/wasm32/kitecodec`, which is INSIDE `BuildFFmpegWasmTask`'s declared output
+  directory. Two consequences, one visible and one latent: FFmpeg re-ran on every invocation because
+  its output tree kept changing, and the next FFmpeg run would have deleted the archive, since that
+  task clears its output before installing. Moved to `native-libs/deps/wasm32/kitecodec`, a sibling,
+  which is where the other generated dependency trees already live. FFmpeg now reports UP-TO-DATE.
+  **Honest bound.** This proves the C layer links and runs on wasm and that the filter registry is
+  populated. It decodes nothing: no `AVFormatContext` is opened, because there is no IO bridge until
+  X-06 and no way to hand it a file before then.
 
 #### X-04. JS would get raw heap offsets, which `kj_internal.h` already forbids for JNI
 - Where: `native/kitecodec-c/kj_handles.c`, 202 lines; `kj_internal.h:16-20` for the reason.

@@ -17716,9 +17716,25 @@ deliberately left open.
   the whole surface costs about 6% of download rather than the 4x the raw number suggests, because
   what the exports retain is largely redundant FFmpeg tables that compress well. That is a further
   argument for the bind-everything decision and it is now a number rather than an expectation.
-  Still ahead in X.5, and not claimed: the Kotlin/wasmJs external declarations and the JS shim.
-  This increment proves the export surface is real and callable, which is what everything above it
-  stands on.
+  Second increment, same day: the generator now also emits `KiteCodecWasm.kt`, **196 Kotlin/wasmJs
+  externals**, one `@JsFun` per entry point. Each takes the emscripten module as its first argument,
+  because Kotlin/Wasm and the codec are two wasm modules with separate linear memories and every
+  call crosses through JS. Pointers map to `Int`, which is what a wasm32 address is, and stay opaque
+  on the Kotlin side. `int64_t` maps to `Long`, and that mapping was settled by COMPILING one across
+  `@JsFun` before the emitter was written rather than assumed, because a type that silently
+  truncated would corrupt every timestamp in the player.
+  All 196 compile for wasmJs with no errors and no warnings. **And they run**: `BindingProof.kt` in
+  `:kiteplayer-sample-web` calls them from Kotlin in a real browser and the page logs
+  `config OK | averror_eof -541478725 | frame alloc OK | width round trip OK | int64 OK
+  (AV_NOPTS_VALUE) | null name refused | media constants distinct`. The int64 line is the one that
+  mattered: a fresh frame's pts is `Long.MIN_VALUE`, so the 64-bit path is exact from Kotlin and
+  not merely non-crashing. Compiling proved the types were well formed; this proves a call reaches
+  the codec.
+  Still ahead in X.5 and NOT claimed: the generated file has no permanent home yet. It is copied
+  into the sample module to be exercised; putting it in `kitecodec-core`'s wasmJs source set is
+  X-07's business, because that moves a published klib's ABI and is not a side effect this item may
+  take. No string, array or struct-out helper is generated either: the proof decodes C strings
+  through emscripten's own `UTF8ToString`, which is a JS call and not part of the binding.
 
 #### X-06. There is no AVIO bridge that can block on a Worker
 - Where: `kj_format.c:450-660` as the reference; `ffkmp_fmt_open_input_io`.

@@ -9,6 +9,16 @@
     </style>
 </head>
 <body>
+<script type="module">
+  // The codec is a SEPARATE wasm module with its own memory, so it is loaded here and published
+  // on globalThis; the Kotlin side reaches it through JS. A module script is deferred, so this
+  // resolves after the Kotlin bundle starts, which is why the Kotlin side waits rather than
+  // assuming it is present.
+  try {
+    const factory = (await import("./kite.mjs")).default;
+    globalThis.__kite = await factory();
+  } catch (e) { console.warn("codec module unavailable:", e.message); globalThis.__kiteFailed = true; }
+</script>
 <script type="application/javascript" src="kiteplayer-sample-web.js"></script>
 </body>
 </html>

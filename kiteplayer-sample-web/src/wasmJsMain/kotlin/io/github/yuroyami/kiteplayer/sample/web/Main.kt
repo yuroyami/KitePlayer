@@ -161,6 +161,8 @@ private fun Probe() {
         val rgba = ByteArray(WIDTH * HEIGHT * 4)
         val report = Report()
         report.add("KV-6 probe, ${WIDTH}x$HEIGHT yuv420p, one thread")
+        // X-05: the generated binding, called from Kotlin rather than from JS.
+        runBindingProof { line -> report.add(line) }
         report.add("hardwareConcurrency=${hardwareConcurrency()} crossOriginIsolated=${crossOriginIsolated()}")
 
         // Phase 1, the conversion, serial per S6-D2.

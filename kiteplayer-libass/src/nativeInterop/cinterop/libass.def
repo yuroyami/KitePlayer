@@ -4,3 +4,8 @@
 headers = ass/ass.h
 headerFilter = ass/**
 package = libass
+
+# ass_add_font takes `const char *data` for BINARY font bytes, which cinterop would otherwise map
+# to String? on the heuristic that a const char* is text. Fonts are not text, and a ByteArray
+# cannot be passed as one, so this function keeps raw pointers on both of its char* parameters.
+noStringConversion = ass_add_font

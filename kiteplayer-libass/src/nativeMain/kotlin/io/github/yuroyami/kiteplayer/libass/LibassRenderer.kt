@@ -8,6 +8,9 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.cstr
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
 import kotlinx.cinterop.get
 import kotlinx.cinterop.pointed
 import kotlinx.cinterop.usePinned
@@ -15,6 +18,7 @@ import libass.ASS_Image
 import libass.ASS_Library
 import libass.ASS_Renderer
 import libass.ASS_Track
+import libass.ass_add_font
 import libass.ass_free_track
 import libass.ass_library_done
 import libass.ass_library_init
@@ -26,20 +30,16 @@ import libass.ass_set_fonts
 import libass.ass_set_frame_size
 
 /**
- * Typesetting-grade ASS rendering through libass (KPKMP 17.12 phase L), emitting the engine's
- * EXISTING bitmap-cue vocabulary: each rendered event becomes [SubtitleCue.Bitmap] regions in
- * the frame's own coordinate space, exactly what the rasterizers already draw for bitmap
- * subtitle formats. Nothing engine-side had to learn a new type, which is the whole point of
- * the bitmap-cue path.
+ * The cinterop half: libass reached directly, with no adapter in between.
  *
- * Font discovery is the platform's: on Apple, libass' CoreText provider finds system fonts by
- * itself (fontconfig deliberately never enters the chain, decision D-7).
+ * Font discovery is the platform's here. Apple's CoreText provider and Windows' GDI/DirectWrite
+ * find system fonts by themselves; Linux has no provider in this chain and renders only what
+ * [addFont] supplies.
  *
- * Honest limits of this first slice: rendering is snapshot-per-call (the engine hook that
- * re-renders animated typesetting per video frame is the next slice), and the Android half
- * needs a JNI bridge before this module serves JVM targets.
+ * Honest limit of this first slice, shared with the JVM half: rendering is snapshot-per-call, and
+ * the engine hook that re-renders animated typesetting per video frame is the next one.
  */
-public class LibassRenderer : AutoCloseable {
+public actual class LibassRenderer actual constructor() : AutoCloseable {
 
     private val library: CPointer<ASS_Library> =
         requireNotNull(ass_library_init()) { "libass refused a library instance" }
@@ -52,17 +52,24 @@ public class LibassRenderer : AutoCloseable {
         ass_set_fonts(renderer, null, "sans-serif", 1, null, 1)
     }
 
-    /**
-     * Renders one whole ASS document at [timeMillis] into bitmap regions for a
-     * [frameWidth] x [frameHeight] video frame. Returns null when nothing is visible there.
-     */
-    public fun renderDocument(
+    public actual fun addFont(name: String, data: ByteArray) {
+        check(!closed) { "LibassRenderer is closed" }
+        if (data.isEmpty()) return
+        // Both char* parameters are raw here, see noStringConversion in libass.def.
+        memScoped {
+            data.usePinned { pinned ->
+                ass_add_font(library, name.cstr.ptr, pinned.addressOf(0), data.size)
+            }
+        }
+    }
+
+    public actual fun renderDocument(
         script: String,
         timeMillis: Long,
         frameWidth: Int,
         frameHeight: Int,
-        startMicros: Long = timeMillis * 1000,
-        endMicros: Long = (timeMillis + 1) * 1000,
+        startMicros: Long,
+        endMicros: Long,
     ): SubtitleCue.Bitmap? {
         check(!closed) { "LibassRenderer is closed" }
         require(frameWidth > 0 && frameHeight > 0) { "frame has no dimensions: ${frameWidth}x$frameHeight" }
@@ -134,7 +141,7 @@ public class LibassRenderer : AutoCloseable {
         return regions
     }
 
-    override fun close() {
+    actual override fun close() {
         if (closed) return
         closed = true
         ass_renderer_done(renderer)

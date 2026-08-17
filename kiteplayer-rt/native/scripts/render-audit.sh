@@ -55,11 +55,34 @@ SHIPPED_FLAGS="-O2 -std=c11 -fvisibility=hidden -fPIC -Wall -Wextra -Werror -Wer
 # this sub-phase: an allowlist without it would fail a correct build. The unit is deliberately built
 # WITHOUT -fno-builtin-memcpy and -fno-builtin-memset, exactly as the plan says, so that these calls
 # stay visible as calls instead of being expanded into something the audit cannot see.
-ALLOWED_UNDEFINED="_memcpy _memset _bzero"
+# W-17: the leading underscore is Mach-O's, not C's. ELF spells the same symbol without it, so the
+# lists below are written in the SOURCE spelling and given the format's prefix at use. On Mach-O
+# that reproduces exactly what this file said before, character for character.
+SYMBOL_PREFIX="_"
+
+# Rewrites a space separated symbol list into the current format's spelling.
+prefixed() {
+    local out=""
+    local name
+    for name in $1; do out="$out $SYMBOL_PREFIX$name"; done
+    printf '%s' "${out# }"
+}
+
+# Reads the prefix from the object itself rather than from the host. An ELF object has no leading
+# underscore on its C symbols; a Mach-O one does.
+detect_symbol_prefix() {
+    case "$(file -b "$1" 2>/dev/null)" in
+        *Mach-O*) SYMBOL_PREFIX="_" ;;
+        *ELF*)    SYMBOL_PREFIX="" ;;
+        *)        SYMBOL_PREFIX="_" ;;
+    esac
+}
+
+ALLOWED_UNDEFINED_NAMES="memcpy memset bzero"
 
 # Everything `kprt_render_cb` may call. Three symbols: the clock it reads twice, the body it forwards
 # to, and the counter update that closes the pair.
-RENDER_CB_ALLOWED="_mach_absolute_time _kprt_render_into _kprt_sink_note_span"
+RENDER_CB_ALLOWED_NAMES="mach_absolute_time kprt_render_into kprt_sink_note_span"
 
 # AudioComponentDescription stores these four-character subtypes in the device object's
 # __TEXT,__literal8 section. Pinning the values in the object catches the dangerous direction a
@@ -71,10 +94,10 @@ REMOTE_IO_FOURCC="72696f63"
 # refers to. The undefined-set check above already forbids all of these in the render unit by
 # construction; this list is what makes the intent explicit and what covers `kprt_render_cb`, whose
 # own unit is allowed to call the device.
-FORBIDDEN_EXACT="_malloc _calloc _realloc _reallocf _free _valloc _posix_memalign _aligned_alloc \
-_objc_msgSend _objc_retain _objc_release _objc_autorelease \
-_pthread_mutex_lock _pthread_mutex_trylock _os_unfair_lock_lock \
-_printf _fprintf _vfprintf _puts _AudioConvertHostTimeToNanos"
+FORBIDDEN_EXACT_NAMES="malloc calloc realloc reallocf free valloc posix_memalign aligned_alloc \
+objc_msgSend objc_retain objc_release objc_autorelease \
+pthread_mutex_lock pthread_mutex_trylock os_unfair_lock_lock \
+printf fprintf vfprintf puts AudioConvertHostTimeToNanos"
 FORBIDDEN_PREFIX="dispatch_ os_log Kotlin_ kfun: _swift_ ___asan _objc_"
 
 FAILURES=0
@@ -178,7 +201,7 @@ scan_forbidden() {
     symbols="$(cat)"
     local hits=""
     local token
-    for token in $FORBIDDEN_EXACT; do
+    for token in $(prefixed "$FORBIDDEN_EXACT_NAMES"); do
         if printf '%s\n' "$symbols" | grep -qx -- "$token"; then
             hits="$hits $token"
         fi
@@ -193,7 +216,7 @@ scan_forbidden() {
         return 1
     fi
     local forbidden_count
-    forbidden_count="$(printf '%s %s\n' "$FORBIDDEN_EXACT" "$FORBIDDEN_PREFIX" |
+    forbidden_count="$(printf '%s %s\n' "$(prefixed "$FORBIDDEN_EXACT_NAMES")" "$FORBIDDEN_PREFIX" |
         wc -w | tr -d ' ')"
     ok "$label refers to none of the $forbidden_count forbidden names"
     return 0
@@ -202,21 +225,26 @@ scan_forbidden() {
 # Audits one compiled real-time unit. Returns non-zero when anything was wrong, which is what the
 # negative control mode reads.
 audit_render_object() {
+    # W-17: the spelling of every symbol below follows the object, not the host. The object is the
+    # SECOND argument; these functions take the label first.
+    detect_symbol_prefix "$2"
     local label="$1" object="$2"
     local before="$FAILURES"
     local undefined symbol
 
-    undefined="$("$NM" -u "$object" | sort -u)"
+    # Mach-O's `nm -u` prints the bare name; ELF's prints "                 U name". Taking the
+    # last field reads both, and an empty line yields nothing rather than a phantom symbol (W-17).
+    undefined="$("$NM" -u "$object" | awk 'NF { print $NF }' | sort -u)"
     local outside=""
     for symbol in $undefined; do
-        in_list "$symbol" "$ALLOWED_UNDEFINED" || outside="$outside $symbol"
+        in_list "$symbol" "$(prefixed "$ALLOWED_UNDEFINED_NAMES")" || outside="$outside $symbol"
     done
     if [ -n "$outside" ]; then
         bad "$label has undefined symbols outside the allowlist:$outside"
     else
         local undefined_inline
         undefined_inline="$(printf '%s\n' "$undefined" | tr '\n' ' ' | sed 's/ $//')"
-        ok "$label undefined set is [$undefined_inline] and the allowlist is [$ALLOWED_UNDEFINED]"
+        ok "$label undefined set is [$undefined_inline] and the allowlist is [$(prefixed "$ALLOWED_UNDEFINED_NAMES")]"
     fi
 
     local defined
@@ -226,7 +254,7 @@ audit_render_object() {
         case "$symbol" in
             __text|__const|l_*|L*|ltmp*) continue ;;
         esac
-        in_list "$symbol" "$ALLOWED_UNDEFINED" && continue
+        in_list "$symbol" "$(prefixed "$ALLOWED_UNDEFINED_NAMES")" && continue
         in_list "$symbol" "$defined" && continue
         escaping="$escaping $symbol"
     done
@@ -255,14 +283,17 @@ audit_render_object() {
 # a callback which silently stopped rendering would otherwise pass because the empty set is a subset
 # of every allowlist.
 audit_callback_object() {
+    # W-17: the spelling of every symbol below follows the object, not the host. The object is the
+    # SECOND argument; these functions take the label first.
+    detect_symbol_prefix "$2"
     local label="$1" object="$2"
     local before="$FAILURES"
 
-    if ! "$NM" "$object" | grep -q ' _kprt_render_cb$'; then
+    if ! "$NM" "$object" | grep -q " ${SYMBOL_PREFIX}kprt_render_cb$"; then
         bad "$label has no kprt_render_cb, so no callback was audited"
         return 1
     fi
-    if "$NM" -g "$object" | awk '$2 == "T" { print $3 }' | grep -qx '_kprt_render_cb'; then
+    if "$NM" -g "$object" | awk '$2 == "T" { print $3 }' | grep -qx "${SYMBOL_PREFIX}kprt_render_cb"; then
         bad "$label exports kprt_render_cb, so Kotlin could install or call it"
     else
         ok "$label keeps kprt_render_cb local: not exported, not in the header, not in the bindings"
@@ -270,10 +301,10 @@ audit_callback_object() {
 
     local symbols expected
     symbols="$("$OBJDUMP" -d -r "$object" |
-        awk '/^[0-9a-f]+ <_kprt_render_cb>:/ { inside = 1; next }
+        awk -v entry="^[0-9a-f]+ <${SYMBOL_PREFIX}kprt_render_cb>:$" '$0 ~ entry { inside = 1; next }
              /^[0-9a-f]+ <.*>:/ { inside = 0 }
              inside && /ARM64_RELOC|X86_64_RELOC/ { print $NF }' | sort -u | tr '\n' ' ' | sed 's/ $//')"
-    expected="$(printf '%s\n' "$RENDER_CB_ALLOWED" | tr ' ' '\n' |
+    expected="$(printf '%s\n' "$(prefixed "$RENDER_CB_ALLOWED_NAMES")" | tr ' ' '\n' |
         sed '/^$/d' | sort -u | tr '\n' ' ' | sed 's/ $//')"
     if [ "$symbols" = "$expected" ]; then
         ok "$label callback call set is exactly [$symbols]"
@@ -287,6 +318,9 @@ audit_callback_object() {
 
 # Pins the AudioUnit subtype from the compiled object. Both the expected presence and the opposite
 # absence matter: checking only for RemoteIO would accept an object which selected both branches.
+# Mach-O only, and CoreAudio only: the four-character subtype lives in __TEXT,__literal8, a section
+# ELF does not have, and the value it pins is an AudioComponentDescription's. A non-Apple sink has
+# no equivalent to check, so this is skipped rather than failed (W-17).
 audit_device_subtype() {
     local label="$1" object="$2" expected="$3" forbidden="$4"
     local before="$FAILURES"
@@ -457,7 +491,7 @@ audit_shipped_archive() {
         bad "$label shipped archive has no kite_rt_render.o member"
     fi
     if [ -f "$extract/kite_rt_coreaudio.o" ]; then
-        if "$NM" "$extract/kite_rt_coreaudio.o" | grep -q '_kprt_test_invoke_render_callback$'; then
+        if "$NM" "$extract/kite_rt_coreaudio.o" | grep -q "${SYMBOL_PREFIX}kprt_test_invoke_render_callback$"; then
             bad "$label shipped device object contains the host-only callback fixture seam"
         else
             ok "$label shipped device object excludes the host-only callback fixture seam"
@@ -482,6 +516,40 @@ else
         "$REMOTE_IO_FOURCC" "$DEFAULT_OUTPUT_FOURCC"
     audit_shipped_archive ios-simulator-arm64 "$IOS_SIM_ARCHIVE" \
         "$REMOTE_IO_FOURCC" "$DEFAULT_OUTPUT_FOURCC"
+fi
+
+# ---- 5b. The ELF arm (W-17) ----
+#
+# The same real-time scan, on the cross-compiled linux_arm64 archive, to prove the instrument reads
+# the object format it is given rather than the one this machine happens to use. Only the render
+# unit is audited: the device half of that archive is kite_rt_sink_unsupported.o, which refuses
+# every entry point and has no callback to scan. Skipped with a note when the archive has not been
+# built, because a missing cross build is not a defect in the audit.
+# Apple's ar cannot read a GNU archive: it treats the long-name member `/39` as a file to create
+# and dies. llvm-ar reads both, and konan ships it beside the clang this audit already prefers.
+find_llvm_ar() {
+    local konan_root="${KONAN_DATA_DIR:-$HOME/.konan}/dependencies"
+    if [ -x "$konan_root/$PREFERRED_LLVM/bin/llvm-ar" ]; then
+        echo "$konan_root/$PREFERRED_LLVM/bin/llvm-ar"
+        return 0
+    fi
+    find "$konan_root" -maxdepth 3 -type f -path '*/llvm-*/bin/llvm-ar' 2>/dev/null | sort | tail -1
+}
+
+LINUX_ARCHIVE="$MODULE/build/kiteplayer-rt-c/linux_arm64/libkiteplayerrt.a"
+LLVM_AR="$(find_llvm_ar)"
+if [ -f "$LINUX_ARCHIVE" ] && [ -n "$LLVM_AR" ] && [ -x "$LLVM_AR" ]; then
+    linux_extract="$WORK/shipped-linux-arm64"
+    mkdir -p "$linux_extract"
+    (cd "$linux_extract" && "$LLVM_AR" x "$LINUX_ARCHIVE")
+    if [ -f "$linux_extract/kite_rt_render.o" ]; then
+        audit_render_object "linux-arm64 shipped kite_rt_render.o" "$linux_extract/kite_rt_render.o"
+    else
+        bad "linux-arm64 shipped archive has no kite_rt_render.o member"
+    fi
+else
+    say "note: the ELF arm did not run (archive $LINUX_ARCHIVE, llvm-ar ${LLVM_AR:-not found})"
+    say "      run ./gradlew :kiteplayer-rt:compileKotlinLinuxArm64 to build it"
 fi
 
 # ---- 6. The negative control, which is the only thing that makes any of the above evidence ----

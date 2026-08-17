@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kitecodec.CodecId
 
 /**
  * Linux has no hardware route in this build, so every codec decodes in software.
@@ -13,3 +14,8 @@ import io.github.yuroyami.kiteplayer.HwdecPolicy
  */
 internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection =
     decoderSelection(policy, route = null)
+
+/**
+ * Linux has no platform audio decoder: there is no OS codec service to name.
+ */
+internal actual fun platformAudioDecoder(codec: String): CodecId? = null

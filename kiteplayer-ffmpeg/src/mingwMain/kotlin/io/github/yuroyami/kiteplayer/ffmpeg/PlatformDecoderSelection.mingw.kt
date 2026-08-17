@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kitecodec.CodecId
 
 /**
  * Windows has no hardware route in this build, so every codec decodes in software.
@@ -13,3 +14,9 @@ import io.github.yuroyami.kiteplayer.HwdecPolicy
  */
 internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection =
     decoderSelection(policy, route = null)
+
+/**
+ * Windows has Media Foundation audio decoders, but FFmpeg exposes no `*_mf` DECODER to name;
+ * its mf wrappers are encoders.
+ */
+internal actual fun platformAudioDecoder(codec: String): CodecId? = null

@@ -12,3 +12,9 @@ private fun String.mediaCodecRoute(): HardwareRoute? = when (trim().lowercase())
     "hevc", "h265", "hev1" -> HardwareRoute.NamedDecoder(CodecId("hevc_mediacodec"), HwdecKind.MediaCodec)
     else -> null
 }
+
+/**
+ * MediaCodec has audio decoders, but FFmpeg's mediacodec wrapper is video only, so there is no
+ * name to hand it. An Android audio offload would go through AudioTrack, not through this seam.
+ */
+internal actual fun platformAudioDecoder(codec: String): CodecId? = null

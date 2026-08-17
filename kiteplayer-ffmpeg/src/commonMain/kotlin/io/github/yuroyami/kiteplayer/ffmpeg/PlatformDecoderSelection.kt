@@ -37,6 +37,20 @@ internal data class DecoderSelection(
 internal expect fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection
 
 /**
+ * The platform's own audio decoder for [codec], by FFmpeg decoder name, or null to decode in software.
+ *
+ * Audio gets a name and no [HardwareRoute], because the two shapes FFmpeg offers for video do not
+ * both exist here: AudioToolbox is a NAMED decoder (`aac_at`) and never an hwaccel. There is also no
+ * [HwdecPolicy] argument. `HwdecPolicy` describes what the VIDEO path may do, its `Require` means
+ * "refuse rather than decode this picture in software", and applying that to audio would refuse every
+ * file whose codec has no platform twin. Audio's contract is softer by nature: prefer the platform
+ * decoder, fall back silently-but-warned at open, never refuse.
+ *
+ * [codec] is FFmpeg's decoder short name, the same string the video table matches on.
+ */
+internal expect fun platformAudioDecoder(codec: String): CodecId?
+
+/**
  * The policy table shared by the platform actuals and its exhaustive common test.
  *
  * [route] is null when the codec is ineligible on this platform. A required but ineligible

@@ -47,6 +47,7 @@ import io.github.yuroyami.kitecodec.StreamInfo
 import io.github.yuroyami.kitecodec.durationMicros
 import io.github.yuroyami.kitecodec.ptsMicros
 import io.github.yuroyami.kitecodec.Frame as KiteFrame
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToLong
 
 /**
@@ -178,6 +179,16 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     /** S4.e: the media item's compiled KD-1 video filter chain, or null for none. */
     internal var videoFilterDescription: String? = null
 
+    /**
+     * Whether audio may open the platform's own decoder (see `platformAudioDecoder`).
+     *
+     * A knob and not a constant, because a platform decoder is a DIFFERENT decoder and not a faster
+     * copy of the same one. Two conformant AAC decoders agree on the music and disagree in the last
+     * bits, so any test that pins exact samples has to pick one and say which; `ReferencePcmTest`
+     * turns this off for exactly that reason, since what it measures is the downmix matrix.
+     */
+    internal var preferPlatformAudioDecoder: Boolean = true
+
     /** S4.e: the pre-open keys the demuxer never consumed, straight from KiteCodec's funnel. */
     internal val unusedOpenOptions: List<String> get() = source.unusedOpenOptions
 
@@ -229,9 +240,12 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
      * Low delay for audio: a player is waiting on these frames, and the decoder holding them back
      * for reordering costs latency for no benefit.
      */
-    internal fun newAudioDecoder(stream: PlayerStreamInfo): AudioDecoder =
+    internal fun newAudioDecoder(
+        stream: PlayerStreamInfo,
+        decoder: CodecId? = null,
+    ): AudioDecoder =
         KiteCodecAudioDecoder(
-            decoder = openDecoder(stream.index, lowDelay = true),
+            decoder = openDecoder(stream.index, lowDelay = true, decoder = decoder),
             stream = stream,
             mapper = mapper,
             // The container's answer, used until the decoder gives its own. A stream that declares no
@@ -633,11 +647,40 @@ private class KiteCodecVideoDecoder(
 public class KiteCodecAudioDecoderFactory internal constructor(
     private val source: KiteCodecSource,
 ) : AudioDecoderFactory {
-    override val name: String = "KiteCodec software"
+    override val name: String = "KiteCodec FFmpeg"
 
+    /**
+     * Prefers the platform's own decoder when one exists, and open is the ONLY place it may refuse.
+     *
+     * The video path needs a whole replay machine to demote mid-stream, because an hwaccel can accept
+     * its attach and then fail on a later picture. Audio needs none of that: a named audio decoder
+     * either opens or does not, and at open nothing has been decoded, nothing delivered, and no
+     * timeline exists to rebuild. So the fallback is one retry on the native decoder, and the warning
+     * says which codec lost its platform path so the loss is visible rather than silent.
+     *
+     * A failure here is not a playback failure. If BOTH opens fail, the second exception propagates
+     * exactly as it did before any of this existed, and the engine reports it typed.
+     */
     override suspend fun create(stream: PlayerStreamInfo): AudioDecoder? {
         if (stream.kind != TrackKind.Audio) return null
-        return source.newAudioDecoder(stream)
+        val platform = stream.codec
+            .takeIf { source.preferPlatformAudioDecoder }
+            ?.let { platformAudioDecoder(it) }
+            ?: return source.newAudioDecoder(stream)
+        return try {
+            source.newAudioDecoder(stream, decoder = platform)
+        } catch (failure: CancellationException) {
+            throw failure
+        } catch (failure: Throwable) {
+            source.onWarning(
+                PlaybackWarning.HardwareDecodeUnavailable(
+                    codec = stream.codec,
+                    reason = "platform audio decoder ${platform.name} refused to open: " +
+                        (failure.message?.takeIf { it.isNotBlank() } ?: failure::class.simpleName ?: "unknown"),
+                ),
+            )
+            source.newAudioDecoder(stream)
+        }
     }
 }
 

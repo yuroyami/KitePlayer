@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kitecodec.CodecId
 
 /**
  * Software only, for now, and the "for now" is a registered item rather than a shrug.
@@ -13,3 +14,9 @@ import io.github.yuroyami.kiteplayer.HwdecPolicy
  */
 internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection =
     decoderSelection(policy, route = null)
+
+/**
+ * The browser's audio decoder is WebCodecs `AudioDecoder`, which is not an FFmpeg decoder name.
+ * When it lands it arrives as its own backend, not as a string handed to this one.
+ */
+internal actual fun platformAudioDecoder(codec: String): CodecId? = null

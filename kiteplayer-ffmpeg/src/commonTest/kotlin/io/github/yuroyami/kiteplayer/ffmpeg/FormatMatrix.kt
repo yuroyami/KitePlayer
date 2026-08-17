@@ -23,8 +23,10 @@ import kotlinx.coroutines.withTimeout
  *   decode, a keyframe seek lands and decoding resumes, close is clean. Anything else fails.
  * - [MatrixVerdict.MustSurvive]: every step either succeeds or fails with a typed exception.
  *   The recorded outcome (played or refused, and where) is the measurement. Only a crash or a
- *   hang fails the row. AV1 sits here because the phone FFmpeg profile enables the av1 decoder
- *   while vendoring no software AV1 codec; the torture rows sit here by construction.
+ *   hang fails the row. Only the torture rows sit here now, by construction. AV1 used to, because
+ *   the phone profile enabled FFmpeg's av1 decoder while vendoring no software AV1 codec, and its
+ *   honest outcome was a typed refusal; dav1d is vendored for every target that runs this matrix
+ *   now (KC-AV1SW), so AV1 owes a real decode like every other format.
  */
 internal enum class MatrixVerdict { MustPlay, MustSurvive }
 
@@ -75,7 +77,10 @@ internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
     MatrixRow("audio-aac.m4a", MatrixVerdict.MustPlay, hasVideo = false),
     MatrixRow("audio-mp3.mp3", MatrixVerdict.MustPlay, hasVideo = false),
     MatrixRow("audio-flac.flac", MatrixVerdict.MustPlay, hasVideo = false),
-    MatrixRow("av1.mkv", MatrixVerdict.MustSurvive),
+    // Promoted from MustSurvive when dav1d landed on every target this runner reaches. If this row
+    // ever refuses again, a tree lost its libdav1d rather than a decoder regressing: check
+    // native-libs/deps/<target>/dav1d before reading any Kotlin.
+    MatrixRow("av1.mkv", MatrixVerdict.MustPlay),
     MatrixRow("torture-truncated.mp4", MatrixVerdict.MustSurvive, hasAudio = false),
     MatrixRow("torture-garbage.mp4", MatrixVerdict.MustSurvive, hasVideo = false, hasAudio = false),
 

@@ -92,7 +92,7 @@ Today, honestly:
 | Platform | Tier | What that means here |
 |---|---|---|
 | macOS arm64 | Experimental T3-Full candidate | Audio and video decode, play in sync, seek, and composite SubRip/WebVTT cues, in a Metal-backed window, on one development machine. The default path is VideoToolbox inside FFmpeg (with a proven software replay fallback) into a zero-copy Metal renderer. The colour instrument proves BT.601, BT.709 and BT.2020 in studio and full range within 2/255 against an independent reference, with a falsifying arm that rejects a wrong matrix. Sustained 4K, thresholds committed before the run: 120 seconds of looped 10-bit 4K HEVC drew all 3466 submitted frames with zero drops, supersedes or failures; the software-decode leg holds real-time decode with the plane upload drawing about 20 fps. The 27-row matrix re-ran green through these defaults on 2026-08-16. Nothing is qualified beyond this one machine. |
-| iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 27-row format matrix runs green on the same named simulator (re-run 2026-08-16 through the S2 defaults): every playable row decodes and resumes after a mid-file seek, and AV1 refuses with a typed error because the phone FFmpeg profile vendors no software AV1 codec. The S2.c Metal-view smoke evidence stays provisional. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
+| iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 27-row format matrix runs green on the same named simulator (re-run 2026-08-16 through the S2 defaults): every playable row decodes and resumes after a mid-file seek. AV1 refused with a typed error on that run because the phone FFmpeg profile then vendored no software AV1 codec; dav1d has since been cross-built into it and the row is now a MustPlay like every other format. The S2.c Metal-view smoke evidence stays provisional. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
 | Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | The sample's direct-XML Activity builds its player from `mobileBackends()` and shows it in the reusable XML-capable `KitePlayerView` from `kiteplayer-view`; two sibling Activities demonstrate Compose/native-view interop and GPU Compose video separately. Runtime GPU evidence is one 1080p30, 8-bit AVC Constrained Baseline fixture whose colour metadata is unspecified. The renderer-coupled MediaCodec path reported `HardwareZeroCopy(MediaCodec)` and the direct Surface tier stabilized at 29 to 31 presented FPS after warm-up. GPU Compose evidence spans 295 to 300 unique VSYNC-matched GPU-proven draws at 29.403 to 29.852 FPS. The newest corrected-gate cold-install passed with 300 decoded/submitted/presented, 299 GPU-proven draws at 29.749 FPS, 1.319 seconds of post-Ended proof drain, 178.274 milliseconds of teardown, +3.275 milliseconds of A/V drift, and no headless frames, drops, supersedes, failures, repeats, rebuffers, underruns, or CPU conversion. An earlier clean post-policy pass proved 297 at 29.403 FPS. A diagnostic repeat remained healthy zero-copy with 299 submitted/presented, one scheduler late drop, and 296 GPU-proven draws at 29.696 FPS; it exposed that the gate must validate the exact decoded-frame partition before applying its drop budget instead of requiring 300 submissions. Forced physical-profile reruns correctly rejected the emulator's variable sub-99% proof coverage. A separate smoke landed a precise seek, reached Ended, and tore down causally. The wider 10-bit, VP9, AV1 and HDR work has parser and host-contract coverage, not successful device playback evidence. Nothing ran on a physical Android device. x86_64 is compile, link, and package qualified only. |
 | JVM (desktop, macOS arm64 host) | Experimental T2 Codec candidate | The JVM variant of KiteCodec carries the JNI adapter in its published artifact, so one `implementation()` line gives a desktop JVM a real FFmpeg backend (avcodec 62.11.100). All 27 rows of the format matrix pass on this host, `KitePlayerPlatform.availability` answers Available, and the default stack pairs that backend with a `javax.sound.sampled` audio sink and an AWT subtitle rasterizer. The audio sink is proved against a fake device seam, not against a sound card, and no Linux or Windows JVM has run it. |
@@ -192,8 +192,9 @@ actually have (AVI, WMV, FLV, DVD-shaped MPEG-PS, MKV with AC-3, E-AC-3, DTS, Tr
 rest of FFmpeg's native menu) open and decode. The measured proof is nine matrix rows that failed on
 the previous profile and pass now, on the JVM host gate, the named iOS simulator and the named
 Android emulator. The named absences: https and every streaming protocol beyond plain http stay out
-(the protocol list is exactly file, pipe, data, http, tcp), software AV1 stays out on phones (FFmpeg's
-own av1 decoder is a hardware wrapper; vendoring dav1d is a separate decision), and the subtitle story is
+(the protocol list is exactly file, pipe, data, http, tcp), software AV1 is now vendored through dav1d
+on every native target and stays out only on the web (FFmpeg's own av1 decoder is a hardware wrapper,
+and dav1d needs pthreads the shipped wasm profile does not have), and the subtitle story is
 exactly the TEXT path: SubRip and WebVTT decode to cues end to end, from container tracks and
 from external local files alike, with the open-end, keyword and entity corners repaired; ASS
 renders its text through the same path without libass styling, and bitmap subtitles (PGS,
@@ -328,10 +329,17 @@ enough to call any platform supported.
   compared against FFmpeg, but the conversion is linear interpolation, which dulls the top end of
   music. libswresample replaces it before 1.0. There is no normalisation on the downmix either, so a
   source that is loud in several channels at once can clip.
-- **Software AV1 on the phones.** FFmpeg carries no native software AV1 decoder (its av1 decoder is
-  a hardware-acceleration shell), so AV1 plays through VideoToolbox on Apple and MediaCodec on
-  Android; a device with no AV1 hardware session has no AV1 route until dav1d is vendored
-  (KPKMP 17.11, KC-AV1SW).
+- **Software AV1 is vendored everywhere except the web.** FFmpeg carries no native software AV1
+  decoder (its av1 decoder is a hardware-acceleration shell), so AV1 needs either a hardware session
+  or dav1d. Both exist now on every native target: dav1d 1.5.4 is cross-built with full SIMD into all
+  eight of them, and hardware is asked for first where it exists (VideoToolbox on Apple silicon from
+  A17 Pro / M3, the MediaCodec wrapper on Android). A device with no AV1 hardware, an iPhone XS for
+  instance, decodes AV1 in software instead of refusing (KPKMP 17.11, KC-AV1SW).
+
+  The web is the exception, and deliberately: dav1d takes a hard pthreads dependency while the
+  shipped wasm profile is the single-threaded `base` variant, and dav1d ships no wasm SIMD at all,
+  so a wasm build of it could not decode AV1 in real time even threaded. The web's AV1 route is the
+  browser's own WebCodecs decoder.
 - **Styled ASS subtitles are seen, not drawn.** The text path (SubRip and WebVTT, embedded or
   external, timed, positioned, rasterised and composited) is complete; ASS tracks appear in the
   track list and their libass rendering is the recorded S4.f remainder.

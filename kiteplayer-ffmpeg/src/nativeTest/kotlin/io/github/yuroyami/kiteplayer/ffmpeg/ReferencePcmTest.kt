@@ -187,6 +187,14 @@ class ReferencePcmTest {
     /** Opens a source with only its audio stream selected, and its decoder. */
     private suspend fun openAudio(clip: String): Triple<KiteCodecSource, Int, AudioDecoder> {
         val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteCodecSource
+        // What this file measures is the DOWNMIX MATRIX and the ring's ordering, against reference PCM
+        // that ffmpeg's own native decoders produced. The tolerances below are tight on purpose because
+        // both sides are then the same arithmetic. A platform decoder is a different decoder, correct
+        // but not bit-identical, so letting one in here would move the variable this test holds still
+        // (measured: aac_at differs from native aac by 2.7e-3 worst sample on surround51.mp4, which is
+        // inaudible and still 2.7x this file's discontinuity bound). AppleAudioToolboxDecodeTest is
+        // where that decoder is measured instead.
+        source.preferPlatformAudioDecoder = false
         val stream = assertNotNull(source.firstAudio, "no audio stream in $clip")
         source.selectStreams(setOf(stream.index))
         val decoder = assertNotNull(source.audioDecoderFactories().first().create(stream))

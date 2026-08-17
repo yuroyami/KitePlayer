@@ -21,7 +21,6 @@ import kotlinx.cinterop.value
 import platform.Foundation.NSError
 import platform.Metal.MTLBlendFactorOne
 import platform.Metal.MTLBlendFactorOneMinusSourceAlpha
-import platform.Metal.MTLBlendFactorSourceAlpha
 import platform.Metal.MTLDeviceProtocol
 import platform.Metal.MTLLibraryProtocol
 import platform.Metal.MTLPixelFormatBGRA8Unorm
@@ -401,7 +400,10 @@ private fun MTLDeviceProtocol.makePipeline(
     attachment.pixelFormat = targetFormat
     if (blended) {
         attachment.blendingEnabled = true
-        attachment.sourceRGBBlendFactor = MTLBlendFactorSourceAlpha
+        // Overlay pixels arrive PREMULTIPLIED (the RgbaBitmap contract, unified 2026-08-17),
+        // so the source RGB factor is One: multiplying by source alpha again darkened every
+        // antialiased edge and translucent cue (audit F-ALPHA1's Metal half).
+        attachment.sourceRGBBlendFactor = MTLBlendFactorOne
         attachment.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha
         attachment.sourceAlphaBlendFactor = MTLBlendFactorOne
         attachment.destinationAlphaBlendFactor = MTLBlendFactorOneMinusSourceAlpha

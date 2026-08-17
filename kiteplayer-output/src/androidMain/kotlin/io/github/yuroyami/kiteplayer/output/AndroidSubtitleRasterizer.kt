@@ -117,11 +117,37 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, safeWidth)
             .setAlignment(alignment)
             .build()
-        val width = layout.width.coerceAtLeast(1)
+        // A POSITIONED cue's bitmap is its text extent, not the whole safe width (audit
+        // F-POS1): the layout keeps its wrap width so the lines break identically, but the
+        // draw below translates the glyphs to the bitmap's origin and the placement anchors
+        // the extent on the authored point. An unpositioned cue keeps the full-width bitmap,
+        // whose internal alignment IS its horizontal placement.
+        val positioned = layoutSpec.positionX != null || layoutSpec.positionY != null
+        val textWidth = if (positioned) {
+            var widest = 0f
+            for (line in 0 until layout.lineCount) {
+                val w = layout.getLineWidth(line)
+                if (w > widest) widest = w
+            }
+            kotlin.math.ceil(widest).toInt().coerceIn(1, safeWidth)
+        } else {
+            layout.width
+        }
+        val glyphShift = if (positioned) {
+            when (alignment) {
+                Layout.Alignment.ALIGN_OPPOSITE -> (safeWidth - textWidth).toFloat()
+                Layout.Alignment.ALIGN_CENTER -> (safeWidth - textWidth) / 2f
+                else -> 0f
+            }
+        } else {
+            0f
+        }
+        val width = textWidth.coerceAtLeast(1)
         val height = layout.height.coerceAtLeast(1)
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
+        if (glyphShift != 0f) canvas.translate(-glyphShift, 0f)
         // Outline pass first, fill second: the cheap universal legibility trick.
         val style = cue.spans.firstOrNull()?.style
         if (style != null && style.outlineWidthPx > 0f) {
@@ -142,13 +168,30 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
 
         val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
         val marginYPx = (viewportHeight * layoutSpec.marginVertical).toInt()
-        val x = layoutSpec.positionX?.let { (it * viewportWidth).toInt() } ?: when (layoutSpec.alignment) {
+        // An authored position is the cue's ANCHOR point, oriented by the alignment (F-POS1):
+        // \pos with \an2 puts the bottom-centre of the text on the point, not its top-left.
+        val x = layoutSpec.positionX?.let { fraction ->
+            val anchor = (fraction * viewportWidth).toInt()
+            when (layoutSpec.alignment) {
+                CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> anchor
+                CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight -> anchor - width
+                else -> anchor - width / 2
+            }
+        } ?: when (layoutSpec.alignment) {
             CueAlignment.BottomLeft, CueAlignment.MiddleLeft, CueAlignment.TopLeft -> marginXPx
             CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight ->
                 viewportWidth - marginXPx - width
             else -> (viewportWidth - width) / 2
         }
-        val y = layoutSpec.positionY?.let { (it * viewportHeight).toInt() } ?: when (layoutSpec.alignment) {
+        val y = layoutSpec.positionY?.let { fraction ->
+            val anchor = (fraction * viewportHeight).toInt()
+            when (layoutSpec.alignment) {
+                CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> anchor
+                CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
+                    anchor - height / 2
+                else -> anchor - height
+            }
+        } ?: when (layoutSpec.alignment) {
             CueAlignment.TopLeft, CueAlignment.TopCenter, CueAlignment.TopRight -> marginYPx
             CueAlignment.MiddleLeft, CueAlignment.MiddleCenter, CueAlignment.MiddleRight ->
                 (viewportHeight - height) / 2

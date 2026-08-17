@@ -58,6 +58,13 @@ public class AudioTrackSink internal constructor(
     private var blockAdapter: BlockBuffer? = null
 
     private var writer: Thread? = null
+
+    /* The interrupted block held across a pause (F-AUD2). Writer-confined: the pause path's
+     * join and the resume path's thread start are the only handovers. Cleared by stop's flush
+     * and by open, because a flush discards exactly what this holds. */
+    private var heldBlockFloats = 0
+    private var heldBlockOffset = 0
+    private var heldBlockShort = false
     @Volatile private var writerRun = false
     @Volatile private var draining = false
     private var closed = false
@@ -131,6 +138,9 @@ public class AudioTrackSink internal constructor(
             blockFrames = minOf(opened.bufferSizeInFrames, 512)
             blockBuffer = FloatArray(512 * format.channels)
             blockAdapter = BlockBuffer(format, blockBuffer)
+            heldBlockFloats = 0
+            heldBlockOffset = 0
+            heldBlockShort = false
             submittedFrames = 0L
             resetTimestampState()
             return format
@@ -187,6 +197,11 @@ public class AudioTrackSink internal constructor(
             submittedFrames = 0L
             resetTimestampState()
         }
+        /* The flush discarded exactly what the held block was (F-AUD2); after the join the
+         * writer is gone, so this clear races nothing. */
+        heldBlockFloats = 0
+        heldBlockOffset = 0
+        heldBlockShort = false
     }
 
     override suspend fun drain() {
@@ -213,6 +228,11 @@ public class AudioTrackSink internal constructor(
             draining = false
             writerRun = false
             d.stop() /* without flush: this is the end-of-media path */
+            /* Mirror stop's accounting reset (audit F-AUD3): everything submitted has been
+             * heard, and a later latencyNanos against a fresh head read minutes of pending
+             * audio out of the stale counter. */
+            submittedFrames = 0L
+            resetTimestampState()
         }
     }
 
@@ -292,20 +312,39 @@ public class AudioTrackSink internal constructor(
         val adapter = blockAdapter ?: return
         val channels = format.channels
         while (writerRun) {
-            val deadline = deadlineForBlock(d, format)
-            val written = callback.onRender(adapter, blockFrames, deadline)
-            val short = written < blockFrames
-            if (short) {
-                /* The tail is the sink's own obligation: nothing above this line zeroes it. */
-                adapter.writeSilence(written.coerceAtLeast(0), blockFrames - written.coerceAtLeast(0))
+            /* Audit F-AUD2: an interrupted block's unwritten tail was already pulled from the
+             * ring, so a resumed writer submits the REMAINDER first instead of dropping up to a
+             * block of decoded audio at every pause. The held state is writer-confined: the
+             * join in pause and the thread start in resume are its happens-before edges. */
+            val resuming = heldBlockFloats > 0
+            val short: Boolean
+            val startFloats: Int
+            val totalFloats: Int
+            if (resuming) {
+                short = heldBlockShort
+                startFloats = heldBlockOffset
+                totalFloats = heldBlockFloats
+            } else {
+                val deadline = deadlineForBlock(d, format)
+                val written = callback.onRender(adapter, blockFrames, deadline)
+                short = written < blockFrames
+                if (short) {
+                    /* The tail is the sink's own obligation: nothing above this line zeroes it. */
+                    adapter.writeSilence(written.coerceAtLeast(0), blockFrames - written.coerceAtLeast(0))
+                }
+                startFloats = 0
+                totalFloats = blockFrames * channels
             }
-            var offsetFloats = 0
-            val totalFloats = blockFrames * channels
+            var offsetFloats = startFloats
             var failed = false
             while (offsetFloats < totalFloats) {
                 val n = d.write(blockBuffer, offsetFloats, totalFloats - offsetFloats)
                 if (n > 0) {
                     offsetFloats += n
+                    /* Audit F-AUD1: a short POSITIVE count is also how the platform hands a
+                     * write back at an interrupt. Re-entering the blocking write here on a
+                     * paused, full track was a writer nothing could join. */
+                    if (!writerRun) break
                     continue
                 }
                 if (!writerRun) break /* pause or stop interrupted the blocking write */
@@ -328,8 +367,18 @@ public class AudioTrackSink internal constructor(
             /* SOL-A1: count what the device actually took. A pause or stop that interrupts
              * the blocking write mid-block, and a device failure partway, both leave a partial
              * count; claiming the whole block made latency and the head fallback lie by up to
-             * one block. Full blocks land on exactly the old arithmetic. */
-            submittedFrames += (offsetFloats / channels).toLong()
+             * one block. Full blocks land on exactly the old arithmetic; a resumed remainder
+             * counts only its own newly written part. */
+            submittedFrames += ((offsetFloats - startFloats) / channels).toLong()
+            if (offsetFloats < totalFloats && !failed) {
+                heldBlockFloats = totalFloats
+                heldBlockOffset = offsetFloats
+                heldBlockShort = short
+            } else {
+                heldBlockFloats = 0
+                heldBlockOffset = 0
+                heldBlockShort = false
+            }
             if (failed) break
             if (draining && short) {
                 /* The drain contract: keep pulling until the callback's first short return,
@@ -367,7 +416,11 @@ public class AudioTrackSink internal constructor(
      */
     private fun readTimestamp(d: AudioTrackDriver): DriverTimestamp? {
         val ts = d.timestamp() ?: return null
-        ts.framePosition = extendTimestampFrames(ts.framePosition, tsState)
+        /* Under headLock like the head's own wrap state (audit F-AUD4): the writer reads this
+         * per block and the public latencyNanos may read it from any thread. */
+        synchronized(headLock) {
+            ts.framePosition = extendTimestampFrames(ts.framePosition, tsState)
+        }
         return ts
     }
 

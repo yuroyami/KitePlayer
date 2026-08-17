@@ -92,17 +92,13 @@ internal class SubtitleOverlayView(context: Context) : View(context) {
         if (width <= 0 || height <= 0) return null
         val count = width.toLong() * height.toLong()
         if (count > Int.MAX_VALUE || rgba.size.toLong() != count * RGBA_BYTES) return null
-        val colors = IntArray(count.toInt())
-        var at = 0
-        for (index in colors.indices) {
-            val red = rgba[at].toInt() and 0xFF
-            val green = rgba[at + 1].toInt() and 0xFF
-            val blue = rgba[at + 2].toInt() and 0xFF
-            val alpha = rgba[at + 3].toInt() and 0xFF
-            colors[index] = (alpha shl 24) or (red shl 16) or (green shl 8) or blue
-            at += RGBA_BYTES
-        }
-        return Bitmap.createBitmap(colors, width, height, Bitmap.Config.ARGB_8888)
+        // Raw copy: the cue bytes are PREMULTIPLIED (the RgbaBitmap contract since the
+        // 2026-08-17 audit) and ARGB_8888 stores premultiplied, so any conversion here is one
+        // premultiply too many; the old straight-colour path darkened every antialiased edge
+        // (audit F-ALPHA1). Mutable but written exactly once, before HWUI ever samples it.
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmap.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(rgba))
+        return bitmap
     }
 
     private fun retireBitmaps() {

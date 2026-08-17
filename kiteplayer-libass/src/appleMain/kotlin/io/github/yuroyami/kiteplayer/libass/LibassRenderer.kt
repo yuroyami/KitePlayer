@@ -87,8 +87,9 @@ public class LibassRenderer : AutoCloseable {
 
     /**
      * One [BitmapRegion] per libass image: the 8-bit coverage bitmap times the image's RGBA
-     * colour, emitted non-premultiplied exactly as [RgbaBitmap] documents. libass colour is
-     * RRGGBBAA with AA as TRANSPARENCY (0 opaque), inverted here once.
+     * colour, emitted PREMULTIPLIED exactly as [RgbaBitmap] documents since the 2026-08-17
+     * audit unified the contract. libass colour is RRGGBBAA with AA as TRANSPARENCY (0 opaque),
+     * inverted here once, and the colour channels are scaled by the pixel's own alpha at emit.
      */
     private fun collectRegions(first: CPointer<ASS_Image>, canvasWidth: Int, canvasHeight: Int): List<BitmapRegion> {
         val regions = mutableListOf<BitmapRegion>()
@@ -111,10 +112,11 @@ public class LibassRenderer : AutoCloseable {
                     val rowBase = row * stride
                     for (column in 0 until width) {
                         val coverage = bitmap[rowBase + column].toInt() and 0xFF
-                        pixels[at++] = red.toByte()
-                        pixels[at++] = green.toByte()
-                        pixels[at++] = blue.toByte()
-                        pixels[at++] = ((coverage * opacity) / 255).toByte()
+                        val alpha = (coverage * opacity) / 255
+                        pixels[at++] = ((red * alpha) / 255).toByte()
+                        pixels[at++] = ((green * alpha) / 255).toByte()
+                        pixels[at++] = ((blue * alpha) / 255).toByte()
+                        pixels[at++] = alpha.toByte()
                     }
                 }
                 regions += BitmapRegion(

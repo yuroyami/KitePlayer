@@ -467,19 +467,24 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      */
     private fun drawOverlay(canvas: TargetCanvas, active: SubtitleOverlay, layout: FrameLayout) {
         if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
-        val scaleX = layout.width.toFloat() / active.viewportWidth
-        val scaleY = layout.height.toFloat() / active.viewportHeight
+        // Overlay coordinates live in UNROTATED video-display space, so they map into the
+        // PRE-turn draw rectangle and the canvas turn in drawOverlayImage glues them to the
+        // picture (audit F-ROT1). The post-turn rectangle put them at the wrong place with the
+        // wrong scale on both axes whenever the video carried a quarter turn.
+        val scaleX = layout.drawWidth / active.viewportWidth
+        val scaleY = layout.drawHeight / active.viewportHeight
         for ((imageIndex, image) in active.images.withIndex()) {
             canvas.drawOverlayImage(
                 rgba = image.bitmap.pixels,
                 width = image.bitmap.width,
                 height = image.bitmap.height,
-                left = layout.left + image.x * scaleX,
-                top = layout.top + image.y * scaleY,
+                left = layout.drawLeft + image.x * scaleX,
+                top = layout.drawTop + image.y * scaleY,
                 drawWidth = image.bitmap.width * scaleX,
                 drawHeight = image.bitmap.height * scaleY,
                 contentHash = active.contentHash,
                 imageIndex = imageIndex,
+                layout = layout,
             )
         }
     }
@@ -556,11 +561,15 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * frame interval late, which at 30 fps is inside anyone's reading reaction.
      */
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
-        this.overlay.value = overlay
         val external = overlayConsumer
         if (external != null) {
+            // A delegated overlay is the external layer's alone (audit F-DDRW1): storing it
+            // here too made the software path burn every cue into the video AND hand it to the
+            // view, so each subtitle drew twice, once without the view's rotation mapping.
+            this.overlay.value = null
             external(overlay)
         } else {
+            this.overlay.value = overlay
             signal.trySend(Unit)
         }
     }
@@ -751,6 +760,7 @@ internal interface TargetCanvas {
         drawHeight: Float,
         contentHash: Long,
         imageIndex: Int,
+        layout: FrameLayout,
     )
 }
 
@@ -799,8 +809,11 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
     private val overlayBitmaps = mutableListOf<Bitmap>()
 
     /**
-     * The premultiply-on-upload the cue contract prescribes: cue pixels arrive straight, a
-     * Canvas needs premultiplied. Done once per contentHash and image index.
+     * Cue pixels arrive PREMULTIPLIED (the RgbaBitmap contract since the 2026-08-17 audit) and
+     * an ARGB_8888 bitmap stores premultiplied, so the upload is a raw copy. The old path here
+     * premultiplied by hand and then let setPixels premultiply AGAIN, which turned every
+     * antialiased edge and translucent cue darker with each pass (audit F-ALPHA1).
+     * Done once per contentHash and image index.
      */
     private fun overlayBitmapFor(
         rgba: ByteArray,
@@ -816,18 +829,8 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
         }
         overlayBitmaps.getOrNull(imageIndex)?.let { return it }
         check(imageIndex == overlayBitmaps.size) { "overlay images must be drawn in index order" }
-        val pixels = IntArray(width * height)
-        var at = 0
-        for (index in pixels.indices) {
-            val r = rgba[at].toInt() and 0xFF
-            val g = rgba[at + 1].toInt() and 0xFF
-            val b = rgba[at + 2].toInt() and 0xFF
-            val a = rgba[at + 3].toInt() and 0xFF
-            pixels[index] = (a shl 24) or ((r * a / 255) shl 16) or ((g * a / 255) shl 8) or (b * a / 255)
-            at += 4
-        }
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+        bitmap.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(rgba))
         overlayBitmaps += bitmap
         return bitmap
     }
@@ -899,10 +902,23 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
             drawHeight: Float,
             contentHash: Long,
             imageIndex: Int,
+            layout: FrameLayout,
         ) {
             val bitmap = overlayBitmapFor(rgba, width, height, contentHash, imageIndex)
             destination.set(left, top, left + drawWidth, top + drawHeight)
-            canvas.drawBitmap(bitmap, null, destination, paint)
+            val saved = canvas.save()
+            try {
+                /* The same turn the picture made (audit F-ROT1): overlay coordinates are mapped
+                 * into the PRE-turn draw rectangle and the canvas turn glues them to the video,
+                 * exactly as drawFrame does. Unrotated they sat on the post-turn rectangle with
+                 * the wrong scale on both axes. */
+                if (layout.rotationDegrees != 0) {
+                    canvas.rotate(layout.rotationDegrees.toFloat(), layout.centerX, layout.centerY)
+                }
+                canvas.drawBitmap(bitmap, null, destination, paint)
+            } finally {
+                canvas.restoreToCount(saved)
+            }
         }
     }
 }

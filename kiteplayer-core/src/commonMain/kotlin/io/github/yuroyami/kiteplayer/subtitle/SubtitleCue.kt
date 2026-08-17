@@ -123,11 +123,14 @@ public data class BitmapRegion(
 )
 
 /**
- * Straight RGBA8888, row major, no padding, non-premultiplied alpha.
+ * PREMULTIPLIED RGBA8888, row major, no padding.
  *
- * Non-premultiplied is chosen because every subtitle source produces it, so converting once at
- * the renderer is cheaper than converting at every decoder. Renderers that need premultiplied
- * alpha convert on upload and document it.
+ * Premultiplied is what both platform rasterizers actually produce (Android's ARGB_8888 copy
+ * and CoreGraphics' premultiplied context) and what the Compose and Metal consumers upload
+ * without conversion. The 2026-08-17 audit found this doc claiming straight alpha while half
+ * the consumers premultiplied AGAIN, turning white 50% text grey; one written contract with
+ * raw-copy consumers is the fix. A producer that computes straight colour premultiplies once
+ * at emit and documents it, as the libass renderer does.
  */
 public class RgbaBitmap(
     public val width: Int,

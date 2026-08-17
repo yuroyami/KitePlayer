@@ -71,6 +71,52 @@ class AndroidSurfaceOverlayTest {
             renderer.close()
         }
     }
+
+    // Audit F-ROT1: overlay coordinates map into the PRE-turn draw rectangle and turn with the
+    // picture; unrotated they sat on the post-turn rectangle with the wrong scale on both axes.
+    @Test
+    fun aRotatedFrameCarriesItsOverlayThroughTheSameTurn() {
+        val target = FakeTarget(canvasWidth = 90, canvasHeight = 160)
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            target = target,
+        )
+        try {
+            kotlinx.coroutines.runBlocking {
+                renderer.setOverlay(
+                    io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+                        images = listOf(
+                            io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                                x = 150,
+                                y = 80,
+                                bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(10, 10, ByteArray(10 * 10 * 4)),
+                            ),
+                        ),
+                        viewportWidth = 160,
+                        viewportHeight = 90,
+                        contentHash = 9L,
+                    ),
+                )
+                /* A 160x90 frame turned 90 degrees fills the 90x160 canvas exactly. */
+                renderer.present(TestFrame(width = 160, height = 90, rotationDegrees = 90), 0L)
+                val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+                while (target.canvases.lastOrNull()?.drawnOverlays?.isEmpty() != false) {
+                    check(System.nanoTime() < deadline) { "no overlay was composited" }
+                    Thread.sleep(2)
+                }
+            }
+            val canvas = target.canvases.last()
+            val draw = canvas.drawnOverlays.single()
+            /* Pre-turn rect: drawLeft = -35, drawTop = 35, at 1:1 scale in unrotated space. */
+            assertEquals(115f, draw.left, "x maps into the pre-turn rectangle at unrotated scale")
+            assertEquals(115f, draw.top)
+            assertEquals(10f, draw.drawWidth, "a quarter turn must not squash the overlay")
+            assertEquals(10f, draw.drawHeight)
+            assertEquals(90, canvas.drawnOverlayLayouts.single().rotationDegrees, "the turn rides the draw")
+        } finally {
+            renderer.close()
+        }
+    }
 }
 
 private class TestFrame(
@@ -137,9 +183,13 @@ private class FakeCanvas(override val width: Int, override val height: Int) : Ta
         drawHeight: Float,
         contentHash: Long,
         imageIndex: Int,
+        layout: FrameLayout,
     ) {
         drawnOverlays += OverlayDraw(width, height, left, top, drawWidth, drawHeight, contentHash)
+        drawnOverlayLayouts += layout
     }
+
+    val drawnOverlayLayouts = mutableListOf<FrameLayout>()
 }
 
 private class FakeTarget(

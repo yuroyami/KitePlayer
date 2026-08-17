@@ -51,6 +51,9 @@ private class FakeAudioTrackDriver(
 
     /** When >= 0, writes from that call index on block like [blockWrites]. */
     @Volatile var blockFromWriteCall = -1
+
+    /** When > 0, an interrupted blocked write returns this short POSITIVE count instead of 0. */
+    @Volatile var interruptWriteResult = 0
     private var writeCalls = 0
     private val writeGate = Object()
     @Volatile private var interrupted = false
@@ -91,7 +94,16 @@ private class FakeAudioTrackDriver(
             synchronized(writeGate) {
                 while (!interrupted) writeGate.wait()
             }
-            return 0 /* the platform returns what it wrote before the interrupt; zero is legal */
+            /* The platform returns what it wrote before the interrupt: zero is legal, and so
+             * is a short POSITIVE count, which is the audit F-AUD1 shape. */
+            if (interruptWriteResult > 0) {
+                val take = interruptWriteResult.coerceAtMost(sizeFloats)
+                synchronized(writtenFloats) {
+                    for (i in 0 until take) writtenFloats += source[offsetFloats + i]
+                }
+                return take
+            }
+            return 0
         }
         val n = synchronized(writeResults) {
             if (writeResults.isEmpty()) sizeFloats else writeResults.removeFirst()
@@ -465,6 +477,65 @@ class AudioTrackSinkTest {
             "no driver call may land after release; the join precedes it",
         )
         assertEquals(1, synchronized(driver.calls) { driver.calls.count { it == "release" } })
+    }
+
+    // Audit F-AUD1: a short POSITIVE return is also how the platform hands a write back at an
+    // interrupt, and the loop used to re-enter the blocking write without re-reading the signal.
+    @Test
+    fun `a short positive return at the pause signal stops the loop instead of re-entering write`() = runBlocking {
+        val driver = FakeAudioTrackDriver()
+        driver.blockWrites = true
+        driver.interruptWriteResult = 100
+        val s = sink(driver)
+        s.open(stereo48k, FullBlockCallback())
+        s.start()
+        driver.writeEntered.await()
+        s.setPaused(true)
+        val writes = synchronized(driver.calls) { driver.calls.count { it == "write" } }
+        assertTrue(
+            writes <= 2,
+            "the signalled writer must stop at the interrupted write, not keep the device busy: $writes writes",
+        )
+        /* And the partial count is honest, exactly like the zero-return interrupt. */
+        driver.timestampAnswer = null
+        driver.headAnswer = 0
+        assertEquals(AudioTrackSink.framesToNanos(50, 48_000), s.latencyNanos())
+        s.close()
+    }
+
+    // Audit F-AUD2: the interrupted block's unwritten tail was already pulled from the ring, so
+    // dropping it on resume lost up to a block of decoded audio at every pause.
+    @Test
+    fun `resume submits the interrupted block's remainder before pulling a new one`() = runBlocking {
+        val driver = FakeAudioTrackDriver()
+        driver.writeResults.add(100)
+        driver.blockFromWriteCall = 1
+        val s = sink(driver)
+        /* Block n is stamped with the value n, so the written stream itself names its block. */
+        val stamped = object : AudioRenderCallback {
+            var block = 0f
+            override fun onRender(destination: AudioSinkBuffer, frames: Int, deadlineNanos: Long): Int {
+                val value = block++
+                val samples = FloatArray(frames * 2) { value }
+                destination.writeInterleaved(samples, 0, 0, frames)
+                return frames
+            }
+        }
+        s.open(stereo48k, stamped)
+        s.start()
+        driver.writeEntered.await()
+        while (synchronized(driver.calls) { driver.calls.count { it == "write" } } < 2) Thread.sleep(1)
+        s.setPaused(true)
+
+        driver.blockFromWriteCall = -1
+        s.setPaused(false)
+        while (synchronized(driver.writtenFloats) { driver.writtenFloats.size } < 1224) Thread.sleep(1)
+        s.setPaused(true)
+        val written = synchronized(driver.writtenFloats) { driver.writtenFloats.toList() }
+        assertEquals(0f, written[100], "float 100 continues block zero's remainder, not a fresh pull")
+        assertEquals(0f, written[1023], "the whole first block lands before any of the second")
+        assertEquals(1f, written[1024], "the second block follows the completed first")
+        s.close()
     }
 
     @Test

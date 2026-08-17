@@ -64,38 +64,53 @@ fun resolveNdk(): File? {
         ?.listFiles { f: File -> f.isDirectory }?.maxByOrNull { it.name }
 }
 
+/*
+ * The Android target is always DECLARED, and only its native half is conditional.
+ *
+ * Applying the Android plugin obliges configuring the target: leave it out and every build of this
+ * project fails with "compileSdk version is not set", whether or not it wanted libass. So the
+ * target exists unconditionally and the JNI wiring below does not, which means a build with no ass
+ * chain still produces Kotlin that compiles and simply has no library to load. That trade is only
+ * acceptable because this module is OPTIONAL and unpublished: its whole purpose needs the chain,
+ * and the log line below says so plainly rather than letting it be discovered at runtime.
+ */
+val androidChainsReady: Boolean = libassDepsRoot != null &&
+    BuildLibassJniTask.ABIS.all {
+        libassDepsRoot.resolve("${it.depsDirName}/ass-chain/lib/libass.a").isFile
+    }
+val ndkForJni: File? = if (androidChainsReady) resolveNdk() else null
+val androidReady: Boolean = androidChainsReady && ndkForJni != null
+if (androidReady) {
+    apply(plugin = libs.plugins.android.kmp.library.get().pluginId)
+}
+
 kotlin {
     explicitApi()
     jvmToolchain(21)
 
     applyDefaultHierarchyTemplate()
 
-    // Android is the one JVM target so far, and it is a different SHAPE of target rather than one
-    // more entry in the list below: it reaches libass through the JNI adapter in native/src, built
-    // by BuildLibassJniTask into the jniLibs layout AGP packages. It appears only when its chains
-    // exist, on the same rule as the cross targets.
-    val androidAbisReady = BuildLibassJniTask.ABIS.all {
-        libassDepsRoot?.resolve("${it.depsDirName}/ass-chain/lib/libass.a")?.isFile == true
-    }
-    val ndkForJni: File? = if (androidAbisReady) resolveNdk() else null
-    if (androidAbisReady && ndkForJni != null) {
-        android {
-            namespace = "io.github.yuroyami.kiteplayer.libass"
-            compileSdk = 36
-            minSdk = 26
-            // Device tests only. A host test could not load the adapter: it is an Android .so, and
-            // proving this half means proving the library loads and renders on a real runtime.
-            withDeviceTestBuilder {
-                sourceSetTreeName = "test"
-            }.configure {
-                instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-            }
+    // Android is a different SHAPE of target rather than one more entry in the list below: it
+    // reaches libass through the JNI adapter in native/src, built by BuildLibassJniTask into the
+    // jniLibs layout AGP packages.
+    android {
+        namespace = "io.github.yuroyami.kiteplayer.libass"
+        compileSdk = 36
+        minSdk = 26
+        // Device tests only. A host test could not load the adapter: it is an Android .so, and
+        // proving this half means proving the library loads and renders on a real runtime.
+        withDeviceTestBuilder {
+            sourceSetTreeName = "test"
+        }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
-    } else if (libassDepsRoot != null) {
+    }
+    if (!androidReady) {
         logger.lifecycle(
-            "[kiteplayer-libass] Android target skipped: " +
-                if (!androidAbisReady) {
-                    "no ass-chain for ${BuildLibassJniTask.ABIS.joinToString { it.depsDirName }}."
+            "[kiteplayer-libass] Android target has NO native library: " +
+                if (!androidChainsReady) {
+                    "no ass-chain for ${BuildLibassJniTask.ABIS.joinToString { it.depsDirName }} " +
+                        "(set -Pkiteplayer.libass.root and run buildAssChainFor<Target>)."
                 } else {
                     "no Android NDK found (set ANDROID_NDK_HOME or sdk.dir in local.properties)."
                 },
@@ -219,13 +234,11 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
-        if (androidAbisReady && ndkForJni != null) {
-            getByName("androidDeviceTest").dependencies {
+        getByName("androidDeviceTest").dependencies {
                 implementation(kotlin("test"))
                 implementation(libs.androidx.test.core)
                 implementation(libs.androidx.test.runner)
-                implementation(libs.androidx.test.ext.junit)
-            }
+            implementation(libs.androidx.test.ext.junit)
         }
     }
 }
@@ -233,11 +246,8 @@ kotlin {
 // The JNI adapter, and the one wiring that puts it in the AAR. The task's output root sits one
 // level ABOVE the ABI directories on purpose: `addGeneratedSourceDirectory` packages `arm64-v8a/`
 // and `x86_64/` from underneath it, which is the layout Android's loader expects to find.
-if (libassDepsRoot != null && BuildLibassJniTask.ABIS.all {
-        libassDepsRoot.resolve("${it.depsDirName}/ass-chain/lib/libass.a").isFile
-    }
-) {
-    resolveNdk()?.let { ndk ->
+if (androidReady) {
+    ndkForJni?.let { ndk ->
         val buildJni = tasks.register<BuildLibassJniTask>("buildLibassJni") {
             sourceFile.set(project.file("native/src/libass_jni.c"))
             assChainRoot.set(libassDepsRoot)

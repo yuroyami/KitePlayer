@@ -191,8 +191,12 @@ every native FFmpeg decoder, demuxer, parser and bitstream filter is compiled, s
 actually have (AVI, WMV, FLV, DVD-shaped MPEG-PS, MKV with AC-3, E-AC-3, DTS, TrueHD, ALAC, and the
 rest of FFmpeg's native menu) open and decode. The measured proof is nine matrix rows that failed on
 the previous profile and pass now, on the JVM host gate, the named iOS simulator and the named
-Android emulator. The named absences: https and every streaming protocol beyond plain http stay out
-(the protocol list is exactly file, pipe, data, http, tcp), software AV1 is now vendored through dav1d
+Android emulator. The named absences: every streaming protocol beyond plain http stays out
+of FFmpeg (its protocol list is exactly file, pipe, data, http, tcp). https is NOT among the absences,
+though this list used to read as if it were: no tree carries a TLS backend on purpose, and https
+plays through `:kiteplayer-network`'s Ktor reader over the custom AVIO bridge, so the bytes reach
+FFmpeg with the OS having already terminated TLS (OkHttp on Android and the JVM, NSURLSession on
+Apple, `fetch` on the web). Software AV1 is now vendored through dav1d
 on every native target and stays out only on the web (FFmpeg's own av1 decoder is a hardware wrapper,
 and dav1d needs pthreads the shipped wasm profile does not have), and the subtitle story is
 exactly the TEXT path: SubRip and WebVTT decode to cues end to end, from container tracks and

@@ -964,7 +964,8 @@ Selected by ANY of these, mechanically, by changed path:
 - any Kotlin under `nativeMain`, `nativeTest`, `jvmMain`, `jvmTest`, `jvmAndAndroidMain`,
   `jvmAndAndroidTest`, `androidMain`, `androidHostTest`, `androidDeviceTest`, `appleMain`,
   `appleTest`, `macos*Main`, `macos*Test`, `ios*Main` or `ios*Test` (the wildcard includes
-  shared iosMain/iosTest)
+  shared iosMain/iosTest), and from phase W also `linux*Main`, `linux*Test`, `mingw*Main`,
+  `mingw*Test` and `realBackendTest`
 - the completion of any Horizon item, unconditionally, whatever it changed
 
 ```bash
@@ -982,6 +983,8 @@ cd ../KiteCodec
 ./native/kitecodec-c/scripts/symbol-audit.sh            # the shipped macos_arm64 archive
 ./native/kitecodec-c/scripts/klib-metadata-diff.sh --check
 ./gradlew :kitecodec-core:macosArm64Test
+./gradlew :kitecodec-core:jvmTest -Pkitecodec.hostTargetsOnly=true   # the real JNI backend, W-01
+./scripts/linux-tests.sh                                             # the cross-built FFmpeg, W-06
 ./gradlew publishToMavenLocal -Pkitecodec.hostTargetsOnly=true   # when KitePlayer must see changes
 
 # KitePlayer. Media generation comes FIRST, not with the sample runs where it used to sit:
@@ -997,6 +1000,14 @@ cd ../KitePlayer
 kiteplayer-rt/native/scripts/build-host.sh asan  && kiteplayer-rt/native/scripts/run-c-tests.sh asan
 kiteplayer-rt/native/scripts/build-host.sh tsan  && kiteplayer-rt/native/scripts/run-c-tests.sh tsan
 kiteplayer-rt/native/scripts/run-c-tests.sh interpose  # plain binaries, interposer must be live
+
+# The desktop surfaces, added by phase W. The JVM suites are ordinary Gradle tasks; the Linux one
+# is a script because Gradle CREATES linuxX64Test and linuxArm64Test on a macOS host and then
+# permanently disables them, so naming those tasks would be green by definition rather than by
+# evidence. mingw has no run line on purpose: a PE binary needs Windows, and the link is the claim.
+./gradlew :kiteplayer-output:jvmTest :kiteplayer-mobile:jvmTest :kiteplayer-ffmpeg:jvmTest
+./scripts/linux-tests.sh                              # core, subtitles and ffmpeg, in a container
+./gradlew :kiteplayer-core:linkDebugTestMingwX64      # Windows stays a link claim
 
 # Cross-target compile spot checks
 ./gradlew :kiteplayer-core:compileKotlinJs :kiteplayer-core:compileKotlinWasmJs \

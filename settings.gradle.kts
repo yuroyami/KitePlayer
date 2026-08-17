@@ -86,3 +86,7 @@ include(":kiteplayer-sample-android")
 // place where the desktop JVM backend, the desktop output half and KiteVideo all run at once,
 // which is what makes the per-frame upload cost measurable instead of assumed.
 include(":kiteplayer-sample-desktop")
+// The KV-6 measurement harness (17.14 X-01), and nothing else. S6 is gated on one unmeasured
+// number, the per-frame cost of converting and drawing a 1080p frame on wasm with ONE thread, and
+// this module exists to produce it before any binding work is committed to.
+include(":kiteplayer-sample-web")

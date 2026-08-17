@@ -17727,6 +17727,29 @@ deliberately left open.
   synchronous XHR. The spike proved in a real browser that a Worker CAN block this way, which is
   why this does not force cross-origin isolation.
 - Sub-phase: X.6. Test: a seek that crosses a buffer boundary on a real file served over HTTP.
+  Result, 2026-08-17: `scripts/wasm-io-probe.sh` opens `testmedia/sync1080p30.mp4` through
+  `ffkmp_fmt_open_input_io` with read and seek callbacks that live in JavaScript, registered with
+  emscripten's `addFunction`. **It demuxes the real file and then decodes it.** Reported: container
+  `mov,mp4,m4a,3gp,3g2,mj2`, 2 streams, h264 1920x1080 and aac, duration 10.00s exactly, and the JS
+  source served 131,120 bytes of a 19,867,162 byte file, which is the right shape: stream discovery
+  seeks and reads a header rather than slurping the whole thing.
+  **Decode, on the same run, because a demuxer that never decodes proves half a pipeline.** Three
+  frames out of h264, first pts 0, converted to RGBA at 1920x1080 and 8,294,400 bytes. The pixels
+  are inspected rather than trusted: 2,073,600 non-black pixels, which is exactly 1920 times 1080,
+  so every pixel carries picture, and the alpha channel is opaque everywhere. A frame of zeroes
+  would have satisfied every size and status assertion, which is why the content check exists.
+  Falsification: a byte source whose read always returns -1 is REFUSED at open with
+  `-1094995529` (`AVERROR_INVALIDDATA`) rather than producing an empty or fabricated context.
+  **Two API traps paid for here.** `ffkmp_fmt_open_input_io` takes an `int64_t` size, and with
+  `WASM_BIGINT` that argument must arrive as a JS BigInt; emscripten's `ccall` has no type spelling
+  for it and fails with `Cannot convert N to a BigInt`, so the export is called directly. And
+  `ffkmp_frame_copy_to_buffer` with a null destination answers -28, an error code and not a length,
+  so the size query is `ffkmp_image_get_buffer_size`; treating the first as a size would have
+  allocated nothing and copied into it.
+  Honest bound: node, not a browser, and a whole file already in memory. The browser arm needs the
+  Worker of X-08 before a blocking read is legal off the main thread, and range-request streaming
+  is not attempted here. What is proved is that the callback shape crosses into JS correctly and
+  that real media decodes through it.
 
 #### X-07. `kitecodec-core`'s wasmJs actuals are `unsupportedMain` stubs
 - Where: `kitecodec-core/build.gradle.kts:204-205` and its placeholder rule.
@@ -17769,6 +17792,33 @@ deliberately left open.
   loop with no worker, no dispatcher and no `runBlocking`.
 - Sub-phase: X.11. Test: X-01's probe re-run against the real renderer, so the gate number and the
   shipped number are comparable by construction.
+  Result, 2026-08-17, TIER ONE PLAYS. `scripts/wasm-browser-demo.sh` in KiteCodec builds the
+  module and serves `native/kitecodec-c/probe/browser/index.html`, which decodes
+  `testmedia/sync1080p30.mp4` with FFmpeg in wasm and draws it to a 2d canvas with `putImageData`.
+  A screenshot of the running page shows the clip's colour bars, sweep line and burnt-in timecode
+  at 1920x1080, and the timecode advances between frames, so this is playback and not one still.
+  **The numbers settle S6-D6 correction 2 and, with it, the open half of the X-01 stop gate.**
+  Per 1080p frame, measured in the page's own HUD: **convert 6.0 to 6.8 ms, draw 2.50 to 2.90 ms,
+  about 8.5 to 9.7 ms together, against a 33.3 ms budget.** Set beside X-01's Kotlin-and-Skia path:
+
+  | step | Kotlin loop + Skia raster (X-01) | FFmpeg sws_scale + putImageData (here) |
+  |---|---|---|
+  | YUV to RGBA | 50 to 87 ms | 6.0 to 6.8 ms |
+  | onto the drawable | 107 to 153 ms | 2.50 to 2.90 ms |
+  | total | 160 to 240 ms | 8.5 to 9.7 ms |
+
+  About twenty times faster, and inside the frame budget with roughly 3.5x headroom. Both halves
+  moved for the same reason: the pixels never enter the Kotlin heap. The conversion runs in C
+  beside the decoder, and the result is already an ArrayBuffer view the canvas accepts directly.
+  **Honest bounds, and the fps figure is NOT one of the numbers above.** The page's frames-per-second
+  readout shows 0.0 to 0.1 and means nothing here: the browser pane is hidden, so
+  `requestAnimationFrame` fires only when a screenshot forces a paint. What is measured is the
+  per-frame COST, which is a span inside the callback and does not depend on how often the callback
+  runs. A real throughput number needs a visible window and is not claimed. Also unclaimed: audio,
+  A/V sync, seeking and the engine. This is the render path, proved end to end, with everything
+  above it still to come. And this is tier one by S6-D6's own terms, a canvas layered under Compose
+  controls; the Compose-true single-surface path that D-6 promises, where clip, alpha and rotation
+  apply to the video pixels, is tier two and is NOT what this measured.
 
 #### X-12. `platformKitePlayerDefaults` is `Unavailable` on wasmJs
 - Where: `:kiteplayer-mobile`'s wasmJs source set.

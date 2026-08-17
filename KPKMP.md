@@ -29,6 +29,32 @@
 > Added 2026-08-17 at the owner's explicit instruction, after an agent reported a whole phase to
 > them in register codes they had no way to read.
 
+> ## **RULE ONE: THIS FILE IS UPDATED BY THE SAME COMMIT THAT CHANGES THE TREE.**
+>
+> **A register row is a claim about the code. A claim nobody revisits becomes a lie with a date on
+> it.** This is not a style preference; it is the only thing that makes the register worth reading.
+>
+> **Whenever you do ANY work on either repository, before you report it done:**
+>
+> 1. **Close what you closed.** Find every row your work answers and mark it CLOSED with the commit
+>    that closed it. Do not leave it for a later sweep. There is no later sweep.
+> 2. **Open what you opened.** A limitation you introduced, accepted or discovered is a new row, in
+>    the register nearest the work, written before you move on.
+> 3. **Correct what you found false.** If a row describes the tree wrongly, say so on the row with
+>    the evidence, and say when it stopped being true if you can tell.
+> 4. **Reduce what you narrowed.** A row half answered is REDUCED with its remainder named, never
+>    silently left whole and never quietly deleted.
+> 5. **Log the work.** Section 14 gets what was measured and what was NOT, in the same commit.
+>
+> **The rule exists because it was broken.** On 2026-08-18 a verification pass found SIX rows the
+> register still listed as open that the tree had already closed, four of them closed the previous
+> day by surges that never looked at the register: SOL-S1 and SOL-S2 by the deep audit's own
+> F-ALPHA1 and F-CFL1, SOL-API6 by W-18, SOL-B3 by a plugin change nobody re-ran. An owner reading
+> this file would have paid for work already done, and an agent trusting it would have started it.
+>
+> **A commit that changes behaviour and does not touch this file is incomplete**, unless the work
+> genuinely answers no row and opens none, which is rarer than it feels while coding.
+
 
 KitePlayer Kotlin Multiplatform, the piloting plan. Written 2026-08-09, revised the same
 day after a second independent full audit of both repositories was verified claim by claim
@@ -8412,7 +8438,7 @@ is no other.
      background-slideshow evidence run must enable it first.
 
 - **2026-08-16, register addition from the surge (17.11):**
-  | KC-AV1SW | KiteCodec | Software AV1 on Android and iOS needs vendored dav1d (BSD-2, LGPL-compatible): FFmpeg's av1 decoder is hwaccel-only, so a device without an AV1 MediaCodec/VideoToolbox session has no AV1 route today. Meson cross-build per ABI, wired as an FFmpeg external. | Open, S3-adjacent |
+  | KC-AV1SW | KiteCodec | CLOSED 2026-08-17/18. dav1d 1.5.4 is cross-built with full SIMD into ALL EIGHT native trees (macos-arm64, ios-arm64, ios-simulator-arm64, android-arm64, android-x64, linux-x64, linux-arm64, mingw-x64) and all three KitePlayer consumer blocks assert it with `dav1d = true`. The format matrix's av1.mkv row was promoted MustSurvive -> MustPlay and passes on macOS, the JVM and the iOS simulator, where it previously recorded the typed -78 refusal. wasm32 is deliberately excluded: dav1d takes a hard pthreads dependency (its meson.build requires `dependency('threads')` on every non-Windows host) while the shipped wasm profile is the single-threaded `base` variant, and dav1d ships no wasm SIMD, so it could not decode in real time even threaded. The web's AV1 route stays WebCodecs (X-15). | CLOSED |
 
 - **2026-08-16, the S4.g surge (owner mandate continued: beat mpv on everything else too).**
   Landed in 0.0.6, every feature red-first or falsified after the fact where noted, full core
@@ -9088,6 +9114,47 @@ briefly quiet machine. It is reported as an outlier rather than quoted as the nu
 figure above is a range because the host was not idle.
 
 ---
+
+- 2026-08-18, the parity sweep and the register's own audit (Opus 5, owner-directed). Two kinds of
+  work, and the second is the one that matters more.
+
+  **The tree.** Every shipped `libavcodec.a` was read with llvm-nm instead of trusted from its
+  configure record, which is how all of this was found. iOS was building with `--disable-asm` for
+  no recorded reason while the Android profile three lines away states that arm64 asm is what makes
+  software decode fast: measured 0 NEON symbols, now 1365, against macOS's 1367 from the same
+  clang. iOS also carried none of the fifteen AudioToolbox decoders, because the profile disables
+  autodetect and never asked for the framework. AV1's VideoToolbox hwaccel turned out to have been
+  compiled all along and simply never requested, so one `when` branch reaches it. dav1d went from
+  two trees to eight, closing KC-AV1SW, and av1.mkv was promoted from MustSurvive to MustPlay. The
+  libass chain went from four targets to eight and the module from two to seven, Android through a
+  new JNI adapter proved on a real emulator. The web learned https through Ktor's js engine.
+  MEASURED, not asserted: aac_at against native aac on surround51.mp4 differs by 2.8e-3 worst and
+  1.4e-5 mean over 147456 samples, with IDENTICAL sample counts, which is the number that rules out
+  a priming difference and therefore an A/V sync risk.
+  NOT measured, and named so nobody reads the absence as proof: AV1 HARDWARE decode, because this
+  machine is an M2 with no AV1 silicon; every AV1 run here proved the refusal-and-fallback path
+  only (PAR-6). Five build bugs were latent rather than new, each invisible until a target that
+  exercises it existed: meson needs pkg-config named in `[binaries]` for a cross build; konan's
+  sysroots are C sysroots so libstdc++'s headers sit outside them; `-std=gnu11` must not reach
+  clang++; `File.copyRecursively` drops executable bits, which only libass' x86 assembly notices;
+  and llvm-ar on an arm64 macOS host wrote freetype's archive with an ARM64EC symbol index that lld
+  ignores for x86-64 mingw, whose symptom is every FT_* symbol undefined with no missing library
+  reported. Diagnose that last one with `llvm-nm --print-armap <archive> | head -1`.
+
+  **The register.** A verification pass over 17.11 and 17.11.b found SIX rows the register listed
+  as open that the tree had already closed: SOL-S1 (F-ALPHA1), SOL-S2 (F-CFL1), SOL-API6 (W-18),
+  SOL-B3 (verified by running it, which nobody had), plus SOL-API7 REDUCED by W-13 and SOL-API4
+  narrowed by M5. Four of those closed on 2026-08-17, the day AFTER the sweep that had just marked
+  them verified, by surges that never opened the register. That is the whole case for RULE ONE at
+  the top of this file, which is added by this entry. SOL-K1, SOL-B5, SOL-C3 and SOL-API2 were
+  re-verified against the tree and ARE still open; they now say so with their evidence. Seven new
+  rows, PAR-1 to PAR-7, record what the sweep opened rather than closed.
+
+  **A regression I introduced and caught here rather than shipping.** Applying the Android plugin
+  unconditionally to :kiteplayer-libass made every build of the project fail with "compileSdk
+  version is not set" unless it passed -Pkiteplayer.libass.root. Found while compiling an unrelated
+  module. The Android target is now always declared with only its native half gated, verified both
+  with and without the flag.
 
 ## 15. Horizon B execution: B1
 
@@ -16372,11 +16439,20 @@ Audio:
   full route recovery remain OPEN here, each its own project. Home stays with B4.
 
 Subtitles:
-- SOL-S1 [V] The straight-alpha cue contract is violated by both rasterizers (premultiplied
-  pixels, already the recorded S4.f honest limit); premultiply exactly once or carry an alpha
-  kind. Home: S4.f.
-- SOL-S2 [C] AppleSubtitleRasterizer creates CoreFoundation and CoreText objects under one
-  broad try; balance every Create-rule object and leak-test cue churn. Home: S4.f.
+- SOL-S1: CLOSED by the deep audit's F-ALPHA1 (55a0d60), the day AFTER this row was marked [V],
+  by a surge that never read this row. Verified against the tree 2026-08-18. The remedy taken was
+  "premultiply exactly once", but in the direction this row did not consider: premultiplied is what
+  BOTH platform rasterizers naturally produce (Android's ARGB_8888 copy, CoreGraphics' premultiplied
+  context) and what the Compose and Metal consumers upload unconverted, so the CONTRACT moved to
+  meet them. RgbaBitmap's KDoc now says PREMULTIPLIED, and the three consumers that premultiplied
+  AGAIN (canvas target, overlay view, Metal's blend factor) are raw copies. The visible defect was
+  white 50%-alpha text rendering grey. Pinned by DesktopSubtitleRasterizerTest, which asserts colour
+  can never exceed alpha.
+- SOL-S2: CLOSED by the deep audit's F-CFL1 (3078eb8), again without this row being consulted.
+  Verified against the tree 2026-08-18: AppleSubtitleRasterizer carries nine release calls and its
+  own comments state that every Create-rule object is released on every exit, naming the leak this
+  row described (a two-hour film's cue edges used to leak the framesetter and its laid-out glyphs
+  once per span per cue). The leak-test half of the row rides the existing cue-churn coverage.
 - SOL-S3 [C] OverlayImage region dimensions are ignored: position is scaled from authoring
   space while source bitmap dimensions are kept. Home: S4.f.
 - SOL-S4 to SOL-S6: CLOSED by S4.f's slice (7e9bb12): open-end resolution in both parsers,
@@ -16402,23 +16478,27 @@ API truth:
   exact frame; SeekCompleted and the replies carry the exact landing only, and a keyframe
   already on the target skips the refine. The coalescing test now pins two flush cycles for one
   merged two-phase seek.
-- SOL-API4 [V] The snapshot placeholders are already honestly KDoc'd as not implemented
-  (bufferedRanges, droppedFramesDecode, audioLatency, containerBitrate, ExternalMaster,
-  LateAndDecode); they stay open as section 11 roadmap facts, not silent lies. Home: their
-  section 11 items.
+- SOL-API4 [V] REDUCED. `bufferedRanges` is REAL since M5's demuxer cache (PlaybackCore computes
+  it from the cache window; CachingMediaIo's KDoc names it), so it is no longer a placeholder and
+  is struck from this row. Still honestly KDoc'd as not implemented, verified 2026-08-18:
+  droppedFramesDecode, audioLatency, containerBitrate, SyncMode.ExternalMaster and LateAndDecode.
+  They stay open as section 11 roadmap facts, not silent lies. Home: their section 11 items.
 - SOL-API5: CLOSED by S4.d (46ac28b): renderer events collect into typed warnings, the bounded
   history and the dump.
-- SOL-API6 [V] RE-VERIFIED 2026-08-17 and still OPEN: NativeRingHandoff.ring is a public
-  CPointer<kprt_ring> behind the @RawRingApi opt-in, so the marker narrows the audience without
-  removing the ABI coupling. Hiding it behind an opaque writer means moving the ring wrapper out
-  of the module whose internal interface it implements, which is a design act; phase W left it for
-  the same 18.3 rule 6 reason as SOL-API7. Home: with SOL-C2 and the first non-Apple backend.
-- SOL-API7 [V] RE-VERIFIED 2026-08-17 and still OPEN: three hard `frame as KiteCodecVideoFrame`
-  casts survive in :kiteplayer-compose-video (ios, jvm, android), so an unsupported
-  backend/renderer pairing fails at runtime instead of as a typed capability error. It wants the
-  sealed hardware-surface model plus renderer capability negotiation, which is a design act rather
-  than an edit, so phase W verified it and left it rather than improvising one (18.3 rule 6).
-  Home: the next stage that touches the surface model.
+- SOL-API6: CLOSED by W-18 (8becb00, "Take the C ring pointer off the public ABI"), which landed
+  2026-08-17 AFTER this row's own re-verification the same day and was never reflected here.
+  Verified against the committed ABI dump 2026-08-18: NativeRingHandoff's constructor and its `ring`
+  getter both speak NativeRingAddress, a value class over kotlin/Long, so no CPointer<kprt_ring>
+  appears in kiteplayer-core's public surface at all. The C type survives only inside CoreAudioSink's
+  implementation, which is where the row wanted it. @RawRingApi remains as the marker on the raw
+  path and is no longer the only thing standing between a consumer and the ABI.
+- SOL-API7: REDUCED by W-13, and the reduction was never recorded here. Verified 2026-08-18: all
+  three sites in :kiteplayer-compose-video (ios, jvm, android) are now `as?` followed by
+  `throw UnsupportedFrameType(actual, expected)`, so an unsupported pairing fails as a typed,
+  readable refusal rather than a ClassCastException. THE REMAINDER, unchanged and still open: there
+  is no sealed hardware-surface model and no renderer capability negotiation, so the refusal still
+  arrives at the first frame rather than at bind time. That half is a design act, not an edit
+  (18.3 rule 6). Home: the next stage that touches the surface model.
 
 Performance (the open remainder):
 - SOL-P1: CLOSED for the software tier by the M4 surge: software planes convert on the CPU
@@ -16464,12 +16544,13 @@ C-reduction (the charter, owner-scheduled, earliest after S4):
 - SOL-C2 [C] Move non-real-time CoreAudio setup, session policy, route/interruption handling,
   capability queries and error mapping to Kotlin; unsupported-platform C stubs become
   expect/actual. Home: S3.
-- SOL-C3 [C] Filter-description composition moves to common Kotlin, retiring the fixed C
-  buffer (P0 closed the overflow; the composition itself is still C). Home: with SOL-C1.
+- SOL-C3 [V] STILL OPEN, re-verified 2026-08-18: helpers_filter.c still composes into fixed
+  `char args[512]` and `char layout_str[128]` buffers. Composition moves to common Kotlin, retiring
+  them (P0 closed the overflow; the composition itself is still C). Home: with SOL-C1.
 
 Kotlin modernization (hygiene, no schedule, no syntax churn before ownership work):
-- SOL-K1 [V] kitecodec-core still passes -Xcontext-parameters, redundant on Kotlin 2.4. Drop at
-  the next KiteCodec window.
+- SOL-K1 [V] STILL OPEN, re-verified 2026-08-18 at kitecodec-core/build.gradle.kts:74:
+  -Xcontext-parameters is still passed and is redundant on Kotlin 2.4. Drop at the next window.
 - SOL-K2 [C] The adopted guidance: context parameters only for the worker helper cluster and a
   codec execution context; higher-value moves are sealed transactional outcomes, structured
   finalizer scopes, ownership-aware lease APIs, inline plane iteration, checked-size helpers
@@ -16482,12 +16563,15 @@ Build and publication:
 - SOL-B2: CLOSED, by observation at phase W entry rather than by a fix: StaticLinkFlags carries
   -llzma today and macosArm64Test links and runs, 113 tests green. Two tests it had been hiding
   since 2e60bf3 were red and are fixed in KiteCodec 2a087b4.
-- SOL-B3 [C] hostTargetsOnly configuration previously failed on Android compileSdk; 3f0f1e3's
-  conditional plugin should have closed it. Verify at the same window and record the outcome.
+- SOL-B3: CLOSED, verified by running it 2026-08-18 rather than by reading the diff, which is what
+  the row asked for: `-Pkitecodec.hostTargetsOnly=true` configures :kitecodec-core cleanly with no
+  compileSdk failure. 3f0f1e3's conditional plugin did close it; nobody had re-run it since.
 - SOL-B4 [C] Vendored archives carry a macOS 26 deployment version while Kotlin/Native links
   macOS 12 (and the shim uses 11); pin one deployment floor in BuildFFmpegTask. Same window.
-- SOL-B5 [C] JNI packaging omits armeabi-v7a. Owner decision required: either it is a target
-  (add it) or it is not (record the refusal in 17.6). Home: S5 entry.
+- SOL-B5 [V] STILL OPEN, re-verified 2026-08-18: LinkKiteCodecJniTask's ABI recipes name arm64-v8a
+  and x86_64 only. The same two-ABI limit now also governs the libass JNI adapter, which took its
+  ABI list from the same reasoning, so the owner decision covers both. Owner decision required:
+  either armeabi-v7a is a target (add it) or it is not (record the refusal in 17.6). Home: S5 entry.
 - SOL-B6 [C] The twin repos are not one atomic graph: mavenLocal-first resolution can shadow
   the sibling checkout with stale artifacts; the audit proposes a composite build or shared
   root plus cross-repo CI. Home: S5, with S7's CI.
@@ -16511,6 +16595,42 @@ negative start times, foreign StreamInfo, decoder output diverging from codec pa
 empty-output MediaSink finalization, midstream format changes, and secure-protocol link
 smokes. Each stage's expansion names the ones it owes.
 
+**Register addition 2026-08-18 (the parity sweep: every shipped archive read with llvm-nm rather
+than trusted from its configure record).** Closed the same day: KC-AV1SW above; the iOS assembly
+and AudioToolbox gaps; libass on every Kotlin/Native target plus Android; https on the web. Opened
+by the same sweep and NOT yet answered:
+
+- PAR-1 [V] mingw-x64's libavcodec.a carries EIGHTEEN d3d11va/d3d11va2/dxva2 hwaccels, compiled
+  because the mingw profile never passed --disable-autodetect, while decision W-D4 and
+  PlatformDecoderSelection.mingw.kt both state that no D3D11VA hwaccel is compiled. The binary and
+  the decision contradict each other. Owner decision: plumb them (KiteCodec needs a hw device
+  context and a frame download for Windows, which is feature work and NOT the one-line route the
+  Apple axis took) or add --disable-autodetect so the binary matches the recorded decision.
+- PAR-2 [V] Linux x64 and arm64 compile ZERO hwaccels, so those trees decode everything on the CPU.
+  Honest and recorded, unlike PAR-1. VAAPI is the candidate. Home: with PAR-1's decision.
+- PAR-3 [V] android-x64 still builds with --disable-asm, so the emulator ABI has no SSE/AVX in
+  libavcodec (0 SIMD symbols against android-arm64's 1363 NEON). Emulator-only, hence low priority,
+  but it is the same omission the iOS arm64 targets carried until 2026-08-17.
+- PAR-4 [V] The wasm profile enables the matroska and webm demuxers while enabling NEITHER the opus
+  NOR the vorbis decoder, so a .webm on the web opens, decodes video, and has no audio decoder for
+  its audio stream. Both are FFmpeg-native and cost no external library. This is the cheapest real
+  gap the sweep found.
+- PAR-5 [V] :kiteplayer-output declares linuxX64, linuxArm64 and mingwX64 targets but has NO
+  linuxMain or mingwMain source set, so those three compile the common file alone: no audio sink,
+  no renderer, no clock. Desktop playback rides the jvm target instead. RECOMMENDED CLOSE: record
+  it as a decision (native desktop targets are engine-only; consumers bring output through the SPI)
+  rather than building ALSA and WASAPI backends nobody has asked for.
+- PAR-6 [V] AV1 hardware decode has never been positively proven. The Apple route is wired and the
+  hwaccel is compiled, but this machine is an M2 with no AV1 silicon, so every run here proves only
+  the refusal-and-fallback path. Positive proof needs an A17 Pro / M3 or newer machine. Owner
+  device fare, like AGW-1.
+- PAR-7 [V] The `fd:` protocol's contract stays spooky even after F-FD1's fix: rewinding before
+  every open MUTATES the caller's descriptor (a dup shares the offset), an unseekable descriptor
+  degrades silently to the streamed case, and the descriptor's lifetime is the caller's problem.
+  Candidate close: retire `fd:` in favour of a positional-read MediaIo (pread / FileChannel.read at
+  an offset), which removes the shared offset entirely and makes the reopen safe by construction
+  rather than by rewind. Plain files keep FFmpeg's own file protocol, which has none of this.
+
 **Register addition 2026-08-16 (from the mpv dependency study, 17.12):**
 - KP-TLS: CLOSED by the network surge (same day). VERIFIED by configure evidence rather than a
   device run: both phone trees' protocol lists are pinned to file/fd/pipe/data/http/tcp, no
@@ -16521,6 +16641,16 @@ smokes. Each stage's expansion names the ones it owes.
   verdict demanded. Proven end to end over local http through real FFmpeg (the https path is
   the same code with the engine's TLS beneath it); a live-https device run remains the owner's
   ordinary device-session fare, not a blocker.
+  **Extended to the web 2026-08-18** (commit 7793dd0): :kiteplayer-network gained a wasmJs target
+  and Ktor's js engine, so `fetch` terminates TLS in the BROWSER and the web needs no more TLS code
+  than any other target. Adding it forced a test split, recorded because it cost real coverage
+  thinking: `runBlocking` does not exist where the only thread is the event loop and ktor-server
+  publishes no wasm artifact, so the server-backed tests moved to a serverBackedTest source set
+  while the DASH manifest parser stayed common and is now covered on the web too. Still without
+  https, and RECOMMENDED TO STAY SO: native linuxX64, linuxArm64 and mingwX64. Linux has no OS HTTP
+  or TLS API to delegate to, so the only engines are curl (rejected by D-7) or one carrying its own
+  crypto (the same objection); those three targets also have no output backend at all (PAR-5), and
+  the desktop story runs on the JVM, which has had https since M1.
 
 ### 17.11.a The pure-Compose audit (M4's exit, run 2026-08-17)
 
@@ -16615,10 +16745,14 @@ commands; the shipped-object audit in render-audit.sh covers what flag parity al
   publications unsupported), so KitePlayerView and the other androidMain public APIs have no
   dump to disagree with. Needs either a KGP release that supports it or a hand-rolled
   classes.jar signature check. Owner decision on the mechanism.
-- F-COV1: tests have only ever executed on four of the twenty declared surfaces (jvm,
-  macosArm64, iosSimulatorArm64, the Android host). linux and mingw need their hosts; tvos
-  and watchos need simulator runs; js and wasm need their node toolchains resolved once with
-  the network on. Recorded as reachable, not blocked.
+- F-COV1: REDUCED 2026-08-18 to SIX of twenty. wasmJs now executes (kiteplayer-network runs 12
+  tests on wasmJs/node, and the DASH manifest parser is covered there for the first time), and a
+  real Android DEVICE surface ran for the first time (kiteplayer-libass, 2 of 2 on the Pixelu16KB
+  emulator). Still owed: linux and mingw need their hosts; watchos needs a simulator run; `js`
+  stays a deliberate placeholder per 17.14. NEWLY BLOCKED, not merely reachable: tvos cannot run on
+  this machine at all, `:kiteplayer-core:tvosSimulatorArm64Test` fails with "Xcode does not support
+  simulator tests for tvos_simulator_arm64" because the tvOS simulator SDK is absent, so
+  `:kiteplayer-core:allTests` cannot pass here and host-only runs must name their targets.
 - The device-only halves of F-ALPHA1, F-ROT1 and F-POS1 (real pixels on a real screen) ride
   the owner's existing emulator checklist, which already carries the three manual checks from
   the M4 surge.
@@ -16717,7 +16851,16 @@ the timeboxed wasm spike with its stated physics. The parked libplacebo features
 kernels, debanding) become eligible HERE as shader work if the desktop picture demands them,
 still under D-7.
 
-**L. LIBASS FULL THROTTLE.** The `kiteplayer-libass` OPTIONAL module: the six-library chain
+**L. LIBASS FULL THROTTLE.** (LARGELY LANDED EARLY, 2026-08-17/18, out of the road's order because
+the chain build turned out to be the work and the integration was small, exactly as this phase
+predicted. The six-library chain now cross-builds for ALL EIGHT native targets, and the module
+renders on all six Kotlin/Native targets plus Android through a new JNI adapter, device-proved 2 of
+2 on the Pixelu16KB emulator. REMAINING: the JVM desktop bridge, which reuses the Android adapter's
+shape but needs host .dylib/.so/.dll packaging and resource loading instead of System.loadLibrary;
+wasm, which needs libass under emscripten plus a binding; the per-frame hook for ANIMATED
+typesetting, since rendering is still snapshot-per-call; and the exit criterion itself, a named
+typesetting-heavy corpus rendered pixel-comparable to mpv, which nothing has run.) The
+`kiteplayer-libass` OPTIONAL module: the six-library chain
 built per target by BuildFFmpegTask-style machinery, rendering through the EXISTING bitmap-cue
 path (integration is small; the build is the work). Exit: a named typesetting-heavy corpus
 renders pixel-comparable to mpv, the Kotlin tier of M2 remains the default, and an app that

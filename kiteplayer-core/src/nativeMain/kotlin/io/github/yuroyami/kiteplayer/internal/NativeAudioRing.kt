@@ -31,7 +31,9 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_underruns
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_write_window
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_written_frames
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import io.github.yuroyami.kiteplayer.spi.NativeRingAddress
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.toCPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.UnsafeNumber
 import kotlinx.cinterop.addressOf
@@ -270,7 +272,15 @@ internal class NativeAudioRing private constructor(
          *        the ring knows its rate and its channel count but not its channel layout, and a layout
          *        inferred from a channel count is the fabrication defect D30 is about.
          */
-        fun adopting(handle: CPointer<kprt_ring>, format: AudioFormat): NativeAudioRing {
+        // This IS the native audio handoff boundary the marker names, so the opt-in belongs here.
+        @OptIn(io.github.yuroyami.kiteplayer.spi.RawRingApi::class)
+        fun adopting(address: NativeRingAddress, format: AudioFormat): NativeAudioRing {
+            // W-18: the SPI carries the ring as an address so no cinterop type reaches core's
+            // public API. This file is one of the two the coupling baseline already allows to name
+            // the C type, so the conversion belongs here and nowhere else.
+            val handle = requireNotNull(address.rawAddress.toCPointer<kprt_ring>()) {
+                "the sink handed over a null ring address"
+            }
             val rate = kprt_ring_sample_rate(handle)
             val channels = kprt_ring_channels(handle)
             // A ring whose format disagrees with the format it is being described by would date every

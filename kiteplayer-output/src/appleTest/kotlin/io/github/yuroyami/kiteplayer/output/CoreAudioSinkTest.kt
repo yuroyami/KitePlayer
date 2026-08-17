@@ -82,7 +82,7 @@ class CoreAudioSinkTest {
     fun `a tone plays and the device consumes it at real time speed`() = runBlocking {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { negotiated -> halfSecond(negotiated) }
-        val ring = handoff.ring
+        val ring = handoff.ringPointer()
         assertEquals(48_000, handoff.format.sampleRate)
         assertEquals(2, handoff.format.channels)
         assertEquals(SampleFormat.F32, handoff.format.sampleFormat)
@@ -130,7 +130,7 @@ class CoreAudioSinkTest {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { negotiated -> negotiated.sampleRate / 4 }
         try {
-            feedRing(handoff.ring, 4_800, 0, pts = 0)
+            feedRing(handoff.ringPointer(), 4_800, 0, pts = 0)
             sink.start()
             delay(120)
 
@@ -149,7 +149,7 @@ class CoreAudioSinkTest {
     fun `pause keeps buffered audio and resume consumes it again`() = runBlocking {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 48_000 }
-        val ring = handoff.ring
+        val ring = handoff.ringPointer()
         try {
             fillRing(ring, 0)
             sink.start()
@@ -181,7 +181,7 @@ class CoreAudioSinkTest {
             sink.start()
             delay(120)
             assertTrue(
-                ringUnderruns(handoff.ring) > 0,
+                ringUnderruns(handoff.ringPointer()) > 0,
                 "a device with nothing to play must be handed silence, and the underrun counted",
             )
             // And the silence came from the ring, not from a second fill in the sink: register item
@@ -205,7 +205,7 @@ class CoreAudioSinkTest {
         // will actually be anchored to.
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 48_000 }
-        val ring = handoff.ring
+        val ring = handoff.ringPointer()
         var worst = 0L
         var readings = 0
         try {
@@ -243,7 +243,7 @@ class CoreAudioSinkTest {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 48_000 }
         try {
-            fillRing(handoff.ring, 0)
+            fillRing(handoff.ringPointer(), 0)
             sink.start()
             delay(250)
             val worst = sink.worstCallbackNanos

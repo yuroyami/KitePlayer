@@ -1,7 +1,7 @@
 # KitePlayer kitert cinterop coupling baseline.
 #
 # Command: ./gradlew checkKitertCoupling
-# Measured matching Kotlin file count: 3
+# Measured matching Kotlin file count: 2
 #
 # Scope: every present src/**/*.kt file, including untracked files, in each
 # active Gradle subproject except the two exclusions below. Comments are stripped;
@@ -24,5 +24,4 @@
 # Patterns: cnames.structs.kprt_ and kiteplayer.rt.cinterop
 
 allowed_kitert_file kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/internal/NativeAudioRing.kt
-allowed_kitert_file kiteplayer-core/src/nativeMain/kotlin/io/github/yuroyami/kiteplayer/spi/NativeRingAudioSink.kt
 allowed_kitert_file kiteplayer-core/src/nativeTest/kotlin/io/github/yuroyami/kiteplayer/AudioRingDifferentialTest.kt

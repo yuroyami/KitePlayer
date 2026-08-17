@@ -21,7 +21,7 @@ class CoreAudioSinkIosTest {
     fun `RemoteIO consumes the C ring publishes an anchor and tears down completely`() = runBlocking {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 48_000 }
-        val ring = handoff.ring
+        val ring = handoff.ringPointer()
         var observedOffsetNanos: Long? = null
 
         try {

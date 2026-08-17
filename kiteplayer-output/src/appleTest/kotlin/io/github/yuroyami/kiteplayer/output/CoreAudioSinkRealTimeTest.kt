@@ -69,10 +69,10 @@ class CoreAudioSinkRealTimeTest {
         try {
             assertEquals(0, sink.callbacks, "an unstarted device must not have called anything")
             assertEquals(0, sink.zeroFilledCallbacks)
-            assertEquals(4_800, ringBuffered(handoff.ring) + ringFree(handoff.ring), "the ring holds what was asked for")
-            assertEquals(48_000, ringSampleRate(handoff.ring))
-            assertEquals(0L, ringConsumed(handoff.ring))
-            assertEquals(0L, ringUnderruns(handoff.ring))
+            assertEquals(4_800, ringBuffered(handoff.ringPointer()) + ringFree(handoff.ringPointer()), "the ring holds what was asked for")
+            assertEquals(48_000, ringSampleRate(handoff.ringPointer()))
+            assertEquals(0L, ringConsumed(handoff.ringPointer()))
+            assertEquals(0L, ringUnderruns(handoff.ringPointer()))
             assertEquals(3, sink.retainedResources())
         } finally {
             sink.close()
@@ -83,7 +83,7 @@ class CoreAudioSinkRealTimeTest {
     fun `the device enters the C callback and dates what it played`() = runBlocking {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 24_000 }
-        val ring = handoff.ring
+        val ring = handoff.ringPointer()
         try {
             fillRing(ring, 0)
             sink.start()
@@ -120,7 +120,7 @@ class CoreAudioSinkRealTimeTest {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 24_000 }
         try {
-            fillRing(handoff.ring, 0)
+            fillRing(handoff.ringPointer(), 0)
             sink.start()
             delay(200)
             sink.stop()
@@ -145,7 +145,7 @@ class CoreAudioSinkRealTimeTest {
         // the sink ends up owning nothing.
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 24_000 }
-        fillRing(handoff.ring, 0)
+        fillRing(handoff.ringPointer(), 0)
         sink.start()
         delay(60)
         val duringPlayback = sink.callbacks
@@ -205,7 +205,7 @@ class CoreAudioSinkRealTimeTest {
             assertEquals(512, sink.deviceBufferFrames)
             // The ring really was created at that capacity, which is the only way to know the number the
             // engine computed was the number C used.
-            assertEquals(512 * 8, ringBuffered(handoff.ring) + ringFree(handoff.ring))
+            assertEquals(512 * 8, ringBuffered(handoff.ringPointer()) + ringFree(handoff.ringPointer()))
         } finally {
             sink.close()
         }
@@ -245,7 +245,7 @@ class CoreAudioSinkRealTimeTest {
         // jump ahead as fast as the feeder could write.
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 48_000 }
-        val ring = handoff.ring
+        val ring = handoff.ringPointer()
         try {
             fillRing(ring, 0)
             sink.start()

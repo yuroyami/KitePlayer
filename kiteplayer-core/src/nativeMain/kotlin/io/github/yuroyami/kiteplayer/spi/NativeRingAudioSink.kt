@@ -1,12 +1,10 @@
-// The seam between a Kotlin engine and a C real-time core is a C pointer, so this file crosses into
-// cinterop and says so at the top rather than through a compiler flag nobody reads.
-@file:OptIn(ExperimentalForeignApi::class, RawRingApi::class)
+// The seam between a Kotlin engine and a C real-time core is a ring the C side owns, and this file
+// names its ADDRESS rather than its type (W-18). No cinterop name appears here, so no consumer of
+// this SPI reads one in the API dump; the two places that really need the pointer convert at their
+// own end, and both are modules the kitert coupling baseline already accounts for.
+@file:OptIn(RawRingApi::class)
 
 package io.github.yuroyami.kiteplayer.spi
-
-import cnames.structs.kprt_ring
-import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.ExperimentalForeignApi
 
 /**
  * Marks the native ring handoff that exposes the real-time core's raw C pointer.
@@ -90,5 +88,17 @@ public interface NativeRingAudioSink : AudioSink {
 @RawRingApi
 public class NativeRingHandoff(
     public val format: AudioFormat,
-    public val ring: CPointer<kprt_ring>,
+    public val ring: NativeRingAddress,
 )
+
+/**
+ * The address of a `kprt_ring` the sink owns, as an opaque number (W-18).
+ *
+ * An address rather than a typed pointer so that no cinterop type reaches this module's public API.
+ * That is an ABI decision and NOT a safety one: this was never made safe by its type. It is made
+ * safe by [RawRingApi], by there being exactly one producer (the sink that created the ring) and
+ * exactly one consumer (the engine's ring wrapper), and by the sink owning the ring for its whole
+ * life. Misusing a number here is exactly as bad as misusing the pointer was.
+ */
+@RawRingApi
+public value class NativeRingAddress(public val rawAddress: Long)

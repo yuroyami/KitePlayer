@@ -27,6 +27,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioSinkEvent
 import io.github.yuroyami.kiteplayer.spi.AudioSinkFactory
 import io.github.yuroyami.kiteplayer.spi.ChannelLayout
 import io.github.yuroyami.kiteplayer.spi.NativeRingAudioSink
+import io.github.yuroyami.kiteplayer.spi.NativeRingAddress
 import io.github.yuroyami.kiteplayer.spi.NativeRingHandoff
 import io.github.yuroyami.kiteplayer.spi.RawRingApi
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
@@ -322,7 +323,12 @@ public class CoreAudioSink private constructor(
             }
             val attachedRing = kprt_sink_ring(created.sink)
                 ?: error("kprt_sink_attach_ring reported success and produced no ring")
-            val handoff = NativeRingHandoff(format = created.format, ring = attachedRing)
+            // W-18: the SPI carries an address, so the pointer is converted here, in the module that
+            // owns the C sink pointer and that the coupling baseline excludes by design.
+            val handoff = NativeRingHandoff(
+                format = created.format,
+                ring = NativeRingAddress(attachedRing.rawValue.toLong()),
+            )
 
             // Published inside the lock, so a diagnostic read from another thread sees either nothing
             // or the complete device/ring/session transaction. Opening itself belongs to the session

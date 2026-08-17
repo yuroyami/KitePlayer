@@ -2685,10 +2685,22 @@ abstract interface io.github.yuroyami.kiteplayer.spi/NativeRingAudioSink : io.gi
 
 // Targets: [native]
 final class io.github.yuroyami.kiteplayer.spi/NativeRingHandoff { // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlinx.cinterop/CPointer<cnames.structs/kprt_ring>) // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.<init>|<init>(io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlinx.cinterop.CPointer<cnames.structs.kprt_ring>){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.spi/AudioFormat, io.github.yuroyami.kiteplayer.spi/NativeRingAddress) // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.<init>|<init>(io.github.yuroyami.kiteplayer.spi.AudioFormat;io.github.yuroyami.kiteplayer.spi.NativeRingAddress){}[0]
 
     final val format // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.format|{}format[0]
         final fun <get-format>(): io.github.yuroyami.kiteplayer.spi/AudioFormat // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.format.<get-format>|<get-format>(){}[0]
     final val ring // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.ring|{}ring[0]
-        final fun <get-ring>(): kotlinx.cinterop/CPointer<cnames.structs/kprt_ring> // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.ring.<get-ring>|<get-ring>(){}[0]
+        final fun <get-ring>(): io.github.yuroyami.kiteplayer.spi/NativeRingAddress // io.github.yuroyami.kiteplayer.spi/NativeRingHandoff.ring.<get-ring>|<get-ring>(){}[0]
+}
+
+// Targets: [native]
+final value class io.github.yuroyami.kiteplayer.spi/NativeRingAddress { // io.github.yuroyami.kiteplayer.spi/NativeRingAddress|null[0]
+    constructor <init>(kotlin/Long) // io.github.yuroyami.kiteplayer.spi/NativeRingAddress.<init>|<init>(kotlin.Long){}[0]
+
+    final val rawAddress // io.github.yuroyami.kiteplayer.spi/NativeRingAddress.rawAddress|{}rawAddress[0]
+        final fun <get-rawAddress>(): kotlin/Long // io.github.yuroyami.kiteplayer.spi/NativeRingAddress.rawAddress.<get-rawAddress>|<get-rawAddress>(){}[0]
+
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/NativeRingAddress.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/NativeRingAddress.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/NativeRingAddress.toString|toString(){}[0]
 }

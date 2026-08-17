@@ -153,7 +153,7 @@ class RealTimeSoakTest {
 
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { negotiated -> negotiated.sampleRate / 2 }
-        val ring = handoff.ring
+        val ring = handoff.ringPointer()
         val pressure = CollectorPressure()
 
         try {
@@ -347,11 +347,11 @@ class RealTimeSoakTest {
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { negotiated -> negotiated.sampleRate / 2 }
         try {
-            fillRing(handoff.ring, 0)
+            fillRing(handoff.ringPointer(), 0)
             sink.start()
             GC.collect()
             val before = heapObjectBytes()
-            feedFor(handoff.ring, minutes)
+            feedFor(handoff.ringPointer(), minutes)
             GC.collect()
             val after = heapObjectBytes()
             sink.stop()

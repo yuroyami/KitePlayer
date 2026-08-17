@@ -4,6 +4,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import cnames.structs.kprt_ring
+import kotlinx.cinterop.toCPointer
 import io.github.yuroyami.kiteplayer.rt.cinterop.KPRT_COMMIT_NEEDS_SEGMENT
 import io.github.yuroyami.kiteplayer.rt.cinterop.KPRT_COMMIT_PUBLISHED
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_anchor
@@ -129,3 +130,14 @@ internal fun ringAnchor(ring: CPointer<kprt_ring>): RingAnchor = memScoped {
 
 /** [frames] at [sampleRate] in microseconds, through the library's own exact rescale. */
 internal fun framesToMicros(frames: Long, sampleRate: Int): Long = kprt_frames_to_micros(frames, sampleRate)
+
+/**
+ * The handoff's ring as a pointer (W-18).
+ *
+ * The SPI carries an ADDRESS so that no cinterop type reaches kiteplayer-core's public API. This
+ * module owns the C sink pointer and the kitert coupling baseline excludes it by design, so the
+ * conversion belongs here, once, rather than at twenty call sites.
+ */
+@OptIn(io.github.yuroyami.kiteplayer.spi.RawRingApi::class)
+internal fun io.github.yuroyami.kiteplayer.spi.NativeRingHandoff.ringPointer(): CPointer<kprt_ring> =
+    requireNotNull(ring.rawAddress.toCPointer()) { "the handoff carried a null ring address" }

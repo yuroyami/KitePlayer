@@ -17634,6 +17634,22 @@ deliberately left open.
 - Fix, decided: NOT decided here, by S6-D4. X-05 opens with its own decision act on the two
   questions the spike raised, playback-only subset versus all 198, and generated versus
   hand-written, and that act is committed separately from the code it authorizes.
+  **Decision act, 2026-08-17. The subset question is answered by MEASUREMENT and it dissolves.**
+  The spike wrote that "a playback-only subset could plausibly halve item 5". Counted against
+  `signature-baseline.txt` rather than estimated, the 198 entry points split 149 playback core, 40
+  encode and mux only, 9 filter graph. Dropping encode and mux therefore removes 20% of the surface,
+  not 50%. The spike's own words were "plausibly", and this is what the count says instead.
+  **Decided: GENERATE, and bind all 198.** Generation is the lever that matters, because it attacks
+  100% of the surface where the subset attacks 20%, and once a generator exists the difference
+  between emitting 149 wrappers and 198 is close to nothing. Binding everything also keeps the web
+  at parity instead of creating a second, quieter definition of what KiteCodec does, which is the
+  same argument W-20 settled for the format matrix. The 213 normalized records already exist and are
+  already gated, so the generator's input is a file the build already fails on when it drifts, and
+  item 5 becomes review rather than authorship.
+  What this does NOT claim: that generation makes item 5 cheap. The JNI precedent is about 2,560
+  lines of C plus a 190-row manifest for the same ABI, and a generator has to be written, its output
+  has to be readable, and the hand-written exceptions (the IO bridge, the callbacks, anything taking
+  a function pointer) still have to be written by hand. The 40-to-60-hour estimate stands.
 - Sub-phase: X.5. Test: whatever the decision act selects, plus the existing signature gate, which
   is what keeps a generated binding honest against future ABI drift.
 

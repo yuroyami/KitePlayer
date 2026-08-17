@@ -16238,6 +16238,258 @@ remaining B-horizon obligations where stages reference them, and every register 
 adopted by an earlier phase. Nothing here is deleted by this renewal; it is sequenced behind
 the outcomes the owner buys first.
 
+### 17.13 The phase W expansion, decision complete
+
+Authored 2026-08-17 by Opus 5 at the owner's direction, entering phase W (17.12: REAL ON DESKTOP
+AND WEB, which is S3 then S6 minus the rows M4 took). Written against the tree at KitePlayer
+47f3799 and KiteCodec 9b33480, from a seven-dimension survey of both repositories that read code
+and treated KDoc and this file as hearsay. 17.2's ritual is satisfied by this subsection: every
+item below carries Where, Problem, Fix, Sub-phase and Test, and the sub-phases name files, steps,
+gate and commit first lines.
+
+**The entry facts, measured on 2026-08-17, not assumed.**
+
+1. The ENGINE already reaches every desktop target. `:kiteplayer-core`, `:kiteplayer-subtitles`
+   and `:kiteplayer-rt` compile for linuxX64, linuxArm64 and mingwX64 today, and
+   `CompileKiteRtTask` already emits `libkiteplayerrt.a` for `linux_x64`, `linux_arm64` and
+   `mingw_x64` from the Kotlin/Native bundled toolchains. Nothing in phase W has to port the
+   engine.
+2. The BACKEND does not. `:kiteplayer-ffmpeg` and `:kiteplayer-output` declare only macosArm64,
+   iosArm64, iosSimulatorArm64, jvm and android. There is no desktop `OutputBackend`, no desktop
+   `AudioSink` of any kind in either repository, no desktop `VideoRenderer`, and no desktop
+   window.
+3. The published JVM variant of `kitecodec-core` is a placeholder BY BUILD WIRING, not by
+   omission: `kitecodec-core/build.gradle.kts:525` makes `jvmMain` depend on `unsupportedMain`,
+   whose nine files throw `AVERROR_PATCHWELCOME` from every entry point, while the real JNI
+   implementation in `jvmAndAndroidMain` is compiled only into the Android target and into an
+   unpublished `jniHarness` compilation. The macOS JNI dylib is already produced by
+   `linkKiteCodecJniMacosArm64` and already loaded by `JniLibrary.jvm.kt` through
+   `System.loadLibrary("kitecodec_jni")` with a `kitecodec.jni.path` override. Desktop JVM
+   playback is therefore a PACKAGING problem sitting on finished code, which is why W.1 is first.
+4. `BuildFFmpegTask` already carries LinuxX64, LinuxArm64 and MingwX64 configure paths
+   (`buildSrc/src/main/kotlin/BuildFFmpegTask.kt:523-533`), and `StaticLinkFlags`, `FFmpegPaths`
+   and `ffmpeg.def` already carry their link sides. No tree has ever been built for them:
+   `native-libs/lgpl/` holds macos-arm64, ios-arm64, ios-simulator-arm64, android-arm64 and
+   android-x64 and nothing else.
+5. The web surface is honest and empty. js and wasmJs are real registered targets that publish
+   real klibs compiled from `unsupportedMain`. There is no emscripten toolchain, no wasm
+   `TargetTriple`, no `@JsExport` anywhere, and `:kiteplayer-compose-video` declares no web target
+   at all.
+6. Tier 1 was RED on the clean tree at entry, for reasons that predate this phase: three cases in
+   KiteCodec's C suites pinned contracts that deliberate changes had already replaced, and one
+   tracked file carried an em dash. Repaired in KiteCodec 9b33480 before the phase began, because
+   18.2 item 4 does not permit building on an ungated tree.
+
+**Decisions taken for this phase, and why. These are executor judgement calls under the owner's
+standing 17.11 rule that homes and order are proposals; each is recorded so the owner can reverse
+it.**
+
+- **W-D1, the JVM desktop path goes FIRST, before the Kotlin/Native desktop path.** S3 as written
+  in 17.2 names "desktop rendering through the JVM path for Compose Desktop and native paths for
+  K/N consumers" in that order, and the entry facts say why the order is also the cheap one: one
+  build-wiring change and one packaging step light up macOS, Linux and Windows desktop at once
+  through code that already exists and is already proven by the Android target. The K/N desktop
+  consumer path needs three FFmpeg trees, two new C device backends and a renderer that does not
+  exist. Buying the first outcome first is 17.1's own law.
+- **W-D2, desktop JVM audio is `javax.sound.sampled`, not new C.** D-7 says the measure for every
+  gap is Kotlin first and a native library only when no Kotlin path can exist. `SourceDataLine`
+  is in the JDK, is present on macOS, Linux and Windows, and reaches ALSA, CoreAudio and WASAPI
+  through the JVM's own backends. The C WASAPI and ALSA sinks that 17.2 names stay in this
+  register (W-08, W-09) for the Kotlin/Native consumer, where no JVM exists to borrow. The cost
+  is stated honestly: `SourceDataLine` is a blocking-write sink with a coarser latency floor than
+  the C ring's device callback, so the desktop JVM sink writes through the engine's existing
+  `KotlinAudioRing` contract and is measured against it rather than promoted to the C ring's
+  evidence tier.
+- **W-D3, linux and mingw FFmpeg cross-build on this Mac with the Kotlin/Native bundled
+  toolchains**, not with Docker and not with Homebrew's mingw. `~/.konan/dependencies` carries
+  `x86_64-unknown-linux-gnu-gcc-8.3.0-glibc-2.19`, `aarch64-unknown-linux-gnu-gcc-8.3.0-glibc-2.25`
+  and `msys2-mingw-w64-x86_64-2`, which are the exact toolchains Kotlin/Native links against.
+  Building FFmpeg with any other toolchain risks a glibc symbol the konan sysroot cannot resolve
+  at link time; building with these cannot.
+- **W-D4, linux and mingw get a REDUCED desktop profile.** `desktopBaseArgs()` demands a
+  third-party stack (x264, svt-av1, opus, libass and more) that has never been cross-built for
+  those triples, and building nine dependencies three ways is not phase W's outcome. Linux and
+  Windows get the phone software profile plus the desktop demuxer and protocol set, which is
+  exactly the 17.6 `standard` tier and plays the whole 17.5 matrix. The GPL desktop stack stays
+  available through the consumer plugin, which 17.6 already says is what the plugin is for.
+- **W-D5, Linux is RUN, Windows is LINKED.** Docker is present on this machine, so linuxArm64 test
+  binaries execute natively in an arm64 Linux container and their results are real measured
+  evidence. No Windows machine and no wine exist here, so every mingw claim in this phase is a
+  compile-and-link claim and says so; the Windows matrix run is an owner rider exactly like the
+  iPhone one.
+- **W-D6, the web spike is timeboxed and its verdict is recorded either way**, per 17.2's S6
+  sentence. Emscripten is installed for it, which is a new toolchain and therefore named here as
+  the register item that authorizes it (W-12) rather than taken silently under 18.3 rule 3.
+
+**The register.**
+
+#### W-01. The published JVM variant of kitecodec-core is a placeholder
+- Where: `../KiteCodec/kitecodec-core/build.gradle.kts:525`; `src/unsupportedMain/` (9 files);
+  `src/jvmAndAndroidMain/`; `src/jniJvmMain/kotlin/.../JniLibrary.jvm.kt`.
+- Problem: `jvmMain` depends on `unsupportedMain`, so every JVM consumer of KiteCodec gets a
+  library whose every entry point throws. The working JNI implementation exists and is proven by
+  the Android target and by the `jniJvmTest` boundary harness, but no published artifact carries
+  it. This is the single reason Compose Desktop cannot play a file today.
+- Fix: give the jvm target the real tree. `jvmMain` depends on `jvmAndAndroidMain`, the
+  `JniLibrary.jvm.kt` actual moves from the harness source set into the published one, and
+  `unsupportedMain` keeps js and wasmJs only. The `jniHarness` compilations stay exactly as they
+  are, because they are how the boundary tests get a mutated library to load.
+- Sub-phase: W.1. Test: `:kitecodec-core:jvmTest` executing the codec contract suite against the
+  real library, proved able to fail by pointing `kitecodec.jni.path` at the corrupt harness dylib.
+
+#### W-02. No desktop JNI library is built or packaged
+- Where: `../KiteCodec/kitecodec-core/build.gradle.kts:756-830` (the JNI link tasks);
+  `native/kitecodec-jni/`.
+- Problem: `linkKiteCodecJniMacosArm64` exists but is described and wired as test-only, and its
+  output reaches no artifact. `System.loadLibrary("kitecodec_jni")` therefore fails for every
+  desktop consumer unless the consumer sets a system property by hand.
+- Fix: the macOS JNI dylib becomes a published resource of the jvm artifact, laid out under
+  `native/<os>-<arch>/` inside the jar, and `JniLibrary.jvm.kt` extracts and loads it from there
+  when `System.loadLibrary` finds nothing on `java.library.path`. Linux and Windows twins land in
+  W.5 once their FFmpeg trees exist; the loader's layout is written once, here, so adding a
+  platform is dropping a file in.
+- Sub-phase: W.1. Test: a JVM test that loads the library from a jar copied to a scratch
+  directory with an empty `java.library.path`, proved able to fail by deleting the resource.
+
+#### W-03. :kiteplayer-ffmpeg's jvm target has no backend
+- Where: `kiteplayer-ffmpeg/build.gradle.kts`; `src/jvmMain/` (absent).
+- Problem: the module declares a jvm target but its backend actuals exist only for native and
+  android, so `KitePlayerPlatform` answers `Unavailable` on the JVM and no `MediaBackend` can be
+  constructed there.
+- Fix: the jvm target gets the same source tree the android target uses (both are JNI consumers of
+  the same KiteCodec JVM API), through a shared `jvmAndAndroidMain` source set in this module.
+- Sub-phase: W.2. Test: a jvm test that opens a testmedia file, reads its track list and decodes
+  one frame.
+
+#### W-04. There is no desktop OutputBackend, AudioSink or VideoRenderer
+- Where: `kiteplayer-output/build.gradle.kts` (no desktop targets, no `jvmMain`);
+  `spi/OutputBackend`, `spi/AudioSink`, `spi/VideoRenderer` in `:kiteplayer-core`.
+- Problem: the whole output half of the player is Apple and Android only. A desktop consumer has
+  a working engine and a working backend and nothing to hear or see it with.
+- Fix: a `DesktopOutputBackend` in `kiteplayer-output`'s jvm source set: a `SourceDataLine` audio
+  sink writing through the engine's existing `KotlinAudioRing` contract per W-D2, a Skia-backed
+  subtitle rasterizer, and the system clock the other backends already share. Video is not a
+  renderer here: on desktop the Compose path IS the renderer, which is W-05.
+- Sub-phase: W.3. Test: host tests for the sink's lifecycle (open, write, pause, drain, flush,
+  close) and for the rasterizer's straight-alpha contract, each proved able to fail.
+
+#### W-05. KiteVideo has no desktop upload path and no desktop measurement (KV-5)
+- Where: `kiteplayer-compose-video/src/jvmMain/.../ImageBitmaps.jvm.kt:19-52`.
+- Problem: the jvm image body exists and is byte-identical Skia code duplicated from the iOS one,
+  but nothing feeds it, `canDrawCommitFencedFrames` is declared true with no GPU completion fence
+  behind it, and KV-5's stated exit is a MEASURED per-frame upload cost that has never been taken.
+- Fix: the duplicated Skia body collapses into one shared source set, the frame source becomes the
+  W-03 jvm backend, the fence claim is corrected to what the desktop path can actually promise,
+  and the per-frame upload cost and dropped-frame count are measured at 1080p30 with modifiers
+  applied and written into the log.
+- Sub-phase: W.4. Test: the existing KiteVideo draw-law tests extended to the jvm target, plus the
+  measurement harness.
+
+#### W-06. No FFmpeg tree exists for linux-x64, linux-arm64 or mingw-x64
+- Where: `../KiteCodec/native-libs/lgpl/`; `buildSrc/src/main/kotlin/BuildFFmpegTask.kt:523-533`.
+- Problem: the configure paths exist and have never run. `LinuxX64` additionally passes
+  `--cc=clang` with no sysroot and no `--enable-cross-compile`, which on a macOS host configures a
+  darwin build under a linux name.
+- Fix: the three desktop triples build from the Kotlin/Native bundled toolchains per W-D3, at the
+  reduced profile of W-D4, and their configure lines are pinned by goldens like every other
+  triple.
+- Sub-phase: W.5. Test: `buildSrc:test` goldens for the three new configure lines, and the object
+  format of each produced archive read back with the target's own toolchain.
+
+#### W-07. KiteCodec publishes no desktop variant, so nothing downstream can resolve one
+- Where: `../KiteCodec/kitecodec-core/build.gradle.kts` target-scope selectors;
+  `settings.gradle.kts` consumption comments in this repository.
+- Problem: every existing selector is the five-target stable set or a mac-local or phone-local
+  scope. There is no desktop superset, so `:kiteplayer-ffmpeg` cannot resolve a backend for a
+  desktop target even after W-06.
+- Fix: a `kitecodec.desktopTargetsOnly` scope covering macosArm64, linuxX64, linuxArm64 and
+  mingwX64 plus the portable jvm/js/wasm variants, and a local publication that preserves the
+  existing Apple and phone variants rather than replacing them.
+- Sub-phase: W.5. Test: `publishToMavenLocal` under the new scope followed by a consumer
+  resolution from this repository, with the previously published variants still resolvable.
+
+#### W-08. kprt_sink is Apple-only, and its clock is mach-shaped
+- Where: `kiteplayer-rt/native/src/kite_rt_coreaudio.c:597-682` (the `#else` refusal arm);
+  `kprt_sink_ticks_to_nanos` and the cached `timebase_numer`/`timebase_denom`.
+- Problem: every non-Apple target links eight `kprt_sink_*` symbols that return
+  `KPRT_SINK_UNSUPPORTED_PLATFORM`, and the sink's tick-to-nanosecond conversion is
+  `mach_timebase_info`, so a new backend cannot even express its own deadline.
+- Fix: the platform-independent half of the sink (the struct, the stats, the verdicts, the render
+  entry) moves into its own translation unit with a per-platform clock, and the CoreAudio file
+  keeps only CoreAudio. ALSA and WASAPI backends then land as siblings rather than as edits to a
+  file named after another platform.
+- Sub-phase: W.6. Test: the existing C suites run unchanged against the split, plus a new case per
+  platform clock proved able to fail by returning a constant.
+
+#### W-09. The C audit instruments are Mach-O and CoreAudio shaped
+- Where: `kiteplayer-rt/native/scripts/render-audit.sh`, `source-discipline.sh`,
+  `build-host.sh`; `../KiteCodec/native/kitecodec-c/scripts/symbol-audit.sh`.
+- Problem: `render-audit.sh` is the strongest instrument in the whole gate and it reads Mach-O
+  with `nm -m`; `source-discipline.sh` hardcodes CoreAudio symbol names; both C `build-host.sh`
+  scripts link a `-dynamiclib` interposer with a Mach-O `__DATA,__interpose` section. A desktop
+  device backend would ship with no proof at all.
+- Fix: the audits read the object format they are given (Mach-O and ELF and PE), and the
+  CoreAudio-named rules become per-backend rule sets keyed by the file under audit.
+- Sub-phase: W.6. Test: each audit run against an ELF archive and proved able to fail there, with
+  the sixteen existing negative controls still able to fail on Mach-O.
+
+#### W-10. The S3-homed audit rows
+- Where: 17.11's open rows whose home is S3: SOL-R9, SOL-R10, SOL-R11, SOL-R12, SOL-R13, SOL-R14's
+  remainder, SOL-API6, SOL-API7, SOL-P7, and SOL-C2. SOL-P8 rides here only if audio work lands.
+- Problem: each is stated in 17.11 and carries its own [V] or [C] mark.
+- Fix: each row's own fix, re-verified against the tree before it is written, since a [C] is a
+  debt to check at pickup.
+- Sub-phase: W.7. Test: named per row inside the sub-phase.
+
+#### W-11. Nothing outside four surfaces has ever run a test (F-COV1's desktop half)
+- Where: 17.11.b's F-COV1; `linuxX64Test`/`linuxArm64Test`/`mingwX64Test` exist as tasks and are
+  permanently disabled on a macOS host.
+- Problem: a phase-W gate that names those tasks is green by definition, which is worse than
+  having no gate.
+- Fix: linuxArm64 test binaries are LINKED here and EXECUTED in an arm64 Linux container per
+  W-D5, and the gate names the container command, not the disabled Gradle task. mingw stays a
+  link claim and the gate says so in the same line.
+- Sub-phase: W.8. Test: the container run itself, with its pass count recorded.
+
+#### W-12. The web spike (S6), timeboxed
+- Where: 17.2's S6; 17.9's KV-6.
+- Problem: web is nine goals' worth of unbuilt surface: no emscripten toolchain, no wasm
+  `TargetTriple`, no binding over the `kc_`/`ffkmp_` ABI, no `@JsExport`, no web `AudioSink`, no
+  web renderer, and an engine whose renderer worker shape uses `newSingleThreadContext` and
+  `runBlocking`, neither of which exists on wasmJs.
+- Fix: run the spike S6 asks for and record its verdict either way: FFmpeg-to-wasm size and decode
+  throughput, the threads and SIMD question, the JS interop shape over the same C ABI, and the
+  single-threaded-engine question, which the survey found is a HARDER blocker than the codec build
+  and which S6's own text never anticipated. This item authorizes the emscripten install per
+  W-D6.
+- Sub-phase: W.9. Test: the spike's own measurements, or the recorded reason a measurement could
+  not be taken.
+
+**Sub-phases, in execution order.**
+
+- **W.1 The JVM variant becomes real** (W-01, W-02). KiteCodec. Commit: "Let the published JVM
+  variant carry the JNI it already has".
+- **W.2 The player's JVM backend** (W-03). Commit: "Give the JVM target the backend its Android
+  twin already runs".
+- **W.3 The desktop output backend** (W-04). Commit: "Hear and read the picture on a desktop JVM".
+- **W.4 KiteVideo on the desktop, measured** (W-05). Commit: "Draw the desktop frame once per
+  upload, and say what it costs".
+- **W.5 The Linux and Windows trees, and a desktop publication** (W-06, W-07). Commit: "Build
+  FFmpeg for the two desktops this machine can cross-compile".
+- **W.6 The device sink splits from its platform, and the audits follow** (W-08, W-09). Commit:
+  "Let a sink exist that CoreAudio did not write".
+- **W.7 The S3 register rows** (W-10). Commit: one per row group.
+- **W.8 The Linux run** (W-11). Commit: "Run the engine's own tests on Linux, and say so".
+- **W.9 The web spike** (W-12). Commit: "Measure the web, and record the verdict".
+
+**The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
+hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase
+delivers is bought in the order above, each sub-phase gated and committed on its own, and the
+Execution log entry for each says what it measured and what it did not. Two exits are owner-blocked
+by construction and are named here so no reader mistakes their absence for an oversight: the
+Windows matrix run needs a Windows machine, and the physical-device halves of the desktop
+measurements need machines that are not this one.
+
 ## 18. The skeleton, for any executor
 
 Written so a capable implementer with NO context, human or model, can work on this project

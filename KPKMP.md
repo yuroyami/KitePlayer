@@ -17784,6 +17784,19 @@ deliberately left open.
 - Fix, decided: AudioWorklet plus a ring over the existing contract, with the latency floor
   MEASURED and stated the way W-D2 states the `SourceDataLine` floor rather than left implicit.
 - Sub-phase: X.10. Test: an underrun count over a sustained run, plus the stated floor.
+  Result, 2026-08-17, SHAPE PROVED, not the sink. The browser demo now decodes the aac stream
+  beside the video and pushes it into Web Audio. Reported by the page: 48000 Hz, 2 channels,
+  planar float, and a sample peak of 0.103, which is real content and not silence. The resample
+  goes through `ffkmp_graph_build_audio` rather than by reading decoder planes raw, for two
+  reasons: it guarantees the output format whatever the source was, which is what a player must do,
+  and it is the first thing that has RUN an avfilter graph in wasm. X-02 added avfilter to the web
+  build on the strength of a symbol lookup; this executes one.
+  **What is NOT claimed.** Nobody heard it. The samples are correct and are scheduled onto an
+  `AudioContext` timeline, but a hidden browser pane suspends audio under the autoplay policy, so
+  audible output is unverified. Nor is this the `AudioSink` X-10 asks for: there is no ring, no
+  underrun count, no latency floor measured, and no engine clock driving it. `createBufferSource`
+  per decoded frame is a proof of the format path, and a real sink is an AudioWorklet fed by a ring,
+  which is what X-10 still has to build and measure the way W-D2 measured `SourceDataLine`.
 
 #### X-11. There is no web `VideoRenderer`, which is KV-6 proper
 - Where: `KiteVideoRenderer.kt`, about 375 lines.

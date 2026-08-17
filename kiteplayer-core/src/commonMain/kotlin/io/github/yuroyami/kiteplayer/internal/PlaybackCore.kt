@@ -1024,6 +1024,13 @@ internal class PlaybackCore(
                 // Idempotent in its own state, and queued rather than refused while opening or seeking:
                 // the restart handler applies it as soon as the pipeline can honour it.
                 playRequested = true
+                // mpv's law (owner report 2026-08-17, F-PLAY1): play at the end IS a restart.
+                // The intent flag was already true after a natural end, so pressing play changed
+                // nothing and the player sat in Ended for ever. An unseekable source keeps
+                // today's honest no-op: there is no way back to the beginning.
+                if (status == PlaybackStatus.Ended && session?.source?.seekable == true) {
+                    restartFrom(Pts.Zero)
+                }
                 command.reply.complete(Unit)
             }
             is CoreCommand.Pause -> {

@@ -209,4 +209,29 @@ class EngineAuditRegressionTest {
         )
         harness.close()
     }
+    // F-PLAY1 (owner report 2026-08-17): play at the end IS a restart, mpv's law. The intent
+    // flag was already true after a natural end, so pressing play changed nothing and the
+    // player sat in Ended for ever.
+    @Test
+    fun `play at Ended restarts from the beginning`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 2_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(3.seconds)
+        assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
+
+        harness.core.play()
+        harness.run(500.milliseconds)
+        assertEquals(
+            PlaybackStatus.Playing,
+            harness.core.snapshots.value.status,
+            "play at the end restarts playback",
+        )
+        val position = harness.core.progress.value.position
+        assertTrue(
+            position < 1.seconds,
+            "the restart begins at the beginning, but the position reads $position",
+        )
+        harness.close()
+    }
 }

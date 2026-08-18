@@ -13,6 +13,11 @@ import kotlin.test.assertNull
  * In commonTest since X-11, because the law it tests moved to commonMain when the web canvas
  * renderer needed the same arithmetic. It ran on Android alone while it was the Android renderer's
  * private law; now that two renderers share it, the tests run everywhere both do.
+ *
+ * Backticked names here may contain SPACES and nothing else exotic. Kotlin/Native refuses a comma
+ * in an identifier ("Name contains illegal characters"), and these names compiled on Android and
+ * wasm for a while before macosArm64 said so, which is the whole hazard of a test file moving from
+ * one target to all of them.
  */
 class FrameLayoutTest {
 
@@ -79,7 +84,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `nothing to draw is a null layout, never a crash`() {
+    fun `nothing to draw is a null layout and never a crash`() {
         assertNull(frameLayout(0, 1080, VideoSize(640, 480), 0))
         assertNull(frameLayout(1920, 0, VideoSize(640, 480), 0))
         assertNull(frameLayout(1920, 1080, VideoSize(0, 480), 0))

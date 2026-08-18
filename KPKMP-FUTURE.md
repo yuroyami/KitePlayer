@@ -52,6 +52,12 @@ and still one document; its other half, KPKMP-PAST.md, is finished business you 
 > 6. **Keep the index true.** 17.15's consolidated register is where a reader learns what is open.
 >    A row you close there must say which commit closed it; a row you open is added there too, not
 >    only in its home section. The index is the promise; the detail is the evidence.
+> 7. **Run the gate that watches what you changed.** Tier 1 always, and the tier your changed paths
+>    select. Three gate steps were found already red on 2026-08-18, each left by an earlier surge
+>    that changed something structural and did not re-run the check watching it: a cross-repository
+>    allowlist naming a file the document split had moved, an ABI dump one target behind the HTTPS
+>    work, and a Linux JNI link the dav1d surge never taught to name `-ldav1d`. A register kept
+>    perfectly true beside a gate nobody runs is only half of the promise.
 >
 > **The rule exists because it was broken.** On 2026-08-18 a verification pass found SIX rows the
 > register still listed as open that the tree had already closed, four of them closed the previous
@@ -88,7 +94,10 @@ and still one document; its other half, KPKMP-PAST.md, is finished business you 
 >
 > **Nothing was rewritten and nothing was deleted.** The split is mechanical and verbatim;
 > `scripts/verify-kpkmp-split.py` proves it against the pre-split version in git and fails if a
-> single line or register id stops resolving.
+> single line or register id stops resolving. It compares two COMMITS, the file before against the
+> two files at the commit the split finished at, so it is a proof about the migration and not a
+> freeze on these documents. It briefly read the working tree instead, and then went red on the
+> first ordinary day of work afterwards for updating a register row exactly as RULE ONE demands.
 >
 > **Section numbers did not change.** A reference to "17.11" or "section 14" still lands; 17.15's
 > register names the file for every open row. If a section is not here, it is finished, and that is
@@ -1125,10 +1134,26 @@ by the same sweep and NOT yet answered:
 - PAR-3 [V] android-x64 still builds with --disable-asm, so the emulator ABI has no SSE/AVX in
   libavcodec (0 SIMD symbols against android-arm64's 1363 NEON). Emulator-only, hence low priority,
   but it is the same omission the iOS arm64 targets carried until 2026-08-17.
-- PAR-4 [V] The wasm profile enables the matroska and webm demuxers while enabling NEITHER the opus
-  NOR the vorbis decoder, so a .webm on the web opens, decodes video, and has no audio decoder for
-  its audio stream. Both are FFmpeg-native and cost no external library. This is the cheapest real
-  gap the sweep found.
+- PAR-4 CLOSED 2026-08-18, commit "Hear the picture in a browser, and say what it costs". The wasm
+  profile enabled the matroska and webm demuxers while enabling NEITHER the opus NOR the vorbis
+  decoder, so a .webm on the web opened, decoded video, and had no audio decoder for its audio
+  stream. `ffprobe` says BOTH `vp9.webm` and `av1.mkv` carry opus, and both are MustPlay rows, so
+  this was silently costing the matrix two rows' audio rather than an exotic file's. Both decoders
+  and both parsers are now in the profile; verified at the symbol level in the rebuilt tree with
+  `llvm-nm --defined-only native-libs/lgpl/wasm32/lib/libavcodec.a`, which shows `ff_opus_decoder`,
+  `ff_vorbis_decoder`, `ff_opus_parser` and `ff_vorbis_parser`. The test that should have caught it
+  was the weak part: it asserted a flat hand-written codec list that nobody had put opus on. It now
+  pins codecs to the ROWS that need them, with a named `knownAbsent` set carrying av1's reason, so
+  a gap must be written down to be silenced. `--enable-demuxer=ogg` was deliberately NOT added: no
+  matrix row is ogg-contained, and the web tier stays lean by naming what it serves.
+  END TO END, which is stronger than the symbols: `scripts/wasm-matrix-probe.sh` links the wasm
+  module with emcc and decodes the matrix under node, and now reports `vp9.webm PLAYS video:vp9
+  plays, audio:opus plays` and `av1.mkv PLAYS video:av1 not in web tier, audio:opus plays`. Real
+  opus frames out of the web build. The probe itself was the second thing hiding this: it decoded
+  ONE stream per row, video where a row had video, so vp9.webm reported PLAYS on its picture alone.
+  It now reports per stream, and separates the codec tier from the DEMUXER tier so a container the
+  lean build cannot open reads as omitted rather than broken. 15 rows play, 11 streams or containers
+  omitted by the tier, 0 unexpected failures.
 - PAR-5 [V] :kiteplayer-output declares linuxX64, linuxArm64 and mingwX64 targets but has NO
   linuxMain or mingwMain source set, so those three compile the common file alone: no audio sink,
   no renderer, no clock. Desktop playback rides the jvm target instead. RECOMMENDED CLOSE: record
@@ -2002,6 +2027,39 @@ deliberately left open.
   per decoded frame is a proof of the format path, and a real sink is an AudioWorklet fed by a ring,
   which is what X-10 still has to build and measure the way W-D2 measured `SourceDataLine`.
 
+  **DONE, 2026-08-18**, commit "Hear the picture in a browser, and say what it costs".
+  `WebAudioSink` plus `WebAudioWorkletDevice` in `:kiteplayer-output`, wired as
+  `WebOutputBackend.audioSink`, with the paced silent sink demoted to the no-`AudioContext`
+  fallback so `nodejs` still gets a player whose clock runs.
+
+  **It is a feeder, not a device callback, and that is structural.** An `AudioWorklet` is a real
+  real-time thread, and this sink still cannot render on it: the worklet is its own realm, the
+  engine's samples live in Kotlin/Wasm linear memory on the main thread, and making those one
+  memory needs `SharedArrayBuffer`, which needs COOP and COEP on whoever embeds the player. X-02
+  already refused to impose that on the default artifact. So this is the OTHER shape `AudioSink`'s
+  own contract names: a push device wrapped by one writer coroutine turning "the device has room"
+  into a pull. The worklet holds the queue and plays it gaplessly; the coroutine keeps it full.
+
+  **The cost, stated rather than left implicit, which is what this row asked for.** The queue is
+  4096 frames, about 85 ms at 48 kHz, and that is the buffering floor this design carries; the
+  platform's own `outputLatency` sits on top of it and `latencyNanos()` reports both. Every block
+  crosses the JS line one sample at a time, because Kotlin/Wasm has no typed-array bridge, the same
+  limit `WebMemory.readBytes` and `BindingProof.fetchClip` already carry: 2048 calls per block, or
+  about 96,000 a second for 48 kHz stereo. The deadline handed to the render callback counts what
+  is already queued ahead of the block, so it is accurate to one worklet report interval, four
+  render quanta or about 10 ms, and always errs toward claiming audio is further away than it is.
+
+  **What is NOT claimed, again.** Nobody has heard it. Eleven tests drive the feeder's policy
+  against a fake device with virtual time (prebuffer ceiling, refill on drain, deadline arithmetic,
+  short-render silencing, seek discard, pause without discard, underrun reporting, latency honesty)
+  and seven more cover the staging buffer. None of that proves the worklet source parses, that
+  `addModule` resolves, or that a speaker moves. Those need a browser and belong with X-14. The
+  underrun COUNT the row asked for exists and is reported as `AudioSinkEvent.Underrun`; a sustained
+  run producing one is still unrun. And a browser starts every `AudioContext` suspended until a
+  user gesture, so until the page has had a click the queue fills, the feeder backs off, and the
+  audio-mastered clock sits at zero. That is correct behaviour, not a hang, and it is the one thing
+  an embedder must know.
+
 #### X-11. There is no web `VideoRenderer`, which is KV-6 proper
 - Where: `KiteVideoRenderer.kt`, about 375 lines.
 - Problem: no renderer exists for web, and the existing one carries threading web does not have.
@@ -2211,9 +2269,10 @@ deliberately left open.
 - X-01 to X-07, X-09, X-12, X-15: LANDED, each with its commit.
 - **X-08 STILL OPEN.** No Worker exists anywhere in the web sources; X-06's blocking IO still has
   no thread that is allowed to wait.
-- **X-10 STILL OPEN.** `WebOutputBackend.audioSink` is `SilentPacedAudioSinkFactory`, whose own
-  KDoc names the real one: an AudioWorklet fed by a ring. The web keeps correct time and makes no
-  sound.
+- **X-10 LANDED 2026-08-18**, commit "Hear the picture in a browser, and say what it costs".
+  `WebOutputBackend.audioSink` is `WebAudioSinkFactory`, an `AudioWorklet` fed by a queue this side
+  keeps full. The silent sink is now the fallback for hosts with no `AudioContext`, which is
+  `nodejs` and any embedder without Web Audio.
 - **X-11 STILL OPEN, and previously mis-summarised as done.** `WebOutputBackend.videoRenderer` is
   `null`. The web sample draws through its own Compose `Canvas` in `Main.kt`, which is what the
   spike measured; there is no `VideoRendererFactory` behind the SPI. A measurement that a frame CAN
@@ -2282,7 +2341,7 @@ this machine does not have.
 | F-COV1 | tests run on six of twenty surfaces; tvos BLOCKED, no SDK here | [V] 08-18 | 17.11.b, here |
 | F-ALPHA1/ROT1/POS1 | the device-only halves: real pixels on a real screen | [owner] | 17.11.b, here |
 | X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-18 | 17.14, here |
-| X-10 | the web sink is silent by design; the real one is an AudioWorklet | [V] 08-18 | 17.14, here |
+| ~~X-10~~ | CLOSED 08-18 by "Hear the picture in a browser, and say what it costs": AudioWorklet sink, silent one demoted to fallback | CLOSED | 17.14, here |
 | X-11 | the web has NO renderer; videoRenderer is null | [V] 08-18 | 17.14, here |
 | X-13 | no artifact layout and no deployment story | [V] 08-18 | 17.14, here |
 | X-14 | the format matrix has never run in a browser | [V] 08-18 | 17.14, here |
@@ -2290,7 +2349,7 @@ this machine does not have.
 | PAR-1 | mingw carries 18 hwaccels while the decision says it carries none | [V] 08-18 [owner] | 17.11, here |
 | PAR-2 | Linux compiles zero hwaccels | [V] 08-18 | 17.11, here |
 | PAR-3 | android-x64 still builds with --disable-asm | [V] 08-18 | 17.11, here |
-| PAR-4 | the web opens webm and has no opus or vorbis decoder for its audio | [V] 08-18 | 17.11, here |
+| ~~PAR-4~~ | CLOSED 08-18 by the same commit: opus and vorbis decoders and parsers in the wasm profile, symbols verified | CLOSED | 17.11, here |
 | PAR-5 | native linux and mingw have no output backend at all | [V] 08-18 [owner] | 17.11, here |
 | PAR-6 | AV1 hardware decode has never been positively proven | [owner] | 17.11, here |
 | PAR-7 | fd: still mutates the caller's descriptor; a positional MediaIo would not | [V] 08-18 | 17.11, here |
@@ -2299,9 +2358,11 @@ this machine does not have.
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | Deferrals 3, 4, 5 and interlude items 2 to 9 (gate call, ABI ratchet, fuzz rule, derived suite lists, the kprt_ decision) | [C] | PAST 15.5, 16.4 |
 
-**Counts, so a reader knows the shape without adding up:** 43 rows. 24 verified against the tree on
-2026-08-18, 10 carried and unverified [C], 11 needing an owner decision or hardware. One row
-(SOL-P10) is QUESTIONED and should be read before it is scheduled.
+**Counts, so a reader knows the shape without adding up:** 43 rows, of which 2 are now CLOSED and
+41 remain. 22 verified against the tree on 2026-08-18, 10 carried and unverified [C], 11 needing an
+owner decision or hardware. One row (SOL-P10) is QUESTIONED and should be read before it is
+scheduled. The two closed rows stay listed, struck through, until the next sweep: a row that
+vanished would leave a reader unable to tell a finished item from one that was never written.
 
 ## 18. The skeleton, for any executor
 

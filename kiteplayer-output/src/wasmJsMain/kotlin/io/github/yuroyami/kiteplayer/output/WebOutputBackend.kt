@@ -28,10 +28,14 @@ import kotlinx.coroutines.launch
  * No renderer is not a gap, it is the same shape `DesktopOutputBackend` has. Compose draws the
  * frames through KiteVideo on both, so the backend supplies only what the platform alone can
  * answer. On the web that is the page's clock and its audio device.
+ *
+ * The sink became audible in X-10. [WebAudioSinkFactory] gives an `AudioWorklet` in a browser and
+ * falls back to [SilentPacedAudioSinkFactory] where Web Audio does not exist, so `nodejs` and any
+ * embedder without it still get a player whose clock runs.
  */
 public object WebOutputBackend : OutputBackend {
     override val clock: MonotonicClock get() = WebMonotonicClock
-    override val audioSink: AudioSinkFactory = SilentPacedAudioSinkFactory
+    override val audioSink: AudioSinkFactory = WebAudioSinkFactory
     override val videoRenderer: VideoRendererFactory? get() = null
 
     /** No web rasteriser yet; the text subtitle path draws through Compose above this layer. */
@@ -69,13 +73,15 @@ private external fun performanceNow(): Double
  * in the first version of this class. So a coroutine calls [AudioRenderCallback.onRender] for one
  * [deviceBufferFrames] block at a time, on a wall-clock schedule, and throws the samples away.
  *
- * The real audible sink is an `AudioWorklet` fed by a ring (X-10). This one is what makes video and
- * A/V sync testable on the web before that exists.
+ * The real audible sink is [WebAudioSinkFactory]'s `AudioWorklet`, landed in X-10. This one is no
+ * longer the web's sink: it is the fallback where Web Audio does not exist, which is `nodejs` and
+ * any embedder without an `AudioContext`, and it is still what makes the engine's own pacing
+ * testable without a browser.
  *
  * INTERNAL on purpose, unlike `WebOutputBackend` and `WebMonotonicClock` which mirror their public
- * desktop twins. This one is scaffolding for X-10, and publishing it would commit the library to a
- * silent sink as API. A consumer reaches it through `WebOutputBackend.audioSink` and never needs
- * the name.
+ * desktop twins. Publishing it would commit the library to a silent sink as API, and it is a
+ * fallback rather than a choice a caller should be able to make. A consumer reaches it through
+ * `WebOutputBackend.audioSink` and never needs the name.
  */
 internal object SilentPacedAudioSinkFactory : AudioSinkFactory {
     override val name: String = "web-silent-paced"

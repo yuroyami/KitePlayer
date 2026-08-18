@@ -18,7 +18,10 @@ stopped reading it. On 2026-08-18 an audit found six register rows listed as ope
 already closed, and the agent auditing them checked twelve of sixty items and asserted the rest from
 the document's own summaries. It was cut by TENSE: one file always read, one never. The cut was
 mechanical and verbatim. `scripts/verify-kpkmp-split.py` proves it and fails if a single line or
-register id stops resolving.
+register id stops resolving. It compares two COMMITS, the single file before against the two files
+at the commit the split finished at, so it proves the MIGRATION rather than freezing these
+documents. Pass `WORKTREE` as its second argument to check files on disk, which is what the next
+document surgery would use while it is under way.
 
 **Section numbers did not change**, so every cross-reference from code or from KPKMP-FUTURE.md still
 lands. Mentions of "KPKMP.md" inside this file are deliberate historical text: they were true when
@@ -74,6 +77,12 @@ written, and an archive is not rewritten to match the present.
 > 6. **Keep the index true.** 17.15's consolidated register is where a reader learns what is open.
 >    A row you close there must say which commit closed it; a row you open is added there too, not
 >    only in its home section. The index is the promise; the detail is the evidence.
+> 7. **Run the gate that watches what you changed.** Tier 1 always, and the tier your changed paths
+>    select. Three gate steps were found already red on 2026-08-18, each left by an earlier surge
+>    that changed something structural and did not re-run the check watching it: a cross-repository
+>    allowlist naming a file the document split had moved, an ABI dump one target behind the HTTPS
+>    work, and a Linux JNI link the dav1d surge never taught to name `-ldav1d`. A register kept
+>    perfectly true beside a gate nobody runs is only half of the promise.
 >
 > **The rule exists because it was broken.** On 2026-08-18 a verification pass found SIX rows the
 > register still listed as open that the tree had already closed, four of them closed the previous
@@ -8581,6 +8590,94 @@ figure above is a range because the host was not idle.
   version is not set" unless it passed -Pkiteplayer.libass.root. Found while compiling an unrelated
   module. The Android target is now always declared with only its native half gated, verified both
   with and without the flag.
+
+- **2026-08-18. The web hears (X-10), and gets something worth hearing (PAR-4).** Commit: "Hear the
+  picture in a browser, and say what it costs".
+
+  **PAR-4 first, because the sink would have had nothing to play.** The wasm FFmpeg profile carried
+  the matroska demuxer and no opus decoder. `ffprobe` on the fixtures shows `vp9.webm` and
+  `av1.mkv` BOTH carry opus tracks and both are MustPlay rows, so this was not an exotic-file gap,
+  it was two matrix rows losing their audio in silence. opus and vorbis, decoders and parsers, are
+  now in the profile. MEASURED: the tree was rebuilt with emscripten 6.0.6 and
+  `llvm-nm --defined-only .../wasm32/lib/libavcodec.a` shows `ff_opus_decoder`, `ff_vorbis_decoder`,
+  `ff_opus_parser`, `ff_vorbis_parser`. NOT measured: no browser has decoded an opus track. The
+  golden test was the actual defect and is rewritten: it asserted a flat hand-written codec list,
+  and nobody had ever put opus on it, so it passed while the gap existed. It now maps matrix ROWS
+  to the codecs they need with a `knownAbsent` set that carries av1's reason in writing. Verified by
+  mutation: removing opus turns it red at the row that needs it, which the old test did not.
+
+  MEASURED end to end afterwards, which is the claim that actually matters: the wasm module was
+  linked with emcc and the matrix decoded under node 26 by `scripts/wasm-matrix-probe.sh`, which
+  reports `vp9.webm PLAYS video:vp9 plays, audio:opus plays` and `av1.mkv PLAYS video:av1 not in
+  web tier, audio:opus plays`. That probe was the SECOND thing hiding PAR-4 and was rewritten here:
+  it decoded one stream per row, video where a row had video, so vp9.webm had been reporting PLAYS
+  on the strength of a picture whose soundtrack no decoder in the build could touch. It now decodes
+  the first video AND the first audio stream in one demux pass and reports both. Rewriting it
+  introduced a regression I caught on the first run: modelling the codec tier without the DEMUXER
+  tier turned five rows the lean build cannot open at all (.ts, .avi, .wmv, .flv, .vob) from
+  expected omissions into failures. Containers are now their own tier, keyed by extension because
+  there is no format name before the open succeeds. Final: 15 rows play, 11 omitted by the tier,
+  0 unexpected failures, exit 0.
+
+  **X-10 is a feeder, and the reason is structural rather than a shortcut.** `AudioSink`'s contract
+  is pull, an `AudioWorklet` is a genuine real-time thread, and the sink still cannot render on it:
+  the worklet is a separate realm, the engine's samples are in Kotlin/Wasm linear memory on the
+  main thread, and one memory needs `SharedArrayBuffer`, which needs COOP and COEP from whoever
+  embeds the player. X-02 had already refused to make the default artifact need that. So this took
+  the other shape the contract names: a push device wrapped by one writer coroutine.
+
+  MEASURED, all against a fake device on virtual time: the prebuffer stops at exactly the
+  high-water mark and not one block further; two blocks played means exactly two refilled; the
+  deadline of each block counts everything queued ahead of it plus device latency, to the
+  nanosecond; a short render silences its tail instead of replaying the previous block through the
+  reused staging array; stop discards and pause does not; an underrun is reported once per growth
+  and not repeated; latency counts the queue this sink itself created; latency QUALITY says
+  Unreliable when the platform offers no figure rather than inventing confidence. Eleven tests, plus
+  seven on the staging buffer, which now keeps what is written to it where its predecessor
+  discarded everything and could not be wrong.
+
+  NOT measured, and named so the absence is not read as proof: nobody has heard it. No browser has
+  run the worklet source, `addModule` has never resolved, and no speaker has moved. Those belong
+  with X-14's matrix run in a real browser. The underrun COUNT exists; a sustained run that
+  produces one has not happened. The per-sample JS crossing is stated rather than benchmarked: 2048
+  calls per block, about 96,000 a second at 48 kHz stereo, forced by Kotlin/Wasm having no
+  typed-array bridge, which is the same limit `WebMemory.readBytes` and `BindingProof.fetchClip`
+  already carry and which X-08's Worker is the real fix for.
+
+  **The trap an embedder will hit.** Browsers start every `AudioContext` suspended until a user
+  gesture. Until the page gets a click, the queue fills, the feeder backs off, and because the
+  clock is audio-mastered, playback sits at position zero. Correct, and indistinguishable from a
+  hang if nobody says so, which is why it is in the sink's KDoc and here.
+
+  **Two mistakes of mine on the way, both caught by checking rather than by luck.** I read
+  "0 opus symbols" off a `llvm-nm` that was not on PATH, so a command-not-found was briefly
+  evidence of a build failure; the emscripten copy of the tool shows all four symbols present. And
+  I piped a Gradle run through `tail` and read `tail`'s exit code as Gradle's, which is the same
+  swallowed-exit-code mistake the split verifier caught two commits earlier.
+
+  **THREE gate steps were already red before this work touched anything, and running the gate is
+  the only reason anyone found out.** None was caused by the change; each was left behind by an
+  earlier surge that did not re-run what it had moved.
+
+  1. `check-deleted-surface.sh` had failed since the pilot document was split by tense two commits
+     earlier. Its cross-repository prose allowlist named `../KitePlayer/KPKMP.md`, a path that had
+     ceased to exist, while the prose it excused had moved to `KPKMP-PAST.md`, which was not on the
+     list. Repointed, with the reason written beside it. Worth naming rather than quietly fixing:
+     the split's own verifier proved that no LINE was lost and could not possibly know that a tool
+     in the OTHER repository referred to the file by path.
+  2. `checkKotlinAbi` had failed since `:kiteplayer-network` gained a wasmJs target in the HTTPS
+     work. The dump differs by one line, the target list, and nothing in the surface changed. Dump
+     refreshed.
+  3. `publishToMavenLocal -Pkitecodec.jni.linux=true` had failed since the dav1d surge, taking
+     `linux-jvm-tests.sh` down with it. `--enable-libdav1d` reached the linux FFmpeg trees but
+     `-ldav1d` was never added to the Linux JNI link, which is the one link that spells its
+     libraries out by hand instead of going through `StaticLinkFlags`. `--no-undefined` did exactly
+     its job and named every `dav1d_*` symbol. The archive was already in the same `lib/` the link
+     searches, so only the name was missing. Linux arm64 now runs 60 tests and all 27 matrix rows.
+
+  The pattern in all three is one thing: a surge changed something structural and did not run the
+  gate that watches it. That is RULE ONE's territory, and RULE ONE currently only asks for the
+  REGISTER to be updated. These say the gate belongs in it too.
 
 ## 15. Horizon B execution: B1
 

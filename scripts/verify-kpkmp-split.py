@@ -11,9 +11,21 @@ header.
 It compares the two files against the last single-file version in git history and fails if any
 non-blank line, or any register id, stopped resolving.
 
-    python3 scripts/verify-kpkmp-split.py [<git-ref-of-single-file-version>]
+    python3 scripts/verify-kpkmp-split.py [<before-ref>] [<after-ref>]
 
 Exit 0 means nothing was lost. Anything else names what went missing.
+
+**This is a proof about the MIGRATION, not an invariant on the files.** Both sides default to git
+refs, and the after-side defaults to the commit the split finished at rather than to the working
+tree. That distinction is the whole point and it was got wrong first: reading the working tree made
+every later edit to either document report as a LOST LINE, so the first ordinary day of work after
+the split turned this red for updating a register row exactly as RULE ONE demands. A check that
+goes red for correct work is a check people learn to skip, which is the disease the split was
+performed to cure. Pinned to two commits, it answers its one question, stays answerable forever,
+and never argues with the documents being alive.
+
+Pass an after-ref of `WORKTREE` to compare against the files on disk, which is what a future
+document surgery would use while it is in progress.
 """
 import re
 import subprocess
@@ -30,7 +42,10 @@ ID_PATTERN = re.compile(
     r"\b(?:SOL-[A-Z]+\d+|F-[A-Z]+\d+|X-\d+|W-\d+|B\d-\d+|I-\d+|KV-\d+|KD-\d+"
     r"|PAR-\d+|KC-[A-Z0-9]+|KP-[A-Z]+|AGW-\d+)\b"
 )
-DEFAULT_REF = "4de779b:KPKMP.md"
+DEFAULT_BEFORE_REF = "4de779b:KPKMP.md"
+# The commit the split finished at: the two files plus the deliberate standalone edits, and nothing
+# from any later day's work.
+DEFAULT_AFTER_REF = "0521ebf"
 ALLOWED_EDITS = Path(__file__).with_name("kpkmp-split-allowed-edits.txt")
 
 
@@ -56,14 +71,20 @@ def read_original(ref: str) -> str:
         sys.exit(f"cannot read {ref}: {failure.stderr.strip()}")
 
 
-def main() -> int:
-    ref = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_REF
-    original = read_original(ref)
+def read_side(name: str, after_ref: str) -> str:
+    """One half of the split, from a commit by default and from disk only when asked."""
+    if after_ref == "WORKTREE":
+        if not Path(name).is_file():
+            sys.exit(f"missing: {name}")
+        return Path(name).read_text()
+    return read_original(f"{after_ref}:{name}")
 
-    missing_files = [name for name in FILES if not Path(name).is_file()]
-    if missing_files:
-        sys.exit(f"missing: {', '.join(missing_files)}")
-    union = "\n".join(Path(name).read_text() for name in FILES)
+
+def main() -> int:
+    before_ref = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_BEFORE_REF
+    after_ref = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_AFTER_REF
+    original = read_original(before_ref)
+    union = "\n".join(read_side(name, after_ref) for name in FILES)
 
     # 1. Every non-blank line survives. Compared stripped, because only content is promised;
     #    a moved line may sit at a different indent inside its new file.
@@ -81,7 +102,8 @@ def main() -> int:
     union_ids = set(ID_PATTERN.findall(union))
     lost_ids = sorted(original_ids - union_ids)
 
-    print(f"reference:      {ref}")
+    print(f"before:         {before_ref}")
+    print(f"after:          {after_ref}")
     print(f"original lines: {len(original.splitlines())}")
     print(f"union lines:    {len(union.splitlines())} across {len(FILES)} files")
     print(f"register ids:   {len(original_ids)} before, {len(union_ids)} after")

@@ -8679,6 +8679,57 @@ figure above is a range because the host was not idle.
   gate that watches it. That is RULE ONE's territory, and RULE ONE currently only asks for the
   REGISTER to be updated. These say the gate belongs in it too.
 
+- **2026-08-18. The web draws (X-11), on a canvas rather than through Compose.** Commit: "Draw the
+  frame on the web, on a canvas rather than through Compose".
+
+  **The plan called this sub-phase "Draw the frame through Compose on the web" and the measurement
+  overruled the plan.** Compose on the web draws through Skia, and Skia wants an `ImageBitmap`,
+  which means the pixels must be in the Kotlin heap. Kotlin/Wasm has no bulk typed-array bridge, so
+  putting them there costs one JS call per byte: X-01 measured that whole path at 160 to 240 ms per
+  1080p frame against a 33.3 ms budget. Converting in C and handing the result to `putImageData` in
+  one `set` measured 8.5 to 9.7 ms. Twenty times, and the difference is the crossing rather than
+  the conversion. A renderer built the planned way would have compiled, satisfied the interface,
+  and not played. `:kiteplayer-compose-video` therefore still has NO wasmJs target, and that is now
+  a recorded decision rather than an omission.
+
+  **The architecture chose the seam.** `:kiteplayer-output` may not depend on KiteCodec, which its
+  build file states and the boundary scans enforce, so the renderer cannot read pixels itself. The
+  Android renderer solves that with `convert: (VideoFrame) -> ByteArray`, supplied by
+  `:kiteplayer-mobile`, which depends on both. The same shape here would have reintroduced the
+  ByteArray and with it the slow path, so the web seam FILLS a caller's JS array instead of
+  returning one: `WebFramePainter` in output, `WebRgbaConverter` in KiteCodec, introduced to each
+  other in `:kiteplayer-mobile` exactly where Android's are.
+
+  **A correction to my own earlier reading.** I had called `WebOutputBackend.videoRenderer == null`
+  the gap. It is not, and checking rather than repeating would have caught it sooner:
+  `DesktopOutputBackend` and `AndroidOutputBackend` are BOTH null and both draw. A backend supplies
+  what the platform alone can answer; a renderer needs a surface, which only a consumer has. The
+  real gap was that no web renderer class existed at all.
+
+  **The geometry law moved instead of being copied.** `frameLayout` and `FrameLayout` were
+  `internal` to androidMain, a hundred lines of pixel-aspect, quarter-turn, zoom and pan arithmetic.
+  The web canvas needs the identical law, and two copies that must agree forever with no way to
+  notice when they stop would fail as a picture subtly the wrong shape on one platform. Moved to
+  `commonMain`; it references only VideoSize, VideoScale and VideoTransform, all of core. Its
+  eleven tests moved to `commonTest` and now run on wasm as well as Android, where before they ran
+  on Android alone. Android's own ten renderer tests stayed green across the move.
+
+  MEASURED here: nothing about speed. The 8.5 to 9.7 ms figure is X-01's, quoted rather than
+  reproduced, and it measured raw JS doing what this code now does rather than this code.
+
+  NOT measured, and this is the honest headline: **nobody has seen a pixel from this renderer.**
+  Node has no `OffscreenCanvas`, no `document` and no `ImageData`, so every path the ten new tests
+  exercise is a REFUSAL path. That is deliberate rather than a shortfall: refusal is where renderer
+  ownership bugs live. Rule 2 of `VideoRenderer` says the renderer owns the frame from the moment
+  `present` is called INCLUDING when it fails and closes it exactly once, `present` has seven ways
+  to refuse, and a leak there holds 3.11 MB of decoder memory per 1080p frame and 24.9 MB per 4K
+  frame. The tests assert the closing on every one of those paths, and mutation-checking by
+  removing the `use` turns seven of them red. Drawing itself needs a browser and is X-14's.
+
+  Also unclaimed: A/V sync between this and X-10's sink, since neither has run in a browser
+  together; overlay upload cost, which is bounded by `contentHash` caching and reasoned about
+  rather than timed; and any throughput number at all.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

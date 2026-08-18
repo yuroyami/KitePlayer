@@ -56,3 +56,13 @@ final object io.github.yuroyami.kiteplayer.mobile/MobileApplePlayerViewRendererF
 
 // Targets: [ios]
 final fun (io.github.yuroyami.kiteplayer.view/KitePlayerUIView).io.github.yuroyami.kiteplayer.mobile/installMobileRenderer() // io.github.yuroyami.kiteplayer.mobile/installMobileRenderer|installMobileRenderer@io.github.yuroyami.kiteplayer.view.KitePlayerUIView(){}[0]
+
+// Targets: [wasmJs]
+final class io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory : io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory|null[0]
+    constructor <init>(kotlin.js/JsAny) // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.<init>|<init>(kotlin.js.JsAny){}[0]
+
+    final val name // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name.<get-name>|<get-name>(){}[0]
+
+    final suspend fun create(): io.github.yuroyami.kiteplayer.spi/VideoRenderer // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.create|create(){}[0]
+}

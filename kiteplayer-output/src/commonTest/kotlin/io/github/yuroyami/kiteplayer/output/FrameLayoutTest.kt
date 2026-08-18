@@ -8,9 +8,13 @@ import kotlin.test.assertNull
 /**
  * The geometry arms of S1.c.5 step 7: aspect fit both ways, non-square pixels, every quarter
  * turn, and the draw-rectangle exchange that makes a turned picture land on its own letterbox.
- * All pure functions, no renderer instance and no Android anywhere.
+ * All pure functions, no renderer instance and no platform anywhere.
+ *
+ * In commonTest since X-11, because the law it tests moved to commonMain when the web canvas
+ * renderer needed the same arithmetic. It ran on Android alone while it was the Android renderer's
+ * private law; now that two renderers share it, the tests run everywhere both do.
  */
-class AndroidSurfaceGeometryTest {
+class FrameLayoutTest {
 
     @Test
     fun `four by three into sixteen by nine pillarboxes symmetrically`() {

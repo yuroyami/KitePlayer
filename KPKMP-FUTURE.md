@@ -2095,6 +2095,37 @@ deliberately left open.
   controls; the Compose-true single-surface path that D-6 promises, where clip, alpha and rotation
   apply to the video pixels, is tier two and is NOT what this measured.
 
+  **DONE, 2026-08-18**, commit "Draw the frame on the web, on a canvas rather than through Compose".
+
+  **The plan's name for this sub-phase was "Draw the frame through Compose on the web", and the
+  measurement above is what overruled it.** Compose on the web draws through Skia, which wants the
+  pixels as a Kotlin `ImageBitmap`, which puts them in the Kotlin heap: the X-01 path, 160 to 240 ms
+  per 1080p frame. The canvas path keeps them in the codec module and hands them to `putImageData`
+  in one JS `set`: 8.5 to 9.7 ms. A renderer built the planned way would have compiled, satisfied
+  the interface, and not played. `:kiteplayer-compose-video` still has no wasmJs target,
+  deliberately, and that absence is now a decision rather than an omission.
+
+  **What was built.** `WebFramePainter`, a seam that FILLS a JS array rather than returning a
+  `ByteArray`, because `:kiteplayer-output` may not depend on KiteCodec and the Android seam's own
+  shape is the slow one here. `WebRgbaConverter` in KiteCodec supplies it, converting with
+  `ffkmp_frame_convert_pixfmt` and copying heap to array in one `set`, over a scratch buffer that
+  grows to the largest frame seen and is freed with the renderer. `WebCanvasVideoRenderer` stages
+  each frame into an offscreen canvas and draws that onto the visible one with `drawImage`, because
+  `putImageData` alone ignores every transform and could never letterbox, zoom, pan or rotate.
+
+  **The geometry law moved to `commonMain` rather than being copied.** `frameLayout` and
+  `FrameLayout` were `internal` to androidMain; two renderers now share one law instead of a hundred
+  lines of pixel-aspect and quarter-turn reasoning living in two places that must agree forever with
+  no way to notice when they stop. Its eleven tests moved to `commonTest` with it and now run on
+  wasm as well as Android.
+
+  **NOT claimed: nobody has seen it.** Node has no `OffscreenCanvas`, no `document` and no
+  `ImageData`, so every path the ten renderer tests exercise is a REFUSAL path. That is where
+  ownership bugs hide and it is what they check: rule 2 says a renderer closes the frame exactly
+  once on every path including failure, `present` has seven ways to refuse, and a leak there costs
+  3.11 MB per frame at 1080p and 24.9 MB at 4K. Verified by mutation: removing the `use` turns
+  seven of them red. A drawn pixel needs a browser and belongs to X-14.
+
 #### X-12. `platformKitePlayerDefaults` is `Unavailable` on wasmJs
 - Where: `:kiteplayer-mobile`'s wasmJs source set.
 - Problem: X-10 and X-11 are not reachable by a consumer until something wires them.
@@ -2273,10 +2304,13 @@ deliberately left open.
   `WebOutputBackend.audioSink` is `WebAudioSinkFactory`, an `AudioWorklet` fed by a queue this side
   keeps full. The silent sink is now the fallback for hosts with no `AudioContext`, which is
   `nodejs` and any embedder without Web Audio.
-- **X-11 STILL OPEN, and previously mis-summarised as done.** `WebOutputBackend.videoRenderer` is
-  `null`. The web sample draws through its own Compose `Canvas` in `Main.kt`, which is what the
-  spike measured; there is no `VideoRendererFactory` behind the SPI. A measurement that a frame CAN
-  be drawn is not a renderer.
+- **X-11 LANDED 2026-08-18**, commit "Draw the frame on the web, on a canvas rather than through
+  Compose". `WebCanvasVideoRenderer` in `:kiteplayer-output`, wired to KiteCodec by
+  `WebCanvasRendererFactory` in `:kiteplayer-mobile`, exactly as Android's renderer is wired.
+  `WebOutputBackend.videoRenderer` is STILL null and that is correct: `DesktopOutputBackend` and
+  `AndroidOutputBackend` are both null too, and both draw. A backend supplies what the platform
+  alone can answer, and a renderer needs a surface, which only a consumer has. Calling that null
+  field the gap was my own error and it is corrected here.
 - **X-13 STILL OPEN.** No artifact layout and no deployment story: COOP and COEP appear only in
   this file and the spike document, in no header, sample or doc a consumer could follow.
 - **X-14 STILL OPEN.** The 17.5 matrix has never run in a browser.
@@ -2342,7 +2376,7 @@ this machine does not have.
 | F-ALPHA1/ROT1/POS1 | the device-only halves: real pixels on a real screen | [owner] | 17.11.b, here |
 | X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-18 | 17.14, here |
 | ~~X-10~~ | CLOSED 08-18 by "Hear the picture in a browser, and say what it costs": AudioWorklet sink, silent one demoted to fallback | CLOSED | 17.14, here |
-| X-11 | the web has NO renderer; videoRenderer is null | [V] 08-18 | 17.14, here |
+| ~~X-11~~ | CLOSED 08-18 by "Draw the frame on the web, on a canvas rather than through Compose" | CLOSED | 17.14, here |
 | X-13 | no artifact layout and no deployment story | [V] 08-18 | 17.14, here |
 | X-14 | the format matrix has never run in a browser | [V] 08-18 | 17.14, here |
 | 4K | the non-goal was set at 1.0x software and never re-decided against 715 fps hardware | [V] 08-18 [owner] | 17.14, here |
@@ -2358,8 +2392,8 @@ this machine does not have.
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | Deferrals 3, 4, 5 and interlude items 2 to 9 (gate call, ABI ratchet, fuzz rule, derived suite lists, the kprt_ decision) | [C] | PAST 15.5, 16.4 |
 
-**Counts, so a reader knows the shape without adding up:** 43 rows, of which 2 are now CLOSED and
-41 remain. 22 verified against the tree on 2026-08-18, 10 carried and unverified [C], 11 needing an
+**Counts, so a reader knows the shape without adding up:** 43 rows, of which 3 are now CLOSED and
+40 remain. 21 verified against the tree on 2026-08-18, 10 carried and unverified [C], 11 needing an
 owner decision or hardware. One row (SOL-P10) is QUESTIONED and should be read before it is
 scheduled. The two closed rows stay listed, struck through, until the next sweep: a row that
 vanished would leave a reader unable to tell a finished item from one that was never written.

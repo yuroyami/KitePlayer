@@ -225,6 +225,44 @@ final class io.github.yuroyami.kiteplayer.output/AppKitWindow { // io.github.yur
 }
 
 // Targets: [wasmJs]
+abstract fun interface io.github.yuroyami.kiteplayer.output/WebFramePainter { // io.github.yuroyami.kiteplayer.output/WebFramePainter|null[0]
+    abstract fun paintRgba(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin.js/JsAny): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/WebFramePainter.paintRgba|paintRgba(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.js.JsAny){}[0]
+}
+
+// Targets: [wasmJs]
+final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer|null[0]
+    constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter){}[0]
+
+    final val events // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.events.<get-events>|<get-events>(){}[0]
+
+    final var failedFrames // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final var presentedFrames // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.close|close(){}[0]
+    final fun setScaleMode(io.github.yuroyami.kiteplayer/VideoScale) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setScaleMode|setScaleMode(io.github.yuroyami.kiteplayer.VideoScale){}[0]
+    final fun setTransform(io.github.yuroyami.kiteplayer/VideoTransform) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setTransform|setTransform(io.github.yuroyami.kiteplayer.VideoTransform){}[0]
+    final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
+    final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
+    final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+    final fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
+    final suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
+    final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
+}
+
+// Targets: [wasmJs]
+final class io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory : io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory|null[0]
+    constructor <init>(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.output/WebFramePainter) // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory.<init>|<init>(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.output.WebFramePainter){}[0]
+
+    final val name // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory.name.<get-name>|<get-name>(){}[0]
+
+    final suspend fun create(): io.github.yuroyami.kiteplayer.spi/VideoRenderer // io.github.yuroyami.kiteplayer.output/WebCanvasVideoRendererFactory.create|create(){}[0]
+}
+
+// Targets: [wasmJs]
 final object io.github.yuroyami.kiteplayer.output/WebMonotonicClock : io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer.output/WebMonotonicClock|null[0]
     final fun nanos(): kotlin/Long // io.github.yuroyami.kiteplayer.output/WebMonotonicClock.nanos|nanos(){}[0]
 }

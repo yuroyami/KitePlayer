@@ -1,20 +1,139 @@
 # KPKMP-PAST: what already happened
 
-> **You are not expected to read this file.** It is the archive half of the pilot document, split
-> off on 2026-08-18. What is true and what is ahead lives in **KPKMP-FUTURE.md**; start there.
+**This file is STANDALONE. Everything needed to read it is in it.** It is the archive half of the
+pilot document, and it is complete on its own terms: the laws below govern any agent that opens it,
+the keys below decode everything written in it, and its own contents are listed.
+
+**You are not expected to read this file, and nothing in it should be acted on.** What is TRUE and
+what is AHEAD lives in its sibling, **KPKMP-FUTURE.md**. If you are deciding what to do next, you
+are in the wrong file; nothing here is a backlog.
+
+**Why it exists.** Decisions the tree still embodies are ARGUED in here, and an open register row
+sometimes points into it for the detail behind a claim. Deleting it would leave the live half
+asserting things it could no longer justify. So it is kept in full, verbatim, and it is kept
+finished: no row here is waiting for anyone.
+
+**How it was made.** The pilot document reached 18,546 lines in one file and agents measurably
+stopped reading it. On 2026-08-18 an audit found six register rows listed as open that the code had
+already closed, and the agent auditing them checked twelve of sixty items and asserted the rest from
+the document's own summaries. It was cut by TENSE: one file always read, one never. The cut was
+mechanical and verbatim. `scripts/verify-kpkmp-split.py` proves it and fails if a single line or
+register id stops resolving.
+
+**Section numbers did not change**, so every cross-reference from code or from KPKMP-FUTURE.md still
+lands. Mentions of "KPKMP.md" inside this file are deliberate historical text: they were true when
+written, and an archive is not rewritten to match the present.
+
+> ## **RULE ZERO: HOW TO TALK TO THE OWNER. READ THIS BEFORE ANY REPLY.**
 >
-> Kept in full, verbatim, because a decision the tree still embodies is argued in here, and because
-> an open register row sometimes points into it for its detail. Nothing was deleted and nothing was
-> rewritten; `scripts/verify-kpkmp-split.py` proves it.
+> **The owner did not write this document and has not read it. An agent wrote it.**
+> The owner does not know what `X-01`, `W-19`, `S6-D2`, `KV-6`, `SOL-P8` or `17.14` mean, and is
+> not required to learn. Those codes exist so AGENTS can be precise with each other and with the
+> tree. They are not a language to speak to a human in.
 >
-> Contains, with section numbers unchanged so every cross-reference still lands: the defect register
-> (4), dead surface disposition (5), the documentation truth register (6), Horizon A (10), the
-> Horizon B roadmap superseded by 17 (11), the execution log and its 113 dated entries (14), the B1
-> execution (15), the B1-to-B2 interlude (16), the road to 1.0 as first written with its executed
-> stage registers (17 through 17.4.9), what section 17 does not change (17.7), KiteVideo's design
-> (17.9), the piloting surface (17.10), and the completed phase W expansion (17.13).
+> **When reporting to the owner, or asking the owner anything, obey all five:**
 >
-> **The log is still appended to**, per KPKMP-FUTURE.md's RULE ONE: in the same commit as the work.
+> 1. **Never lead with a code.** Say the thing. "The web draw test" beats "X-01". If a code must
+>    appear at all, it goes in brackets after the plain words, never instead of them.
+> 2. **Say what it MEANS, not what it IS.** Not "the raster build is 13 ns per byte". Rather:
+>    "getting one video frame onto the screen takes 150 ms, and it needs to take 33, so video on
+>    the web would play like a slideshow. Here is why, and here is the fix."
+> 3. **Assume zero knowledge of this file, the code, and the history.** The owner knows the
+>    PRODUCT: a video player that should work on phones, desktop and web. Speak in those terms.
+> 4. **A decision request must be answerable by someone who has read nothing.** State the choice,
+>    what each option costs in time and in what the user gets, and give a recommendation. Never
+>    ask the owner to pick between two register items by name.
+> 5. **No wall of jargon.** Short sentences. Plain words. If a sentence needs this document to be
+>    understood, rewrite it.
+>
+> **This rule outranks every style note elsewhere in this file.** The rest of this document is
+> written agent-to-agent and stays that way; that is what it is for. This rule governs what
+> LEAVES the document and reaches a person.
+>
+> Added 2026-08-17 at the owner's explicit instruction, after an agent reported a whole phase to
+> them in register codes they had no way to read.
+
+
+> ## **RULE ONE: THIS FILE IS UPDATED BY THE SAME COMMIT THAT CHANGES THE TREE.**
+>
+> **A register row is a claim about the code. A claim nobody revisits becomes a lie with a date on
+> it.** This is not a style preference; it is the only thing that makes the register worth reading.
+>
+> **Whenever you do ANY work on either repository, before you report it done:**
+>
+> 1. **Close what you closed.** Find every row your work answers and mark it CLOSED with the commit
+>    that closed it. Do not leave it for a later sweep. There is no later sweep.
+> 2. **Open what you opened.** A limitation you introduced, accepted or discovered is a new row, in
+>    the register nearest the work, written before you move on.
+> 3. **Correct what you found false.** If a row describes the tree wrongly, say so on the row with
+>    the evidence, and say when it stopped being true if you can tell.
+> 4. **Reduce what you narrowed.** A row half answered is REDUCED with its remainder named, never
+>    silently left whole and never quietly deleted.
+> 5. **Log the work.** The execution log (KPKMP-PAST.md, section 14) gets what was measured and
+>    what was NOT, in the same commit.
+> 6. **Keep the index true.** 17.15's consolidated register is where a reader learns what is open.
+>    A row you close there must say which commit closed it; a row you open is added there too, not
+>    only in its home section. The index is the promise; the detail is the evidence.
+>
+> **The rule exists because it was broken.** On 2026-08-18 a verification pass found SIX rows the
+> register still listed as open that the tree had already closed, four of them closed the previous
+> day by surges that never looked at the register: SOL-S1 and SOL-S2 by the deep audit's own
+> F-ALPHA1 and F-CFL1, SOL-API6 by W-18, SOL-B3 by a plugin change nobody re-ran. An owner reading
+> this file would have paid for work already done, and an agent trusting it would have started it.
+>
+> **A commit that changes behaviour and does not touch this file is incomplete**, unless the work
+> genuinely answers no row and opens none, which is rarer than it feels while coding.
+
+
+> ## **THE KEYS. Everything in this file is written in these, so they are repeated in both files.**
+>
+> **Evidence levels**, strongest to weakest. No lower item may be presented as a higher one.
+> 1 a repeatable release-mode automated test on a named real device with saved metrics ·
+> 2 a deterministic model, differential oracle, sanitizer or fuzz result on the exact contract ·
+> 3 a clean consumer build using only published artifacts · 4 a source-level proof with ownership
+> and state invariants · 5 a unit test around an isolated helper · 6 a manual observation ·
+> 7 compilation alone · 8 a declared target, KDoc, plan or README sentence.
+> The full statement with its worked examples is section 2 of KPKMP-FUTURE.md.
+>
+> **Support tiers.** T1 API: common code compiles, no playback claim. T2 Codec: a runtime can open,
+> decode, seek, cancel and close real media. T3-Full: qualified audio plus video, sync, subtitles
+> and lifecycle. T3-Audio: audio only, explicitly no video or subtitle claim. T4 Product: T3 plus OS
+> integrations and clean packaging. T5 Supported: T4 plus real-device qualification, security,
+> performance and release gates.
+>
+> **Verification marks on a register row.** `[V]` re-verified against the tree on the date given.
+> `[C]` carried from an audit, its anchor never re-checked, so check before trusting it.
+> `[owner]` needs a decision or hardware that the build machine does not have.
+>
+> **Register id families.** `SOL-` the 2026-08-13 implementation audit (R rendering, A audio,
+> S subtitles, API, P performance, C the C-reduction charter, K Kotlin modernization, B build) ·
+> `F-` the 2026-08-17 deep audit · `PAR-` the 2026-08-18 parity sweep of the shipped archives ·
+> `D` numbered defects · `B1-`/`I-` the B1 execution and its interlude · `W-` phase W (desktop) ·
+> `X-` stage S6 (web) · `KV-` KiteVideo · `KD-` the piloting surface · `KC-`/`KP-` KiteCodec and
+> KitePlayer cross-repository rows · `AGW-` the Android GPU work.
+>
+> **The two repositories.** KitePlayer is the engine and the player. KiteCodec is the sibling that
+> binds FFmpeg and ships the native trees; it lives at `../KiteCodec` and has its own git history.
+
+
+> ## **WHAT IS IN THIS FILE**
+>
+> | section | what |
+> |---|---|
+> | 4 | the defect register, D1 to D35, closed |
+> | 5 | dead surface disposition |
+> | 6 | the documentation truth register |
+> | 10 | Horizon A, the executable run |
+> | 11 | Horizon B's product roadmap, superseded by 17 |
+> | 14 | **the execution log, 113 dated entries.** Still appended to, per RULE ONE |
+> | 15 | Horizon B execution: B1 |
+> | 16 | the B1 to B2 interlude |
+> | 17 to 17.4.9 | the road to 1.0 as first written, with its executed stage registers |
+> | 17.7 | what section 17 does not change |
+> | 17.9 | KiteVideo, the Compose-true renderer |
+> | 17.10 | the piloting surface, package KD |
+> | 17.13 | the phase W expansion, complete: all seventeen sub-phases accounted for |
+
 
 ## 4. Defect register
 

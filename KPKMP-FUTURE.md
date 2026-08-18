@@ -1,4 +1,7 @@
-# KPKMP: the pilot document
+# KPKMP-FUTURE: what is true and what is ahead
+
+**This file is STANDALONE. Everything needed to work is in it.** The pilot document is two files
+and still one document; its other half, KPKMP-PAST.md, is finished business you never have to open.
 
 > ## **RULE ZERO: HOW TO TALK TO THE OWNER. READ THIS BEFORE ANY REPLY.**
 >
@@ -60,18 +63,16 @@
 > genuinely answers no row and opens none, which is rarer than it feels while coding.
 
 
-> ## **THERE ARE TWO FILES. THIS IS THE ONE YOU READ.**
+> ## **THERE ARE TWO FILES. THIS IS THE ONE YOU READ, AND IT IS COMPLETE ON ITS OWN.**
 >
-> **KPKMP-FUTURE.md (this file) is what is TRUE and what is AHEAD.** Read it every session. It is
-> everything you need to decide what to do: the rules, the contract, the evidence rules, the state
-> of the code, the constants, the design digests, the verification protocol, the standing decisions,
-> the format matrix, the size tiers, every register that still has an open row, the current road,
-> **the consolidated open register at 17.15**, and the skeleton.
+> **KPKMP-FUTURE.md (this file) is what is TRUE and what is AHEAD.** It is STANDALONE: every rule,
+> key and contract needed to work is in it. You never have to open the other file to decide what to
+> do, and you are not missing context by not opening it.
 >
-> **KPKMP-PAST.md is what already HAPPENED. You are not expected to read it, ever.** The execution
-> log's 113 entries, the closed defect register, the executed stage plans, the superseded roadmaps.
-> It is kept in full because a decision the tree still embodies is argued in there, and because a
-> register row sometimes points into it for detail. It is an archive, not a backlog.
+> **KPKMP-PAST.md is what already HAPPENED**, and it is standalone too. The execution log's 113
+> entries, the closed defect register, the executed stage plans, the superseded roadmaps. Open it
+> only for archaeology: when a row here points into it, or when you need the ARGUMENT behind a
+> decision the tree already embodies. It is an archive, not a backlog, and nothing in it is waiting.
 >
 > **Why it is split this way.** The pilot document reached 18,546 lines in ONE file and agents
 > stopped reading it. That is measured, not felt: on 2026-08-18 an audit found six register rows
@@ -81,15 +82,69 @@
 > gets quoted with the confidence of a read one.
 >
 > So the cut is by TENSE, and it is the only cut that survives contact with a working agent: one
-> file you always read, one you never do. 2,249 lines against 16,297.
+> file you always read, one you never do. 2,400 lines against 16,400. Both carry the same laws and
+> the same keys, deliberately duplicated, because a file that needs its sibling to be understood is
+> not two files, it is one file in two pieces.
 >
 > **Nothing was rewritten and nothing was deleted.** The split is mechanical and verbatim;
 > `scripts/verify-kpkmp-split.py` proves it against the pre-split version in git and fails if a
 > single line or register id stops resolving.
 >
 > **Section numbers did not change.** A reference to "17.11" or "section 14" still lands; 17.15's
-> register names the file for every open row. If you are looking for a section and it is not here,
-> it is in KPKMP-PAST.md, and that fact alone tells you it is finished.
+> register names the file for every open row. If a section is not here, it is finished, and that is
+> the only thing its absence means.
+
+
+> ## **THE KEYS. Everything in this file is written in these, so they are repeated in both files.**
+>
+> **Evidence levels**, strongest to weakest. No lower item may be presented as a higher one.
+> 1 a repeatable release-mode automated test on a named real device with saved metrics ·
+> 2 a deterministic model, differential oracle, sanitizer or fuzz result on the exact contract ·
+> 3 a clean consumer build using only published artifacts · 4 a source-level proof with ownership
+> and state invariants · 5 a unit test around an isolated helper · 6 a manual observation ·
+> 7 compilation alone · 8 a declared target, KDoc, plan or README sentence.
+> Section 2 below states this in full, with what it forbids.
+>
+> **Support tiers.** T1 API: common code compiles, no playback claim. T2 Codec: a runtime can open,
+> decode, seek, cancel and close real media. T3-Full: qualified audio plus video, sync, subtitles
+> and lifecycle. T3-Audio: audio only, explicitly no video or subtitle claim. T4 Product: T3 plus OS
+> integrations and clean packaging. T5 Supported: T4 plus real-device qualification, security,
+> performance and release gates.
+>
+> **Verification marks on a register row.** `[V]` re-verified against the tree on the date given.
+> `[C]` carried from an audit, its anchor never re-checked, so check before trusting it.
+> `[owner]` needs a decision or hardware that the build machine does not have.
+>
+> **Register id families.** `SOL-` the 2026-08-13 implementation audit (R rendering, A audio,
+> S subtitles, API, P performance, C the C-reduction charter, K Kotlin modernization, B build) ·
+> `F-` the 2026-08-17 deep audit · `PAR-` the 2026-08-18 parity sweep of the shipped archives ·
+> `D` numbered defects · `B1-`/`I-` the B1 execution and its interlude · `W-` phase W (desktop) ·
+> `X-` stage S6 (web) · `KV-` KiteVideo · `KD-` the piloting surface · `KC-`/`KP-` KiteCodec and
+> KitePlayer cross-repository rows · `AGW-` the Android GPU work.
+>
+> **The two repositories.** KitePlayer is the engine and the player. KiteCodec is the sibling that
+> binds FFmpeg and ships the native trees; it lives at `../KiteCodec` and has its own git history.
+
+> ## **WHAT IS IN THIS FILE**
+>
+> | section | what |
+> |---|---|
+> | 1 | the executor contract: how to work here |
+> | 2 | the evidence rules in full |
+> | 3 | the state of the code, verified |
+> | 7 | constants |
+> | 8 | the design digests: the contracts the code implements |
+> | 9 | the verification protocol: what you run before claiming anything |
+> | 12 | DRM and scope boundaries |
+> | 13 | decisions already taken, not to be re-litigated |
+> | 17.5 | the format conformance matrix |
+> | 17.6 | size tiers |
+> | 17.8 | network, un-parked by D-4 |
+> | 17.11, 17.11.a, 17.11.b | the registers that still hold open rows |
+> | 17.12 | **the current road**: which phase is being bought now |
+> | 17.14 | the web stage and its open rows |
+> | **17.15** | **THE CONSOLIDATED OPEN REGISTER. Start here if you want to know what is left.** |
+> | 18 | the skeleton, for an executor with no context |
 
 KitePlayer Kotlin Multiplatform, the piloting plan. Written 2026-08-09, revised the same
 day after a second independent full audit of both repositories was verified claim by claim

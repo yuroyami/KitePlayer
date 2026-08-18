@@ -102,7 +102,7 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  * There is no normalisation and no limiter. The coefficients above are applied as written, so a
  * source that is loud in several channels at once can sum above full scale and clip at the device.
  * A measured normalisation belongs with the production rate conversion, which replaces this stage
- * and the one next to it; see KPKMP.md section 11.
+ * and the one next to it; see KPKMP-PAST.md section 11.
  *
  * ### When the layout is not certain
  *

@@ -9,7 +9,7 @@ package io.github.yuroyami.kiteplayer.internal
  * on the way down and it leaves images of the signal on the way up, both of which are audible on
  * music as a dulled top end. It is here so that a device that will not take the decoder's rate plays
  * the right notes at the right speed instead of nothing, and it is replaced by libswresample in
- * Horizon B (KPKMP.md section 11, B4). No document may present it as the production rate conversion,
+ * Horizon B (KPKMP-PAST.md section 11, B4). No document may present it as the production rate conversion,
  * because it is not one.
  *
  * ### Why it holds state

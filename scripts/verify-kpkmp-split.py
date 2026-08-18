@@ -3,11 +3,12 @@
 
 The pilot document was 18,546 lines in one file and agents measurably stopped reading it: a
 2026-08-18 audit found six register rows listed as open that the code had already closed, and the
-agent auditing them checked twelve of sixty items and asserted the rest. The file was split by
-LIFETIME on that date. The split was mechanical, every line moved verbatim, and this script is what
-makes that claim checkable rather than a promise in a header.
+agent auditing them checked twelve of sixty items and asserted the rest. It was split by TENSE on
+that date, into one file that is always read and one that never is. The split was mechanical, every
+line moved verbatim, and this script is what makes that claim checkable rather than a promise in a
+header.
 
-It compares the five files against the last single-file version in git history and fails if any
+It compares the two files against the last single-file version in git history and fails if any
 non-blank line, or any register id, stopped resolving.
 
     python3 scripts/verify-kpkmp-split.py [<git-ref-of-single-file-version>]
@@ -20,11 +21,8 @@ import sys
 from pathlib import Path
 
 FILES = [
-    "KPKMP.md",
-    "KPKMP-REGISTERS.md",
-    "KPKMP-DECISIONS.md",
-    "KPKMP-LOG.md",
-    "KPKMP-ARCHIVE.md",
+    "KPKMP-FUTURE.md",  # what is true and what is ahead; read every session
+    "KPKMP-PAST.md",    # what already happened; read almost never
 ]
 # The families the registers actually use. Kept explicit rather than clever: a regex that matches
 # too much would hide a loss by matching prose.

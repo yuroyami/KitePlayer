@@ -945,7 +945,7 @@ internal class PlaybackCore(
                 session != null && session?.source?.seekable != true &&
                     !inPlaceExternalSubtitleChange(command) -> UnsupportedOperationException(
                     "this source is not seekable, so a track switch cannot reopen it and seek back to " +
-                        "where playback was; see KPKMP.md digest 8.3",
+                        "where playback was; see KPKMP-PAST.md digest 8.3",
                 )
                 command.kind == TrackKind.Subtitle &&
                     !isExternalSubtitle(command.track) &&

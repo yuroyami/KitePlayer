@@ -71,7 +71,7 @@ public interface AudioSink : AutoCloseable {
      *
      * No engine code reads this. The audio clock is anchored from the deadline the render callback
      * carries, which needs no latency figure, so this exists for diagnostics and for a later sink
-     * that has no such callback. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * that has no such callback. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public fun latencyNanos(): Long
 
@@ -82,7 +82,7 @@ public interface AudioSink : AutoCloseable {
      *
      * The engine collects nothing from this feed yet, so a sink is free to publish honestly and no
      * decision follows. Device-change and device-loss recovery is what will read it.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public val events: Flow<AudioSinkEvent>
 }
@@ -161,7 +161,7 @@ public interface AudioSinkBuffer {
      *
      * Nothing calls it: the engine's ring is interleaved and writes through [writeInterleaved]. It is
      * here for a platform whose device buffer is planar.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public fun writePlane(
         channel: Int,

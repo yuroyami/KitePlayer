@@ -47,7 +47,7 @@ import kotlin.time.Duration
  *
  * External subtitles, filter chains, an advanced option escape hatch, chapters, a playlist or queue,
  * frame stepping and stereo balance are all absent rather than stubbed. The configuration members that
- * describe them carry a marker in their own documentation pointing at the roadmap in KPKMP.md section 11.
+ * describe them carry a marker in their own documentation pointing at the roadmap in KPKMP-PAST.md section 11.
  */
 public class KitePlayer internal constructor(private val core: PlaybackCore) : AutoCloseable {
 
@@ -478,7 +478,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * that path needs a seekable source. Selecting an EXTERNAL subtitle track (S4.e, a negative
      * [TrackId] from [MediaItem.externalSubtitles]) while no container subtitle stream is
      * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
-     * switching is on the roadmap in KPKMP.md section 11.
+     * switching is on the roadmap in KPKMP-PAST.md section 11.
      *
      * @throws IllegalStateException when nothing is open.
      * @throws UnsupportedOperationException for a container switch on a source that cannot seek,

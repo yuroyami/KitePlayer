@@ -44,7 +44,7 @@ public sealed interface PlayerEvent {
      * frame, or, with nothing attached, the schedule presented and released it. It is not a report that
      * a pixel reached a display. A renderer that accepts a frame may still supersede it with a newer one
      * or fail to draw it, and it counts those outcomes itself. Per-submission terminal feedback, which
-     * is what would make this event mean scanout, needs the renderer protocol in KPKMP.md section 11
+     * is what would make this event mean scanout, needs the renderer protocol in KPKMP-PAST.md section 11
      * (B5).
      */
     public data class FirstFrameRendered(val latency: Duration) : PlayerEvent
@@ -73,7 +73,7 @@ public sealed interface PlayerEvent {
  *
  * Nothing calls it. No engine code writes a log line, so one supplied through [PlayerConfig] stays
  * silent, and the diagnostics that do exist are [KitePlayer.stats] and [KitePlayer.events].
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
  */
 public fun interface PlayerLogger {
     public fun log(level: LogLevel, tag: String, message: String, throwable: Throwable?)

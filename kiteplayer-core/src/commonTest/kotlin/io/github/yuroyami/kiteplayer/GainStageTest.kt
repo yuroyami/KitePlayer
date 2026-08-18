@@ -31,7 +31,7 @@ class GainStageTest {
 
     @Test
     fun `the ramp default is five milliseconds`() {
-        // KPKMP.md section 7 fixes this number, so it is asserted rather than assumed.
+        // KPKMP-PAST.md section 7 fixes this number, so it is asserted rather than assumed.
         val gain = GainStage(48_000, 1)
         assertEquals(240, gain.rampFrames, "5 ms at 48 kHz is 240 frames")
         assertEquals(1f / 240, gain.slopePerFrame)

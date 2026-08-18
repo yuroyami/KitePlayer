@@ -16,7 +16,7 @@ and decoder are platform-specific.
 > T2 Codec with provisional output evidence, each backed by a local runnable sample and a
 > 27-row format matrix, not a full tier. No physical iPhone or Android device has run any of it:
 > that session needs the owner's hardware and signing and is the one open item of the phone stage.
-> This file states what has been measured and nothing beyond it. [`KPKMP.md`](KPKMP.md) is the
+> This file states what has been measured and nothing beyond it. [`KPKMP-PAST.md`](KPKMP-PAST.md) is the
 > full plan, defect register and running execution log: every phase, measured number and decision.
 
 ## Playing a file
@@ -203,7 +203,7 @@ exactly the TEXT path: SubRip and WebVTT decode to cues end to end, from contain
 from external local files alike, with the open-end, keyword and entity corners repaired; ASS
 renders its text through the same path without libass styling, and bitmap subtitles (PGS,
 VobSub, DVB) are not decoded at all. The libass and bitmap half is S4.f's own expansion in
-KPKMP.md, recorded there as not started.
+KPKMP-PAST.md, recorded there as not started.
 
 **The local iOS substrate.** `kiteplayer-output` and `kiteplayer-ffmpeg` now declare iosArm64 and
 iosSimulatorArm64 alongside macosArm64. The private S1.b.1 software-codec trees feed the FFmpeg backend,
@@ -409,7 +409,7 @@ its own documentation, pointing at where it is planned.
 
 ## What comes after this, and is not started
 
-The plan is `KPKMP.md` in this repository, and it has two horizons. Horizon A is the work above, and it
+The plan is `KPKMP-PAST.md` in this repository, and it has two horizons. Horizon A is the work above, and it
 is finished. Horizon B is everything that turns this engine into a product, it is sequenced and decided,
 and **none of it is done**: a shared C ABI with fuzzing and sanitizers, the rest of the codec layer,
 subtitles end to end with libass, swresample and real tempo control, a Metal renderer with hardware
@@ -596,7 +596,7 @@ proved binary-compatible move. Samples have no dumps because an application has 
 The device tests open the default output and play a short quiet tone. They exist because the one thing
 a mock cannot confirm is that the engine's clock and the audio device share a time base. The separate
 28-test iOS audio proof uses the exact freshly linked Kotlin/Native program inside the minimal simulator
-app host recorded in `KPKMP.md`; the ordinary bare-kexe simulator runner has no application audio
+app host recorded in `KPKMP-PAST.md`; the ordinary bare-kexe simulator runner has no application audio
 context. The filtered 8-test renderer proof runs separately on the same named simulator and needs no
 application audio context. The bounded UIKit sample smoke is separate again; it is the measured local
 run behind the simulator candidate row and is not included in any of those test totals.

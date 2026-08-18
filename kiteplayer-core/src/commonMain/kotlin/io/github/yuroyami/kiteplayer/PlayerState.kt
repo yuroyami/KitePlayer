@@ -128,7 +128,7 @@ public data class Progress(
  * of numbers side by side: submitted against drawn is the difference between the engine keeping up
  * and the output keeping up, and copying the second group into this class would only invent a figure
  * the engine cannot know, because no member of the renderer interface reports one. Per-submission
- * terminal feedback is the roadmap item that would change that; see KPKMP.md section 11 (B5).
+ * terminal feedback is the roadmap item that would change that; see KPKMP-PAST.md section 11 (B5).
  */
 public data class PlaybackStats(
     val decodedVideoFrames: Long = 0,
@@ -155,7 +155,7 @@ public data class PlaybackStats(
      * Packets dropped before they were decoded.
      *
      * Always zero: nothing drops a packet before decoding it, which is what [FrameDropPolicy.LateAndDecode]
-     * would need. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * would need. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val droppedFramesDecode: Long = 0,
     /** Frames the schedule showed for longer than their own duration, counted once each. */
@@ -179,7 +179,7 @@ public data class PlaybackStats(
      *
      * Always zero. The audio clock is anchored to the instant the device says a specific frame becomes
      * audible, so no latency figure is needed to keep time, and `AudioSink.latencyNanos` has no reader.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val audioLatency: Duration = ZERO,
     val audioLatencyQuality: LatencyQuality = LatencyQuality.Unreliable,
@@ -188,7 +188,7 @@ public data class PlaybackStats(
      * The container's overall bitrate.
      *
      * Always null: a source reports a bitrate per stream and none reports one for the container.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,
@@ -229,7 +229,7 @@ public enum class LoopMode {
      *
      * Refused rather than ignored: there is no queue and no playlist, so asking for this throws instead of
      * quietly behaving like [Off]. A caller can tell the difference between a mode it got and a mode it
-     * did not. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * did not. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     All,
 }
@@ -244,7 +244,7 @@ public enum class SyncMode {
      * A wall clock drives playback and audio is resampled to follow it.
      *
      * Nothing drives playback from an external clock, and nothing resamples audio to follow one.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     ExternalMaster,
 }
@@ -253,7 +253,7 @@ public enum class SyncMode {
  * Which clock is actually in charge right now, as opposed to which was requested.
  *
  * [External] is never reported, because [SyncMode.ExternalMaster] is not implemented.
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
  */
 public enum class MasterClock { None, Audio, Video, External }
 
@@ -262,7 +262,7 @@ public enum class MasterClock { None, Audio, Video, External }
  *
  * A sink reports one of these and the engine's tolerances do not change. The only response today is
  * a single warning when a sink says [Unreliable], and the one sink that exists says [Estimated].
- * Not implemented yet; see the roadmap in KPKMP.md section 11.
+ * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
  */
 public enum class LatencyQuality {
     /** The platform reports a real measured figure. */
@@ -320,7 +320,7 @@ public enum class FrameDropPolicy {
      * Also drop before decoding, when the decoder cannot keep up. Needed for 4K on weak hardware.
      *
      * Nothing drops a packet before decoding it, so this behaves like [LateOnly].
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     LateAndDecode,
 }

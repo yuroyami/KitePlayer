@@ -1,6 +1,6 @@
 # KV-5: the desktop upload path, measured
 
-Register item **W-05** in KPKMP.md section 17.13, which is KV-5 in 17.9: *"desktop upload path:
+Register item **W-05** in KPKMP-PAST.md section 17.13, which is KV-5 in 17.9: *"desktop upload path:
 one upload per frame; desktop bandwidth makes this cheap; measured anyway."*
 
 This file replaces that assumption with numbers. Short version: the upload is **not** cheap. It

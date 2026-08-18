@@ -1,7 +1,15 @@
-# Lines from the pre-split KPKMP.md that were INTENTIONALLY changed after the split, with why.
-# The verifier treats these as edited rather than lost. Keep this list short: every entry is a
-# place where the split's "not one line rewritten" promise was deliberately broken, and each one
-# should be obviously worth it.
+# Lines from the pre-split KPKMP.md that were INTENTIONALLY changed, with why.
+# The verifier treats these as edited rather than lost. Keep this list short and keep the reasons:
+# every entry is a place where "not one line rewritten" was deliberately broken, and each one has to
+# be obviously worth it. A line added here without a reason is how a real loss gets hidden.
 #
-# RULE ONE step 5 had to name the log's new home, since section 14 is no longer in this file.
+# --- RULE ONE step 5 had to name the log's new home, since section 14 moved to KPKMP-PAST.md.
 > 5. **Log the work.** Section 14 gets what was measured and what was NOT, in the same commit.
+#
+# --- The document's own opening claimed one FILE. It is now two files and still one document.
+#     Left unchanged, the first thing a reader meets would contradict the file they are holding.
+against the source and merged in. This is the only planning document. Everything the
+executor needs is in this file and in the code.
+#
+# --- Skeleton rule 1, same reason: it named KPKMP.md, which no longer exists as a path.
+1. **KPKMP.md is the only planning document.** If it is not in KPKMP, it is not the plan. Its

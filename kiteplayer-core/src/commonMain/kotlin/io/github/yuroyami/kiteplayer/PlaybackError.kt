@@ -40,7 +40,7 @@ public sealed class PlaybackError {
      * Never produced. A track whose every candidate refuses is deselected with a warning, and an open
      * fails only when nothing playable is left, which reports [NoPlayableStream] and names every stream.
      * This is the shape for a caller that asks for one specific track and must be told why it cannot have
-     * it. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * it. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public data class DecoderUnavailable(val codec: String, val kind: TrackKind) : PlaybackError() {
         override val message: String get() = "no decoder for $kind stream in $codec"
@@ -62,7 +62,7 @@ public sealed class PlaybackError {
      * as [SourceUnavailable] with the device's own message inside it, because nothing distinguishes the
      * two at the point the open unwinds. Telling them apart, and falling back to a silent picture when
      * there is a picture, needs the device-loss handling in the roadmap.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public data class AudioDeviceUnavailable(val detail: String) : PlaybackError() {
         override val message: String get() = "no audio device: $detail"
@@ -154,7 +154,7 @@ public sealed class PlaybackWarning {
      * Never emitted: the drops are counted as `PlaybackStats.droppedFramesLate`, and a rate over the last
      * second is something a caller works out by diffing two samples. A warning would have to be rate
      * limited to be useful, which is a policy nothing has decided.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public data class FrameDropping(val droppedInLastSecond: Int) : PlaybackWarning() {
         override val message: String get() = "dropping frames: $droppedInLastSecond in the last second"
@@ -165,7 +165,7 @@ public sealed class PlaybackWarning {
      *
      * Never emitted: the engine does not collect `AudioSink.events`, so a device that changes underneath
      * playback is not noticed and nothing recovers from it.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public data class AudioDeviceChanged(val detail: String) : PlaybackWarning() {
         override val message: String get() = "audio device changed: $detail"
@@ -176,7 +176,7 @@ public sealed class PlaybackWarning {
      *
      * Never emitted: an underrun is counted as `PlaybackStats.audioUnderruns`, which is a number a caller
      * can diff, and the sink's own event feed that would carry the occurrence has no reader.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public data class AudioUnderrun(val totalSoFar: Long) : PlaybackWarning() {
         override val message: String get() = "audio underrun, $totalSoFar so far"
@@ -208,7 +208,7 @@ public sealed class PlaybackWarning {
      * tone-mapped one. Emitted once per stream.
      *
      * This is the documented behaviour and not a failure. A real tone-mapped path is Horizon B
-     * (KPKMP.md section 11, B5), after which approximate output becomes something a caller asks for
+     * (KPKMP-PAST.md section 11, B5), after which approximate output becomes something a caller asks for
      * rather than the only thing on offer.
      */
     public data class TonemappingUnavailable(val detail: String) : PlaybackWarning() {
@@ -278,7 +278,7 @@ public sealed class PlaybackWarning {
      *
      * Never emitted: the engine does not collect `VideoRenderer.events`. A renderer that refuses a frame
      * still costs nothing more than that frame, because a refusal is counted as a drop and playback
-     * carries on. Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * carries on. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public data class NoRenderSurface(val detail: String) : PlaybackWarning() {
         override val message: String get() = "no render surface: $detail"

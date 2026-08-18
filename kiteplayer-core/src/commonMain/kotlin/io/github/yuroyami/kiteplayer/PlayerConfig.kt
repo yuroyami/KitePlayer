@@ -160,13 +160,13 @@ public data class BufferPolicy(
      * How far back a live stream may seek.
      *
      * There is no live path: no network source, no live window, no seekable range published for one.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val liveBackBuffer: Duration = 20.seconds,
     /**
      * Drop to the live edge when further behind than this.
      *
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val liveMaxLag: Duration = 10.seconds,
 ) {
@@ -201,13 +201,13 @@ public data class AudioConfig(
      * constant A/V offset, so it is exposed rather than hidden.
      *
      * No sink reports that quality and no code reads this value.
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val assumedLatencyWhenUnreliable: Duration = 80.milliseconds,
     /**
      * Start with audio disabled. Useful for a thumbnail scrubber.
      *
-     * Not implemented yet; see the roadmap in KPKMP.md section 11.
+     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val startDisabled: Boolean = false,
 ) {

@@ -39,7 +39,7 @@ internal actual class BlockingMediaIo actual constructor(
                     "Kotlin/Wasm has no runBlocking and a browser forbids blocking the main thread. " +
                     "Supply a source whose bytes are already resident (a File, a fetch response or " +
                     "an ArrayBuffer), or run the player in a Worker where blocking is legal " +
-                    "(KPKMP.md 17.14 X-08).",
+                    "(KPKMP-FUTURE.md 17.14 X-08).",
             )
         }
         return outcome

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs :kiteplayer-ffmpeg's OWN jvm test suite on real Linux, from a macOS host (KPKMP.md W-20).
+# Runs :kiteplayer-ffmpeg's OWN jvm test suite on real Linux, from a macOS host (KPKMP-PAST.md W-20).
 #
 # Why this and not a probe: W-16 proved the jar's Linux JNI library LOADS (identity acceptable,
 # h264 and hevc present). Nothing had DECODED on Linux through the JVM path, while macOS runs all

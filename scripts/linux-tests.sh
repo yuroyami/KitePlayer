@@ -4,7 +4,7 @@
 # Why this exists: Gradle creates linuxX64Test / linuxArm64Test but permanently disables them on a
 # macOS host, so a gate that names those tasks is green by definition. Kotlin/Native CROSS-LINKS the
 # binaries here; this script is what actually EXECUTES them, in a Linux container. Register item
-# W-11, KPKMP.md 17.13.
+# W-11, KPKMP-PAST.md 17.13.
 #
 #   ./scripts/linux-tests.sh                # linuxArm64, native speed on Apple silicon
 #   ./scripts/linux-tests.sh linuxX64       # linuxX64, emulated, slow

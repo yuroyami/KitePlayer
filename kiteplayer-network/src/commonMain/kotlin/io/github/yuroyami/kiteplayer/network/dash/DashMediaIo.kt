@@ -120,12 +120,20 @@ public object Dash {
         val representation = adaptationSet.representations.maxByOrNull { it.bandwidth }
             ?: throw IllegalArgumentException("$mpdUrl has no Representation")
         val plan = DashManifestParser.segmentPlan(manifest, period, representation)
-        val io = DashMediaIo(plan) { url ->
-            val response = client.get(url)
-            require(response.status.isSuccess()) { "segment fetch failed: $url is ${response.status}" }
-            response.bodyAsBytes()
-        }
-        return MediaItem(uri = mpdUrl, io = io)
+        // A factory, so every open of this item gets its own segment stream. One live reader here
+        // meant the second open of the same item -- a track switch, a loop, a queue coming back
+        // round -- was handed the one the previous session had already closed (audit KP-P1-03).
+        // The plan itself is immutable and shared by every reader the factory makes.
+        return MediaItem(
+            uri = mpdUrl,
+            io = {
+                DashMediaIo(plan) { url ->
+                    val response = client.get(url)
+                    require(response.status.isSuccess()) { "segment fetch failed: $url is ${response.status}" }
+                    response.bodyAsBytes()
+                }
+            },
+        )
     }
 
     private fun DashAdaptationSet.isVideo(): Boolean =

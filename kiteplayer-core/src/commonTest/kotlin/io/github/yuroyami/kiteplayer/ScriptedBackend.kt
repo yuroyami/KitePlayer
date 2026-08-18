@@ -159,6 +159,15 @@ internal class FaultPlan(
     /** True makes closing the backend session throw, which close must survive. */
     var sessionCloseThrows: Boolean = false
 
+    /**
+     * True parks `stop()` for as long as it stays true: a device close that has wedged.
+     *
+     * Armable and disarmable, and the parked call rechecks it, so a test can wedge the terminal
+     * release, prove the close reports a compromised runtime rather than hanging, and then let the
+     * release finish so nothing is left parked on the scheduler (audit KP-P1-07).
+     */
+    var stopHangs: Boolean = false
+
     fun refuseSend(): Boolean = roll(refuseSendPercent)
     fun emptyDecode(): Boolean = roll(emptyDecodePercent)
     fun refusePresent(): Boolean = roll(refusePresentPercent)
@@ -820,6 +829,9 @@ internal class ScriptedSink(
     override suspend fun stop() {
         stopCount++
         trace.record("sink.stop")
+        // A device whose stop has wedged. Rechecked rather than parked for ever, so the test that
+        // arms it can also release it and leave nothing running.
+        while (faults.stopHangs) delay(1_000)
         running = false
     }
 

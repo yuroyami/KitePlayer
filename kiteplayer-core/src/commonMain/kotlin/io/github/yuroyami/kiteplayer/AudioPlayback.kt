@@ -67,6 +67,8 @@ public class AudioPlayback(
      */
     private val bufferDuration: Duration = 200.milliseconds,
     private val onWarning: (PlaybackWarning) -> Unit = {},
+    /** The LFE and headroom policy the downmix applies; see [DownmixConfig]. */
+    private val downmix: DownmixConfig = DownmixConfig(),
 ) : AutoCloseable {
 
     /**
@@ -285,7 +287,8 @@ public class AudioPlayback(
         val pitchNow = synchronized(lock) { epochPreservePitch }
         val existing = pipeline
         val stage = when {
-            existing == null -> AudioPipeline(sourceFormat, negotiated, onWarning, preservePitch = pitchNow)
+            existing == null ->
+                AudioPipeline(sourceFormat, negotiated, onWarning, preservePitch = pitchNow, downmix = downmix)
             existing.matches(sourceFormat) && existing.preservePitch == pitchNow -> existing
             else -> existing.rebuiltFor(sourceFormat, pitchNow)
         }
@@ -415,6 +418,41 @@ public class AudioPlayback(
         // the two.
         pipeline?.reset()
         generation = newGeneration
+    }
+
+    /**
+     * Pushes the last of the decoded audio out of the DSP stages and into the ring.
+     *
+     * The tempo stage holds up to two pitch periods it cannot splice without the audio that comes
+     * after them, and at the end of a stream nothing comes after them. Until this call existed they
+     * were discarded by the next reset, so every clip played at a non-1x speed lost its final
+     * fragment and short clips lost an audible share of themselves (audit P0-20).
+     *
+     * Call it once, after the decoder is drained and every decoded buffer has been submitted, and
+     * before [drain]. Belongs to the feeder, like [submitDecoded]: it runs the same pipeline and
+     * the same timestamp arithmetic, and nothing else may touch either.
+     *
+     * @param abort polled while the ring is full, exactly as [submitDecoded] polls it.
+     * @return sample frames handed to the ring, zero when the stages were already empty.
+     */
+    public suspend fun finishDecoded(abort: () -> Boolean = { false }): Int {
+        val stage = pipeline ?: return 0
+        val negotiated = format ?: return 0
+        val emittedBefore = stage.tempoEmittedFrames
+        val produced = stage.finish()
+        if (produced <= 0) return 0
+        val speedNow = synchronized(lock) { epochSpeed }
+        if (speedNow == 1.0) {
+            // Dated by the ring's own continuity, like every 1.0 buffer: the tail follows the
+            // buffer before it with no gap, so a null pts is the truthful answer rather than a
+            // guess at a media timestamp the tempo stage never carried.
+            submit(null, stage.output, produced, abort)
+            return produced
+        }
+        val base = synchronized(lock) { scaledBaseUs }
+        val scaledPts = base?.let { Pts(it + framesToMicros(emittedBefore, negotiated.sampleRate)) }
+        submit(scaledPts, stage.output, produced, abort)
+        return produced
     }
 
     /**

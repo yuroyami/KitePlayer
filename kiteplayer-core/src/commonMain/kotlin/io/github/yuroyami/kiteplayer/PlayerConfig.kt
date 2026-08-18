@@ -210,6 +210,8 @@ public data class AudioConfig(
      * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     val startDisabled: Boolean = false,
+    /** How multichannel audio is folded down when the device has fewer speakers. */
+    val downmix: DownmixConfig = DownmixConfig(),
 ) {
     init {
         require(assumedLatencyWhenUnreliable >= Duration.ZERO) {
@@ -217,6 +219,52 @@ public data class AudioConfig(
         }
     }
 }
+
+/**
+ * How a multichannel mix is folded into fewer speakers.
+ *
+ * Both defaults follow the reference the rest of this project follows, which is FFmpeg's own
+ * resampler, and both were previously neither implemented nor decided: the mixer applied the
+ * standard coefficients raw, so a source loud in several channels at once summed past full scale
+ * and clipped at the device (audit 15.3.2).
+ */
+public data class DownmixConfig(
+    /**
+     * Scale the matrix so a full-scale input can never sum past full scale.
+     *
+     * False by default, which is FFmpeg's own behaviour for float output and therefore what this
+     * engine's reference recordings are made of: `ReferencePcmTest` compares the whole audio path
+     * against `ffmpeg -ac 2`, and normalising by default would put the engine a fixed 7 dB below
+     * its own oracle. It is also what a listener expects, because it is what mpv and VLC sound
+     * like.
+     *
+     * The risk that leaves is real and worth naming: the coefficients can sum above full scale on
+     * a passage loud in several channels at once. The engine's own pipeline is float and does not
+     * clip there, so this only bites at the conversion into a device that takes integer samples.
+     *
+     * True removes that risk by arithmetic rather than by luck: the whole matrix is divided by its
+     * largest row sum, so the balance between speakers is untouched and only the level moves. It
+     * costs about 7 dB on a 5.1 film. Choose it for an integer output you cannot afford to clip.
+     */
+    val normalize: Boolean = false,
+    /**
+     * Fold the low-frequency effects channel into the stereo mix.
+     *
+     * False by default, which drops it. This is not a preference, it is a measurement: a 5.1 clip
+     * carrying a 60 Hz tone in its LFE and silence in every other speaker comes out of
+     * `ffmpeg -ac 2` as EXACT silence, and `ReferencePcmTest` pins that. ITU-R BS.775 says the
+     * same thing: the LFE is a separate effects feed for a subwoofer and not a bass instrument,
+     * and summing it into two full-range speakers makes film audio boom and eats the headroom the
+     * dialogue needs.
+     *
+     * The engine used to fold it in at -3 dB, and the surround fixtures kept their LFE silent so
+     * that the disagreement with FFmpeg never showed up in a test (audit 15.3.2).
+     *
+     * True folds it in at the same -3 dB every other non-front channel gets, for a caller who
+     * would rather keep the content than match the reference.
+     */
+    val includeLfe: Boolean = false,
+)
 
 /**
  * Which subtitle track to pick, when to show its cues, and how large to draw them.

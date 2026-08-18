@@ -92,11 +92,12 @@ public class WebCanvasVideoRenderer(
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
     /**
-     * Any software format, because the painter converts rather than this class. A hardware frame is
-     * refused: nothing on the web produces one for this renderer, and claiming otherwise would let
-     * a mis-wired decoder reach here and fail per frame instead of at attach.
+     * Any software format, because the painter converts rather than this class. [PlayerPixelFormat.Opaque]
+     * is refused: it means a hardware frame, nothing on the web produces one for this renderer, and
+     * answering true would let a mis-wired decoder fail per frame instead of at attach (audit S-W5).
      */
-    override fun supports(format: PlayerPixelFormat): Boolean = state != null
+    override fun supports(format: PlayerPixelFormat): Boolean =
+        state != null && format != PlayerPixelFormat.Opaque
 
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
         // Ownership rule 2: this renderer owns the frame from here, including on every failure

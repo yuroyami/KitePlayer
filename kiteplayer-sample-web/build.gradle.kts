@@ -20,7 +20,7 @@ kotlin {
     sourceSets {
         wasmJsMain.dependencies {
             // The real web backend (17.14 X-07), not the placeholder.
-            implementation("io.github.yuroyami:kitecodec-core:0.0.9")
+            implementation(libs.kitecodec.core)
             // The whole player stack, to prove the web defaults resolve (17.14 X-12).
             implementation(project(":kiteplayer-mobile"))
             implementation(compose.runtime)

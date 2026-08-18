@@ -403,6 +403,15 @@ typedef struct {
     int32_t channels;
     /* The device's own period, in sample frames. What the engine sizes its ring against. */
     int32_t device_buffer_frames;
+    /* The speaker order actually IN FORCE, as a native-order mask, or 0 when none is.
+     *
+     * Zero is the honest answer and not a failure: the unit refused the layout and resolves the
+     * channel order its own way, so the caller must key its downmix on the channel count instead
+     * of on an order nothing agreed to. This used to be unreported, and above stereo the sink
+     * declared MPEG 5.1 A for EVERY count from three to six and discarded the verdict, so a
+     * three channel stream was announced as a six channel layout and the refusal was invisible
+     * (audit 15.3.3). */
+    int64_t channel_layout_mask;
 } kprt_sink_format;
 
 /* Everything the sink can say about itself, read in one call.

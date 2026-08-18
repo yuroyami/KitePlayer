@@ -79,6 +79,22 @@ class WebCanvasVideoRendererTest {
     }
 
     /**
+     * Opaque is the engine's name for a frame that lives in hardware memory, and this renderer is
+     * software by construction. It used to answer true for every format including that one, so a
+     * mis-wired decoder was refused once per frame by `present` instead of once at attach, which is
+     * what the KDoc promised all along (audit S-W5).
+     */
+    @Test
+    fun supportsIsFalseForOpaqueEvenWithAContext() {
+        val renderer = WebCanvasVideoRenderer(fakeCanvas(), painter)
+        assertFalse(
+            renderer.supports(PlayerPixelFormat.Opaque),
+            "a software renderer must refuse a hardware frame at attach, not per frame",
+        )
+        renderer.close()
+    }
+
+    /**
      * With a context but no way to build the offscreen stage, which is node exactly. The frame is
      * still closed and the refusal is COUNTED, so a session that draws nothing says how much.
      */

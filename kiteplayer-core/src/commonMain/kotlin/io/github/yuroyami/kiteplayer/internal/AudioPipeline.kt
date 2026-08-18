@@ -12,7 +12,7 @@ import kotlin.time.Duration
  *
  * 1. [ChannelMixer] puts the channels in the speakers the device has. Downmixing first means the rate
  *    conversion runs on two channels instead of eight.
- * 2. [LinearResampler] makes the rate the one the device accepted.
+ * 2. [SincResampler] makes the rate the one the device accepted.
  * 3. [TempoStage] makes the sound take `1/speed` as long without moving its pitch. After the
  *    resampler, so pitch detection runs at one known rate; before the gain, so mute stays the
  *    last word.
@@ -51,8 +51,11 @@ internal class AudioPipeline(
      * which is mpv's `audio-pitch-correction=no` and sometimes exactly what a caller wants.
      */
     val preservePitch: Boolean = true,
+    /** The LFE and headroom policy the downmix applies; see `DownmixConfig`. */
+    private val downmix: io.github.yuroyami.kiteplayer.DownmixConfig =
+        io.github.yuroyami.kiteplayer.DownmixConfig(),
 ) {
-    private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning)
+    private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning, downmix)
 
     /**
      * The uncorrected-pitch rate. Always 1.0 while [preservePitch] is true. When it is not,
@@ -63,7 +66,7 @@ internal class AudioPipeline(
 
     private var resampler = buildResampler()
 
-    private fun buildResampler(): LinearResampler = LinearResampler(
+    private fun buildResampler(): SincResampler = SincResampler(
         sourceRate = if (resampleSpeed == 1.0) {
             sourceFormat.sampleRate
         } else {
@@ -148,7 +151,7 @@ internal class AudioPipeline(
      * exists to avoid.
      */
     fun rebuiltFor(decoderFormat: AudioFormat, preservePitch: Boolean = this.preservePitch): AudioPipeline =
-        AudioPipeline(decoderFormat, targetFormat, onWarning, rampDuration, preservePitch).also {
+        AudioPipeline(decoderFormat, targetFormat, onWarning, rampDuration, preservePitch, downmix).also {
             it.volume = volume
             it.muted = muted
             it.speed = speed
@@ -204,6 +207,62 @@ internal class AudioPipeline(
         gain.apply(result, produced)
         output = result
         return produced
+    }
+
+    /**
+     * Pushes out what the stages are still holding, for the end of the stream.
+     *
+     * TWO stages hold something now. The tempo stage keeps up to two pitch periods of lookahead
+     * that no further input will ever trigger, and dropping them loses the end of the media (audit
+     * P0-20). The rate conversion holds half a kernel, which is 0.36 ms at 44.1 kHz: small, but it
+     * is real audio and the old interpolator's excuse for skipping it (it held under one frame, and
+     * producing that frame would have meant inventing the sample after the end of the stream) no
+     * longer applies. Silence after the end of the media is not an invention, it is the truth, so
+     * the filter is drained with it and the tail comes out.
+     *
+     * The drained tail still passes the tempo stage and the gain, in that order, exactly as every
+     * other buffer does; a mute or a ramp therefore reaches the tail too.
+     *
+     * Call once, at end of stream, on the feeder that owns this pipeline. Safe to call again: the
+     * second call finds nothing queued and answers zero.
+     *
+     * @return sample frames written to [output], zero when no stage was holding anything.
+     */
+    fun finish(): Int {
+        var total = 0
+        // 1. The rate conversion's tail, through the tempo stage like any other buffer.
+        if (!resampler.isPassThrough) {
+            resampled = grown(resampled, resampler.drainCapacity() * targetChannels)
+            val drained = resampler.drain(resampled)
+            if (drained > 0) {
+                if (tempo.speed != 1.0 || tempo.hasQueuedInput) {
+                    val stretched = tempo.process(resampled, drained)
+                    total = appendFinished(tempo.output, stretched, 0)
+                } else {
+                    tempo.countBypassed(drained)
+                    total = appendFinished(resampled, drained, 0)
+                }
+            }
+        }
+        // 2. Whatever the tempo stage was still holding, after it.
+        val last = tempo.finish()
+        if (last > 0) total = appendFinished(tempo.output, last, total)
+
+        if (total <= 0) return 0
+        gain.apply(finished, total)
+        output = finished
+        return total
+    }
+
+    /** The end-of-stream tail, which is up to two pieces and has to leave as one buffer. */
+    private var finished: FloatArray = FloatArray(0)
+
+    private fun appendFinished(source: FloatArray, frames: Int, at: Int): Int {
+        if (frames <= 0) return at
+        val values = (at + frames) * targetChannels
+        if (finished.size < values) finished = finished.copyOf(values)
+        source.copyInto(finished, at * targetChannels, 0, frames * targetChannels)
+        return at + frames
     }
 
     /**

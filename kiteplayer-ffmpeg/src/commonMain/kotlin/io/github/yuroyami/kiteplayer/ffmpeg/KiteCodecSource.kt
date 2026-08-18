@@ -65,7 +65,9 @@ public class KiteCodecSourceFactory : MediaSourceFactory {
         // backend door for the same MediaItem.
         val options = preOpenOptions(media)
         rewindFdOption(options)
-        val io = media.io
+        // Once per open, like the backend door: what the factory answers with is this source's
+        // reader and is closed with it (audit KP-P1-03).
+        val io = media.io?.invoke()
         val source = mappingFFmpegRuntimeRejection {
             KiteCodecSource(
                 when {

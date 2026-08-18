@@ -299,6 +299,11 @@ public class CoreAudioSink private constructor(
                         // internal format passes through unchanged and neither side converts anything.
                         sampleFormat = SampleFormat.F32,
                         channelLayout = ChannelLayout.forChannelCount(accepted.channels),
+                        // The order the unit ACCEPTED, not the one that was asked for. Zero means
+                        // it refused the layout and resolves the order itself, in which case the
+                        // engine's mixer must key on the channel count rather than on an order
+                        // nothing agreed to (audit 15.3.3).
+                        channelLayoutMask = accepted.channel_layout_mask.takeIf { it != 0L },
                     ),
                     deviceBufferFrames = accepted.device_buffer_frames,
                 )

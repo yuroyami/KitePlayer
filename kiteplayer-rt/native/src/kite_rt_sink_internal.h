@@ -33,6 +33,10 @@ struct kprt_sink {
 
     int32_t sample_rate;
     int32_t channels;
+    /* The speaker order the device ACCEPTED, as a native-order mask, or 0 when it refused one.
+     * Reported to the caller so a downmix keys on an order that is really in force rather than on
+     * one that was merely asked for (audit 15.3.3). */
+    int64_t channel_layout_mask;
     _Atomic int32_t device_buffer_frames;
 
     /* The device clock's tick-to-nanosecond ratio, read once at create.

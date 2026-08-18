@@ -118,12 +118,16 @@ class AudioPlaybackTest {
         val audio = AudioPlayback(FakeAudioSink(accepts = format(2, rate = 48_000)), TestClock())
         audio.open(format(2, rate = 44_100))
 
+        // Two buffers: the rate conversion is a windowed filter and holds half a kernel, once, so
+        // the first buffer is short by that and every one after it carries the exact ratio.
         audio.submitDecoded(pts(0), FloatArray(441 * 2), 441, format(2, rate = 44_100))
+        audio.submitDecoded(null, FloatArray(441 * 2), 441, format(2, rate = 44_100))
 
         assertEquals(
-            10,
+            19,
             audio.buffered.inWholeMilliseconds,
-            "441 frames at 44.1 kHz are 480 at 48 kHz, which is the same 10 ms of audio",
+            "882 frames at 44.1 kHz are 960 at 48 kHz, less the filter's one-off lookahead, which " +
+                "is 20 ms of audio minus a third of a millisecond",
         )
         audio.close()
     }

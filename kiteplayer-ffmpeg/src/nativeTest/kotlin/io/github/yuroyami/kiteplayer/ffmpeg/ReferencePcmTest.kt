@@ -338,6 +338,29 @@ class ReferencePcmTest {
         )
     }
 
+    /**
+     * The LFE policy, measured against FFmpeg instead of assumed (audit 15.3.2).
+     *
+     * The other two fixtures keep their LFE silent on purpose, because the engine used to fold the
+     * LFE into the stereo mix at -3 dB while FFmpeg's own downmix drops it, and a silent channel
+     * was the one value both agreed on. That avoided the disagreement rather than settling it. This
+     * clip carries a 60 Hz tone in the LFE and silence in all five other speakers, so FFmpeg's
+     * reference is either exact silence or that tone: measured here, it is exact silence, and the
+     * engine now matches.
+     *
+     * Red by defaulting `DownmixConfig.includeLfe` to true, which is what the engine used to do.
+     */
+    @Test
+    fun `the low frequency channel is dropped exactly as ffmpeg drops it`() = runBlocking {
+        val (produced, format) = decodeThroughPipeline("surround51lfe.wav")
+        assertEquals(6, format.channels, "the fixture must decode as six channels")
+        assertMatchesReferencePcm(
+            "surround51lfe.wav",
+            produced,
+            readFloats("$mediaDir/surround51lfe-stereo.f32le"),
+        )
+    }
+
     @Test
     fun `an AAC 5point1 stream reports the back mask`() = runBlocking {
         // A note about the fixture as much as a test: FFmpeg's AAC decoder resolves this file to back

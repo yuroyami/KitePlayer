@@ -188,6 +188,23 @@ ffmpeg -v error -y -filter_complex "$six;[fl][fr][fc][lfe][sl][sr]join=inputs=6:
 ffmpeg -v error -y -i surround51.mp4 -ac 2 -f f32le surround51-stereo.f32le
 ffmpeg -v error -y -i surround51side.wav -ac 2 -f f32le surround51side-stereo.f32le
 
+echo "5.1 carrying content ONLY in the LFE, to settle the downmix's LFE policy"
+# The clips above keep their LFE silent on purpose, because the engine used to fold the LFE into
+# the stereo mix at -3 dB while FFmpeg's own downmix drops it, and a silent channel was the one
+# value both agreed on. That dodged the question instead of answering it (audit 15.3.2). The
+# engine now follows FFmpeg, so the answer can be MEASURED: this clip puts a 60 Hz tone in the
+# LFE and silence everywhere else, which makes the reference either silence (the LFE is dropped)
+# or that tone at -3 dB (it is folded in), with nothing in between to argue about.
+lfeonly="aevalsrc=0:sample_rate=48000:duration=2[fl];"
+lfeonly="$lfeonly aevalsrc=0:sample_rate=48000:duration=2[fr];"
+lfeonly="$lfeonly aevalsrc=0:sample_rate=48000:duration=2[fc];"
+lfeonly="$lfeonly aevalsrc=0.5*sin(2*PI*60*t):sample_rate=48000:duration=2[lfe];"
+lfeonly="$lfeonly aevalsrc=0:sample_rate=48000:duration=2[bl];"
+lfeonly="$lfeonly aevalsrc=0:sample_rate=48000:duration=2[br]"
+ffmpeg -v error -y -filter_complex "$lfeonly;[fl][fr][fc][lfe][bl][br]join=inputs=6:channel_layout=5.1[a]" \
+  -map "[a]" -c:a pcm_f32le surround51lfe.wav
+ffmpeg -v error -y -i surround51lfe.wav -ac 2 -f f32le surround51lfe-stereo.f32le
+
 echo "30 minute 360p clip for leak and drift soak tests"
 ffmpeg -v error -y \
   -f lavfi -i "testsrc2=size=640x360:rate=25:duration=1800" \

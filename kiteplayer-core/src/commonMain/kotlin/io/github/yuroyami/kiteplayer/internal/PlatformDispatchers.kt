@@ -61,5 +61,10 @@ internal class SharedLaneDispatchers(
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     override val raster: CoroutineContext = calm.limitedParallelism(1)
 
+    // Blocking, because a session release is nothing but blocking native closes, and its OWN lane
+    // so that a close which wedges cannot also park the actor that is timing it (audit KP-P1-07).
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    override val release: CoroutineContext = blocking.limitedParallelism(1)
+
     override fun close() {}
 }

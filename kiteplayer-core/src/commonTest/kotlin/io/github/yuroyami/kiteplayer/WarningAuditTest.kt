@@ -30,6 +30,7 @@ class WarningAuditTest {
         PlaybackWarning.NoRenderSurface("x"),
         PlaybackWarning.OptionsUnused(listOf("x")),
         PlaybackWarning.CommandRefused("setSpeed", "x"),
+        PlaybackWarning.ResourcesNotReleased("x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
@@ -51,6 +52,10 @@ class WarningAuditTest {
         )
         is PlaybackWarning.AudioDrainIncomplete -> listOf(
             "PlaybackCore's end-of-stream drain, when the sink's drain deadline passes unfinished",
+            "PlaybackCore's end-of-stream tail wait, when decoded audio does not reach the device in time",
+        )
+        is PlaybackWarning.ResourcesNotReleased -> listOf(
+            "PlaybackCore.teardownSession, naming every close that failed while the session was released",
         )
         is PlaybackWarning.AudioLatencyUnreliable -> listOf(
             "PlaybackCore's open path, when the sink reports LatencyQuality.Unreliable",

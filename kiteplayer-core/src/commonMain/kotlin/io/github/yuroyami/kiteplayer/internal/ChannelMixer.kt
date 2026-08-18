@@ -99,10 +99,26 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  * - 7.1 `FL FR FC LFE BL BR SL SR`: `L = FL + M*FC + M*LFE + M*BL + M*SL`,
  *   `R = FR + M*FC + M*LFE + M*BR + M*SR`
  *
- * There is no normalisation and no limiter. The coefficients above are applied as written, so a
- * source that is loud in several channels at once can sum above full scale and clip at the device.
- * A measured normalisation belongs with the production rate conversion, which replaces this stage
- * and the one next to it; see KPKMP-PAST.md section 11.
+ * ### What happens to those coefficients before they are used
+ *
+ * Both corrections come from `DownmixConfig`, and both defaults are FFmpeg's, measured rather than
+ * assumed (audit 15.3.2). The LFE column is ZEROED: `ffmpeg -ac 2` turns a 5.1 clip whose only
+ * content is an LFE tone into exact silence, which `ReferencePcmTest` now pins, and the engine used
+ * to fold it in at -3 dB instead. Normalisation is OFF, also matching FFmpeg for float output, so
+ * the coefficients above are what is applied and a passage loud in several channels at once can
+ * still sum past full scale; the engine's own pipeline is float and does not clip on it, and a
+ * caller shipping to an integer device can turn normalisation on and pay about 7 dB for the
+ * guarantee. Normalisation divides the WHOLE matrix by its largest row sum rather than each row by
+ * its own, which keeps left and right in balance.
+ *
+ * ### Equal channel counts are not automatically a copy
+ *
+ * When the source and the device both name a layout and those layouts differ, the channels are
+ * PERMUTED into the device's order. Six channels are 5.1 with side surrounds or 5.1 with back
+ * surrounds, and copying one into the other puts the surround content in speakers the mix never
+ * meant (audit 15.3.4). A speaker the source does not carry is left silent rather than filled,
+ * because inventing content for it would be upmixing and this stage does not upmix. When either
+ * side names no layout, or both name the same one, the copy is still right and is still what runs.
  *
  * ### When the layout is not certain
  *
@@ -125,6 +141,8 @@ internal class ChannelMixer(
     private val source: AudioFormat,
     private val target: AudioFormat,
     onWarning: (PlaybackWarning) -> Unit = {},
+    private val policy: io.github.yuroyami.kiteplayer.DownmixConfig =
+        io.github.yuroyami.kiteplayer.DownmixConfig(),
 ) {
     init {
         require(source.channels > 0) { "a source format with ${source.channels} channels cannot be mixed" }
@@ -147,8 +165,14 @@ internal class ChannelMixer(
     val sourceLayout: MixLayout? =
         if (source.channelLayoutMask == null) MixLayout.forChannelCount(sourceChannels) else maskedLayout
 
+    /** The layout the DEVICE takes, when it named one this mixer models and the count agrees. */
+    private val targetLayout: MixLayout? = target.channelLayoutMask
+        ?.let { MixLayout.forMask(it) }
+        ?.takeIf { it.channels == targetChannels }
+
     /** Row-major, `targetChannels` rows of `sourceChannels` gains. Null means pass channels through. */
-    private val matrix: FloatArray? = matrixFor(sourceLayout, sourceChannels, targetChannels)
+    private val matrix: FloatArray? =
+        matrixFor(sourceLayout, targetLayout, sourceChannels, targetChannels, policy)
 
     /**
      * True when the channels are copied rather than mixed, which is either a target that already has
@@ -256,13 +280,123 @@ internal class ChannelMixer(
         /**
          * The matrix for one layout pair, or null when the channels are to be copied instead.
          *
-         * Equal channel counts copy: the decoder already produces what the device asked for, and a
-         * matrix that reorders known layouts into each other is a Horizon B concern.
+         * Two things happen here that did not before. Equal channel counts no longer copy blindly:
+         * when the source and the device both name a layout and those layouts are DIFFERENT, the
+         * channels are permuted into the device's order, because 5.1 with side surrounds and 5.1
+         * with back surrounds have the same six channels in different speakers and copying one into
+         * the other puts the surround content in the wrong place (audit 15.3.4). And a downmix is
+         * scaled so it cannot clip (audit 15.3.2).
          */
-        private fun matrixFor(layout: MixLayout?, sourceChannels: Int, targetChannels: Int): FloatArray? {
-            if (sourceChannels == targetChannels) return null
+        private fun matrixFor(
+            layout: MixLayout?,
+            targetLayout: MixLayout?,
+            sourceChannels: Int,
+            targetChannels: Int,
+            policy: io.github.yuroyami.kiteplayer.DownmixConfig,
+        ): FloatArray? {
+            if (sourceChannels == targetChannels) {
+                // Same count, same layout, or a layout either side did not name: a copy is right.
+                if (layout == null || targetLayout == null || layout == targetLayout) return null
+                return reorder(layout, targetLayout)
+            }
             if (targetChannels != 2 || layout == null) return null
+            return downmix(layout, sourceChannels, policy)
+        }
 
+        /**
+         * Puts [source]'s channels into [target]'s speakers, by speaker and never by position.
+         *
+         * A target speaker the source does not carry takes its nearest equivalent, which in
+         * practice means the side and back surrounds standing in for each other: a device with back
+         * speakers playing a mix authored for side speakers should play the surround content from
+         * the back, not go silent. Anything with no equivalent at all is left silent, because
+         * filling it would be upmixing and this stage does not upmix.
+         *
+         * Null when the mapping turns out to be the identity, which keeps the plain copy path. That
+         * is what happens for every pair of layouts this build models, because all nine follow the
+         * same native bit order: this exists for a DEVICE that reports an order of its own, which
+         * is the case the audit describes and the case no modelled layout can stand in for.
+         */
+        private fun reorder(source: MixLayout, target: MixLayout): FloatArray? {
+            val sourceSpeakers = speakersOf(source)
+            val targetSpeakers = speakersOf(target)
+            val rows = FloatArray(target.channels * source.channels)
+            var identity = sourceSpeakers.size == targetSpeakers.size
+            for (out in targetSpeakers.indices) {
+                val speaker = targetSpeakers[out]
+                var from = sourceSpeakers.indexOf(speaker)
+                if (from < 0) from = sourceSpeakers.indexOf(equivalentOf(speaker))
+                if (from < 0) {
+                    identity = false
+                    continue
+                }
+                if (from != out) identity = false
+                rows[out * source.channels + from] = 1f
+            }
+            return if (identity) null else rows
+        }
+
+        /**
+         * The speaker that stands in for one the source does not have.
+         *
+         * Only the side and back surrounds, because they are the only pair among the modelled
+         * layouts that carries the same content under two names. Everything else answers with
+         * itself, which finds nothing and leaves the speaker silent.
+         */
+        private fun equivalentOf(speaker: Int): Int = when (speaker) {
+            BACK_LEFT_BIT -> SIDE_LEFT_BIT
+            BACK_RIGHT_BIT -> SIDE_RIGHT_BIT
+            SIDE_LEFT_BIT -> BACK_LEFT_BIT
+            SIDE_RIGHT_BIT -> BACK_RIGHT_BIT
+            else -> speaker
+        }
+
+        /** The speaker bits of a layout, lowest first, which IS the channel order in a buffer. */
+        private fun speakersOf(layout: MixLayout): List<Int> =
+            (0 until 64).filter { bit -> (layout.mask shr bit) and 1L == 1L }
+
+        private const val BACK_LEFT_BIT: Int = 4
+        private const val BACK_RIGHT_BIT: Int = 5
+        private const val SIDE_LEFT_BIT: Int = 9
+        private const val SIDE_RIGHT_BIT: Int = 10
+
+        /** The bit for the low-frequency effects channel in the native order mask. */
+        private const val LFE_BIT: Int = 3
+
+        private fun downmix(
+            layout: MixLayout,
+            sourceChannels: Int,
+            policy: io.github.yuroyami.kiteplayer.DownmixConfig,
+        ): FloatArray {
+            val rows = stereoMatrix(layout)
+            if (!policy.includeLfe) {
+                // The LFE column, zeroed. Its position is wherever the LFE bit sits in this
+                // layout's own channel order, which is why the mask is the identity here too.
+                val lfe = speakersOf(layout).indexOf(LFE_BIT)
+                if (lfe >= 0) {
+                    rows[lfe] = 0f
+                    rows[sourceChannels + lfe] = 0f
+                }
+            }
+            if (policy.normalize) {
+                // The largest row sum is the loudest a full-scale input can drive an output. Divide
+                // the WHOLE matrix by it, not each row by its own: scaling rows independently moves
+                // the balance between left and right, which is a worse defect than the level.
+                var peak = 0f
+                for (out in 0 until 2) {
+                    var sum = 0f
+                    for (channel in 0 until sourceChannels) sum += rows[out * sourceChannels + channel]
+                    if (sum > peak) peak = sum
+                }
+                if (peak > 1f) {
+                    val scale = 1f / peak
+                    for (i in rows.indices) rows[i] *= scale
+                }
+            }
+            return rows
+        }
+
+        private fun stereoMatrix(layout: MixLayout): FloatArray {
             val m = MINUS_3_DB
             return when (layout) {
                 // FC

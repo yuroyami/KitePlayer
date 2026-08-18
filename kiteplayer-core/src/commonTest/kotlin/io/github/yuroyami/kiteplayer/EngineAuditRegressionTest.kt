@@ -21,6 +21,44 @@ import kotlin.time.Duration.Companion.seconds
  */
 class EngineAuditRegressionTest {
 
+    /**
+     * P0-20. At a pitch-preserving speed the tempo stage holds up to two pitch periods it cannot
+     * splice, because a splice needs the audio that comes after them and at the end of a stream
+     * nothing does. The terminal state used to be decided without asking, so those frames met the
+     * next reset instead of the device.
+     *
+     * Measured on this harness before and after the fix: 15,480 frames reached the device, then
+     * 16,896. The 1,416 frames between them are the stage's lookahead, about 29 ms, and they are
+     * the end of the media. The threshold below sits between the two readings and is derived from
+     * the media rather than from either: at 1.5x, half a second of audio owes the device at least
+     * `duration * rate / speed` frames.
+     *
+     * The assertion is the count, not the status. A run that ends is easy; a run that ends having
+     * played everything is the fix.
+     */
+    @Test
+    fun `a pitch-preserving speed still delivers the tail the tempo stage was holding`() = runTest {
+        val script = MediaScript(durationUs = 500_000, hasVideo = false)
+        val harness = CoreHarness(this, script = script, renderer = null)
+        harness.open()
+        harness.core.setSpeed(1.5)
+        harness.core.play()
+        harness.run(6.seconds)
+
+        assertEquals(
+            PlaybackStatus.Ended,
+            harness.core.snapshots.value.status,
+            "half a second at 1.5x must finish inside six seconds of virtual time",
+        )
+        val owed = (script.durationUs * script.sampleRate / 1_000_000L / 1.5).toLong()
+        assertTrue(
+            harness.sink.framesPlayed >= owed,
+            "the device heard ${harness.sink.framesPlayed} frames where the media owes it $owed at " +
+                "1.5x, so the tempo stage's lookahead was dropped rather than flushed",
+        )
+        harness.close()
+    }
+
     // F-LOOP1: LoopMode.One at the end of an unseekable source must not issue a seek. The A-B
     // branch already refuses; the plain repeat branch was the one seek path with no guard.
     @Test

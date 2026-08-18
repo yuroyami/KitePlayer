@@ -6,6 +6,7 @@
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.AudioPlayback
+import io.github.yuroyami.kiteplayer.chapterHolding
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
@@ -28,6 +29,7 @@ import io.github.yuroyami.kiteplayer.Progress
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.SyncMode
+import io.github.yuroyami.kiteplayer.TrackChange
 import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.TrackInfo
 import io.github.yuroyami.kiteplayer.TrackKind
@@ -207,12 +209,17 @@ internal class PlaybackCore(
      * A file that cannot be read or parsed warns typed and is skipped; the open never fails
      * over a subtitle.
      */
-    private fun loadExternalSubtitles(item: MediaItem) {
-        // Every DECLARED file mints an id, loaded or not (F-EXT1): the count of loaded tracks
-        // used to seed addExternalSubtitle's next id, which collided with a declared track as
-        // soon as one earlier declaration had failed to load.
-        externalSubtitleIdsMinted = item.externalSubtitles.size
-        externalSubtitleTracks = item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
+    /**
+     * Reads the declared subtitle files, before any session exists.
+     *
+     * Split from [adoptExternalSubtitles] so an open can know whether a file flagged
+     * [SubtitleSource.selectImmediately] will really load BEFORE it decides whether to select the
+     * container's own subtitle stream. Deciding first and finding out afterwards is how a flagged
+     * file that turned out to be unreadable left the viewer with no subtitles at all, which is
+     * worse than the defect it was fixing (audit KP-P1-20). Nothing here touches the session.
+     */
+    private fun parseExternalSubtitles(item: MediaItem): List<ExternalSubtitleTrack> =
+        item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
             // TrackId's own convention: external ids are negative, printed external1, external2...
             val id = TrackId(-(index + 1))
             when (val parsed = parseExternalSubtitle(sourceFile, id)) {
@@ -223,8 +230,16 @@ internal class PlaybackCore(
                 }
             }
         }
-        if (externalSubtitleTracks.isNotEmpty()) {
-            tracks = tracks.copy(all = tracks.all + externalSubtitleTracks.map { it.info })
+
+    /** Merges what [parseExternalSubtitles] read into the session's track table. */
+    private fun adoptExternalSubtitles(item: MediaItem, parsed: List<ExternalSubtitleTrack>) {
+        // Every DECLARED file mints an id, loaded or not (F-EXT1): the count of loaded tracks
+        // used to seed addExternalSubtitle's next id, which collided with a declared track as
+        // soon as one earlier declaration had failed to load.
+        externalSubtitleIdsMinted = item.externalSubtitles.size
+        externalSubtitleTracks = parsed
+        if (parsed.isNotEmpty()) {
+            tracks = tracks.copy(all = tracks.all + parsed.map { it.info })
         }
     }
 
@@ -307,16 +322,74 @@ internal class PlaybackCore(
                 tracks = tracks.copy(all = tracks.all + parsed.track.info)
                 if (active.subtitleStream != null) {
                     // A container stream is timing cues: route through the same rebuild the
-                    // ordinary selection path takes, so one selection owner survives.
+                    // ordinary selection path takes, so one selection owner survives. The caller
+                    // is deliberately NOT answered here. It asked for a subtitle to be SHOWING,
+                    // and handing it an id while the rebuild that makes that true has not run,
+                    // and can still fail the whole player, is the false success the audit named
+                    // (KP-P1-02).
                     pendingExternalSubtitle = id
-                    pendingTrackChange?.reply?.complete(Unit)
-                    pendingTrackChange = CoreCommand.SelectTrack(TrackKind.Subtitle, id, CompletableDeferred())
+                    val selection = CompletableDeferred<TrackChange>()
+                    queueSelection(TrackKind.Subtitle, id, selection)
+                    awaitSubtitleAdd(id, selection, command.reply)
                 } else {
                     applyExternalSubtitle(id)
+                    command.reply.complete(id)
                 }
-                command.reply.complete(id)
             }
         }
+    }
+
+    /**
+     * Answers an [addExternalSubtitle] only once the rebuild its selection triggered has landed.
+     *
+     * Launched on the session dispatcher, which is the actor's own thread, so the rollback below
+     * touches actor state under exactly the confinement every handler runs in. A selection that did
+     * not apply takes the appended track back out again: a row in the track table that nothing can
+     * ever show is worse than a call that failed and said so.
+     */
+    private fun awaitSubtitleAdd(
+        id: TrackId,
+        selection: CompletableDeferred<TrackChange>,
+        reply: CompletableDeferred<TrackId>,
+    ) {
+        scope.launch {
+            val outcome = try {
+                selection.await()
+            } catch (cancellation: CancellationException) {
+                reply.completeExceptionally(cancellation)
+                throw cancellation
+            } catch (failure: Throwable) {
+                withdrawExternalSubtitle(id)
+                reply.completeExceptionally(failure)
+                return@launch
+            }
+            if (outcome is TrackChange.Applied) {
+                reply.complete(id)
+                return@launch
+            }
+            withdrawExternalSubtitle(id)
+            val why = when (outcome) {
+                is TrackChange.Superseded -> "a later track selection replaced it"
+                is TrackChange.Discarded -> outcome.reason
+                is TrackChange.Applied -> ""
+            }
+            reply.completeExceptionally(
+                IllegalStateException("the subtitle file loaded but its selection did not apply: $why"),
+            )
+        }
+    }
+
+    /** Takes an external subtitle track back out after its selection failed to apply. */
+    private fun withdrawExternalSubtitle(id: TrackId) {
+        externalSubtitleTracks = externalSubtitleTracks.filterNot { it.id == id }
+        tracks = tracks.copy(all = tracks.all.filterNot { it.id == id })
+        if (selectedExternalSubtitle == id) {
+            selectedExternalSubtitle = null
+            session?.subtitleCues?.clear()
+            tracks = tracks.withSelection(TrackKind.Subtitle, null)
+        }
+        if (pendingExternalSubtitle == id) pendingExternalSubtitle = null
+        publishSnapshot()
     }
 
     /** Swaps the timed cue table in place (S4.e): no container reopen, one publish. */
@@ -398,7 +471,24 @@ internal class PlaybackCore(
     private var seekHeldSinceNanos: Long = 0
     private var lastSeekAtNanos: Long = 0
     private var framesShownAtLastSeek: Long = 0
-    private var pendingTrackChange: CoreCommand.SelectTrack? = null
+    /**
+     * The desired track selection: at most one request per kind, each with its caller waiting.
+     *
+     * A map, and not the single pending command it used to be, for two separate reasons. A caller
+     * that changed the audio track and then the subtitle track before the first rebuild ran lost
+     * the audio change entirely AND was told it had applied; one rebuild now carries every kind
+     * that has been asked for, and only a second request for the SAME kind displaces the first,
+     * which is told so (audit KP-P1-01).
+     */
+    private val pendingSelections = mutableMapOf<TrackKind, SelectionRequest>()
+
+    /** One caller's track selection, waiting for the rebuild that will honour it. */
+    private class SelectionRequest(
+        val kind: TrackKind,
+        val track: TrackId?,
+        val reply: CompletableDeferred<TrackChange>,
+    )
+
     private var pendingVideoRecovery: VideoRecovery? = null
     private var videoRecoveryAttempted: Boolean = false
     private var forceBackendSoftwareForMedia: Boolean = false
@@ -406,6 +496,24 @@ internal class PlaybackCore(
 
     private var demuxUnderrunSeen = false
     private var rebuffers = 0L
+
+    /**
+     * The counters of every session this player has finished with (audit KP-P1-21).
+     *
+     * [PlaybackStats] documents its frame figures as monotonic totals, and they were read straight
+     * off the live session, which is a NEW object after every track switch, decoder recovery,
+     * queue advance and loop. A viewer who changed the audio track watched every total in an
+     * overlay fall back to zero. The published figure is now this plus whatever the live session
+     * has reached, so it only ever grows, and the per-session gauges beside it (queue depths,
+     * drift, frames per second) stay per-session because that is what a gauge is.
+     */
+    private var retiredDecodedVideo = 0L
+    private var retiredSubmitted = 0L
+    private var retiredHeadless = 0L
+    private var retiredDroppedLate = 0L
+    private var retiredRefused = 0L
+    private var retiredRepeated = 0L
+    private var retiredUnderruns = 0L
     private var stillImageShownSinceNanos: Long = 0
     private var stillImageFinished = false
     private var firstFrameSeen = false
@@ -562,16 +670,30 @@ internal class PlaybackCore(
         awaitReply(reply, stopOnCancellation = true)
     }
 
+    /**
+     * Cancellable on its own, like every request that does not own the session (audit KP-P1-04).
+     *
+     * The step is an ordinary seek that has already been accepted; abandoning the wait abandons
+     * the answer, not the position and not the player.
+     */
     suspend fun stepFrame() {
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.StepFrame(reply))
-        awaitReply(reply, stopOnCancellation = true)
+        awaitReply(reply)
     }
 
     suspend fun captureFrame(): io.github.yuroyami.kiteplayer.CapturedFrame {
         val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
         send(CoreCommand.CaptureFrame(reply))
-        return awaitReply(reply, stopOnCancellation = true)
+        try {
+            return reply.await()
+        } catch (cancellation: CancellationException) {
+            // A cancelled capture withdraws ITS OWN arm and nothing else. Posting Stop here, the
+            // way the session-owning commands do, meant abandoning a screenshot killed playback
+            // (audit KP-P1-04). A newer capture that already replaced this arm is left alone.
+            if (!closedNow.value) commands.trySend(CoreCommand.WithdrawCapture(reply))
+            throw cancellation
+        }
     }
 
     /**
@@ -643,10 +765,10 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
-    suspend fun selectTrack(kind: TrackKind, track: TrackId?) {
-        val reply = CompletableDeferred<Unit>()
+    suspend fun selectTrack(kind: TrackKind, track: TrackId?): TrackChange {
+        val reply = CompletableDeferred<TrackChange>()
         send(CoreCommand.SelectTrack(kind, track, reply))
-        awaitReply(reply)
+        return awaitReply(reply)
     }
 
     suspend fun attachRenderer(renderer: VideoRenderer) {
@@ -782,6 +904,15 @@ internal class PlaybackCore(
     private fun closedCommand(command: String): IllegalStateException =
         IllegalStateException("the player is closed, so $command cannot run")
 
+    /**
+     * Awaits one reply.
+     *
+     * [stopOnCancellation] belongs to the commands that OWN the session, which is open, openQueue
+     * and the two queue jumps: cancelling one of those mid-flight can leave a half-built graph, so
+     * the actor is told to stop. Every other request is cancellable on its own, and posting a
+     * global Stop for one of them is how abandoning a screenshot used to kill playback (audit
+     * KP-P1-04).
+     */
     private suspend fun <T> awaitReply(reply: CompletableDeferred<T>, stopOnCancellation: Boolean = false): T {
         try {
             return reply.await()
@@ -1020,6 +1151,8 @@ internal class PlaybackCore(
             is CoreCommand.QueuePrevious -> jumpQueue(queueIndex - 1, command.reply, "previous")
             is CoreCommand.StepFrame -> stepOneFrame(command.reply)
             is CoreCommand.CaptureFrame -> requestCapture(command.reply)
+            is CoreCommand.WithdrawCapture ->
+                session?.video?.captureRequest?.compareAndSet(command.request, null)
             is CoreCommand.Play -> {
                 // Idempotent in its own state, and queued rather than refused while opening or seeking:
                 // the restart handler applies it as soon as the pipeline can honour it.
@@ -1057,13 +1190,12 @@ internal class PlaybackCore(
                         // A container stream is timing cues: the ordinary rebuild deselects it,
                         // and the external table applies once the new graph stands (S4.e).
                         pendingExternalSubtitle = externalTarget
-                        pendingTrackChange?.reply?.complete(Unit)
-                        pendingTrackChange = command
+                        queueSelection(command.kind, command.track, command.reply)
                     } else {
                         // No container stream involved: the swap is a cue-table replacement, in
                         // place, with no reopen and no seek.
                         applyExternalSubtitle(externalTarget)
-                        command.reply.complete(Unit)
+                        command.reply.complete(TrackChange.Applied(command.kind, externalTarget))
                     }
                 } else {
                     // A container selection while an external track times cues clears it: one
@@ -1073,8 +1205,7 @@ internal class PlaybackCore(
                         session?.subtitleCues?.clear()
                     }
                     // Applied by its own handler, so one pass never reopens the graph twice.
-                    pendingTrackChange?.reply?.complete(Unit)
-                    pendingTrackChange = command
+                    queueSelection(command.kind, command.track, command.reply)
                 }
             }
             is CoreCommand.AttachRenderer -> {
@@ -1297,8 +1428,23 @@ internal class PlaybackCore(
                     when (event) {
                         is RendererEvent.SurfaceLost ->
                             warn(PlaybackWarning.NoRenderSurface(event.detail))
-                        is RendererEvent.Failed ->
-                            warn(PlaybackWarning.RendererFailed(event.detail))
+                        // A hard renderer failure used to be a warning and nothing else, so the
+                        // schedule went on handing frames to a renderer that had already said it
+                        // could not draw: the sound played and the picture stayed black for the
+                        // rest of the session with nothing to be done about it (audit 15.4.3).
+                        // Detaching is the recovery this engine can actually perform. Playback
+                        // continues headless, which is a state it already supports completely, the
+                        // frames are counted as headless instead of refused, and the application
+                        // is free to attach a working renderer whenever it has one.
+                        is RendererEvent.Failed -> {
+                            warn(
+                                PlaybackWarning.RendererFailed(
+                                    "${event.detail}; the renderer was detached and playback " +
+                                        "continues without a picture until another is attached",
+                                ),
+                            )
+                            commands.trySend(CoreCommand.DetachRenderer(CompletableDeferred()))
+                        }
                         is RendererEvent.SurfaceAvailable, is RendererEvent.VsyncChanged -> Unit
                     }
                 }
@@ -1360,6 +1506,10 @@ internal class PlaybackCore(
         lastSeekAtNanos = 0
         framesShownAtLastSeek = 0
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+        // For the same reason as the pending seek above: a waiting selection names a track id from
+        // the PREVIOUS media's table, and running it against the new file would rebuild the wrong
+        // stream or silently change nothing and report success.
+        discardPendingSelections("a new media item was opened before the selection could be applied")
         maskedSeekTargetMicros.value = NO_SEEK_MASK
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
@@ -1371,7 +1521,19 @@ internal class PlaybackCore(
         openedAtNanos = clock.nanos()
         setStatus(PlaybackStatus.Opening)
         try {
-            var built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto, StreamChoice.Auto)
+            // The subtitle files are read FIRST, because whether one of them loads decides whether
+            // the container's own subtitle stream should be selected at all. A file flagged
+            // selectImmediately wins over the container's default, and the flag used to be honoured
+            // only when no container subtitle happened to be active, which made an unconditional
+            // promise conditional on the file (audit KP-P1-20). Choosing here rather than
+            // afterwards means no rebuild and no moment where both selections exist.
+            val parsedExternals = parseExternalSubtitles(command.media)
+            val immediateExternal = parsedExternals.firstOrNull { track ->
+                command.media.externalSubtitles
+                    .getOrNull(-track.id.value - 1)?.selectImmediately == true
+            }
+            val subtitleChoice = if (immediateExternal != null) StreamChoice.None else StreamChoice.Auto
+            var built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto, subtitleChoice)
             session = built
             // The item's start position (SOL-API1), first half: the SOURCE is moved before the
             // workers start, while nothing reads it, so the initial fill decodes from the
@@ -1391,7 +1553,7 @@ internal class PlaybackCore(
                         val observed = recoverObservedVideoFailure(built, Pts(startTargetUs ?: 0L))
                         if (observed == null) throw workerOutcomeException(built, "before the initial fill completed")
                         val recovered = observed.result ?: run {
-                            command.reply.completeExceptionally(CancellationException("open was preempted"))
+                            command.reply.completeExceptionally(preemptedByTeardown("open"))
                             return
                         }
                         built = recovered.session
@@ -1402,26 +1564,41 @@ internal class PlaybackCore(
                     FillOutcome.TimedOut -> warn(
                         PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE"),
                     )
-                    FillOutcome.Ready, FillOutcome.Preempted -> Unit
+                    FillOutcome.Ready -> Unit
+                    // A stop or a close is already on the channel. Everything below this point
+                    // publishes Paused, announces Opened and completes the caller successfully,
+                    // and the very next command then tears all of it down: the caller was told an
+                    // open succeeded and was left with an Idle player (audit KP-P1-05).
+                    FillOutcome.Preempted -> {
+                        teardownSession()
+                        command.reply.completeExceptionally(preemptedByTeardown("open"))
+                        return
+                    }
                 }
-                if (!recoveredAndPresented) presentFirstFrame(built)
+                if (!recoveredAndPresented) reportFirstFrame(built, "open")
             } catch (failure: Throwable) {
                 if (failure is CancellationException) throw failure
                 val observed = recoverObservedVideoFailure(built, Pts(startTargetUs ?: 0L)) ?: throw failure
                 val recovered = observed.result ?: run {
-                    command.reply.completeExceptionally(CancellationException("open was preempted"))
+                    command.reply.completeExceptionally(preemptedByTeardown("open"))
                     return
                 }
                 built = recovered.session
             }
-            // External subtitle files (S4.e): parsed AFTER the session stands, so their synthetic
-            // tracks merge into the container's table and a flagged one starts timing at once.
-            loadExternalSubtitles(command.media)
-            externalSubtitleTracks.firstOrNull { track ->
-                command.media.externalSubtitles.getOrNull(-track.id.value - 1)?.selectImmediately == true
-            }?.let { immediate ->
-                if (session?.subtitleStream == null) applyExternalSubtitle(immediate.id)
+            // presentFirstFrame itself stops on a preemption, so the check is repeated here: a stop
+            // that arrived while the first frame was being pushed out must not be overtaken by the
+            // success below either (audit KP-P1-05).
+            if (preempted()) {
+                teardownSession()
+                command.reply.completeExceptionally(preemptedByTeardown("open"))
+                return
             }
+            // External subtitle files (S4.e): read before the session was built, merged into the
+            // container's table now that one exists, so a flagged one starts timing at once.
+            adoptExternalSubtitles(command.media, parsedExternals)
+            // Unconditional: when this is non-null the container's subtitle stream was left
+            // unselected above, so there is never a competing selection to defer to.
+            immediateExternal?.let { applyExternalSubtitle(it.id) }
             // The start position's second half: the exact landing, as an ordinary precise seek
             // through the ordinary machine, so the masked position report, generation fencing
             // and pause preservation all hold without a special case.
@@ -1429,7 +1606,7 @@ internal class PlaybackCore(
                 queueSeek(SeekRequest(SeekTarget.Absolute(Pts(startTargetUs)), SeekMode.Precise), null)
             }
             setStatus(PlaybackStatus.Paused)
-            eventSink.tryEmit(PlayerEvent.Opened(command.media, tracks))
+            emitEvent(PlayerEvent.Opened(command.media, tracks))
             command.reply.complete(Unit)
         } catch (cancellation: CancellationException) {
             throw cancellation
@@ -1449,6 +1626,27 @@ internal class PlaybackCore(
      * only then, tell the source which streams to read. Opening fails only when nothing playable is left,
      * because a file with a video track this build cannot decode is still a file whose sound plays.
      */
+    /**
+     * How far an open got before it threw. Read only by [classify], written only below, and safe
+     * as a plain field because every write and the read all happen on the session actor.
+     */
+    private enum class OpenStage {
+        Source,
+        Decoders,
+        Output,
+        Assembly,
+        ;
+
+        fun describe(): String = when (this) {
+            Source -> "opening the source"
+            Decoders -> "creating its decoders"
+            Output -> "building its audio output"
+            Assembly -> "assembling the session"
+        }
+    }
+
+    private var openStage: OpenStage = OpenStage.Source
+
     private suspend fun buildSession(
         item: MediaItem,
         videoChoice: StreamChoice,
@@ -1464,18 +1662,22 @@ internal class PlaybackCore(
         // answers only for an item with a URI and no reader of its own; the cache wraps every
         // reader-fed open. On an open FAILURE a resolver-produced reader is the engine's to
         // close (the item's own reader stays the caller's, matching the backend's contract).
-        val resolvedIo = if (item.io == null) config.network.ioResolver?.resolve(item.uri) else null
-        val suppliedIo = item.io ?: resolvedIo
+        openStage = OpenStage.Source
+        // One reader per session, made HERE and owned here. The item carries a factory rather than
+        // a live reader precisely because this line runs again for every rebuild: a track switch, a
+        // decoder recovery, a loop and a queue returning to the same item all come back through it,
+        // and the reader the previous session was given has been closed since (audit KP-P1-03).
+        val suppliedIo = item.io?.invoke() ?: config.network.ioResolver?.resolve(item.uri)
         val cachingIo = if (suppliedIo != null && config.network.ioCache.enabled) {
             CachingMediaIo(suppliedIo, config.network.ioCache)
         } else {
             null
         }
-        val effectiveItem = when {
-            cachingIo != null -> item.copy(io = cachingIo)
-            resolvedIo != null -> item.copy(io = resolvedIo)
-            else -> item
-        }
+        // What the backend will read through: the cache when there is one, the raw reader
+        // otherwise. Handed over as a factory that answers with this one reader, because that is
+        // what the item's own field is and the backend must not have two shapes to handle.
+        val sessionIo = cachingIo ?: suppliedIo
+        val effectiveItem = if (sessionIo == null) item else item.copy(io = { sessionIo })
         val backendSession = try {
             acquireAcrossContext(
                 context = dispatchers.demux,
@@ -1483,7 +1685,10 @@ internal class PlaybackCore(
                 closeAbandoned = { it.close() },
             ) ?: error("a media backend returned no session")
         } catch (failure: Throwable) {
-            if (resolvedIo != null) runCatching { resolvedIo.close() }
+            // Every reader on this path is the engine's, whoever supplied the factory, so an open
+            // that never produced a session closes it here. The backend's own unwind may have got
+            // there first, which is why MediaIo.close is documented to tolerate a second call.
+            if (sessionIo != null) runCatching { sessionIo.close() }
             throw failure
         }
         // The reverse-order construction ledger (audit P1-2). Every resource acquired below
@@ -1495,7 +1700,12 @@ internal class PlaybackCore(
         try {
             // Backend degradations (hardware fallback, colour approximation) flow into the same
             // warning stream everything else uses, instead of a backend-private default (P1-21).
-            backendSession.setWarningSink { warning -> eventSink.tryEmit(PlayerEvent.Warning(warning)) }
+            openStage = OpenStage.Decoders
+            // Through warn(), not straight onto the flow: a backend degradation that went only to
+            // the event flow was absent from the bounded history and therefore from every support
+            // bundle, which is the one place a warning that happened before anyone collected can
+            // still be read.
+            backendSession.setWarningSink { warning -> warn(warning) }
             val source = backendSession.source
             tracks = source.streams.toTracks()
 
@@ -1598,6 +1808,7 @@ internal class PlaybackCore(
                 videoPlayback.speed = speed
             }
 
+            openStage = OpenStage.Output
             var sink: AudioSink? = null
             var audioPlayback: AudioPlayback? = null
             var negotiated: AudioFormat? = null
@@ -1609,7 +1820,12 @@ internal class PlaybackCore(
                 // idempotent). The window between the sink's creation and that construction is one
                 // non-suspending line, and the playback entry below covers everything after it,
                 // including a throw from AudioPlayback.open itself, which used to leak the sink.
-                val createdPlayback = AudioPlayback(createdSink, clock, onWarning = { warn(it) })
+                val createdPlayback = AudioPlayback(
+                    createdSink,
+                    clock,
+                    onWarning = { warn(it) },
+                    downmix = config.audio.downmix,
+                )
                 audioPlayback = createdPlayback
                 rollback += { createdPlayback.close() }
                 // Before open: open() captures the wanted rate as the fresh path's epoch, so a
@@ -1619,8 +1835,9 @@ internal class PlaybackCore(
                 negotiated = createdPlayback.open(audioDecoder.outputFormat)
                 createdPlayback.volume = volume
                 createdPlayback.muted = muted
-                eventSink.tryEmit(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
+                emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
+            openStage = OpenStage.Assembly
 
             withContext(dispatchers.demux) {
                 source.selectStreams(
@@ -1632,7 +1849,7 @@ internal class PlaybackCore(
                 .withSelection(TrackKind.Video, videoStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Audio, audioStream?.let { TrackId(it.index) })
                 .withSelection(TrackKind.Subtitle, subtitleStream?.let { TrackId(it.index) })
-            videoStream?.videoSize?.let { eventSink.tryEmit(PlayerEvent.VideoSizeChanged(it)) }
+            videoStream?.videoSize?.let { emitEvent(PlayerEvent.VideoSizeChanged(it)) }
 
             val softLimitUs = config.buffer.softTarget.inWholeMicroseconds
             // A queue starts at the initial generation, and a session built after a track change starts at
@@ -1924,57 +2141,183 @@ internal class PlaybackCore(
     private enum class FillOutcome { Ready, Preempted, WorkerFinished, TimedOut }
 
     /**
+     * What the one-frame push achieved, as five separate facts rather than one boolean.
+     *
+     * They were one number before, `submitted + headless`, and that number was wrong in both
+     * directions: a renderer that refused every frame could never satisfy it, so an open burned
+     * its whole ten second budget and then reported success anyway, while a frame released with no
+     * renderer attached satisfied it instantly (audit KP-P1-06). Each outcome now has a name, and
+     * the two that mean "the viewer is looking at nothing new" say so.
+     */
+    private enum class FirstFrame {
+        /** A renderer accepted the frame. The strongest signal this engine has for "on screen". */
+        Submitted,
+
+        /** Nothing is attached, so the frame was paced and released with nowhere to draw it. */
+        Headless,
+
+        /** A renderer was attached and refused it. The surface still shows whatever it showed. */
+        Refused,
+
+        /** Nothing left the schedule before the deadline, or a stop cut the wait short. */
+        None,
+
+        /** No video track, so there is no first frame and nothing to report. */
+        NoVideo,
+    }
+
+    /**
      * Presents one frame with the clock stopped, so opening ends on a picture rather than on nothing.
      *
      * The scheduler worker does the presenting, because a renderer is documented to be called from it.
      * The actor asks for exactly one frame and waits for it to go out.
      */
-    private suspend fun presentFirstFrame(session: OpenSession) {
-        val video = session.video ?: return
+    private suspend fun presentFirstFrame(
+        session: OpenSession,
+        budget: Duration = OPEN_FILL_DEADLINE,
+    ): FirstFrame {
+        val video = session.video ?: return FirstFrame.NoVideo
         // Against a baseline and not against zero. A seek ends with this too, and by then frames have
         // already gone out for the position the viewer left, so counting from zero would report the old
         // picture as the new one and present nothing at all.
-        val before = session.framesOut(video)
+        // Three baselines, because the difference between them IS the answer. The attachable
+        // renderer is the only thing that knows whether a real renderer took the frame or whether
+        // there was nothing attached to take it: with no delegate it accepts on the schedule's
+        // behalf, so the schedule's own submitted count cannot tell those two apart. The refusal
+        // is the schedule's to report, because that is where the renderer's "no" comes back.
+        val submittedBefore = session.renderer.submittedFrames
+        val headlessBefore = session.renderer.headlessFrames
+        val refusedBefore = video.refusedFrames
         session.schedulerMode.value = SCHEDULER_ONE_FRAME
-        val deadline = clock.nanos() + OPEN_FILL_DEADLINE.inWholeNanoseconds
+        val deadline = clock.nanos() + budget.inWholeNanoseconds
+        var outcome = FirstFrame.None
         while (clock.nanos() < deadline) {
             session.firstWorkerOutcome.value?.cause?.let { throw it }
-            if (session.framesOut(video) > before) break
+            outcome = when {
+                session.renderer.submittedFrames > submittedBefore -> FirstFrame.Submitted
+                session.renderer.headlessFrames > headlessBefore -> FirstFrame.Headless
+                video.refusedFrames > refusedBefore -> FirstFrame.Refused
+                else -> FirstFrame.None
+            }
+            if (outcome != FirstFrame.None) break
             if (preempted()) break
             delay(WORKER_POLL)
         }
         session.schedulerMode.value = SCHEDULER_IDLE
+        return outcome
     }
+
+    /**
+     * The same push, with the two silent outcomes said out loud (audit KP-P1-06).
+     *
+     * A headless release is deliberately NOT warned: with no renderer attached there is no picture
+     * to be wrong about, `PlaybackStats.headlessFrames` already counts it, and the facade documents
+     * that detaching costs the picture and nothing else. The other two are warned because in both
+     * of them a renderer exists and the viewer is still looking at the old surface.
+     */
+    private suspend fun reportFirstFrame(session: OpenSession, what: String): FirstFrame {
+        val outcome = presentFirstFrame(session)
+        when (outcome) {
+            FirstFrame.Submitted, FirstFrame.Headless, FirstFrame.NoVideo -> Unit
+            FirstFrame.Refused -> warn(
+                PlaybackWarning.StartupIncomplete(
+                    "the renderer refused the first frame of the $what, so the surface still shows " +
+                        "whatever it showed before",
+                ),
+            )
+            FirstFrame.None -> warn(
+                PlaybackWarning.StartupIncomplete(
+                    "no frame left the schedule within $OPEN_FILL_DEADLINE, so the $what finished " +
+                        "on no picture",
+                ),
+            )
+        }
+        return outcome
+    }
+
+    /**
+     * The refusal a preempted open or track change completes with (audit KP-P1-05).
+     *
+     * Not a `CancellationException`: the caller's own coroutine was never cancelled, and handing
+     * one back makes structured concurrency treat another part of the application calling stop as
+     * this caller's own cancellation. A stop arriving mid-open is a fact about the order the calls
+     * were made in, so it reads as one.
+     */
+    private fun preemptedByTeardown(what: String): IllegalStateException = IllegalStateException(
+        "$what was preempted by stop() or close(), so the session it was building was torn down",
+    )
 
     // ---------------------------------------------------------------------------------------------
     // The handlers.
     // ---------------------------------------------------------------------------------------------
 
-    /** Applies a track change by reopening the source at the position playback is at. See digest 8.3. */
+    /**
+     * Installs one caller's selection, displacing only a request for the SAME kind.
+     *
+     * The displaced caller is told `Superseded` and named the request that beat it. Completing it
+     * normally, which is what happened before, meant two callers who asked for two different audio
+     * tracks were both told they had won (audit KP-P1-01).
+     */
+    private fun queueSelection(kind: TrackKind, track: TrackId?, reply: CompletableDeferred<TrackChange>) {
+        pendingSelections.put(kind, SelectionRequest(kind, track, reply))
+            ?.reply?.complete(TrackChange.Superseded(kind, track))
+    }
+
+    /** Ends every waiting selection without applying it: a stop, a close, or no media left. */
+    private fun discardPendingSelections(reason: String) {
+        val discarded = pendingSelections.values.toList()
+        pendingSelections.clear()
+        discarded.forEach { it.reply.complete(TrackChange.Discarded(reason)) }
+    }
+
+    /**
+     * The choice for one kind: what a waiting request asked for, or what is selected now.
+     *
+     * Null inside a request means "none" and not "choose for me": a caller that asks for no audio
+     * must get no audio, and the automatic choice is what an open does rather than what a change
+     * to one track does.
+     */
+    private fun choiceFor(
+        requested: List<SelectionRequest>,
+        kind: TrackKind,
+        current: Int?,
+    ): StreamChoice {
+        val request = requested.firstOrNull { it.kind == kind }
+            ?: return current?.let { StreamChoice.At(it) } ?: StreamChoice.None
+        return request.track?.let { StreamChoice.At(it.value) } ?: StreamChoice.None
+    }
+
+    /** Applies the desired selection by reopening the source at the position playback is at. See digest 8.3. */
     private suspend fun handleTrackChanges() {
-        // A renderer failure has already torn the old graph down. The recovery reopen folds this
-        // choice into its one replacement graph so the command is neither lost nor causes two opens.
+        // A renderer failure has already torn the old graph down. The recovery reopen folds these
+        // choices into its one replacement graph so nothing is lost and no second open happens.
         if (pendingVideoRecovery != null) return
-        val change = pendingTrackChange ?: return
-        pendingTrackChange = null
+        if (pendingSelections.isEmpty()) return
+        // Taken and cleared together: everything asked for so far rides ONE rebuild, and a request
+        // arriving during it belongs to the next one.
+        val requested = pendingSelections.values.toList()
+        pendingSelections.clear()
         val current = session
         val item = media
         if (current == null || item == null) {
-            change.reply.complete(Unit)
+            requested.forEach {
+                it.reply.complete(
+                    TrackChange.Discarded("no media is open, so the selection had nothing to apply to"),
+                )
+            }
             return
         }
         val at = currentPosition()
         val wasPlaying = playRequested
-        // Null means "none" and not "choose for me": a caller that asks for no audio must get no audio, and
-        // the automatic choice is what an open does rather than what a change to one track does.
-        val video = choiceFor(change, TrackKind.Video, current.videoStream?.index)
-        val audio = choiceFor(change, TrackKind.Audio, current.audioStream?.index)
+        val video = choiceFor(requested, TrackKind.Video, current.videoStream?.index)
+        val audio = choiceFor(requested, TrackKind.Audio, current.audioStream?.index)
         // An external subtitle target means NO container stream (S4.e): the rebuild deselects
         // whatever container track was timing cues, and the external table applies afterwards.
-        val subtitle = if (change.kind == TrackKind.Subtitle && isExternalSubtitle(change.track)) {
+        val subtitleRequest = requested.firstOrNull { it.kind == TrackKind.Subtitle }
+        val subtitle = if (subtitleRequest != null && isExternalSubtitle(subtitleRequest.track)) {
             StreamChoice.None
         } else {
-            choiceFor(change, TrackKind.Subtitle, current.subtitleStream?.index)
+            choiceFor(requested, TrackKind.Subtitle, current.subtitleStream?.index)
         }
         try {
             teardownSession()
@@ -1988,7 +2331,9 @@ internal class PlaybackCore(
                     val observed = recoverObservedVideoFailure(rebuilt, at)
                     if (observed == null) throw workerOutcomeException(rebuilt, "before the track change could refill")
                     val recovered = observed.result ?: run {
-                        change.reply.completeExceptionally(CancellationException("track change was preempted"))
+                        requested.forEach {
+                            it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION))
+                        }
                         return
                     }
                     rebuilt = recovered.session
@@ -1997,7 +2342,15 @@ internal class PlaybackCore(
                 FillOutcome.TimedOut -> warn(
                     PlaybackWarning.StartupIncomplete("no stream reached readiness within $OPEN_FILL_DEADLINE after the track change"),
                 )
-                FillOutcome.Ready, FillOutcome.Preempted -> Unit
+                FillOutcome.Ready -> Unit
+                // The same lie an open used to tell (audit KP-P1-05): a stop is already queued, so
+                // publishing a status and reporting the selection applied would be undone by the
+                // very next command.
+                FillOutcome.Preempted -> {
+                    teardownSession()
+                    requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
+                    return
+                }
             }
             // A user seek that was already queued outranks the reposition. A successful decoder
             // recovery has already performed the internal precise reposition and must not queue it twice.
@@ -2015,21 +2368,23 @@ internal class PlaybackCore(
                 applyExternalSubtitle(waiting)
             }
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
-            change.reply.complete(Unit)
+            requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
         } catch (cancellation: CancellationException) {
-            change.reply.completeExceptionally(
-                if (closedNow.value) {
-                    IllegalStateException("the player was closed before selectTrack could finish")
-                } else {
-                    cancellation
-                },
-            )
+            requested.forEach {
+                it.reply.completeExceptionally(
+                    if (closedNow.value) {
+                        IllegalStateException("the player was closed before selectTrack could finish")
+                    } else {
+                        cancellation
+                    },
+                )
+            }
             throw cancellation
         } catch (failure: Throwable) {
             val error = classify(failure, item)
             teardownSession()
             fail(error)
-            change.reply.completeExceptionally(PlaybackException(error))
+            requested.forEach { it.reply.completeExceptionally(PlaybackException(error)) }
         }
     }
 
@@ -2051,7 +2406,7 @@ internal class PlaybackCore(
         val video = session.video ?: return
         if (!firstFrameSeen && session.framesOut(video) > 0) {
             firstFrameSeen = true
-            eventSink.tryEmit(
+            emitEvent(
                 PlayerEvent.FirstFrameRendered((clock.nanos() - openedAtNanos).nanoseconds),
             )
         }
@@ -2118,14 +2473,19 @@ internal class PlaybackCore(
 
     /** Completes a recovery deferred by the worker-outcome handler so queued user seeks win. */
     private suspend fun handlePendingVideoRecovery(recovery: VideoRecovery) {
-        val trackChange = pendingTrackChange
-        val requestedRecovery = trackChange?.let { change ->
+        // Taken and cleared together, like the ordinary rebuild: the recovery reopen IS the one
+        // replacement graph, so every waiting selection rides it and is answered by it.
+        val requested = pendingSelections.values.toList()
+        pendingSelections.clear()
+        val requestedRecovery = if (requested.isEmpty()) {
+            recovery
+        } else {
             recovery.copy(
-                video = choiceFor(change, TrackKind.Video, recovery.video.selectedIndex()),
-                audio = choiceFor(change, TrackKind.Audio, recovery.audio.selectedIndex()),
-                subtitle = choiceFor(change, TrackKind.Subtitle, recovery.subtitle.selectedIndex()),
+                video = choiceFor(requested, TrackKind.Video, recovery.video.selectedIndex()),
+                audio = choiceFor(requested, TrackKind.Audio, recovery.audio.selectedIndex()),
+                subtitle = choiceFor(requested, TrackKind.Subtitle, recovery.subtitle.selectedIndex()),
             )
-        } ?: recovery
+        }
         val userSeek = pendingSeek
         val target = userSeek?.resolve(requestedRecovery.position, requestedRecovery.duration)
             ?: requestedRecovery.position
@@ -2139,13 +2499,15 @@ internal class PlaybackCore(
                 recovery = requestedRecovery,
                 requestedTarget = target,
                 mode = userSeek?.mode ?: SeekMode.Precise,
-            ) ?: return
-            if (trackChange != null && pendingTrackChange === trackChange) {
-                pendingTrackChange = null
-                trackChange.reply.complete(Unit)
+            ) ?: run {
+                // A stop or a close preempted the reopen, so the graph these selections asked for
+                // never came to exist. Saying so beats leaving the callers to infer it.
+                requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
+                return
             }
+            requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
             if (userSeek != null) {
-                eventSink.tryEmit(PlayerEvent.SeekCompleted(result.epoch, result.landedAt.asDuration))
+                emitEvent(PlayerEvent.SeekCompleted(result.epoch, result.landedAt.asDuration))
                 resolveSeekReplies(SeekResult.Applied(result.landedAt))
             }
             setStatus(if (playRequested) PlaybackStatus.Buffering else PlaybackStatus.Paused)
@@ -2155,10 +2517,7 @@ internal class PlaybackCore(
             val error = softwareRecoveryFailure(requestedRecovery, failure)
             teardownSession()
             resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
-            if (trackChange != null && pendingTrackChange === trackChange) {
-                pendingTrackChange = null
-                trackChange.reply.completeExceptionally(PlaybackException(error))
-            }
+            requested.forEach { it.reply.completeExceptionally(PlaybackException(error)) }
             fail(error)
         }
     }
@@ -2242,7 +2601,7 @@ internal class PlaybackCore(
         }
         val applied = landed ?: target
         publishedPositionMicros.value = applied.micros
-        presentFirstFrame(rebuilt)
+        reportFirstFrame(rebuilt, "decoder recovery")
         rebuilt.firstWorkerOutcome.value?.cause?.let { throw it }
         if (preempted()) {
             teardownSession()
@@ -2416,10 +2775,14 @@ internal class PlaybackCore(
         val chapters = session.source.chapters
         if (chapters.isNotEmpty()) {
             val positionUs = publishedPositionMicros.value
-            val index = chapters.indexOfLast { it.start.inWholeMicroseconds <= positionUs }
+            // The same shared reading the facade uses, so an event and a query can never disagree
+            // about which chapter is playing. A position in a gap belongs to no chapter, which is
+            // reported as one: null (audit KP-P1-11).
+            val current = chapters.chapterHolding(positionUs)
+            val index = current?.let { chapters.indexOf(it) } ?: -1
             if (index != lastChapterIndex) {
                 lastChapterIndex = index
-                eventSink.tryEmit(PlayerEvent.ChapterChanged(chapters.getOrNull(index)))
+                emitEvent(PlayerEvent.ChapterChanged(current))
             }
         }
         if (session.isStillImage && session.framesOut(session.video) > 0) {
@@ -2636,7 +2999,11 @@ internal class PlaybackCore(
         // reported without this line, none with it. Idempotent, and undone by a flush.
         val audioQueue = session.audioQueue
         if (endOfStream.audioDecoderDrained && audioQueue != null &&
-            audioQueue.isEndOfStream && audioQueue.count == 0
+            audioQueue.isEndOfStream && audioQueue.count == 0 &&
+            // AND nothing still between the decoder and the device. Without this the ring was told
+            // the stream had ended while up to five decoded buffers were still on their way into
+            // it, so the marker meant "demux finished", not "no more audio" (audit P0-20).
+            session.audioInFlight.value == 0
         ) {
             session.audio?.endOfStream()
         }
@@ -2652,6 +3019,40 @@ internal class PlaybackCore(
         if (!endOfStream.audioDecoderDrained || !endOfStream.videoDecoderDrained) return
         if (session.selectedQueues().any { it.count > 0 }) return
         if (session.video != null && session.video.queuedFrames > 0 && !stillImageFinished) return
+
+        // The audio lane's own end, which the four conditions above cannot see. A drained decoder
+        // and an empty packet queue say demuxing and decoding finished; the decoded samples then
+        // travel through a handoff channel, a conversion and the DSP stages before any device hears
+        // them. Ending here used to cut all of that off, which is silent media loss and is worst
+        // exactly where it is most audible: short clips, and any non-1x speed (audit P0-20).
+        if (session.audio != null && !endOfStream.tailAbandoned) {
+            // Bounded like the sink drain below it and for the same reason (F-EOS1): a feeder that
+            // cannot place the tail must not park the player one poll short of Ended for ever. The
+            // deadline starts at the first of these two waits, so a stalled handoff and a stalled
+            // flush share one budget rather than each getting a fresh one.
+            if (endOfStream.tailRequestedNanos == 0L) endOfStream.tailRequestedNanos = clock.nanos()
+            val tailPending = session.audioInFlight.value > 0 || !session.audioTailFlushed.value
+            val tailTimedOut =
+                clock.nanos() - endOfStream.tailRequestedNanos >= DRAIN_DEADLINE.inWholeNanoseconds
+            if (tailPending && tailTimedOut) {
+                endOfStream.tailAbandoned = true
+                warn(
+                    PlaybackWarning.AudioDrainIncomplete(
+                        "the decoded audio still in flight did not reach the device within " +
+                            "$DRAIN_DEADLINE, so the end of the media was declared without it",
+                    ),
+                )
+            } else if (session.audioInFlight.value > 0) {
+                wakeIn(WORKER_POLL)
+                return
+            } else if (!session.audioTailFlushed.value) {
+                // Everything decoded has been handed over. What is left is what the tempo stage is
+                // holding, and only the feeder may push that out, so ask and wait for its answer.
+                session.audioEosRequested.value = true
+                wakeIn(WORKER_POLL)
+                return
+            }
+        }
 
         if (!endOfStream.draining) {
             endOfStream.draining = true
@@ -2704,7 +3105,7 @@ internal class PlaybackCore(
         // late callback cannot re-anchor a clock that is already frozen.
         session.audio?.anchorClock()
         session.audio?.pause()
-        eventSink.tryEmit(PlayerEvent.Ended)
+        emitEvent(PlayerEvent.Ended)
         setStatus(PlaybackStatus.Ended)
     }
 
@@ -2776,40 +3177,51 @@ internal class PlaybackCore(
         playRequested = true
     }
 
-    /** One nominal frame period, from the stream's own rate, for stepFrame's target (S4.e). */
-    private fun frameStepUs(active: OpenSession): Long {
-        val rate = active.videoStream?.frameRate?.takeIf { it > 0.0 } ?: return 33_333
-        return (1_000_000.0 / rate).toLong().coerceAtLeast(1_000)
-    }
-
     /**
-     * Steps a PAUSED player forward by one frame (S4.e): a precise seek to the current position
-     * plus one nominal frame period, which decodes exactly what is needed and presents the
-     * landing frame, video-only media included. Stepping a playing player is a caller mistake.
+     * Steps a PAUSED player forward by exactly one decoded frame (S4.e, corrected by KP-P1-10).
+     *
+     * This used to be a precise seek to the current position plus one NOMINAL frame period taken
+     * from the container's declared rate. Every assumption in that sentence fails on real media:
+     * variable frame rate has no nominal period, B-frames and repeated or non-monotonic timestamps
+     * make "one period later" land on the wrong frame, and a container whose declared rate is
+     * simply wrong skips or repeats. It also treated a superseded seek as a successful step, and it
+     * refused to work at all on a source that could not seek.
+     *
+     * What it does now is what stepping is: the decoder has already filled the frame queue ahead of
+     * the paused picture, so the schedule is asked to release exactly one of them. The frame that
+     * comes out is the next frame of the media, whatever its timestamp, on any source, seekable or
+     * not, and no decoding is repeated to get it.
      */
-    private fun stepOneFrame(reply: CompletableDeferred<Unit>) {
+    private suspend fun stepOneFrame(reply: CompletableDeferred<Unit>) {
         val active = session
         when {
             active == null ->
                 reply.completeExceptionally(IllegalStateException("stepFrame needs an open media item"))
             playRequested ->
                 reply.completeExceptionally(IllegalStateException("stepFrame steps a PAUSED player; pause first"))
-            active.videoStream == null ->
+            active.videoStream == null || active.video == null ->
                 reply.completeExceptionally(UnsupportedOperationException("stepFrame needs a selected video track"))
-            !active.source.seekable ->
-                reply.completeExceptionally(
-                    UnsupportedOperationException("stepFrame precise-seeks, and this source is not seekable"),
-                )
             else -> {
-                val target = Pts(currentPosition().micros + frameStepUs(active))
-                val seekReply = CompletableDeferred<SeekResult>()
-                scope.launch {
-                    when (val result = seekReply.await()) {
-                        is SeekResult.Applied, is SeekResult.Superseded -> reply.complete(Unit)
-                        is SeekResult.Rejected -> reply.completeExceptionally(IllegalStateException(result.reason))
+                when (presentFirstFrame(active, STEP_DEADLINE)) {
+                    FirstFrame.Submitted, FirstFrame.Headless, FirstFrame.Refused -> {
+                        // The picture IS the position while paused, so the step publishes the
+                        // frame it just put on screen rather than waiting for a clock that is
+                        // frozen to notice.
+                        active.lastVideoPtsUs.value
+                            .takeIf { it != NO_POSITION }
+                            ?.let { publishedPositionMicros.value = it }
+                        publishSnapshot()
+                        reply.complete(Unit)
                     }
+                    FirstFrame.None -> reply.completeExceptionally(
+                        IllegalStateException(
+                            "no frame reached the screen within $STEP_DEADLINE; the media may have ended",
+                        ),
+                    )
+                    FirstFrame.NoVideo -> reply.completeExceptionally(
+                        UnsupportedOperationException("stepFrame needs a selected video track"),
+                    )
                 }
-                queueSeek(SeekRequest(SeekTarget.Absolute(target), SeekMode.Precise), seekReply)
             }
         }
     }
@@ -2922,7 +3334,7 @@ internal class PlaybackCore(
                     }
                     if (observed != null) {
                         val recovered = observed.result ?: return
-                        eventSink.tryEmit(
+                        emitEvent(
                             PlayerEvent.SeekCompleted(recovered.epoch, recovered.landedAt.asDuration),
                         )
                         resolveSeekReplies(SeekResult.Applied(recovered.landedAt))
@@ -2955,7 +3367,9 @@ internal class PlaybackCore(
         val session = session ?: return false
         val sinceLastSeekUs = (nowNanos - lastSeekAtNanos) / 1_000
         if (lastSeekAtNanos != 0L && sinceLastSeekUs < SeekTiming.COALESCE_WINDOW_US) {
-            val shown = session.framesOut(session.video)
+            // Released, so that a refusing renderer does not freeze scrubbing: the previous seek
+            // did produce its frame, the output simply would not draw it (audit KP-P1-06).
+            val shown = session.framesReleased(session.video)
             if (session.video != null && shown <= framesShownAtLastSeek) return true
         }
         if (request.mode == SeekMode.Precise && status == PlaybackStatus.Buffering && playRequested) {
@@ -3134,7 +3548,7 @@ internal class PlaybackCore(
         seekPhase = SeekPhase.Idle
         session.discardBeforeUs.value = Long.MIN_VALUE
         lastSeekAtNanos = clock.nanos()
-        framesShownAtLastSeek = session.framesOut(session.video)
+        framesShownAtLastSeek = session.framesReleased(session.video)
         // No landing frame is a real answer, not a formality to paper over. It is legitimate in
         // exactly two shapes: the seek ran off the end of the stream (nothing left to decode), or
         // a later request preempted this one. Anything else means the pipeline produced nothing
@@ -3149,8 +3563,10 @@ internal class PlaybackCore(
             return
         }
         publishedPositionMicros.value = (landed ?: target).micros
-        presentFirstFrame(session)
-        eventSink.tryEmit(PlayerEvent.SeekCompleted(epoch, (landed ?: target).asDuration))
+        // A landing that ran off the end of the stream has no frame to show by definition, so it
+        // takes the silent form: warning there would fire on every seek to the end of a file.
+        if (landed != null) reportFirstFrame(session, "seek") else presentFirstFrame(session)
+        emitEvent(PlayerEvent.SeekCompleted(epoch, (landed ?: target).asDuration))
         resolveSeekReplies(SeekResult.Applied(landed ?: target))
         // An applied seek is the one legal exit from Ended besides open and stop: the position
         // moved, so "playback reached the end" is no longer true. A landing that itself ran off
@@ -3217,7 +3633,15 @@ internal class PlaybackCore(
         while (true) {
             val buffer = session.decodedAudio.tryReceive().getOrNull() ?: break
             buffer.close()
+            session.audioInFlight.decrementAndGet()
         }
+        // A seek away from the end makes the stream un-ended, so the token and the feeder's answer
+        // both go back. Left set, the next arrival at the end would read a stale "already flushed"
+        // and skip the tail it was supposed to push (audit P0-20).
+        session.audioEosRequested.value = false
+        session.audioTailFlushed.value = false
+        endOfStream.tailRequestedNanos = 0
+        endOfStream.tailAbandoned = false
         session.video?.flush(epoch)
         // The scheduler is the only writer of this reading, and it is parked, so clearing it here is the
         // same discipline as flushing a decoder on its owning worker. It has to be cleared: a position
@@ -3267,8 +3691,7 @@ internal class PlaybackCore(
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
-        pendingTrackChange?.reply?.complete(Unit)
-        pendingTrackChange = null
+        discardPendingSelections("stop() tore the session down before the selection could be applied")
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
         teardownSession()
         media = null
@@ -3279,14 +3702,17 @@ internal class PlaybackCore(
         endOfStream.reset()
         seekPhase = SeekPhase.Idle
         // Idle publishes Idle's numbers: a position and progress left over from the stopped
-        // session would describe media that no longer exists (audit P1-18). The stats baseline
-        // resets with them so the next session's zero-based counter never goes negative.
+        // session would describe media that no longer exists (audit P1-18).
         maskedSeekTargetMicros.value = NO_SEEK_MASK
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
-        lastStatsDecoded = 0L
         setStatus(PlaybackStatus.Idle)
         publishSnapshot()
+        // The stats too, and off the interval: the totals stay (they belong to the player, and the
+        // stopped session was retired into them), while every gauge falls to its empty value
+        // because there is no session to measure. Waiting for the next interval left a stopped
+        // player reporting the queue depths of media it no longer holds (audit KP-P1-21).
+        publishProgressAndStats(force = true)
     }
 
     private suspend fun runClose(reply: CompletableDeferred<Unit>) {
@@ -3297,18 +3723,34 @@ internal class PlaybackCore(
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
+        // The session comes off the actor FIRST, so that everything below is about a graph nothing
+        // else can reach, and the release can then run somewhere this coroutine is able to stop
+        // waiting for (audit KP-P1-07).
+        val detached = detachSession()
         // A zero budget is used by tests to force the compromised-runtime result. It must not prevent
         // teardown from starting: a missed deadline changes the report, never resource ownership.
-        val finished = if (closeDeadline <= Duration.ZERO) {
-            teardownSession()
-            false
-        } else {
-            withTimeoutOrNull(closeDeadline) { teardownSession() } != null
+        val finished = when {
+            // First, and before the "nothing to release" case: a zero budget is the test override
+            // that forces the compromised report deterministically, and it must do that whether or
+            // not a session was open.
+            closeDeadline <= Duration.ZERO -> {
+                if (detached != null) releaseSession(detached)
+                false
+            }
+            detached == null -> true
+            else -> awaitRelease(detached)
         }
         settleOutstandingForClose()
         val failure = if (!finished) {
             val error = PlaybackError.RuntimeCompromised(
-                "teardown did not finish within $closeDeadline, so a worker may still hold resources",
+                if (teardownWedged.value) {
+                    "teardown did not finish within $closeDeadline and is STILL RUNNING, so the " +
+                        "playback threads were left alive rather than closed under it; a native " +
+                        "call that has wedged cannot be killed from inside the process, so a caller " +
+                        "that needs those threads back has to terminate the process"
+                } else {
+                    "teardown did not finish within $closeDeadline, so a worker may still hold resources"
+                },
             )
             PlaybackException(error)
         } else {
@@ -3321,11 +3763,46 @@ internal class PlaybackCore(
         terminated = true
     }
 
+    /**
+     * Releases [detached] on a lifetime of its own and waits at most [closeDeadline] for it.
+     *
+     * The deadline used to wrap [teardownSession] directly, whose whole body is `NonCancellable`,
+     * so it could never fire: a native close that wedged kept `closeAndAwait` suspended for ever
+     * and the documented compromised-runtime report was unreachable (audit KP-P1-07). The release
+     * is not abandoned, because abandoning it would leak the graph outright; what changes is that
+     * the actor stops WAITING for it and reports the truth.
+     *
+     * @return true when the release finished inside the deadline.
+     */
+    private suspend fun awaitRelease(detached: OpenSession): Boolean {
+        // Parentless, so cancelling anything cannot abandon the graph half released, and on the
+        // release lane, which is the one lane the actor is not standing on.
+        val release = GlobalScope.launch(
+            context = dispatchers.release + CoroutineName("kiteplayer-session-release"),
+        ) {
+            try {
+                releaseSession(detached)
+            } catch (thrown: Throwable) {
+                // This job has no parent to report to, so a throw here would be an unhandled
+                // failure. warn() is fence-locked and safe from any thread.
+                warn(PlaybackWarning.ResourcesNotReleased("the session release failed${causeDetail(thrown)}"))
+            }
+        }
+        if (withTimeoutOrNull(closeDeadline) { release.join() } != null) return true
+        // Still running. The dispatchers it is standing on must NOT be closed under it, so the
+        // finalizer is told to leave them alone: leaked threads are recoverable by ending the
+        // process, and closing a dispatcher a wedged native call is running on is not.
+        teardownWedged.value = true
+        return false
+    }
+
+    /** Set when a release outlived its deadline, so the finalizer leaves its dispatchers alone. */
+    private val teardownWedged = atomic(false)
+
     /** Completes every command that close prevents from running, once, from the actor thread. */
     private fun settleOutstandingForClose() {
         pendingVideoRecovery = null
-        pendingTrackChange?.reply?.complete(Unit)
-        pendingTrackChange = null
+        discardPendingSelections("the player was closed before the selection could be applied")
         pendingSeek = null
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
         commands.close()
@@ -3368,7 +3845,10 @@ internal class PlaybackCore(
             context = Dispatchers.Default + CoroutineName("kiteplayer-close-finalizer"),
         ) {
             try {
-                if (closeDispatchers) dispatchers.close()
+                // Never under a release that is still running: those threads ARE the dispatchers,
+                // and closing one out from under a wedged native call turns a leak into a crash
+                // (audit KP-P1-07). The compromised report already names the leak.
+                if (closeDispatchers && !teardownWedged.value) dispatchers.close()
             } catch (failure: Throwable) {
                 reportedFailure = compromisedClose(
                     "the owned playback dispatchers did not close${causeDetail(failure)}",
@@ -3398,7 +3878,7 @@ internal class PlaybackCore(
         val error = failure?.error
         if (error != null) {
             lastError = error
-            eventSink.tryEmit(PlayerEvent.Failed(error))
+            emitEvent(PlayerEvent.Failed(error))
         }
         if (status != PlaybackStatus.Idle) {
             if (!StatusMachine.isLegal(status, PlaybackStatus.Idle)) {
@@ -3415,6 +3895,22 @@ internal class PlaybackCore(
         maskedSeekTargetMicros.value = NO_SEEK_MASK
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
+        // The totals survive the close because they belong to the player and every session was
+        // retired into them; every gauge is at its empty value because nothing is measurable any
+        // more. Built by hand rather than through publishProgressAndStats for the reason below:
+        // nothing here may consult the clock (audit KP-P1-21).
+        statsState.value = PlaybackStats(
+            decodedVideoFrames = retiredDecodedVideo,
+            submittedFrames = retiredSubmitted,
+            headlessFrames = retiredHeadless,
+            droppedFramesLate = retiredDroppedLate,
+            refusedFrames = retiredRefused,
+            repeatedFrames = retiredRepeated,
+            audioUnderruns = retiredUnderruns,
+            droppedEvents = droppedEvents.value,
+            rebuffers = rebuffers,
+            syncMode = config.syncMode,
+        )
         // Do not consult the clock or any worker after their dispatchers have closed. This is the same
         // state projection publishSnapshot would make with no live session, written once by the new owner.
         snapshotState.value = PlayerSnapshot(
@@ -3452,16 +3948,58 @@ internal class PlaybackCore(
      * that owned it. Everything is attempted even when something throws, because one backend refusing to
      * close is not a reason to leak the rest.
      */
+    /**
+     * Takes the session off the actor and folds its counters into the player's totals.
+     *
+     * Split from [releaseSession] for two reasons. Terminal close has to be able to BOUND its wait
+     * for the release half, and it can only do that once the session is unreachable, which is this
+     * line (audit KP-P1-07). And the counters must be retired at exactly this moment, because after
+     * it nothing can read them again and their totals would otherwise fall back to the next
+     * session's zero (audit KP-P1-21).
+     */
+    private fun detachSession(): OpenSession? {
+        val detached = session ?: return null
+        session = null
+        retireCounters(detached)
+        return detached
+    }
+
     private suspend fun teardownSession() {
-        val session = session ?: return
-        this.session = null
+        releaseSession(detachSession() ?: return)
+    }
+
+    /** Folds one finished session's counters into the player's totals. Once per session, exactly. */
+    private fun retireCounters(session: OpenSession) {
+        retiredDecodedVideo += session.decodedVideoFrames.value
+        retiredSubmitted += session.renderer.submittedFrames
+        retiredHeadless += session.renderer.headlessFrames
+        retiredDroppedLate += session.video?.droppedFrames ?: 0
+        retiredRefused += session.video?.refusedFrames ?: 0
+        retiredRepeated += session.video?.repeatedFrames ?: 0
+        retiredUnderruns += session.audio?.underruns ?: 0
+    }
+
+    private suspend fun releaseSession(session: OpenSession) {
         // Once detached, this is the only remaining owner of the graph. Cancellation and the close
         // reporting budget may no longer skip any release below, otherwise the detached decoder or
         // backend session becomes unreachable. A wedged native close may therefore outlive the budget;
         // that is preferable to returning while a worker can still touch freed native state.
         withContext(NonCancellable) {
             session.schedulerMode.value = SCHEDULER_IDLE
-            runCatching { session.sink?.stop() }
+            // Every close still runs even when an earlier one failed, which is why each is wrapped.
+            // What changed is that the failures are COLLECTED rather than dropped: a decoder or a
+            // device that refused to close used to leave no trace anywhere (audit KP-P1-08).
+            val releaseFailures = mutableListOf<String>()
+            suspend fun release(what: String, block: suspend () -> Unit) {
+                try {
+                    block()
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (failure: Throwable) {
+                    releaseFailures += "$what: ${failure.message ?: failure::class.simpleName}"
+                }
+            }
+            release("audio device stop") { session.sink?.stop() }
             session.workers.forEach { worker -> runCatching { worker.quiesce(QUIESCE_DEADLINE) } }
             session.jobs.forEach { it.cancel() }
             session.rasterJob?.cancel()
@@ -3469,40 +4007,65 @@ internal class PlaybackCore(
             session.rasterJob?.let { runCatching { it.join() } }
             // Direct hardware frames retain codec output slots. Release the playback queue while the
             // codec owner is still alive; closing MediaCodec first invalidates queued frame handles.
-            runCatching { session.video?.close() }
+            release("video output") { session.video?.close() }
             session.videoDecoder?.let { decoder ->
-                runCatching { withContext(dispatchers.videoDecode) { decoder.close() } }
+                release("video decoder") { withContext(dispatchers.videoDecode) { decoder.close() } }
             }
             session.audioDecoder?.let { decoder ->
-                runCatching { withContext(dispatchers.audioDecode) { decoder.close() } }
+                release("audio decoder") { withContext(dispatchers.audioDecode) { decoder.close() } }
             }
             while (true) {
                 val buffer = session.decodedAudio.tryReceive().getOrNull() ?: break
                 runCatching { buffer.close() }
+                session.audioInFlight.decrementAndGet()
             }
-            runCatching { session.videoQueue?.close() }
-            runCatching { session.audioQueue?.close() }
+            release("video queue") { session.videoQueue?.close() }
+            release("audio queue") { session.audioQueue?.close() }
             // Subtitles are resources like the other two paths: the decoder holds backend state and
             // the queue holds owned packets, and skipping them here leaked both (audit P1-13).
-            runCatching { session.subtitleDecoder?.close() }
-            runCatching { session.subtitleQueue?.close() }
+            release("subtitle decoder") { session.subtitleDecoder?.close() }
+            release("subtitle queue") { session.subtitleQueue?.close() }
             runCatching { session.pendingSubtitlePacket?.close() }
             session.pendingSubtitlePacket = null
             // Closes the sink too: the audio path owns the device it was given.
-            runCatching { session.audio?.close() }
-            runCatching { session.backendSession.close() }
+            release("audio playback") { session.audio?.close() }
+            release("backend session") { session.backendSession.close() }
+            if (releaseFailures.isNotEmpty()) {
+                warn(PlaybackWarning.ResourcesNotReleased(releaseFailures.joinToString("; ")))
+            }
         }
     }
 
     private fun fail(error: PlaybackError) {
         lastError = error
-        eventSink.tryEmit(PlayerEvent.Failed(error))
+        emitEvent(PlayerEvent.Failed(error))
         setStatus(PlaybackStatus.Failed)
     }
 
-    private fun classify(failure: Throwable, item: MediaItem): PlaybackError = when (failure) {
-        is PlaybackException -> failure.error
-        else -> PlaybackError.SourceUnavailable(item.uri, failure, failure.message)
+    /**
+     * Turns a failure from an open into a typed error, using the stage the open had reached.
+     *
+     * Everything that was not already typed used to become "source unavailable", whatever had
+     * actually broken: a refusing audio device, a renderer, or a plain bug in assembly all told the
+     * caller the file could not be read. That invites a pointless retry and hides the subsystem
+     * that failed (audit KP-P1-19). Only a failure while the source itself was being opened is a
+     * source failure now; the rest name their stage and keep their cause.
+     */
+    private fun classify(failure: Throwable, item: MediaItem): PlaybackError = when {
+        failure is PlaybackException -> failure.error
+        openStage == OpenStage.Source ->
+            PlaybackError.SourceUnavailable(item.uri, failure, failure.message)
+        // Internal rather than AudioDeviceUnavailable, which carries no cause: the subsystem is
+        // named in the detail and the original throwable survives, which a support bundle needs.
+        openStage == OpenStage.Output -> PlaybackError.Internal(
+            "the audio output could not be built for ${item.uri}: ${failure.message}",
+            failure,
+        )
+        else -> PlaybackError.Internal(
+            "the playback session failed while ${openStage.describe()} for ${item.uri}: " +
+                "${failure.message}",
+            failure,
+        )
     }
 
     private suspend fun handleWorkerOutcome(outcome: WorkerOutcome) {
@@ -3606,11 +4169,17 @@ internal class PlaybackCore(
         publishProgressAndStats()
     }
 
-    /** The interval-gated halves, shared by dirty and quiet passes (SOL-P6). */
-    private fun publishProgressAndStats() {
+    /**
+     * The interval-gated halves, shared by dirty and quiet passes (SOL-P6).
+     *
+     * [force] publishes regardless of the intervals, which is what a stop needs: the session is
+     * gone, and leaving the last playing session's queue depths and drift on the flow describes
+     * media that is no longer open (audit KP-P1-21).
+     */
+    private fun publishProgressAndStats(force: Boolean = false) {
         val session = session
         val now = clock.nanos()
-        if ((now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
+        if (force || (now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
             progressState.value = Progress(
                 // The masked read, deliberately: the progress flow feeds the same seek bars that
@@ -3620,13 +4189,14 @@ internal class PlaybackCore(
                 bufferedRanges = bufferedRanges(session),
             )
         }
-        if ((now - lastStatsAtNanos).nanoseconds >= config.statsInterval) {
+        if (force || (now - lastStatsAtNanos).nanoseconds >= config.statsInterval) {
             val elapsed = (now - lastStatsAtNanos).nanoseconds
             lastStatsAtNanos = now
-            val decoded = session?.decodedVideoFrames?.value ?: 0
-            // Coerced: the counter is per-session and restarts at zero on reopen, while
-            // lastStatsDecoded survives the session change; the raw difference then goes negative
-            // and reported a negative FPS against a monotonic-total contract (audit P1-18).
+            val decoded = retiredDecodedVideo + (session?.decodedVideoFrames?.value ?: 0)
+            // The total is monotonic by construction now that retired sessions are folded in, so
+            // the difference cannot go negative. The coercion stays as a floor rather than as the
+            // fix it used to be: a negative frames-per-second against a monotonic-total contract
+            // is the kind of thing worth being defended against twice (audit P1-18, KP-P1-21).
             val delta = (decoded - lastStatsDecoded).coerceAtLeast(0L)
             val fps = if (elapsed > Duration.ZERO) {
                 delta * 1_000.0 / elapsed.inWholeMilliseconds.coerceAtLeast(1)
@@ -3634,14 +4204,15 @@ internal class PlaybackCore(
                 0.0
             }
             lastStatsDecoded = decoded
-            // F-WRN1: the audit found these two documented warnings wired to nothing. The
-            // counters restart with the session, so a shrink just re-baselines silently.
-            val underrunsNow = session?.audio?.underruns ?: 0
+            // F-WRN1: the audit found these two documented warnings wired to nothing. Both read
+            // the player-level total now, so the rising edge is a real onset rather than the
+            // silent re-baselining a per-session counter produced at every reopen.
+            val underrunsNow = retiredUnderruns + (session?.audio?.underruns ?: 0)
             if (underrunsNow > lastStatsUnderruns) {
                 warn(PlaybackWarning.AudioUnderrun(underrunsNow))
             }
             lastStatsUnderruns = underrunsNow
-            val droppedLateNow = session?.video?.droppedFrames ?: 0
+            val droppedLateNow = retiredDroppedLate + (session?.video?.droppedFrames ?: 0)
             val droppedDelta = (droppedLateNow - lastStatsDroppedLate).coerceAtLeast(0)
             if (droppedDelta >= FRAME_DROP_WARN_PER_INTERVAL) {
                 warn(PlaybackWarning.FrameDropping(droppedDelta.toInt()))
@@ -3649,11 +4220,13 @@ internal class PlaybackCore(
             lastStatsDroppedLate = droppedLateNow
             statsState.value = PlaybackStats(
                 decodedVideoFrames = decoded,
-                submittedFrames = session?.renderer?.submittedFrames ?: 0,
-                headlessFrames = session?.renderer?.headlessFrames ?: 0,
-                droppedFramesLate = session?.video?.droppedFrames ?: 0,
-                repeatedFrames = session?.video?.repeatedFrames ?: 0,
-                audioUnderruns = session?.audio?.underruns ?: 0,
+                submittedFrames = retiredSubmitted + (session?.renderer?.submittedFrames ?: 0),
+                headlessFrames = retiredHeadless + (session?.renderer?.headlessFrames ?: 0),
+                droppedFramesLate = droppedLateNow,
+                refusedFrames = retiredRefused + (session?.video?.refusedFrames ?: 0),
+                repeatedFrames = retiredRepeated + (session?.video?.repeatedFrames ?: 0),
+                audioUnderruns = underrunsNow,
+                droppedEvents = droppedEvents.value,
                 rebuffers = rebuffers,
                 avDrift = (session?.driftUs?.value ?: 0L).microseconds,
                 videoDecodeFps = fps,
@@ -3699,6 +4272,27 @@ internal class PlaybackCore(
         else -> MasterClock.None
     }
 
+    /**
+     * Every event leaves through here, and a loss is counted instead of ignored (audit KP-P1-09).
+     *
+     * `tryEmit` answers false when the buffer is full, which is what a collector slower than the
+     * session produces. Every call site used to discard that answer, so a lost `SeekCompleted` or
+     * `Ended` was indistinguishable from one that was never emitted. The count is published as
+     * [PlaybackStats.droppedEvents], a monotonic total a consumer can diff, and it is in the
+     * diagnostics dump.
+     *
+     * The other way an event reaches nobody is not a defect and is not detectable: this flow
+     * replays nothing, so one emitted while nobody is collecting is delivered to nobody and
+     * `tryEmit` still says true. That is the documented split between state and occurrences, and
+     * it is why every warning is ALSO written to the bounded history, which a late reader can read.
+     */
+    private fun emitEvent(event: PlayerEvent) {
+        if (!eventSink.tryEmit(event)) droppedEvents.incrementAndGet()
+    }
+
+    /** Events the buffer could not take. Published as a stat and printed in the dump. */
+    private val droppedEvents = atomic(0L)
+
     private fun warn(warning: PlaybackWarning) {
         // The bounded history first (S4.d): the event feed replays nothing to a late collector,
         // and a bug report is exactly a late collector, so the record cannot live only there.
@@ -3707,7 +4301,7 @@ internal class PlaybackCore(
             while (warningLog.size > WARNING_HISTORY_LIMIT) warningLog.removeFirst()
         }
         io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", warning.message)
-        eventSink.tryEmit(PlayerEvent.Warning(warning))
+        emitEvent(PlayerEvent.Warning(warning))
     }
 
     /** Warnings this core emitted, oldest first, capped at [WARNING_HISTORY_LIMIT]. */
@@ -3769,12 +4363,28 @@ internal class PlaybackCore(
         appendLine("stats")
         appendLine("  decoded=${liveStats.decodedVideoFrames} submitted=${liveStats.submittedFrames} " +
             "headless=${liveStats.headlessFrames} droppedLate=${liveStats.droppedFramesLate} " +
-            "repeated=${liveStats.repeatedFrames}")
+            "refused=${liveStats.refusedFrames} repeated=${liveStats.repeatedFrames}")
         appendLine("  underruns=${liveStats.audioUnderruns} rebuffers=${liveStats.rebuffers} " +
             "avDrift=${liveStats.avDrift} master=${liveStats.masterClock} hwdec=${liveStats.hardwareDecode}")
+        // Anything but zero means this session's event feed is not a complete record, which a bug
+        // report that reasons from the events needs to know before it reasons (audit KP-P1-09).
+        appendLine("  eventsDropped=${liveStats.droppedEvents} (a full buffer: the collector was slower " +
+            "than the session)")
         appendLine()
         appendLine("kd artifacts")
-        appendLine("  filters: none attached (typed filter attachment is the facade's S4.e landing)")
+        // The filter the media item actually carries. This line used to say "none attached"
+        // unconditionally, so a support bundle from a session running a filter graph denied that
+        // the graph existed, which is the one fact such a bundle is collected to establish
+        // (audit KP-P1-18). Typed filter plans are still roadmap work; a raw graph string is what
+        // can be attached today, and it is what is reported.
+        val attachedFilter = snapshot.media?.videoFilter
+        appendLine(
+            if (attachedFilter == null) {
+                "  filters: none attached"
+            } else {
+                "  filters: video graph attached: $attachedFilter"
+            },
+        )
         appendLine()
         appendLine("warnings (${warningHistory().size} kept, cap $WARNING_HISTORY_LIMIT)")
         warningHistory().forEach { entry ->
@@ -4227,8 +4837,15 @@ internal class PlaybackCore(
             // imprecision against a sample-exact trim that needs a filter this build does not have.
             val bufferEndUs = buffer.pts.micros + buffer.format.durationOf(buffer.frameCount).micros
             if (bufferEndUs <= session.discardBeforeUs.value) return true
+            // Counted BEFORE the offer, not inside it: the feeder lowers this the moment it is done
+            // with a buffer, and a count raised after a successful handoff could be lowered before
+            // it was ever raised. An abandoned offer puts it back below (audit P0-20).
+            session.audioInFlight.incrementAndGet()
             while (true) {
-                if (worker.quiesceRequested) return false
+                if (worker.quiesceRequested) {
+                    session.audioInFlight.decrementAndGet()
+                    return false
+                }
                 // A select rather than a cancelled send, for the same reason the actor uses one: a send
                 // cancelled at the wrong instant can leave a buffer neither queued nor owned by anyone.
                 val sent = select<Boolean> {
@@ -4267,7 +4884,22 @@ internal class PlaybackCore(
             val buffer = select<AudioBuffer?> {
                 session.decodedAudio.onReceive { it }
                 onTimeout(WORKER_POLL) { null }
-            } ?: continue
+            }
+            if (buffer == null) {
+                // Nothing waiting. If the session has said the stream is over and the handoff is
+                // provably empty, push the DSP tail into the ring and answer. This worker owns the
+                // pipeline, so it is the only place that may (audit P0-20).
+                if (session.audioEosRequested.value &&
+                    !session.audioTailFlushed.value &&
+                    session.audioInFlight.value == 0
+                ) {
+                    audio.finishDecoded { worker.quiesceRequested }
+                    // Only after the tail is in the ring, so the terminal state cannot read this
+                    // as done while a quiesce abandoned the submit half way.
+                    if (!worker.quiesceRequested) session.audioTailFlushed.value = true
+                }
+                continue
+            }
             try {
                 if (buffer.generation != epoch) continue
                 session.firstAudio.record(epoch, buffer.pts)
@@ -4300,6 +4932,9 @@ internal class PlaybackCore(
                 audio.submitDecoded(pts, interleaved, frames, buffer.format) { worker.quiesceRequested }
             } finally {
                 buffer.close()
+                // Lowered only here, after the buffer is finished with on every path including the
+                // epoch skip above, so the count covers the conversion and not just the queue.
+                session.audioInFlight.decrementAndGet()
             }
         }
     }
@@ -4331,10 +4966,13 @@ internal class PlaybackCore(
                 }
                 SCHEDULER_ONE_FRAME -> {
                     video.resumeSchedule()
-                    val before = session.framesOut(video)
+                    // Released and not shown: a renderer that refuses still consumed the frame, so
+                    // a gate counting successes alone would tick the whole queue away one frame at
+                    // a time looking for a success that is never coming (audit KP-P1-06).
+                    val before = session.framesReleased(video)
                     val wait = video.tick(masterPosition(session))
                     recordVideoClock(session, video)
-                    if (session.framesOut(video) > before) {
+                    if (session.framesReleased(video) > before) {
                         session.schedulerMode.compareAndSet(SCHEDULER_ONE_FRAME, SCHEDULER_IDLE)
                     } else if (wait > Duration.ZERO) {
                         delay(minOf(wait, WORKER_POLL).atLeastOneTick())
@@ -4403,6 +5041,30 @@ internal class PlaybackCore(
         /** Between the audio decoder and the feeder. Small, because the ring is the real buffer. */
         val decodedAudio: Channel<AudioBuffer> = Channel(capacity = 4)
 
+        /**
+         * Decoded audio that has left the decoder and has not yet reached the device.
+         *
+         * Counts what is queued in [decodedAudio] AND the one buffer the feeder is converting, so
+         * a reading of zero means the handoff really is empty rather than momentarily so. The end
+         * of stream reads it: the packet queue emptying says only that demuxing finished, and up
+         * to five buffers of real audio can still be in here when it does (audit P0-20).
+         *
+         * Raised by the decoder before it offers a buffer and lowered by the feeder once the
+         * buffer is done with, in that order, so the count is an upper bound and never negative.
+         */
+        val audioInFlight = atomic(0)
+
+        /**
+         * The end-of-stream token for the audio lane, set by the session and read by the feeder.
+         *
+         * The feeder answers by flushing the DSP tail and setting [audioTailFlushed]. Both are
+         * cleared by a flush, because a seek away from the end makes the stream un-ended.
+         */
+        val audioEosRequested = atomic(false)
+
+        /** Set by the feeder once the DSP tail is in the ring. The terminal state waits for it. */
+        val audioTailFlushed = atomic(false)
+
         val decodedVideoFrames = atomic(0L)
         val lastVideoPtsUs = atomic(NO_POSITION)
         val driftUs = atomic(0L)
@@ -4464,11 +5126,19 @@ internal class PlaybackCore(
 
         fun anyWorkerFinished(): Boolean = workers.any { it.isFinished }
 
-        /** Frames that left the schedule one way or another, which is how a presentation is noticed. */
+        /** Frames that reached a screen, or would have if one were attached. */
         fun framesOut(video: VideoPlayback?): Long {
             if (video == null) return 0
             return video.submittedFrames + video.headlessFrames
         }
+
+        /**
+         * Frames the schedule let go of, refusals included (audit KP-P1-06).
+         *
+         * What "one frame went out" must mean for any wait: a renderer that refuses everything
+         * still consumed the frame, and a wait that only counted successes never ended.
+         */
+        fun framesReleased(video: VideoPlayback?): Long = video?.releasedFrames ?: 0
 
         val isStillImage: Boolean
             get() = videoStream != null && audioStream == null && (videoStream.isCoverArt || videoStream.isSparse)
@@ -4480,6 +5150,10 @@ internal class PlaybackCore(
 
         /** No seek in flight: [maskedSeekTargetMicros] defers to the published clock. */
         const val NO_SEEK_MASK: Long = Long.MIN_VALUE
+
+        /** Said once, by every path where a stop or a close ends a selection before it applies. */
+        const val PREEMPTED_SELECTION: String =
+            "stop() or close() tore the session down before the selection could be applied"
 
         /**
          * The longest the loop sleeps when nothing asks for earlier.
@@ -4520,6 +5194,16 @@ internal class PlaybackCore(
 
         /** How long a seek may spend finding its landing. */
         val SEEK_DEADLINE: Duration = 10.seconds
+
+        /**
+         * How long a single frame step waits for its frame.
+         *
+         * Far shorter than an open's budget, because the frame it wants has already been decoded
+         * and is sitting in the queue: anything that takes longer than this means the queue is
+         * empty, which at the end of the media is the honest answer rather than something to wait
+         * ten seconds for.
+         */
+        val STEP_DEADLINE: Duration = 1.seconds
 
         /** How long a seek prefers the video side's answer before it accepts the audio side's. */
         val LANDING_GRACE: Duration = 500.milliseconds
@@ -4606,6 +5290,12 @@ internal class EndOfStreamState {
     /** The video decoder has reported the end of its stream. */
     var videoDecoderDrained: Boolean = false
 
+    /** When the audio lane was first asked to push its DSP tail out, so that wait is bounded too. */
+    var tailRequestedNanos: Long = 0
+
+    /** The tail wait was bounded out rather than answered, so the tail is gone and it was said. */
+    var tailAbandoned: Boolean = false
+
     /** The decoders are done and the device is playing out what it already holds. */
     var draining: Boolean = false
 
@@ -4627,6 +5317,8 @@ internal class EndOfStreamState {
         videoDecoderDrained = false
         draining = false
         drainStartedNanos = 0
+        tailRequestedNanos = 0
+        tailAbandoned = false
         sinkDrained = false
         drainFailed = false
         keepOpen = false
@@ -4770,6 +5462,16 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class CaptureFrame(
         val reply: CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>,
     ) : CoreCommand("captureFrame", reply)
+
+    /**
+     * Withdraws one abandoned [CaptureFrame] arm (audit KP-P1-04).
+     *
+     * Fire and forget, and identity-matched: a capture whose caller went away must clear its own
+     * request and leave a newer one that already replaced it armed.
+     */
+    class WithdrawCapture(
+        val request: CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>,
+    ) : CoreCommand("withdrawCapture", CompletableDeferred(Unit))
     class Play(val reply: CompletableDeferred<Unit>) : CoreCommand("play", reply)
     class Pause(val reply: CompletableDeferred<Unit>) : CoreCommand("pause", reply)
     class Seek(val request: SeekRequest, val reply: CompletableDeferred<SeekResult>) : CoreCommand("seek", reply)
@@ -4797,7 +5499,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SelectTrack(
         val kind: TrackKind,
         val track: TrackId?,
-        val reply: CompletableDeferred<Unit>,
+        val reply: CompletableDeferred<TrackChange>,
     ) : CoreCommand("selectTrack", reply)
 
     class AttachRenderer(

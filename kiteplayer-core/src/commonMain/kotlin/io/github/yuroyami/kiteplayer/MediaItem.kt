@@ -45,12 +45,19 @@ public data class MediaItem(
     /**
      * Read the bytes through your own code instead of through FFmpeg's protocols.
      *
-     * Wired through the custom AVIO bridge (KPKMP 17.12 M1): when set, [uri] is a label only
-     * and every byte the demuxer touches comes from this reader. This is how an application
-     * plays through its own HTTP client with its own TLS and auth, from an encrypted store,
-     * a torrent, a cache, or bytes it already holds.
+     * A FACTORY, not a reader. The engine calls it once per open and closes what it gets when that
+     * session ends, so every call must return a FRESH reader. One media item is opened more than
+     * once by perfectly ordinary playback: a track switch reopens the container, so does a hardware
+     * decoder recovery, so does a loop, and so does a queue coming back round. Holding one live
+     * reader here meant the second open was handed the one the first session had already closed,
+     * and the media simply stopped (audit KP-P1-03).
+     *
+     * Wired through the custom AVIO bridge (KPKMP 17.12 M1): when set, [uri] is a label only and
+     * every byte the demuxer touches comes from the reader this makes. This is how an application
+     * plays through its own HTTP client with its own TLS and auth, from an encrypted store, a
+     * torrent, a cache, or bytes it already holds.
      */
-    val io: MediaIo? = null,
+    val io: (suspend () -> MediaIo)? = null,
     /**
      * A hint for the demuxer, for example "mpegts", when the bytes have no recognisable header.
      * Almost never needed. Probing is reliable.
@@ -94,6 +101,13 @@ public data class MediaItem(
 public interface MediaIo : AutoCloseable {
     /** Total size in bytes, or null when unknown, for example a live stream. */
     public val size: Long?
+
+    /**
+     * Releases whatever this reader holds. Called exactly once by the engine per reader it made,
+     * and it must tolerate being called twice: an open that fails part way is unwound from both
+     * sides, and a reader that throws on a second close turns a handled failure into a new one.
+     */
+    override fun close()
 
     /** False disables seeking in the player for this item. */
     public val seekable: Boolean
@@ -141,8 +155,8 @@ public data class SubtitleSource(
     /** Shown in a track menu. Defaults to the file name. */
     val title: String? = null,
     val language: String? = null,
-    /** Read the subtitle bytes through your own code. */
-    val io: MediaIo? = null,
+    /** Read the subtitle bytes through your own code. A factory, exactly like [MediaItem.io]. */
+    val io: (suspend () -> MediaIo)? = null,
     /** Selected as soon as it is loaded. */
     val selectImmediately: Boolean = false,
 )

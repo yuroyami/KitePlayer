@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.ChannelMixer
 import io.github.yuroyami.kiteplayer.internal.MixLayout
+import kotlin.math.abs
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlin.test.Test
@@ -12,6 +13,15 @@ import kotlin.test.assertTrue
 private const val M: Float = ChannelMixer.MINUS_3_DB
 
 private const val TOLERANCE: Float = 1e-6f
+
+/**
+ * The coefficients exactly as the specification writes them: LFE folded in, nothing scaled.
+ *
+ * The impulse cases below are the ITU matrix written out by hand, so they are checked against the
+ * matrix itself rather than against the matrix plus a policy. What the DEFAULT policy then does to
+ * those coefficients has its own tests further down (audit 15.3.2).
+ */
+private val RAW = DownmixConfig(normalize = false, includeLfe = true)
 
 private fun format(channels: Int, mask: Long?, rate: Int = 48_000) = AudioFormat(
     sampleRate = rate,
@@ -88,6 +98,7 @@ class ChannelMixerTest {
                 source = format(case.layout.channels, case.layout.mask),
                 target = stereoDevice,
                 onWarning = { warnings += it },
+                policy = RAW,
             )
 
             for (channel in 0 until case.layout.channels) {
@@ -123,6 +134,7 @@ class ChannelMixerTest {
         val mixer = ChannelMixer(
             source = format(6, MixLayout.Surround51Side.mask),
             target = stereoDevice,
+            policy = RAW,
         )
         // Two frames of 5.1: the first is centre only, the second is front left only.
         val input = floatArrayOf(
@@ -185,6 +197,7 @@ class ChannelMixerTest {
             source = format(6, mask = null),
             target = stereoDevice,
             onWarning = { warnings += it },
+            policy = RAW,
         )
 
         // Centre only. A guess that fell back to the first two channels would give silence here,
@@ -233,5 +246,138 @@ class ChannelMixerTest {
 
         assertEquals(listOf(1f, 2f, 0f, 0f), output.toList())
         assertEquals(1, warnings.size, "channels the source cannot fill are a degradation, so it is said")
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // The policy the default applies to those coefficients (audit 15.3.2).
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * What normalisation is for, and what turning it on buys.
+     *
+     * Every channel of a 5.1 mix at full scale at once is the worst case a real film reaches on a
+     * loud transient. Without normalisation the front row sums past full scale and a device taking
+     * integer samples clips it into a crackle. Red by ignoring `policy.normalize` in `downmix`.
+     */
+    @Test
+    fun `normalisation makes it impossible to drive the output past full scale`() {
+        val mixer = ChannelMixer(
+            source = format(6, MixLayout.Surround51.mask),
+            target = stereoDevice,
+            policy = DownmixConfig(normalize = true),
+        )
+        val output = FloatArray(2)
+        mixer.mix(FloatArray(6) { 1f }, output, frames = 1)
+
+        assertTrue(
+            abs(output[0]) <= 1f && abs(output[1]) <= 1f,
+            "a downmix that can exceed full scale clips at the device: got ${output.toList()}",
+        )
+    }
+
+    /**
+     * And the DEFAULT, which is FFmpeg's: louder, matching the reference recordings the whole
+     * audio path is compared against, and able to exceed full scale on a loud passage.
+     */
+    @Test
+    fun `the default follows ffmpeg and can exceed full scale`() {
+        val mixer = ChannelMixer(
+            source = format(6, MixLayout.Surround51.mask),
+            target = stereoDevice,
+        )
+        val output = FloatArray(2)
+        mixer.mix(FloatArray(6) { 1f }, output, frames = 1)
+
+        assertTrue(
+            output[0] > 1f,
+            "the unnormalised matrix is the louder mpv behaviour and it must still be reachable",
+        )
+    }
+
+    /**
+     * The LFE channel is a subwoofer feed, not a bass instrument. Red by defaulting includeLfe on.
+     */
+    @Test
+    fun `the low frequency effects channel is left out of a stereo downmix by default`() {
+        val mixer = ChannelMixer(format(6, MixLayout.Surround51.mask), stereoDevice)
+        val output = FloatArray(2)
+        // LFE alone, at full scale.
+        mixer.mix(floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f), output, frames = 1)
+
+        assertEquals(0f, output[0], TOLERANCE, "LFE must not reach the left speaker")
+        assertEquals(0f, output[1], TOLERANCE, "nor the right one")
+    }
+
+    /** And it is a policy and not a rule: a caller that wants the content back can have it. */
+    @Test
+    fun `the low frequency effects channel can be folded in on request`() {
+        val mixer = ChannelMixer(
+            format(6, MixLayout.Surround51.mask),
+            stereoDevice,
+            policy = DownmixConfig(normalize = false, includeLfe = true),
+        )
+        val output = FloatArray(2)
+        mixer.mix(floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f), output, frames = 1)
+
+        assertEquals(M, output[0], TOLERANCE)
+        assertEquals(M, output[1], TOLERANCE)
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Equal counts, different speakers (audit 15.3.4).
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Equal counts are matched by SPEAKER, and a device the source cannot fill exactly still gets
+     * the surround content rather than silence.
+     *
+     * 5.1 with side surrounds into a device wanting 5.1 with back surrounds is the pair the audit
+     * names. Both carry the same six speakers under two names and, as it happens, in the same
+     * native order, so the right answer here is still the content unmoved: what must NOT happen is
+     * the surround channels going silent because the target's speaker names did not match.
+     *
+     * Red by removing the side-and-back equivalence from `reorder`, which drops both surrounds.
+     */
+    @Test
+    fun `equal counts are matched by speaker and never leave the surrounds silent`() {
+        val mixer = ChannelMixer(
+            source = format(6, MixLayout.Surround51Side.mask),
+            target = format(6, MixLayout.Surround51.mask),
+        )
+        val output = FloatArray(6)
+        mixer.mix(floatArrayOf(1f, 2f, 3f, 4f, 5f, 6f), output, frames = 1)
+
+        assertEquals(
+            listOf(1f, 2f, 3f, 4f, 5f, 6f),
+            output.toList(),
+            "side and back surrounds carry the same content under two names; a device with back " +
+                "speakers must play the side mix, not go quiet",
+        )
+    }
+
+    /**
+     * A device that named NO layout is still a straight copy, which is what a count-only sink is.
+     *
+     * Worth pinning because it is the common case and because the reorder must not fire on a guess:
+     * the mixer keys on what both sides actually declared, and a device that declared nothing has
+     * declared nothing.
+     */
+    @Test
+    fun `equal counts with a device that named no layout stay a copy`() {
+        val mixer = ChannelMixer(
+            source = format(6, MixLayout.Surround51Side.mask),
+            target = format(6, mask = null),
+        )
+        assertTrue(mixer.isIdentity, "there is nothing to reorder against")
+    }
+
+    /** A device that named the SAME layout is still a straight copy, with no matrix at all. */
+    @Test
+    fun `equal counts with the same layout stay a copy`() {
+        val mixer = ChannelMixer(
+            source = format(6, MixLayout.Surround51.mask),
+            target = format(6, MixLayout.Surround51.mask),
+        )
+        assertTrue(mixer.isIdentity, "the same six speakers in the same order need no work at all")
     }
 }

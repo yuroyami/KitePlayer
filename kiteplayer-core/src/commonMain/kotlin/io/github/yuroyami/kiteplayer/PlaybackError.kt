@@ -256,6 +256,19 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * Tearing a session down did not release everything cleanly.
+     *
+     * Teardown runs every close in its own `runCatching` so that one failure cannot strand the
+     * resources after it, which is right. What was wrong is that the failures then vanished: a
+     * decoder or device that refused to close left no trace anywhere, and the next open met a
+     * machine in a state nothing had reported (audit KP-P1-08). The session is gone either way,
+     * which is why this is a warning and not a failure, but it is now a warning that exists.
+     */
+    public data class ResourcesNotReleased(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "the session did not release cleanly: $detail"
+    }
+
+    /**
      * The item asked to start somewhere the open could not take it: an unseekable source, or a
      * position past the end. Playback starts where the container does instead, and this says so
      * rather than leaving the caller to notice the position report.

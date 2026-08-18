@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer
 import io.github.yuroyami.kiteplayer.internal.AudioPipeline
 import io.github.yuroyami.kiteplayer.internal.ChannelMixer
 import io.github.yuroyami.kiteplayer.internal.MixLayout
+import io.github.yuroyami.kiteplayer.internal.SincResampler
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlin.test.Test
@@ -19,6 +20,10 @@ import kotlin.test.assertTrue
  */
 class AudioPipelineTest {
 
+    /** The coefficients unscaled and with the LFE kept, so a level here reads the matrix itself. */
+    private val RAW_DOWNMIX = DownmixConfig(normalize = false, includeLfe = true)
+
+
     private fun format(channels: Int, rate: Int, mask: Long?) = AudioFormat(
         sampleRate = rate,
         channels = channels,
@@ -34,9 +39,28 @@ class AudioPipelineTest {
         for (frame in 0 until frames) it[frame * 6 + 2] = 1f
     }
 
+    /**
+     * P0-20. The pipeline's own end-of-stream exit. Only the tempo stage holds anything worth
+     * recovering, and before this existed the only way out of it was a reset, which dropped it.
+     */
+    @Test
+    fun `finish pushes out what the tempo stage was still holding`() {
+        val pipeline = AudioPipeline(stereoDevice, stereoDevice)
+        pipeline.speed = 2.0
+        // A tenth of a second, which leaves the stage mid-lookahead exactly as a real last buffer does.
+        val frames = stereoDevice.sampleRate / 10
+        pipeline.process(FloatArray(frames * 2) { 0.5f }, frames)
+
+        val tail = pipeline.finish()
+        assertTrue(tail > 0, "the pipeline was holding audio that finish did not hand back")
+        assertEquals(0, pipeline.finish(), "a second finish has nothing left to give")
+    }
+
     @Test
     fun `a downmix with no rate change passes through the mixer and the gain only`() {
-        val pipeline = AudioPipeline(surround51, stereoDevice)
+        // The RAW policy, so this reads the matrix and not the matrix plus the headroom scaling;
+        // what the default policy does to the coefficients is ChannelMixerTest's subject.
+        val pipeline = AudioPipeline(surround51, stereoDevice, downmix = RAW_DOWNMIX)
         val produced = pipeline.process(centreOnly(4), 4)
 
         assertEquals(4, produced, "the rates match, so the frame count cannot change")
@@ -48,20 +72,31 @@ class AudioPipelineTest {
 
     @Test
     fun `a downmix and a rate change compose`() {
-        val pipeline = AudioPipeline(format(6, 44_100, MixLayout.Surround51Side.mask), stereoDevice)
-        val produced = pipeline.process(centreOnly(441), 441)
+        val pipeline = AudioPipeline(
+            format(6, 44_100, MixLayout.Surround51Side.mask),
+            stereoDevice,
+            downmix = RAW_DOWNMIX,
+        )
+        // Two buffers: the first is short by the resampler's lookahead, which every windowed
+        // filter has, so the pair is what carries the ratio.
+        val firstCount = pipeline.process(centreOnly(441), 441)
+        val first = pipeline.output.copyOf(firstCount * 2)
+        val steady = pipeline.process(centreOnly(441), 441)
 
-        assertEquals(480, produced, "441 frames at 44.1 kHz are 480 at 48 kHz")
-        // Constant input through a linear interpolation is the same constant, downmixed once.
-        for (frame in 1 until produced) {
-            assertEquals(ChannelMixer.MINUS_3_DB, pipeline.output[frame * 2], 1e-6f, "left at $frame")
-            assertEquals(ChannelMixer.MINUS_3_DB, pipeline.output[frame * 2 + 1], 1e-6f, "right at $frame")
+        // The first buffer is short by the kernel's lookahead, once and permanently; every buffer
+        // after it carries the exact ratio, which is the property that keeps the clock honest.
+        assertEquals(480, steady, "441 frames at 44.1 kHz are 480 at 48 kHz once the filter is primed")
+        // A constant through the filter is the same constant, downmixed once. Past the kernel's
+        // fade-in at the very start, which is silence before the stream and not the mix.
+        for (frame in SincResampler.TAPS until first.size / 2) {
+            assertEquals(ChannelMixer.MINUS_3_DB, first[frame * 2], 1e-4f, "left at $frame")
+            assertEquals(ChannelMixer.MINUS_3_DB, first[frame * 2 + 1], 1e-4f, "right at $frame")
         }
     }
 
     @Test
     fun `the gain is applied last`() {
-        val pipeline = AudioPipeline(surround51, stereoDevice)
+        val pipeline = AudioPipeline(surround51, stereoDevice, downmix = RAW_DOWNMIX)
         pipeline.muted = true
         // Long enough for the ramp to finish inside the buffer.
         val produced = pipeline.process(centreOnly(1024), 1024)

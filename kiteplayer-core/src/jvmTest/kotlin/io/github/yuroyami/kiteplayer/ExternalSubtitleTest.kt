@@ -2,6 +2,8 @@
 
 package io.github.yuroyami.kiteplayer
 
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import java.io.File
 import kotlin.test.Test
@@ -30,6 +32,89 @@ class ExternalSubtitleTest {
             """.trimIndent(),
         )
         deleteOnExit()
+    }
+
+    /**
+     * KP-P1-20. `selectImmediately` promises selection unconditionally, and used to be honoured
+     * only when the container happened to carry no subtitle stream of its own: with one present the
+     * flag was silently ignored and the viewer got the container's subtitles instead of the file
+     * they asked for.
+     */
+    @Test
+    fun `an immediate external subtitle wins over the container's own subtitle stream`() = runTest {
+        val file = srtFile()
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                subtitleCues = listOf(
+                    io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(
+                        startMicros = 100_000,
+                        endMicros = 200_000,
+                        spans = listOf(
+                            io.github.yuroyami.kiteplayer.subtitle.StyledSpan("from the container"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem(
+                "scripted://media",
+                externalSubtitles = listOf(
+                    SubtitleSource(uri = file.absolutePath, title = "Outside", selectImmediately = true),
+                ),
+            ),
+        )
+
+        val selected = harness.core.snapshots.value.tracks.selectedSubtitle
+        assertTrue(
+            selected != null && selected.isExternal,
+            "the flagged file must be the selection, not the container's stream; got $selected",
+        )
+        harness.close()
+    }
+
+    /**
+     * The other half of KP-P1-20, and the regression the fix could have introduced: deciding to
+     * skip the container's subtitle stream BEFORE knowing whether the flagged file loads would
+     * leave a viewer with no subtitles at all when it does not.
+     */
+    @Test
+    fun `an immediate external subtitle that cannot load leaves the container's stream selected`() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                subtitleCues = listOf(
+                    io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(
+                        startMicros = 100_000,
+                        endMicros = 200_000,
+                        spans = listOf(
+                            io.github.yuroyami.kiteplayer.subtitle.StyledSpan("from the container"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem(
+                "scripted://media",
+                externalSubtitles = listOf(
+                    SubtitleSource(
+                        uri = "/nowhere/this-file-does-not-exist.srt",
+                        selectImmediately = true,
+                    ),
+                ),
+            ),
+        )
+
+        val selected = harness.core.snapshots.value.tracks.selectedSubtitle
+        assertTrue(
+            selected != null && !selected.isExternal,
+            "with the flagged file unreadable the container's own subtitles must still play; got $selected",
+        )
+        harness.close()
     }
 
     @Test
@@ -177,6 +262,90 @@ class ExternalSubtitleTest {
         val external = harness.core.snapshots.value.tracks.all.filter { it.id.isExternal }
         assertEquals(1, external.size, "the ass file must load: ${harness.core.warningHistory().map { it.warning.message }}")
         assertEquals("external/ass", external.single().codec)
+        harness.close()
+    }
+
+    /** A container that carries its own subtitle stream, which is what makes the swap a REOPEN. */
+    private fun containerScript(): MediaScript = MediaScript(
+        subtitleCues = listOf(
+            io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text(
+                startMicros = 100_000,
+                endMicros = 200_000,
+                spans = listOf(io.github.yuroyami.kiteplayer.subtitle.StyledSpan("from the container")),
+            ),
+        ),
+    )
+
+    /**
+     * KP-P1-02. Red by completing the caller's reply in `addExternalSubtitle` at the moment the
+     * file parses, instead of chaining it to the selection: the id then comes back while the
+     * container's own subtitles are still the selected ones.
+     */
+    @Test
+    fun `adding a subtitle answers only once it is really the selected one`() = runTest {
+        val file = srtFile()
+        val harness = CoreHarness(this, script = containerScript())
+        harness.attachRenderer()
+        harness.open()
+        val container = harness.core.snapshots.value.tracks.selectedSubtitle
+        assertTrue(
+            container != null && !container.isExternal,
+            "the fixture needs the container's own subtitle stream selected, got $container",
+        )
+
+        val id = harness.core.addExternalSubtitle(SubtitleSource(uri = file.absolutePath, title = "Picked"))
+
+        assertEquals(
+            id,
+            harness.core.snapshots.value.tracks.selectedSubtitle,
+            "the call handed back an id for a track that was not selected yet: the reopen its " +
+                "selection needs had not run, and could still have failed the whole player",
+        )
+        harness.close()
+    }
+
+    /**
+     * KP-P1-02, the other half: a selection that never applies takes its track back out.
+     *
+     * Displacement rather than failure, because a failure rebuilds the track table from the
+     * container anyway and would pass without any rollback at all. A displaced add is the case
+     * that exposes it: the appended row lives in the engine's own external table, which every
+     * later rebuild copies back on top of the container's, so without the rollback a subtitle the
+     * caller was told it did not get reappears in the menu for the rest of the session.
+     *
+     * Red by dropping the `withdrawExternalSubtitle(id)` calls from `awaitSubtitleAdd`.
+     */
+    @Test
+    fun `a subtitle whose selection is replaced is taken back out of the track list`() = runTest {
+        val file = srtFile()
+        val harness = CoreHarness(this, script = containerScript())
+        harness.attachRenderer()
+        harness.open()
+        val container = harness.core.snapshots.value.tracks.selectedSubtitle
+        assertTrue(container != null && !container.isExternal, "the fixture needs a container track")
+        val before = harness.core.snapshots.value.tracks.all.size
+
+        // The add's own selection, displaced by a subtitle selection made in the same pass.
+        val add = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { harness.core.addExternalSubtitle(SubtitleSource(uri = file.absolutePath)) }
+        }
+        val replace = async(start = CoroutineStart.UNDISPATCHED) {
+            harness.core.selectTrack(TrackKind.Subtitle, container)
+        }
+        val refusal = add.await().exceptionOrNull()
+        replace.await()
+        harness.run(500.milliseconds)
+
+        assertTrue(
+            refusal is IllegalStateException,
+            "an add whose selection was replaced must refuse, not hand back an id; got $refusal",
+        )
+        assertEquals(
+            before,
+            harness.core.snapshots.value.tracks.all.size,
+            "a row for a track the caller was told it did not get must not stay in the menu: " +
+                "${harness.core.snapshots.value.tracks.all.map { it.id }}",
+        )
         harness.close()
     }
 }

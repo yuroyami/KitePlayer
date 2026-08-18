@@ -152,6 +152,16 @@ public data class PlaybackStats(
     /** Frames the schedule decided were too late to show. A scheduler decision, not a renderer one. */
     val droppedFramesLate: Long = 0,
     /**
+     * Frames a renderer was handed and refused, for example because its surface is gone.
+     *
+     * Counted apart from [droppedFramesLate], which it used to be folded into. They are different
+     * diagnoses with different fixes: a late drop says the pipeline could not keep up, a refusal
+     * says the output could not draw, and one number for both made a dead surface read as a slow
+     * decoder (audit KP-P1-06). A run with a healthy [decodedVideoFrames] and a rising figure here
+     * is a picture problem and nothing else.
+     */
+    val refusedFrames: Long = 0,
+    /**
      * Packets dropped before they were decoded.
      *
      * Always zero: nothing drops a packet before decoding it, which is what [FrameDropPolicy.LateAndDecode]
@@ -162,6 +172,20 @@ public data class PlaybackStats(
     val repeatedFrames: Long = 0,
     val audioUnderruns: Long = 0,
     val rebuffers: Long = 0,
+    /**
+     * Events [KitePlayer.events] could not take because its buffer was full.
+     *
+     * A collector slower than the session makes this rise, and every one of those is an occurrence
+     * a consumer counting on the event stream never saw. It was silent before: the engine ignored
+     * the answer `tryEmit` gives it, so a lost seek completion looked exactly like one that never
+     * happened (audit KP-P1-09). Anything above zero means the event feed is not a complete record
+     * for this session, and the fix is a faster collector.
+     *
+     * Not the same thing as an event nobody was listening for. This flow replays nothing to a late
+     * collector by design, and that case is undetectable and deliberate; it is also why every
+     * warning is additionally kept in [KitePlayer.warningHistory].
+     */
+    val droppedEvents: Long = 0,
     /**
      * Video clock minus the master clock at the last presented frame. Positive means video is AHEAD
      * of the master clock.
@@ -335,4 +359,27 @@ public data class Chapter(
     val start: Duration,
     val end: Duration?,
     val title: String?,
-)
+) {
+    /**
+     * True when [positionMicros] falls inside this chapter: at or after [start], and before [end].
+     *
+     * The half-open reading is what makes a boundary belong to exactly one chapter. A null [end]
+     * means the chapter runs to the end of the media, which is what a container writes for its last
+     * one and sometimes for all of them.
+     */
+    internal fun holds(positionMicros: Long): Boolean =
+        start.inWholeMicroseconds <= positionMicros &&
+            (end == null || positionMicros < end.inWholeMicroseconds)
+}
+
+/**
+ * The chapter whose span holds [positionMicros], or null when none does.
+ *
+ * The one place this question is answered, because it used to be answered twice and both answers
+ * ignored [Chapter.end]: a position in a GAP between chapters reported the expired one, so a file
+ * with real gaps announced a chapter that had already finished (audit KP-P1-11). Searched from the
+ * end so overlapping tables resolve to the latest chapter that starts at or before the position,
+ * which is the same tie-break the previous readings used.
+ */
+internal fun List<Chapter>.chapterHolding(positionMicros: Long): Chapter? =
+    lastOrNull { it.holds(positionMicros) }

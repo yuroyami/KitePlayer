@@ -173,6 +173,33 @@ internal class TempoStage(
         emittedFrames += frames
     }
 
+    /**
+     * Emits everything still queued, for the end of the stream.
+     *
+     * [process] only acts once two periods are queued, because every operation reads a period ahead
+     * of the one it writes. At the end of a stream that lookahead never arrives, so up to two
+     * periods of real audio sit here with nothing to trigger them, and [reset] used to be the only
+     * way out: it dropped them. On a short clip that is the last audible fraction of a second going
+     * missing (audit P0-20).
+     *
+     * The remainder is emitted straight through rather than spliced. A splice needs the period
+     * after the one it cuts, and at the end of a stream there is no such period; stretching the
+     * final fragment would mean inventing it. What this costs is that the last few tens of
+     * milliseconds play at their recorded length instead of the requested speed, which is below
+     * what anyone can hear and is what every player in this family does at flush.
+     *
+     * @return frames written to [output], zero when nothing was queued.
+     */
+    fun finish(): Int {
+        outputFrames = 0
+        if (queuedFrames <= 0) return 0
+        // Both counters move exactly as an ordinary copy moves them, so the pts law upstairs dates
+        // this fragment on the same axis as every buffer before it.
+        emitCopy(queuedFrames)
+        consume(queuedFrames)
+        return outputFrames
+    }
+
     /** Drops everything queued and the ratio counters. The seek path, like every stage's reset. */
     fun reset() {
         queuedFrames = 0

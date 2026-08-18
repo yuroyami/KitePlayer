@@ -65,10 +65,11 @@
 #define KPRT_DEFAULT_DEVICE_BUFFER_FRAMES 512
 
 /* Channels this sink will accept (SOL-A6). Both Apple output units take interleaved 32 bit
- * float, and above stereo the layout is DECLARED rather than assumed: 3 to 6 channels carry
- * the MPEG 5.1 A layout tag (L R C LFE Ls Rs), which is FFmpeg's own native 5.1 order, so the
- * engine's interleave reaches the right speakers without a remap. Counts above 6 clamp to 2
- * rather than 6, because the pipeline's mixer downmixes to stereo but cannot yet fold 8 into
+ * float, and above stereo the layout is DECLARED rather than assumed: each count from one to six
+ * carries the tag whose speaker order matches FFmpeg's own for that count, so the engine's
+ * interleave reaches the right speakers without a remap. See `kprt_layout_tag_for`, which replaced
+ * the old rule of tagging EVERY count above two as MPEG 5.1 A (audit 15.3.3). Counts above 6 clamp
+ * to 2 rather than 6, because the pipeline's mixer downmixes to stereo but cannot yet fold 8 into
  * 6 (SOL-P8); stereo is the honest fallback that always sounds right. */
 #define KPRT_MIN_CHANNELS 1
 #define KPRT_MAX_CHANNELS 6
@@ -77,6 +78,31 @@ static void report_status(int32_t *out_os_status, OSStatus status)
 {
     if (out_os_status != NULL)
         *out_os_status = (int32_t)status;
+}
+
+/* The CoreAudio layout tag for a channel count, and the native-order mask that tag IS.
+ *
+ * Every row is the tag whose speaker order matches FFmpeg's native order for that count, so the
+ * engine's interleave reaches the right speakers with no remap. The mask is the same fact written
+ * the way the engine's mixer reads it: one bit per speaker, channels in the order of those bits
+ * from the lowest upward. Zero for a count with no answer, which is the caller's cue to key on the
+ * count alone rather than on an order nobody agreed to.
+ *
+ *   1  FC                      2  FL FR
+ *   3  FL FR LFE               4  FL FR BL BR
+ *   5  FL FR FC BL BR          6  FL FR FC LFE BL BR
+ */
+static AudioChannelLayoutTag kprt_layout_tag_for(int32_t channels, int64_t *out_mask)
+{
+    switch (channels) {
+    case 1: *out_mask = 0x4;  return kAudioChannelLayoutTag_Mono;
+    case 2: *out_mask = 0x3;  return kAudioChannelLayoutTag_Stereo;
+    case 3: *out_mask = 0xB;  return kAudioChannelLayoutTag_DVD_4;
+    case 4: *out_mask = 0x33; return kAudioChannelLayoutTag_Quadraphonic;
+    case 5: *out_mask = 0x37; return kAudioChannelLayoutTag_MPEG_5_0_A;
+    case 6: *out_mask = 0x3F; return kAudioChannelLayoutTag_MPEG_5_1_A;
+    default: *out_mask = 0;   return 0;
+    }
 }
 
 /* SOL-A4: the REAL render granularity, asked of the unit instead of assumed. On both Apple
@@ -305,6 +331,7 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     kprt_sink *sink;
     OSStatus status;
     int32_t accepted_channels;
+    int64_t layout_mask;
     UInt32 bytes_per_frame;
 
     report_status(out_os_status, 0);
@@ -363,16 +390,28 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     status = AudioUnitSetProperty(instance, kAudioUnitProperty_StreamFormat,
                                   kAudioUnitScope_Input, KPRT_OUTPUT_BUS,
                                   &asbd, (UInt32)sizeof(asbd));
-    /* SOL-A6: above stereo the speaker order is a CONTRACT, not a guess. MPEG 5.1 A is
-     * L R C LFE Ls Rs, exactly FFmpeg's native 5.1 interleave. Best effort: a unit that
-     * refuses the layout still plays, it just resolves ambiguity its own way. */
-    if (status == noErr && accepted_channels > 2) {
-        AudioChannelLayout layout;
-        memset(&layout, 0, sizeof(layout));
-        layout.mChannelLayoutTag = kAudioChannelLayoutTag_MPEG_5_1_A;
-        (void)AudioUnitSetProperty(instance, kAudioUnitProperty_AudioChannelLayout,
-                                   kAudioUnitScope_Input, KPRT_OUTPUT_BUS,
-                                   &layout, (UInt32)sizeof(layout));
+    /* SOL-A6: above stereo the speaker order is a CONTRACT, not a guess. The tag is chosen BY THE
+     * CHANNEL COUNT now: declaring MPEG 5.1 A for three, four and five channels as well described
+     * six speakers to a unit that had been given three, and the unit's refusal was thrown away
+     * with a cast to void, so nothing anywhere knew which order was really in force (audit
+     * 15.3.3). The verdict is kept and reported, so a caller that cannot be told an order keys on
+     * the channel count instead of trusting one. */
+    layout_mask = 0;
+    if (status == noErr) {
+        AudioChannelLayoutTag tag = kprt_layout_tag_for(accepted_channels, &layout_mask);
+        if (tag != 0) {
+            AudioChannelLayout layout;
+            OSStatus layout_status;
+            memset(&layout, 0, sizeof(layout));
+            layout.mChannelLayoutTag = tag;
+            layout_status = AudioUnitSetProperty(instance, kAudioUnitProperty_AudioChannelLayout,
+                                                 kAudioUnitScope_Input, KPRT_OUTPUT_BUS,
+                                                 &layout, (UInt32)sizeof(layout));
+            /* Best effort still: a unit that refuses the layout plays anyway. What changed is that
+             * the refusal is no longer silent. */
+            if (layout_status != noErr)
+                layout_mask = 0;
+        }
     }
     if (status != noErr) {
         free(sink);
@@ -386,6 +425,7 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
      * called immediately would produce silence rather than noise. */
     sink->sample_rate = sample_rate;
     sink->channels = accepted_channels;
+    sink->channel_layout_mask = layout_mask;
     atomic_store_explicit(&sink->device_buffer_frames, kprt_query_device_frames(instance),
                           memory_order_relaxed);
     sink->unit = (void *)instance;
@@ -435,6 +475,7 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
 
     out_format->sample_rate = sink->sample_rate;
     out_format->channels = sink->channels;
+    out_format->channel_layout_mask = sink->channel_layout_mask;
     out_format->device_buffer_frames =
         atomic_load_explicit(&sink->device_buffer_frames, memory_order_relaxed);
     *out_sink = sink;

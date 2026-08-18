@@ -24,6 +24,57 @@ class ChapterTest {
         ),
     )
 
+    /**
+     * KP-P1-11. A chapter table may leave gaps, and a position inside one belongs to no chapter.
+     * Both readings used to ignore `end` and answer with the chapter that had already finished, so
+     * a player sitting in a gap displayed the previous chapter's title as the one playing.
+     */
+    private fun gappedTable() = listOf(
+        Chapter(index = 0, start = 0.milliseconds, end = 1_000.milliseconds, title = "one"),
+        // The gap: nothing covers 1.0 s to 2.0 s.
+        Chapter(index = 1, start = 2_000.milliseconds, end = 3_000.milliseconds, title = "two"),
+    )
+
+    @Test
+    fun `the shared lookup answers null for a position in a gap`() {
+        val table = gappedTable()
+        assertEquals("one", table.chapterHolding(500_000)?.title)
+        assertEquals(null, table.chapterHolding(1_500_000)?.title, "1.5 s falls in the gap")
+        assertEquals("two", table.chapterHolding(2_500_000)?.title)
+        assertEquals(
+            null,
+            table.chapterHolding(3_500_000)?.title,
+            "past a declared end is a gap too, even for the last chapter",
+        )
+        assertEquals("one", table.chapterHolding(0)?.title, "a chapter holds its own start")
+        assertEquals(
+            "two",
+            table.chapterHolding(2_000_000)?.title,
+            "a boundary belongs to the chapter that starts on it, never to the one that ended",
+        )
+    }
+
+    /**
+     * KP-P1-11 through the engine. A table with a real gap must announce leaving a chapter, not
+     * hold the expired one until the next begins.
+     */
+    @Test
+    fun `playing through a gap announces that no chapter is current`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000, chapters = gappedTable()))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(5.seconds)
+
+        val announced = harness.events.filterIsInstance<PlayerEvent.ChapterChanged>()
+            .map { it.chapter?.title }
+        assertEquals(
+            listOf("one", null, "two", null),
+            announced,
+            "the gaps are chapters too, announced as none: $announced",
+        )
+        harness.close()
+    }
+
     @Test
     fun `playback crosses boundaries and announces each chapter once`() = runTest {
         val harness = CoreHarness(this, script = chapteredScript())

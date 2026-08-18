@@ -52,12 +52,26 @@ internal class FrameQueue(private val capacity: Int) {
     val size: Int get() = synchronized(lock) { pending.size }
     val isFull: Boolean get() = synchronized(lock) { pending.size >= capacity }
 
-    /** Media duration held ahead of the frame on screen. Feeds the buffering decision. */
+    /**
+     * Media duration held ahead of the frame on screen. Feeds the buffering decision.
+     *
+     * Measured to the END of the last queued frame, not to its start. The difference between the
+     * two readings is one frame every time, so a queue holding a single frame used to report zero
+     * media buffered while holding a real fortieth of a second, and every reading was one frame
+     * short of the truth (audit, FrameQueue). A frame with no declared duration contributes only
+     * its start, which is the same conservative answer as before for that frame alone.
+     */
     val bufferedUs: Long
         get() = synchronized(lock) {
             val first = pending.firstOrNull() ?: return@synchronized 0L
             val last = pending.lastOrNull() ?: return@synchronized 0L
-            (last.pts.micros - first.pts.micros).coerceAtLeast(0L)
+            val lastEnd = last.duration?.let { duration ->
+                // Saturating: a decoder that reports a nonsense duration must not wrap the answer
+                // into a negative one, which would read as an empty queue and start a rebuffer.
+                val end = last.pts.micros + duration.micros
+                if (duration.micros > 0 && end < last.pts.micros) Long.MAX_VALUE else end
+            } ?: last.pts.micros
+            (lastEnd - first.pts.micros).coerceAtLeast(0L)
         }
 
     /**

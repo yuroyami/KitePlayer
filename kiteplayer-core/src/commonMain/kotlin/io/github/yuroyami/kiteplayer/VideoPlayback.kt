@@ -111,6 +111,7 @@ public class VideoPlayback(
     private var submitted = 0L
     private var headless = 0L
     private var droppedLate = 0L
+    private var refused = 0L
     private var repeated = 0L
     private var lastDriftUs = 0L
 
@@ -133,10 +134,31 @@ public class VideoPlayback(
     public val headlessFrames: Long get() = headless
 
     /**
-     * Frames that never reached the screen: dropped because their time had passed, or refused by the
-     * renderer, for example because its surface is gone.
+     * Frames the SCHEDULE dropped because their time had passed.
+     *
+     * A renderer refusal is [refusedFrames] and is deliberately not counted here. The two are
+     * different diagnoses with different fixes: a late drop means the pipeline could not keep up,
+     * a refusal means the output could not draw, and folding them together made a dead surface
+     * look like a slow decoder (audit KP-P1-06, KP-P1-21).
      */
     public val droppedFrames: Long get() = droppedLate
+
+    /**
+     * Frames a renderer was handed and refused, for example because its surface is gone.
+     *
+     * The schedule did its job for each of these: the frame was decoded, paced and offered on
+     * time, and the output said no. Playback continues, which is why this is a counter and not a
+     * failure.
+     */
+    public val refusedFrames: Long get() = refused
+
+    /**
+     * Every frame that left the schedule, whatever became of it: submitted, headless or refused.
+     *
+     * What the engine's one-frame push waits for. Waiting on submissions alone means a refusing
+     * renderer never satisfies the wait and burns the whole budget instead (audit KP-P1-06).
+     */
+    public val releasedFrames: Long get() = submitted + headless + refused
 
     /**
      * Frames the schedule held on screen for a second period, because video was ahead of the master
@@ -312,7 +334,7 @@ public class VideoPlayback(
         }
         // The renderer owns the frame from here, including on failure, so it must not be touched
         // afterwards.
-        if (renderer.present(frame, targetNanos)) submitted++ else droppedLate++
+        if (renderer.present(frame, targetNanos)) submitted++ else refused++
         return Duration.ZERO
     }
 

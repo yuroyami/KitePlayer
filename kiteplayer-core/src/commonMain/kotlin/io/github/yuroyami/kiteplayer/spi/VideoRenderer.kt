@@ -99,7 +99,19 @@ public sealed interface RendererEvent {
     /** The display's refresh interval changed, for example the window moved to another monitor. */
     public data class VsyncChanged(val intervalNanos: Long) : RendererEvent
 
-    /** The renderer failed in a way it cannot recover from. The engine falls back to software. */
+    /**
+     * The renderer failed in a way it cannot recover from.
+     *
+     * The engine DETACHES it and carries on without a picture, warning
+     * `PlaybackWarning.RendererFailed` as it does. It does not build a replacement: there is no
+     * software renderer for the engine to fall back to, because a renderer owns a surface the
+     * application gave it and only the application can supply another. Attaching a new one is
+     * therefore the application's move, and it is legal at any time.
+     *
+     * This used to say the engine falls back to software, and nothing did (audit 15.4.3): the
+     * failed renderer stayed attached, kept refusing every frame, and the picture stayed black for
+     * the rest of the session.
+     */
     public data class Failed(val detail: String) : RendererEvent
 }
 

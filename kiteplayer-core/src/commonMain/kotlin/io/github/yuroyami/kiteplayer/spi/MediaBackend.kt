@@ -25,6 +25,11 @@ public interface MediaBackend {
      * Called on the engine's demux worker, so the implementation may block on I/O the way libavformat
      * does. Throwing is how a backend refuses: the engine turns the failure into a typed
      * [io.github.yuroyami.kiteplayer.PlaybackError].
+     *
+     * [MediaItem.io] is a factory and must be invoked at most ONCE per call to this member. The
+     * engine has already resolved and wrapped whatever the application supplied, so what the
+     * factory answers with is this session's reader: close it with the session, and never keep it
+     * past one.
      */
     public suspend fun open(media: MediaItem): BackendSession
 

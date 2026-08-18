@@ -84,8 +84,10 @@ class KitePlayerTest {
         harness.run(200.milliseconds)
         assertEquals("https://example.test/movie.mkv", resolvedFor, "the resolver never saw the uri")
         val opened = harness.backend.lastOpenedItem
-        assertNotNull(opened?.io, "the resolved reader never reached the backend")
-        assertNotSame(supplied, opened?.io, "the engine must interpose the M5 cache, not pass the reader raw")
+        // The item carries a FACTORY now (audit KP-P1-03), and the engine's answers with the one
+        // reader it made for this session, so invoking it is how a test sees what the backend saw.
+        val delivered = assertNotNull(opened?.io, "the resolved reader never reached the backend").invoke()
+        assertNotSame(supplied, delivered, "the engine must interpose the M5 cache, not pass the reader raw")
 
         // A uri the resolver declines passes through untouched: local files stay on the
         // backend's own fast path.

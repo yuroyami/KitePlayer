@@ -365,14 +365,21 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
     /**
      * Loads a subtitle FILE during playback, appends it to [PlayerSnapshot.tracks] as an
-     * external track, selects it, and returns its id. The complement of
-     * [MediaItem.externalSubtitles] for the file a viewer picks after playback started.
+     * external track, selects it, and returns its id once it is really showing.
      *
      * SubRip and WebVTT, the same text path the open-time route reads.
      *
-     * @throws IllegalStateException when nothing is open.
+     * When a container subtitle stream is already timing cues, the swap needs the same reopen
+     * [selectTrack] needs, and this call waits for it. It used to return the id as soon as the file
+     * parsed, so a caller held an id for a track whose selection had not run and might still fail
+     * the player (audit KP-P1-02). A selection that does not apply takes the appended track back
+     * out of [PlayerSnapshot.tracks] rather than leaving a row nothing can show.
+     *
+     * @throws IllegalStateException when nothing is open, or when the selection was replaced or
+     *         torn down before it applied.
      * @throws IllegalArgumentException when the file cannot be read, cannot be parsed, or
      *         parses to no cues; the message says which.
+     * @throws PlaybackException when the reopen the selection needed failed.
      */
     public suspend fun addExternalSubtitle(source: SubtitleSource): TrackId =
         core.addExternalSubtitle(source)
@@ -416,14 +423,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Steps a PAUSED player forward by exactly one frame and returns with it on screen (S4.e).
      *
-     * The step is a precise seek to the current position plus one nominal frame period, so it
-     * decodes only what it needs and works for video-only media. Held down in a UI it produces
-     * deterministic single-frame advances; the engine's seek coalescing keeps a burst cheap.
+     * One DECODED frame, and not one nominal frame period: the decoder has already filled the queue
+     * ahead of the paused picture, so the schedule releases the next frame of the media whatever
+     * its timestamp. That is what makes it exact on variable frame rate, on B-frames, on repeated
+     * timestamps and on a container whose declared frame rate is simply wrong, all of which the old
+     * seek-by-average-period step got wrong (audit KP-P1-10). It needs no seek, so it works on a
+     * source that cannot seek, and it repeats no decoding, so holding the key down is cheap.
      *
-     * @throws IllegalStateException when nothing is open, or while playing: a playing player is
-     *         already stepping sixty times a second.
-     * @throws UnsupportedOperationException with no selected video track, or when the source
-     *         cannot seek.
+     * @throws IllegalStateException when nothing is open, while playing (a playing player is
+     *         already stepping sixty times a second), or when no frame arrived, which at the end of
+     *         the media means there is no next frame.
+     * @throws UnsupportedOperationException with no selected video track.
      */
     public suspend fun stepFrame() {
         core.stepFrame()
@@ -449,11 +459,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * no chapter table (S4.e). Pure over the published snapshot; pair it with [position] for the
      * chapter now playing.
      */
-    public fun chapterAt(position: Duration): Chapter? {
-        val chapters = state.value.chapters
-        val positionUs = position.inWholeMicroseconds
-        return chapters.lastOrNull { it.start.inWholeMicroseconds <= positionUs }
-    }
+    public fun chapterAt(position: Duration): Chapter? =
+        state.value.chapters.chapterHolding(position.inWholeMicroseconds)
 
     /**
      * Seeks to the start of chapter [index] and returns when its first frame is on screen, with
@@ -471,7 +478,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Selects a track, or deselects the kind entirely with a null [track].
+     * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
      * Switching a CONTAINER track reopens the container and seeks back to where playback was,
      * because the demuxer permits its stream selection to be set once before the first read, so
@@ -480,13 +487,23 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
      * switching is on the roadmap in KPKMP-PAST.md section 11.
      *
+     * Selections of DIFFERENT kinds made close together are merged into one reopen, so setting the
+     * audio track and then the subtitle track costs one rebuild and both are applied. Two requests
+     * for the SAME kind cannot both be honoured, and the earlier one returns
+     * [TrackChange.Superseded] rather than the success it used to report (audit KP-P1-01). Read the
+     * result when it matters; ignore it when your application only ever selects from one place.
+     *
+     * @return [TrackChange.Applied] when this request is the live selection,
+     *         [TrackChange.Superseded] when a later request for the same kind replaced it, and
+     *         [TrackChange.Discarded] when a stop, a close or a new open ended it first.
+     * @throws PlaybackException when the reopen itself failed: the media or the device broke.
      * @throws IllegalStateException when nothing is open.
+     * @throws IllegalArgumentException when [track] is not a track of [kind] in the current media.
      * @throws UnsupportedOperationException for a container switch on a source that cannot seek,
      *         and for a container subtitle track when the backend decodes no subtitle format.
      */
-    public suspend fun selectTrack(kind: TrackKind, track: TrackId?) {
+    public suspend fun selectTrack(kind: TrackKind, track: TrackId?): TrackChange =
         core.selectTrack(kind, track)
-    }
 
     /**
      * Attaches a renderer, or replaces the one attached. Legal at any time, including while playing.

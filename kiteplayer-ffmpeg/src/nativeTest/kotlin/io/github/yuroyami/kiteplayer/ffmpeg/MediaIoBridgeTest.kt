@@ -73,7 +73,9 @@ class MediaIoBridgeTest {
     @Test
     fun `a media item whose bytes come from MediaIo opens demuxes and closes`() = runBlocking {
         val io = SuspendingMemoryIo(readFile("$mediaDir/subbed.mkv"))
-        val session = KiteCodecSourceFactory().open(MediaItem("mem://subbed.mkv", io = io))
+        // A factory, because the item carries one now (audit KP-P1-03). This test keeps a handle
+        // on the reader it makes so it can assert the bridge read through it and closed it.
+        val session = KiteCodecSourceFactory().open(MediaItem("mem://subbed.mkv", io = { io }))
         val source = session as KiteCodecSource
         try {
             assertTrue(source.streams.isNotEmpty(), "no streams demuxed through MediaIo")

@@ -68,11 +68,11 @@ public data class Tracks(
     val selectedVideo: TrackId? = null,
     val selectedAudio: TrackId? = null,
     /**
-     * The selected subtitle track.
+     * The selected subtitle track: a container stream, or a negative id for an external file.
      *
-     * Always null. A container's subtitle streams are listed in [all], because reporting what a file
-     * holds is honest, and selecting one is refused with a typed error: no decoder in this build produces
-     * a cue. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Null means no subtitles are showing. Real since S4.c gave the engine a text cue path and S4.e
+     * added external files; a container subtitle stream whose format no decoder in this build reads
+     * is still refused with a typed error rather than selected and left silent.
      */
     val selectedSubtitle: TrackId? = null,
 ) {
@@ -97,4 +97,37 @@ public data class Tracks(
     public companion object {
         public val Empty: Tracks = Tracks()
     }
+}
+
+/**
+ * What happened to one [KitePlayer.selectTrack] call.
+ *
+ * There is a result type here because the answer is genuinely not a boolean and genuinely not
+ * always success. Only one selection of a kind can be pending at a time, so two callers asking for
+ * two different audio tracks at once means one of them does not get what it asked for, and the
+ * engine used to complete BOTH of them normally: the loser was told its track was selected while a
+ * different one was playing (audit KP-P1-01). A stop, a close and a call made against no open
+ * media did the same. Each of those now has its own answer.
+ *
+ * A selection that fails because the media or the device failed still throws [PlaybackException],
+ * and one made with a track id of the wrong kind, on an unseekable source, or for a format no
+ * decoder reads still throws, because those are mistakes in the calling code. This type is for the
+ * outcomes that are nobody's mistake.
+ */
+public sealed interface TrackChange {
+
+    /** This request is the live selection: [track] of [kind] is what the player is using now. */
+    public data class Applied(val kind: TrackKind, val track: TrackId?) : TrackChange
+
+    /**
+     * A later [KitePlayer.selectTrack] replaced this request before it ran, and [by] is what the
+     * player applied instead. Nothing of this request is live.
+     */
+    public data class Superseded(val kind: TrackKind, val by: TrackId?) : TrackChange
+
+    /**
+     * The request ended without applying and without being replaced: a stop or a close arrived
+     * first, or there was no longer an open media item to apply it to. [reason] says which.
+     */
+    public data class Discarded(val reason: String) : TrackChange
 }

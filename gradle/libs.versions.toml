@@ -21,6 +21,9 @@ androidxTestExtJunit = "1.3.0"
 androidxActivityCompose = "1.13.0"
 
 [libraries]
+# The codec backend. One entry so the library coordinate and the Gradle plugin below cannot drift
+# to different versions: they are the same release and a mismatch resolves two FFmpeg bindings.
+kitecodec-core = { module = "io.github.yuroyami:kitecodec-core", version.ref = "kitecodec" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }

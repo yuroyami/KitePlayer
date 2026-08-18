@@ -43,6 +43,16 @@ internal interface PlaybackDispatchers : AutoCloseable {
     /** SOL-P5: subtitle rasterisation, off the actor. Serial like every lane. */
     val raster: CoroutineContext
 
+    /**
+     * Where a session's release runs at terminal close, so the actor can BOUND its wait for it.
+     *
+     * A lane of its own and not the session's, because the point is that a release which wedges
+     * must not take the coroutine that is timing it with it (audit KP-P1-07). The default answers
+     * with the session lane, which is right for the single-threaded runtimes and for tests, where
+     * every lane is one cooperative dispatcher and there is no second thread to escape to.
+     */
+    val release: CoroutineContext get() = session
+
     companion object {
         /**
          * Every worker on one context.

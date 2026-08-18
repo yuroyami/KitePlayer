@@ -61,7 +61,9 @@ public class KiteCodecMediaBackend(
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
         val options = preOpenOptions(media)
         rewindFdOption(options)
-        val io = media.io
+        // Invoked exactly once: the item carries a factory, and the reader it makes belongs to this
+        // session and is closed with it (audit KP-P1-03).
+        val io = media.io?.invoke()
         val source = mappingFFmpegRuntimeRejection {
             KiteCodecSource(
                 when {

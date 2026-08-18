@@ -47,6 +47,41 @@ class TempoStageTest {
         }
     }
 
+    /**
+     * P0-20. The stage needs two periods of lookahead before it may splice, so at the end of a
+     * stream whatever is short of that has nothing to trigger it. `reset` used to be the only exit
+     * and it dropped them, which is the end of a clip going missing. `finish` is the exit that
+     * keeps them.
+     */
+    @Test
+    fun `finish emits the lookahead the end of a stream leaves stranded`() {
+        for (speed in listOf(0.5, 1.25, 2.0, 4.0)) {
+            val stage = TempoStage(channels, rate)
+            stage.speed = speed
+            // A tenth of a second, fed whole, so the stage is left mid-lookahead exactly as the
+            // last buffer of a real stream leaves it.
+            val input = sine(440.0, 0.1)
+            val inputFrames = input.size / channels
+            stage.process(input, inputFrames)
+            val emittedBeforeFinish = stage.emittedFrames
+
+            val tail = stage.finish()
+            assertTrue(tail > 0, "at $speed the stage was holding audio that finish did not emit")
+            assertEquals(
+                emittedBeforeFinish + tail,
+                stage.emittedFrames,
+                "the tail must count as emitted at $speed, or the pts law dates the next buffer wrong",
+            )
+            assertEquals(
+                inputFrames.toLong(),
+                stage.consumedFrames,
+                "after finish every input frame must be accounted for at $speed",
+            )
+            assertEquals(0, stage.finish(), "a second finish has nothing left to give at $speed")
+            assertTrue(!stage.hasQueuedInput, "finish must leave the queue empty at $speed")
+        }
+    }
+
     @Test
     fun `the ratio holds at every supported speed under adversarial chunking`() {
         val random = Random(7)

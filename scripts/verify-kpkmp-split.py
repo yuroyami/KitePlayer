@@ -38,10 +38,12 @@ def allowed_edits() -> set:
     """Lines the split deliberately changed, so a real loss stays visible among them."""
     if not ALLOWED_EDITS.is_file():
         return set()
+    # "= " prefixed lines are entries; the rest is commentary. The prefix matters: some allowed
+    # lines are markdown headings that start with "#", and a plain comment rule would swallow them.
     return {
-        line.strip()
+        line[2:].strip()
         for line in ALLOWED_EDITS.read_text().splitlines()
-        if line.strip() and not line.startswith("#")
+        if line.startswith("= ")
     }
 
 

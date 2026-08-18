@@ -9150,6 +9150,19 @@ figure above is a range because the host was not idle.
   re-verified against the tree and ARE still open; they now say so with their evidence. Seven new
   rows, PAR-1 to PAR-7, record what the sweep opened rather than closed.
 
+  **Second pass, same day, after the owner asked whether the whole file had been checked or only
+  the SOL rows.** It had been only the SOL rows and a few neighbours: about a dozen of some sixty
+  items. The rest of this entry's claims had been read off this document rather than off the tree,
+  which is the very habit RULE ONE was written against, committed one hour earlier. The second pass
+  verified against the code: SOL-S3 (the exact line, still open), SOL-A6's remainder, SOL-P8,
+  SOL-P9, SOL-C1 (now with 213 helpers counted), SOL-C2, F-ABI1, and every web row. It found one
+  row that names something that DOES NOT EXIST (SOL-P10: no SwrContext appears anywhere in
+  KiteCodec's C) and one summary of my own that was wrong (X-11 was called done; the web's
+  videoRenderer is null and the sample draws through its own Canvas). Phase W was verified commit
+  by commit, and its two commit-less sub-phases are closed rather than missing. UNVERIFIABLE ON
+  THIS MACHINE, and named rather than guessed: SOL-B8 needs the remote repository, SOL-B6 needs CI,
+  AGW-1 and PAR-6 need hardware, and the nineteen test-debt rows were sampled rather than walked.
+
   **A regression I introduced and caught here rather than shipping.** Applying the Android plugin
   unconditionally to :kiteplayer-libass made every build of the project fail with "compileSdk
   version is not set" unless it passed -Pkiteplayer.libass.root. Found while compiling an unrelated
@@ -16432,7 +16445,9 @@ Audio:
   consumes the ring, so an observer that sees this callback's consumption sees its deadline;
   `running` and the device period are atomics now. C suites, render audit and source
   discipline all green after.
-- SOL-A6: PARTIAL by the M4 surge, deliberately. Multichannel PCM is REAL: AudioTrack
+- SOL-A6: PARTIAL by the M4 surge, deliberately. Remainder re-verified STILL OPEN 2026-08-18: no
+  passthrough, offload, device-selection or route-recovery surface exists in kiteplayer-core or the
+  Apple output tier. Multichannel PCM is REAL: AudioTrack
   accepts 1/2/6/8 with the masks that match FFmpeg's interleave, CoreAudio accepts up to 6
   with the MPEG 5.1 A layout declared, and unmapped counts fall to stereo (the mixer's safe
   landing; 8-into-6 folding is SOL-P8's business). Passthrough, offload, device selection and
@@ -16453,8 +16468,11 @@ Subtitles:
   own comments state that every Create-rule object is released on every exit, naming the leak this
   row described (a two-hour film's cue edges used to leak the framesetter and its laid-out glyphs
   once per span per cue). The leak-test half of the row rides the existing cue-churn coverage.
-- SOL-S3 [C] OverlayImage region dimensions are ignored: position is scaled from authoring
-  space while source bitmap dimensions are kept. Home: S4.f.
+- SOL-S3 [V] STILL OPEN, re-verified 2026-08-18 with the line in hand:
+  AppKitVideoRenderer.drawOverlayInto computes `drawWidth = image.bitmap.width * sx` and
+  `drawHeight = image.bitmap.height * sy`, so the SOURCE bitmap's dimensions are scaled by the
+  viewport ratio while the region's own `width`/`height` are never read. Position is scaled from
+  authoring space exactly as this row said. Home: S4.f.
 - SOL-S4 to SOL-S6: CLOSED by S4.f's slice (7e9bb12): open-end resolution in both parsers,
   word-boundary block keywords, and span-text entity decoding.
 - SOL-S7 [C] Public cue styling exceeds what the rasterizers apply (first span chooses global
@@ -16527,23 +16545,36 @@ Performance (the open remainder):
   target format instead of compiling per composer, the UIKit fallback gained the identity fast
   path AppKit already had, and both fallbacks cache overlay CGImages by content hash: without the
   hash key a held cue built 60 CGImages where it now builds 1.
-- SOL-P8 [V] LinearResampler aliases under real rate changes and ChannelMixer cannot remap
-  equal-count layouts nor limit surround downmix (both already KDoc'd interim). Home: B4's
-  swresample adoption, pulled by S3 if audio work lands there first.
-- SOL-P9 [C] Track changes reopen the whole backend session (digest 8.3's recorded limit),
-  which reconnects network inputs and cannot serve live media. Home: rides 17.8 when network
-  reopens; until then it stays the documented limit.
-- SOL-P10 [C] The swr half of perf blocker 3: persistent SwrContext owners for KiteCodec's
-  conversion surfaces (the sws half is closed). Home: the next KiteCodec window.
+- SOL-P8 [V] STILL OPEN, re-verified 2026-08-18: LinearResampler's own KDoc still says it is
+  "replaced by libswresample in Horizon B". It aliases under real rate changes, and ChannelMixer
+  cannot remap equal-count layouts nor limit surround downmix (both KDoc'd interim). NOTE for
+  whoever takes it: SOL-P10 turns out to name a SwrContext that does not exist, so this row, not
+  that one, is where the swresample adoption actually lands. Home: B4, pulled by S3 if audio work
+  lands there first.
+- SOL-P9 [V] STILL OPEN, re-verified 2026-08-18: PlaybackCore still speaks of "handleTrackChanges
+  to finish its container rebuild", and refuses a track switch on an unseekable source because it
+  "cannot reopen it and seek back". Track changes reopen the whole backend session, which
+  reconnects network inputs and cannot serve live media. Home: rides 17.8; until then it stays the
+  documented limit.
+- SOL-P10 [V] QUESTIONED 2026-08-18, and the row may be MOOT as written. `swr_` and `SwrContext`
+  appear NOWHERE in KiteCodec's eleven C sources; the only mentions in the repository are two audit
+  shell scripts. There is no SwrContext for anyone to own persistently, because audio conversion is
+  Kotlin-side (LinearResampler and ChannelMixer, which SOL-P8 already covers). Either this row
+  described a surface that was removed, or it was written by analogy to the sws half and never
+  checked. DO NOT schedule it until someone confirms what it was meant to name. Home: the next
+  KiteCodec window, as a five-minute reading rather than work.
 
 C-reduction (the charter, owner-scheduled, earliest after S4):
-- SOL-C1 [C] Replace the one-line helper C (packet, codecpar, stream, error, trivial frame and
-  codec, most of format and playback) with direct cinterop on Kotlin/Native. KEEP: the JNI
-  adapter, the ABI/identity probe, the get_format callback, FFmpeg itself, and the whole
-  real-time C island (callback, ring, anchors, atomics). The goal is no redundant C, not no C.
-- SOL-C2 [C] Move non-real-time CoreAudio setup, session policy, route/interruption handling,
-  capability queries and error mapping to Kotlin; unsupported-platform C stubs become
-  expect/actual. Home: S3.
+- SOL-C1 [V] STILL OPEN, and now with a number: 213 exported helper functions across eleven C
+  sources (helpers_codec, codecpar, error, filter, format, frame, hwaccel, packet, playback, stream,
+  and kitecodec_abi), measured 2026-08-18. Replace the one-line helper C (packet, codecpar, stream,
+  error, trivial frame and codec, most of format and playback) with direct cinterop on
+  Kotlin/Native. KEEP: the JNI adapter, the ABI/identity probe, the get_format callback, FFmpeg
+  itself, and the whole real-time C island. The goal is no redundant C, not no C.
+- SOL-C2 [V] STILL OPEN, re-verified 2026-08-18: `kiteplayer-rt/native/src/kite_rt_coreaudio.c`
+  is present and carries the setup. Move non-real-time CoreAudio setup, session policy,
+  route/interruption handling, capability queries and error mapping to Kotlin; unsupported-platform
+  C stubs become expect/actual. Home: S3.
 - SOL-C3 [V] STILL OPEN, re-verified 2026-08-18: helpers_filter.c still composes into fixed
   `char args[512]` and `char layout_str[128]` buffers. Composition moves to common Kotlin, retiring
   them (P0 closed the overflow; the composition itself is still C). Home: with SOL-C1.
@@ -16594,6 +16625,11 @@ Metal frames, failed CoreAudio shutdown with a live callback, attached-picture-f
 negative start times, foreign StreamInfo, decoder output diverging from codec parameters,
 empty-output MediaSink finalization, midstream format changes, and secure-protocol link
 smokes. Each stage's expansion names the ones it owes.
+**Sampled 2026-08-18 rather than assumed:** the list is PARTLY addressed and has never been
+reconciled. Test files matching the wrap, quiescence, ASan and attached-picture rows exist; nothing
+in either repository matches "negative start times" or "midstream format changes". Whoever next
+owns this list should walk all nineteen and strike the ones already written, because carrying a
+closed row costs the same attention as a real one.
 
 **Register addition 2026-08-18 (the parity sweep: every shipped archive read with llvm-nm rather
 than trusted from its configure record).** Closed the same day: KC-AV1SW above; the iOS assembly
@@ -16741,9 +16777,9 @@ commands; the shipped-object audit in render-audit.sh covers what flag parity al
 
 **OPEN, honestly.**
 
-- F-ABI1: the built-in abiValidation covers no Android target surface (KGP reports Android
-  publications unsupported), so KitePlayerView and the other androidMain public APIs have no
-  dump to disagree with. Needs either a KGP release that supports it or a hand-rolled
+- F-ABI1 [V] STILL OPEN, re-verified 2026-08-18: the `api/` directories carry a `jvm` dump and a
+  `.klib.api` and no Android dump at all, so KitePlayerView and the other androidMain public APIs
+  have nothing to disagree with. Needs either a KGP release that supports it or a hand-rolled
   classes.jar signature check. Owner decision on the mechanism.
 - F-COV1: REDUCED 2026-08-18 to SIX of twenty. wasmJs now executes (kiteplayer-network runs 12
   tests on wasmJs/node, and the DASH manifest parser is covered there for the first time), and a
@@ -17541,6 +17577,14 @@ it.**
   than one core".
 - **W.17 The matrix runs on the Linux JVM** (W-20). Commit: "Decode the whole matrix on a
   Linux JVM".
+
+**Status, verified commit by commit 2026-08-18.** All seventeen sub-phases are accounted for.
+Fifteen landed under the titles named above, across both repositories (W.1, W.5 and W.13 are
+KiteCodec commits, which is why they do not appear in KitePlayer's log). The two without a commit
+are closed rather than missing, and both for the same reason: **W.11** was CLOSED as superseded by
+W-19, and **W.12** CONCLUDED into W-19 as well, its three candidate changes measured and two
+rejected on their numbers (the raster shader at 0.15x and the fixed-point rewrite at 1.04x, against
+the parallel slice's 3.36x on four tasks). No sub-phase is silently unfinished.
 
 **The honest bound on this phase, written before it starts.** 17.3 estimates S3 at 70 to 108
 hours and S6 at 80 to 120. Nothing in this expansion changes that arithmetic. What this phase
@@ -18368,6 +18412,24 @@ deliberately left open.
 - **X.14 The matrix runs on the web** (X-14). Commit: "Decode the whole matrix in a browser".
 - **X.15 The browser decodes what it can in hardware** (X-15). Commit: "Let the browser decode the
   frames it already knows how to decode".
+
+**Status, verified against the tree 2026-08-18 (not from notes).**
+- X-01 to X-07, X-09, X-12, X-15: LANDED, each with its commit.
+- **X-08 STILL OPEN.** No Worker exists anywhere in the web sources; X-06's blocking IO still has
+  no thread that is allowed to wait.
+- **X-10 STILL OPEN.** `WebOutputBackend.audioSink` is `SilentPacedAudioSinkFactory`, whose own
+  KDoc names the real one: an AudioWorklet fed by a ring. The web keeps correct time and makes no
+  sound.
+- **X-11 STILL OPEN, and previously mis-summarised as done.** `WebOutputBackend.videoRenderer` is
+  `null`. The web sample draws through its own Compose `Canvas` in `Main.kt`, which is what the
+  spike measured; there is no `VideoRendererFactory` behind the SPI. A measurement that a frame CAN
+  be drawn is not a renderer.
+- **X-13 STILL OPEN.** No artifact layout and no deployment story: COOP and COEP appear only in
+  this file and the spike document, in no header, sample or doc a consumer could follow.
+- **X-14 STILL OPEN.** The 17.5 matrix has never run in a browser.
+- The 4K non-goal re-decision stands open too: 17.9 declared 4K out of scope on a 1.0x software
+  measurement, and X-15 then measured 715 fps through the browser's own decoder at 1080p. That
+  non-goal must be re-decided against a 4K clip rather than inherited.
 
 **The honest bound on this stage, written before it starts.** The spike costed this at 178 to 272
 hours against 17.3's S6 estimate of 80 to 120, and this expansion does not shrink that. It changes

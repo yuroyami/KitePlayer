@@ -1,0 +1,7 @@
+# Lines from the pre-split KPKMP.md that were INTENTIONALLY changed after the split, with why.
+# The verifier treats these as edited rather than lost. Keep this list short: every entry is a
+# place where the split's "not one line rewritten" promise was deliberately broken, and each one
+# should be obviously worth it.
+#
+# RULE ONE step 5 had to name the log's new home, since section 14 is no longer in this file.
+> 5. **Log the work.** Section 14 gets what was measured and what was NOT, in the same commit.

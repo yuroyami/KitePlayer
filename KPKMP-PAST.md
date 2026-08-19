@@ -8730,6 +8730,112 @@ figure above is a range because the host was not idle.
   together; overlay upload cost, which is bounded by `contentHash` caching and reasoned about
   rather than timed; and any throughput number at all.
 
+### 14.114 The SUPREME surges, 2026-08-18, absorbed here on 2026-08-19
+
+**Provenance.** These entries were the execution logs of `KiteCodec/SUPREME.md`, which was itself a
+Fable 5 verification pass over `KiteCodec/SOLSUPREME.md`, a third party audit of the pair. Both
+documents were distilled into KPKMP-FUTURE.md on 2026-08-19 and deleted. Their OPEN findings live in
+17.15 through 17.19 of that file. What follows is what was DONE, kept because the measurements are
+evidence and evidence does not get thrown away.
+
+**The verification pass itself.** Roughly 100 concrete code claims were read at their cited lines
+across all 20 release blockers, both P1 tables, the C and JNI section, the DSL audit, the
+documentation table and the player sections. One claim was overstated, none were fabricated. The
+pass also produced eight findings of its own, of which the sharpest was that a Wasm comment
+described C behaviour that did not exist, so the binding reported EVERY open option as unused on
+every open.
+
+**The Now tier.** Seven quick wins. The literal `$key` in two option error messages (the code really
+did carry the escaped `${'$'}` form at `f135ae2`); the Wasm decoder context leaked when the source
+closed first, and the comment claiming the container owned it was wrong about FFmpeg; unused option
+reporting; the C invalid pixel format that aborted the process while its test blessed the crash;
+converted RGB frames carrying the source's limited range tags; a Web renderer that accepted every
+pixel format including Opaque; and a codec version pinned twice outside the catalog.
+
+*Measured:* a throwaway emcc probe linked the real archive and proved the caller's key array came
+back byte for byte unchanged, upgrading the option finding from a reading to a fact. The macOS
+sample played `sync1080p30.mp4` end to end, 300 of 300 frames, 0 dropped, 0 repeated, 0 underruns,
+14 ms final drift.
+
+**The Next tier, two silent losses.** The player declared the media ended while decoded audio, the
+handoff channel and the tempo stage still held samples. *Measured, before and after, at 1.5x with
+pitch preserved:* the device received **15,480 frames, then 16,896**. Those 1,416 frames are two
+pitch periods, about 29 ms, and they are the end of the media. At 1.0 the tempo stage is bypassed
+and there is no difference, which is why the pinning test runs at 1.5x. On the KiteCodec side the
+Wasm backend dropped refused packets, sent its drain signal once, treated a closed packet as that
+signal, and seeked without the container start time; *measured:* the seek was landing **3 seconds
+wrong** on a file with a nonzero start.
+
+**Group 1, the safety pair.** Per object reentrant locks on Frame, Packet and StreamDecoder on
+Native, and an operation ledger on FilterGraph because `process` suspends and a lock cannot be held
+across a suspension. Real close state machines on both sink backends, with the Native one split into
+two flags because close WRITES on its way out. *Proven:* 300 rounds of close against read on a
+frame, 200 of close against receive on a decoder, 200 of close against feed on a graph, each with
+closer and worker on different threads; 50 rounds of two simultaneous JVM sink closes leaving
+exactly one valid container. Real 1080p playback through the leased frame path at 1 ms worst
+schedule, so the per frame lock is invisible at playback rates. *Honesty:* Kotlin/Native has no
+thread sanitizer, so "no crash under stress" is the strongest oracle available on that side.
+
+**Group 2, the commands that lied.** Nine defects, all the same shape: a call reporting success for
+something that did not happen. Track selection became a transaction returning `Applied`,
+`Superseded` or `Discarded`, with one desired selection per KIND so audio and subtitle both apply on
+one reopen. External subtitle add waits for the reopen its selection needs and rolls the appended
+track back if it never applies. Cancelling a capture or a frame step stopped killing the player. A
+stop queued during an open really preempts it. The first frame reports what it was. A renderer
+refusal got its own counter instead of reading as a slow decoder. Session counters fold into
+monotonic totals. Dropped events are counted. Terminal close is bounded. Every open of an item gets
+its own reader.
+
+*Proven:* 14 falsifications, 13 red. The fourteenth is the bounded close, and reverting it produces
+a HANG rather than a failure, which is the defect itself; the run was killed after ten minutes with
+the test still waiting, and that is recorded as the evidence rather than dressed up. *Two tests were
+thrown away for being green for the wrong reason:* a subtitle rollback test that passed without any
+rollback because a FAILED reopen rebuilds the track table anyway, and a dropped event test that
+never dropped anything because a collector stalling on a timed delay keeps up perfectly under
+virtual time. The replacements lose 135 of 200 events.
+
+**Group 3, picture and sound.** `LinearResampler` was replaced by `SincResampler`, 32 taps, 512
+phases, Blackman window, cutoff at the lower Nyquist. *Measured:* a 15 kHz tone converted 48 kHz to
+16 kHz has nowhere to go, and through the old linear interpolation **1.0 of its amplitude arrives at
+1 kHz**, in the middle of speech, as a whistle that was never recorded. The sinc kernel puts it
+below 0.01. That one number is the whole case for the rewrite.
+
+*Measured:* `ffmpeg -ac 2` turns a 5.1 clip whose only content is an LFE tone into EXACT silence.
+FFmpeg drops the LFE. This had been an assumption in every previous version of the code, and the
+surround fixtures were built with a SILENT LFE specifically so the disagreement could never surface
+in a test; the generator said so in a comment. A fixture now carries a 60 Hz tone in the LFE alone
+and pins it. *Measured:* turning normalisation on by default put the engine a fixed **7 dB** below
+its own reference recordings, so the default follows the oracle.
+
+CoreAudio stopped declaring a layout it was not given (it had tagged every count above two as
+MPEG 5.1 A and thrown the unit's refusal away with a cast to void). A failed renderer is detached
+instead of leaving permanent black. A frame step steps a real decoded frame instead of seeking to
+the current position plus a nominal frame period.
+
+*Proven:* eight falsifications, seven red. The eighth was DELETED rather than kept: whole matrix
+versus per row normalisation cannot be falsified today because every modelled matrix is symmetric,
+so the two rules are numerically identical. A test that cannot fail is not a test.
+
+**The KiteCodec correctness pass at M and L.** Damaged data became visible: all four backends had
+treated `AVERROR_INVALIDDATA` exactly like a consumed packet, so a rotted file decoded to fewer
+frames with no error, no warning and no count. There is now a `CorruptData` policy and a skipped
+count. An encoder became one way. A failed stream became terminal. Subtitles alone became a real
+output. A copy only transcode learned where it is.
+
+*Two corrections made mid pass, both worth keeping as method.* Marking an encoder spent in a
+`finally` looked right and was wrong: a drive that fails BEFORE the codec is touched has drained
+nothing, and marking it spent replaced the real failure with a misleading one on retry. The existing
+contract suite caught it in under a minute. And a poison path released a borrowed handle the
+existing `finally` already released, a double release; that one was caught by re-reading before
+running, not by a test, which is an argument for the multi-pass habit rather than against it.
+
+**What the 2026-08-19 distillation found wrong with these logs.** Recorded here so the entry does not
+read better than it was. The headline count paragraph said 6 of 20 release blockers closed while its
+own tables marked 10. Six rows logged DONE are not done on every backend. The P0-05 fix introduced
+two leaks. Three "covered by existing tests" claims were false, and the emcc probe described above
+is not in the repository. Ten Wasm rows have no test and cannot get one until a `wasmJsTest` source
+set exists. The detail is in KPKMP-FUTURE.md 17.16.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

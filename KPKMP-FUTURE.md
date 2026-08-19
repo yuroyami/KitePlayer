@@ -3,6 +3,28 @@
 **This file is STANDALONE. Everything needed to work is in it.** The pilot document is two files
 and still one document; its other half, KPKMP-PAST.md, is finished business you never have to open.
 
+> ## **IT NOW COVERS BOTH REPOSITORIES. THERE IS NO OTHER PLAN DOCUMENT ANYWHERE.**
+>
+> **On 2026-08-19 the two audit documents living in KiteCodec were distilled into this file and
+> deleted.** They were `SOLSUPREME.md`, a third party code audit of the pair, and `SUPREME.md`, a
+> verification pass over it plus six execution logs. Their open findings are in 17.15 through
+> 17.19; the ORDER to do them in is 17.20; their execution logs moved to KPKMP-PAST.md section
+> 14.114, where every other finished thing already lives. KiteCodec keeps a `PLANNING.md` pointer so
+> a reader landing in that repository is not stranded.
+>
+> **Start at 17.20.** It is one page and it says what to do first and why.
+>
+> This is the same move 17.11 records for SOL_REVIEW.md and ANDROID_GPU_WORK.md on 2026-08-16, and
+> it is made for the same reason: **an open item in a document nobody opens is not tracked, it is
+> lost.** Two of the six rows this distillation had to correct were rows one document listed as
+> open while another had already closed them.
+>
+> **The distillation was not a copy.** Every open claim in both documents was re-verified against
+> KiteCodec `dd2823c` and KitePlayer `e201186` by locating each symbol BY NAME, because every line
+> number in both documents had rotted. That pass found six rows logged DONE that are not done on
+> every backend, one fix that introduced two leaks of its own, three previously unknown safety
+> defects, and four counts that contradicted their own tables. All of it is in 17.16 and 17.19.
+
 > ## **RULE ZERO: HOW TO TALK TO THE OWNER. READ THIS BEFORE ANY REPLY.**
 >
 > **The owner did not write this document and has not read it. An agent wrote it.**
@@ -289,43 +311,43 @@ exactly that until later evidence moves it.
 
 ## 3. State of the code, verified
 
-**Proven working, measured on this machine (evidence levels 5 and 6).** Audio and video
-playback in sync on macOS arm64: 1080p30 (300/300 frames, 0 dropped, 0 underruns),
-720p59.94 (480 frames, 0 dropped), 4K HEVC 10-bit video-master (180 frames), 3 minute
-audio soak with 0 ms clock drift. Colour conversion verified against `ffmpeg` CLI output
-with mean component error under 2 of 255 for BT.709, BT.601 and yuv420p10le. A window
-draws real frames via Core Graphics. 163 tests pass across 4 suites. KitePlayer baseline
-is `e5ddccc`; KiteCodec baseline is `f442b82`.
+**Re-written 2026-08-19 because the previous version had rotted into fiction.** It said there was
+no `KitePlayer` facade and no `PlaybackCore`; both have existed for months. It counted 163 tests;
+there are 874 in KitePlayer alone. It named baselines two dozen commits stale. A "state of the
+code" section that describes a tree from months ago is worse than no section, because it is read
+with the confidence of a measured one. What follows is measured against KitePlayer `e201186` and
+KiteCodec `dd2823c`.
 
-**The architecture that is settled.** One engine in `commonMain` with no platform code and
-an injected `MonotonicClock`. Pull-shaped audio sink whose real-time callback publishes
-(pts, audibleAtNanos) anchors through a seqlock; the clock is anchored to what the device
-reports, never estimated from queued sample counts. Generation counters invalidate stale
-work after a seek by comparison at the next hop; they are defence in depth, and after this
-revision they no longer substitute for quiescence (see D34). The sync law and its
-constants live in code (`SyncLaw`, `FrameDurationEstimator`, `SeekTiming`, `BufferPolicy`
-defaults) and are not retuned without evidence. The KiteCodec low-level layer
-(`PacketReader`, `StreamDecoder`, `withPlanes`, `hardwareSurface`, behind
-`@KiteCodecLowLevelApi`) mirrors libavcodec's send/receive shape and moves packet
-references without copying.
+**What exists and works.** The full engine: `KitePlayer` facade over `PlaybackCore`'s actor loop,
+workers for demux, both decoders, the audio feed and the video schedule, the quiesce handshake,
+`SyncLaw`, `MediaClock`, the seek machine, packet queues, `AudioPlayback` and `VideoPlayback`.
+Audio and video play in sync on macOS arm64 at 1080p30, 720p59.94 VFR and 4K HEVC 10 bit, each at
+zero dropped frames and zero underruns. The audio path has a real windowed sinc resampler, a
+measured downmix policy, a WSOLA tempo stage and pitch preservation. Subtitles decode and draw,
+with libass on all six Kotlin/Native targets plus Android. There are Android, Apple, desktop JVM,
+Linux, and Web output paths, and the desktop JVM plays the whole 17.5 conformance matrix.
 
-**What does not exist.** No `KitePlayer` facade, no `PlaybackCore`; the sample wires the
-pipeline by hand. Seeking is designed but connected to nothing. No resampler, downmixer or
-gain stage. Rotation stops at the KiteCodec boundary. Subtitles are one orphaned parser.
-Only macOS arm64 has backends. There is no Metal renderer, no hardware decode, no
-network/live path, no published artifact of any kind, and KiteCodec's own README records
-that its Maven artifacts and prebuilt FFmpeg release assets do not exist yet.
+**The measured size of the thing.** 874 Kotlin test functions in KitePlayer across 123 test files,
+256 in KiteCodec across 42; nine C suites in KiteCodec and ten in KitePlayer's real-time core.
 
-**The verdict this file acts on.** Two independent reviews agree: the engine core is
-genuinely Kotlin-first, the KiteCodec layer is genuinely FFmpeg-first, and the faults
-cluster in three places. First, the middle layer re-derives things FFmpeg already solved
-and gets some wrong (timestamp rescale, DTS units, start time, channel layouts). Second,
-ownership is inconsistent at exactly one seam (the shown frame) and the real-time audio
-contract is violated in one place (per-callback allocation). Third, a large public surface
-promises what nothing implements. The correct response is to repair the substrate in
-Horizon A, then build the facade on valid contracts, and to let Horizon B carry everything
-that makes it a product.
+**Where the two repositories stand apart, and it matters.** KiteCodec HAS continuous integration:
+four workflows (`ci`, `docs`, `publish`, `release-binaries`). **KitePlayer has no `.github`
+directory at all.** Every claim about KitePlayer's health is a claim about somebody's laptop.
 
+**What still does not exist.** No published artifact of either repository that a stranger can
+resolve. No audio device recovery. No viewport aware subtitle rasterisation. On the Web, no test
+source set for the Wasm backend at all, so a whole class of fixes is written but unfalsifiable.
+DRM is out of scope by decision (section 12), not missing by accident.
+
+**The verdict this file acts on.** The 2026-08-18 audit and its verification pass agree with the
+two earlier reviews: the engine core is genuinely Kotlin first, the KiteCodec layer is genuinely
+FFmpeg first, and what is left divides cleanly in two. The CORRECTNESS half is nearly finished:
+the logs close ten of twenty release blockers, and of the ten still open, nine are packaging, so
+**KC-WEB-IO is the only correctness blocker left**. Read "closed" with one caution the
+2026-08-19 pass earned: two of those ten are overstated, four are real code that no test can
+falsify because the Wasm backend has no test source set, and one of them introduced two leaks while
+fixing one. 17.16 names each. The DISTRIBUTION half has not started and cannot start on this
+machine: it needs credentials and one licence decision that belong to the owner (17.17).
 ---
 
 ## 7. Constants
@@ -797,9 +819,16 @@ Decisions from the merged reviews, binding on this run:
     the origin, `mapDuration` never does (D10).
 11. Missing pts is synthesised at the decoder wrapper; `VideoFrame.pts` stays non-null.
     Low-level KiteCodec keeps representing absence honestly (null helpers).
-12. The linear resampler is interim, labelled as such in KDoc and README, and is replaced
-    by swresample in B4. It is not the 1.0 default.
-13. Speed with audio open throws until B4.
+12. SUPERSEDED 2026-08-19. The linear resampler is GONE, replaced by `SincResampler`, a
+    32 tap windowed sinc at 512 phases. **swresample was never adopted and is no longer the
+    plan**: it is linked into KiteCodec and its version is reported, but no `swr_` function is
+    called from any Kotlin or C in either repository, and no `SwrContext` exists for anyone to
+    own. The library being present keeps the option open; nothing depends on taking it. What
+    remains of the old audio quality row is NOT the rate conversion, it is that `ChannelMixer`
+    folds only to stereo (17.19).
+13. SUPERSEDED 2026-08-19. Speed with audio open works. `TempoStage` does pitch preserving time
+    stretch, `preservePitch` is public and published in the snapshot, and the tempo tail is part
+    of the end of media gate.
 14. Track switching reopens seekable sources only (D32 gate) until B6.
 15. HDR and BT.2020 CL render approximately WITH a typed warning in Horizon A; the 1.0
     gate requires the managed path (B5), at which point approximate output becomes an
@@ -2327,76 +2356,576 @@ named so their absence is not read as an oversight: the `js` target stays a plac
 `wasmJs` is lit, the threaded artifact is optional and behind a feature detect rather than default,
 and 4K stays the non-goal 17.9 already declared, now with the spike's measured 1.0x behind it.
 
-## 17.15 THE CONSOLIDATED OPEN REGISTER
+## 17.15 THE CONSOLIDATED OPEN REGISTER, BOTH REPOSITORIES
 
-**Every open item in the project, one line each, with where its detail lives.** Born 2026-08-18,
-because the open rows were scattered across EIGHT places (4, 11, 15.5, 16.4, 17.11, 17.11.b, 17.13,
-17.14) and no reader ever held all of them at once. That scattering is what let six closed rows sit
-marked open for a day, and what let SOL-P10 ask for a `SwrContext` that has never existed in the C.
+**Every open item in the project, one line each, with where its detail lives.** Born 2026-08-18 for
+KitePlayer alone. **Widened 2026-08-19 to cover KiteCodec too**, when the two audit documents that
+had been living in that repository (`SOLSUPREME.md`, a third party audit, and `SUPREME.md`, its
+verification pass) were distilled into this file and deleted. This register is now the only
+surviving index of their open findings, exactly as it already was for the two documents distilled
+into 17.11 on 2026-08-16.
+
+**If you only want to know what to do next, go to 17.20. It is the order, and it is short.**
+This section is the inventory; 17.20 is the plan over it.
 
 **This table is the index and the authority on WHAT is open. It is not the detail.** Follow the
-pointer for the argument, the evidence and the history. "here" means this file, KPKMP-FUTURE.md;
-"PAST" means KPKMP-PAST.md, and a row pointing there is one whose DETAIL is historical even though
-the row itself is open.
-
-**Keeping it true is RULE ONE's job.** Close a row here in the same commit that closes it in the
-code. A row that leaves this table must leave it as CLOSED with a commit, never by deletion.
+pointer. "here" means this file; "PAST" means KPKMP-PAST.md.
 
 Verified column: **[V]** re-verified against the tree on the date shown. **[C]** carried from an
-audit, anchor never re-checked, so check before trusting. **[owner]** needs a decision or hardware
-this machine does not have.
+audit, anchor never re-checked. **[owner]** needs a decision or hardware this machine does not have.
+
+**Everything dated 08-19 was re-read against KiteCodec `dd2823c` and KitePlayer `e201186` by
+locating each symbol by name, because every line number in both audit documents had rotted.**
+
+### The KitePlayer rows
 
 | Row | Open item, in one line | Ver | Detail |
 |---|---|---|---|
-| SOL-S3 | overlay draws the SOURCE bitmap's size, never the region's own | [V] 08-18 | 17.11, here |
-| SOL-S7 | public cue styling claims more than the rasterizers apply | [C] | 17.11, here |
-| SOL-S8 | positioned bottom cues still consume implicit stacking space | [C] | 17.11, here |
-| SOL-A6 | passthrough, offload, device selection, route recovery absent | [V] 08-18 | 17.11, here |
-| SOL-P3 | KiteCodec frame access copies twice and boxes its plane list | [C] | 17.11, here |
-| SOL-P8 | LinearResampler aliases; ChannelMixer cannot remap equal counts | [V] 08-18 | 17.11, here |
-| SOL-P9 | a track change reopens the whole session, so live media cannot | [V] 08-18 | 17.11, here |
-| SOL-P10 | **QUESTIONED**: asks for a SwrContext that exists nowhere in the C | [V] 08-18 | 17.11, here |
-| SOL-API2 | logger, liveBackBuffer, liveMaxLag, startDisabled accepted and unused | [V] 08-18 | 17.11, here |
-| SOL-API4 | droppedFramesDecode, audioLatency, containerBitrate, ExternalMaster, LateAndDecode are placeholders | [V] 08-18 | 17.11, here |
-| SOL-API7 | REDUCED: refusal is typed now; no sealed surface model yet | [V] 08-18 | 17.11, here |
-| SOL-C1 | 213 exported C helpers that Kotlin/Native cinterop could do | [V] 08-18 | 17.11, here |
-| SOL-C2 | non-real-time CoreAudio setup still lives in C | [V] 08-18 | 17.11, here |
-| SOL-C3 | filter composition still builds into a fixed char args[512] | [V] 08-18 | 17.11, here |
-| SOL-K1 | kitecodec-core still passes -Xcontext-parameters, redundant | [V] 08-18 | 17.11, here |
-| SOL-K2 | the modernization posture, a style rather than a task | [C] | 17.11, here |
-| SOL-B4 | vendored archives and Kotlin/Native disagree on the macOS floor | [C] | 17.11, here |
-| SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-18 [owner] | 17.11, here |
-| SOL-B6 | the twin repos are not one graph; mavenLocal can shadow a sibling | [C] | 17.11, here |
-| SOL-B7 | both builds emit Gradle API warnings that become Gradle 10 breaks | [V] 08-18 | 17.11, here |
-| SOL-B8 | remote publication still lacks the ordinary JVM and Android artifacts | [C] | 17.11, here |
+| SOL-S3 | overlay draws the SOURCE bitmap's size, never the region's own | [V] 08-19 | 17.11, here |
+| SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
+| SOL-S8 | positioned bottom cues still consume implicit stacking space | [V] 08-19 | 17.11, here |
+| SOL-A6 | passthrough, offload, device selection, route recovery absent | [V] 08-19 | 17.11, here |
+| SOL-P3 | frame access copies twice and boxes its plane list | [V] 08-19 | 17.11, here |
+| SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
+| SOL-P9 | a track change reopens the whole session, so live media cannot | [V] 08-19 | 17.11, here |
+| ~~SOL-P10~~ | CLOSED as MOOT 08-19: it asks for a SwrContext that exists nowhere | CLOSED | 17.11, here |
+| SOL-API2 | five, not four, accepted-and-unused config knobs | [V] 08-19 | 17.11, here |
+| SOL-API4 | five stats placeholders, untouched by the new real counters | [V] 08-19 | 17.11, here |
+| SOL-API7 | REDUCED: refusal is typed; the engine never calls `supports()` | [V] 08-19 | 17.11, here |
+| SOL-C1 | 198 exported C symbols, not the 213 this row has always said | [V] 08-19 | 17.11, here |
+| SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
+| SOL-C3 | filter composition still builds into a fixed `char args[512]` | [V] 08-19 | 17.11, here |
+| SOL-K1 | `-Xcontext-parameters` still passed for nothing | [V] 08-19 | 17.11, here |
+| SOL-K2 | the modernization posture; UNFALSIFIABLE as written | [V] 08-19 | 17.11, here |
+| SOL-B4 | three macOS floors disagree: 26.0, 12.0 and 11.0, measured | [V] 08-19 | 17.11, here |
+| SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-19 [owner] | 17.11, here |
+| SOL-B6 | the twin repos are not one graph; mavenLocal shadows a sibling | [V] 08-19 | 17.11, here |
+| SOL-B7 | both builds emit warnings that become Gradle 10 breaks, MEASURED | [V] 08-19 | 17.11, here |
+| SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
 | AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
-| test debt | nineteen named missing regressions, PARTLY written, never reconciled | [V] 08-18 | 17.11, here |
-| F-ABI1 | no Android ABI dump exists, so androidMain has nothing to disagree with | [V] 08-18 [owner] | 17.11.b, here |
-| F-COV1 | tests run on six of twenty surfaces; tvos BLOCKED, no SDK here | [V] 08-18 | 17.11.b, here |
+| test debt | nineteen named missing regressions, never reconciled | [V] 08-19 | 17.11, here |
+| F-ABI1 | no Android ABI dump exists in any of the twelve `api/` dirs | [V] 08-19 [owner] | 17.11.b, here |
+| F-COV1 | six of twenty surfaces; tvos blocked by a missing RUNTIME, not an SDK | [V] 08-19 | 17.11.b, here |
 | F-ALPHA1/ROT1/POS1 | the device-only halves: real pixels on a real screen | [owner] | 17.11.b, here |
-| X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-18 | 17.14, here |
-| ~~X-10~~ | CLOSED 08-18 by "Hear the picture in a browser, and say what it costs": AudioWorklet sink, silent one demoted to fallback | CLOSED | 17.14, here |
-| ~~X-11~~ | CLOSED 08-18 by "Draw the frame on the web, on a canvas rather than through Compose" | CLOSED | 17.14, here |
-| X-13 | no artifact layout and no deployment story | [V] 08-18 | 17.14, here |
-| X-14 | the format matrix has never run in a browser | [V] 08-18 | 17.14, here |
-| 4K | the non-goal was set at 1.0x software and never re-decided against 715 fps hardware | [V] 08-18 [owner] | 17.14, here |
-| PAR-1 | mingw carries 18 hwaccels while the decision says it carries none | [V] 08-18 [owner] | 17.11, here |
-| PAR-2 | Linux compiles zero hwaccels | [V] 08-18 | 17.11, here |
-| PAR-3 | android-x64 still builds with --disable-asm | [V] 08-18 | 17.11, here |
-| ~~PAR-4~~ | CLOSED 08-18 by the same commit: opus and vorbis decoders and parsers in the wasm profile, symbols verified | CLOSED | 17.11, here |
-| PAR-5 | native linux and mingw have no output backend at all | [V] 08-18 [owner] | 17.11, here |
+| X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-19 | 17.14, here |
+| X-13 | no artifact layout and no deployment story | [V] 08-19 | 17.14, here |
+| X-14 | the format matrix runs under node, never in a browser | [V] 08-19 | 17.14, here |
+| 4K | the non-goal was set at 1.0x software, never re-decided | [V] 08-18 [owner] | 17.14, here |
+| PAR-1 | mingw carries 18 hwaccels; no `--disable-autodetect` on that path | [V] 08-19 [owner] | 17.11, here |
+| PAR-2 | Linux compiles zero hwaccels | [V] 08-19 | 17.11, here |
+| PAR-3 | android-x64 has 0 SIMD symbols against arm64's 1365 | [V] 08-19 | 17.11, here |
+| PAR-5 | native linux and mingw declare targets with no source set | [V] 08-19 [owner] | 17.11, here |
 | PAR-6 | AV1 hardware decode has never been positively proven | [owner] | 17.11, here |
-| PAR-7 | fd: still mutates the caller's descriptor; a positional MediaIo would not | [V] 08-18 | 17.11, here |
-| L | libass: JVM bridge, wasm, the per-frame animated hook, the mpv corpus | [V] 08-18 | 17.12, here |
+| PAR-7 | `fd:` still mutates the caller's descriptor | [V] 08-19 | 17.11, here |
+| L | libass: JVM bridge, wasm, the animated hook, the mpv corpus | [V] 08-19 | 17.12, here |
+| KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |
+| KP-API | throwing stubs, unusable default factory, five dead knobs, global logger | [V] 08-19 | 17.16, here |
+| KP-B1..B13 | player build and release; no CI of any kind exists | [V] 08-19 | 17.16, here |
 | M riders | the iPhone KiteStats run and the physical device session | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
-| B-horizon | Deferrals 3, 4, 5 and interlude items 2 to 9 (gate call, ABI ratchet, fuzz rule, derived suite lists, the kprt_ decision) | [C] | PAST 15.5, 16.4 |
+| B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |
 
-**Counts, so a reader knows the shape without adding up:** 43 rows, of which 3 are now CLOSED and
-40 remain. 21 verified against the tree on 2026-08-18, 10 carried and unverified [C], 11 needing an
-owner decision or hardware. One row (SOL-P10) is QUESTIONED and should be read before it is
-scheduled. The two closed rows stay listed, struck through, until the next sweep: a row that
-vanished would leave a reader unable to tell a finished item from one that was never written.
+### The KiteCodec rows
+
+| Row | Open item, in one line | Ver | Detail |
+|---|---|---|---|
+| KC-WEB-IO | the Web reader stages whole files a byte at a time and never closes | [V] 08-19 | 17.16, here |
+| KC-CANCEL | a blocking FFmpeg call cannot be cancelled; no interrupt callback | [V] 08-19 | 17.16, here |
+| KC-SPEC | output specs carry no colour, HDR, pixel aspect or exact layout | [V] 08-19 | 17.16, here |
+| KC-REMUX | a "lossless" remux drops tags, disposition, rotation and side data | [V] 08-19 | 17.16, here |
+| KC-AENC | the audio encoder validates and converts nothing | [V] 08-19 | 17.16, here |
+| KC-COLOR-PROV | a guessed colour cannot be told from a declared one | [V] 08-19 | 17.16, here |
+| KC-TRACKSEL | primary track selection has no policy; Wasm has no disposition | [V] 08-19 | 17.16, here |
+| KC-WASM-MODEL | the Wasm probe answers with plausible emptiness | [V] 08-19 | 17.16, here |
+| KC-FILTER-DIVERGE | JVM filters eagerly, Native lazily, and the key omits SAR | [V] 08-19 | 17.16, here |
+| KC-FILTER-LOCK | user callbacks run under the graph lock, on BOTH backends now | [V] 08-19 | 17.16, here |
+| KC-FILTER-SESSION | `process` is single use and the type does not say so | [V] 08-19 | 17.16, here |
+| KC-FRAME-FLOW | a buffered frame Flow strands native frames; documented | [V] 08-19 | 17.16, here |
+| KC-BRIDGE | 14 C and JNI bridge defects; no lease, no exception checks | [V] 08-19 | 17.16, here |
+| KC-CFILTER | 7 C filter and frame defects; substring pins, unchecked strdup | [V] 08-19 | 17.16, here |
+| KC-DSL | 11 DSL defects; untyped steps, no marker, raw map wins | [V] 08-19 | 17.16, here |
+| KC-PERF | 10 hot paths; per-byte Web interop, the JVM copy chain | [V] 08-19 | 17.16, here |
+| KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
+| KC-DOCTRUTH | 11 documentation contradictions; the build file contradicts itself | [V] 08-19 | 17.16, here |
+| KC-CI-C | CI runs ONE of seven C suites | [V] 08-19 | 17.16, here |
+| KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
+| KC-NOTDONE | six rows logged DONE that are not done on every backend | [V] 08-19 | 17.16, here |
+| KC-P0-05-LEAK | the P0-05 fix introduced two new leaks | [V] 08-19 | 17.16, here |
+| P0-11..P0-19 | the whole distribution program; nine release blockers | [V] 08-19 [owner] | 17.17, here |
+| P0-14 | GPL tasks build LGPL trees, and a test now enforces it | [V] 08-19 [owner] | 17.17, here |
+| SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
+
+### The safety rows, which outrank everything above
+
+| Row | Open item, in one line | Ver | Detail |
+|---|---|---|---|
+| SEC-1 | a subtitle can overflow the heap on 32 bit Android ABIs | [V] 08-19 | 17.19, here |
+| SEC-2 | a manifest can make the player fetch anything, with the caller's cookies | [V] 08-19 | 17.19, here |
+| SEC-3 | secrets survive the redaction built to remove them | [V] 08-19 | 17.19, here |
+| SEC-4 | the JNI layer has no exception discipline at all | [V] 08-19 | 17.19, here |
+| SEC-5 | a filter value is interpolated unescaped, and a golden test pins it | [V] 08-19 | 17.19, here |
+| SEC-6 | two hangs and a crash in the network module | [V] 08-19 | 17.19, here |
+
+**Counts, measured off this table rather than estimated.** 43 KitePlayer rows, of which 1 is CLOSED
+and **42 remain**. 25 KiteCodec rows. 6 safety rows. **73 open rows in total.**
+
+Of the 42 open KitePlayer rows, **37 carry [V] and none carry [C]**: all eight rows that were
+carried and unverified before this pass have now been read against the tree. The remaining 5 carry
+neither mark because they need hardware this machine does not have, and 10 rows in total are
+[owner] gated. **So nothing in this register is unverified except what cannot be verified here.**
+
+Three rows the previous version kept struck through (X-10, X-11, PAR-4) are gone, because that
+version said they would stay "until the next sweep" and this is the sweep. SOL-P10 is struck here
+for one edition and goes the same way next time.
+
+**Corrections this pass made to the register's own bookkeeping.** The previous counts paragraph said
+"21 verified, 10 carried, 11 owner". Counted directly, it was 27, 8 and 10. Two rows, SOL-B7 and
+SOL-API2, were marked [V] in this index while their own detail in 17.11 still said [C], so the index
+and the detail disagreed about what had been checked and both rows were skipped by the sweep that
+believed the index. Both are now genuinely verified. **A register whose index disagrees with its own
+detail is the exact failure this section was created to end**, so the rule earns a sentence: when
+they disagree, the DETAIL wins, because it is the one written next to the evidence.
+
+### 17.16 The detail behind the register's new rows
+
+Written 2026-08-19 from the distillation. Every anchor here was located by symbol name against
+KiteCodec `dd2823c` and KitePlayer `e201186`.
+
+#### KC-NOTDONE. Six rows the execution log calls DONE that are not done everywhere
+
+**Read this row before any other, because it is the one that costs money.** A row marked DONE is a
+row nobody revisits. Each of these was logged as closed, and each is genuinely closed on at least
+one backend, which is why they read as finished. They are not.
+
+- **P1-11 is not done on the JVM at all.** `MediaSource.jvm.kt:239`, `withCodecParameters`, takes a
+  `StreamInfo` and immediately does `Internals.fmtStream(checkOpen(), stream.index)` with no
+  ownership check, **while the same class defines `requireOwnStream` at `:336` and calls it in
+  three other places.** Native's equivalent does call it (`MediaSource.native.kt:423`). So
+  `MediaSink.jvm.addCopyStream` still accepts a `StreamInfo` from a different `MediaSource` and
+  writes this file's codec parameters under the other file's time base, which is the defect
+  verbatim. The falsifying test lives only in `nativeTest`.
+- **P1-04 is not done on the Native muxer.** `MediaSink.native.kt:263` still throws
+  `FFmpegError.Internal("No encoder named ...")` while its JVM twin was converted in the same
+  commit, so `addVideoEncoder` and `addAudioEncoder` on Native cannot be caught by kind.
+- **P1-10 is incomplete on both backends, in the same place.** The poison is wired into
+  `newStreamFor` only. `addCopyStream` calls `avformat_new_stream` and then does work that can
+  throw, with no poison on either backend, so the muxer is left holding a half configured stream
+  and the sink still looks usable. Nothing tests the state machine at all.
+- **P0-08's guard is Native only, and the row said so, but the JVM hole is real:**
+  `MediaSink.jvm.kt:399` has no media type guard, so a video frame into a JVM audio encoder still
+  reaches FFmpeg.
+- **P0-07 is incomplete inside Native itself.** `Frame.withPlanes` and `Frame.hardwareSurface` are
+  shipped public API that still dereference through `checkedNative`, which **its own KDoc says is
+  not a lease**. That is the render path.
+- **P1-05 behaves differently on Wasm.** `MediaSource.wasmJs.kt:143` resets the skipped count at the
+  start of every `decodeStreams` and writes it only in the `finally`, so a Wasm caller reading it
+  mid flow always sees zero, while JVM and Native accumulate live for the source's lifetime. The
+  commonMain KDoc promises the second behaviour.
+
+#### KC-P0-05-LEAK. The fix for P0-05 introduced two leaks of its own
+
+In `decodeStreams`, `val reader = openPacketReader(streams)` sits BETWEEN the `catch` that unwinds
+the built decoders and the `try/finally` that owns their cleanup. `openPacketReader` can throw,
+because it is the call that takes the new cursor lease. When it does, **every decoder just built
+leaks its codec context**, which is precisely the defect P0-05 was opened to fix. In `extractFrame`
+the reader and the decoder are both opened outside the `try`, so a throwing `openDecoder` leaves
+`readerActive` true for ever and that `MediaSource` can never open another reader again.
+
+#### KC-CI-C. Continuous integration runs one of the seven C suites
+
+`ci.yml:167` and `:174` both run `./scripts/run-c-tests.sh <variant> test_identity`, while
+`run-c-tests.sh:38` defines seven suites. `test_ownership`, `test_buffers`, `test_rescale`,
+`test_strerror_thread`, `test_convert` and `test_args` run **only on a developer's laptop**. Every
+"C suites 7 of 7 green" line in the execution logs is therefore a true statement about a local run
+and a false impression about the project's guard rails. Cheap to fix and it changes what every
+future green means.
+
+#### Correctness, KiteCodec, still open
+
+One release blocker is left and it is the Web reader; everything else here is a P1.
+
+- **KC-WEB-IO (was P0-06). Wrong in five separate ways.** `WebIoBridge.kt:75-99` stages the whole
+  source under a 512 MiB cap; `drain` calls `io.seek(0)` without asking `io.seekable`; `writeBytes`
+  crosses into JavaScript once per byte; `open` does not suspend, so the staging blocks; and nothing
+  ever closes the `MediaByteSource`. **Two of those five break a written contract rather than a
+  quality bar.** `MediaByteSource` KDoc promises close runs exactly once and that seek is never
+  called on a nonseekable source. JVM honours both, Native honours seekable, Wasm honours neither
+  and says nothing. Size L, and untestable until a `wasmJsTest` source set exists.
+- **KC-CANCEL (was P1-07).** A repo-wide grep for `interrupt_callback` returns zero hits. The only
+  cancellation is one `ensureActive()` per demux iteration, so a network open, read or seek blocks
+  for ever, and `Transcoder.transcode` never leaves the calling dispatcher. Size L, C ABI change on
+  every backend. **This is the same hole 17.12's amended D-4 reopened as C-52 to C-54, so the two
+  rows are one piece of work and should be scheduled once.**
+- **KC-SPEC (was P1-26).** `MediaSink.kt:77-101` carries codec, size, pixel format, frame rate,
+  bitrate, keyframe interval and an untyped options map. Correction to the audit's wording: "cannot
+  express" is too strong, because that map reaches `av_opt_set`, so a determined caller can set some
+  of it by hand. The true claim is that there is no typed way and **nothing propagates from the
+  source**, so an encode silently flattens HDR and turns 5.1(side) into 5.1(back). Size L.
+- **KC-REMUX (was P1-27).** Both backends copy codec parameters and one time base and stop. Tags,
+  language, title, disposition, rotation, display matrix, side data and stream groups are all
+  dropped. Chapters are readable in the C and no writer consumes them; there is no program or
+  attachment path at all. Size M, **and it makes the README's "bit-exact" remux wording false
+  today**, which links it to KC-DOCTRUTH.
+- **KC-AENC (was P1-28).** Both backends read `if (audio) 0L else conversionFor(...)`, so video gets
+  a dimension check and a pixel format conversion while audio gets neither validation nor
+  conversion. A rate, format, layout or frame size mismatch fails late and cryptically. Size M.
+- **KC-COLOR-PROV (was P1-24).** All four sites overwrite an Unspecified field with a guess, so a
+  declared BT.709 and a guessed one are indistinguishable. The new `ColorInfo.rangeSpecified` flag
+  separates provenance for RANGE only. Wasm preserves Unspecified, so the backends disagree. Size M.
+- **KC-TRACKSEL (was P1-08).** JVM and Native skip attached pictures then take the first video;
+  `primaryAudio` is a plain `firstOrNull`; Wasm cannot exclude cover art because it never reads
+  disposition. No `TrackSelector` exists. **Bigger than a P1 suggests: doing it properly adds public
+  API.**
+- **KC-WASM-MODEL (was P1-34).** Container metadata and chapters are hardcoded empty; the stream
+  read omits metadata, disposition, start time, extradata, colour, VP9 and the layout mask, all
+  silently defaulted; everything that is not audio, video or subtitle collapses to `Data`, erasing
+  Attachment and Unknown. Rotation and SAR are populated now, so the audit's "erases major parts"
+  overshoots slightly. Size M.
+- **KC-FILTER-DIVERGE (was P1-17 and P1-18).** JVM builds both graphs once and eagerly from codec
+  parameters; Native builds them lazily from the first decoded frame and rebuilds on a key change,
+  so a mid stream format change behaves differently on the two. Native's key is a `List<Any>?`
+  allocated per frame and it omits SAR, which the builder one line away actually uses, and the audio
+  layout. Size L; the honest fix is moving orchestration to common Kotlin.
+- **KC-FILTER-LOCK (was P1-20). Now true on both backends, and the second one is new.** JVM's
+  `feedInput` is `synchronized(lock)` and invokes `onOutput` inside it. The operation ledger work
+  gave Native the same shape: `feedInput` wraps `drainTo` in `operation { }`, which is
+  `synchronized(opLock)`. **Two corrections on how to read this.** The reentrant case the audit
+  describes is HANDLED on Native by design, because the lock is reentrant and a callback that closes
+  the graph defers the free to the outermost exit; that is the ledger working. The residual Native
+  hazard is narrower: a callback that blocks on another thread needing `opLock` deadlocks. And the
+  comment at `FilterGraph.native.kt:111-113` argues that user code must not run under a lock while
+  the enclosing `operation { }` does exactly that. It is talking about the frame lease, so it is not
+  false, but it reads as a guarantee the function does not give. Size M.
+- **KC-FILTER-SESSION (was P1-19 residual, P1-21, P1-31).** The close versus operation race is
+  CLOSED on Native, with a ledger, a KDoc citing the audit, and a passing race test. What is left is
+  API shape: neither backend refuses concurrent or repeated collection of `process`, which closes
+  the graph in its `finally` and throws on a second collection at runtime rather than in the type;
+  and `feedInput` returns `Unit`, so a multi input graph cannot answer `NeedsInput(otherPad)` and
+  instead bounds its retry at two attempts and reports an untyped `InvalidArgument` carrying prose.
+  Both are documented. Size L, same design as the convergence work.
+- **KC-FRAME-FLOW (was P1-30).** `Frame.kt:13-18` states the defect verbatim in PUBLIC KDoc, so this
+  is known and written rather than hidden, and it stays listed only because a documented leak is
+  still a leak. There is no `Flow<Packet>`, so the blast radius is the frame path alone. Size M.
+
+#### The KiteCodec long tails, each a body of work rather than one fix
+
+| Row | Findings | What it actually is | Size |
+|---|---|---|---|
+| KC-BRIDGE | 14 | No lease on a resolved handle; O(n) close scan over a table that never shrinks, with caller controlled recursion depth; generation masked at 31 bits but stored and compared at 32, so a slot past `0x7FFFFFFF` stops resolving; the token's kind bits never validated; a pending JNI exception while a handle is minted, which leaks the context; modified UTF-8 on two paths while the correct decoder sits unused; callback exceptions cleared and collapsed to generic I/O; a thread attached and never detached; registration that erases every C signature | L |
+| KC-CFILTER | 7 | `[out]` detected by substring search; sources published progressively then freed on failure, leaving earlier entries dangling; four unchecked `av_strdup`; a plane index never bounded, with the test still asserting the wrong answer; an eight channel cap on upload only | M |
+| KC-DSL | 11 | Untyped steps, no `@DslMarker` anywhere, six of seven types with no validation, raw strings where a typed `SampleFormat` already exists, a raw options map applied after the typed keys so it wins, CBR emitted as VBV with no `nal-hrd`, the x264 preset ladder emitted for every codec including VideoToolbox, `CodecId` conflating bitstream identity with implementation | L |
+| KC-PERF | 10 | Per byte Web interop, whole input staging, a JVM upload chain of at least three copies, an output path that allocates native memory then copies to Java, no common zero copy lease, handle table scaling, per frame graph keys, a thread local scaler with no session | XL |
+| KC-BUILD | 23 | A 1,286 line build script; target truth duplicated across five hand synced representations; **`/usr/lib/include` on Linux, which is simply the wrong path**; a cache key that records a URL it never compares; redirects followed automatically inside the loop that validates them manually; filename only validation of local trees; two plugin tests excluded and no CI running any; unescaped `-D` values; unconditional `dllexport` for a static build; cache keys hashing one file | L |
+| KC-DOCTRUTH | 11 | README 0.0.1 against VERSION 0.0.9; minSdk 26 against 24 in seven places; wasmJs called a placeholder with "no media runtime" against 2,303 real lines; **the core build script contradicting itself at `:206` and `:553` about whether the JVM is a placeholder**; portable LGPL claimed to carry libsvtav1 when it carries only zlib; "bit-exact" remux; 180 internal register codes left in shipped sources | M |
+| SEAM | 8 | Target graphs that do not match, an `api` leak of a KiteCodec `Frame` pinned in both committed ABI dumps, non transactional source close, 467 hand written metadata mappings with one test, four modules repeating one config block with one of them missing a flag, and two version catalogs that have already drifted | L |
+
+#### The KitePlayer rows this pass added
+
+- **KP-NET.** Unvalidated 206 responses with no `Content-Range`, `ETag` or `If-Range` anywhere; a
+  seek that validates nothing and a class with no closed flag; no timeout, retry, backoff or
+  reconnect; DASH that picks one representation by bandwidth, drops audio, refuses live and
+  multi period, and cannot seek; an MPD repeat count taken verbatim from XML; and the module is not
+  published while all eleven other library modules are. **See also SEC-2 and SEC-6, which are in
+  this module and outrank all of it.**
+- **KP-API.** `editions()` and `programs()` throw unconditionally and a test pins that they do; the
+  default factory compiles and then throws; **five** accepted and unused config knobs, not the four
+  the old row said; public models that are mutable through arrays, giving identity equality; raw
+  FFmpeg option strings and filter chains at the public edge; a process wide logger beside a per
+  player one nothing reads; `Pts` arithmetic that is naked `Long` and prints garbage at
+  `Long.MIN_VALUE`; unchecked geometry in `CapturedFrame`; and no Java or Swift adaptation of any
+  kind. Six KDoc blocks deny features that shipped and three promise behaviour that does not exist.
+  **`spi/AudioSink.kt` contradicts itself inside one file:** line 83 says the engine collects
+  nothing from the events feed, line 185 says the engine rebuilds the sink in response to it.
+- **KP-B1..B13.** A release build that is debuggable and debug signed; no wrapper checksum, no
+  dependency verification, no lockfiles; an NDK chosen by string sort; a publication readiness check
+  that reads generated POM XML and nothing else; no `developers`, no signing, no Sonatype
+  configuration anywhere; two optional modules unpublished; test fixtures that are gitignored and
+  regenerated by the host `ffmpeg` with no pin or checksum; and **no continuous integration of any
+  kind: KitePlayer has no `.github` directory at all**, which means every claim about its health is
+  a claim about one laptop.
+
+### 17.17 The public release gate
+
+**A public claim about the PAIR stays blocked until every box below is green.** Adopted from the
+2026-08-18 audit's own gate, with each box's status re-checked against the tree on 2026-08-19.
+This is not the phase gate of section 9; section 9 says whether a CHANGE is safe to keep, and this
+says whether the pair may be offered to strangers.
+
+The shape of the answer, in one sentence: **the correctness half is nearly done and the
+distribution half has not started.**
+
+| # | The box | Status |
+|---|---|---|
+| 1 | Invalid C pixel formats cannot abort; the test fails on any signal | GREEN |
+| 2 | Native frame, decoder, filter and sink operations hold a lifetime lease for the whole FFI call | GREEN |
+| 3 | JVM and Native sink close is a terminal atomic state machine | GREEN |
+| 4 | Wasm send, drain, EOF, wrong stream, seek, extraction, options and ownership match the shared suite | CODE ONLY. The code changed and no test can fail: there is NO `wasmJsTest` source set in KiteCodec |
+| 5 | Web input is worker backed or explicitly small; no per byte interop, exactly once close | RED. KC-WEB-IO |
+| 6 | Every custom I/O failure path preserves its cause and closes once | GREEN on JVM and Native. RED on Wasm, which never closes the source at all |
+| 7 | Player EOF waits for decoded handoffs, every buffering stage, the video and subtitle lanes, and the sink | AMBER. Demux, both decoders, packet queues, the video frame queue, decoded audio in flight and the DSP tail and the sink drain are all in the gate, each bounded. The SUBTITLE lane is not |
+| 8 | Reopen paths get a fresh `MediaIo`; no closed source is reused | GREEN |
+| 9 | Open, stop, seek, track and subtitle selection, cancellation and close return truthful results | GREEN |
+| 10 | Every native output and render capability is leased through close; device or renderer loss recovers or fails typed | AMBER. A failed renderer is now detached. Audio device loss is still only warned about |
+| 11 | Every published JVM OS and architecture has a matching runtime artifact, or is not advertised | RED |
+| 12 | The ordinary Android AAR builds on CI and is device tested for its declared ABIs | RED |
+| 13 | Android Native attaches the JavaVM and device tests MediaCodec, or does not advertise it | RED |
+| 14 | The Wasm `.mjs` and `.wasm` runtime is in a versioned package and browser tested | RED |
+| 15 | GPL and LGPL names, configure flags, capabilities, link dependencies and licences agree | RED, and it needs an OWNER DECISION first |
+| 16 | Prebuilt assets exist and a clean consumer installs and runs without this checkout | RED |
+| 17 | Every published KitePlayer variant resolves one matching KiteCodec variant | RED |
+| 18 | The player modules and the exact Web codec runtime release together; no Maven Local | RED |
+| 19 | Licence, SBOM and provenance accompany every bundled native dependency | RED |
+| 20 | Release candidate tests run BEFORE publication and publication is atomic | RED |
+
+**How to read box 4 and box 7, because they are the two that could be misread as done.** Box 4's
+code is written and reviewed and it compiles; what is missing is any test that could go red if it
+regressed, and that is a different risk from an unwritten fix, not a smaller one. Box 7's gate is
+genuinely thorough on the audio and video lanes and every wait in it is bounded, which is the part
+that used to hang; the subtitle lane simply is not consulted, so a trailing cue can be cut.
+
+#### P0-14 needs an owner decision, and it is not the decision the row implies
+
+**The row reads as "add `--enable-gpl` to the portable tasks". Do not do that until you have read
+this.** The facts, measured:
+
+- `BuildFFmpegTask.kt:243`, the `isPortableDesktop` branch, **ignores the licence argument
+  entirely**. `portableDesktopArgs()` returns exactly `listOf("--enable-zlib")`.
+- So `buildFFmpegForLinuxX64Gpl`, `buildFFmpegForLinuxArm64Gpl` and `buildFFmpegForMingwX64Gpl`
+  produce trees containing **no GPL code at all**. They are FFmpeg plus zlib. They are written to
+  `native-libs/gpl/<triple>/`, so the directory name, the task name and
+  `FFmpeg.identity.buildLicenseFlavour` all report `gpl` for an LGPL artifact.
+- **A test now enforces this.** `BuildFFmpegTaskTest.kt:233-266` pins `--enable-gpl` as FORBIDDEN
+  for those three triples under BOTH licences. Anyone who "fixes" the row the obvious way fails a
+  green test, which will read as their mistake.
+- `release-binaries.yml:138-178` runs that task with `license: gpl` and hands the result to
+  `package-ffmpeg.sh` as `gpl linux-x64`. The script copies `COPYING.GPLv2` and `COPYING.GPLv3` into
+  the zip and bundles `libx264.a` and `libx265.a` from the runner's apt packages into a tree that was
+  never configured with `--enable-gpl`. **GPL licensed archives would ship, unreferenced by
+  libavcodec, inside a zip whose FFmpeg is LGPL, carrying GPL licence texts.** There is no Windows
+  release job at all.
+- The only genuinely GPL Windows tree anywhere is a third party download CI installs and states it
+  never redistributes. The repo's own mingw GPL producer and the tree CI tests are different things.
+
+**What the owner is actually choosing between.** Option one: make the portable tasks honest LGPL,
+which means renaming the tasks and directories, dropping the GPL licence texts from those zips, and
+not bundling x264 or x265 into them. Nothing needs to be relicensed and no capability is lost that
+the build currently has. Option two: make them really GPL, which means passing `--enable-gpl`,
+moving the pinned test, cross building x264 and x265 for three triples, and accepting that anything
+linking those artifacts inherits GPL obligations including publishing corresponding source. **Option
+one matches what the code already builds; option two matches what the names already claim.**
+
+The licence facts behind it: x264 and x265 are GPL-2.0+ (both also sell commercial licences), and
+FFmpeg's `eq` and `boxblur` filters are GPL-only. libmp3lame and FriBidi are LGPL. SVT-AV1, libvpx,
+libaom, libopus, libwebp, FreeType, HarfBuzz, libass, zlib and bzip2 are permissive. **Three
+libraries the packaging bundles are absent from `docs/licensing.md` entirely: libpng16, graphite2
+(LGPL-2.1+ / MPL / GPL tri licensed) and libnuma (LGPL-2.1).** That gap is its own defect whichever
+option is chosen.
+
+### 17.18 What a mature player still needs, by domain
+
+Distilled from the 2026-08-18 audit's parity table. **Read it as a map, not a backlog.** Nothing
+here is scheduled; it exists so that a stage entry can ask "which of these does this phase buy?"
+and get an answer instead of a feeling.
+
+**The rule that governs this whole table, and it outranks the table.** Do not chase it as a
+feature count. The first real differentiator is that every feature THAT ALREADY EXISTS has the
+same transaction, ownership, timing, fallback, diagnostic and installation behaviour on every
+platform where it is advertised. Parity built on a command that lies or on an artifact nobody can
+install is not parity.
+
+The comparison class is libmpv and libVLC. The audit did not read their source; "class" names the
+product tier expected of them, while every statement about what THIS pair has or lacks comes only
+from these two repositories.
+
+| Domain | What the pair has today | What the mature class still requires |
+|---|---|---|
+| Session control | open, play, pause, stop, seek, observable state, queue commands, and since 2026-08-18 truthful transactional results | interruption policy, crash-safe recovery, exactly documented readiness |
+| Clock and sync | common clock, sync law, drop and rebuffer machinery, device-anchored clock | device-route recovery, refresh-rate change, passthrough clocks, live-edge policy, telemetry-backed tuning |
+| Queue | navigation, repeat and shuffle shaped controls | preloading, gapless, crossfade, failure policy, persistence and resume, nested playlists, library identity |
+| Rate, loop, frame | speed, pitch preservation, AB loop, capture, and a frame step that now steps a real frame | reverse and trick play, slow motion policy, scan and jog |
+| Track selection | runtime calls, default selection, per-kind transactions | in-place switching without reopening, ranked language and accessibility policy, decoder-support rationale, multi-angle, stable source-scoped handles |
+| Subtitles | SubRip, WebVTT, an ASS dialogue tier, several rasterizers, libass on six native targets plus Android | persistent libass everywhere, bitmap PGS and DVD subtitles, attachments and fonts, karaoke and animation, style override, viewport and safe-area layout, external URL sources, accessibility captions |
+| Video output | Android Surface, Canvas and GPU, Apple Metal and native views, software Compose, a Web canvas path | Linux and Windows GPU contexts, WebGL or WebGPU, HDR and display capability, display hotplug, exact control parity, direct-buffer leases, thumbnail paths, energy-aware tier selection |
+| Audio output | CoreAudio, RemoteIO, AudioTrack, JVM desktop, WebAudio, a lock-free C ring, and since 2026-08-18 a real resampler and a measured downmix policy | WASAPI, ALSA, Pulse and PipeWire quality backends, device enumeration and hotplug, exclusive mode, passthrough, replaygain, limiter, equalizer, route-aware layout negotiation |
+| Network and cache | an optional Ktor range source, a static DASH prototype | HLS, real DASH ABR, progressive cache, bounded prefetch, resume, validators, throughput estimation, proxy and auth, reconnect and backoff, offline cache, cancellation down to the socket |
+| Live media | demux could consume a live source | DVR window, live-edge clock, low-latency HLS and DASH, catch-up rate, discontinuity policy, timeshift, latency metrics |
+| Chapters and programs | chapters exist; programs and editions are throwing stubs | end-aware chapters, programs, editions, stream groups, attachments, multi-angle |
+| Processing | a raw video filter string, capture | typed audio and video filter plans, runtime rebuild, equalizer, loudness, deinterlace policy, recording while playing, thumbnails, storyboards, waveforms |
+| Observability | state, events, warnings, stats, bounded history, support bundle, and since 2026-08-18 a dropped-event count | sequenced state transitions, structured logs with redaction, per-stage latency and corruption metrics, trace export, reproducible bundles |
+| Platform experience | native and Compose presentation modules, a PiP capability boolean | media session, lock screen, remote commands, audio focus and interruptions, real PiP, casting and AirPlay, background policy, accessibility semantics, desktop window and input |
+| Security and protected media | headers and options are exposed | DRM and CDM callbacks (see section 12, out of scope until a product decision), secure-surface policy, credential redaction, certificate and proxy controls, sandboxed parsing, untrusted-media limits |
+| Extensibility | backend and output SPIs | stable plugin points for protocols, decryptors, subtitle providers, render effects, telemetry and track policy, none of them exposing FFmpeg or JNI internals |
+
+### 17.19 Found by this pass, in neither audit
+
+**These are new. Nobody has seen them before 2026-08-19, they are not in SOLSUPREME and not in
+SUPREME, and three of them are the most serious findings in this document.** They exist because
+the re-verification read the code around each claim instead of only the claim.
+
+**The safety three. Take these first, ahead of everything else in 17.16 and 17.17.**
+
+- **SEC-1. A subtitle can overflow the heap on 32 bit Android.** `libass_jni.c:106,110-112`
+  accumulates `pixelBytes` and `headerBytes` with no overflow check. `size_t` is 32 bit on
+  `armeabi-v7a` and `x86`, so a large enough cue wraps the total, `malloc(totalBytes)` under
+  allocates, and the fill loop at `:133-143` then writes the full un wrapped amount. The dimensions
+  come from the subtitle file, which is untrusted input. Note the interaction with SOL-B5: those two
+  ABIs are the ones nothing currently cross builds, so the exposure arrives WITH the fix for that
+  row. Size S to fix, and it must land before armeabi-v7a ever ships.
+
+- **SEC-2. A manifest can make the player fetch anything, with the caller's credentials.**
+  `DashManifest.kt:270` resolves `reference.contains("://") -> reference`, accepting any absolute
+  URL out of an attacker supplied MPD with no scheme allowlist and no origin check.
+  `DashMediaIo.kt:131` then fetches it using THE CALLER'S OWN `HttpClient`, carrying its default
+  headers and its cookie jar. That is server side request forgery plus credential leakage, in a
+  module built to load remote manifests. Size S for the allowlist, M to do origin policy properly.
+
+- **SEC-3. Secrets survive the redaction that exists to remove them.** `PlaybackCore.kt:4322`
+  redacts with `substringAfterLast('/')`, so `https://host/video.mp4?token=SECRET` becomes
+  `video.mp4?token=SECRET`. The query string is exactly where credentials live, and this lands in
+  every support bundle. `FacadeTruthTest.kt:21-33` passes because it only tests the directory part.
+  Size S, and the test needs the query case added or it will regress.
+
+**The JNI layer has no exception discipline at all.** `libass_jni.c` contains zero
+`ExceptionCheck`. `GetStringUTFChars` at `:52` can return NULL with a pending OutOfMemoryError, and
+`:53` and `:54` then make JNI calls that are illegal in that state. Separately, `kj_abi.c:55-69`
+accumulates with `off += snprintf(buf + off, sizeof buf - (size_t)off, ...)` into `char buf[4096]`:
+if `off` ever passed 4096 the `size_t` subtraction wraps to a huge value and `buf + off` leaves the
+array. It is latent today (the reachable maximum is about 2.3 KB) and it is unguarded, untested,
+and it is the exact hazard `helpers_filter.c:138-142` guards against everywhere else. **There is no
+C test of the JNI layer at all**, which is why none of this was caught.
+
+**A filter value is interpolated into the filter string unescaped.** `dsl/FilterDsl.kt:186` does
+`add("sample_fmts=$it")` raw, while the very next line routes `channelLayout` through
+`escapeFilterValue`. So `AudioFormat(sampleFormat = "fltp,volume=0")` silently appends an entire
+extra filter to the graph. **A golden test pins the unescaped form** at `dsl/KdGoldensTest.kt:63`,
+so fixing this correctly requires moving that golden, which is the sort of thing that gets reverted
+by someone who thinks they broke a test.
+
+**An untyped map silently beats the typed field next to it, in two places.** The DSL row already
+named it for decoder options. The same shape exists for encoders: `MediaSink.native.kt:157-166`
+sets the bitrate from `spec.bitrateBps`, then applies `spec.options` immediately after, so
+`options["b"]` wins over the typed spec field. Same at `:225` for audio.
+
+**Two hangs and a crash in the network module, none acknowledged anywhere.**
+`KtorMediaIo.kt:79`: `close()` cancels the scope, and a later read reaches `openAt`, whose
+`scope.launch` body never runs, so `channel.readAvailable` suspends FOREVER rather than throwing.
+`XmlMini.kt:108` recurses per nesting level, so a deep manifest raises `StackOverflowError`, which
+is an `Error` that every `catch (Exception)` in the module misses. `DashManifest.kt:207` divides by
+`template.timescale` BEFORE the `require(segmentMicros > 0)` guard on the next line, so
+`timescale="0"` is an uncaught `ArithmeticException` instead of a typed refusal. And
+`DashMediaIo.kt:98,133` buffer whole responses with no size cap.
+
+**The mixer only ever folds to stereo, and the C already says so.** `ChannelMixer.kt:302` reads
+`if (targetChannels != 2 || layout == null) return null`. A 7.1 source going to a six speaker
+device therefore gets no matrix at all and falls through to a truncating pass through. This is not
+a hypothetical: `kite_rt_coreaudio.c:347` CLAMPS CoreAudio to 2 channels rather than 6 for exactly
+this reason, with the comment naming the row. **On a real 5.1 setup this player outputs stereo.**
+That is a user visible product limitation and it appears nowhere in any register. It is the true
+remainder of SOL-P8, and it is worth more than the two thirds of that row already closed.
+
+**The generated Wasm binding and the file that actually compiles are two copies nothing compares.**
+The generator writes `native-libs/deps/wasm32/binding/KiteCodecWasm.kt` (gitignored); the tree
+compiles `kitecodec-core/src/wasmJsMain/.../wasm/KiteCodecWasm.kt` (committed). They are identical
+today. Nothing keeps them so: `generateWasmBinding` is not a dependency of any compile or check
+task, no test reads the committed copy, and `wasm-binding-probe.sh:21` only checks the GENERATED
+file exists. Edit `signature-baseline.txt`, re-run the symbol audit, and the compiled binding keeps
+the old names, compiles clean, and fails at runtime in a browser with
+`m._<old_name> is not a function`. **The project already solved this exact problem once**:
+`wasm-report-offsets.sh:9-10` has a `check` mode that refuses drift on a sibling generated file. It
+was simply never applied here. Size S, and it is the best value in this whole section.
+
+**Six other things worth having written down.**
+
+- `AudioTrackSink.kt:113` builds its accepted format with no `channelLayoutMask`, so `targetLayout`
+  is always null on Android and the equal count speaker matching added on 2026-08-18 **can never
+  engage there**. The machinery is inert on the one platform with the most device variety.
+- `CoreAudioSink.kt:431` nulls `handle`, `ring` and `negotiated` BEFORE calling `destroy()`, so
+  after an unproven teardown `close()` is a permanent no op. There is no `TeardownPending` state.
+- `DesktopAudioSink.kt:199` recovers with `dead?.close(); create(); fresh.open(); driver = fresh`
+  and no `try/catch`, so a failed open leaks `fresh` and leaves `driver` pointing at the closed
+  line. The `open()` path at `:143` DOES guard, which is what makes this an omission rather than a
+  policy.
+- `build.gradle.kts:26` hardcodes the group while `gradle.properties:23` declares `GROUP`, which is
+  the exact double source bug the same file's comment at `:27-29` says it fixed for the version.
+- `kiteplayer-sample` is the one module of four missing `dav1d.set(true)`, so the dav1d build time
+  assertion silently does not run there.
+- `KiteRtBindingTest.kt:285` asserts the stats reader zeroes its struct while checking only 3 of 8
+  fields, never `device_buffer_frames`. That blind spot is precisely why the unsupported sink's
+  missing write stayed invisible.
+
+### 17.20 THE ORDER. What to do next, and why that order
+
+**This is the answer to "what now". The register above says what is open; this says what to do
+first.** It replaces the priority orders of both distilled documents, which were written before the
+2026-08-19 verification and did not know about the safety rows or the six unfinished DONE rows.
+
+**The rule that outranks the order:** a fix is done when its EVIDENCE exists, not when the code
+changes. Every item below lands with the gate its changed path selects, and any item whose truth no
+test can express says so in writing rather than passing quietly. That rule is why the order looks
+the way it does: three of the top five items are cheap precisely because they buy back the ability
+to tell whether anything else is true.
+
+#### First: the three safety rows. Nothing else moves until these do
+
+`SEC-1`, `SEC-2`, `SEC-3` (17.19). A heap overflow reachable from an untrusted subtitle, a manifest
+that can make the player fetch any URL with the caller's cookies, and a redaction that leaves the
+query string where credentials live. All three are small. **SEC-1 must land before `armeabi-v7a`
+ever ships**, because that ABI is where the 32 bit wrap lives, and SOL-B5 is the row that would add
+it. Take `SEC-4` (no JNI exception checks) in the same sitting; it is the same file.
+
+#### Second: buy back the ability to know things. All cheap, all high leverage
+
+1. **`KC-CI-C`.** Continuous integration runs one of seven C suites. Six suites guard nothing
+   outside a laptop. Change two lines.
+2. **`KC-WASM-MIRROR`.** The generated Wasm binding and the file that actually compiles are two
+   copies nothing compares, and the drift fails only at runtime in a browser. **The project already
+   wrote this check for a sibling file**; apply it here.
+3. **A `wasmJsTest` source set.** Twelve rows are marked done with no test that could ever fail, and
+   they will stay that way for ever without it. This is the single biggest lie-per-hour reduction
+   available.
+4. **`KC-NOTDONE` and `KC-P0-05-LEAK`.** Six rows logged DONE that are not done on every backend,
+   plus one fix that introduced two leaks. **Do these before anything new**, because they are
+   already counted as finished and nobody will come back to them otherwise. P1-11 on the JVM is the
+   worst: it is a whole missing ownership check in a class that already has the helper.
+
+#### Third: the correctness rows that are actually left
+
+`KC-WEB-IO` first, because it is the last correctness release blocker. Then `KC-CANCEL`, and take it
+together with 17.12's C-52 to C-54, which are the same hole seen from the network side; scheduling
+them twice is how you build the interrupt callback twice. Then `SOL-P8`'s real remainder, the
+stereo only mixer, because it is a user visible product limitation that the C already documents and
+no register ever stated. Then audio device recovery (`SOL-A6`) and viewport subtitles
+(`KP-P1-15`), the two rows the last surge honestly left open.
+
+#### Fourth: the truth rows. Cheap, and they stop the next reader being misled
+
+`KC-DOCTRUTH` and its KitePlayer twin inside `KP-API`. A build script that contradicts itself about
+whether the JVM is a placeholder, a README that calls a 2,303 line backend a placeholder, minSdk
+stated as 24 in seven places when it is 26, six KDocs that deny features which shipped, three that
+promise recovery that does not exist, and one SPI file that contradicts itself sixteen lines apart.
+None of this is hard. All of it is why the last two audits disagreed with the tree.
+
+#### Fifth: the distribution program, when the owner is ready
+
+The whole `P0-11` to `P0-19` cluster is ONE program and must not be started piecemeal (17.17).
+**It is blocked on the owner, not on work:** Maven Central credentials, signing keys, and the
+`P0-14` licence decision. Do not advertise any target it has not shipped.
+
+#### Everything else
+
+The long tails in 17.16, then 17.18's parity map, in whatever order the product wants. **Do not
+chase 17.18 as a feature count.** The first real differentiator is that every feature that already
+exists behaves the same on every platform where it is advertised.
+
+#### What this order deliberately does NOT do
+
+It does not put the biggest items first. `KC-PERF` is XL and sits near the bottom; the C and JNI
+bridge is L and sits with the long tails. That is on purpose. **The project's measured failure mode
+is not slowness, it is claims that were not true**: six rows open in one document and closed in
+another, a fixture built so a disagreement could not surface, three "covered by existing tests"
+lines that were false, and a count contradicting its own table two paragraphs later. The order above
+spends its first two tiers buying back the ability to detect that, because every later estimate
+depends on it.
 
 ## 18. The skeleton, for any executor
 

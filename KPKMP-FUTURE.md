@@ -1212,10 +1212,31 @@ by the same sweep and NOT yet answered:
   no renderer, no clock. Desktop playback rides the jvm target instead. RECOMMENDED CLOSE: record
   it as a decision (native desktop targets are engine-only; consumers bring output through the SPI)
   rather than building ALSA and WASAPI backends nobody has asked for.
-- PAR-6 [V] AV1 hardware decode has never been positively proven. The Apple route is wired and the
-  hwaccel is compiled, but this machine is an M2 with no AV1 silicon, so every run here proves only
-  the refusal-and-fallback path. Positive proof needs an A17 Pro / M3 or newer machine. Owner
-  device fare, like AGW-1.
+- PAR-6 [V] 08-19 REWRITTEN, and it is worse than the old row said. It used to read "AV1 hardware
+  decode has never been positively proven", which implied the route was complete and only the
+  hardware was missing. Reading the code around the claim showed the route CANNOT complete on any
+  build this project ships.
+
+  **What was fixed on 2026-08-19.** `appleHwaccelDecodeArgs()` pinned only `h264_videotoolbox` and
+  `hevc_videotoolbox`, so `av1_videotoolbox` was never named. It is pinned now, and the two
+  configure goldens moved with it. This takes effect the next time an Apple FFmpeg tree is built;
+  no published artifact changes.
+
+  **What the pin does NOT fix, which is the row's real remainder.** An hwaccel attaches to a
+  DECODER. `libdav1d` is an external decoder and carries no hwaccel at all, and
+  `avcodec_find_decoder(AV_CODEC_ID_AV1)` walks `codec_list` in the order `allcodecs.c` declares,
+  where `ff_libdav1d_decoder` (line 776) sits ahead of `ff_av1_decoder` (line 846). Every
+  KitePlayer consumer build carries dav1d, so the lookup returns libdav1d, `get_format` is never
+  offered `AV_PIX_FMT_VIDEOTOOLBOX`, and `ffkmp_codecctx_use_videotoolbox` attaches a device
+  context that nothing will ever ask about. **On an iPhone 15 Pro or newer, AV1 decodes on the CPU
+  while the AV1 silicon sits idle, and no amount of hardware would change that.**
+
+  **What closing it takes.** A decoder chosen BY NAME, which KiteCodec has no path for today, plus
+  a policy: open native `av1` with VideoToolbox attached, and fall back to `libdav1d` in software
+  when the hardware refuses, which is the same shape D-2's measured fallback already has for h264
+  and hevc. Size M. After that it still needs an A17 Pro / M3 or newer machine for positive proof,
+  because this one is an M2 with no AV1 silicon, so it can only ever prove the refusal path. Owner
+  device fare for the proof, ordinary work for the route.
 - PAR-7 [V] The `fd:` protocol's contract stays spooky even after F-FD1's fix: rewinding before
   every open MUTATES the caller's descriptor (a dup shares the offset), an unseekable descriptor
   degrades silently to the streamed case, and the descriptor's lifetime is the caller's problem.
@@ -2438,7 +2459,7 @@ locating each symbol by name, because every line number in both audit documents 
 | PAR-2 | Linux compiles zero hwaccels | [V] 08-19 | 17.11, here |
 | PAR-3 | android-x64 has 0 SIMD symbols against arm64's 1365 | [V] 08-19 | 17.11, here |
 | PAR-5 | native linux and mingw declare targets with no source set | [V] 08-19 [owner] | 17.11, here |
-| PAR-6 | AV1 hardware decode has never been positively proven | [owner] | 17.11, here |
+| PAR-6 | REWRITTEN: hardware AV1 cannot engage at all; libdav1d wins the decoder lookup | [V] 08-19 | 17.11, here |
 | PAR-7 | `fd:` still mutates the caller's descriptor | [V] 08-19 | 17.11, here |
 | L | libass: JVM bridge, wasm, the animated hook, the mpv corpus | [V] 08-19 | 17.12, here |
 | KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |

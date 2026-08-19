@@ -56,5 +56,9 @@ kitecodec {
         source.set(ffmpegLocalRoot.map { FFmpegSource.Local }.orElse(FFmpegSource.System))
         localRoot.fileProvider(ffmpegLocalRoot)
         license.set(FFmpegLicense.LGPL)
+        // The one module of four that never said it (17.19's bullet). Plugin 0.0.11 makes the
+        // toggle a two-way contract, so a dav1d tree with this line missing FAILS the build the
+        // day this repository bumps its plugin. Stated now, before that day.
+        dav1d.set(true)
     }
 }

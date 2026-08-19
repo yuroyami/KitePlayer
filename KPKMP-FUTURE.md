@@ -2498,9 +2498,10 @@ locating each symbol by name, because every line number in both audit documents 
 | P0-11..P0-19 | the whole distribution program; nine release blockers | [V] 08-19 [owner] | 17.17, here |
 | P0-14 | GPL tasks build LGPL trees, and a test now enforces it | [V] 08-19 [owner] | 17.17, here |
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
+| KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
 
-**Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 25 KiteCodec rows.
-**67 open rows in total.**
+**Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
+**68 open rows in total.**
 
 **The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
 file under RULE TWO (PAST 14.115).
@@ -2565,6 +2566,22 @@ because it is the call that takes the new cursor lease. When it does, **every de
 leaks its codec context**, which is precisely the defect P0-05 was opened to fix. In `extractFrame`
 the reader and the decoder are both opened outside the `try`, so a throwing `openDecoder` leaves
 `readerActive` true for ever and that `MediaSource` can never open another reader again.
+
+#### KC-CAPS. A build cannot be asked which decoders it carries
+
+Opened 2026-08-19 by the owner, from a real failure: an iOS device threw FFmpeg's bare `-78`
+(ENOSYS) on an AV1 file, and NOTHING could say whether that build carried dav1d. It took an hour of
+binary archaeology to learn the answer was "the installed app was stale". Two layers are missing:
+
+- **Runtime.** `MediaSource`/the C layer expose no "decoders in this build" query, and a decoder
+  refusal surfaces as the raw error code instead of "codec av1: no software decoder in this build".
+  FFmpeg has the answer cheap (`av_codec_iterate`); nothing binds it.
+- **Build time.** Plugin 0.0.11 closed the biggest half (the dav1d contract is now two-way, and
+  `kitecodecInfo` prints the provisioning per target), but the info line reports the TOGGLES, not a
+  measured inventory of the tree it links.
+
+Size S for the runtime query plus the named refusal; the error-message half pays for itself the
+first time any decoder is missing anywhere.
 
 #### KC-CI-C. Continuous integration runs one of the eight C suites
 
@@ -2842,8 +2859,6 @@ was simply never applied here. Size S, and it is the best value in this whole se
   policy.
 - `build.gradle.kts:26` hardcodes the group while `gradle.properties:23` declares `GROUP`, which is
   the exact double source bug the same file's comment at `:27-29` says it fixed for the version.
-- `kiteplayer-sample` is the one module of four missing `dav1d.set(true)`, so the dav1d build time
-  assertion silently does not run there.
 - `KiteRtBindingTest.kt:285` asserts the stats reader zeroes its struct while checking only 3 of 8
   fields, never `device_buffer_frames`. That blind spot is precisely why the unsupported sink's
   missing write stayed invisible.

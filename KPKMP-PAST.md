@@ -9027,6 +9027,57 @@ subtitle; the two ABIs where the wrap lived are still the two ABIs nothing cross
 The DASH policy is proven against parsed manifests, not against a live hostile server. No fuzzing
 was run against any of the six.
 
+### 14.116 The plugin control surge, 2026-08-19
+
+**What it was.** The owner, on Fable 5 and rightly annoyed, named two truths about the Gradle
+plugin in one message: the API surface did not clearly control what gets grabbed, built, injected
+and used, and `dav1d = false` not deactivating dav1d "makes no sense". Both were real. KiteCodec
+plugin 0.0.11, published to mavenLocal the same sitting.
+
+**The dav1d toggle became a contract enforced in BOTH directions.** The old rule was written down
+in the plugin itself as a design choice: "Presence in the tree is the linking truth; the toggle is
+the CONTRACT", and the code under it read `if (dav1dArchive.exists()) linkerOpts("-ldav1d")`. So
+the tree decided, and the toggle validated only one direction. Measured consequence: Synkplay
+linked dav1d for two releases without one line of its build saying so, and `dav1d = false` against
+a dav1d tree silently linked it anyway.
+
+The physics is why `false` cannot simply strip it: dav1d is compiled INTO libavcodec when FFmpeg
+itself is built, so a consumer link can neither add nor subtract it. What the toggle can do is
+refuse a mismatch loudly, and now does, in both directions, with the one-line fix in each message.
+
+*Evidence.* A functional test drives both directions against a fake Local tree: the unset toggle
+against a dav1d tree fails naming the fix, and `dav1d = true` links `-ldav1d` exactly once. Then
+the real world: bumping Synkplay to plugin 0.0.11 WITHOUT the declaration failed its iOS link
+configuration with the new message verbatim, which is the old silent state caught in the wild;
+declaring `dav1d.set(true)` linked the framework green in 44 seconds. The one KitePlayer module of
+four that never declared it (kiteplayer-sample, 17.19's bullet, now deleted per RULE TWO) declares
+it too, before the day KitePlayer bumps its own plugin and the contract would have caught it.
+
+**The clean lifecycle exists now.** `clean` wipes build/, but nothing ever wiped what the plugin
+GRABBED: downloaded FFmpeg archives live in the shared Gradle cache and outlived every project
+clean invisibly. `kitecodecCleanCache` is the visible handle; `kitecodec { cleanCacheOnClean =
+true }` hooks it into `clean`. Default off, because that cache is shared machine-wide. The
+functional test seeds a marker in the real cache path and proves all three behaviours: plain
+`clean` preserves it, the task deletes it, the opted-in `clean` deletes it. `ffmpeg.localRoot` is
+deliberately untouchable: the plugin only reads that tree and must not delete what it did not
+create.
+
+**`kitecodecInfo` prints the provisioning.** One line per wired target: source, license, version,
+dav1d, libass, and where the binaries come from. The decisions were all lazy providers resolved at
+configuration time, which made them invisible; now they are a sentence.
+
+**Two pre-existing exclusions honoured, not fixed.** The plugin's test task excludes
+`kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks` and
+`missingLicenseChoiceFailsConfigurationWithInstructions` by name, recorded in its build file as
+pre-existing failures the executor contract forbids fixing mid-task. Discovering that cost a
+detour through javap; the build file comment was three screens below the failure.
+
+**What is NOT claimed.** No prebuilt dav1d flavour exists (`Prebuilt` + `dav1d = true` still
+refuses with instructions), iOS still has no prebuilt assets at all (both ride the P0-11..P0-19
+distribution program), and the runtime still cannot be asked which decoders a build carries.
+That last gap is now register row KC-CAPS, opened by the same owner message: the AV1 device
+failure that started today surfaced as a bare -78 precisely because nothing could answer it.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

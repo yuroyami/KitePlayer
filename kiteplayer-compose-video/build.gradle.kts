@@ -67,6 +67,12 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        jvmTest.dependencies {
+            // Skiko's native library, which is what actually rasterises here. Without it the JVM
+            // frame path throws NoClassDefFoundError on org.jetbrains.skia.Image, so the desktop
+            // renderer would have looked untestable when it is only unloaded.
+            implementation(compose.desktop.currentOs)
+        }
         getByName("androidDeviceTest").dependencies {
             implementation(kotlin("test"))
             implementation(project(":kiteplayer-mobile"))

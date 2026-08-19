@@ -28,10 +28,10 @@ internal actual class BlockingMediaIo actual constructor(
     private val io: MediaIo,
 ) : MediaByteSource {
 
-    override val size: Long? get() = io.size
-    override val seekable: Boolean get() = io.seekable
+    actual override val size: Long? get() = io.size
+    actual override val seekable: Boolean get() = io.seekable
 
-    override fun read(into: ByteArray, offset: Int, length: Int): Int {
+    actual override fun read(into: ByteArray, offset: Int, length: Int): Int {
         val outcome = runWithoutSuspending { io.read(into, offset, length) }
         if (outcome == null) {
             throw UnsupportedOperationException(
@@ -45,7 +45,7 @@ internal actual class BlockingMediaIo actual constructor(
         return outcome
     }
 
-    override fun seek(position: Long) {
+    actual override fun seek(position: Long) {
         val outcome = runWithoutSuspending { io.seek(position); 0 }
         if (outcome == null) {
             throw UnsupportedOperationException(
@@ -55,7 +55,7 @@ internal actual class BlockingMediaIo actual constructor(
         }
     }
 
-    override fun close(): Unit = io.close()
+    actual override fun close(): Unit = io.close()
 }
 
 /**

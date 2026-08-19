@@ -5,7 +5,7 @@ kotlin = "2.4.10"
 agp = "9.2.1"
 vanniktechPublish = "0.36.0"
 dokka = "2.2.0"
-kitecodec = "0.0.9"
+kitecodec = "0.0.10"
 ktor = "3.5.2"
 
 coroutines = "1.11.0"

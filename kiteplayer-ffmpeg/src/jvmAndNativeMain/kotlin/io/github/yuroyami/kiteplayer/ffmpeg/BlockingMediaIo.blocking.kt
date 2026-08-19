@@ -15,10 +15,10 @@ internal actual class BlockingMediaIo actual constructor(
     private val io: MediaIo,
 ) : MediaByteSource {
 
-    override val size: Long? get() = io.size
-    override val seekable: Boolean get() = io.seekable
+    actual override val size: Long? get() = io.size
+    actual override val seekable: Boolean get() = io.seekable
 
-    override fun read(into: ByteArray, offset: Int, length: Int): Int = runBlocking {
+    actual override fun read(into: ByteArray, offset: Int, length: Int): Int = runBlocking {
         var r = io.read(into, offset, length)
         while (r == 0) {
             delay(1)
@@ -27,9 +27,9 @@ internal actual class BlockingMediaIo actual constructor(
         r
     }
 
-    override fun seek(position: Long) {
+    actual override fun seek(position: Long) {
         runBlocking { io.seek(position) }
     }
 
-    override fun close() = io.close()
+    actual override fun close() = io.close()
 }

@@ -8999,6 +8999,28 @@ wasmJs compile, the rt C suites under asan, and the new libass suite under plain
 `DashUrlRefusedException`, `DashResponseTooLargeException`, the two size constants and the added
 default parameters. `checkKotlinAbi` is green again.
 
+**Cutting 0.0.10 found two more reds nobody had ever run into.** `publishToMavenLocal` is not in
+any gate tier, and KitePlayer had not been published since 2026-08-17 05:05. Both failures are
+metadata-only: they break `compileCommonMainKotlinMetadata` and `compileNativeMainKotlinMetadata`,
+which are the klibs a PUBLICATION is built from, while every per-target compile and every test
+stayed green.
+
+- `BlockingMediaIo` is an `expect class` naming `MediaByteSource` as a supertype and declaring none
+  of its abstract members. Red since `d2900fb` gave the FFmpeg backend a web target and split the
+  class into expect/actual. The members are now declared on the expect and marked `actual override`
+  on both actuals.
+- `FdRewind.native.kt` called `lseek`, whose `off_t` is 64 bit on Apple and Linux and 32 bit on
+  mingw, from the shared `nativeMain` source set. A shared native source set cannot type a
+  declaration whose width differs between its targets. Split into `appleMain` and `linuxMain` with
+  the real call, and `mingwMain` with the no-op the expect's own contract already described.
+
+**That makes five pre-existing gate reds found in two days by running paths nobody ran.** The other
+three were the cross-repository allowlist, the stale ABI dump and the Linux JNI link. The lesson is
+RULE ONE step 7's, and `publishToMavenLocal` deserves a place in Tier 2 for the same reason.
+
+**Consumed downstream.** KiteCodec `0.0.10` and KitePlayer `0.0.10` published to mavenLocal, and
+Synkplay rides them.
+
 **What is NOT claimed.** No device ran any of this. The libass overflow guard is proven by host
 arithmetic and by a compile against the real `jni.h` and `ass.h`, not by a phone rendering a hostile
 subtitle; the two ABIs where the wrap lived are still the two ABIs nothing cross-builds (SOL-B5).

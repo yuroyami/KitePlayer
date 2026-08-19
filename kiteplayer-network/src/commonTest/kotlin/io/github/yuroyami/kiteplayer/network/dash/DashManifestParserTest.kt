@@ -210,4 +210,25 @@ class DashManifestParserTest {
         val title = root.attr("title")!!
         assertEquals("\uD83D\uDE00\uD83D\uDCA9", title, "both references decode to pairs, got ${title.length} units")
     }
+
+    @Test
+    fun `a zero timescale is refused typed rather than dividing by it`() {
+        // SEC-6: `duration * 1_000_000 / timescale` ran BEFORE the guard on the next line, so
+        // timescale="0" came out as an uncaught ArithmeticException.
+        val mpd = """
+            <?xml version="1.0"?>
+            <MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT4S">
+                <Period duration="PT4S">
+                    <AdaptationSet contentType="video" mimeType="video/mp2t">
+                        <SegmentTemplate media="s-${'$'}Number${'$'}.ts" startNumber="1" timescale="0" duration="1"/>
+                        <Representation id="v" bandwidth="1"/>
+                    </AdaptationSet>
+                </Period>
+            </MPD>
+        """.trimIndent()
+        val refusal = assertFailsWith<IllegalArgumentException> {
+            DashManifestParser.parse(mpd, "http://cdn.test/vod/movie.mpd")
+        }
+        assertTrue("timescale must be positive" in refusal.message!!, refusal.message!!)
+    }
 }

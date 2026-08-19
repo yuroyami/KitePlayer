@@ -13,8 +13,11 @@
  */
 #include <jni.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <ass/ass.h>
+
+#include "libass_pack_limits.h"
 
 typedef struct {
     ASS_Library *library;
@@ -49,13 +52,21 @@ Java_io_github_yuroyami_kiteplayer_libass_LibassNative_addFont(
     (void) clazz;
     KiteLibass *self = (KiteLibass *) (intptr_t) handle;
     if (!self || !data) return;
-    const char *utf = name ? (*env)->GetStringUTFChars(env, name, NULL) : NULL;
+    /* A NULL from either of these leaves an OutOfMemoryError pending, and every further JNI call
+     * made in that state is undefined behaviour, so each one returns rather than continues. */
+    const char *utf = NULL;
+    if (name) {
+        utf = (*env)->GetStringUTFChars(env, name, NULL);
+        if (!utf) return;
+    }
     jsize size = (*env)->GetArrayLength(env, data);
     jbyte *bytes = (*env)->GetByteArrayElements(env, data, NULL);
-    if (bytes) {
-        ass_add_font(self->library, utf ? utf : "", (const char *) bytes, (int) size);
-        (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
+    if (!bytes) {
+        if (utf) (*env)->ReleaseStringUTFChars(env, name, utf);
+        return;
     }
+    ass_add_font(self->library, utf ? utf : "", (const char *) bytes, (int) size);
+    (*env)->ReleaseByteArrayElements(env, data, bytes, JNI_ABORT);
     if (utf) (*env)->ReleaseStringUTFChars(env, name, utf);
 }
 
@@ -100,14 +111,22 @@ Java_io_github_yuroyami_kiteplayer_libass_LibassNative_renderPacked(
      * allocation and a single JNI array, which is the whole reason for the packed shape. */
     int count = 0;
     size_t pixelBytes = 0;
+    size_t headerBytes = sizeof(int32_t);
     for (ASS_Image *at = image; at; at = at->next) {
         if (at->w <= 0 || at->h <= 0 || !at->bitmap) continue;
+        size_t bytes = kite_region_bytes(at->w, at->h);
+        if (bytes == 0 ||
+            kite_add_passes_ceiling(pixelBytes, bytes) ||
+            kite_add_passes_ceiling(headerBytes + pixelBytes, 5u * sizeof(int32_t))) {
+            ass_free_track(track);
+            return NULL;
+        }
+        pixelBytes += bytes;
+        headerBytes += 5u * sizeof(int32_t);
         count++;
-        pixelBytes += (size_t) at->w * (size_t) at->h * 4u;
     }
     if (count == 0) { ass_free_track(track); return NULL; }
 
-    size_t headerBytes = sizeof(int32_t) + (size_t) count * 5u * sizeof(int32_t);
     size_t totalBytes = headerBytes + pixelBytes;
     unsigned char *packed = malloc(totalBytes);
     if (!packed) { ass_free_track(track); return NULL; }
@@ -128,7 +147,10 @@ Java_io_github_yuroyami_kiteplayer_libass_LibassNative_renderPacked(
         put_int(packed + headerAt, at->dst_y);        headerAt += sizeof(int32_t);
         put_int(packed + headerAt, width);            headerAt += sizeof(int32_t);
         put_int(packed + headerAt, height);           headerAt += sizeof(int32_t);
-        put_int(packed + headerAt, width * height * 4); headerAt += sizeof(int32_t);
+        /* Computed in size_t, not int: the counting pass proved this fits in an int32, and
+         * `width * height * 4` in int arithmetic would be signed overflow on the way there. */
+        put_int(packed + headerAt, (int32_t) ((size_t) width * (size_t) height * 4u));
+        headerAt += sizeof(int32_t);
 
         for (int row = 0; row < height; row++) {
             const unsigned char *source = at->bitmap + (size_t) row * (size_t) stride;
@@ -144,9 +166,13 @@ Java_io_github_yuroyami_kiteplayer_libass_LibassNative_renderPacked(
     }
     ass_free_track(track);
 
+    /* totalBytes is at or below INT32_MAX by construction, so the cast is exact. A NULL here
+     * means a pending OutOfMemoryError, which the caller must be allowed to see. */
     jbyteArray result = (*env)->NewByteArray(env, (jsize) totalBytes);
-    if (result) (*env)->SetByteArrayRegion(env, result, 0, (jsize) totalBytes, (const jbyte *) packed);
+    if (!result) { free(packed); return NULL; }
+    (*env)->SetByteArrayRegion(env, result, 0, (jsize) totalBytes, (const jbyte *) packed);
     free(packed);
+    if ((*env)->ExceptionCheck(env)) return NULL;
     return result;
 }
 

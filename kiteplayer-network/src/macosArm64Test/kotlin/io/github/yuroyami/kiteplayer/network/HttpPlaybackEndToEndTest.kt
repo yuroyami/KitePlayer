@@ -148,8 +148,9 @@ class HttpPlaybackEndToEndTest {
         val port = serveRanged(bytes)
         val url = "http://127.0.0.1:$port/movie.mp4"
 
-        val ktorIo = KtorMediaIo.open(url)
-        val source = KiteCodecSourceFactory().open(MediaItem(url, io = ktorIo))
+        // A factory, because MediaItem.io became one when KP-P1-03 landed. This file was never
+        // compiled after that change, so it had been red on macosArm64 ever since.
+        val source = KiteCodecSourceFactory().open(MediaItem(url, io = { KtorMediaIo.open(url) }))
         try {
             assertTrue(source.seekable, "a ranged http source must be seekable end to end")
             val video = source.streams.firstOrNull { it.kind == TrackKind.Video }

@@ -26,8 +26,10 @@ public final class io/github/yuroyami/kiteplayer/network/KtorMediaIoResolver : i
 
 public final class io/github/yuroyami/kiteplayer/network/dash/Dash {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/network/dash/Dash;
-	public final fun manifest (Ljava/lang/String;Lio/ktor/client/HttpClient;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public final fun mediaItemFor (Ljava/lang/String;Lio/ktor/client/HttpClient;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun manifest (Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun manifest$default (Lio/github/yuroyami/kiteplayer/network/dash/Dash;Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun mediaItemFor (Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun mediaItemFor$default (Lio/github/yuroyami/kiteplayer/network/dash/Dash;Ljava/lang/String;Lio/ktor/client/HttpClient;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;JJLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashAdaptationSet {
@@ -66,8 +68,10 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashManifest {
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashManifestParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/network/dash/DashManifestParser;
-	public final fun parse (Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
-	public final fun segmentPlan (Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;Lio/github/yuroyami/kiteplayer/network/dash/DashPeriod;Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;)Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentPlan;
+	public final fun parse (Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
+	public static synthetic fun parse$default (Lio/github/yuroyami/kiteplayer/network/dash/DashManifestParser;Ljava/lang/String;Ljava/lang/String;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;
+	public final fun segmentPlan (Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;Lio/github/yuroyami/kiteplayer/network/dash/DashPeriod;Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;)Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentPlan;
+	public static synthetic fun segmentPlan$default (Lio/github/yuroyami/kiteplayer/network/dash/DashManifestParser;Lio/github/yuroyami/kiteplayer/network/dash/DashManifest;Lio/github/yuroyami/kiteplayer/network/dash/DashPeriod;Lio/github/yuroyami/kiteplayer/network/dash/DashRepresentation;Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashSegmentPlan;
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashMediaIo : io/github/yuroyami/kiteplayer/MediaIo {
@@ -77,6 +81,11 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashMediaIo : io/g
 	public fun getSize ()Ljava/lang/Long;
 	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/network/dash/DashMediaIoKt {
+	public static final field MAX_MANIFEST_BYTES J
+	public static final field MAX_SEGMENT_BYTES J
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashPeriod {
@@ -121,6 +130,10 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashRepresentation
 	public final fun getWidth ()Ljava/lang/Integer;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/network/dash/DashResponseTooLargeException : java/lang/IllegalStateException {
+	public fun <init> (Ljava/lang/String;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/network/dash/DashSegmentPlan {
@@ -172,6 +185,33 @@ public final class io/github/yuroyami/kiteplayer/network/dash/DashTimelineEntry 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy$Companion;
+	public fun <init> ()V
+	public fun <init> (Ljava/util/Set;ZZ)V
+	public synthetic fun <init> (Ljava/util/Set;ZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/Set;
+	public final fun component2 ()Z
+	public final fun component3 ()Z
+	public final fun copy (Ljava/util/Set;ZZ)Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;Ljava/util/Set;ZZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAllowSchemeDowngrade ()Z
+	public final fun getAllowedSchemes ()Ljava/util/Set;
+	public final fun getSameOriginOnly ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy$Companion {
+	public final fun getDefault ()Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;
+	public final fun getSameOrigin ()Lio/github/yuroyami/kiteplayer/network/dash/DashUrlPolicy;
+}
+
+public final class io/github/yuroyami/kiteplayer/network/dash/DashUrlRefusedException : java/lang/IllegalArgumentException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/network/xml/XmlElement {
 	public fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;)V
 	public final fun attr (Ljava/lang/String;)Ljava/lang/String;
@@ -190,6 +230,7 @@ public final class io/github/yuroyami/kiteplayer/network/xml/XmlException : java
 
 public final class io/github/yuroyami/kiteplayer/network/xml/XmlMini {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/network/xml/XmlMini;
+	public static final field MAX_DEPTH I
 	public final fun parse (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/network/xml/XmlElement;
 }
 

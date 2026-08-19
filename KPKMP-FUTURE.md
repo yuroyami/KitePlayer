@@ -61,8 +61,9 @@ and still one document; its other half, KPKMP-PAST.md, is finished business you 
 >
 > **Whenever you do ANY work on either repository, before you report it done:**
 >
-> 1. **Close what you closed.** Find every row your work answers and mark it CLOSED with the commit
->    that closed it. Do not leave it for a later sweep. There is no later sweep.
+> 1. **Close what you closed.** Find every row your work answers and, per RULE TWO, DELETE it from
+>    this file, writing its closing entry into KPKMP-PAST.md with the commit that closed it. Do not
+>    leave it for a later sweep. There is no later sweep.
 > 2. **Open what you opened.** A limitation you introduced, accepted or discovered is a new row, in
 >    the register nearest the work, written before you move on.
 > 3. **Correct what you found false.** If a row describes the tree wrongly, say so on the row with
@@ -89,6 +90,29 @@ and still one document; its other half, KPKMP-PAST.md, is finished business you 
 >
 > **A commit that changes behaviour and does not touch this file is incomplete**, unless the work
 > genuinely answers no row and opens none, which is rarer than it feels while coding.
+
+
+> ## **RULE TWO: THIS FILE ONLY SHRINKS. WHAT IS DONE LEAVES IT.**
+>
+> **The owner's standing instruction, given 2026-08-19.** Anything this document lists that gets
+> touched, fixed, enhanced or dropped is REMOVED from this file completely and written into
+> KPKMP-PAST.md. Not struck through. Not marked CLOSED and left in place for a later sweep.
+> Removed.
+>
+> **The target is an EMPTY KPKMP-FUTURE.md.** That is what the split was for: this file is the work
+> that is LEFT. Every line in it that is no longer left makes the rest harder to find, and a CLOSED
+> row still costs a reader the time to read it and decide it does not matter. The previous edition
+> kept three closed rows "until the next sweep" and one struck through "for one edition". Both
+> habits end here.
+>
+> **What this changes about RULE ONE.** Step 1 said "mark it CLOSED with the commit that closed
+> it". It now reads: DELETE the row from this file, and write the closing entry into KPKMP-PAST.md
+> section 14 with the commit and the evidence. Steps 2, 3, 4 and 7 are unchanged. Step 6 is
+> unchanged in spirit: the index stays true, and a row that has left the index left because it is
+> finished.
+>
+> **A REDUCED row does NOT leave.** Half answered is still open. Rewrite the row down to its
+> remainder and keep it here; only the part that is genuinely finished goes to the archive.
 
 
 > ## **THERE ARE TWO FILES. THIS IS THE ONE YOU READ, AND IT IS COMPLETE ON ITS OWN.**
@@ -2388,7 +2412,6 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-P3 | frame access copies twice and boxes its plane list | [V] 08-19 | 17.11, here |
 | SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
 | SOL-P9 | a track change reopens the whole session, so live media cannot | [V] 08-19 | 17.11, here |
-| ~~SOL-P10~~ | CLOSED as MOOT 08-19: it asks for a SwrContext that exists nowhere | CLOSED | 17.11, here |
 | SOL-API2 | five, not four, accepted-and-unused config knobs | [V] 08-19 | 17.11, here |
 | SOL-API4 | five stats placeholders, untouched by the new real counters | [V] 08-19 | 17.11, here |
 | SOL-API7 | REDUCED: refusal is typed; the engine never calls `supports()` | [V] 08-19 | 17.11, here |
@@ -2447,7 +2470,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-PERF | 10 hot paths; per-byte Web interop, the JVM copy chain | [V] 08-19 | 17.16, here |
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | 11 documentation contradictions; the build file contradicts itself | [V] 08-19 | 17.16, here |
-| KC-CI-C | CI runs ONE of seven C suites | [V] 08-19 | 17.16, here |
+| KC-CI-C | CI runs ONE of EIGHT C suites; the other seven guard only a laptop | [V] 08-19 | 17.16, here |
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
 | KC-NOTDONE | six rows logged DONE that are not done on every backend | [V] 08-19 | 17.16, here |
 | KC-P0-05-LEAK | the P0-05 fix introduced two new leaks | [V] 08-19 | 17.16, here |
@@ -2455,28 +2478,19 @@ locating each symbol by name, because every line number in both audit documents 
 | P0-14 | GPL tasks build LGPL trees, and a test now enforces it | [V] 08-19 [owner] | 17.17, here |
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 
-### The safety rows, which outrank everything above
+**Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 25 KiteCodec rows.
+**67 open rows in total.**
 
-| Row | Open item, in one line | Ver | Detail |
-|---|---|---|---|
-| SEC-1 | a subtitle can overflow the heap on 32 bit Android ABIs | [V] 08-19 | 17.19, here |
-| SEC-2 | a manifest can make the player fetch anything, with the caller's cookies | [V] 08-19 | 17.19, here |
-| SEC-3 | secrets survive the redaction built to remove them | [V] 08-19 | 17.19, here |
-| SEC-4 | the JNI layer has no exception discipline at all | [V] 08-19 | 17.19, here |
-| SEC-5 | a filter value is interpolated unescaped, and a golden test pins it | [V] 08-19 | 17.19, here |
-| SEC-6 | two hangs and a crash in the network module | [V] 08-19 | 17.19, here |
-
-**Counts, measured off this table rather than estimated.** 43 KitePlayer rows, of which 1 is CLOSED
-and **42 remain**. 25 KiteCodec rows. 6 safety rows. **73 open rows in total.**
+**The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
+file under RULE TWO (PAST 14.115).
 
 Of the 42 open KitePlayer rows, **37 carry [V] and none carry [C]**: all eight rows that were
 carried and unverified before this pass have now been read against the tree. The remaining 5 carry
 neither mark because they need hardware this machine does not have, and 10 rows in total are
 [owner] gated. **So nothing in this register is unverified except what cannot be verified here.**
 
-Three rows the previous version kept struck through (X-10, X-11, PAR-4) are gone, because that
-version said they would stay "until the next sweep" and this is the sweep. SOL-P10 is struck here
-for one edition and goes the same way next time.
+SOL-P10 is gone too: the previous edition struck it through and said it would go "next time", and
+RULE TWO says there is no next time.
 
 **Corrections this pass made to the register's own bookkeeping.** The previous counts paragraph said
 "21 verified, 10 carried, 11 owner". Counted directly, it was 27, 8 and 10. Two rows, SOL-B7 and
@@ -2531,14 +2545,18 @@ leaks its codec context**, which is precisely the defect P0-05 was opened to fix
 the reader and the decoder are both opened outside the `try`, so a throwing `openDecoder` leaves
 `readerActive` true for ever and that `MediaSource` can never open another reader again.
 
-#### KC-CI-C. Continuous integration runs one of the seven C suites
+#### KC-CI-C. Continuous integration runs one of the eight C suites
 
 `ci.yml:167` and `:174` both run `./scripts/run-c-tests.sh <variant> test_identity`, while
-`run-c-tests.sh:38` defines seven suites. `test_ownership`, `test_buffers`, `test_rescale`,
-`test_strerror_thread`, `test_convert` and `test_args` run **only on a developer's laptop**. Every
-"C suites 7 of 7 green" line in the execution logs is therefore a true statement about a local run
-and a false impression about the project's guard rails. Cheap to fix and it changes what every
-future green means.
+`run-c-tests.sh` defines EIGHT suites since the 2026-08-19 safety surge added `test_append`.
+`test_ownership`, `test_buffers`, `test_rescale`, `test_strerror_thread`, `test_convert`,
+`test_args` and `test_append` run **only on a developer's laptop**. Every "C suites green" line in
+the execution logs is therefore a true statement about a local run and a false impression about the
+project's guard rails. Cheap to fix and it changes what every future green means.
+
+**KitePlayer has the same gap and it is worse there**, because KitePlayer has no CI at all
+(`KP-B1..B13`): `kiteplayer-rt` has eight C suites and `kiteplayer-libass` gained a ninth on
+2026-08-19, and nothing outside this laptop has ever run any of them.
 
 #### Correctness, KiteCodec, still open
 
@@ -2625,8 +2643,9 @@ One release blocker is left and it is the Web reader; everything else here is a 
   seek that validates nothing and a class with no closed flag; no timeout, retry, backoff or
   reconnect; DASH that picks one representation by bandwidth, drops audio, refuses live and
   multi period, and cannot seek; an MPD repeat count taken verbatim from XML; and the module is not
-  published while all eleven other library modules are. **See also SEC-2 and SEC-6, which are in
-  this module and outrank all of it.**
+  published while all eleven other library modules are. **The six safety rows that used to sit
+  beside this one, two of them in this very module, were all fixed on 2026-08-19 (PAST 14.115).**
+  What is left here is resilience and publication, not safety.
 - **KP-API.** `editions()` and `programs()` throw unconditionally and a test pins that they do; the
   default factory compiles and then throws; **five** accepted and unused config knobs, not the four
   the old row said; public models that are mutable through arrays, giving identity equality; raw
@@ -2759,61 +2778,16 @@ from these two repositories.
 ### 17.19 Found by this pass, in neither audit
 
 **These are new. Nobody has seen them before 2026-08-19, they are not in SOLSUPREME and not in
-SUPREME, and three of them are the most serious findings in this document.** They exist because
-the re-verification read the code around each claim instead of only the claim.
+SUPREME.** They exist because the re-verification read the code around each claim instead of only
+the claim. The three most serious of them were safety defects, and those were fixed the same day.
 
-**The safety three. Take these first, ahead of everything else in 17.16 and 17.17.**
-
-- **SEC-1. A subtitle can overflow the heap on 32 bit Android.** `libass_jni.c:106,110-112`
-  accumulates `pixelBytes` and `headerBytes` with no overflow check. `size_t` is 32 bit on
-  `armeabi-v7a` and `x86`, so a large enough cue wraps the total, `malloc(totalBytes)` under
-  allocates, and the fill loop at `:133-143` then writes the full un wrapped amount. The dimensions
-  come from the subtitle file, which is untrusted input. Note the interaction with SOL-B5: those two
-  ABIs are the ones nothing currently cross builds, so the exposure arrives WITH the fix for that
-  row. Size S to fix, and it must land before armeabi-v7a ever ships.
-
-- **SEC-2. A manifest can make the player fetch anything, with the caller's credentials.**
-  `DashManifest.kt:270` resolves `reference.contains("://") -> reference`, accepting any absolute
-  URL out of an attacker supplied MPD with no scheme allowlist and no origin check.
-  `DashMediaIo.kt:131` then fetches it using THE CALLER'S OWN `HttpClient`, carrying its default
-  headers and its cookie jar. That is server side request forgery plus credential leakage, in a
-  module built to load remote manifests. Size S for the allowlist, M to do origin policy properly.
-
-- **SEC-3. Secrets survive the redaction that exists to remove them.** `PlaybackCore.kt:4322`
-  redacts with `substringAfterLast('/')`, so `https://host/video.mp4?token=SECRET` becomes
-  `video.mp4?token=SECRET`. The query string is exactly where credentials live, and this lands in
-  every support bundle. `FacadeTruthTest.kt:21-33` passes because it only tests the directory part.
-  Size S, and the test needs the query case added or it will regress.
-
-**The JNI layer has no exception discipline at all.** `libass_jni.c` contains zero
-`ExceptionCheck`. `GetStringUTFChars` at `:52` can return NULL with a pending OutOfMemoryError, and
-`:53` and `:54` then make JNI calls that are illegal in that state. Separately, `kj_abi.c:55-69`
-accumulates with `off += snprintf(buf + off, sizeof buf - (size_t)off, ...)` into `char buf[4096]`:
-if `off` ever passed 4096 the `size_t` subtraction wraps to a huge value and `buf + off` leaves the
-array. It is latent today (the reachable maximum is about 2.3 KB) and it is unguarded, untested,
-and it is the exact hazard `helpers_filter.c:138-142` guards against everywhere else. **There is no
-C test of the JNI layer at all**, which is why none of this was caught.
-
-**A filter value is interpolated into the filter string unescaped.** `dsl/FilterDsl.kt:186` does
-`add("sample_fmts=$it")` raw, while the very next line routes `channelLayout` through
-`escapeFilterValue`. So `AudioFormat(sampleFormat = "fltp,volume=0")` silently appends an entire
-extra filter to the graph. **A golden test pins the unescaped form** at `dsl/KdGoldensTest.kt:63`,
-so fixing this correctly requires moving that golden, which is the sort of thing that gets reverted
-by someone who thinks they broke a test.
+**Six of this section's findings are gone, because they were fixed on 2026-08-19** (PAST 14.115).
+What is left below is what is still true.
 
 **An untyped map silently beats the typed field next to it, in two places.** The DSL row already
 named it for decoder options. The same shape exists for encoders: `MediaSink.native.kt:157-166`
 sets the bitrate from `spec.bitrateBps`, then applies `spec.options` immediately after, so
 `options["b"]` wins over the typed spec field. Same at `:225` for audio.
-
-**Two hangs and a crash in the network module, none acknowledged anywhere.**
-`KtorMediaIo.kt:79`: `close()` cancels the scope, and a later read reaches `openAt`, whose
-`scope.launch` body never runs, so `channel.readAvailable` suspends FOREVER rather than throwing.
-`XmlMini.kt:108` recurses per nesting level, so a deep manifest raises `StackOverflowError`, which
-is an `Error` that every `catch (Exception)` in the module misses. `DashManifest.kt:207` divides by
-`template.timescale` BEFORE the `require(segmentMicros > 0)` guard on the next line, so
-`timescale="0"` is an uncaught `ArithmeticException` instead of a typed refusal. And
-`DashMediaIo.kt:98,133` buffer whole responses with no size cap.
 
 **The mixer only ever folds to stereo, and the C already says so.** `ChannelMixer.kt:302` reads
 `if (targetChannels != 2 || layout == null) return null`. A 7.1 source going to a six speaker
@@ -2858,25 +2832,20 @@ was simply never applied here. Size S, and it is the best value in this whole se
 **This is the answer to "what now". The register above says what is open; this says what to do
 first.** It replaces the priority orders of both distilled documents, which were written before the
 2026-08-19 verification and did not know about the safety rows or the six unfinished DONE rows.
+**The safety tier that used to stand above everything here is done (PAST 14.115), so this list
+starts where the work actually starts.**
 
 **The rule that outranks the order:** a fix is done when its EVIDENCE exists, not when the code
 changes. Every item below lands with the gate its changed path selects, and any item whose truth no
 test can express says so in writing rather than passing quietly. That rule is why the order looks
-the way it does: three of the top five items are cheap precisely because they buy back the ability
-to tell whether anything else is true.
+the way it does: the cheapest items are cheap precisely because they buy back the ability to tell
+whether anything else is true.
 
-#### First: the three safety rows. Nothing else moves until these do
+#### First: buy back the ability to know things. All cheap, all high leverage
 
-`SEC-1`, `SEC-2`, `SEC-3` (17.19). A heap overflow reachable from an untrusted subtitle, a manifest
-that can make the player fetch any URL with the caller's cookies, and a redaction that leaves the
-query string where credentials live. All three are small. **SEC-1 must land before `armeabi-v7a`
-ever ships**, because that ABI is where the 32 bit wrap lives, and SOL-B5 is the row that would add
-it. Take `SEC-4` (no JNI exception checks) in the same sitting; it is the same file.
-
-#### Second: buy back the ability to know things. All cheap, all high leverage
-
-1. **`KC-CI-C`.** Continuous integration runs one of seven C suites. Six suites guard nothing
-   outside a laptop. Change two lines.
+1. **`KC-CI-C`.** Continuous integration runs `test_identity` and nothing else. There are EIGHT
+   suites since the safety surge added `test_append`, so seven of them guard nothing outside a
+   laptop. `.github/workflows/ci.yml:167,174`. Change two lines.
 2. **`KC-WASM-MIRROR`.** The generated Wasm binding and the file that actually compiles are two
    copies nothing compares, and the drift fails only at runtime in a browser. **The project already
    wrote this check for a sibling file**; apply it here.
@@ -2888,7 +2857,7 @@ it. Take `SEC-4` (no JNI exception checks) in the same sitting; it is the same f
    already counted as finished and nobody will come back to them otherwise. P1-11 on the JVM is the
    worst: it is a whole missing ownership check in a class that already has the helper.
 
-#### Third: the correctness rows that are actually left
+#### Second: the correctness rows that are actually left
 
 `KC-WEB-IO` first, because it is the last correctness release blocker. Then `KC-CANCEL`, and take it
 together with 17.12's C-52 to C-54, which are the same hole seen from the network side; scheduling
@@ -2897,7 +2866,7 @@ stereo only mixer, because it is a user visible product limitation that the C al
 no register ever stated. Then audio device recovery (`SOL-A6`) and viewport subtitles
 (`KP-P1-15`), the two rows the last surge honestly left open.
 
-#### Fourth: the truth rows. Cheap, and they stop the next reader being misled
+#### Third: the truth rows. Cheap, and they stop the next reader being misled
 
 `KC-DOCTRUTH` and its KitePlayer twin inside `KP-API`. A build script that contradicts itself about
 whether the JVM is a placeholder, a README that calls a 2,303 line backend a placeholder, minSdk
@@ -2905,7 +2874,7 @@ stated as 24 in seven places when it is 26, six KDocs that deny features which s
 promise recovery that does not exist, and one SPI file that contradicts itself sixteen lines apart.
 None of this is hard. All of it is why the last two audits disagreed with the tree.
 
-#### Fifth: the distribution program, when the owner is ready
+#### Fourth: the distribution program, when the owner is ready
 
 The whole `P0-11` to `P0-19` cluster is ONE program and must not be started piecemeal (17.17).
 **It is blocked on the owner, not on work:** Maven Central credentials, signing keys, and the

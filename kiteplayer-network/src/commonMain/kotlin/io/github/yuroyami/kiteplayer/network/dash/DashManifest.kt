@@ -70,17 +70,64 @@ public data class DashSegmentPlan(
     val mediaUrls: List<String>,
 )
 
+/**
+ * What a manifest is allowed to point this player at (SEC-2).
+ *
+ * An MPD is attacker-supplied input: the player fetches whatever it names, using the CALLER'S
+ * `HttpClient`, which carries that client's default headers and its cookie jar. Before this policy
+ * existed the resolver accepted any absolute URL at all, so a manifest could name
+ * `file:///etc/passwd`, or an address on the machine's own network, and have the player fetch it
+ * with the caller's credentials attached. That is server-side request forgery plus credential
+ * leakage, in the one module built to load remote manifests.
+ *
+ * **Cross-origin is allowed by default and that is deliberate.** A BaseURL pointing at a different
+ * CDN host is ordinary, correct DASH, and refusing it would break real manifests. The two things
+ * that are NOT ordinary are refused by default instead: a scheme other than http or https, and an
+ * https manifest naming http resources.
+ *
+ * **A caller whose `HttpClient` carries credentials should pass [SameOrigin].** That is the only
+ * configuration in which a hostile manifest cannot make those credentials leave the origin the
+ * manifest itself came from.
+ */
+public data class DashUrlPolicy(
+    /** Lowercase schemes a resolved URL may use. */
+    val allowedSchemes: Set<String> = setOf("http", "https"),
+    /** Whether an `https` manifest may name `http` resources. */
+    val allowSchemeDowngrade: Boolean = false,
+    /** Whether every resolved URL must share the manifest's scheme, host and port. */
+    val sameOriginOnly: Boolean = false,
+) {
+    public companion object {
+        /** http and https, no downgrade, cross-origin allowed. */
+        public val Default: DashUrlPolicy = DashUrlPolicy()
+
+        /** [Default] plus: nothing outside the manifest's own origin is ever fetched. */
+        public val SameOrigin: DashUrlPolicy = DashUrlPolicy(sameOriginOnly = true)
+    }
+}
+
+/** A URL a manifest asked for and [DashUrlPolicy] refused. */
+public class DashUrlRefusedException(message: String) : IllegalArgumentException(message)
+
 public object DashManifestParser {
 
-    /** Parses [xml] fetched from [manifestUrl]; the URL anchors every relative BaseURL. */
-    public fun parse(xml: String, manifestUrl: String): DashManifest {
+    /**
+     * Parses [xml] fetched from [manifestUrl]; the URL anchors every relative BaseURL, and
+     * [policy] decides what the manifest is allowed to point at (SEC-2).
+     */
+    public fun parse(
+        xml: String,
+        manifestUrl: String,
+        policy: DashUrlPolicy = DashUrlPolicy.Default,
+    ): DashManifest {
         val root = XmlMini.parse(xml)
         require(root.name == "MPD") { "not a DASH manifest: root element is <${root.name}>" }
-        val mpdBase = resolveBaseUrl(directoryOf(manifestUrl), root)
+        requireAllowedScheme(manifestUrl, policy)
+        val mpdBase = resolveBaseUrl(directoryOf(manifestUrl), root, policy)
         val isDynamic = root.attr("type") == "dynamic"
         val duration = root.attr("mediaPresentationDuration")?.let(::parseIsoDurationMicros)
         val periods = root.children("Period").map { period ->
-            val periodBase = resolveBaseUrl(mpdBase, period)
+            val periodBase = resolveBaseUrl(mpdBase, period, policy)
             DashPeriod(
                 baseUrl = periodBase,
                 durationMicros = period.attr("duration")?.let(::parseIsoDurationMicros),
@@ -91,7 +138,7 @@ public object DashManifestParser {
                         mimeType = set.attr("mimeType"),
                         segmentTemplate = setTemplate,
                         representations = set.children("Representation").map { rep ->
-                            parseRepresentation(rep, periodBase, set, setTemplate)
+                            parseRepresentation(rep, periodBase, set, setTemplate, policy)
                         },
                     )
                 },
@@ -105,8 +152,9 @@ public object DashManifestParser {
         periodBase: String,
         set: XmlElement,
         setTemplate: DashSegmentTemplate?,
+        policy: DashUrlPolicy,
     ): DashRepresentation {
-        val repBase = resolveBaseUrl(periodBase, rep)
+        val repBase = resolveBaseUrl(periodBase, rep, policy)
         val ownTemplate = rep.child("SegmentTemplate")?.let(::parseTemplate)
         val segmentList = rep.child("SegmentList") ?: set.child("SegmentList")
         return DashRepresentation(
@@ -120,10 +168,10 @@ public object DashManifestParser {
             segmentTemplate = ownTemplate ?: setTemplate,
             segmentUrls = segmentList?.children("SegmentURL")
                 ?.mapNotNull { it.attr("media") }
-                ?.map { resolveUrl(repBase, it) }
+                ?.map { resolveUrl(repBase, it, policy) }
                 ?: emptyList(),
             initializationUrl = segmentList?.child("Initialization")?.attr("sourceURL")
-                ?.let { resolveUrl(repBase, it) },
+                ?.let { resolveUrl(repBase, it, policy) },
         )
     }
 
@@ -131,7 +179,11 @@ public object DashManifestParser {
         initialization = template.attr("initialization"),
         media = template.attr("media"),
         startNumber = template.attr("startNumber")?.toLongOrNull() ?: 1L,
-        timescale = template.attr("timescale")?.toLongOrNull() ?: 1L,
+        // Refused here rather than at the division that uses it: `timescale="0"` used to reach
+        // `duration * 1_000_000 / timescale` and raise an untyped ArithmeticException (SEC-6).
+        timescale = (template.attr("timescale")?.toLongOrNull() ?: 1L).also {
+            require(it > 0) { "SegmentTemplate timescale must be positive, not $it" }
+        },
         duration = template.attr("duration")?.toLongOrNull(),
         timeline = template.child("SegmentTimeline")?.children("S")?.map { s ->
             DashTimelineEntry(
@@ -152,6 +204,7 @@ public object DashManifestParser {
         manifest: DashManifest,
         period: DashPeriod,
         representation: DashRepresentation,
+        policy: DashUrlPolicy = DashUrlPolicy.Default,
     ): DashSegmentPlan {
         require(!manifest.isDynamic) {
             "live (dynamic) manifests need a live window this tier does not do yet"
@@ -168,7 +221,11 @@ public object DashManifestParser {
             ?: throw IllegalArgumentException("SegmentTemplate without media for ${representation.id}")
 
         val initialization = template.initialization?.let {
-            resolveUrl(representation.baseUrl, substitute(it, representation, number = null, time = null))
+            resolveUrl(
+                representation.baseUrl,
+                substitute(it, representation, number = null, time = null),
+                policy,
+            )
         }
         val mediaUrls = mutableListOf<String>()
         if (template.timeline.isNotEmpty()) {
@@ -194,6 +251,7 @@ public object DashManifestParser {
                     mediaUrls += resolveUrl(
                         representation.baseUrl,
                         substitute(media, representation, number, time),
+                        policy,
                     )
                     time += entry.d
                     number++
@@ -212,6 +270,7 @@ public object DashManifestParser {
                 mediaUrls += resolveUrl(
                     representation.baseUrl,
                     substitute(media, representation, template.startNumber + i, time),
+                    policy,
                 )
                 time += segmentDuration
             }
@@ -260,16 +319,90 @@ public object DashManifestParser {
     }
 
     /** The element's BaseURL chain applied onto [parent]. */
-    private fun resolveBaseUrl(parent: String, element: XmlElement): String {
+    private fun resolveBaseUrl(
+        parent: String,
+        element: XmlElement,
+        policy: DashUrlPolicy,
+    ): String {
         val base = element.child("BaseURL")?.text?.takeIf { it.isNotBlank() } ?: return parent
-        return resolveUrl(parent, base)
+        return resolveUrl(parent, base, policy)
     }
 
-    /** RFC-3986-lite resolution: absolute URLs pass, path-absolute joins the origin, else the directory. */
-    internal fun resolveUrl(base: String, reference: String): String = when {
-        reference.contains("://") -> reference
-        reference.startsWith("/") -> originOf(base) + reference
-        else -> directoryOf(base) + reference
+    /**
+     * RFC-3986-lite resolution, then [policy] (SEC-2).
+     *
+     * A scheme is detected by its grammar rather than by looking for `://`, which is what let
+     * `file:/etc/passwd` through as a relative path and would have accepted a relative segment
+     * name that happened to contain `://` as absolute.
+     */
+    internal fun resolveUrl(
+        base: String,
+        reference: String,
+        policy: DashUrlPolicy = DashUrlPolicy.Default,
+    ): String {
+        val resolved = when {
+            schemeOf(reference) != null -> reference
+            // `//host/path` inherits the manifest's scheme, and refuses when there is none to
+            // inherit rather than guessing one.
+            reference.startsWith("//") -> {
+                val scheme = schemeOf(base)
+                    ?: throw DashUrlRefusedException(
+                        "$reference is scheme-relative and the manifest URL $base has no scheme",
+                    )
+                "$scheme:$reference"
+            }
+            reference.startsWith("/") -> originOf(base) + reference
+            else -> directoryOf(base) + reference
+        }
+        return checkAgainst(base, resolved, policy)
+    }
+
+    /** The whole of [DashUrlPolicy], applied once, at the only place a URL is produced. */
+    private fun checkAgainst(base: String, resolved: String, policy: DashUrlPolicy): String {
+        val scheme = schemeOf(resolved)
+            ?: throw DashUrlRefusedException("$resolved has no scheme, so nothing can vouch for it")
+        if (scheme !in policy.allowedSchemes) {
+            throw DashUrlRefusedException(
+                "the manifest asked for $resolved; scheme '$scheme' is not in " +
+                    "${policy.allowedSchemes.sorted()}, and a manifest is untrusted input",
+            )
+        }
+        if (!policy.allowSchemeDowngrade && schemeOf(base) == "https" && scheme != "https") {
+            throw DashUrlRefusedException(
+                "an https manifest asked for $resolved over '$scheme'; set " +
+                    "DashUrlPolicy(allowSchemeDowngrade = true) if that is genuinely intended",
+            )
+        }
+        if (policy.sameOriginOnly && originOf(resolved) != originOf(base)) {
+            throw DashUrlRefusedException(
+                "the manifest at ${originOf(base)} asked for $resolved, and this policy is " +
+                    "sameOriginOnly; use DashUrlPolicy.Default to allow other CDN hosts",
+            )
+        }
+        return resolved
+    }
+
+    /** The manifest URL itself goes through the scheme half of the policy before it is fetched. */
+    internal fun requireAllowedScheme(url: String, policy: DashUrlPolicy) {
+        val scheme = schemeOf(url)
+            ?: throw DashUrlRefusedException("$url has no scheme, so nothing can vouch for it")
+        if (scheme !in policy.allowedSchemes) {
+            throw DashUrlRefusedException(
+                "$url uses scheme '$scheme', which is not in ${policy.allowedSchemes.sorted()}",
+            )
+        }
+    }
+
+    /** The lowercase scheme of [url], or null when it has none. `scheme:` per RFC 3986. */
+    private fun schemeOf(url: String): String? {
+        val colon = url.indexOf(':')
+        if (colon <= 0) return null
+        if (!url[0].isLetter()) return null
+        for (i in 1 until colon) {
+            val ch = url[i]
+            if (!ch.isLetterOrDigit() && ch != '+' && ch != '-' && ch != '.') return null
+        }
+        return url.substring(0, colon).lowercase()
     }
 
     private fun directoryOf(url: String): String = url.substringBeforeLast('/') + "/"

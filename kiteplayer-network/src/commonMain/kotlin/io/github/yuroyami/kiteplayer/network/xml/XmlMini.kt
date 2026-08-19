@@ -26,6 +26,16 @@ public class XmlException(message: String, public val offset: Int) : Exception("
 
 public object XmlMini {
 
+    /**
+     * How deep a document may nest before the parser refuses (SEC-6).
+     *
+     * `parseElement` recurses once per level, so a manifest of ten thousand opening tags raised
+     * `StackOverflowError`. That is an `Error`, not an `Exception`, so every `catch (Exception)`
+     * in this module missed it and it came out of the player as a crash instead of a refusal.
+     * Real DASH nests under ten levels; this ceiling is far above any honest document.
+     */
+    public const val MAX_DEPTH: Int = 256
+
     /** Parses one document and returns its root element. */
     public fun parse(text: String): XmlElement {
         val parser = Parser(text)
@@ -37,6 +47,7 @@ public object XmlMini {
 
     private class Parser(private val s: String) {
         var at = 0
+        private var depth = 0
 
         fun skipProlog() {
             while (true) {
@@ -63,6 +74,17 @@ public object XmlMini {
         }
 
         fun parseElement(): XmlElement {
+            if (++depth > MAX_DEPTH) {
+                throw XmlException("nested past $MAX_DEPTH elements, which no real manifest does", at)
+            }
+            try {
+                return parseElementBody()
+            } finally {
+                depth--
+            }
+        }
+
+        private fun parseElementBody(): XmlElement {
             expect('<')
             val name = readName()
             val attributes = mutableMapOf<String, String>()

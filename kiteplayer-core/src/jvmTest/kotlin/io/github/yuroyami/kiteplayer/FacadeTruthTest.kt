@@ -33,6 +33,29 @@ class FacadeTruthTest {
     }
 
     @Test
+    fun `the bundle keeps no query string and no option value`() = runTest {
+        // SEC-3. The redaction was `substringAfterLast('/')`, so the token rode out in the one
+        // artifact a user is most likely to paste in public, and `headers` carried the rest.
+        val harness = CoreHarness(this)
+        harness.attachRenderer()
+        harness.core.open(
+            MediaItem(
+                "scripted://host/folder/movie.mp4?token=SECRET&sig=ALSOSECRET",
+                openOptions = mapOf("headers" to "Authorization: Bearer SECRET"),
+            ),
+        )
+        harness.run(100.milliseconds)
+
+        val bundle = player(harness).supportBundle()
+        assertFalse("SECRET" in bundle, "no credential may survive in any line of the bundle")
+        assertFalse("ALSOSECRET" in bundle, "a second query parameter must go the same way")
+        assertFalse("token=" in bundle, "the query string itself must not appear")
+        assertTrue("movie.mp4" in bundle, "the media stays identifiable by its basename")
+        assertTrue("headers" in bundle, "which options were set is still reportable")
+        harness.close()
+    }
+
+    @Test
     fun `the dump echoes open options and the queue`() = runTest {
         val harness = CoreHarness(this)
         harness.attachRenderer()

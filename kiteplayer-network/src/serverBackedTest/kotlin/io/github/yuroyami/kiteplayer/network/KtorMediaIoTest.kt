@@ -13,6 +13,7 @@ import kotlinx.coroutines.runBlocking
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -122,6 +123,27 @@ class KtorMediaIoTest {
         assertNull(resolver.resolve("content://media/id"), "a content uri is not the resolver's")
         val io = resolver.resolve("HTTP://127.0.0.1:$port/media")
         assertTrue(io is KtorMediaIo, "an http uri resolves to the Ktor reader")
+        io.close()
+    }
+
+    @Test
+    fun aReadAfterCloseRefusesInsteadOfHangingForEver() = runBlocking {
+        // SEC-6. close() cancels the scope, so a later read reached openAt, whose scope.launch
+        // body never ran. Nothing wrote to the pipe and readAvailable suspended FOR EVER: no
+        // error, no timeout, no thread to blame. This test would not finish before the fix.
+        val bytes = content(4096)
+        val port = serve(bytes)
+        val io = KtorMediaIo.open("http://127.0.0.1:$port/media")
+        val buffer = ByteArray(64)
+        assertTrue(io.read(buffer, 0, buffer.size) > 0, "the reader works before close")
+        // The seek is what makes this the real defect: it moves the position away from the open
+        // body, so the read after close cannot be served from it and MUST go through openAt.
+        io.seek(2048)
+        io.close()
+
+        assertFailsWith<KtorMediaIoException> { io.read(buffer, 0, buffer.size) }
+        assertFailsWith<KtorMediaIoException> { io.seek(1024) }
+        // Closing twice is a no-op rather than a second cancel of a dead scope.
         io.close()
     }
 }

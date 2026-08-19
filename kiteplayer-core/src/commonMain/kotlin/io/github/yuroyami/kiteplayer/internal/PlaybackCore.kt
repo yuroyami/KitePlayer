@@ -4319,7 +4319,10 @@ internal class PlaybackCore(
      * which is when it is usually called.
      */
     fun diagnosticsDump(redactPaths: Boolean = false): String = buildString {
-        fun path(uri: String): String = if (redactPaths) uri.substringAfterLast('/') else uri
+        fun path(uri: String): String = if (redactPaths) redactUri(uri) else uri
+        // Free text quotes the URI it failed on, so redacting only the path lines left the
+        // token in the bundle one line further down (SEC-3).
+        fun text(value: String): String = if (redactPaths) redactUrisIn(value) else value
         val snapshot = snapshotState.value
         val liveStats = statsState.value
         val liveProgress = progressState.value
@@ -4327,7 +4330,16 @@ internal class PlaybackCore(
         appendLine("status      ${snapshot.status}")
         appendLine("media       ${snapshot.media?.uri?.let(::path) ?: "none"}")
         snapshot.media?.openOptions?.takeIf { it.isNotEmpty() }?.let { options ->
-            appendLine("openOptions $options (unconsumed keys warn typed at open)")
+            // Values are withheld under redaction and keys are not: `headers` routinely carries an
+            // Authorization line, and a bundle still has to show WHICH options were set (SEC-3).
+            appendLine(
+                if (redactPaths) {
+                    "openOptions ${options.keys.sorted()} (values withheld; " +
+                        "unconsumed keys warn typed at open)"
+                } else {
+                    "openOptions $options (unconsumed keys warn typed at open)"
+                },
+            )
         }
         if (snapshot.queue.isNotEmpty()) {
             appendLine(
@@ -4338,7 +4350,7 @@ internal class PlaybackCore(
         appendLine("duration    ${snapshot.duration ?: "unknown"}")
         appendLine("seekable    ${snapshot.seekable}")
         appendLine("position    ${liveProgress.position} (buffered ahead ${liveProgress.bufferedAhead})")
-        appendLine("error       ${snapshot.error?.message ?: "none"}")
+        appendLine("error       ${snapshot.error?.message?.let(::text) ?: "none"}")
         appendLine()
         appendLine("config")
         appendLine("  backend           ${config.backends.backend?.describeForDiagnostics() ?: "none"}")
@@ -4382,13 +4394,13 @@ internal class PlaybackCore(
             if (attachedFilter == null) {
                 "  filters: none attached"
             } else {
-                "  filters: video graph attached: $attachedFilter"
+                "  filters: video graph attached: ${text(attachedFilter)}"
             },
         )
         appendLine()
         appendLine("warnings (${warningHistory().size} kept, cap $WARNING_HISTORY_LIMIT)")
         warningHistory().forEach { entry ->
-            appendLine("  [${entry.atNanos}] ${entry.warning.message}")
+            appendLine("  [${entry.atNanos}] ${text(entry.warning.message)}")
         }
     }
 

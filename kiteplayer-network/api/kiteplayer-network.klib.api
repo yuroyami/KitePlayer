@@ -122,6 +122,10 @@ final class io.github.yuroyami.kiteplayer.network.dash/DashRepresentation { // i
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashRepresentation.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.network.dash/DashResponseTooLargeException : kotlin/IllegalStateException { // io.github.yuroyami.kiteplayer.network.dash/DashResponseTooLargeException|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.network.dash/DashResponseTooLargeException.<init>|<init>(kotlin.String){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan { // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan|null[0]
     constructor <init>(kotlin/String?, kotlin.collections/List<kotlin/String>) // io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan.<init>|<init>(kotlin.String?;kotlin.collections.List<kotlin.String>){}[0]
 
@@ -185,6 +189,36 @@ final class io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry { // io
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashTimelineEntry.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy { // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy|null[0]
+    constructor <init>(kotlin.collections/Set<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.<init>|<init>(kotlin.collections.Set<kotlin.String>;kotlin.Boolean;kotlin.Boolean){}[0]
+
+    final val allowSchemeDowngrade // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.allowSchemeDowngrade|{}allowSchemeDowngrade[0]
+        final fun <get-allowSchemeDowngrade>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.allowSchemeDowngrade.<get-allowSchemeDowngrade>|<get-allowSchemeDowngrade>(){}[0]
+    final val allowedSchemes // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.allowedSchemes|{}allowedSchemes[0]
+        final fun <get-allowedSchemes>(): kotlin.collections/Set<kotlin/String> // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.allowedSchemes.<get-allowedSchemes>|<get-allowedSchemes>(){}[0]
+    final val sameOriginOnly // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.sameOriginOnly|{}sameOriginOnly[0]
+        final fun <get-sameOriginOnly>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.sameOriginOnly.<get-sameOriginOnly>|<get-sameOriginOnly>(){}[0]
+
+    final fun component1(): kotlin.collections/Set<kotlin/String> // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.component1|component1(){}[0]
+    final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.component3|component3(){}[0]
+    final fun copy(kotlin.collections/Set<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.copy|copy(kotlin.collections.Set<kotlin.String>;kotlin.Boolean;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.toString|toString(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.Companion|null[0]
+        final val Default // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.Companion.Default|{}Default[0]
+            final fun <get-Default>(): io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.Companion.Default.<get-Default>|<get-Default>(){}[0]
+        final val SameOrigin // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.Companion.SameOrigin|{}SameOrigin[0]
+            final fun <get-SameOrigin>(): io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy // io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy.Companion.SameOrigin.<get-SameOrigin>|<get-SameOrigin>(){}[0]
+    }
+}
+
+final class io.github.yuroyami.kiteplayer.network.dash/DashUrlRefusedException : kotlin/IllegalArgumentException { // io.github.yuroyami.kiteplayer.network.dash/DashUrlRefusedException|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.network.dash/DashUrlRefusedException.<init>|<init>(kotlin.String){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.network.xml/XmlElement { // io.github.yuroyami.kiteplayer.network.xml/XmlElement|null[0]
     constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>, kotlin.collections/List<io.github.yuroyami.kiteplayer.network.xml/XmlElement>, kotlin/String) // io.github.yuroyami.kiteplayer.network.xml/XmlElement.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.network.xml.XmlElement>;kotlin.String){}[0]
 
@@ -236,15 +270,23 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.githu
 }
 
 final object io.github.yuroyami.kiteplayer.network.dash/Dash { // io.github.yuroyami.kiteplayer.network.dash/Dash|null[0]
-    final suspend fun manifest(kotlin/String, io.ktor.client/HttpClient): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/Dash.manifest|manifest(kotlin.String;io.ktor.client.HttpClient){}[0]
-    final suspend fun mediaItemFor(kotlin/String, io.ktor.client/HttpClient): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.network.dash/Dash.mediaItemFor|mediaItemFor(kotlin.String;io.ktor.client.HttpClient){}[0]
+    final suspend fun manifest(kotlin/String, io.ktor.client/HttpClient, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ..., kotlin/Long = ...): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/Dash.manifest|manifest(kotlin.String;io.ktor.client.HttpClient;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy;kotlin.Long){}[0]
+    final suspend fun mediaItemFor(kotlin/String, io.ktor.client/HttpClient, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ..., kotlin/Long = ..., kotlin/Long = ...): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.network.dash/Dash.mediaItemFor|mediaItemFor(kotlin.String;io.ktor.client.HttpClient;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy;kotlin.Long;kotlin.Long){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer.network.dash/DashManifestParser { // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser|null[0]
-    final fun parse(kotlin/String, kotlin/String): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.parse|parse(kotlin.String;kotlin.String){}[0]
-    final fun segmentPlan(io.github.yuroyami.kiteplayer.network.dash/DashManifest, io.github.yuroyami.kiteplayer.network.dash/DashPeriod, io.github.yuroyami.kiteplayer.network.dash/DashRepresentation): io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.segmentPlan|segmentPlan(io.github.yuroyami.kiteplayer.network.dash.DashManifest;io.github.yuroyami.kiteplayer.network.dash.DashPeriod;io.github.yuroyami.kiteplayer.network.dash.DashRepresentation){}[0]
+    final fun parse(kotlin/String, kotlin/String, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ...): io.github.yuroyami.kiteplayer.network.dash/DashManifest // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.parse|parse(kotlin.String;kotlin.String;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy){}[0]
+    final fun segmentPlan(io.github.yuroyami.kiteplayer.network.dash/DashManifest, io.github.yuroyami.kiteplayer.network.dash/DashPeriod, io.github.yuroyami.kiteplayer.network.dash/DashRepresentation, io.github.yuroyami.kiteplayer.network.dash/DashUrlPolicy = ...): io.github.yuroyami.kiteplayer.network.dash/DashSegmentPlan // io.github.yuroyami.kiteplayer.network.dash/DashManifestParser.segmentPlan|segmentPlan(io.github.yuroyami.kiteplayer.network.dash.DashManifest;io.github.yuroyami.kiteplayer.network.dash.DashPeriod;io.github.yuroyami.kiteplayer.network.dash.DashRepresentation;io.github.yuroyami.kiteplayer.network.dash.DashUrlPolicy){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer.network.xml/XmlMini { // io.github.yuroyami.kiteplayer.network.xml/XmlMini|null[0]
+    final const val MAX_DEPTH // io.github.yuroyami.kiteplayer.network.xml/XmlMini.MAX_DEPTH|{}MAX_DEPTH[0]
+        final fun <get-MAX_DEPTH>(): kotlin/Int // io.github.yuroyami.kiteplayer.network.xml/XmlMini.MAX_DEPTH.<get-MAX_DEPTH>|<get-MAX_DEPTH>(){}[0]
+
     final fun parse(kotlin/String): io.github.yuroyami.kiteplayer.network.xml/XmlElement // io.github.yuroyami.kiteplayer.network.xml/XmlMini.parse|parse(kotlin.String){}[0]
 }
+
+final const val io.github.yuroyami.kiteplayer.network.dash/MAX_MANIFEST_BYTES // io.github.yuroyami.kiteplayer.network.dash/MAX_MANIFEST_BYTES|{}MAX_MANIFEST_BYTES[0]
+    final fun <get-MAX_MANIFEST_BYTES>(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/MAX_MANIFEST_BYTES.<get-MAX_MANIFEST_BYTES>|<get-MAX_MANIFEST_BYTES>(){}[0]
+final const val io.github.yuroyami.kiteplayer.network.dash/MAX_SEGMENT_BYTES // io.github.yuroyami.kiteplayer.network.dash/MAX_SEGMENT_BYTES|{}MAX_SEGMENT_BYTES[0]
+    final fun <get-MAX_SEGMENT_BYTES>(): kotlin/Long // io.github.yuroyami.kiteplayer.network.dash/MAX_SEGMENT_BYTES.<get-MAX_SEGMENT_BYTES>|<get-MAX_SEGMENT_BYTES>(){}[0]

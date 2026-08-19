@@ -55,7 +55,18 @@ public class KtorMediaIo private constructor(
     private var bodyJob: Job? = firstJob
     private var bodyPosition = 0L
 
+    /**
+     * Set by [close] and checked by every entry point (SEC-6).
+     *
+     * [close] cancels the scope. A read after that reached [openAt], whose `scope.launch` body
+     * therefore never ran, so nothing ever wrote to the pipe and `readAvailable` suspended FOR
+     * EVER: a hang with no error, no timeout and no thread to blame. Refusing typed is the only
+     * honest answer, and it is the one a caller can see.
+     */
+    private var closed = false
+
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
+        if (closed) throw KtorMediaIoException("read after close on $uri")
         if (length <= 0) return 0
         val knownSize = size
         if (knownSize != null && position >= knownSize) return -1
@@ -68,12 +79,16 @@ public class KtorMediaIo private constructor(
     }
 
     override suspend fun seek(position: Long) {
+        if (closed) throw KtorMediaIoException("seek after close on $uri")
         // Lazy: the reposition is real at the next read, which reopens only when the current
         // stream is not already there. The engine's cache absorbs most seeks before this.
         this.position = position
     }
 
+    /** Idempotent: closing twice is a no-op, and every later read or seek refuses typed. */
     override fun close() {
+        if (closed) return
+        closed = true
         body?.cancel()
         bodyJob?.cancel()
         scope.cancel()
@@ -82,6 +97,7 @@ public class KtorMediaIo private constructor(
 
     /** One ranged GET at [target], streamed through a bounded pipe. */
     private fun openAt(target: Long): ByteReadChannel {
+        if (closed) throw KtorMediaIoException("openAt after close on $uri")
         body?.cancel()
         bodyJob?.cancel()
         val pipe = ByteChannel(autoFlush = true)

@@ -8836,6 +8836,175 @@ two leaks. Three "covered by existing tests" claims were false, and the emcc pro
 is not in the repository. Ten Wasm rows have no test and cannot get one until a `wasmJsTest` source
 set exists. The detail is in KPKMP-FUTURE.md 17.16.
 
+### 14.115 The safety surge, 2026-08-19
+
+**What it was.** All six safety rows of the 2026-08-19 register, fixed in one sitting, across both
+repositories. They were the top of 17.20's order and the reason nothing else was allowed to move.
+This is also the first entry written under RULE TWO: the rows are DELETED from KPKMP-FUTURE.md
+rather than struck through there, and this is where they now live.
+
+**KiteCodec `588ec63`, KitePlayer the commit that carries this entry.**
+
+---
+
+**SEC-1. A subtitle could overflow the heap on 32 bit Android.** `libass_jni.c` accumulated the
+packed buffer's size with no check at all. `size_t` is 32 bit on `armeabi-v7a` and `x86`, so a
+large enough cue wrapped the total, `malloc` under-allocated, and the fill loop then wrote the full
+un-wrapped amount past the end. Region dimensions come out of the subtitle file, which is untrusted
+input.
+
+*The fix.* One ceiling, `INT32_MAX`, closes two different overflows: it is below `SIZE_MAX` on the
+32 bit ABIs so the wrap becomes unreachable, and it is exactly the range of the signed 32 bit
+`jsize` that `NewByteArray` takes on every ABI. Picking `INT32_MAX` rather than `SIZE_MAX` is also
+what made it testable: the guard trips at the same input on a 64 bit host as on a 32 bit phone.
+The arithmetic moved to `libass_pack_limits.h`, a header carrying no jni.h and no libass, so a host
+test can compile the SHIPPED code rather than a copy of it.
+
+*Also fixed in the same pass.* The per-region header wrote `width * height * 4` in `int`
+arithmetic, which is signed overflow on the way to a value the counting pass had already proven
+fits; it now computes in `size_t`. And the file used `int32_t`, `uint32_t` and `intptr_t` while
+including no `<stdint.h>`, getting them only from whatever `jni.h` happened to pull in.
+
+*Evidence.* A new suite, `kiteplayer-libass/native/tests/test_pack_limits.c`, 15 cases, run by a
+new `kiteplayer-libass/native/scripts/run-c-tests.sh` in plain and asan. It borrows kiteplayer-rt's
+harness rather than growing a second one; that is allowed inside one repository, and `harness.h`'s
+rule is about not sharing across the two. Every overflowing row asserts TWO things, the discipline
+`test_ring_rescale` established: that the guard refuses, and that the unguarded 32 bit arithmetic
+genuinely wrapped. Mutation-proven twice: deleting the region check turns case 4 red, and an
+off-by-one in the accumulation check turns case 11 red.
+
+**There was no C test of the JNI layer at all before this.** That is why none of it was caught.
+
+---
+
+**SEC-4a. The same file had no JNI exception discipline.** `GetStringUTFChars` returns NULL with an
+`OutOfMemoryError` pending, and the next two JNI calls were made anyway, which is undefined
+behaviour. `NewByteArray` could throw and the result was returned without a check. Both paths now
+return immediately, releasing what they hold.
+
+---
+
+**SEC-2. A manifest could make the player fetch anything, with the caller's credentials.**
+`DashManifest.resolveUrl` was `reference.contains("://") -> reference`: any string containing those
+three characters anywhere was accepted as an absolute URL, and `DashMediaIo` then fetched it with
+the CALLER'S `HttpClient`, carrying its default headers and its cookie jar.
+
+*The fix.* A `DashUrlPolicy` applied at the single place a URL is produced. Default: `http` and
+`https` only, and no `https` manifest may name `http` resources. `DashUrlPolicy.SameOrigin` for a
+caller whose client carries credentials.
+
+*The judgement call, stated because it is a real trade.* Cross-origin is ALLOWED by default. A
+BaseURL pointing at a different CDN host is ordinary, correct DASH, and an existing test in the
+repository documents exactly that shape. Refusing it by default would have broken real manifests to
+close a hole that the scheme allowlist already closes for the dangerous cases. The refusal message
+names the knob for callers who need the strict form.
+
+*A second defect the fix caught.* Scheme detection by `contains("://")` also missed `file:/etc/passwd`
+with a single slash, which was treated as a RELATIVE path and joined onto the manifest directory.
+Scheme detection is now by RFC 3986 grammar, and `//host/path` inherits the manifest's scheme
+instead of being mangled into `http://cdn/vod//host/path`.
+
+*Evidence.* `DashUrlPolicyTest`, 9 cases in commonTest, covering `file:` in both spellings, `data:`,
+`jar:`, `ftp:`, `gopher:`, the downgrade, the port-only origin change, the scheme-relative form, the
+manifest URL itself, and a hostile `BaseURL` refused during parse. The ordinary relative resolutions
+are pinned too, so the policy cannot quietly break normal playback.
+
+---
+
+**SEC-3. Secrets survived the redaction built to remove them.** `PlaybackCore.diagnosticsDump`
+redacted with `substringAfterLast('/')`, so `https://host/video.mp4?token=SECRET` became
+`video.mp4?token=SECRET`. The query string is exactly where credentials live, and a support bundle
+is the artifact a user is most likely to paste in public.
+
+*The fix, which went wider than the row.* `redactUri` drops the fragment, then the query, then
+everything before the last slash, so no token, host, path or `user:password@` userinfo survives.
+`redactUrisIn` does the same to URIs quoted inside free text, because the error line and the warning
+history quote the URI they failed on: redacting only the path lines left the secret one line further
+down. `openOptions` now prints its KEYS ONLY under redaction, because `headers` routinely carries an
+`Authorization` line and a bundle still has to show which options were set.
+
+*Evidence.* `RedactionTest`, 5 cases in commonTest, plus a new `FacadeTruthTest` case that asserts
+the literal secret appears nowhere in a real bundle. Mutation-proven: restoring the old one-liner
+turns 4 tests red across both suites.
+
+---
+
+**SEC-4b. `kj_abi.c` accumulated with `off += snprintf(...)` and no bound.** snprintf returns the
+length it WOULD have written. Once `off` passes the buffer size, `buf + off` leaves the array and
+`sizeof buf - (size_t)off` wraps to an enormous `size_t`, so the next append writes past the end
+with a bound that no longer bounds anything. Seven of the identity report's fields are strings of
+unbounded length. Latent today at about 2.3 KB against 4 KB, and unguarded.
+
+*The fix.* `kj_append` in a new `native/kitecodec-jni/kj_append.h`, which refuses rather than
+truncates: a half-written report is worse than none, because the Kotlin side splits it into a fixed
+31 fields and a short one parses into wrong values instead of failing. Callers turn the refusal into
+the bridge's typed handle exception. `helpers_filter.c` already guarded this by hand; this is that
+guard in one place.
+
+*Evidence.* A new suite, `test_append`, added to the existing seven, 6 cases, green in plain and
+asan. **The test found a real bug in the fix while it was being written:** `vsnprintf` writes the
+part that fits BEFORE the overflow is detectable, so a refused append left a truncated tail behind.
+The NUL is now restored at the old offset on refusal. The last case is the honest-row discipline
+again: it computes what the un-guarded chain would have produced and asserts it landed OUTSIDE the
+buffer, so the suite cannot pass on a buffer that was simply never filled.
+
+*Where it runs.* `native/kitecodec-c/scripts/build-host.sh` gained `-I ../kitecodec-jni` for this
+one header. The JNI tree has no C test rig of its own, and `kj_append.h` carries no jni.h precisely
+so it does not need one.
+
+---
+
+**SEC-5. A filter value was interpolated unescaped.** `FilterDsl.kt` did `add("sample_fmts=$it")`
+raw while the very next line routed `channelLayout` through `escapeFilterValue`, so
+`AudioFormat(sampleFormat = "fltp,volume=0")` silently appended an entire extra filter to the graph.
+
+**The register was wrong about the cost, and this corrects it.** 17.19 said fixing this "requires
+moving that golden" at `KdGoldensTest.kt:63`, and warned it was the sort of change someone reverts
+thinking they broke a test. It does not. `escapeFilterValue` quotes only values carrying a
+structural character, and `fltp` carries none, so the golden is byte for byte unchanged. Three new
+assertions pin that: two injections quoted, and the ordinary value untouched.
+
+---
+
+**SEC-6. Two hangs, a crash and an unbounded buffer in the network module.**
+
+- **`KtorMediaIo` hung for ever after close.** `close()` cancelled the scope, so a later read
+  reached `openAt`, whose `scope.launch` body therefore never ran; nothing wrote to the pipe and
+  `readAvailable` suspended with no error, no timeout and no thread to blame. There is now a
+  `closed` flag and every entry point refuses typed. **The mutation run is the evidence: with the
+  guards removed the new test does not fail, it HANGS, and the run was killed at 150 seconds.** The
+  test deliberately seeks before closing, because without that the read is served from the already
+  open body and never reaches the path that hangs.
+- **`XmlMini` recursed once per nesting level**, so a deep manifest raised `StackOverflowError`,
+  which is an `Error` and which every `catch (Exception)` in the module missed. A depth ceiling of
+  256 refuses typed. Three cases, including one that proves the counter unwinds so 300 siblings do
+  not accumulate it.
+- **`DashManifest` divided by `template.timescale` BEFORE the `require` on the next line**, so
+  `timescale="0"` was an uncaught `ArithmeticException`. Now refused at parse time, which covers
+  every use rather than the one the row named.
+- **`DashMediaIo` buffered whole responses with no cap.** `bodyAsText()` and `bodyAsBytes()` take
+  whatever the server sends. There is now a ceiling on each (8 MiB manifest, 64 MiB segment), the
+  declared `Content-Length` is checked first because it is free, and the read itself is bounded
+  because a server may declare one length and send another.
+
+---
+
+**Gates run.** Tier 1 green on both repositories, including the em dash scan. Tier 2 arms selected
+by the changed paths, all green: KiteCodec `apiCheck`, `jvmTest` (the real JNI backend, which is
+what exercises the guarded identity report), `macosArm64Test`, and the eight C suites in plain, asan,
+tsan and interpose; KitePlayer `macosArm64Test` for core, network and subtitles, the JVM suites, the
+wasmJs compile, the rt C suites under asan, and the new libass suite under plain and asan.
+
+**One dump regenerated.** `kiteplayer-network`'s ABI dump, for the new `DashUrlPolicy`,
+`DashUrlRefusedException`, `DashResponseTooLargeException`, the two size constants and the added
+default parameters. `checkKotlinAbi` is green again.
+
+**What is NOT claimed.** No device ran any of this. The libass overflow guard is proven by host
+arithmetic and by a compile against the real `jni.h` and `ass.h`, not by a phone rendering a hostile
+subtitle; the two ABIs where the wrap lived are still the two ABIs nothing cross-builds (SOL-B5).
+The DASH policy is proven against parsed manifests, not against a live hostile server. No fuzzing
+was run against any of the six.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

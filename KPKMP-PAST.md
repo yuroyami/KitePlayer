@@ -9078,6 +9078,67 @@ distribution program), and the runtime still cannot be asked which decoders a bu
 That last gap is now register row KC-CAPS, opened by the same owner message: the AV1 device
 failure that started today surfaced as a bare -78 precisely because nothing could answer it.
 
+### 14.117 The provisioning-drift surge, 2026-08-20
+
+**What it was.** The owner asked why baking FFmpeg is manual and why no flag makes it automatic,
+and said plainly that they get confused by it. Both halves were fair. The answer to the first is
+that consumers were never meant to bake at all: `FFmpegSource.Prebuilt` downloads, and manual
+baking was only ever the KiteCodec developer's path. That plan has a hole, because prebuilt assets
+exist for 5 of 11 triples and iOS has none, so every iOS consumer is pushed onto `Local` and
+therefore onto a hand-run bake. `FFmpegSource.BuildFromSource` is declared in the enum and is a
+stub that only ever throws.
+
+**The real defect underneath the confusion.** A vendored tree is a dead artifact. Nothing rebuilds
+it and nothing compared it, so a recipe change in `buildSrc` and the `.a` files on disk drift apart
+in silence. This was not hypothetical: `av1_videotoolbox` was pinned into the Apple hwaccel list on
+2026-08-19, and a day later every Apple tree still carried the two-hwaccel line with every gate
+green. The evidence had been on disk the whole time, because every bake since B1 stamps its exact
+configure line into `lib/kitecodec/ffmpeg-configure.txt`. Nobody was reading it.
+
+**Two answers, one automatic and one manual.**
+
+- `-Pkitecodec.ffmpeg.autoBake=true` makes the per-target compile depend on that target's bake.
+  Gradle then owns the question: its up-to-date check covers the task's inputs INCLUDING its
+  buildSrc implementation classpath, so a recipe edit re-bakes and an unchanged one is skipped.
+  Opt-in, because a first bake of a missing tree is tens of minutes and nobody wants that by
+  surprise. Proven by task graph: without the flag `buildFFmpegForMacosArm64` appears 0 times in
+  the graph for `compileKiteCodecCForMacosArm64`; with it, it appears ahead of the compile.
+- `checkFFmpegRecipes` is the manual half for builds that do not opt in. It compares each tree's
+  stamp against the recipe the checkout would pass today and names the flags that moved.
+
+**What the comparison deliberately ignores, and why the check survives contact.** Machine-specific
+keys (`--prefix`, `--cc`, `--ar`, sysroots) are dropped, because `--prefix` is a fresh scratch path
+every run and `--cc` carries an SDK path that moves with every Xcode update; comparing them would
+cry wolf constantly, and a check that is red by default is a check nobody runs. The dav1d trio is
+dropped for the same reason from the other direction: it is switched by a per-invocation `-P`
+toggle at bake time, and MEASURED, including it painted 8 of 8 real trees stale. Nothing is lost,
+because the plugin's own dav1d contract (0.0.11, 14.116) compares the tree's archive against the
+consumer's declaration in both directions.
+
+*Evidence.* Four buildSrc unit tests: the av1 drift replayed and caught by name, one recipe
+rendered by FFmpeg's `config.log` echo and by the task compared EQUAL across quoting, a scratch
+prefix and an Xcode SDK move, drift caught in the dropped direction, and the dav1d exclusion pinned
+with its reason. Mutation-proven: removing the quote normalisation turns two of them red. Then the
+real trees: `checkFFmpegRecipes` reports **4 of 8 vendored trees stale**, and every one is true
+drift, including both iOS trees missing `av1_videotoolbox` and macOS missing a filter added since
+its bake. The task is in Tier 1 now, and Tier 1's own blind-spot paragraph was corrected: it used
+to disclaim exactly this gap.
+
+**Two Gradle constraints this hit, recorded because they shaped the design.** A `doLast` in a
+`.kts` file that closes over a script-level `val` drags a Gradle script object into the
+configuration cache, which refuses it; the fix is a typed task in buildSrc with a `Serializable`
+input, not `notCompatibleWithConfigurationCache`, which did not help. And a hook registered INSIDE
+`tasks.register<BuildFFmpegTask> { }` only runs when a bake is realised, which never happens when
+you ask only for the check: the first working version reported "no tree carries a stamp" against
+eight stamped trees. The expectations are gathered in the check task's own configure block now, so
+an ordinary build never realises a bake to compute them.
+
+**What is NOT claimed.** Auto-bake was proven to enter the task graph, not to complete a bake: a
+real one is tens of minutes and none was run to green in this sitting. `BuildFromSource` is still a
+stub, iOS still has no prebuilt assets, and the clone of `vendor/ffmpeg` is still a manual one-time
+step that no flag performs. Those three are what would make provisioning fully automatic for a
+consumer, and all three ride the P0-11..P0-19 distribution program.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

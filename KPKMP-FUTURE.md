@@ -621,6 +621,7 @@ Selected by: every change, including a change to prose alone. Nothing is exempt.
 # or run already-built host binaries. Run the C suites' build step only when a C file changed.
 cd ../KiteCodec
 ./gradlew checkCinteropCoupling                       # counts source text, no build required
+./gradlew :kitecodec-core:checkFFmpegRecipes          # vendored trees vs the recipe, no build
 ./native/kitecodec-c/scripts/check-deleted-surface.sh  # reads the tree only
 ./native/kitecodec-c/scripts/run-c-tests.sh plain
 
@@ -647,7 +648,9 @@ cd ../KitePlayer && git ls-files -z | xargs -0 grep -n $'\u2014'
 **What Tier 1 cannot catch, stated so nobody reads a green Tier 1 as a green gate.** No data race
 (that is tsan), no wrong-architecture archive (that is the per-target compile), no cinterop
 surface change (that needs the klib built), no real-media regression, and nothing at all about a
-target whose archive this run did not build.
+target whose archive this run did not build. It DOES now catch a vendored FFmpeg tree baked from a
+different recipe than the checkout describes, which nothing caught before 2026-08-20: the
+`av1_videotoolbox` pin sat unbaked in every Apple tree for a day with every gate green.
 
 ### Tier 2, MEDIUM. Roughly 10 to 15 minutes
 
@@ -2499,9 +2502,10 @@ locating each symbol by name, because every line number in both audit documents 
 | P0-14 | GPL tasks build LGPL trees, and a test now enforces it | [V] 08-19 [owner] | 17.17, here |
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
+| KC-PROVISION | consumers cannot auto-provision: BuildFromSource is a stub, iOS has no prebuilt asset | [V] 08-20 | 17.16, here |
 
-**Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
-**68 open rows in total.**
+**Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 27 KiteCodec rows.
+**69 open rows in total.**
 
 **The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
 file under RULE TWO (PAST 14.115).
@@ -2566,6 +2570,26 @@ because it is the call that takes the new cursor lease. When it does, **every de
 leaks its codec context**, which is precisely the defect P0-05 was opened to fix. In `extractFrame`
 the reader and the decoder are both opened outside the `try`, so a throwing `openDecoder` leaves
 `readerActive` true for ever and that `MediaSource` can never open another reader again.
+
+#### KC-PROVISION. A consumer cannot make FFmpeg appear by itself
+
+Opened 2026-08-20 by the owner, whose words were that they get confused by having to type a Gradle
+task by hand. The design says they should never have to: `FFmpegSource.Prebuilt` downloads. The
+design does not hold, in three separate places.
+
+- **`FFmpegSource.BuildFromSource` is a stub.** It is a declared enum value whose whole
+  implementation throws "only available inside the KiteCodec checkout". The option a consumer would
+  reach for exists in name only.
+- **Prebuilt covers 5 of 11 triples.** Android x3, macos-arm64 and linux-x64 have assets; iOS,
+  mingw, linux-arm64 and macos-x64 have none. So every iOS consumer is forced onto `Local`, which
+  means somebody baked by hand, which is exactly the manual step the design promised to avoid.
+- **The `vendor/ffmpeg` clone is manual and no flag performs it.** Every bake task refuses with the
+  `git clone` line to paste.
+
+2026-08-20 closed the DRIFT half of this (auto-bake and `checkFFmpegRecipes`, PAST 14.117), which
+is a different problem: that one was about a tree going stale, this one is about a tree not existing
+without a human. Size M for a real `BuildFromSource` (the bake tasks live in buildSrc and would have
+to ship inside the plugin); the prebuilt-asset half is owner-gated with P0-11..P0-19.
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 

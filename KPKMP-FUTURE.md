@@ -2502,7 +2502,7 @@ locating each symbol by name, because every line number in both audit documents 
 | P0-14 | GPL tasks build LGPL trees, and a test now enforces it | [V] 08-19 [owner] | 17.17, here |
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-PROVISION | consumers cannot auto-provision: BuildFromSource is a stub, iOS has no prebuilt asset | [V] 08-20 | 17.16, here |
+| KC-PROVISION | consumers cannot auto-provision; OWNER-ACCEPTED DESIGN recorded 08-21, ready to build | [V] 08-21 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 27 KiteCodec rows.
 **69 open rows in total.**
@@ -2590,6 +2590,69 @@ design does not hold, in three separate places.
 is a different problem: that one was about a tree going stale, this one is about a tree not existing
 without a human. Size M for a real `BuildFromSource` (the bake tasks live in buildSrc and would have
 to ship inside the plugin); the prebuilt-asset half is owner-gated with P0-11..P0-19.
+
+**THE ACCEPTED DESIGN, owner-approved 2026-08-21. Do not re-litigate the shape; build it.**
+The owner factored the API themselves and the factorization is better than the flat enum: what you
+HAVE (finished binaries vs source to build) and where it comes FROM (remote, a directory, the
+system) are two independent axes. The old enum was four flat points of that grid pretending to be
+different animals; `Prebuilt` and `Local` were always the same thing from two places.
+
+```kotlin
+sealed interface From {                       // the origin axis, one meaning under both heads
+    companion object {
+        fun remote(repo: String = "yuroyami/KiteCodec",
+                   pinnedSha256: Map<String, String> = emptyMap()): From
+        fun directory(dir: File): From
+        fun system(prefix: String? = null): From
+    }
+}
+sealed interface FFmpegSource {               // the what-you-have axis, two heads only
+    data class Prebuilt(val from: From = From.remote()) : FFmpegSource
+    data class BuildFromSource(
+        val from: From = From.remote(),       // default: pinned n8.0 source tarball, sha-verified
+        val outputDir: File? = null,          // default: shared fingerprint-keyed cache
+    ) : FFmpegSource
+}
+```
+
+Migration is mechanical and every old mode is a grid cell: `Prebuilt` becomes `Prebuilt()`,
+`Local` becomes `Prebuilt(From.directory(root))`, `System` becomes `Prebuilt(From.system())`, the
+`BuildFromSource` stub becomes real. The DSL properties `localRoot`, `repo` and `pinnedSha256`
+are DELETED from `FFmpegSpec`: each lives inside the only mode that reads it, so impossible states
+(a localRoot beside source = Prebuilt) stop being expressible. `version`, `license`, `dav1d`,
+`libass`, `cleanCacheOnClean` stay top-level; dav1d and libass mean the same across modes (bake
+input for BuildFromSource, two-way contract for binaries).
+
+Rules that are part of the decision, with their reasons:
+
+- **Bake output lands in the shared Gradle cache keyed by the recipe fingerprint**
+  (`~/.gradle/caches/kitecodec/ffmpeg-built/<recipe-hash>/<triple>/`), NOT under `build/`. The
+  owner first wanted `build/kiteCodecFfmpeg` and accepted the counter-argument: `clean` wipes
+  `build/` and a bake is tens of minutes per target, and per-project output means KitePlayer and
+  Synkplay each baking identical trees. `BuildFromSource(outputDir = ...)` is the explicit opt-out
+  for anyone who wants it project-local anyway; the cost is documented at the arg.
+  `kitecodecCleanCache` and `cleanCacheOnClean` already cover the cache, zero new lifecycle API.
+- **Source fetch is a pinned release TARBALL with sha256, never a git clone.** Smaller,
+  checksummable, reproducible.
+- **Toolchain probe BEFORE the bake.** iOS needs Xcode, Android the NDK, dav1d meson and nasm. A
+  missing tool is one sentence at configuration, never a build that dies at minute 31.
+- **The version gate applies to a custom `sourceDir` too.** Its version headers are probed; a 7.x
+  checkout against klibs compiled for 8.0 refuses with a sentence, because it would link clean and
+  corrupt memory (B1-03's exact route).
+- **One dead cell, refused at configuration:** `BuildFromSource(From.system())` is nonsense and a
+  shared `From` type cannot make it uncompilable; splitting origin types per head was rejected
+  because it kills the uniformity that is the point. One-sentence refusal.
+- **`From.remote()` shifts referent by head** (a Releases repo under Prebuilt, a source repo/tag
+  under BuildFromSource) and that is accepted: same reading, "get it from there".
+- **Enum to sealed interface is a breaking change and goes out in its own minor version** with a
+  migration table in the changelog. Pre-1.0, two consumers, both the owner's.
+
+Also recorded 2026-08-21, found while tracing this: **`hasPrebuiltAsset = true` on five triples is
+a lie today.** The GitHub repo is private, has ZERO releases ever, and `release-binaries.yml` has
+never run once, so `Prebuilt` 404s for every triple, not just the six unmarked ones. Until a
+release exists, honest `Prebuilt` behaviour is a configuration-time refusal naming the
+alternatives. The publish itself stays owner-gated (P0-11..P0-19: repo visibility, credentials,
+licence call).
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 

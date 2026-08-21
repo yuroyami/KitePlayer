@@ -2498,14 +2498,15 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
 | KC-NOTDONE | six rows logged DONE that are not done on every backend | [V] 08-19 | 17.16, here |
 | KC-P0-05-LEAK | the P0-05 fix introduced two new leaks | [V] 08-19 | 17.16, here |
-| P0-11..P0-19 | the whole distribution program; nine release blockers | [V] 08-19 [owner] | 17.17, here |
-| P0-14 | GPL tasks build LGPL trees, and a test now enforces it | [V] 08-19 [owner] | 17.17, here |
+| P0-11..P0-19 | REDUCED 08-21: repo public, licensed, 0.1.0 cut; Central + desktop assets remain | [V] 08-21 [owner] | 17.17, here |
+
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
 | KC-PROVISION | consumers cannot auto-provision; OWNER-ACCEPTED DESIGN recorded 08-21, ready to build | [V] 08-21 | 17.16, here |
 
-**Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 27 KiteCodec rows.
-**69 open rows in total.**
+**Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
+**68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
+trees it described no longer exist.
 
 **The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
 file under RULE TWO (PAST 14.115).
@@ -2570,6 +2571,36 @@ because it is the call that takes the new cursor lease. When it does, **every de
 leaks its codec context**, which is precisely the defect P0-05 was opened to fix. In `extractFrame`
 the reader and the decoder are both opened outside the `try`, so a throwing `openDecoder` leaves
 `readerActive` true for ever and that `MediaSource` can never open another reader again.
+
+#### 2026-08-21: the repository went public, and what that changed
+
+KiteCodec is PUBLIC as of 2026-08-21, licensed Apache-2.0, version 0.1.0. Three things that
+blocked a release are gone, and two remain.
+
+**Closed.** The repository had NO valid licence file: what was there was a 955-byte stub, not the
+Apache-2.0 text, so GitHub could not even detect a licence and nobody could legally use the code.
+LICENSE is now the full canonical text and NOTICE states the FFmpeg LGPL position and the three
+obligations it puts on a consumer. **All GPL flavours are gone** by owner decision: no GPL build
+tasks, no GPL release jobs, `FFmpegLicense.GPL` surviving only as a label for a tree a consumer
+built themselves. That deletes P0-14 rather than fixing it.
+
+**Two release defects found only by trying to release.** The publish job's bare
+`needs: [android, macos-desktop, linux-desktop]` meant one failing job cancelled the release and
+discarded the Android zips that had already built; it now publishes what succeeded. And
+`hasPrebuiltAsset` was true for macos-arm64 and linux-x64 while ZERO releases existed anywhere,
+so `Prebuilt` accepted them and 404ed at download instead of refusing at configuration, which is
+the exact failure that flag exists to prevent. Both are false until their job passes.
+
+**Still open, and both are owner-gated.** Maven Central publication is deliberately LAST: Central
+is permanently immutable, so a 0.1.0 published before prebuilts exist would forever carry a
+default `Prebuilt` source that 404s. And the desktop assets are blocked on Homebrew shipping
+svt-av1 and graphite2 shared-only against `-Pkitecodec.ffmpeg.selfContained=true`, which cannot
+simply be dropped because a Release asset must link on a machine with neither installed. Fix it by
+building those two statically in the workflow, or by dropping libsvtav1 and harfbuzz's graphite2
+backend from the desktop profile.
+
+**iOS is unchanged and that is the point.** No CI job, none planned, so no amount of release work
+reaches it. KC-PROVISION's `BuildFromSource` is the only thing that does.
 
 #### KC-PROVISION. A consumer cannot make FFmpeg appear by itself
 

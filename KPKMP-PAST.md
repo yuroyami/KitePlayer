@@ -9249,6 +9249,37 @@ What this closes narratively: the August chain that began with a bare `-78` on a
 with every app in the family getting AV1-capable, self-provisioned FFmpeg from a Maven
 coordinate.
 
+### 14.121 Maven Central, 2026-08-22: kitecodec-core 0.1.1 is public
+
+**The venue decision is decided and executed: `io.github.yuroyami:kitecodec-core:0.1.1` is live
+on Maven Central**, released the same day the owner ordered it, under the new version rule
+(minor frozen at 0.1, patch-only bumps, each owner-approved; 0.1.1 was approved in the order).
+
+The pre-flight caught two would-have-been-permanent mistakes before the first upload: a POM
+description still requiring the deleted Gradle plugin, and SECURITY.md documenting the plugin's
+checksum path as a security surface. It also surfaced the real gap: 0.1.0 published NO Android
+artifact, so an androidTarget consumer resolved the JVM artifact and died at first load.
+KC-ANDROID (f30abdf) fixed that: the androidTarget registers by default
+(-Pkitecodec.noAndroid=true escape hatch), and the AAR ships self-contained libkitecodec_jni.so
+for arm64-v8a and x86_64 with the licence payload inside. The Synkplay full-flavour arm64 APK
+was rebuilt carrying the 16.3 MB codec library as proof, and KitePlayer 0.0.11 republished so
+its POMs, the Android AAR included, point at the Central artifact.
+
+The five Maven Central secrets were set on the GitHub repository (piped from the maintainer's
+gradle.properties, never displayed), and publish.yml became workflow_dispatch-ONLY by owner
+order with a konan warmup step (its first armed run reproduced KC-CI-KONAN exactly and the
+warmup fixed it; run 32577670646 then published green from CI end to end). 0.1.1 itself shipped
+via publishAndReleaseToMavenCentral from the maintainer's machine, deployment
+8f89669b-12bd-4a4d-865b-4e392e12a220, AUTOMATIC release, no portal click. The v0.1.1 GitHub
+release carries the 11 checksum-verified FFmpeg zips the klibs embed, keeping the LGPL
+source-offer chain exact. Both stale staged deployments were dropped (the very first,
+b590896a, lagged in the portal's validation queue; USER_MANAGED, inert, dropped when the queue
+let it).
+
+**The closing proof, machine-independent for the first time:** a consumer project with ONLY
+mavenCentral() and one dependency line downloaded 0.1.1 from repo1, linked a macOS executable
+and an iOS simulator framework, and RAN: avcodec 62.11.100, dav1d true.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

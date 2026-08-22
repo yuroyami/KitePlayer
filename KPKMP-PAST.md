@@ -9139,6 +9139,48 @@ stub, iOS still has no prebuilt assets, and the clone of `vendor/ffmpeg` is stil
 step that no flag performs. Those three are what would make provisioning fully automatic for a
 consumer, and all three ride the P0-11..P0-19 distribution program.
 
+### 14.118 The full-coverage release surge, 2026-08-22
+
+**The owner's directive, verbatim in spirit: every KiteCodec release is a GitHub release on a
+normal version tag, and every release carries the FULL set of FFmpeg companion prebuilts for
+every supported target. Delivered the same day.** The v0.1.0 release carries all 22 zips
+(11 triples x 2 flavours, plain and dav1d) plus the FFmpeg source offer; all 22 build jobs and
+the publish job passed on the FIRST full run (run 32564028006).
+
+**The decision that made it possible: every profile is PORTABLE, macOS included.** The fat macOS
+desktop profile (vpx/aom/opus/lame/webp encoders, freetype/harfbuzz/fribidi/libass, drawtext)
+was deleted, because every one of those libraries came from Homebrew and Homebrew ships graphite2
+shared-only, so a self-contained fat asset was impossible; that was the standing desktop blocker
+in the 08-21 release attempt. macOS now builds exactly like iOS (SDK zlib, VideoToolbox,
+AudioToolbox) plus the VideoToolbox encoders and the native aac encoder. Decoding untouched:
+the read side is wide by class, software AV1 is the dav1d flavour. This also executed what the
+"P0-14 owner decision" subsection in 17.17 called option one, and its documentation half:
+packaging bundles NOTHING from the runner any more, so the libpng16/graphite2/libnuma licensing
+gap closed by those libraries no longer shipping. Tier 17.17 row 15 went GREEN.
+
+**The tag scheme moved to the version tag.** Assets live on `v0.1.0`, not `ffmpeg-n8.0`. The
+plugin gained `ffmpeg.releaseTag` whose convention is the plugin's OWN version tag through a
+build-generated constant, so plugin X.Y.Z always fetches the assets released with it.
+
+**Coverage machinery that had to exist first:** `BuildDav1dTask` gained cross files for
+android-arm32, ios-x64 and macos-x64 (all 11 triples now, each of the three proven locally
+before CI); `package-ffmpeg.sh` lost its stale desktop bundle list (the thing that failed
+linux-x64 on 08-21 for libraries the portable profile never linked) and instead verifies the
+dav1d flavour against the tree BOTH ways; the iOS prebuilt link set gained
+`-framework AudioToolbox`, which the profile always referenced and nothing named.
+
+**Verified before `hasPrebuiltAsset` flipped true for all 11:** 22 zips + 22 checksums + source
+offer on the live release; five sampled dav1d assets (linux-x64, mingw-x64, macos-arm64,
+android-arm32, ios-arm64) checksum-match and define `ff_libdav1d_decoder`; a checkout-free
+consumer project against mavenLocal plugin 0.1.0 derived the v0.1.0 tag by itself and fetched
+macos-arm64 + mingw-x64 + linux-arm64 dav1d assets from the live release. Locally before push:
+macos-arm64 portable bake + full macosArm64Test green, macos-x64 cross bake WITH dav1d green.
+
+**What this closed elsewhere in the register:** the coverage leg of KC-PROVISION (the two-axis
+API design remains open and unbuilt), the desktop-assets half of P0-11..P0-19 (Maven Central
+remains, deliberately last), and 17.17 rows 15 (GREEN) and 16 (AMBER: assets and fetch proven,
+Central still gates a truly clean consumer). KiteCodec commits 85d0625 and 4315918.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two
@@ -9146,6 +9188,7 @@ competing ABI designs, each verified claim by claim against the source and re-me
 the claim was load bearing. This section is to B1 what section 10 is to Horizon A: the
 executable run. It is decision complete. An implementer needs this section, section 1, section
 2, section 9 and the code, and nothing else.
+
 
 ### 15.0 The decision, and what it costs
 

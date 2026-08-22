@@ -2498,11 +2498,11 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
 | KC-NOTDONE | six rows logged DONE that are not done on every backend | [V] 08-19 | 17.16, here |
 | KC-P0-05-LEAK | the P0-05 fix introduced two new leaks | [V] 08-19 | 17.16, here |
-| P0-11..P0-19 | REDUCED 08-21: repo public, licensed, 0.1.0 cut; Central + desktop assets remain | [V] 08-21 [owner] | 17.17, here |
+| P0-11..P0-19 | REDUCED 08-22: full 22-asset v0.1.0 release live and verified; ONLY Maven Central remains | [V] 08-22 [owner] | 17.17, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-PROVISION | consumers cannot auto-provision; OWNER-ACCEPTED DESIGN recorded 08-21, ready to build | [V] 08-21 | 17.16, here |
+| KC-PROVISION | the two-axis Prebuilt/BuildFromSource API remains to build; the COVERAGE half closed 08-22 (PAST 14.118) | [V] 08-22 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
@@ -2584,23 +2584,10 @@ obligations it puts on a consumer. **All GPL flavours are gone** by owner decisi
 tasks, no GPL release jobs, `FFmpegLicense.GPL` surviving only as a label for a tree a consumer
 built themselves. That deletes P0-14 rather than fixing it.
 
-**Two release defects found only by trying to release.** The publish job's bare
-`needs: [android, macos-desktop, linux-desktop]` meant one failing job cancelled the release and
-discarded the Android zips that had already built; it now publishes what succeeded. And
-`hasPrebuiltAsset` was true for macos-arm64 and linux-x64 while ZERO releases existed anywhere,
-so `Prebuilt` accepted them and 404ed at download instead of refusing at configuration, which is
-the exact failure that flag exists to prevent. Both are false until their job passes.
-
-**Still open, and both are owner-gated.** Maven Central publication is deliberately LAST: Central
-is permanently immutable, so a 0.1.0 published before prebuilts exist would forever carry a
-default `Prebuilt` source that 404s. And the desktop assets are blocked on Homebrew shipping
-svt-av1 and graphite2 shared-only against `-Pkitecodec.ffmpeg.selfContained=true`, which cannot
-simply be dropped because a Release asset must link on a machine with neither installed. Fix it by
-building those two statically in the workflow, or by dropping libsvtav1 and harfbuzz's graphite2
-backend from the desktop profile.
-
-**iOS is unchanged and that is the point.** No CI job, none planned, so no amount of release work
-reaches it. KC-PROVISION's `BuildFromSource` is the only thing that does.
+**Everything that stood here about missing assets closed on 2026-08-22** (PAST 14.118): the
+v0.1.0 release carries all 22 zips, verified, and `hasPrebuiltAsset` is true for all 11 triples
+because it is true. **The one remaining owner gate is Maven Central publication**, deliberately
+LAST: Central is permanently immutable, so nothing ships there until the pair is worth freezing.
 
 #### KC-PROVISION. A consumer cannot make FFmpeg appear by itself
 
@@ -2611,11 +2598,10 @@ design does not hold, in three separate places.
 - **`FFmpegSource.BuildFromSource` is a stub.** It is a declared enum value whose whole
   implementation throws "only available inside the KiteCodec checkout". The option a consumer would
   reach for exists in name only.
-- **Prebuilt covers 5 of 11 triples.** Android x3, macos-arm64 and linux-x64 have assets; iOS,
-  mingw, linux-arm64 and macos-x64 have none. So every iOS consumer is forced onto `Local`, which
-  means somebody baked by hand, which is exactly the manual step the design promised to avoid.
 - **The `vendor/ffmpeg` clone is manual and no flag performs it.** Every bake task refuses with the
   `git clone` line to paste.
+- The third leg that stood here, "Prebuilt covers 5 of 11 triples", CLOSED on 2026-08-22:
+  every triple has both flavours on the v0.1.0 release (PAST 14.118).
 
 2026-08-20 closed the DRIFT half of this (auto-bake and `checkFFmpegRecipes`, PAST 14.117), which
 is a different problem: that one was about a tree going stale, this one is about a tree not existing
@@ -2678,12 +2664,6 @@ Rules that are part of the decision, with their reasons:
 - **Enum to sealed interface is a breaking change and goes out in its own minor version** with a
   migration table in the changelog. Pre-1.0, two consumers, both the owner's.
 
-Also recorded 2026-08-21, found while tracing this: **`hasPrebuiltAsset = true` on five triples is
-a lie today.** The GitHub repo is private, has ZERO releases ever, and `release-binaries.yml` has
-never run once, so `Prebuilt` 404s for every triple, not just the six unmarked ones. Until a
-release exists, honest `Prebuilt` behaviour is a configuration-time refusal naming the
-alternatives. The publish itself stays owner-gated (P0-11..P0-19: repo visibility, credentials,
-licence call).
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 
@@ -2845,8 +2825,8 @@ distribution half has not started.**
 | 12 | The ordinary Android AAR builds on CI and is device tested for its declared ABIs | RED |
 | 13 | Android Native attaches the JavaVM and device tests MediaCodec, or does not advertise it | RED |
 | 14 | The Wasm `.mjs` and `.wasm` runtime is in a versioned package and browser tested | RED |
-| 15 | GPL and LGPL names, configure flags, capabilities, link dependencies and licences agree | RED, and it needs an OWNER DECISION first |
-| 16 | Prebuilt assets exist and a clean consumer installs and runs without this checkout | RED |
+| 15 | GPL and LGPL names, configure flags, capabilities, link dependencies and licences agree | GREEN as of 08-22: GPL producers deleted 08-21, every profile portable and LGPL, packaging bundles nothing and verifies the dav1d flavour both ways |
+| 16 | Prebuilt assets exist and a clean consumer installs and runs without this checkout | AMBER as of 08-22: all 22 assets live and a checkout-free project fetched three of them through the plugin; still gated on `kitecodec-core` being mavenLocal-only (Central, row P0-11..P0-19) |
 | 17 | Every published KitePlayer variant resolves one matching KiteCodec variant | RED |
 | 18 | The player modules and the exact Web codec runtime release together; no Maven Local | RED |
 | 19 | Licence, SBOM and provenance accompany every bundled native dependency | RED |
@@ -2857,44 +2837,6 @@ code is written and reviewed and it compiles; what is missing is any test that c
 regressed, and that is a different risk from an unwritten fix, not a smaller one. Box 7's gate is
 genuinely thorough on the audio and video lanes and every wait in it is bounded, which is the part
 that used to hang; the subtitle lane simply is not consulted, so a trailing cue can be cut.
-
-#### P0-14 needs an owner decision, and it is not the decision the row implies
-
-**The row reads as "add `--enable-gpl` to the portable tasks". Do not do that until you have read
-this.** The facts, measured:
-
-- `BuildFFmpegTask.kt:243`, the `isPortableDesktop` branch, **ignores the licence argument
-  entirely**. `portableDesktopArgs()` returns exactly `listOf("--enable-zlib")`.
-- So `buildFFmpegForLinuxX64Gpl`, `buildFFmpegForLinuxArm64Gpl` and `buildFFmpegForMingwX64Gpl`
-  produce trees containing **no GPL code at all**. They are FFmpeg plus zlib. They are written to
-  `native-libs/gpl/<triple>/`, so the directory name, the task name and
-  `FFmpeg.identity.buildLicenseFlavour` all report `gpl` for an LGPL artifact.
-- **A test now enforces this.** `BuildFFmpegTaskTest.kt:233-266` pins `--enable-gpl` as FORBIDDEN
-  for those three triples under BOTH licences. Anyone who "fixes" the row the obvious way fails a
-  green test, which will read as their mistake.
-- `release-binaries.yml:138-178` runs that task with `license: gpl` and hands the result to
-  `package-ffmpeg.sh` as `gpl linux-x64`. The script copies `COPYING.GPLv2` and `COPYING.GPLv3` into
-  the zip and bundles `libx264.a` and `libx265.a` from the runner's apt packages into a tree that was
-  never configured with `--enable-gpl`. **GPL licensed archives would ship, unreferenced by
-  libavcodec, inside a zip whose FFmpeg is LGPL, carrying GPL licence texts.** There is no Windows
-  release job at all.
-- The only genuinely GPL Windows tree anywhere is a third party download CI installs and states it
-  never redistributes. The repo's own mingw GPL producer and the tree CI tests are different things.
-
-**What the owner is actually choosing between.** Option one: make the portable tasks honest LGPL,
-which means renaming the tasks and directories, dropping the GPL licence texts from those zips, and
-not bundling x264 or x265 into them. Nothing needs to be relicensed and no capability is lost that
-the build currently has. Option two: make them really GPL, which means passing `--enable-gpl`,
-moving the pinned test, cross building x264 and x265 for three triples, and accepting that anything
-linking those artifacts inherits GPL obligations including publishing corresponding source. **Option
-one matches what the code already builds; option two matches what the names already claim.**
-
-The licence facts behind it: x264 and x265 are GPL-2.0+ (both also sell commercial licences), and
-FFmpeg's `eq` and `boxblur` filters are GPL-only. libmp3lame and FriBidi are LGPL. SVT-AV1, libvpx,
-libaom, libopus, libwebp, FreeType, HarfBuzz, libass, zlib and bzip2 are permissive. **Three
-libraries the packaging bundles are absent from `docs/licensing.md` entirely: libpng16, graphite2
-(LGPL-2.1+ / MPL / GPL tri licensed) and libnuma (LGPL-2.1).** That gap is its own defect whichever
-option is chosen.
 
 ### 17.18 What a mature player still needs, by domain
 

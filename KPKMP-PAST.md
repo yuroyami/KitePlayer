@@ -9181,6 +9181,51 @@ API design remains open and unbuilt), the desktop-assets half of P0-11..P0-19 (M
 remains, deliberately last), and 17.17 rows 15 (GREEN) and 16 (AMBER: assets and fetch proven,
 Central still gates a truly clean consumer). KiteCodec commits 85d0625 and 4315918.
 
+### 14.119 KC-EMBED, 2026-08-22: FFmpeg moved inside the klibs and the plugin died
+
+**Owner directive, same day as 14.118 and superseding half of it: kill the dav1d on/off axis
+(always on; measured ~0.7-0.9 MB in-app on arm64) and kill the Gradle plugin entirely, because
+KiteCodec should be a library, not a library AND a plugin. Shipped the same day, KiteCodec
+commit 508ec60.**
+
+**The mechanism.** Each native target's cinterop klib embeds libkitecodec.a plus the six libav*
+archives plus libdav1d through the def's `staticLibraries` slot (dependents before dependencies,
+dav1d last), and carries its platform linker flags in per-family `linkerOpts`, so they ride the
+klib manifest to every consumer link. A second def, `ffmpeg-system.def`, keeps the dev fallback
+for a host with only a shared brew/apt FFmpeg. The published proof: every one of the 11 native
+cinterop klibs in mavenLocal 0.1.0 carries 8 embedded archives (~9-11 MB each), and a consumer
+project containing NOTHING but the dependency line linked a macOS executable (which RAN:
+identity gate green, dav1d present, GPL-only filter absent), an iOS simulator framework, and a
+Windows PE32+ executable.
+
+**What died with the axis and the plugin:** the two-way dav1d contract, the
+Local/System/Prebuilt consumer modes, releaseTag/repo/pinnedSha256, fetch tasks,
+kitecodecInfo/kitecodecCleanCache, the plugin's version gate (the B1-03 mismatch-corruption
+class is now IMPOSSIBLE: FFmpeg travels inside the klib compiled against it), the plugin half
+of the root B1-04 assertion, the stable/experimental publication split (all 11 native targets
+publish; the every-target-tree hard fail stays), and the release flavour axis (11 assets, dav1d
+inside every one; the 22-asset generation was refreshed and the superseded flavour names
+deleted from v0.1.0).
+
+**Two real defects the full-set publish flushed out, both fixed in the same commit:** posix
+memcpy commonizes with different size_t widths once androidNativeArm32 joins the shared-native
+metadata compile (the custom-IO trampoline now uses a counted copy), and the JVM JNI dylib
+still linked the fat-era Homebrew stack, silently depending on TWENTY shared dylibs
+(libwebp/libass/libSvtAv1Enc/graphite2/...); it now links the vendored archives, SDK zlib and
+the media frameworks only, so the jar's native bundle is genuinely self-contained for the first
+time. 62 JVM tests green, macosArm64Test green, apiCheck green after the 13-target dump
+refresh, buildSrc suites green.
+
+**Licensing posture (the owner's "escape hatch"):** artifact POMs declare Apache-2.0 +
+LGPL-2.1-or-later (embedded FFmpeg) + BSD-2-Clause (dav1d); the JVM jar carries
+COPYING.LGPLv2.1 and a third-party notice under META-INF/licenses/kitecodec-ffmpeg/; NOTICE
+states the consumer obligations; the exact FFmpeg source tarball stays attached to the v-tag
+release. Same posture as VLC's LGPL mobile artifacts.
+
+**What this leaves open:** KC-MIGRATE (five consumer modules across Synkplay and KitePlayer
+still speak the deleted plugin's DSL against old mavenLocal artifacts), the public Maven venue
+decision, and the pre-existing konan-ordering CI flake recorded on the KC-MIGRATE row.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

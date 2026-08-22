@@ -2502,7 +2502,7 @@ locating each symbol by name, because every line number in both audit documents 
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-EMBED | OWNER DIRECTIVE 08-22: kill the dav1d axis AND the whole Gradle plugin; embed FFmpeg inside the klibs. Research complete, execution handed off. SUPERSEDES KC-PROVISION | [V] 08-22 | 17.16, here |
+| KC-MIGRATE | migrate Synkplay + 4 KitePlayer modules off the deleted plugin onto embedded kitecodec-core 0.1.0 (KC-EMBED itself SHIPPED 08-22, PAST 14.119) | [V] 08-22 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
@@ -2589,167 +2589,28 @@ v0.1.0 release carries all 22 zips, verified, and `hasPrebuiltAsset` is true for
 because it is true. **The one remaining owner gate is Maven Central publication**, deliberately
 LAST: Central is permanently immutable, so nothing ships there until the pair is worth freezing.
 
-#### KC-EMBED. Kill the dav1d axis and the whole Gradle plugin; FFmpeg moves inside the klibs
+#### KC-MIGRATE. Five consumer modules still speak the deleted plugin's DSL
 
-**OWNER DIRECTIVE, 2026-08-22, and it SUPERSEDES KC-PROVISION entirely.** The two-axis
-`Prebuilt()/BuildFromSource()` API recorded here on 08-21 is DEAD: there is no plugin left to give
-that API to. The owner's words, condensed faithfully: kill the dav1d on/off axis (dav1d is always
-on; the measured in-app cost is ~0.7-0.9 MB on arm64, ~1.6-2.0 MB on x86_64, and without it FFmpeg
-plays zero AV1 in software); and kill the KiteCodec Gradle plugin, because KiteCodec should be a
-library, not a library AND a plugin. The owner explicitly overruled the four standing objections:
-Local/System modes may die ("99.9999% of devs will use the prebuilts anyway"), artifact size does
-not matter, and licence separation gets the industry-standard escape hatch (licence texts and the
-source offer ride INSIDE every artifact; see the licensing paragraph below). Publishing venue
-(Maven Central vs elsewhere) stays UNDECIDED and does not block this work: mavenLocal now, venue
-later. Do not re-litigate any of this; build it.
+KC-EMBED itself SHIPPED on 2026-08-22 (PAST 14.119): the dav1d axis is dead, the plugin module
+is deleted, FFmpeg is embedded inside every published klib, and the one-dependency-line consumer
+is proven end to end. What remains is the migration of this family's own consumers, each still
+building against OLD mavenLocal artifacts (plugin 0.0.10/0.0.11 + matching kitecodec-core), so
+nothing is broken and nothing is urgent:
 
-**The mechanism is already proven in production, which is why this is low-risk.** The cinterop def
-already embeds a static archive into the klib and it SURVIVES PUBLICATION: mavenLocal artifact
-`kitecodec-core-macosarm64/0.0.10/kitecodec-core-macosarm64-0.0.10-cinterop-ffmpeg.klib` contains
-`default/targets/macos_arm64/included/libkitecodec.a` (verified by unzip on 2026-08-22). Gradle
-resolves the `-cinterop-ffmpeg.klib` artifact automatically with the module; consumers need
-NOTHING but a dependency line. Embedding FFmpeg = adding seven more archives to the same slot.
+- Synkplay `shared/build.gradle.kts:242-259` and KitePlayer `kiteplayer-ffmpeg:163-176`,
+  `kiteplayer-compose-video:95-104`, `kiteplayer-mobile:95-104`, `kiteplayer-sample:54-63`:
+  delete the `kitecodec { }` block, the plugin application (catalog rows: Synkplay
+  libs.versions.toml:54+166, KitePlayer:8+26+57) and the `kitecodec.ffmpeg.localRoot`
+  plumbing; bump `kitecodec-core` to 0.1.0.
+- The bump spans many 0.0.x API changes, so treat each repo as its own migration surge with its
+  own gate, not a mechanical edit.
+- kiteplayer-libass never used the plugin's toggle and is untouched.
 
-**The target state.** `implementation("io.github.yuroyami:kitecodec-core:<v>")` is the whole
-integration. Each native target's cinterop klib carries libavformat/libavcodec/libavfilter/
-libswscale/libswresample/libavutil + libdav1d (that ORDER: dependents before dependencies, dav1d
-last because libavcodec draws from it), plus the platform linker flags in the def so consumer
-links self-describe. The JVM jar and Android AAR already embed their JNI libraries and are the
-model, unchanged. The GitHub release keeps 11 FFmpeg zips (no flavour segment; dav1d always
-inside) as build evidence, source-offer anchor and the input the publish pipeline unpacks into
-`native-libs/` before embedding.
-
-**Verified facts the executor needs, so nothing is re-researched** (all paths in the KiteCodec
-repo unless said otherwise, all verified 2026-08-22):
-
-- Def file `kitecodec-core/src/nativeInterop/cinterop/ffmpeg.def`: has
-  `staticLibraries = libkitecodec.a`, per-family `linkerOpts.osx/ios/linux/mingw/android` that
-  name the six `-lav*` flags (android adds `-lmediandk -landroid -llog -lz`). The `-lav*` lines
-  must MOVE OUT for the embedded mode or every consumer link fails on "library not found".
-- Cinterop wiring `kitecodec-core/build.gradle.kts:456-478`: `extraOpts("-libraryPath",
-  paths.libDir)` is ALREADY passed per target, plus a second `-libraryPath` for the C helper
-  archive dir. So the FFmpeg lib dir is already on the cinterop search path; embedding needs only
-  the `staticLibraries` names.
-- Own-binary link flags `kitecodec-core/build.gradle.kts:509-524`: `-L` + tree-presence dav1d
-  (`hasDav1d = file(libDir/libdav1d.a).exists()`) + `StaticLinkFlags.forTarget(triple, license,
-  isStaticVendored, dav1d)` + `hostFallbackSearchFlags` (now always empty) + a dev-only
-  `-rpath`. `StaticLinkFlags.forTarget` has exactly TWO call sites: there and
-  `kitecodec-sample/build.gradle.kts:75` (sample also calls `hostFallbackSearchFlags:83` and
-  resolves via `FFmpegPaths:52`).
-- dav1d toggle sites: `BuildFFmpegTask.kt` lines 118 (`enableDav1d`), 164/236/265/282/291-...
-  (`dav1dRootOrNull`, `dav1dArgs`, fingerprint stub), 312 (`thirdPartyArchives(dav1d=...)`), 357
-  (deps search dir gate), 965+996 (`TOGGLE_CONTROLLED_CONFIGURE_FLAGS` excludes the three dav1d
-  configure flags from the recipe fingerprint; with the axis dead these become PART of the
-  recipe: delete the exclusion so `checkFFmpegRecipes` demands `--enable-libdav1d` in every
-  tree's evidence). `kitecodec-core/build.gradle.kts:689-691` reads `-Pkitecodec.ffmpeg.dav1d`.
-  JNI: `LinkKiteCodecJniTask.androidLinkFlags(recipe, dav1d)` (line ~340) and the macOS JVM
-  dylib link use tree-presence dav1d already, so they keep working UNCHANGED once every tree
-  carries dav1d; simplifying the parameter away is optional cleanup.
-- Local tree inventory (native-libs/lgpl/): android-arm64 YES-dav1d, android-x64 YES, ios-arm64
-  YES, ios-simulator-arm64 YES, linux-arm64 YES, linux-x64 YES, macos-x64 YES, mingw-x64 YES,
-  macos-arm64 NO (plain bake from 08-22), android-arm32 MISSING ENTIRELY, wasm32 n/a. Fix both
-  gaps by downloading the two dav1d assets from the v0.1.0 release and unzipping into
-  `native-libs/lgpl/<triple>/` (zip root is include/lib, exactly the tree layout), or rebaking.
-- Release v0.1.0 currently holds 22 zips + 22 sha256 + source tarball, all verified. After the
-  axis dies the canonical set is 11 zips named `ffmpeg-n8.0-lgpl-<triple>.zip` WITH dav1d inside;
-  the 22 old assets (11 plain without dav1d, 11 `-dav1d-` named) are superseded and should be
-  deleted from the release after the refreshed run publishes (gh release delete-asset).
-- Plugin module: `settings.gradle.kts:21` includes it; NOTHING else in the repo consumes it.
-  `ci.yml` never references it. `publish.yml` has the Portal job (lines ~120-137), a header
-  claiming plugin+Central publication, `FFMPEG_VERSION` env consumed by root `build.gradle.kts`
-  (KEEP that env line: the root B1-04 assertion at build.gradle.kts:108-153 reads it), and a
-  fetch step pinned to the FIVE stable triples and the DEAD `ffmpeg-<version>` tag scheme.
-  Root `build.gradle.kts:161-210` also parses
-  `kitecodec-gradle-plugin/.../FFmpegExpectations.kt` for EXPECTED_MAJORS (B1-04): that half of
-  the assertion dies with the plugin (the version-mismatch class it guarded, B1-03, becomes
-  IMPOSSIBLE: FFmpeg is inside the klib, consumers cannot mismatch it).
-- Publish gates `kitecodec-core/build.gradle.kts:85-170`: `stableTargetsOnly` registers only
-  macosArm64+linuxX64+android x3; ios*, macosX64, linuxArm64, mingwX64 are "EXPERIMENTAL (not
-  published in v0.1)" and every remote publish DEMANDS stableTargetsOnly. The embedded model
-  needs ALL 11 published: promote the experimental targets into the default published set and
-  rework the gate so a full-set publish (local first) is legal while still hard-failing if any
-  configured target lacks its FFmpeg tree. Evidence honesty stays in docs (tier table), not in
-  artifact absence.
-- `mkdocs.yml:100` navs `docs/gradle-plugin.md`. README sections Install/Release status/plugin
-  API/dav1d contract all describe the plugin world. `docs/getting-started.md`,
-  `docs/platforms.md`, `docs/troubleshooting.md` were already rewritten for portable profiles on
-  08-22 and only need plugin-paragraph surgery.
-
-**Execution plan, in order, each phase leaving the tree green:**
-
-1. **dav1d axis dies in buildSrc.** `BuildFFmpegTask`: delete `enableDav1d`; dav1d args and deps
-   tree required unconditionally (fail with "run buildDav1dFor<Target> first" naming the task);
-   delete `TOGGLE_CONTROLLED_CONFIGURE_FLAGS` and its filter. `StaticLinkFlags`: drop the dav1d
-   parameters; `thirdPartyArchives` returns [libdav1d.a] always, `forTarget` leads with
-   `-ldav1d` whenever staticVendored. `kitecodec-core/build.gradle.kts`: registration drops the
-   property read at 689-691; make `buildFFmpegFor<T>` `dependsOn("buildDav1dFor<T>")` so one
-   task bakes a complete tree; update the two forTarget call sites (core 518, sample 75) and the
-   hasDav1d tree-presence line (517) to the new signatures. Update `BuildFFmpegTaskTest`
-   (the dav1d on/off golden test becomes an always-on golden; the SUPPORTED_TARGETS test stands).
-2. **package-ffmpeg.sh**: delete the flavour argument and its naming; REQUIRE `lib/libdav1d.a`
-   (the current both-ways flavour check collapses to one mandatory check).
-3. **release-binaries.yml**: delete the dav1d matrix dimension; dav1d clone/build steps become
-   unconditional; 11 jobs; asset names lose the flavour segment. Keep the publish job, tag input
-   and source-offer step as they are.
-4. **Embedding.** Two def files sharing the header block:
-   `ffmpeg.def` (vendored/published mode): `staticLibraries = libkitecodec.a libavformat.a
-   libavcodec.a libavfilter.a libswscale.a libswresample.a libavutil.a libdav1d.a` (exactly that
-   order) and per-family linkerOpts holding ONLY platform flags: osx/ios `-lz -framework
-   CoreFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox -framework
-   AudioToolbox`; linux `-lz -lm -ldl -lpthread`; mingw `-lz -liconv -lws2_32 -lbcrypt -lsecur32
-   -lmfplat -lole32 -lstrmiids -luuid`; android `-lmediandk -landroid -llog -lz`.
-   `ffmpeg-system.def` (dev fallback when no vendored tree): `staticLibraries = libkitecodec.a`
-   plus the CURRENT `-lav*` linkerOpts lines. `build.gradle.kts` picks the def by
-   `paths.isStaticVendored`. The `-libraryPath` entries already in place cover both. The own-test
-   `binaries.all` block can then shrink (klib now carries archives and flags), but keeping the
-   `-L` line is harmless.
-5. **Plugin dies.** Remove `include(":kitecodec-gradle-plugin")`, `git rm -r` the module.
-   Root build.gradle.kts: excise the FFmpegExpectations half of B1-04 (keep the
-   buildSrc/workflow/vendor RELEASE agreement). publish.yml: delete the Portal job and plugin
-   prose; retarget the fetch step to the v-tag scheme and all 11 triples (or bake). mkdocs nav
-   and docs/gradle-plugin.md: delete or rewrite as "how binaries reach you" page. README: the
-   Install section becomes plugin-free (one dependency line + repositories), the plugin API and
-   dav1d-contract sections die, Release status reworded, the licensing note gains the embedded
-   obligations.
-6. **Licensing escape hatch (owner point 4).** Every published artifact that carries FFmpeg bytes
-   must itself carry `COPYING.LGPLv2.1`, `LICENSE.md` and a `BUILD-INFO`-style pointer to the
-   exact source tarball on the v-tag release (the zips already model this; replicate into the
-   cinterop klib or a resources sibling + the POM licence list naming LGPL-2.1-or-later alongside
-   Apache-2.0 for the bundled parts). NOTICE and README state the consumer's LGPL section 6
-   obligations exactly as today. This is the same posture VLC's Android AAR ships with.
-7. **Publish gate promotion** (see facts above): all 11 native targets in the published set;
-   full-set publishToMavenLocal legal; the every-target-tree hard-fail stays.
-8. **Prove, then push.** Ladder: (a) buildSrc tests; (b) fill the two tree gaps (macos-arm64
-   dav1d, android-arm32) from release assets; (c) `checkFFmpegRecipes` green with dav1d flags now
-   IN the fingerprint; (d) `:kitecodec-core:macosArm64Test`; (e) full-set
-   `publishToMavenLocal`; (f) the decisive smoke: a temp consumer project with NO plugin, only
-   `mavenLocal()` + the dependency line, that LINKS AND RUNS a macosArm64 executable calling
-   into FFmpeg through KiteCodec, plus `linkDebugFrameworkIosSimulatorArm64` and a mingwX64
-   link to prove the flags propagate per family; (g) refreshed release run (11 assets), delete
-   the 22 superseded assets; (h) register: this row moves to PAST under RULE TWO, tier 17.17
-   rows 16/17 re-scored.
-
-**Gotchas the researcher already hit so the executor does not:** archive order matters on ELF
-(dependents before dependencies; dav1d LAST). The `-lav*` def lines are the one thing that will
-silently break every consumer if left in the embedded def. cinterop caches aggressively: the
-existing `inputs.files` pattern on the C archive (build.gradle.kts:480-508) documents why, and
-the seven FFmpeg archives need the same input-tracking treatment or a rebaked tree publishes
-stale. `hostFallbackSearchFlags`/`homebrewPrefix` are already vestigial (return emptyList).
-The Docs workflow on GitHub is red since 08-21 for an unrelated pre-existing reason
-(`compileNativeMainKotlinMetadata` unresolved ffkmp_*); do not chase it as part of this.
-`apiCheck`/klib ABI dump is unaffected: embedding changes klib contents, not Kotlin API surface.
-
-**Consumer migration, AFTER KiteCodec ships (each its own commit, both repos build today on old
-mavenLocal plugin versions so nothing is urgent):** Synkplay `shared/build.gradle.kts:242-259`
-and KitePlayer `kiteplayer-ffmpeg:163-176`, `kiteplayer-compose-video:95-104`,
-`kiteplayer-mobile:95-104`, `kiteplayer-sample:54-63`: delete the `kitecodec { }` block, the
-plugin application (catalog: Synkplay libs.versions.toml:54+166, KitePlayer:8+26+57) and the
-`kitecodec.ffmpeg.localRoot` plumbing above the Synkplay block; bump `kitecodec-core`. The
-kiteplayer-libass ass-chain never used the plugin toggle (zero users measured) and is untouched.
-
-**Open owner decisions, parked, not blockers:** where the Maven artifacts live long-term
-(Central credentials exist; Central is immutable, so it waits until the shape is worth
-freezing), and whether the superseded ffmpeg-n8.0 release gets deleted.
+Also open, found during KC-EMBED and out of its scope: the per-push CI (`ci.yml`) is red with a
+konan toolchain-ordering flake predating the surge (compileKiteCodecCFor<Target> can run before
+the Kotlin/Native distribution lands; same family as the Docs workflow's standing red), and its
+System-mode host jobs should probably become vendored-tree jobs fed by the release assets now
+that System is an internal dev fallback only.
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 

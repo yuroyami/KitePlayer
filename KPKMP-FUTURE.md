@@ -2429,6 +2429,7 @@ locating each symbol by name, because every line number in both audit documents 
 
 | Row | Open item, in one line | Ver | Detail |
 |---|---|---|---|
+| KP-PROD | THE PRODUCTION PROGRAM, owner-ordered 2026-08-22: the ordered handoff from here to a shippable player; every row below maps into one of its four phases | [V] 08-22 | 17.16, here |
 | SOL-S3 | overlay draws the SOURCE bitmap's size, never the region's own | [V] 08-19 | 17.11, here |
 | SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
 | SOL-S8 | positioned bottom cues still consume implicit stacking space | [V] 08-19 | 17.11, here |
@@ -2528,6 +2529,69 @@ detail is the exact failure this section was created to end**, so the rule earns
 they disagree, the DETAIL wins, because it is the one written next to the evidence.
 
 ### 17.16 The detail behind the register's new rows
+
+#### KP-PROD. The production handoff: from a laptop-proven engine to a shippable player
+
+Owner question, 2026-08-22, verbatim in spirit: what separates KitePlayer from production worth,
+and from libVLC and libmpv. This section is the executable answer. It schedules NOTHING by
+itself; it ORDERS the existing open rows so an executor starts at phase 1 and never wonders what
+outranks what. Two standing laws outrank everything in it: the 17.18 rule (parity of what EXISTS
+beats new feature count) and the versioning rule (minor frozen at 0.1x-style patch bumps,
+owner-approved each time). DRM stays out of scope per section 12, and the 4K software non-goal
+stays owner-gated (row: 4K).
+
+**The definition being executed.** Production-worth means: (1) a stranger can INSTALL it from a
+public repository and their first build is green, (2) its green claims are DEVICE claims, not
+one-Mac claims, and (3) the first afternoon of real use hits no register-documented hole. The
+giants comparison reduces to the same three plus time: libVLC and libmpv are twenty years of
+hostile input baked into code. That tail cannot be shortcut, but it can be bounded: the wild
+corpus row below is the down payment. What the pair has that the giants structurally do not: one
+Kotlin engine on 11 targets, a typed coroutine API with truthful transactional commands, and
+one-dependency-line provisioning proven on Maven Central today (KiteCodec 0.1.1, PAST 14.121).
+
+**Phase 1: INSTALLABLE. Repeat KiteCodec's Central journey for KitePlayer.** The path is now
+known and half the tooling exists. Rows: KP-B1..B13 (no CI of any kind on this repository: build
+it, mirroring KiteCodec's ci/release/publish trio, konan warmup included per KC-CI-KONAN),
+SOL-B8 (the AAR publication), F-ABI1 (Android ABI dump before anything is frozen), SOL-B7
+(Gradle 10 warnings become breaks; fix before CI pins green), SOL-B6 (the twin repos resolve as
+one graph or with explicit Central pins, never mavenLocal shadows), SOL-B4 (one macOS floor,
+decided once), SOL-B5 [owner] (armeabi-v7a in or formally out), 17.17 boxes 11, 17, 18, 19, 20.
+Exit: `implementation("io.github.yuroyami:kiteplayer-mobile:0.0.x")` from a machine that has
+never seen this checkout, resolving KiteCodec 0.1.x from Central, building green. Everything in
+this phase is mechanical; nothing needs a device.
+
+**Phase 2: DEVICE-TRUE. Convert one-Mac claims into device claims.** Mostly owner-gated hardware
+sessions, which is why phase 1 goes first: [owner] AGW-1 (Android GPU on a physical phone), the
+M riders (iPhone KiteStats run, the physical-device session), the W riders (the Windows matrix
+has NEVER run on Windows; mingw links are not runs), F-ALPHA1/ROT1/POS1 (real pixels on real
+screens), 17.17 boxes 12 and 13, and the iOS background slideshow evidence (memory row). Also
+here: PAR-3 (android-x64 zero SIMD), PAR-1 [owner] and PAR-2 (hwaccel truth on mingw and linux),
+PAR-6 (hardware AV1 cannot engage; needs the by-name decoder policy KC-CAPS also wants). Exit:
+every platform the README advertises has at least one physical-device green run recorded.
+
+**Phase 3: DAILY-DRIVER. The holes a user hits in the first afternoon, all already documented:**
+SOL-P8 remainder (the mixer folds ONLY to stereo and CoreAudio is clamped to 2ch: on a 5.1
+system this player outputs stereo; the single most user-visible row in the register), SOL-P9 (a
+track change reopens the session, so live media cannot switch tracks), 17.17 box 10 (audio
+device loss only warns), box 7 (the subtitle lane is outside the EOF gate: a trailing cue can be
+cut), SOL-A6 (passthrough, offload, device selection, route recovery), KP-NET (HLS, real DASH
+ABR, cache, reconnect, resume: today it is a range request and a static prototype), the platform
+experience row of 17.18 (media session, audio focus, lock screen, interruptions, real PiP: the
+OS must know a player is running), SOL-S3/S7/S8 (subtitle rendering truths), KP-API (the five
+dead knobs and throwing stubs stop lying). Exit: a written first-afternoon script (play local,
+play HTTP, switch tracks, unplug headphones, background the app, finish a file with subtitles)
+passes on Android and iOS hardware.
+
+**Phase 4: TAIL. Where the giants live; bounded, never finished:** the wild-input corpus (start
+with the mpv/VLC public sample suites against the 17.5 matrix; every failure becomes a row), the
+17.18 map consumed domain by domain in owner-picked order, X-08/X-13/X-14 for the web organ,
+L (libass everywhere plus the mpv corpus), the test-debt row's nineteen named regressions, and
+the SOL-C/K code-health rows riding along. This phase has no exit; it has a cadence.
+
+**What NOT to do, stated so the executor cannot drift:** do not add features to close the 17.18
+map while any phase 1-3 row is open (the 17.18 rule); do not bump the minor version ever; do not
+publish anything whose gate is not green (17.17 box 20 becomes real in phase 1); do not treat
+simulator green as device green (the exact confusion phase 2 exists to end).
 
 Written 2026-08-19 from the distillation. Every anchor here was located by symbol name against
 KiteCodec `dd2823c` and KitePlayer `e201186`.

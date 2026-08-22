@@ -2502,7 +2502,7 @@ locating each symbol by name, because every line number in both audit documents 
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-MIGRATE | migrate Synkplay + 4 KitePlayer modules off the deleted plugin onto embedded kitecodec-core 0.1.0 (KC-EMBED itself SHIPPED 08-22, PAST 14.119) | [V] 08-22 | 17.16, here |
+| KC-CI-KONAN | per-push CI is red with a konan toolchain-ordering flake predating KC-EMBED, and its System-mode host jobs should become vendored-tree jobs fed by release assets | [V] 08-22 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
@@ -2589,28 +2589,16 @@ v0.1.0 release carries all 22 zips, verified, and `hasPrebuiltAsset` is true for
 because it is true. **The one remaining owner gate is Maven Central publication**, deliberately
 LAST: Central is permanently immutable, so nothing ships there until the pair is worth freezing.
 
-#### KC-MIGRATE. Five consumer modules still speak the deleted plugin's DSL
+#### KC-CI-KONAN. The per-push CI predates the embedded world in two ways
 
-KC-EMBED itself SHIPPED on 2026-08-22 (PAST 14.119): the dav1d axis is dead, the plugin module
-is deleted, FFmpeg is embedded inside every published klib, and the one-dependency-line consumer
-is proven end to end. What remains is the migration of this family's own consumers, each still
-building against OLD mavenLocal artifacts (plugin 0.0.10/0.0.11 + matching kitecodec-core), so
-nothing is broken and nothing is urgent:
-
-- Synkplay `shared/build.gradle.kts:242-259` and KitePlayer `kiteplayer-ffmpeg:163-176`,
-  `kiteplayer-compose-video:95-104`, `kiteplayer-mobile:95-104`, `kiteplayer-sample:54-63`:
-  delete the `kitecodec { }` block, the plugin application (catalog rows: Synkplay
-  libs.versions.toml:54+166, KitePlayer:8+26+57) and the `kitecodec.ffmpeg.localRoot`
-  plumbing; bump `kitecodec-core` to 0.1.0.
-- The bump spans many 0.0.x API changes, so treat each repo as its own migration surge with its
-  own gate, not a mechanical edit.
-- kiteplayer-libass never used the plugin's toggle and is untouched.
-
-Also open, found during KC-EMBED and out of its scope: the per-push CI (`ci.yml`) is red with a
-konan toolchain-ordering flake predating the surge (compileKiteCodecCFor<Target> can run before
-the Kotlin/Native distribution lands; same family as the Docs workflow's standing red), and its
-System-mode host jobs should probably become vendored-tree jobs fed by the release assets now
-that System is an internal dev fallback only.
+Found during KC-EMBED, out of its scope, still open. First: `ci.yml` is red with a
+toolchain-ordering flake that predates the surge entirely (`compileKiteCodecCFor<Target>` can
+run before the Kotlin/Native distribution lands in `~/.konan`, the same family as the Docs
+workflow's standing red since 08-21). Second: its host jobs still exercise the System (brew/apt
+shared FFmpeg) path as if it were a consumer mode, but since KC-EMBED System is an internal dev
+fallback only; those jobs should become vendored-tree jobs fed by the release assets, which is
+also what would make them deterministic. KC-MIGRATE closed on 2026-08-22 (PAST 14.120): both
+consumer repositories are on the embedded world.
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 

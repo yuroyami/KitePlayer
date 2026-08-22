@@ -1,5 +1,3 @@
-import io.github.yuroyami.kitecodec.gradle.FFmpegLicense
-import io.github.yuroyami.kitecodec.gradle.FFmpegSource
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import java.io.File
@@ -9,7 +7,6 @@ plugins {
     alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.vanniktech.publish)
     alias(libs.plugins.dokka)
-    alias(libs.plugins.kitecodec)
 }
 
 /*
@@ -88,18 +85,3 @@ kotlin {
     }
 }
 
-val ffmpegLocalRoot = providers.gradleProperty("kitecodec.ffmpeg.localRoot").map { path ->
-    File(path).absoluteFile.normalize()
-}
-
-kitecodec {
-    ffmpeg {
-        source.set(ffmpegLocalRoot.map { FFmpegSource.Local }.orElse(FFmpegSource.System))
-        localRoot.fileProvider(ffmpegLocalRoot)
-        license.set(FFmpegLicense.LGPL)
-        // Software AV1 (KC-AV1SW). An assertion as much as a request: the toggle fails the build
-        // when the tree it is pointed at carries no libdav1d, which is exactly how a silently
-        // AV1-less tree got shipped before anyone noticed.
-        dav1d.set(true)
-    }
-}

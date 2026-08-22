@@ -9226,6 +9226,29 @@ release. Same posture as VLC's LGPL mobile artifacts.
 still speak the deleted plugin's DSL against old mavenLocal artifacts), the public Maven venue
 decision, and the pre-existing konan-ordering CI flake recorded on the KC-MIGRATE row.
 
+### 14.120 KC-MIGRATE, 2026-08-22: both consumers joined the embedded world
+
+**Same day as 14.119. KitePlayer and Synkplay dropped the deleted plugin's DSL and moved onto
+embedded kitecodec-core 0.1.0. Zero API drift: not one Kotlin source changed in either repo.**
+
+**KitePlayer** (this repo, version bumped 0.0.10 -> 0.0.11): the four modules
+(kiteplayer-ffmpeg, kiteplayer-compose-video, kiteplayer-mobile, kiteplayer-sample) lost the
+plugin application, the `kitecodec { }` block and the `kitecodec.ffmpeg.localRoot` plumbing;
+the catalog lost the plugin row and bumped kitecodec to 0.1.0. Evidence:
+kiteplayer-ffmpeg's macosArm64Test AND jvmTest green over the embedded FFmpeg (the real-media
+suites), the macOS sample player linked, and a FULL `publishToMavenLocal` of the whole matrix
+ran 1497 tasks green with no FFmpeg plumbing anywhere.
+
+**Synkplay** (kiteplayer bumped 0.0.10 -> 0.0.11): `shared/build.gradle.kts` lost the plugin
+and block, the catalog lost both kitecodec rows, and the `kitecodec.ffmpeg.localRoot` line left
+`local.properties`, which retires the last hand-baked-tree dependency this family had. Evidence:
+the iOS simulator framework linked (the exact surface that started the whole AV1 saga), desktop
+and androidMain compiled, and the debug APK assembled.
+
+What this closes narratively: the August chain that began with a bare `-78` on an iPhone ends
+with every app in the family getting AV1-capable, self-provisioned FFmpeg from a Maven
+coordinate.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

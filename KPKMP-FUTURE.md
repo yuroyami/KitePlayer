@@ -2437,8 +2437,7 @@ locating each symbol by name, because every line number in both audit documents 
 | Row | Open item, in one line | Ver | Detail |
 |---|---|---|---|
 | KP-PROD | THE PRODUCTION PROGRAM, owner-ordered 2026-08-22: the ordered handoff from here to a shippable player; every row below maps into one of its four phases | [V] 08-22 | 17.16, here |
-| KP-RQ | THE RENDER-QUALITY LADDER, owner-ordered 2026-08-23: dither, deband, scaler, linear light, Anime4K; libplacebo REJECTED with reasons | [V] 08-23 | 17.21, here |
-| KP-ADEX | androidDeviceTest cannot be BUILT for a device below API 31: backtick test names with spaces fail dexing ("not allowed prior to DEX version 040"), so no instrumented suite runs on older hardware | [V] 08-23 | 17.21, here |
+| KP-RQ | THE RENDER-QUALITY LADDER, owner-ordered 2026-08-23: rungs 1 to 3 (dither, deband, kernel) are CLOSED on both renderers, PAST 14.125 to 14.128; linear light, Anime4K and HDR passthrough remain, and every rung still owes a phone measurement | [V] 08-23 | 17.21, here |
 | SOL-S3 | overlay draws the SOURCE bitmap's size, never the region's own | [V] 08-19 | 17.11, here |
 | SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
 | SOL-S8 | positioned bottom cues still consume implicit stacking space | [V] 08-19 | 17.11, here |
@@ -3131,17 +3130,18 @@ project's content is about 150 lines of shader, written below as RQ-1 to RQ-4.
 The Apple picture shader (`METAL_SHADER_SOURCE` in `kiteplayer-output` `MetalVideoSupport.kt`,
 fragment `kp_picture`): correct YUV matrices keyed on the declared colour space, limited and full
 range, 16-bit plane textures for 10-bit content, tone mapping and eq as separate bit-exact-off
-uniform blocks. The gaps: sampling is BILINEAR IN GAMMA SPACE (`mag_filter::linear`), the target is
-`BGRA8Unorm` with NO DITHER (10-bit sources are truncated to 8 at the write), there is NO DEBAND,
-and chroma is sampled with no siting correction. On the owner's iPhone XS an 800p film is upscaled
-about 1.4x bilinearly; banding on gradients and soft edges are both visible today.
+uniform blocks. Since PAST 14.125 to 14.128 it also carries dithering, debanding, chroma siting and
+a Catmull-Rom kernel, all opt-in and all bit-exact when off, and the Android GL blit carries the
+same three. ONE gap from the original reading is left and it is RQ-4's: scaling still happens in
+gamma space, because that is the rung that changes the shape of the pipeline rather than adding a
+pass to it.
 
 #### The surfaces, so nobody discovers coverage the hard way
 
 | Surface | Programmable stage today | Gets the ladder? |
 |---|---|---|
 | Apple, ALL paths: Metal interop layer AND KiteVideo (the readback `MetalPictureReader` WRAPS `MetalFrameComposer`, verified) | one shared shader body | YES, written once |
-| Android, KiteVideo GPU tier (API 31+) | the GL blit in `AndroidGpuImageVideoRenderer.kt` (fragment at its line ~893, colour matrix already a uniform) | YES, the second copy |
+| Android, KiteVideo GPU tier (API 31+) | the GL blit in `AndroidGpuImageVideoRenderer.kt` | YES, the second copy, and it is the ONLY place a kernel can run on Android: Compose maps every `FilterQuality` above `None` onto one `isFilterBitmap` flag, so the drawing step cannot resample better than bilinear no matter what it is asked for (proven in `AndroidFilterQualityDeviceTest`) |
 | Android, INTEROP (the shipping default): MediaCodec decodes DIRECT to the SurfaceView Surface | NONE, no shader runs on the picture | NO. Honest row: closing this means routing interop through a GL compositor, which is SOL-R14 and AGW territory, not this ladder |
 | CPU paths (Android pre-31 KiteVideo, desktop JVM, web canvas, Apple CG fallback) | none | NO, out of scope |
 
@@ -3159,27 +3159,19 @@ surface: a `RenderQuality` config on `PlayerConfig` plus a live setter, modelled
 `VideoAdjustments`. (4) A rung lands in the Metal body and the Android GL blit in the SAME surge,
 or the surge opens a row saying which half it skipped and why.
 
-**RQ-1, dithering. LANDED 2026-08-23, PAST 14.125; measured free on an A12.** At the final write, after every other stage: an 8x8 ordered Bayer matrix (a
-64x64 blue-noise texture is the upgrade if the pattern is visible), amplitude 1/255. This is the
-cheapest rung and the precision to dither FROM already exists, because 10-bit planes ride R16
-textures into the shader. Proof: a synthetic 10-bit gradient clip added to `testmedia.sh`; the
-golden asserts no flat run longer than the dither period, and the bit-exact-off golden pins the
-disabled path. Estimate: under one session, both shader bodies.
+**RQ-1 dithering, RQ-2 debanding and chroma siting, RQ-3 the Catmull-Rom kernel: ALL CLOSED
+2026-08-23**, on the Metal body and the Android GL blit both, recorded in PAST 14.125 to 14.128.
+Read those entries before starting RQ-4: three of the four findings in them are about passes that
+compiled, cost every tap and did nothing, which is this ladder's characteristic failure and is not
+caught by any test that only asks whether the code runs.
 
-**RQ-2, debanding, plus chroma siting in the same surge. METAL HALF LANDED 2026-08-23, PAST 14.126; Android half compiles but is unmeasured, and the device cost is still owed.** mpv's shape: for each plane sample the
-average of taps at a small random-radius ring around the texel, replace the sample when it differs
-by less than a threshold, then add low-amplitude grain; one iteration first, thresholds as config
-with mpv's defaults as the reference point. Run it on the sampled Y, Cb, Cr BEFORE the matrix,
-which is where mpv does it and what the plane textures make natural. Chroma siting rides along: a
-half-texel horizontal offset for left-sited 4:2:0 in the sampler coordinates, two lines. This rung
-is the single most visible one on this project's anime content. Gate: measured fps delta on the XS
-under 5 percent at 800p, else it defaults off on A-series below A14. Estimate: one session.
-
-**RQ-3, the upscaling kernel. METAL HALF LANDED 2026-08-23, PAST 14.127; sixteen taps, not four, and the reason is recorded. Android half NOT written; device cost owed.** Catmull-Rom bicubic for luma, using the standard four-bilinear-
-fetch formulation so it costs four samples, not sixteen; chroma stays bilinear until measured.
-Fit-mode upscales only; downscale stays bilinear for now and says so. Proof: a checkerboard and
-text-card clip, golden plus eyeball; the sharpness difference at the XS's 1.4x is the point.
-Estimate: one session.
+Law (2) is HALF met. The Android halves have their hardware numbers, taken on a Redmi Note 8
+(Adreno 610, Android 10), per 1920x1080 draw over a 6.83 ms plain blit: dither +1.30 ms, deband
++7.72 ms, the kernel +22.01 ms. Against a 24 fps whole-frame budget of 41.7 ms that is 20, 35 and
+69 percent, so dithering is affordable on the floor device, debanding is a choice, and the kernel
+is not a default at this class. The METAL halves still have no device number, because neither
+iPhone was reachable this session. Everything stays opt-in behind `RenderQuality.Off` until the
+owner decides on those numbers; moving a default is not an implementer's call.
 
 **RQ-4, linear-light scaling.** The structural rung, deliberately last of the four: today decode
 and scale are ONE pass, with scaling done by the sampler in gamma space. Correct light-linear

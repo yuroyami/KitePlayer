@@ -255,6 +255,44 @@ class OutputGenerationLeaseBookTest {
         assertEquals(null, fittedGpuOutputSize(fullHd, 0, null))
     }
 
+    /**
+     * 17.21 RQ-3: a requested kernel is the ONE thing that lets the blit enlarge.
+     *
+     * The buffer normally stops at the source's own size, because the drawing step can enlarge
+     * just as well and for free. On Android it cannot, so when a kernel is asked for the
+     * enlargement moves here and the buffer takes the full fitted footprint instead.
+     */
+    @Test
+    fun gpuOutputEnlargesOnlyWhenAKernelWillDoTheEnlarging() {
+        val small = VideoSize(640, 360)
+
+        assertEquals(
+            small,
+            fittedGpuOutputSize(small, 0, GpuViewport(1920, 1080)),
+            "without a kernel the buffer must still refuse to grow past the source",
+        )
+        assertEquals(
+            VideoSize(1920, 1080),
+            fittedGpuOutputSize(small, 0, GpuViewport(1920, 1080), allowUpscale = true),
+            "with one it takes the whole fitted footprint, which is what the kernel then fills",
+        )
+        assertEquals(
+            VideoSize(1920, 1080),
+            fittedGpuOutputSize(small, 90, GpuViewport(1080, 1920), allowUpscale = true),
+            "a quarter turn swaps the portrait footprint back into the unrotated landscape buffer",
+        )
+        assertEquals(
+            VideoSize(1080, 607),
+            fittedGpuOutputSize(small, 0, GpuViewport(1080, 1080), allowUpscale = true),
+            "the fit is still a fit: the narrow axis binds and aspect is kept",
+        )
+        assertEquals(
+            VideoSize(1920, 1080),
+            fittedGpuOutputSize(VideoSize(3840, 2160), 0, GpuViewport(1920, 1080), allowUpscale = true),
+            "a downscale is unaffected by the flag, since the cap was never what bound it",
+        )
+    }
+
     @Test
     fun gpuOutputUsesPixelAspectToAvoidShadingInvisiblePixels() {
         val anamorphicSource = VideoSize(

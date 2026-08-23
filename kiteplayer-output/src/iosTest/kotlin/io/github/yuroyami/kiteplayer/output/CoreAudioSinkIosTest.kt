@@ -58,7 +58,7 @@ class CoreAudioSinkIosTest {
         val fresh = CoreAudioSink()
         try {
             val freshHandoff = fresh.openWithRing(format) { 4_800 }
-            fillRing(freshHandoff.ring, 0)
+            fillRing(freshHandoff.ringPointer(), 0)
             fresh.start()
             var attempts = 0
             while (fresh.callbacks == 0L && attempts < 100) {

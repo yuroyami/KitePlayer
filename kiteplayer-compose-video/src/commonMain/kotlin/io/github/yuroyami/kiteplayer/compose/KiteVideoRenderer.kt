@@ -110,6 +110,8 @@ internal class KiteVideoRenderer(
     private val publishAdjustments: (io.github.yuroyami.kiteplayer.VideoAdjustments) -> Unit = {},
     /** Publishes the engine's framing controls into the draw-phase state. */
     private val publishTransform: (io.github.yuroyami.kiteplayer.VideoTransform) -> Unit = {},
+    /** Publishes the sampling the draw phase should scale the picture with. */
+    private val publishFilterQuality: (androidx.compose.ui.graphics.FilterQuality) -> Unit = {},
     /** Optional platform GPU tier. Software frames still use this renderer's worker. */
     private val hardwareRenderer: KiteVideoHardwareRenderer? = null,
 ) : VideoRenderer {
@@ -124,6 +126,27 @@ internal class KiteVideoRenderer(
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
         publishTransform(transform)
+    }
+
+    /**
+     * The render-quality ladder reaches TWO places from here, and it has to reach both (17.21).
+     *
+     * The scaler is Compose's own: the draw phase enlarges the published image, so the kernel is
+     * a `filterQuality` on that one call. Dithering and debanding are not Compose's to do, so
+     * they go on to the platform GPU tier, which is the only thing in this path holding a shader.
+     * Forgetting the second half is why a dither could be switched on and change nothing on the
+     * Android GPU tier: the engine talks to THIS renderer, never to the one underneath it.
+     */
+    override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
+        publishFilterQuality(
+            when (quality.scaler) {
+                io.github.yuroyami.kiteplayer.VideoScaler.CatmullRom ->
+                    androidx.compose.ui.graphics.FilterQuality.High
+                io.github.yuroyami.kiteplayer.VideoScaler.Bilinear ->
+                    androidx.compose.ui.graphics.FilterQuality.Low
+            },
+        )
+        hardwareRenderer?.setRenderQuality(quality)
     }
 
     /** The contentHash the published overlay was built from, so an unchanged one is not rebuilt. */

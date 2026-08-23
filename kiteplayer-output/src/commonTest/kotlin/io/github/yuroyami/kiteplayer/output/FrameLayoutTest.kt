@@ -22,7 +22,7 @@ import kotlin.test.assertNull
 class FrameLayoutTest {
 
     @Test
-    fun `four by three into sixteen by nine pillarboxes symmetrically`() {
+    fun fourByThreeIntoSixteenByNinePillarboxesSymmetrically() {
         val layout = frameLayout(1920, 1080, VideoSize(640, 480), 0)!!
         assertEquals(1080, layout.bottom - layout.top, "height fills")
         assertEquals(1440, layout.width, "4:3 at 1080 high is 1440 wide")
@@ -32,7 +32,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `sixteen by nine into four by three letterboxes symmetrically`() {
+    fun sixteenByNineIntoFourByThreeLetterboxesSymmetrically() {
         val layout = frameLayout(1024, 768, VideoSize(1920, 1080), 0)!!
         assertEquals(1024, layout.width, "width fills")
         assertEquals(576, layout.height, "16:9 at 1024 wide is 576 high")
@@ -41,7 +41,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `anamorphic pixels widen the picture through displayWidth`() {
+    fun anamorphicPixelsWidenThePictureThroughDisplayWidth() {
         /* 720x480 with 32:27 pixels displays as 853 wide (DVD widescreen). */
         val size = VideoSize(720, 480, 32, 27)
         val layout = frameLayout(853, 480, size, 0)!!
@@ -50,7 +50,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `every quarter turn is drawn and everything else shows as stored`() {
+    fun everyQuarterTurnIsDrawnAndEverythingElseShowsAsStored() {
         assertEquals(0, quarterTurn(0))
         assertEquals(90, quarterTurn(90))
         assertEquals(180, quarterTurn(180))
@@ -62,7 +62,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `a quarter turned frame swaps its content axes before the fit`() {
+    fun aQuarterTurnedFrameSwapsItsContentAxesBeforeTheFit() {
         /* A 1920x1080 frame turned 90 degrees occupies 1080x1920 of content: on a 1080x1920
          * portrait canvas it fills it exactly. */
         val layout = frameLayout(1080, 1920, VideoSize(1920, 1080), 90)!!
@@ -72,7 +72,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `the draw rectangle is the destination with its sides exchanged about the same centre`() {
+    fun theDrawRectangleIsTheDestinationWithItsSidesExchangedAboutTheSameCentre() {
         val layout = frameLayout(1080, 1920, VideoSize(1920, 1080), 90)!!
         assertEquals(layout.centerX, (layout.drawLeft + layout.drawRight) / 2f)
         assertEquals(layout.centerY, (layout.drawTop + layout.drawBottom) / 2f)
@@ -84,7 +84,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `nothing to draw is a null layout and never a crash`() {
+    fun nothingToDrawIsANullLayoutAndNeverACrash() {
         assertNull(frameLayout(0, 1080, VideoSize(640, 480), 0))
         assertNull(frameLayout(1920, 0, VideoSize(640, 480), 0))
         assertNull(frameLayout(1920, 1080, VideoSize(0, 480), 0))
@@ -92,7 +92,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `the fit never overhangs the canvas by a rounding error`() {
+    fun theFitNeverOverhangsTheCanvasByARoundingError() {
         for (cw in intArrayOf(101, 640, 1919)) for (ch in intArrayOf(99, 480, 1079)) {
             for (turn in intArrayOf(0, 90)) {
                 val layout = frameLayout(cw, ch, VideoSize(1280, 719), turn)!!
@@ -104,7 +104,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `fill covers the canvas and crops the overhanging axis symmetrically`() {
+    fun fillCoversTheCanvasAndCropsTheOverhangingAxisSymmetrically() {
         // 4:3 content on a 16:9 canvas: width fills, height overhangs and splits evenly.
         val layout = frameLayout(1920, 1080, VideoSize(640, 480), 0, io.github.yuroyami.kiteplayer.VideoScale.Fill)!!
         assertEquals(0, layout.left)
@@ -115,7 +115,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `stretch takes the canvas whole and keeps the turn`() {
+    fun stretchTakesTheCanvasWholeAndKeepsTheTurn() {
         val layout = frameLayout(1920, 1080, VideoSize(640, 480), 180, io.github.yuroyami.kiteplayer.VideoScale.Stretch)!!
         assertEquals(0, layout.left)
         assertEquals(0, layout.top)
@@ -125,7 +125,7 @@ class FrameLayoutTest {
     }
 
     @Test
-    fun `the framing transform matches the compose geometry word for word`() {
+    fun theFramingTransformMatchesTheComposeGeometryWordForWord() {
         // The forced aspect replaces the container's shape: square content forced to 2:1.
         val forced = frameLayout(
             100, 100, VideoSize(100, 100), 0,

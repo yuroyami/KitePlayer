@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 class PreOpenOptionsTest {
 
     @Test
-    fun `headers become one CRLF-joined http option block`() {
+    fun headersBecomeOneCrlfJoinedHttpOptionBlock() {
         val options = preOpenOptions(
             MediaItem(
                 "https://example.test/movie.mkv",
@@ -28,13 +28,13 @@ class PreOpenOptionsTest {
     }
 
     @Test
-    fun `formatHint becomes a format whitelist of one`() {
+    fun formatHintBecomesAFormatWhitelistOfOne() {
         val options = preOpenOptions(MediaItem("pipe:0", formatHint = "mpegts"))
         assertEquals("mpegts", options["format_whitelist"])
     }
 
     @Test
-    fun `a raw openOptions key wins over the typed sugar`() {
+    fun aRawOpenOptionsKeyWinsOverTheTypedSugar() {
         val options = preOpenOptions(
             MediaItem(
                 "https://example.test/movie.mkv",
@@ -51,7 +51,7 @@ class PreOpenOptionsTest {
     }
 
     @Test
-    fun `an item with neither adds nothing`() {
+    fun anItemWithNeitherAddsNothing() {
         assertTrue(preOpenOptions(MediaItem("file.mkv")).isEmpty())
         assertEquals(
             mapOf("probesize" to "32768"),

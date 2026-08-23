@@ -9584,6 +9584,150 @@ default on anywhere until it is measured on hardware. Both the owner's iPhone an
 the bus during this session, so RQ-2 and RQ-3 both stand without a device number. The Android GL
 half of RQ-3 is NOT written; only RQ-1 and RQ-2 reached that blit.
 
+### 14.128 KP-RQ rungs 2 and 3 finished, 2026-08-23: the Android halves, the phone that came back, and what the driver gets to decide
+
+Rungs 2 and 3 shipped their Metal halves on 2026-08-23 with the Android halves recorded as
+"compiles but unmeasured" and "not written". Both are now written, and every claim in them is
+proven by pixels read back from real GLES2 drivers rather than by inspection: an API 36 emulator
+on the development machine, and a Redmi Note 8 with an Adreno 610 that came back onto the USB bus
+late in the session and turned "no device number" into a table.
+
+**The blocker had to go first.** No instrumented suite in this repository could be BUILT, let
+alone run: fifteen test methods written with backticked names containing spaces failed dexing with
+"Space characters in SimpleName ... are not allowed prior to DEX version 040", which needs a minSdk
+this library will not have. That is register row KP-ADEX, and it meant the Android half of the
+ladder had never had a way to be checked at all. Eleven names in `FrameLayoutTest` and four in
+`PreOpenOptionsTest` are now camelCase, and all four modules that own an `androidDeviceTest` build
+their APKs. KP-ADEX is closed.
+
+**RQ-3's Android half is not where it looks like it belongs.** The obvious place for a kernel is
+the drawing step: `KiteVideo` makes exactly one `drawImage` call, and Compose takes a
+`filterQuality` there. On Skia that works, and `SkiaFilterQualityTest` measures it: `High` maps to
+`CubicResampler(1/3, 1/3)`, rises faster across a step than `Low`, and rings past both endpoints,
+which bilinear can never do. On Android it does nothing at all. Compose's Android paint maps every
+quality above `None` onto the single `isFilterBitmap` flag, so `Low`, `Medium` and `High` are one
+bilinear. `AndroidFilterQualityDeviceTest` pins that in pixels: all three produce byte-identical
+output at an 8x enlargement, and if Android ever grows a real resampler that test fails and says
+so.
+
+So on Android the kernel has to run in the only shader that path owns, the OES-to-RGBA blit. That
+blit refused to enlarge: `fittedGpuOutputSize` capped the buffer at the source's own size, for the
+good reason that the drawing step could enlarge for free. On Android it cannot, so asking for a
+kernel now lifts that cap and the blit takes the whole fitted footprint, with Compose then drawing
+at 1:1. Ask for no kernel and the old size law holds byte for byte.
+
+**The three passes, proven.** The blit's fragment body is now one string compiled twice: once over
+`samplerExternalOES` for production, once over `sampler2D` for the test, differing by two header
+lines. Only MediaCodec can fill an external texture, so a test holding one could put no known
+pattern in and would prove nothing. Seven assertions run the real body:
+
+- neutral is bit-exact at 1:1, which is the ladder's first law
+- dither spreads one level in the Bayer ORDER, checked position by position
+- debanding leaves a flat field untouched
+- debanding refuses a hard 0-to-255 edge, byte for byte
+- dither carries what debanding alone cannot write, 115 pixels against 25
+- Catmull-Rom is steeper than bilinear and overshoots both endpoints
+- Catmull-Rom at native size is the source itself, since the kernel interpolates
+
+Two implementation corrections came out of writing them. The debanding ring was walked in OUTPUT
+texels, an approximation the code admitted to; the vertex stage now derives the two source-texel
+step vectors from the texture matrix with w = 0, so they are directions rather than points and a
+crop offset cannot leak into them. And `debandGrain` was ignored on this tier. It is applied now as
+ONE value added to all three channels, which shifts Y and leaves Cb and Cr exactly where they were,
+so it is the same luma-only grain the Metal body applies, said in the space MediaCodec hands over.
+
+**The driver's rounding, which broke two assertions and is worth knowing about.** Both failures
+were mine assuming something the shader does not control.
+
+The first: the dither assertion predicted which Bayer positions cross to the higher level by
+assuming the write rounds at the half step. The emulator does not; a calibration sweep put its
+crossing at about 120.52 of 255, which moved the predicted threshold from 41 to 43. The rounding
+boundary belongs to the driver, so the test now MEASURES it by binary search and predicts from it.
+Exact, and portable: the Adreno and the emulator both pass it and they do not agree on the number.
+
+The second took three attempts and the first two were the wrong shape. The band test asserted that
+only pixels within the ring's reach may change, and stray pixels appeared in columns 0, 8 and 24,
+nowhere near the boundary. Excluding pixels pushed off the band's own levels did not catch them;
+neither did excluding pixels dither alone had moved. The cause is that the two renders take
+DIFFERENT BRANCHES of the same shader, and a pixel whose dithered value lands within a hundredth of
+a level of an off-half-step crossing can flip on the last bit of a different instruction sequence.
+That is the driver, not the pass. The assertion now says the effect is CONCENTRATED in the ring's
+reach, four fifths of it, which is what the claim was always about. The Adreno crosses close enough
+to the half step to produce no strays at all.
+
+**The change that did not explain anything, kept anyway.** `GL_DITHER` was disabled along the way
+on the theory that the driver was adding a second ordered pattern; the readback was identical
+either way on both drivers, so that theory was wrong.
+The call stays, with a comment that says what it is for and what it did not explain, because a
+driver that does dither would land on exactly the sub-step values RQ-1 writes.
+
+**The plumbing hole this uncovered.** `KiteVideoRenderer` published the scale mode, the picture
+controls and the framing, and forwarded none of them to the platform GPU tier beneath it. Nothing
+called `setRenderQuality` on it at all, so on the Android GPU tier a switched-on dither had reached
+nothing since RQ-1 landed. It now publishes the sampling for the draw AND forwards the whole value
+down, with a host test asserting both halves arrive.
+
+**The device measurement, which the ladder's second law demanded and which finally exists.** The
+Redmi Note 8 came back onto the USB bus late in the session: Android 10, Adreno 610, a low-end
+2019 phone and exactly the floor this should be judged against. All seven correctness tests pass
+there unchanged, which matters on its own because the dither assertion calibrates the driver's
+write boundary and had only ever met the emulator's.
+
+Cost, per 1920x1080 draw, 1280x720 source, three runs, upload and readback subtracted by timing
+the same call with the draw repeated 30 times against 0 times:
+
+| pass | ms per draw | over the plain blit |
+|---|---|---|
+| blit alone | 6.83 | |
+| plus dither | 8.13 | +1.30 ms, +19 percent |
+| plus deband | 14.55 | +7.72 ms, +113 percent |
+| plus the kernel | 28.84 | +22.01 ms, +322 percent |
+
+Read against a 24 fps budget of 41.7 ms for the WHOLE frame, decode included: the kernel alone
+takes 69 percent of it on this phone, debanding takes 35 percent, and dithering takes 20 percent
+for the entire blit rather than for the pass. So dithering is affordable on the floor device,
+debanding is a choice, and the kernel is not something to default on anywhere near this class of
+hardware. No default is moved here regardless, because that call is the owner's; what changes is
+that it can now be made on numbers.
+
+The emulator's numbers are kept for contrast and as a warning about reading them as phone numbers:
++2.6 to +5.5 ms, +20.9 to +22.3 ms and +63.4 to +63.7 ms for the same three passes. The ORDER is
+the same and the ratios are not, which is the whole reason law two asks for hardware.
+
+Both of the owner's iPhones stayed off the bus, so the Metal halves of RQ-2 and RQ-3 still have no
+device number and every rung stays opt-in behind `RenderQuality.Off`.
+
+**Three reds found while verifying, none caused here, each checked rather than assumed.** The
+first is fixed because the fix is one token: W-18 took the C ring pointer off the public ABI on
+2026-08-17 and updated every call site but one, so `CoreAudioSinkIosTest` still passed
+`handoff.ring` where its siblings pass `handoff.ringPointer()`, and the WHOLE `iosSimulatorArm64`
+test target has not compiled since. It compiles again.
+
+The second is what that fix then exposed, and it needed an experiment rather than a shrug. With the
+target compiling, twenty tests fail on the simulator and every one of them is a CoreAudio device
+test: `CoreAudioSinkTest` 9 of 14, `CoreAudioSinkRealTimeTest` 10 of 10, `CoreAudioSinkIosTest` 1
+of 1, while `AnnexBTest`, `FrameLayoutTest`, `UIKitVideoRendererTest`, `AppleSubtitleRasterizerTest`
+and `AppleAudioSessionPolicyTest` are all green there. The failure is CoreAudio status -10851 at
+`AudioUnitInitialize`, which is the simulator having no audio route. That mattered more than usual
+because 14.124's channel-count fix touches exactly that code path and landed AFTER the compile
+break, so nobody had run these against it. The pre-fix `kite_rt_coreaudio.c` was checked out over
+the current one and the target re-run: identical counts, 1, 10 and 9. The channel-count fix is
+cleared by measurement, and the same suites pass on macOS where the audio hardware is real.
+
+The third is left alone and recorded: `WebCanvasVideoRendererTest.aFrameIsClosedAndCountedWhenThe`
+`StageCannotBeBuilt` fails on the wasm browser target on the clean tree too, verified by stashing
+this work. That is a behavioural failure in a renderer this work does not touch, and guessing at it
+inside a picture-quality commit would be the wrong place to spend the attention.
+
+**Still owed.** The phone measurement for the METAL halves of RQ-2 and RQ-3: the Android halves
+have theirs now, Apple's do not. The Apple `KiteVideo` readback path still renders with the disabled quality block, so the ladder reaches the
+Apple interop layer and not the Compose one. Debanding and the kernel remain exclusive on both
+renderers, deband winning, which is a deliberate choice to keep the two identical rather than a
+limit either one has; the combination is the open follow-up. `AndroidSurfaceVideoRendererDeviceTest`
+needs an Activity and a real SurfaceView and does not complete on this emulator; it has never run
+in CI or anywhere else because of KP-ADEX, so it is characterised here as untested rather than as
+a regression.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

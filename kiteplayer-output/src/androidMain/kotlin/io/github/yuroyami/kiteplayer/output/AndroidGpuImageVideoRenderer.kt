@@ -47,6 +47,7 @@ import java.nio.ByteOrder
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.TreeMap
 
@@ -91,6 +92,18 @@ public class AndroidGpuImageVideoRenderer(
     /**
      * The render-quality passes (17.21). This tier blits OES to an RGBA8 image, so eight bits is
      * what the dither spreads across; anything it cannot do it ignores, as the SPI allows.
+     *
+     * Asking for a kernel also changes the SIZE of that image. The blit normally refuses to
+     * enlarge, because enlarging in an intermediate buffer wastes memory when the drawing step
+     * can do it just as well. On Android it cannot: Compose maps every FilterQuality above None
+     * onto one boolean, `isFilterBitmap`, so High and Low are the same bilinear and the kernel
+     * has nowhere else to run. With one requested, the blit takes the enlargement itself and
+     * Compose then draws at 1:1. Ask for none and the old size law holds, bit for bit.
+     *
+     * That enlargement is paid for in memory: the queue holds six buffers, and they grow from the
+     * source's size to the viewport's. A 480p film on a 1080p phone goes from about 8 MB to about
+     * 50 MB. It is bounded by the display and it is opt-in, which is why the cost is taken rather
+     * than capped, but it is a cost and it belongs next to the switch that spends it.
      */
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
         bridge.ditherStep.set(if (quality.dither) 1f / 255f else 0f)
@@ -98,6 +111,8 @@ public class AndroidGpuImageVideoRenderer(
         // band survives a smaller threshold and the pass would then do nothing.
         bridge.debandThreshold.set(if (quality.deband) quality.debandThreshold / 16384f else 0f)
         bridge.debandRange.set(quality.debandRange)
+        bridge.debandGrain.set(if (quality.deband) quality.debandGrain / 16384f else 0f)
+        bridge.bicubic.set(quality.scaler == io.github.yuroyami.kiteplayer.VideoScaler.CatmullRom)
     }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
@@ -396,6 +411,12 @@ private class OesRgbaBridge(
 
     /** Ring radius in source pixels at the first iteration. */
     val debandRange = java.util.concurrent.atomic.AtomicReference(16f)
+
+    /** Grain added back after smoothing, in 0..1. Zero adds none. */
+    val debandGrain = java.util.concurrent.atomic.AtomicReference(0f)
+
+    /** True runs the Catmull-Rom kernel AND lets the blit enlarge. Read by the blit. */
+    val bicubic = java.util.concurrent.atomic.AtomicBoolean(false)
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -421,6 +442,8 @@ private class OesRgbaBridge(
                         ditherStep,
                         debandThreshold,
                         debandRange,
+                        debandGrain,
+                        bicubic,
                         publish,
                         recordSuperseded,
                         reportFailure,
@@ -573,9 +596,14 @@ internal class GlState private constructor(
     private val ditherStepUniform: Int,
     private val debandThreshold: java.util.concurrent.atomic.AtomicReference<Float>,
     private val debandRange: java.util.concurrent.atomic.AtomicReference<Float>,
+    private val debandGrain: java.util.concurrent.atomic.AtomicReference<Float>,
+    private val bicubic: java.util.concurrent.atomic.AtomicBoolean,
     private val debandThresholdUniform: Int,
-    private val debandStepUniform: Int,
+    private val debandRangeUniform: Int,
+    private val debandGrainUniform: Int,
     private val debandSeedUniform: Int,
+    private val sourceSizeUniform: Int,
+    private val bicubicUniform: Int,
 ) : AutoCloseable {
     /** Advances per draw so the debanding ring and its grain do not sit still. */
     private val debandSeed = java.util.concurrent.atomic.AtomicInteger(0)
@@ -600,7 +628,8 @@ internal class GlState private constructor(
     ) {
         if (closed || size.width <= 0 || size.height <= 0) return
         val rotation = normalizedGpuQuarterTurn(rotationDegrees)
-        val outputSize = fittedGpuOutputSize(size, rotation, requestedViewport.get())
+        val outputSize =
+            fittedGpuOutputSize(size, rotation, requestedViewport.get(), bicubic.get())
         val sourceChanged = size != configuredSourceSize
         val metadataChanged =
             sourceChanged || rotation != configuredRotation || colorSpace != configuredColorSpace
@@ -658,6 +687,7 @@ internal class GlState private constructor(
             frameConfiguration.androidColorSpace,
         )
         val outputSize = configuredOutputSize
+        val sourceSize = configuredSourceSize ?: frameConfiguration.size
         if (outputSize == null) {
             // The frame reached the bridge, but there is deliberately no Compose node to receive it.
             recordSuperseded(1L)
@@ -688,19 +718,19 @@ internal class GlState private constructor(
                 GLES20.glUniform3f(colorOffsetUniform, packed[9], packed[10], packed[11])
                 GLES20.glUniform1f(colorEnabledUniform, 1f)
             }
+            // The source's own size, which is what makes a tap offset mean one SOURCE texel
+            // rather than one output texel. The vertex half turns it into the two step vectors.
+            GLES20.glUniform2f(
+                sourceSizeUniform,
+                sourceSize.width.coerceAtLeast(1).toFloat(),
+                sourceSize.height.coerceAtLeast(1).toFloat(),
+            )
             GLES20.glUniform1f(ditherStepUniform, ditherStep.get())
             GLES20.glUniform1f(debandThresholdUniform, debandThreshold.get())
-            // The ring is walked in OUTPUT texels on this tier, which is an approximation the Metal
-            // body does not need: there the source's own size is known, here the external texture's
-            // is not exposed. At or near 1:1 the two agree; on a large upscale the ring is wider in
-            // source terms than asked for, which softens more, so the range is the knob to lower.
-            val ring = debandRange.get()
-            GLES20.glUniform2f(
-                debandStepUniform,
-                ring / outputSize.width.coerceAtLeast(1),
-                ring / outputSize.height.coerceAtLeast(1),
-            )
+            GLES20.glUniform1f(debandRangeUniform, debandRange.get())
+            GLES20.glUniform1f(debandGrainUniform, debandGrain.get())
             GLES20.glUniform1f(debandSeedUniform, (debandSeed.getAndIncrement() % 1024).toFloat())
+            GLES20.glUniform1f(bicubicUniform, if (bicubic.get()) 1f else 0f)
             GLES20.glEnableVertexAttribArray(position)
             GLES20.glEnableVertexAttribArray(texCoord)
             VERTICES.position(0)
@@ -926,28 +956,72 @@ internal class GlState private constructor(
         const val MAX_ACQUIRED_IMAGES = 6
         val VERTICES: ByteBuffer = floatBuffer(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)
         val TEX_COORDS: ByteBuffer = floatBuffer(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f)
+        /**
+         * The blit's vertex half.
+         *
+         * Beyond the quad it carries three derived facts the fragment cannot recover on its own:
+         * where the fragment sits in SOURCE texels, and the two vectors that step one source texel
+         * in the sampling space the texture matrix defines. Those two are transformed with w = 0,
+         * which makes them directions rather than points, so a crop offset cannot leak into a step
+         * and a flip or a quarter turn carries into them correctly.
+         */
         const val VERTEX_SHADER = """
             attribute vec2 aPosition;
             attribute vec2 aTexCoord;
             uniform mat4 uTexMatrix;
+            uniform vec2 uSourceSize;
             varying vec2 vTexCoord;
+            varying vec2 vSourceCoord;
+            varying vec2 vStepX;
+            varying vec2 vStepY;
             void main() {
                 gl_Position = vec4(aPosition, 0.0, 1.0);
                 vTexCoord = (uTexMatrix * vec4(aTexCoord, 0.0, 1.0)).xy;
+                vSourceCoord = aTexCoord * uSourceSize;
+                vStepX = (uTexMatrix * vec4(1.0 / uSourceSize.x, 0.0, 0.0, 0.0)).xy;
+                vStepY = (uTexMatrix * vec4(0.0, 1.0 / uSourceSize.y, 0.0, 0.0)).xy;
             }
         """
-        const val FRAGMENT_SHADER = """
+        /**
+         * What the production blit samples: MediaCodec's external texture.
+         *
+         * The extension line has to precede every declaration, which is why the sampler's type is
+         * a macro and the body below is shared verbatim rather than duplicated.
+         */
+        const val EXTERNAL_SAMPLER_HEADER = """
             #extension GL_OES_EGL_image_external : require
             precision highp float;
-            uniform samplerExternalOES uTexture;
+            #define KP_SAMPLER samplerExternalOES
+        """
+
+        /**
+         * The same body over an ORDINARY texture, which is what the device test compiles.
+         *
+         * Only a producer such as MediaCodec can fill an external texture, so a test holding one
+         * could not put a known pattern in and would prove nothing about the arithmetic below.
+         * This header and [EXTERNAL_SAMPLER_HEADER] differ by the sampler's type and nothing else.
+         */
+        const val PLAIN_SAMPLER_HEADER = """
+            precision highp float;
+            #define KP_SAMPLER sampler2D
+        """
+
+        /** Every line of arithmetic the blit runs, over whichever sampler the header declared. */
+        const val FRAGMENT_BODY = """
+            uniform KP_SAMPLER uTexture;
             uniform mat3 uColorMatrix;
             uniform vec3 uColorOffset;
             uniform float uColorEnabled;
             uniform float uDitherStep;
             uniform float uDebandThreshold;
-            uniform vec2 uDebandStep;
+            uniform float uDebandRange;
+            uniform float uDebandGrain;
             uniform float uDebandSeed;
+            uniform float uBicubic;
             varying vec2 vTexCoord;
+            varying vec2 vSourceCoord;
+            varying vec2 vStepX;
+            varying vec2 vStepY;
 
             float kpHash(vec2 p, float seed) {
                 return fract(sin(dot(vec3(p, seed), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
@@ -974,19 +1048,59 @@ internal class GlState private constructor(
                 return 32.0 * xb2 + 16.0 * yb2 + 8.0 * xb1 + 4.0 * yb1 + 2.0 * xb0 + yb0;
             }
 
+            /* Catmull-Rom's weight, B = 0 and C = 0.5, written out. */
+            float kpCubicWeight(float x) {
+                float a = abs(x);
+                if (a < 1.0) return ((1.5 * a - 2.5) * a) * a + 1.0;
+                if (a < 2.0) return ((-0.5 * a + 2.5) * a - 4.0) * a + 2.0;
+                return 0.0;
+            }
+
+            /* Sixteen taps at texel centres, NOT the four bilinear fetches of the usual trick.
+             *
+             * That trick folds each PAIR of texels into one fetch, which needs both of the pair's
+             * weights to be non-negative so the sample lands inside the pair. Catmull-Rom's lobes
+             * go negative, the sample lands past the pair, and the kernel silently degrades to the
+             * bilinear it exists to replace. It compiles, it costs four taps, it sharpens nothing.
+             * Sixteen exact taps are the honest price (17.21 keeps the numbers). */
+            vec4 kpBicubic() {
+                vec2 f = fract(vSourceCoord - 0.5);
+                vec2 first = -1.0 - f;
+                vec4 sum = vec4(0.0);
+                float weight = 0.0;
+                for (int j = 0; j < 4; j++) {
+                    float dy = first.y + float(j);
+                    float wy = kpCubicWeight(dy);
+                    for (int i = 0; i < 4; i++) {
+                        float dx = first.x + float(i);
+                        float w = kpCubicWeight(dx) * wy;
+                        sum += w * texture2D(uTexture, vTexCoord + dx * vStepX + dy * vStepY);
+                        weight += w;
+                    }
+                }
+                return sum / weight;
+            }
+
             void main() {
-                vec4 c = texture2D(uTexture, vTexCoord);
-                /* Debanding, this tier's version of RQ-2.
-                 *
-                 * It differs from the Metal body in a way worth stating rather than hiding: there
-                 * the pass runs on the Y, Cb and Cr planes BEFORE the matrix, which is where mpv
-                 * does it. Here MediaCodec hands over an external texture that is already RGB, so
-                 * the ring is walked on the converted colour instead. Same shape, same threshold
-                 * law, one conversion later. */
+                /* Debanding and the kernel are exclusive, and deband wins, which is exactly what
+                 * the Metal body does. Keeping the two renderers identical is worth more than
+                 * either of them being individually richer; 17.21 records the combination as open. */
+                vec4 c;
                 if (uDebandThreshold > 0.0) {
+                    /* One difference from the Metal body, stated rather than hidden: there the
+                     * pass runs on the Y, Cb and Cr planes BEFORE the matrix, which is where mpv
+                     * does it. MediaCodec hands this tier an external texture that is already RGB,
+                     * so the ring is walked on the converted colour. Same shape, same threshold
+                     * law, one conversion later. */
+                    c = texture2D(uTexture, vTexCoord);
                     float angle = kpHash(gl_FragCoord.xy, uDebandSeed) * 6.2831853;
-                    vec2 dir = vec2(cos(angle), sin(angle)) * uDebandStep;
-                    vec2 perp = vec2(-dir.y, dir.x);
+                    float ca = cos(angle);
+                    float sa = sin(angle);
+                    /* The ring is walked in SOURCE texels, which is what the radius means and what
+                     * the Metal body already did. Rotating the source basis rather than the raw
+                     * coordinate also keeps the ring round when the two axes scale differently. */
+                    vec2 dir = (ca * vStepX + sa * vStepY) * uDebandRange;
+                    vec2 perp = (-sa * vStepX + ca * vStepY) * uDebandRange;
                     vec3 a = texture2D(uTexture, vTexCoord + dir).rgb;
                     vec3 b = texture2D(uTexture, vTexCoord - dir).rgb;
                     vec3 d = texture2D(uTexture, vTexCoord + perp).rgb;
@@ -997,6 +1111,17 @@ internal class GlState private constructor(
                      * reject exactly what this pass exists to fix. */
                     vec3 flat3 = step(abs(c.rgb - avg), vec3(uDebandThreshold));
                     c.rgb = mix(c.rgb, avg, flat3);
+                    if (uDebandGrain > 0.0) {
+                        /* ONE value added to all three channels. That shifts Y and leaves Cb and
+                         * Cr untouched, so it is the luma-only grain the Metal body applies, said
+                         * in the space this tier is handed. */
+                        float g = (kpHash(gl_FragCoord.xy + 17.0, uDebandSeed) - 0.5) * uDebandGrain;
+                        c.rgb = clamp(c.rgb + vec3(g), 0.0, 1.0);
+                    }
+                } else if (uBicubic > 0.5) {
+                    c = kpBicubic();
+                } else {
+                    c = texture2D(uTexture, vTexCoord);
                 }
                 if (uColorEnabled > 0.5) {
                     c.rgb = clamp(uColorMatrix * c.rgb + uColorOffset, 0.0, 1.0);
@@ -1011,6 +1136,11 @@ internal class GlState private constructor(
                 gl_FragColor = c;
             }
         """
+
+        const val FRAGMENT_SHADER = EXTERNAL_SAMPLER_HEADER + FRAGMENT_BODY
+
+        /** The device test's program: same body, ordinary sampler. */
+        const val TEST_FRAGMENT_SHADER = PLAIN_SAMPLER_HEADER + FRAGMENT_BODY
 
         /**
          * SOL-R14's Android half: the engine's ONE colour-matrix law, packed for the blit.
@@ -1038,6 +1168,8 @@ internal class GlState private constructor(
             ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
             debandThreshold: java.util.concurrent.atomic.AtomicReference<Float>,
             debandRange: java.util.concurrent.atomic.AtomicReference<Float>,
+            debandGrain: java.util.concurrent.atomic.AtomicReference<Float>,
+            bicubic: java.util.concurrent.atomic.AtomicBoolean,
             publish: (AndroidGpuImageFrame) -> Unit,
             recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
@@ -1096,6 +1228,14 @@ internal class GlState private constructor(
                 )
                 check(pbuffer !== EGL14.EGL_NO_SURFACE) { "EGL could not create a pbuffer" }
                 eglCheck(EGL14.eglMakeCurrent(display, pbuffer, pbuffer, context), "make initial context current")
+                /* GL_DITHER is ENABLED by default in GLES2 and is a second, uncontrolled
+                 * dithering stage: the driver may perturb the fragment on its way into the
+                 * framebuffer with a pattern of its own. It shows on nothing here (the device
+                 * test's Bayer readback is identical either way on the emulator's driver), and
+                 * that is exactly why it is turned off rather than left alone: RQ-1 writes values
+                 * that deliberately sit BETWEEN two levels, which is the one case a driver that
+                 * does dither would land on top of. One ordered pattern in the picture, ours. */
+                GLES20.glDisable(GLES20.GL_DITHER)
                 texture = IntArray(1).also { GLES20.glGenTextures(1, it, 0) }[0]
                 check(texture != 0) { "GLES could not create an external texture" }
                 GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
@@ -1118,9 +1258,15 @@ internal class GlState private constructor(
                 val colorEnabledUniform = GLES20.glGetUniformLocation(program, "uColorEnabled")
                 val ditherStepUniform = GLES20.glGetUniformLocation(program, "uDitherStep")
                 val debandThresholdUniform = GLES20.glGetUniformLocation(program, "uDebandThreshold")
-                val debandStepUniform = GLES20.glGetUniformLocation(program, "uDebandStep")
+                val debandRangeUniform = GLES20.glGetUniformLocation(program, "uDebandRange")
+                val debandGrainUniform = GLES20.glGetUniformLocation(program, "uDebandGrain")
                 val debandSeedUniform = GLES20.glGetUniformLocation(program, "uDebandSeed")
-                check(position >= 0 && texCoord >= 0 && sampler >= 0 && texMatrixUniform >= 0) {
+                val sourceSizeUniform = GLES20.glGetUniformLocation(program, "uSourceSize")
+                val bicubicUniform = GLES20.glGetUniformLocation(program, "uBicubic")
+                check(
+                    position >= 0 && texCoord >= 0 && sampler >= 0 &&
+                        texMatrixUniform >= 0 && sourceSizeUniform >= 0,
+                ) {
                     "Android GPU image shader interface was optimized away"
                 }
                 val state = GlState(
@@ -1151,9 +1297,14 @@ internal class GlState private constructor(
                     ditherStepUniform = ditherStepUniform,
                     debandThreshold = debandThreshold,
                     debandRange = debandRange,
+                    debandGrain = debandGrain,
+                    bicubic = bicubic,
                     debandThresholdUniform = debandThresholdUniform,
-                    debandStepUniform = debandStepUniform,
+                    debandRangeUniform = debandRangeUniform,
+                    debandGrainUniform = debandGrainUniform,
                     debandSeedUniform = debandSeedUniform,
+                    sourceSizeUniform = sourceSizeUniform,
+                    bicubicUniform = bicubicUniform,
                 )
                 surfaceTexture.setOnFrameAvailableListener(
                     {
@@ -1441,18 +1592,24 @@ internal fun physicalGpuViewport(width: Int, height: Int, scale: Float): GpuView
 }
 
 /**
- * Fits the unrotated RGBA buffer into the physical display footprint without upscaling it.
+ * Fits the unrotated RGBA buffer into the physical display footprint.
  *
  * Pixel aspect is reflected in the target footprint, while the original [VideoSize] remains frame
  * metadata for Compose layout. A quarter turn swaps the fitted footprint back into the unrotated
  * buffer's axes. Each axis is capped independently: the original frame metadata makes Compose
  * restore pixel aspect, so forcing this intermediate RGBA buffer back to display aspect would
  * unnecessarily discard resolution on the other axis at native anamorphic size.
+ *
+ * The buffer never grows past the source unless [allowUpscale] says otherwise, because enlarging
+ * here would spend memory on pixels the drawing step can invent just as well. [allowUpscale] is
+ * what a requested kernel sets, and only that: on Android the drawing step CANNOT invent them any
+ * better, so the enlargement has to happen where the kernel is (17.21 RQ-3).
  */
 internal fun fittedGpuOutputSize(
     sourceSize: VideoSize,
     rotationDegrees: Int,
     viewport: GpuViewport?,
+    allowUpscale: Boolean = false,
 ): VideoSize? {
     if (sourceSize.width <= 0 || sourceSize.height <= 0) return null
     if (viewport == null || viewport.width <= 0 || viewport.height <= 0) return null
@@ -1474,8 +1631,10 @@ internal fun fittedGpuOutputSize(
     val desiredWidth = if (quarterTurned) footprintHeight else footprintWidth
     val desiredHeight = if (quarterTurned) footprintWidth else footprintHeight
     return VideoSize(
-        width = minOf(sourceSize.width, desiredWidth).coerceAtLeast(1),
-        height = minOf(sourceSize.height, desiredHeight).coerceAtLeast(1),
+        width = (if (allowUpscale) desiredWidth else minOf(sourceSize.width, desiredWidth))
+            .coerceAtLeast(1),
+        height = (if (allowUpscale) desiredHeight else minOf(sourceSize.height, desiredHeight))
+            .coerceAtLeast(1),
     )
 }
 

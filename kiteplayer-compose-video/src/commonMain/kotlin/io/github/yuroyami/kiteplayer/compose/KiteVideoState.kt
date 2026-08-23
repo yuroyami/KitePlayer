@@ -85,6 +85,19 @@ public class KiteVideoState internal constructor(
         mutableStateOf(null)
 
     /**
+     * How the draw phase samples the picture when it scales it, under the same law as
+     * [videoColorFilter]: one setting, not one frame.
+     *
+     * What each value MEANS is not the same everywhere, and the difference is worth stating
+     * because it decides where the work has to live. On Skia (desktop, iOS, web) High is a real
+     * cubic resampler. On Android it is not: Compose maps everything above None onto the single
+     * `isFilterBitmap` flag, so High and Low are the same bilinear. The Android GPU tier
+     * therefore does its own enlargement in the blit, and this value changes nothing there.
+     */
+    internal val filterQuality: MutableState<androidx.compose.ui.graphics.FilterQuality> =
+        mutableStateOf(androidx.compose.ui.graphics.FilterQuality.Low)
+
+    /**
      * A dropped Window metric needs a newly recorded Compose draw before a later exact metric can
      * prove completion. This state is observed only through [acquireFrameForDraw], so incrementing
      * it invalidates the draw scope without recomposition or layout.
@@ -135,6 +148,7 @@ public class KiteVideoState internal constructor(
                 )
             }
         },
+        publishFilterQuality = { quality -> filterQuality.value = quality },
         hardwareRenderer = hardwareRenderer,
     )
 

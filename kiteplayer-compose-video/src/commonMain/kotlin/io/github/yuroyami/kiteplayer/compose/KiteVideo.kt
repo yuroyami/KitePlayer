@@ -64,6 +64,7 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                     val mode = state.scaleMode.value
                     val videoFilter = state.videoColorFilter.value
                     val framing = state.transform.value
+                    val sampling = state.filterQuality.value
                     val layout = videoLayout(
                         areaWidth = size.width.toInt(),
                         areaHeight = size.height.toInt(),
@@ -86,7 +87,7 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                                     layout.drawWidth.roundToInt().coerceAtLeast(1),
                                     layout.drawHeight.roundToInt().coerceAtLeast(1),
                                 ),
-                                filterQuality = FilterQuality.Low,
+                                filterQuality = sampling,
                                 // The picture controls, on the VIDEO image only: subtitles below
                                 // composite unfiltered, exactly like every platform renderer.
                                 colorFilter = videoFilter,

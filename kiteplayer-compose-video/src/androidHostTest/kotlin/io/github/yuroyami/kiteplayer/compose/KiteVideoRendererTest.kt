@@ -66,6 +66,11 @@ private class FakeHardwareRenderer : KiteVideoHardwareRenderer {
     var closes = 0
     var viewport: Triple<Int, Int, Float>? = null
     val viewports = mutableListOf<Triple<Int, Int, Float>>()
+    var quality: io.github.yuroyami.kiteplayer.RenderQuality? = null
+
+    override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
+        this.quality = quality
+    }
 
     override val presentedFrames: Long get() = presented
     override val supersededFrames: Long get() = superseded
@@ -118,6 +123,7 @@ private class Harness(
     val published = CopyOnWriteArrayList<KiteVideoFrame?>()
     val publishThreads = CopyOnWriteArrayList<String>()
     val publishedOverlays = CopyOnWriteArrayList<KiteVideoOverlay?>()
+    val publishedFilterQualities = CopyOnWriteArrayList<androidx.compose.ui.graphics.FilterQuality>()
     @Volatile var overlayImagesBuilt = 0
     val renderer = KiteVideoRenderer(
         convert = convert,
@@ -127,6 +133,7 @@ private class Harness(
             FakeImage(w, h)
         },
         publishOverlay = { overlay -> publishedOverlays += overlay },
+        publishFilterQuality = { quality -> publishedFilterQualities += quality },
         publish = { frame ->
             published += frame
             publishThreads += Thread.currentThread().name
@@ -152,6 +159,48 @@ private class Harness(
 }
 
 class KiteVideoRendererTest {
+
+    /**
+     * 17.21 RQ-3: the ladder splits in two here, and BOTH halves have to arrive.
+     *
+     * The scaler is the drawing step's own business, so it leaves as a `filterQuality`. Dithering
+     * and debanding are not something Compose can do, so the whole value has to go on to the
+     * platform GPU tier underneath. Only forwarding the first half is the failure that hides: the
+     * engine talks to this renderer and never to the one below it, so a dither switched on would
+     * have reached nothing at all on the Android GPU path.
+     */
+    @Test
+    fun renderQualityReachesBothTheDrawAndTheGpuTierBeneathIt() {
+        val hardware = FakeHardwareRenderer()
+        val h = Harness(hardwareRenderer = hardware)
+        try {
+            h.renderer.setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality.Off)
+            assertEquals(
+                listOf(androidx.compose.ui.graphics.FilterQuality.Low),
+                h.publishedFilterQualities.toList(),
+                "no kernel is the sampling every renderer did before the ladder existed",
+            )
+
+            val cubic = io.github.yuroyami.kiteplayer.RenderQuality(
+                dither = true,
+                deband = true,
+                scaler = io.github.yuroyami.kiteplayer.VideoScaler.CatmullRom,
+            )
+            h.renderer.setRenderQuality(cubic)
+            assertEquals(
+                androidx.compose.ui.graphics.FilterQuality.High,
+                h.publishedFilterQualities.last(),
+                "a kernel must select the best sampling the drawing step offers",
+            )
+            assertEquals(
+                cubic,
+                hardware.quality,
+                "the WHOLE value must reach the GPU tier: it owns the two passes Compose cannot do",
+            )
+        } finally {
+            h.renderer.close()
+        }
+    }
 
     @Test
     fun noArgumentStateIsSoftwareOnlyWithoutAnOwningAndroidWindow() {

@@ -32,6 +32,8 @@ public data class PlayerSnapshot(
     val videoScale: VideoScale = VideoScale.Fit,
     /** The live picture controls (brightness, contrast, saturation, hue). Renderers honour them. */
     val videoAdjustments: VideoAdjustments = VideoAdjustments.Identity,
+    /** The render-quality passes in force (17.21). */
+    val renderQuality: RenderQuality = RenderQuality.Off,
     /** The live framing controls (aspect override, zoom, pan). Renderers honour them. */
     val videoTransform: VideoTransform = VideoTransform.Identity,
     /** The runtime subtitle timing shift. Positive shows cues later. */

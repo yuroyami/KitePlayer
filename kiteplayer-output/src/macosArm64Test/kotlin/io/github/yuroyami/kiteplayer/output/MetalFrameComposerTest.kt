@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.Pts
+import io.github.yuroyami.kiteplayer.RenderQuality
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
@@ -33,6 +34,7 @@ import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -95,12 +97,14 @@ class MetalFrameComposerTest {
         targetHeight: Int = 64,
         adjustUniforms: FloatArray = DISABLED_ADJUST_UNIFORMS,
         toneMapped: Boolean = false,
+        qualityUniforms: FloatArray = DISABLED_QUALITY_UNIFORMS,
     ): ByteArray {
         val target = composer.device.makeTargetTexture(targetWidth, targetHeight)
         val commands = composer.encode(
             target, frame, picture, overlay, targetWidth, targetHeight,
             adjustUniforms = adjustUniforms,
             toneMapped = toneMapped,
+            qualityUniforms = qualityUniforms,
         )
         commands.waitUntilCompleted()
         val bytes = ByteArray(targetWidth * targetHeight * 4)
@@ -332,6 +336,68 @@ class MetalFrameComposerTest {
     }
 
     // The Kotlin mirror of the shader's tone-mapping law, for expected values.
+    @Test
+    fun `dithering off writes exactly the pixels it always did`() {
+        // The ladder's first law (17.21): a build that turns nothing on must be bit-exact against
+        // the pipeline that existed before the pass was written. Same picture, both uniform blocks.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val picture = solidNv12(8, 8, y = 120, cb = 128, cr = 128)
+        val frame = TestFrame(8, 8, bt(ColorMatrix.Bt709))
+        val before = render(composer, frame, picture, qualityUniforms = DISABLED_QUALITY_UNIFORMS)
+        val after = render(
+            composer, frame, picture,
+            qualityUniforms = packQualityUniforms(RenderQuality.Off),
+        )
+        assertTrue(
+            before.contentEquals(after),
+            "the neutral RenderQuality changed the write, so nothing below it can be measured alone",
+        )
+    }
+
+    @Test
+    fun `dithering spreads one flat value across the two steps it sits between`() {
+        // A flat field is the whole test. Undithered, every pixel quantises to the SAME output step,
+        // which is exactly what makes a smooth ramp band. Dithered, the ordered pattern must push
+        // part of the field onto the neighbouring step while leaving the average where it was.
+        //
+        // The target is the picture's own size so the 8x8 pattern maps one-to-one onto the 8x8 field
+        // and every one of its 64 offsets is exercised. Y=124 is chosen because it lands about
+        // three quarters of the way between two output steps, so the split is wide and the test does
+        // not sit on a rounding knife edge.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val picture = solidNv12(8, 8, y = 124, cb = 128, cr = 128)
+        val frame = TestFrame(8, 8, bt(ColorMatrix.Bt709))
+
+        val plain = render(composer, frame, picture, targetWidth = 8, targetHeight = 8)
+        val dithered = render(
+            composer, frame, picture, targetWidth = 8, targetHeight = 8,
+            qualityUniforms = packQualityUniforms(RenderQuality(dither = true)),
+        )
+
+        val plainGreens = (0 until 64).map { bgraAt(plain, 8, it % 8, it / 8)[1] }
+        val ditherGreens = (0 until 64).map { bgraAt(dithered, 8, it % 8, it / 8)[1] }
+        val flat = plainGreens.first()
+
+        assertEquals(1, plainGreens.toSet().size, "the undithered flat field must be a single value")
+        assertTrue(
+            ditherGreens.toSet().size > 1,
+            "dithering left the whole field on one step, so it did nothing: $ditherGreens",
+        )
+        assertTrue(
+            ditherGreens.all { kotlin.math.abs(it - flat) <= 1 },
+            "dithering moved a pixel by more than one output step: $ditherGreens",
+        )
+        // A pattern that only ever brightens would pass everything above and still be wrong, because
+        // it would lift the whole picture. Centring is the property that stops that.
+        val drift = ditherGreens.average() - plainGreens.average()
+        assertTrue(
+            kotlin.math.abs(drift) < 0.6,
+            "dithering shifted the average by $drift steps, so the pattern is not centred on zero",
+        )
+    }
+
     private fun pqEncode1(y: Double): Double {
         val p = y.coerceAtLeast(0.0).pow(0.1593017578125)
         return ((0.8359375 + 18.8515625 * p) / (1.0 + 18.6875 * p)).pow(78.84375)

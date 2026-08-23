@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.PlayerEvent
+import io.github.yuroyami.kiteplayer.RenderQuality
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
@@ -81,6 +82,9 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
 
     /** `--hwdec-off` forces the software decoder, so a hardware route can be measured against it. */
     private val hwdecOff = NSProcessInfo.processInfo.arguments.contains(HWDEC_OFF_ARGUMENT)
+
+    /** `--dither` turns RQ-1 on, so its cost can be measured against the same run without it. */
+    private val ditherOn = NSProcessInfo.processInfo.arguments.contains(DITHER_ARGUMENT)
     private var scenarioStarted = false
     private val controlButtons = mutableListOf<UIButton>()
 
@@ -355,7 +359,9 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         }
         try {
             withTimeout(SCENARIO_TIMEOUT) {
-                trace.line("### hardwareDecode=" + (if (hwdecOff) "Off" else "Auto"))
+                trace.line("### hardwareDecode=" + (if (hwdecOff) "Off" else "Auto") +
+            " dither=" + (if (ditherOn) "on" else "off"))
+        player.setRenderQuality(RenderQuality(dither = ditherOn))
         trace.line("### phase 1: first open, fresh player")
                 openAndSettle(player, trace, first, stopFirst = false)
 
@@ -641,6 +647,7 @@ private fun SmokeResult.toJson(): String = buildString {
 private const val SMOKE_ARGUMENT = "--s1b-smoke"
 private const val SCENARIO_ARGUMENT = "--scenario"
 private const val HWDEC_OFF_ARGUMENT = "--hwdec-off"
+private const val DITHER_ARGUMENT = "--dither"
 private const val SCENARIO_TRACE_NAME = "scenario-trace.log"
 private val SCENARIO_TIMEOUT = 10.minutes
 private val SCENARIO_SAMPLE_INTERVAL = 250.milliseconds

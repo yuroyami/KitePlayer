@@ -18,6 +18,14 @@ import kotlin.time.Duration.Companion.seconds
  * nothing reads are marked one by one below, each with a pointer to where they are decided.
  */
 public data class PlayerConfig(
+    /**
+     * How much work renderers spend on the picture beyond decoding it correctly (17.21).
+     *
+     * Off by default, which is the pre-17.21 pipeline exactly. Change it live with
+     * [KitePlayer.setRenderQuality]; this is only the value a fresh player starts at.
+     */
+    val renderQuality: RenderQuality = RenderQuality.Off,
+
     val syncMode: SyncMode = SyncMode.Auto,
     /**
      * What to do about hardware decoding.

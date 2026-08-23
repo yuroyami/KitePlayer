@@ -9452,6 +9452,40 @@ compose-video, view and ffmpeg on JVM, macOS and the iOS simulator.
 
 These ship in the next patch release; this commit carries the code and the register, not the bump.
 
+### 14.125 KP-RQ rung 1, 2026-08-23: dithering, and the knob the ladder hangs on
+
+`RenderQuality` and `KitePlayer.setRenderQuality` exist, delivered exactly like the picture
+controls: the value belongs to the player, every renderer is told it on attach and on change, and a
+renderer honours what it can and ignores the rest. `RenderQuality.Off` is the default and is the
+pre-17.21 pipeline byte for byte, which the first of the two new Metal tests pins by rendering the
+same picture through both uniform blocks and comparing the writes.
+
+RQ-1 itself is an 8x8 ordered Bayer pattern applied as the LAST instruction before the 8-bit write,
+amplitude one output step, centred on zero so a flat field cannot drift brighter. Written twice, as
+the ladder requires: literally as a constant table in the Metal body, and computed by bit
+interleave in the Android GL blit, because GLES2 cannot index an array with a non-constant. Both
+produce the same matrix. The same offset is applied to all three channels on purpose; an
+independent offset per channel dithers chroma too and shows as coloured speckle on grey.
+
+The second test is the one with teeth: a flat field at Y=124, rendered at the picture's own size so
+all 64 pattern positions are exercised, must come back on more than one output step, never move a
+pixel by more than one step, and leave the average within 0.6 of a step. Proven red by neutering
+the shader branch. Getting there corrected the test twice, both worth recording: the first version
+read a 64-wide target with an 8-wide stride, and the second sat on a luma whose distance to the
+next step was smaller than most of the pattern's offsets, so it looked like the pass did nothing
+when it was working correctly.
+
+**Measured on the owner's iPhone XS**, which is the gate the ladder demands before any default
+moves. On a hardware-decoded 1080p clip, where the renderer is the only variable: dither off 21.5
+and 22.0 fps presented, dither on 21.9 and 21.5. The difference is inside the run-to-run spread, so
+RQ-1 costs nothing measurable on an A12. The config default STAYS `Off` anyway, because
+disabled-is-bit-exact is a law about what a caller gets without asking, not a statement about cost;
+`RenderQuality.Standard` is there for a caller who wants the passes.
+
+NOT covered, and recorded rather than discovered later: the Apple KiteVideo readback path
+(`MetalPictureReader`) renders through the composer with the DISABLED block, so KiteVideo on Apple
+does not dither yet; Android's shipping interop tier has no shader at all. Both are stated in 17.21.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

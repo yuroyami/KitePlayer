@@ -292,6 +292,30 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Sets how much work the renderer spends on the picture beyond decoding it correctly (17.21):
+     * dithering, debanding, and which kernel resamples the frame.
+     *
+     * Delivered exactly like [setVideoAdjustments]: the value belongs to the player, every renderer
+     * is told it on attach, and a change lands on the next drawn frame with no pipeline work. A
+     * renderer honours what it can and ignores the rest, so this never fails and never blocks.
+     * [RenderQuality.Off] reproduces the pre-17.21 picture byte for byte.
+     *
+     * @throws IllegalArgumentException on a non-finite or negative debanding parameter.
+     */
+    public fun setRenderQuality(value: RenderQuality) {
+        require(value.debandThreshold.isFinite() && value.debandThreshold >= 0f) {
+            "the deband threshold must be finite and not negative, was ${value.debandThreshold}"
+        }
+        require(value.debandRange.isFinite() && value.debandRange > 0f) {
+            "the deband range must be finite and above zero, was ${value.debandRange}"
+        }
+        require(value.debandGrain.isFinite() && value.debandGrain >= 0f) {
+            "the deband grain must be finite and not negative, was ${value.debandGrain}"
+        }
+        core.post(CoreCommand.SetRenderQuality(value, CompletableDeferred()))
+    }
+
+    /**
      * Sets the framing controls: a forced display aspect, magnification, and pan, mpv's
      * `video-aspect-override`, `video-zoom` and `video-pan-x`/`-y`.
      *

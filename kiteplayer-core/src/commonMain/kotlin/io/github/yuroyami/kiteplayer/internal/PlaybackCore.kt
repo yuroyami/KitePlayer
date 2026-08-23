@@ -431,6 +431,7 @@ internal class PlaybackCore(
     private var muted: Boolean = false
     private var videoScale: VideoScale = VideoScale.Fit
     private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
+    private var renderQuality: io.github.yuroyami.kiteplayer.RenderQuality = config.renderQuality
     private var videoTransform: VideoTransform = VideoTransform.Identity
 
     /** Runtime subtitle timing shift, seeded from config. Positive shows cues later. */
@@ -1304,6 +1305,12 @@ internal class PlaybackCore(
                 if (session == null) pendingRenderer?.setAdjustments(command.value)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetRenderQuality -> {
+                renderQuality = command.value
+                session?.renderer?.setRenderQuality(command.value)
+                if (session == null) pendingRenderer?.setRenderQuality(command.value)
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetVideoTransform -> {
                 videoTransform = command.value
                 session?.renderer?.setTransform(command.value)
@@ -1400,6 +1407,7 @@ internal class PlaybackCore(
         // player, so whichever renderer arrives is told the ruling values before its first frame.
         renderer?.setScaleMode(videoScale)
         renderer?.setAdjustments(videoAdjustments)
+        renderer?.setRenderQuality(renderQuality)
         renderer?.setTransform(videoTransform)
         val session = this.session
         if (session == null) {
@@ -3975,6 +3983,7 @@ internal class PlaybackCore(
             loop = loop,
             videoScale = videoScale,
             videoAdjustments = videoAdjustments,
+            renderQuality = renderQuality,
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
@@ -4205,6 +4214,7 @@ internal class PlaybackCore(
             loop = loop,
             videoScale = videoScale,
             videoAdjustments = videoAdjustments,
+            renderQuality = renderQuality,
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
@@ -5571,6 +5581,8 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)
     class SetPreservePitch(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setPreservePitch", reply)
     class SetVideoScale(val mode: VideoScale, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoScale", reply)
+    class SetRenderQuality(val value: io.github.yuroyami.kiteplayer.RenderQuality, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setRenderQuality", reply)
     class SetVideoAdjustments(val value: VideoAdjustments, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setVideoAdjustments", reply)
     class SetVideoTransform(val value: VideoTransform, val reply: CompletableDeferred<Unit>) :

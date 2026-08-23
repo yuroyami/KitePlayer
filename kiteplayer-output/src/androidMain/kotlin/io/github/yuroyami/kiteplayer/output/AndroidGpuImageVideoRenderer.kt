@@ -88,6 +88,14 @@ public class AndroidGpuImageVideoRenderer(
     private val eventFlow = MutableSharedFlow<RendererEvent>(replay = 4, extraBufferCapacity = 4)
     private val bridge = OesRgbaBridge(::publishImage, ::recordSuperseded, ::bridgeFailed)
 
+    /**
+     * The render-quality passes (17.21). This tier blits OES to an RGBA8 image, so eight bits is
+     * what the dither spreads across; anything it cannot do it ignores, as the SPI allows.
+     */
+    override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
+        bridge.ditherStep.set(if (quality.dither) 1f / 255f else 0f)
+    }
+
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         // SOL-R14's Android half: the OES-to-RGBA blit is the ONE hook this tier has, and it
         // now applies the same unit-domain law every other renderer does. A paused picture
@@ -375,6 +383,9 @@ private class OesRgbaBridge(
 
     /** SOL-R14: the packed colour law the blit reads per draw; null is bit-exact off. */
     val adjust = AtomicReference<FloatArray?>()
+
+    /** One output step when dithering is on, zero when it is off. Read by the blit. */
+    val ditherStep = java.util.concurrent.atomic.AtomicReference(0f)
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -397,6 +408,7 @@ private class OesRgbaBridge(
                         frameConfigurations,
                         requestedViewport,
                         adjust,
+                        ditherStep,
                         publish,
                         recordSuperseded,
                         reportFailure,
@@ -545,6 +557,8 @@ internal class GlState private constructor(
     private val colorEnabledUniform: Int,
     /** SOL-R14: the packed colour law, written by setAdjustments on any thread. */
     private val adjust: AtomicReference<FloatArray?>,
+    private val ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
+    private val ditherStepUniform: Int,
 ) : AutoCloseable {
     private val transform = FloatArray(16)
     private var outputQueue: OutputQueue? = null
@@ -655,6 +669,7 @@ internal class GlState private constructor(
                 GLES20.glUniform3f(colorOffsetUniform, packed[9], packed[10], packed[11])
                 GLES20.glUniform1f(colorEnabledUniform, 1f)
             }
+            GLES20.glUniform1f(ditherStepUniform, ditherStep.get())
             GLES20.glEnableVertexAttribArray(position)
             GLES20.glEnableVertexAttribArray(texCoord)
             VERTICES.position(0)
@@ -892,16 +907,46 @@ internal class GlState private constructor(
         """
         const val FRAGMENT_SHADER = """
             #extension GL_OES_EGL_image_external : require
-            precision mediump float;
+            precision highp float;
             uniform samplerExternalOES uTexture;
             uniform mat3 uColorMatrix;
             uniform vec3 uColorOffset;
             uniform float uColorEnabled;
+            uniform float uDitherStep;
             varying vec2 vTexCoord;
+
+            /* The 8x8 ordered Bayer value for a pixel, in 0..63.
+             *
+             * Computed rather than read from a const array, because GLES2 cannot index an array
+             * with a non-constant expression. This is the standard bit-interleave of the recursive
+             * construction and produces the SAME matrix the Metal body spells out literally, which
+             * is what lets both renderers band a gradient the same way. */
+            float kpBayer8(vec2 pixel) {
+                vec2 p = floor(mod(pixel, 8.0));
+                float x = p.x;
+                float y = p.y;
+                float xb2 = floor(x / 4.0);
+                float xb1 = floor(mod(x / 2.0, 2.0));
+                float xb0 = mod(x, 2.0);
+                float yb2 = floor(y / 4.0);
+                float yb1 = floor(mod(y / 2.0, 2.0));
+                float yb0 = mod(y, 2.0);
+                /* Interleaved as x2 y2 x1 y1 x0 y0, most significant first: the y bits carry the
+                 * coarse split and the x bits the fine one, which is the classic ordering. */
+                return 32.0 * xb2 + 16.0 * yb2 + 8.0 * xb1 + 4.0 * yb1 + 2.0 * xb0 + yb0;
+            }
+
             void main() {
                 vec4 c = texture2D(uTexture, vTexCoord);
                 if (uColorEnabled > 0.5) {
                     c.rgb = clamp(uColorMatrix * c.rgb + uColorOffset, 0.0, 1.0);
+                }
+                /* Last, and only when asked: one output step of centred ordered noise, the same
+                 * amplitude and the same centring law as the Metal path (17.21 RQ-1). Zero is the
+                 * pre-17.21 write, bit for bit. */
+                if (uDitherStep > 0.0) {
+                    float pattern = (kpBayer8(gl_FragCoord.xy) + 0.5) / 64.0 - 0.5;
+                    c.rgb = clamp(c.rgb + pattern * uDitherStep, 0.0, 1.0);
                 }
                 gl_FragColor = c;
             }
@@ -930,6 +975,7 @@ internal class GlState private constructor(
             frameConfigurations: FrameConfigurationBook,
             requestedViewport: AtomicReference<GpuViewport?>,
             adjust: AtomicReference<FloatArray?>,
+            ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
             publish: (AndroidGpuImageFrame) -> Unit,
             recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
@@ -1008,6 +1054,7 @@ internal class GlState private constructor(
                 val colorMatrixUniform = GLES20.glGetUniformLocation(program, "uColorMatrix")
                 val colorOffsetUniform = GLES20.glGetUniformLocation(program, "uColorOffset")
                 val colorEnabledUniform = GLES20.glGetUniformLocation(program, "uColorEnabled")
+                val ditherStepUniform = GLES20.glGetUniformLocation(program, "uDitherStep")
                 check(position >= 0 && texCoord >= 0 && sampler >= 0 && texMatrixUniform >= 0) {
                     "Android GPU image shader interface was optimized away"
                 }
@@ -1035,6 +1082,8 @@ internal class GlState private constructor(
                     colorOffsetUniform = colorOffsetUniform,
                     colorEnabledUniform = colorEnabledUniform,
                     adjust = adjust,
+                    ditherStep = ditherStep,
+                    ditherStepUniform = ditherStepUniform,
                 )
                 surfaceTexture.setOnFrameAvailableListener(
                     {

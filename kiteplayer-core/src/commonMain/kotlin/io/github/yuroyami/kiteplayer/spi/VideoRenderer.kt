@@ -70,6 +70,15 @@ public interface VideoRenderer : AutoCloseable {
     public fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {}
 
     /**
+     * How much work to spend on the picture beyond decoding it correctly (17.21).
+     *
+     * Told the same way the scale mode and the picture controls are told, and honoured as far as
+     * the renderer can: a renderer with no shader of its own ignores it entirely, and the neutral
+     * value must reproduce the pre-17.21 write byte for byte.
+     */
+    public fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {}
+
+    /**
      * The framing controls (aspect override, zoom, pan), folded into the same geometry pass the
      * scale mode drives. The same delivery law as [setScaleMode]; defaulted the same way.
      */

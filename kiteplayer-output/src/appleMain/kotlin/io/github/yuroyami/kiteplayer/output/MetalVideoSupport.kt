@@ -127,12 +127,48 @@ struct AdjustUniforms {
     int   enabled;      // 0 skips the multiply entirely, keeping identity bit-exact for the instrument
 };
 
+struct QualityUniforms {
+    int   flags;        // bit 0 dither. Later rungs claim the higher bits; 0 is the pre-17.21 write.
+    float ditherScale;  // one output step, so the pattern is exactly +/- half a step
+    float pad0;
+    float pad1;
+};
+
 struct ToneUniforms {
     int   mode;         // 0 off (bit-exact SDR path), 1 PQ, 2 HLG
     float srcPeak;      // source peak in nits; the EETF's source anchor
     int   gamut2020;    // 1 converts BT.2020 primaries to BT.709 in linear light
     float pad;
 };
+
+/* An 8x8 ordered Bayer matrix, the classic recursive construction, as values in 0..63.
+ *
+ * Ordered rather than blue noise because it needs no texture and no upload: this is the last
+ * instruction before an 8-bit write, and the whole point is that it costs nothing. The pattern is
+ * centred below (value + 0.5) / 64 - 0.5, so it adds and subtracts equally and cannot shift the
+ * average brightness of a flat area, which a naive 0..1 pattern would. */
+constant float KP_BAYER8[64] = {
+     0.0, 32.0,  8.0, 40.0,  2.0, 34.0, 10.0, 42.0,
+    48.0, 16.0, 56.0, 24.0, 50.0, 18.0, 58.0, 26.0,
+    12.0, 44.0,  4.0, 36.0, 14.0, 46.0,  6.0, 38.0,
+    60.0, 28.0, 52.0, 20.0, 62.0, 30.0, 54.0, 22.0,
+     3.0, 35.0, 11.0, 43.0,  1.0, 33.0,  9.0, 41.0,
+    51.0, 19.0, 59.0, 27.0, 49.0, 17.0, 57.0, 25.0,
+    15.0, 47.0,  7.0, 39.0, 13.0, 45.0,  5.0, 37.0,
+    63.0, 31.0, 55.0, 23.0, 61.0, 29.0, 53.0, 21.0
+};
+
+/* Half an output step of ordered noise, keyed on the pixel's own position on the target.
+ *
+ * Applied to every channel with the SAME offset on purpose: an independent offset per channel
+ * dithers chroma as well as luma and shows up as coloured speckle on grey ramps, which is worse
+ * than the banding it removes. */
+static inline float3 kp_dither(float3 rgb, float2 position, float step) {
+    uint x = uint(position.x) & 7u;
+    uint y = uint(position.y) & 7u;
+    float pattern = (KP_BAYER8[y * 8u + x] + 0.5) / 64.0 - 0.5;
+    return rgb + pattern * step;
+}
 
 // SMPTE ST 2084 (PQ) constants.
 constant float KP_PQ_M1 = 0.1593017578125;
@@ -228,7 +264,8 @@ fragment float4 kp_picture(
     texture2d<float> planeC [[texture(2)]],
     constant ColorUniforms &c [[buffer(0)]],
     constant AdjustUniforms &adj [[buffer(1)]],
-    constant ToneUniforms &tone [[buffer(2)]]
+    constant ToneUniforms &tone [[buffer(2)]],
+    constant QualityUniforms &q [[buffer(3)]]
 ) {
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
     float3 rgb;
@@ -267,6 +304,13 @@ fragment float4 kp_picture(
             adj.m[6] * p.x + adj.m[7] * p.y + adj.m[8] * p.z + adj.offset[2]
         ), 0.0, 1.0);
     }
+    /* Last, after every stage that could have produced an off-grid value: tone mapping, the eq
+     * matrix and the YUV conversion all land between output steps, and this is the only place that
+     * knows what a step is worth. Clamped again because the pattern can push a 0.0 or a 1.0 out of
+     * range by half a step. */
+    if ((q.flags & 1) != 0) {
+        rgb = clamp(kp_dither(rgb, in.position.xy, q.ditherScale), 0.0, 1.0);
+    }
     return float4(rgb, 1.0);
 }
 
@@ -296,6 +340,33 @@ internal val DISABLED_TONE_UNIFORMS: FloatArray = FloatArray(4)
  * is not plumbed through [ColorSpaceInfo] yet, and 1000 is both HLG's nominal peak and the
  * commonest PQ mastering level. Recorded as the honest limit of this first tone-mapping pass.
  */
+/**
+ * QualityUniforms for [quality], targeting a write of [targetBits] bits per channel (17.21).
+ *
+ * The dither step is one output step, `1 / (2^bits - 1)`, because the pattern's job is to spread a
+ * value across the two grid points it falls between. Reading it from the target rather than
+ * assuming 8 keeps a future 10-bit surface honest for free.
+ */
+internal fun packQualityUniforms(
+    quality: io.github.yuroyami.kiteplayer.RenderQuality,
+    targetBits: Int = 8,
+): FloatArray {
+    var flags = 0
+    if (quality.dither) flags = flags or 1
+    val levels = (1 shl targetBits) - 1
+    return floatArrayOf(
+        Float.fromBits(flags),
+        1f / levels,
+        0f,
+        0f,
+    )
+}
+
+/** QualityUniforms with every flag clear: the pre-17.21 write, bit for bit. */
+internal val DISABLED_QUALITY_UNIFORMS: FloatArray = packQualityUniforms(
+    io.github.yuroyami.kiteplayer.RenderQuality.Off,
+)
+
 internal fun packToneUniforms(colorSpace: ColorSpaceInfo): FloatArray {
     val mode = when (colorSpace.transfer) {
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq -> 1

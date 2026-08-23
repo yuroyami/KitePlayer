@@ -76,6 +76,7 @@ public class MetalVideoRenderer public constructor(
 
     /** The picture controls, pre-packed for the shader once per setting. Read per draw. */
     private val adjustUniforms = atomic(DISABLED_ADJUST_UNIFORMS)
+    private val qualityUniforms = atomic(DISABLED_QUALITY_UNIFORMS)
 
     /** The ruling framing controls, under the same ownership as the scale mode. */
     private val videoTransform = atomic(io.github.yuroyami.kiteplayer.VideoTransform.Identity)
@@ -194,6 +195,7 @@ public class MetalVideoRenderer public constructor(
                 scaleMode = scaleMode.value,
                 videoTransform = videoTransform.value,
                 adjustUniforms = adjustUniforms.value,
+                qualityUniforms = qualityUniforms.value,
                 toneMapped = true,
             )
             presented.incrementAndGet()
@@ -269,6 +271,7 @@ public class MetalVideoRenderer public constructor(
                 scaleMode = scaleMode.value,
                 videoTransform = videoTransform.value,
                 adjustUniforms = adjustUniforms.value,
+                qualityUniforms = qualityUniforms.value,
                 toneMapped = true,
             )
         } catch (failure: Throwable) {
@@ -291,6 +294,15 @@ public class MetalVideoRenderer public constructor(
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustUniforms.value = packAdjustUniforms(adjustments)
+        requestRedraw()
+    }
+
+    /**
+     * The render-quality passes (17.21). The target is `BGRA8Unorm`, so eight bits is what the
+     * dither spreads a value across; a paused picture re-encodes so a change is visible at once.
+     */
+    override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
+        qualityUniforms.value = packQualityUniforms(quality, targetBits = 8)
         // SOL-R1 retired the old paused-picture limit: the retained picture re-encodes now.
         requestRedraw()
     }

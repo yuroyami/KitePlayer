@@ -100,6 +100,7 @@ final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.
 
     final fun close() // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.close|close(){}[0]
     final fun setAdjustments(io.github.yuroyami.kiteplayer/VideoAdjustments) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setAdjustments|setAdjustments(io.github.yuroyami.kiteplayer.VideoAdjustments){}[0]
+    final fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]
     final fun setScaleMode(io.github.yuroyami.kiteplayer/VideoScale) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setScaleMode|setScaleMode(io.github.yuroyami.kiteplayer.VideoScale){}[0]
     final fun setTransform(io.github.yuroyami.kiteplayer/VideoTransform) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setTransform|setTransform(io.github.yuroyami.kiteplayer.VideoTransform){}[0]
     final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]

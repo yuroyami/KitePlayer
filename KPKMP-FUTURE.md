@@ -3158,7 +3158,7 @@ surface: a `RenderQuality` config on `PlayerConfig` plus a live setter, modelled
 `VideoAdjustments`. (4) A rung lands in the Metal body and the Android GL blit in the SAME surge,
 or the surge opens a row saying which half it skipped and why.
 
-**RQ-1, dithering.** At the final write, after every other stage: an 8x8 ordered Bayer matrix (a
+**RQ-1, dithering. LANDED 2026-08-23, PAST 14.125; measured free on an A12.** At the final write, after every other stage: an 8x8 ordered Bayer matrix (a
 64x64 blue-noise texture is the upgrade if the pattern is visible), amplitude 1/255. This is the
 cheapest rung and the precision to dither FROM already exists, because 10-bit planes ride R16
 textures into the shader. Proof: a synthetic 10-bit gradient clip added to `testmedia.sh`; the

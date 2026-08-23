@@ -7,6 +7,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/view/PlayerViewRen
 public final class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer$DefaultImpls {
 	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
+	public static fun setRenderQuality (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/RenderQuality;)V
 	public static fun setScaleMode (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public static fun setTransform (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoTransform;)V
 	public static fun videoDecoderFactories (Lio/github/yuroyami/kiteplayer/view/PlayerViewRenderer;)Ljava/util/List;

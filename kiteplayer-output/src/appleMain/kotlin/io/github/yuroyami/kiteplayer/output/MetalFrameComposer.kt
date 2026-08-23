@@ -119,6 +119,11 @@ internal class MetalFrameComposer(
          * either way: the packed mode is 0 and the shader skips the whole block.
          */
         toneMapped: Boolean = false,
+        /**
+         * The render-quality passes as [packQualityUniforms] packs them. The default is DISABLED,
+         * so the offscreen reader and the colour instrument keep comparing an untouched picture.
+         */
+        qualityUniforms: FloatArray = DISABLED_QUALITY_UNIFORMS,
     ): MTLCommandBufferProtocol {
         pictureColor = frame.colorSpace
         val toneUniforms = if (toneMapped) packToneUniforms(frame.colorSpace) else DISABLED_TONE_UNIFORMS
@@ -157,6 +162,9 @@ internal class MetalFrameComposer(
                 // behaviour on some GPUs, and the disabled flag costs the shader one compare.
                 adjustUniforms.usePinned { pinned ->
                     encoder.setFragmentBytes(pinned.addressOf(0), (adjustUniforms.size * 4).toULong(), atIndex = 1u)
+                }
+                qualityUniforms.usePinned { pinned ->
+                    encoder.setFragmentBytes(pinned.addressOf(0), (qualityUniforms.size * 4).toULong(), atIndex = 3u)
                 }
                 toneUniforms.usePinned { pinned ->
                     encoder.setFragmentBytes(pinned.addressOf(0), (toneUniforms.size * 4).toULong(), atIndex = 2u)

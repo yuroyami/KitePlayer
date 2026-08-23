@@ -9349,6 +9349,68 @@ for a UTF-16LE marker string is enough.
 KitePlayer 0.0.12, this commit. Synkplay took the pin in 4f1116f2, its iOS framework
 linking green against it.
 
+### 14.123 KP-SEEKEND and the AV1 chase, 2026-08-23
+
+Two owner reports from the same session, one an engine defect and one not.
+
+**KP-SEEKEND: a seek past the end froze the player for seconds and lied about where it was.**
+A shared playlist that loads a SHORT file while the room sits deep in a LONG one seeks the new
+file to a position it does not have. `SeekRequest.resolve` already clamped that to the duration,
+so the landing was correct, but two things around it were not. The position MASK answered with the
+raw request, so `position()` reported a minute on a four second file and the seek bar drew past
+its own maximum. And the first-frame push then waited for a frame at or after the end, which
+cannot exist, so it spent its whole startup budget on it: the actor's pass counter stopped dead
+for about seven seconds before the session could even be told it had ended. Measured, not
+inferred, by sampling `debugState` while it was stuck.
+
+Both are fixed. The mask is clamped to the media's own duration, which is the SAME value the seek
+resolves against (`session.source.duration` feeds both), so the reported position can never
+disagree with where the seek actually goes; this is behaviour-neutral by construction and only
+stops the engine contradicting itself. The first-frame wait now ends the moment nothing can arrive:
+every selected stream at end of stream with an empty queue, every decoder drained, no frame held.
+
+**The audit of that second half found a real hole in it, and closing the hole is the more
+interesting half of this entry.** The first version of the check asked the queues, the decoders and
+the frame queue, and all three could answer "nothing" while a frame sat in the decode worker's hand
+between `videoDecoderReceive` and `handOver`. At the true end of a stream that is not a rare window,
+it is the normal final-frame path, and the cost would have been a seek near the end that leaves the
+previous picture on screen. The audio lane already had exactly this accounting for exactly this
+reason (`audioInFlight`, audit P0-20); the video lane never did. It does now: `videoInFlight`,
+incremented at both receive sites and released in `handOver`'s finally. The result fails safe, which
+is the property worth keeping: a leaked counter disables the early exit and restores the old
+behaviour rather than inventing a new failure.
+
+**The AV1 report was NOT an engine defect, and the measurement matters more than the verdict.**
+The owner's iPhone XS played an 800p AV1 file at roughly one frame every five seconds. Ruled out on
+that same phone, each with a local file and a Release build: decode capability (a deliberately
+brutal 1424x800 10-bit film-grain 73 Mbps clip holds real time at 17 to 24 fps), the VideoToolbox
+AV1 route (forced software is 19 to 24 fps with a full queue, the hardware route 17 to 21 with the
+queue draining, so the attach on pre-A17 silicon is useless to slightly harmful and not the bug),
+long files and deep seeks (a 30 minute AV1 opens in 179 ms and seeks to 15 minutes in 640 ms), and
+dense ASS subtitles (2400 styled events, still 23 to 24 fps).
+
+What it was: a **DEBUG build of the shared framework**. Same clip, same phone, Release presents
+16.9 fps and Debug presents **0.7 fps**, while BOTH decode at 22 to 24 fps and the engine submits
+frames normally in both. Only presentation collapses, and the Metal renderer is newest-wins, so a
+consumer that slow shows one frame and drops the rest. It looked codec-specific because it is
+path-specific: AV1 on an A12 has no hardware route, so its frames take the software plane-upload
+path, while H.264 arrives as a VideoToolbox buffer that wraps with no copy. H.264 on the SAME debug
+build presents 21.9 fps.
+
+Two things follow. The owner's fix is to build Release. The engineering note is that the
+software-frame presentation path is heavy enough for an unoptimised build to collapse it thirtyfold,
+and even in Release its headroom is thin (17 to 21 fps against a 24 fps target on the hard clip).
+That is KV-2's territory and it is now measured rather than assumed. 17.11.a's zero-copy row was
+corrected in the same commit: it claimed Apple parity that S2.d never built.
+
+**What this left behind.** The iOS sample's scenario gained `--hwdec-off`, so a hardware route can
+be measured against forced software on a real device, and its Xcode build phase now honours the
+CONFIGURATION instead of always linking the Release framework, which is what made a Debug device
+build measurable at all. Synkplay's `KiteStats` line gained `fps`, `videoQms`, `audioQms` and
+`rebuffers`, the three numbers that separate a slow decoder from a slow reader.
+
+KitePlayer 0.0.13, this commit. Synkplay took the pin and the stats line in c8b08c25.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

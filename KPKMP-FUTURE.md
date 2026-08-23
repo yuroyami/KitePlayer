@@ -1284,12 +1284,18 @@ and closed in the same surge (the HDR row).
 | HDR tone mapping | Metal shader (M3) | CPU law on software frames; the hardware readback now tone-maps for display (closed 2026-08-17) | even |
 | Rotation | yes | yes, draw-phase rotate | even |
 | Compose modifiers on the video itself (clip, alpha, shared elements) | no; a platform view hole | yes | KiteVideo wins |
-| Zero-copy hardware path | CVPixelBuffer to CAMetalLayer | Android API 31+ HardwareBuffer images; Apple zero-copy rides S2.d | even, per-platform |
+| Zero-copy hardware path | CVPixelBuffer to CAMetalLayer | Android API 31+ HardwareBuffer images; on APPLE it is NOT zero-copy and this row overstated it (corrected 2026-08-23): the iOS path reads the frame back from Metal into RGBA and Skia copies it again per frame. S2.d shipped the draw-phase overlays, not the Apple zero-copy, which is still KV-2's | interop WINS on Apple; even on Android |
 | Sustained fullscreen power | display controller presents; GPU idles | GPU lightly awake per frame | interop wins, RECORDED (17.9's honest cost, unchanged by design) |
 
 The one deliberate non-goal stands as designed: sustained fullscreen belongs to the baseline
 wrapper (D-6 keeps both paths for exactly this reason), so it is not a loss against the
-audit's rule but the division of labour the register chose. KiteVideo loses nowhere else.
+audit's rule but the division of labour the register chose.
+
+**Corrected 2026-08-23.** "KiteVideo loses nowhere else" was true only if the Apple zero-copy row
+was, and it was not: that row asserted a path S2.d never built. On Apple today KiteVideo pays a
+Metal readback plus a Skia copy per frame where the interop renderer wraps the CVPixelBuffer with
+no copy at all, so KiteVideo loses on Apple copies as well, until KV-2 lands. The Android half of
+the row stands as written.
 
 ### 17.11.b The deep audit and its fix surge (2026-08-17)
 

@@ -800,6 +800,42 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `a seek past the end settles at the end instead of waiting out the startup budget`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(200.milliseconds)
+
+        // What a shared-playlist consumer does when the room's position belongs to a LONGER file
+        // than the one just opened (owner report 2026-08-23).
+        harness.core.seekLater(Pts(60_000_000), SeekMode.KeyframeThenRefine)
+
+        // The position may never name a time the media does not have, not even while the request
+        // is still in flight and the mask is answering for it.
+        val duration = harness.core.snapshots.value.duration
+        assertNotNull(duration)
+        assertTrue(
+            harness.core.position() <= duration,
+            "position reported ${harness.core.position()} on media that is only $duration long",
+        )
+
+        // A frame at or after the end cannot exist, so nothing may wait for one: the pipeline is
+        // already at end of stream and the engine can say so at once.
+        harness.run(1.seconds)
+        assertEquals(
+            PlaybackStatus.Ended,
+            harness.core.snapshots.value.status,
+            "a seek to the end sat in ${harness.core.snapshots.value.status} instead of ending: the " +
+                "first-frame push waited out its whole budget for a frame past the end",
+        )
+        assertTrue(
+            harness.core.position() <= duration,
+            "position settled at ${harness.core.position()} past the end",
+        )
+        harness.close()
+    }
+
+    @Test
     fun `play and pause are idempotent in their own state and queue during an open`() = runTest {
         val harness = CoreHarness(this)
         harness.backend.openGate = kotlinx.coroutines.CompletableDeferred()

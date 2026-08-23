@@ -722,7 +722,7 @@ internal class PlaybackCore(
     /** Seeks and returns what happened to this request: it landed, or a later request replaced it. */
     suspend fun seek(to: Pts, mode: SeekMode): SeekResult {
         val reply = CompletableDeferred<SeekResult>()
-        maskedSeekTargetMicros.value = to.micros
+        maskedSeekTargetMicros.value = maskFor(to)
         send(CoreCommand.Seek(SeekRequest(SeekTarget.Absolute(to), mode), reply))
         return awaitReply(reply)
     }
@@ -734,8 +734,22 @@ internal class PlaybackCore(
         // caller polls position() in the gap before the command is drained, and an absolute target
         // needs no session state to name it. A request the drain drops (unseekable source) is
         // cleared one pass later by handlePlaybackTime.
-        maskedSeekTargetMicros.value = to.micros
+        maskedSeekTargetMicros.value = maskFor(to)
         commands.trySend(CoreCommand.SeekLater(SeekRequest(SeekTarget.Absolute(to), mode)))
+    }
+
+    /**
+     * What the mask may answer for [to]: the request, but never a time the media does not have.
+     *
+     * The mask exists so a caller polling position() through a queued seek reads the timeline it
+     * asked for rather than the one it is leaving. That is only true while the request is
+     * reachable: a target past the end resolves to the end, so answering the raw request reports a
+     * position the media never has, and a seek bar drawn from it sits past its own maximum
+     * (owner report 2026-08-23, a shared playlist seeking a short file to a long file's position).
+     */
+    private fun maskFor(to: Pts): Long {
+        val durationUs = snapshotState.value.duration?.inWholeMicroseconds ?: return to.micros
+        return to.micros.coerceAtMost(durationUs)
     }
 
     /**
@@ -2146,6 +2160,14 @@ internal class PlaybackCore(
         return FillOutcome.TimedOut
     }
 
+    /** True when no frame can arrive any more: every stream ended, every decoder drained, nothing held. */
+    private fun atEndOfStream(session: OpenSession): Boolean =
+        session.selectedQueues().isNotEmpty() &&
+            session.selectedQueues().all { it.isEndOfStream && it.count == 0 } &&
+            session.decodersDrained() &&
+            session.videoInFlight.value == 0 &&
+            (session.video?.queuedFrames ?: 0) == 0
+
     /** What the initial fill actually established, so open never mistakes a timeout for readiness. */
     private enum class FillOutcome { Ready, Preempted, WorkerFinished, TimedOut }
 
@@ -2210,6 +2232,12 @@ internal class PlaybackCore(
             }
             if (outcome != FirstFrame.None) break
             if (preempted()) break
+            // A pipeline that has reached the end of every selected stream, drained its decoders
+            // and holds no frame cannot produce one, so waiting out the rest of the budget buys
+            // nothing and costs the caller seconds of a frozen player. This is what a seek to the
+            // very end looks like from here, and the whole budget used to be spent on it before
+            // the session could even be told it had ended (owner report 2026-08-23).
+            if (atEndOfStream(session)) break
             delay(WORKER_POLL)
         }
         session.schedulerMode.value = SCHEDULER_IDLE
@@ -4704,6 +4732,7 @@ internal class PlaybackCore(
                     val frame = videoDecoderReceive(decoder)
                     if (frame != null) {
                         session.decodedVideoFrames.incrementAndGet()
+                        session.videoInFlight.incrementAndGet()
                         if (!handOver(session, worker, video, frame, epoch)) break
                     } else {
                         if (worker.quiesceRequested) break
@@ -4726,6 +4755,7 @@ internal class PlaybackCore(
     ): Boolean {
         val frame = videoDecoderReceive(decoder) ?: return false
         session.decodedVideoFrames.incrementAndGet()
+        session.videoInFlight.incrementAndGet()
         handOver(session, worker, video, frame, epoch)
         return true
     }
@@ -4789,6 +4819,7 @@ internal class PlaybackCore(
             }
         } finally {
             if (ownsFrame) frame.close()
+            session.videoInFlight.decrementAndGet()
         }
     }
 
@@ -5076,6 +5107,17 @@ internal class PlaybackCore(
          * buffer is done with, in that order, so the count is an upper bound and never negative.
          */
         val audioInFlight = atomic(0)
+
+        /**
+         * Video frames the decoder has produced that have not reached the frame queue yet.
+         *
+         * The audio twin above exists because a drained decoder and an empty packet queue say
+         * "demuxing and decoding finished", not "nothing is still on its way" (audit P0-20). The
+         * video lane has the same gap between [videoDecoderReceive] returning a frame and
+         * [handOver] submitting it, and end-of-stream questions asked in that gap would answer
+         * that no frame can arrive while one is in a worker's hand.
+         */
+        val videoInFlight = atomic(0)
 
         /**
          * The end-of-stream token for the audio lane, set by the session and read by the feeder.

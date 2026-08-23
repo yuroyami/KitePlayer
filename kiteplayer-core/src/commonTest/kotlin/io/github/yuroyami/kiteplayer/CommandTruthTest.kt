@@ -430,12 +430,15 @@ class CommandTruthTest {
     @Test
     fun `an open preempted by stop refuses instead of reporting success`() = runTest {
         // A source that never fills: the open sits in awaitInitialFill, which is exactly the
-        // window a stop arrives in.
+        // window a stop arrives in. The stall has to come from the READER, not from a decoder
+        // that produces nothing: a stream that has reached its end can no longer produce a frame,
+        // and since 2026-08-23 the engine says so at once instead of waiting out its budget, so a
+        // silent decoder over a fast source now finishes the open rather than hanging in it.
         val faults = FaultPlan()
         faults.videoDecodeProducesNothing = true
         val harness = CoreHarness(
             this,
-            script = MediaScript(hasAudio = false),
+            script = MediaScript(hasAudio = false, readDelayUs = 5_000_000),
             faults = faults,
         )
         harness.attachRenderer()

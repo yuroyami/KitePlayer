@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
+import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
 import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
@@ -76,6 +77,9 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         if (at < 0) emptyList() else arguments.drop(at + 1).map { it.toString() }
     }
     private val scenarioMode = scenarioClips.isNotEmpty()
+
+    /** `--hwdec-off` forces the software decoder, so a hardware route can be measured against it. */
+    private val hwdecOff = NSProcessInfo.processInfo.arguments.contains(HWDEC_OFF_ARGUMENT)
     private var scenarioStarted = false
     private val controlButtons = mutableListOf<UIButton>()
 
@@ -335,12 +339,13 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         KiteLog.install { tag, message -> trace.line("log $tag: $message") }
         val first = "$documents/${scenarioClips[0]}"
         val second = "$documents/${scenarioClips.getOrElse(1) { scenarioClips[0] }}"
-        var player = KitePlayer.create(PlayerConfig(backends = mobileBackends()))
+        var player = KitePlayer.create(scenarioConfig())
         playerView.player = player
         var sampler = scope.launch { sampleScenario(player, trace) }
         try {
             withTimeout(SCENARIO_TIMEOUT) {
-                trace.line("### phase 1: first open, fresh player")
+                trace.line("### hardwareDecode=" + (if (hwdecOff) "Off" else "Auto"))
+        trace.line("### phase 1: first open, fresh player")
                 openAndSettle(player, trace, first, stopFirst = false)
 
                 trace.line("### phase 2: SECOND open, same player, same file")
@@ -356,7 +361,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
                     .onFailure { trace.line("phase 4 close failed: $it") }
                 trace.line("close took ${closeStarted.elapsedNow().inWholeMilliseconds} ms")
                 runCatching { playerView.player = null }
-                player = KitePlayer.create(PlayerConfig(backends = mobileBackends()))
+                player = KitePlayer.create(scenarioConfig())
                 playerView.player = player
                 sampler = scope.launch { sampleScenario(player, trace) }
                 openAndSettle(player, trace, second, stopFirst = false)
@@ -375,6 +380,11 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
             exitProcess(0)
         }
     }
+
+    private fun scenarioConfig(): PlayerConfig = PlayerConfig(
+        backends = mobileBackends(),
+        hardwareDecode = if (hwdecOff) HwdecPolicy.Off else HwdecPolicy.Auto,
+    )
 
     private suspend fun openAndSettle(
         player: KitePlayer,
@@ -618,6 +628,7 @@ private fun SmokeResult.toJson(): String = buildString {
 
 private const val SMOKE_ARGUMENT = "--s1b-smoke"
 private const val SCENARIO_ARGUMENT = "--scenario"
+private const val HWDEC_OFF_ARGUMENT = "--hwdec-off"
 private const val SCENARIO_TRACE_NAME = "scenario-trace.log"
 private val SCENARIO_TIMEOUT = 10.minutes
 private val SCENARIO_SAMPLE_INTERVAL = 250.milliseconds

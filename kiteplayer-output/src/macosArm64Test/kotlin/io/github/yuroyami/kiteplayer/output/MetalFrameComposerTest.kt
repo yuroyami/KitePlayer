@@ -5,6 +5,7 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.RenderQuality
+import io.github.yuroyami.kiteplayer.VideoScaler
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
@@ -492,6 +493,76 @@ class MetalFrameComposerTest {
             ),
         )
         assertTrue(before.contentEquals(after), "the neutral value changed the write")
+    }
+
+    @Test
+    fun `the bicubic kernel interpolates at one to one and sharpens an upscale`() {
+        // Two properties, and the first is the reason Catmull-Rom was chosen over B-spline.
+        //
+        // At its own size the kernel must return the texel itself, because Catmull-Rom
+        // INTERPOLATES: a picture drawn 1:1 must be untouched, or every unscaled playback would be
+        // quietly filtered. A B-spline kernel would blur it and still pass a "looks smoother" eye
+        // test, which is exactly the trap.
+        //
+        // On an upscale it must be SHARPER than bilinear, which is measurable without eyeballs: a
+        // hard edge stretched by bilinear becomes a long linear ramp, while a cubic kernel keeps the
+        // transition tighter. Counting how many samples sit strictly between the two levels is that
+        // difference, and fewer is sharper.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val size = 16
+        val picture = lumaNv12(size, size) { x, _ -> if (x < size / 2) 60 else 200 }
+        val frame = TestFrame(size, size, bt(ColorMatrix.Bt709))
+        val cubic = packQualityUniforms(
+            RenderQuality(scaler = VideoScaler.CatmullRom),
+            sourceWidth = size, sourceHeight = size,
+        )
+
+        val oneToOnePlain = render(composer, frame, picture, targetWidth = size, targetHeight = size)
+        val oneToOneCubic = render(
+            composer, frame, picture, targetWidth = size, targetHeight = size,
+            qualityUniforms = cubic,
+        )
+        assertTrue(
+            oneToOnePlain.contentEquals(oneToOneCubic),
+            "the kernel changed a picture drawn at its own size, so it is not interpolating",
+        )
+
+        // Now the same picture stretched four times, where a kernel can actually show itself.
+        val big = size * 4
+        val stretchedPlain = render(composer, frame, picture, targetWidth = big, targetHeight = big)
+        val stretchedCubic = render(
+            composer, frame, picture, targetWidth = big, targetHeight = big,
+            qualityUniforms = cubic,
+        )
+        fun row(bytes: ByteArray) = (0 until big).map { bgraAt(bytes, big, it, big / 2)[1] }
+        val bilinearRow = row(stretchedPlain)
+        val cubicRow = row(stretchedCubic)
+
+        // The steepest single step across the transition. A sharper kernel concentrates the change
+        // into fewer output pixels, so its largest neighbour-to-neighbour jump is bigger. Counting
+        // how many samples lie between the two levels does NOT separate them, because both spread
+        // the edge over the same four output pixels; what differs is the SHAPE inside those four.
+        fun steepest(r: List<Int>) = r.zipWithNext().maxOf { (a, b) -> kotlin.math.abs(b - a) }
+        assertTrue(
+            steepest(cubicRow) > steepest(bilinearRow),
+            "the kernel was no steeper than bilinear on a 4x upscale: cubic ${steepest(cubicRow)}, " +
+                "bilinear ${steepest(bilinearRow)}",
+        )
+
+        // The signature of a cubic with negative lobes, and the thing bilinear can never do: it
+        // overshoots past the two levels it is interpolating between. Asserting it pins that the
+        // kernel really is Catmull-Rom and not a smoother in disguise.
+        val low = bilinearRow.first()
+        val high = bilinearRow.last()
+        assertTrue(
+            bilinearRow.all { it in low..high },
+            "bilinear overshot its endpoints, so this picture cannot separate the two kernels",
+        )
+        assertTrue(
+            cubicRow.any { it < low || it > high },
+            "the kernel never overshot, so it is not a cubic with negative lobes: $cubicRow",
+        )
     }
 
     private fun pqEncode1(y: Double): Double {

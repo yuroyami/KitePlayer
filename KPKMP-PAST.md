@@ -9540,6 +9540,50 @@ the ring is sized in OUTPUT texels because the external texture's own size is no
 The owner's iPhone left the bus mid-session, so RQ-2 has no cost number yet. RQ-1's measurement
 stands (free on an A12); RQ-2's is the next thing to take.
 
+### 14.127 KP-RQ rung 3, 2026-08-23: the kernel, and why the cheap version of it is a lie
+
+Catmull-Rom bicubic for luma and for packed RGBA sources, opt-in through `VideoScaler.CatmullRom`.
+Chroma keeps the sampler's bilinear, as mpv does: it is half resolution and a kernel there buys far
+less than it costs. Debanding wins when both it and the kernel are asked for, because it owns the
+tap pattern and a band it has already flattened does not need a sharper kernel to resolve it.
+
+**The finding worth keeping.** The first implementation used the well known "bicubic in four
+bilinear fetches", which folds each pair of texels into one fetch by placing the sample so the
+hardware's own linear weight comes out as the ratio of the two cubic weights. It produced output
+identical to bilinear to within one unit of 255, while costing four taps.
+
+The trick requires the pair's weights to be NON-NEGATIVE, so the ratio lands inside the pair.
+Catmull-Rom has negative lobes: at f = 0.125 the weights are w0 = -0.048 and w1 = 0.964, so
+w1 / (w0 + w1) = 1.052, the sample lands past the pair, and the hardware interpolates the NEXT two
+texels instead. The kernel silently degrades to bilinear. That trick belongs to B-spline, which is
+non-negative and blurs by design, and using it for an interpolating kernel is a correctness bug
+that no compiler and no smoke test will report.
+
+Replaced with sixteen taps at texel centres, where a linear sampler returns each texel exactly.
+That is the honest cost of an interpolating kernel and is why this rung is opt-in and measured. A
+nine-tap formulation exists and is the obvious follow-up; it was deliberately not written on the
+same day, because it would land untested beside the fix for the last optimisation that looked
+correct and was not.
+
+Diagnosis, in order, because two of the three steps were wrong turns: the assertion "fewer samples
+lie between the two levels" does not separate the kernels at all, since both spread a 4x edge over
+the same four output pixels and differ only in the SHAPE inside them. A probe that forced the
+branch to a constant proved the branch really did execute, which is what turned the search from
+"is it wired" to "is the maths right". The test now asserts the two properties that define this
+kernel against bilinear: it must be steeper across the transition, and it must OVERSHOOT past both
+endpoints, which a bilinear kernel can never do. Measured on the fixed implementation, a 60-to-200
+step upscaled 4x undershoots to 39 and overshoots to 226 against endpoints of 51 and 214, about 7
+percent each way, which is Catmull-Rom's known ringing.
+
+Also pinned: a picture drawn at its OWN size must be untouched, because Catmull-Rom interpolates.
+That assertion is what would catch a future switch to B-spline, which would blur every unscaled
+frame while still looking smoother to an eye test.
+
+**Owed, and shared with RQ-2:** the device cost. Sixteen taps is not free and this rung must not
+default on anywhere until it is measured on hardware. Both the owner's iPhone and the Redmi left
+the bus during this session, so RQ-2 and RQ-3 both stand without a device number. The Android GL
+half of RQ-3 is NOT written; only RQ-1 and RQ-2 reached that blit.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

@@ -3175,7 +3175,7 @@ half-texel horizontal offset for left-sited 4:2:0 in the sampler coordinates, tw
 is the single most visible one on this project's anime content. Gate: measured fps delta on the XS
 under 5 percent at 800p, else it defaults off on A-series below A14. Estimate: one session.
 
-**RQ-3, the upscaling kernel.** Catmull-Rom bicubic for luma, using the standard four-bilinear-
+**RQ-3, the upscaling kernel. METAL HALF LANDED 2026-08-23, PAST 14.127; sixteen taps, not four, and the reason is recorded. Android half NOT written; device cost owed.** Catmull-Rom bicubic for luma, using the standard four-bilinear-
 fetch formulation so it costs four samples, not sixteen; chroma stays bilinear until measured.
 Fit-mode upscales only; downscale stays bilinear for now and says so. Proof: a checkerboard and
 text-card clip, golden plus eyeball; the sharpness difference at the XS's 1.4x is the point.

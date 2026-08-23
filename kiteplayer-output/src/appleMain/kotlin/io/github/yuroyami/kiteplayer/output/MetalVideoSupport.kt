@@ -128,7 +128,7 @@ struct AdjustUniforms {
 };
 
 struct QualityUniforms {
-    int   flags;          // bit 0 dither, bit 1 deband. 0 is the pre-17.21 write.
+    int   flags;          // bit 0 dither, bit 1 deband, bit 2 bicubic. 0 is the pre-17.21 write.
     float ditherScale;    // one output step, so the pattern is exactly +/- half a step
     float debandThreshold;// how flat a neighbourhood must be to count as a band, in 0..1
     float debandRange;    // ring radius at the first iteration, in source pixels
@@ -224,6 +224,61 @@ static inline float kp_deband_plane(
         return centre;
     }
     return avg;
+}
+
+/* Catmull-Rom bicubic, sixteen taps.
+ *
+ * The obvious optimisation does NOT apply here, and the reason is worth keeping because it fails
+ * silently. The well known "bicubic in four bilinear fetches" folds each PAIR of texels into one
+ * fetch by placing the sample so the hardware's own linear weight comes out as the ratio of the two
+ * cubic weights. That requires the pair's weights to be non-negative: the ratio has to land inside
+ * the pair. Catmull-Rom has NEGATIVE lobes, so at small offsets the ratio exceeds one, the fetch
+ * lands on the next texel pair instead, and the result collapses to something indistinguishable
+ * from plain bilinear. It compiles, it runs, it costs four taps and it sharpens nothing. The trick
+ * belongs to B-spline, which is non-negative and blurs by design.
+ *
+ * So the weights are applied to sixteen taps taken AT texel centres, where a linear sampler returns
+ * the texel exactly. That is the honest cost of an interpolating kernel, and it is why this rung is
+ * opt-in and measured rather than defaulted on. A nine-tap formulation exists and is the obvious
+ * follow-up; it is not written here because it would land untested on the same day as this. */
+static inline float kp_cubic_weight(float x) {
+    /* Catmull-Rom, the standard a = -0.5 form, as a function of distance. */
+    float ax = abs(x);
+    if (ax < 1.0) {
+        return 1.0 + ax * ax * (1.5 * ax - 2.5);
+    }
+    if (ax < 2.0) {
+        return 2.0 + ax * (-4.0 + ax * (2.5 - 0.5 * ax));
+    }
+    return 0.0;
+}
+
+static inline float4 kp_bicubic(texture2d<float> plane, sampler s, float2 coord, float2 size) {
+    float2 texel = 1.0 / size;
+    float2 position = coord * size - 0.5;
+    float2 base = floor(position);
+    float2 f = position - base;
+
+    float wx[4];
+    float wy[4];
+    for (int i = 0; i < 4; ++i) {
+        wx[i] = kp_cubic_weight(float(i - 1) - f.x);
+        wy[i] = kp_cubic_weight(float(i - 1) - f.y);
+    }
+
+    float4 total = float4(0.0);
+    float weightSum = 0.0;
+    for (int j = 0; j < 4; ++j) {
+        for (int i = 0; i < 4; ++i) {
+            float w = wx[i] * wy[j];
+            float2 at = (base + float2(float(i - 1), float(j - 1)) + 0.5) * texel;
+            total += plane.sample(s, at) * w;
+            weightSum += w;
+        }
+    }
+    /* The weights sum to one analytically; dividing keeps the edges honest, where clamping repeats
+     * a texel and the sum is still one but the samples are not what the kernel assumed. */
+    return total / max(weightSum, 1e-5);
 }
 
 // SMPTE ST 2084 (PQ) constants.
@@ -326,7 +381,9 @@ fragment float4 kp_picture(
     constexpr sampler s(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
     float3 rgb;
     if (c.mode == 2) {
-        rgb = planeA.sample(s, in.texcoord).rgb;
+        rgb = ((q.flags & 4) != 0 && q.lumaTexelX > 0.0)
+            ? kp_bicubic(planeA, s, in.texcoord, float2(1.0 / q.lumaTexelX, 1.0 / q.lumaTexelY)).rgb
+            : planeA.sample(s, in.texcoord).rgb;
     } else {
         float rawY;
         float rawCb;
@@ -342,19 +399,24 @@ fragment float4 kp_picture(
             chromaCoord.x -= q.lumaTexelX * 0.5;
         }
         bool deband = (q.flags & 2) != 0;
+        bool bicubic = (q.flags & 4) != 0 && q.lumaTexelX > 0.0;
+        /* The luma sample, by whichever rule is in force. Debanding wins when both are asked for:
+         * it owns the tap pattern, and a band it has already flattened does not need a sharper
+         * kernel to resolve it. Chroma keeps the sampler's bilinear either way, which is what mpv
+         * does too: chroma is half resolution and a kernel on it buys far less than it costs. */
+        if (deband) {
+            rawY = kp_deband_plane(planeA, s, in.texcoord, float2(q.lumaTexelX, q.lumaTexelY),
+                                   q.debandRange, q.debandThreshold, in.position.xy, q.frameSeed);
+        } else if (bicubic) {
+            rawY = kp_bicubic(planeA, s, in.texcoord, float2(1.0 / q.lumaTexelX, 1.0 / q.lumaTexelY)).r;
+        } else {
+            rawY = planeA.sample(s, in.texcoord).r;
+        }
         if (c.mode == 1) {
-            rawY = deband
-                ? kp_deband_plane(planeA, s, in.texcoord, float2(q.lumaTexelX, q.lumaTexelY),
-                                  q.debandRange, q.debandThreshold, in.position.xy, q.frameSeed)
-                : planeA.sample(s, in.texcoord).r;
             float2 uv = planeB.sample(s, chromaCoord).rg;
             rawCb = uv.x;
             rawCr = uv.y;
         } else {
-            rawY = deband
-                ? kp_deband_plane(planeA, s, in.texcoord, float2(q.lumaTexelX, q.lumaTexelY),
-                                  q.debandRange, q.debandThreshold, in.position.xy, q.frameSeed)
-                : planeA.sample(s, in.texcoord).r;
             rawCb = planeB.sample(s, chromaCoord).r;
             rawCr = planeC.sample(s, chromaCoord).r;
         }
@@ -439,6 +501,9 @@ internal fun packQualityUniforms(
     // ring, so the pass turns itself off rather than sampling a wrong neighbourhood.
     val sized = sourceWidth > 0 && sourceHeight > 0
     if (quality.deband && sized) flags = flags or 2
+    if (quality.scaler == io.github.yuroyami.kiteplayer.VideoScaler.CatmullRom && sized) {
+        flags = flags or 4
+    }
     val levels = (1 shl targetBits) - 1
     // The thresholds are mpv's units, 1/16384 of full scale, converted here rather than in the
     // shader so the constant is not written twice in two languages.

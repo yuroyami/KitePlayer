@@ -9838,6 +9838,92 @@ proven pre-existing, recorded above rather than absorbed.
 17.20 order and is now the blocker on three rows rather than the twelve it was already carrying. It
 did not touch KitePlayer, which still has no CI at all.
 
+### 14.131 Every CI job was red, 2026-08-23: seven causes, read rather than guessed
+
+Found immediately after 14.130 pushed. The run it triggered was red, so the seven C suites that
+surge had just added to the gate were invisible. Pulling the previous run's logs showed why:
+**all eleven jobs failed, and the Docs workflow with them.** Not flaky. The workflows were never
+updated when KC-EMBED changed what a build needs, so they were testing a world that no longer
+exists.
+
+**This is the same disease as 14.130 one level up.** That surge fixed rows logged DONE that were
+done on one backend. This one fixed gates logged GREEN that had not passed in days. A permanently
+red CI is not a weaker CI, it is no CI: nobody can tell a new break from the standing one, and the
+badge lies to anyone who wanders into a public repository.
+
+#### The seven, each read from a failed job rather than predicted
+
+1. **dav1d was never cloned. Four jobs** (macOS vendored, all three Android ABIs). KC-EMBED made
+   dav1d a mandatory dependency of the FFmpeg build; nothing in `ci.yml` ever cloned it, so each
+   died in under a minute on `buildDav1dFor<Target>` with "dav1d source not found", printing the
+   exact `git clone` line it wanted. The cache was wrong in the same way: dav1d installs to
+   `native-libs/deps/<triple>/dav1d`, outside the `native-libs/lgpl/<triple>` path being cached, so
+   a cache hit would have restored FFmpeg and left dav1d missing. Both trees now cache under one key
+   hashing both build tasks, both sources clone together, and `meson`/`ninja` are installed, which
+   `BuildDav1dTask` demands and neither job had.
+2. **A real defect in `FFmpegPaths`, not a workflow bug. Linux x64 AND the whole Docs workflow.**
+   Debian and Ubuntu install libav* headers under the MULTIARCH include directory, so
+   `libavformat-dev` on ubuntu-24.04 puts `avformat.h` at `/usr/include/x86_64-linux-gnu/`. The lib
+   lookup already knew this and checked `/usr/lib/<tuple>` first; **the include lookup did not, and
+   only checked `/usr/include` and `/usr/local/include`.** So apt installed correctly, the resolver
+   answered "no FFmpeg install found", the whole cinterop was skipped, and every native file failed
+   with `Unresolved reference 'ffmpeg'`. Both candidate lists now derive from one multiarch tuple
+   and are unit tested; the test was watched to fail first. **This one cause was two of the four
+   workflows.** Corrected the same evening, after watching the run rather than assuming: it fixed
+   the Docs workflow's FIRST failure, not its only one. With the unresolved references gone, Docs
+   got further and then hit cause 3 below, the konan race, which it was the last workflow still
+   missing a warmup for. Both halves are fixed; the lesson is that "same error, therefore same
+   single cause" was a guess, and the run said otherwise within the hour.
+3. **The konan LLVM race. Two consumer e2e jobs, and the Docs workflow.** The C helper tasks compile with konan's own LLVM,
+   which only lands in `~/.konan/dependencies` once a Kotlin/Native compile has run, so a fresh
+   runner races it and dies with "No LLVM package with a usable clang". `publish.yml` has carried the
+   warmup for exactly this since KC-CI-KONAN was opened. It was never copied here, nor into the
+   docs job, which was the last one without it. The error naming a macOS LLVM package on a Linux
+   runner is not a second defect: `resolveLlvmBinDir` falls back to any `llvm-*` package present and
+   only names the preferred one when it finds none. There was no package at all.
+4. **A one-line script bug. The fuzz job.** `replay-corpus.sh` ran `[ -x "$CC" ]` against `KC_CC`,
+   and the job sets `KC_CC=clang-18`. **A bare name is a PATH lookup, not a path**, so the test asked
+   for `./clang-18` in the current directory and failed with clang-18 sitting in `/usr/bin`. The job
+   exited 1 after a thirty-minute fuzz run, every run. Bare names now resolve through PATH; explicit
+   paths and genuinely absent compilers still fail, both checked locally.
+5. **The Windows pin 404s.** BtbN PRUNES old autobuild releases, so `autobuild-2026-07-01-13-54` no
+   longer exists. Re-pinned to a current tag with a freshly computed sha256, which buys weeks, not a
+   fix. Row opened: KC-BTBN-ROT.
+6. **`apiCheck` had stopped guarding anything** (KC-APICHECK-RED, opened in 14.130, closed here).
+   CI runs it with `-Pkitecodec.hostTargetsOnly=true`; the committed dump had been regenerated
+   WITHOUT that flag, so the baseline listed thirteen targets while the gate could only present
+   three, and the check failed on the target header before comparing one declaration. Re-dumped
+   under the flag. **Nothing was lost from the surface**: all 1895 declaration lines are unchanged,
+   and the diff is three lines of target bookkeeping. **Proven live rather than merely green**: a
+   throwaway `public fun kiteCodecApiRatchetProbe()` was added, apiCheck failed and named it, and
+   went green again when it was removed. The cost is stated on the row: the dump no longer records
+   which targets each declaration exists on.
+7. **The macOS job was tracking Homebrew's release schedule.** It asserted the installed libavutil
+   was exactly 60.8.100, because `klib-metadata-baseline.txt` freezes 24 FFmpeg version constants to
+   their micro values (I-15). Homebrew moved to 60.26.102 and the job went red. **Bumping the assert
+   would have bought weeks: a pin against a moving formula is a calendar, not a gate.** Owner chose
+   the durable option. The job now reads the vendored LGPL tree, which the build pins at n8.0 and
+   whose libavutil IS 60.8.100, so the committed baseline matches with **zero drift, verified
+   locally against the real tree: all six `klib-metadata-diff` counters read 0.** That tree is also
+   the FFmpeg the project ships, which is what those frozen constants should have described from the
+   start. Homebrew stays installed for the `ffmpeg` CLI `e2e.sh` asserts with, and for dav1d's
+   meson/ninja/nasm; its version no longer matters to anything, which is the point. A `test -f`
+   guard fails the job if the vendored tree is absent, because the silent fallback would be brew.
+
+#### What was verified locally before pushing
+
+`buildSrc:test` (including the two new `FFmpegPaths` cases), `jvmTest`, `macosArm64Test`,
+`checkCinteropCoupling`, `check-deleted-surface.sh`, all 8 C suites, `replay-corpus.sh asan`
+(6 targets, 105 corpus files, 0 failed), `apiCheck` both green AND proven to fail on a real change,
+`klib-metadata-diff.sh --check` against the vendored tree, and `ci.yml` parsed as YAML.
+
+#### What this surge did NOT do
+
+It did not merge the two macOS jobs, which now share a cache key and duplicate a from-source FFmpeg
+build on a cold cache. It did not move the Windows job onto this project's own release assets, which
+is the only thing that ends KC-BTBN-ROT. It did not widen `apiCheck` back to thirteen targets. All
+three are written down rather than left as folklore.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

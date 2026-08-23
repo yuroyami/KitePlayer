@@ -2506,12 +2506,13 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
 | KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
-| KC-APICHECK-RED | apiCheck fails on clean main, so the public API ratchet guards nothing | [V] 08-23 | 17.16, here |
+| KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
+| KC-BTBN-ROT | the Windows job depends on BtbN's retention policy and 404s on a schedule nobody sets | [V] 08-23 | 17.16, here |
 | P0-11..P0-19 | REDUCED 08-22: full 22-asset v0.1.0 release live and verified; ONLY Maven Central remains | [V] 08-22 [owner] | 17.17, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-CI-KONAN | per-push CI is red with a konan toolchain-ordering flake predating KC-EMBED, and its System-mode host jobs should become vendored-tree jobs fed by release assets | [V] 08-22 | 17.16, here |
+| KC-CI-KONAN | REDUCED 08-23: the konan flake and the macOS System job are fixed; Linux and Windows still link an FFmpeg the project does not ship, and the two macOS jobs duplicate a from-source build | [V] 08-23 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
@@ -2640,20 +2641,35 @@ surge removed it on purpose. Testing this needs a fault-injection seam in the si
 exist and should not be improvised into production code without deciding its shape first. Size S for
 the seam, and it is the only thing standing between P1-10 and being genuinely done.
 
-#### KC-APICHECK-RED. The public API ratchet has stopped guarding anything
+#### KC-ABI-SCOPE. The API ratchet is live again, and now watches 3 targets of 13
 
-Opened 2026-08-23. `./gradlew :kitecodec-core:apiCheck -Pkitecodec.hostTargetsOnly=true`, the exact
-line `ci.yml` runs, **fails on a clean checkout of main.** Proven pre-existing: every change of the
-2026-08-23 surge was stashed and the command failed on the untouched tree. The committed dump was
-produced across all thirteen targets; the flag restricts the run to three; the target headers
-therefore disagree and the check fails before comparing a single declaration.
+KC-APICHECK-RED closed 2026-08-23 (PAST 14.131): the baseline had been re-dumped WITHOUT the flag CI
+uses, so it listed thirteen targets while the gate could only ever present three, and the check
+failed on the target header before comparing one declaration. Re-dumped under the flag, and **proven
+live rather than merely green**: a throwaway public function was added, `apiCheck` failed and named
+it, and it went green again when the function was removed.
 
-So a public API change cannot currently fail here, which is the entire purpose of the file. Fixing
-it is a decision, not a repair: either re-dump under the same flag CI uses, so the baseline and the
-gate describe the same set, or give CI an FFmpeg tree per target so the full dump can be checked.
-The first takes minutes and narrows what the ratchet covers; the second is the honest one and is the
-same work `PAR-5` and the Windows rows want anyway. **Third standing red in this family**, after
-KC-CI-KONAN and the Docs workflow, and they should be swept together.
+**What that leaves open, stated because it was chosen and not discovered.** No declaration was lost
+(all 1895 lines unchanged; the diff was three lines of target bookkeeping), but the dump no longer
+records WHICH targets a declaration exists on. Two extension declarations that read
+`Targets: [native]`, meaning all eleven native targets, now read `Targets: [macosArm64]`. **So a
+public API added on iOS but not on macOS would pass this gate.** Widening it back needs an FFmpeg
+tree per target in CI, the same work `PAR-5` and the Windows rows want. Until that exists, a live
+three-target gate is worth more than the dead thirteen-target record it replaced. Related: `F-ABI1`,
+the Android half of the same theme.
+
+#### KC-BTBN-ROT. The Windows job rents its FFmpeg from someone else's retention policy
+
+Opened 2026-08-23 (PAST 14.131). The job downloads a pinned BtbN autobuild, and **BtbN prunes old
+autobuilds**, so the pin 404s after a few weeks and the job goes red on a schedule nobody set. It
+was re-pinned that day to a current tag with a freshly computed sha256, which is a delay, not a fix.
+The comment above the pin refuses `latest` because it is a moving tag, and that is right; the answer
+is not to pick a different stranger's tag.
+
+**The durable fix is that this project already publishes a mingw-x64 FFmpeg.** The v0.1.0 release
+carries all 22 prebuilt zips across 11 triples, verified (PAST 14.118). Feeding this job that asset
+makes Windows CI link what Windows consumers actually get, ends the rot, and is the same move
+`KC-CI-KONAN` asks for on the other host jobs. Size S.
 
 #### 2026-08-21: the repository went public, and what that changed
 
@@ -2672,16 +2688,24 @@ v0.1.0 release carries all 22 zips, verified, and `hasPrebuiltAsset` is true for
 because it is true. **The one remaining owner gate is Maven Central publication**, deliberately
 LAST: Central is permanently immutable, so nothing ships there until the pair is worth freezing.
 
-#### KC-CI-KONAN. The per-push CI predates the embedded world in two ways
+#### KC-CI-KONAN. REDUCED 2026-08-23. What is left of the pre-embed CI
 
-Found during KC-EMBED, out of its scope, still open. First: `ci.yml` is red with a
-toolchain-ordering flake that predates the surge entirely (`compileKiteCodecCFor<Target>` can
-run before the Kotlin/Native distribution lands in `~/.konan`, the same family as the Docs
-workflow's standing red since 08-21). Second: its host jobs still exercise the System (brew/apt
-shared FFmpeg) path as if it were a consumer mode, but since KC-EMBED System is an internal dev
-fallback only; those jobs should become vendored-tree jobs fed by the release assets, which is
-also what would make them deterministic. KC-MIGRATE closed on 2026-08-22 (PAST 14.120): both
-consumer repositories are on the embedded world.
+Two thirds closed in PAST 14.131; the remainder is worth keeping separate from the noise around it.
+
+**Closed.** The konan toolchain-ordering flake: the C helper tasks compile with konan's own LLVM,
+which only lands in `~/.konan/dependencies` after a Kotlin/Native compile, so a fresh runner raced it
+and died with "No LLVM package with a usable clang". `publish.yml` had carried the warmup for this
+exact reason since this row was opened; it is now in the consumer e2e jobs too. Also closed: the
+macOS host job no longer exercises the System path. It reads the vendored LGPL tree, and with it went
+the Homebrew version assert that had been turning every formula bump into a red gate.
+
+**Open.** Two host jobs still link an FFmpeg the project does not ship. **Linux** links apt's, which
+now works (the multiarch include defect that had been failing it is fixed) but is not the shipped
+profile, so the suite can still drift into depending on codecs the released artifact lacks with
+nothing noticing. **Windows** links a third party's build, which is `KC-BTBN-ROT`. Both want the
+answer the macOS job just took: read the release assets. Also open and cheaper: **the two macOS jobs
+now share a cache key and duplicate a from-source FFmpeg build on a cold cache.** Merging them is
+obvious and was deliberately not done in the same surge that changed what they link.
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 

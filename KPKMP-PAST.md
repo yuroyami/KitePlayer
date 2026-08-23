@@ -9752,6 +9752,92 @@ KitePlayer has no public Maven venue yet and no CI publish, so mavenLocal plus t
 record in the log IS the release. Synkplay still pins 0.0.13 and moving that pin is its own act in
 its own repository.
 
+### 14.130 KC-CI-C and the fake-DONE rows, 2026-08-23: what "green" was actually covering
+
+Owner-picked from the 17.20 order: buy back the ability to know things, then close the rows that
+were already counted as finished. Everything below is against KiteCodec `7b1e762`. Every anchor was
+located BY NAME, and doing so paid immediately: three of the claims this register carried were
+already false.
+
+**KC-CI-C. CLOSED.** `ci.yml:167,174` passed `test_identity` as an explicit argument, so seven of
+the eight suites ran only on a laptop. Both steps now pass no suite name, which `run-c-tests.sh`
+documents as gate behaviour and which runs the whole list. Before changing them, all eight were run
+locally in both variants that CI uses: `plain` 8 passed 0 failed, `asan` 8 passed 0 failed. So this
+widening does not turn CI red, and the seven suites it adds were genuinely green rather than merely
+unrun. The job was renamed from "FFmpeg identity gate" to name what it now covers, and the script's
+own header comment was corrected: it said "all seven" in two places while `ALL_SUITES` has held
+eight since the safety surge added `test_append`.
+
+**KC-NOTDONE. Four of six closed with tests, two closed without one and said so.**
+
+- **P1-11, the JVM ownership check. CLOSED, tested.** `MediaSource.jvm.kt` `withCodecParameters`
+  took a `StreamInfo` and went straight to `fmtStream` with no canonicalisation, while the same
+  class defined `requireOwnStream` and called it in three other places. `MediaSink.jvm.addCopyStream`
+  is the caller, so a `StreamInfo` from a DIFFERENT file resolved to whatever lived at the same
+  index here and the remux wrote these codec parameters under the other file's time base. The
+  falsifying test builds two files at 25 and 50 fps, so both carry a video stream at index 0 and
+  only identity can tell them apart; it failed on the old code by getting no exception at all.
+- **P0-08, the JVM media type guard. CLOSED, tested.** An audio encoder handed a video frame reached
+  FFmpeg on the JVM and read the picture bytes as samples. The RED run is worth keeping: the test
+  log carries `[aac @ ...] Qavg: 65536.000`, which is the aac encoder having actually encoded a
+  luma plane. After the fix the same line reads `Qavg: nan`, the encoder having received nothing.
+- **P1-04, the Native typed error. CLOSED, tested.** `MediaSink.native.kt` threw
+  `FFmpegError.Internal` where the JVM twin threw `FFmpegError.EncoderNotFound`, so `when (error)`
+  fell to its else branch on one backend and not the other. One lookup serves both encoder kinds, so
+  one line fixed both; there are two tests because the audio and video entry points are separate
+  public API and a future refactor could split the lookup again.
+- **P0-07 inside Native. CLOSED; one half tested, the other half stated.** `withPlanes` and
+  `hardwareSurface` read through `checkedNative`, whose own KDoc says in as many words that it is
+  not a lease. Both now use `withNative`. `withPlanes` has a deterministic test and it does not rely
+  on a crash: it asserts that a concurrent `close()` cannot COMPLETE while the block runs. Under a
+  lease the closer parks on the frame's lock; without one it finishes in microseconds, and the test
+  gives it fifty milliseconds before looking. `hardwareSurface` has NO test and cannot have one from
+  the public API: its whole window is inside a property getter, with nothing a test can hold open.
+  Its guard is that it now takes the same lease `withPlanes` pins.
+- **P1-05 on Wasm. Code CLOSED, NO TEST EXISTS.** `corruptDataSkipped` was zeroed at the start of
+  every `decodeStreams` and written only in the `finally`, so a caller reading it mid-flow always
+  saw zero while JVM and Native accumulate live, and a second pass erased the first one's total. It
+  now carries a per-call base, updates after every packet, and accumulates for the source's lifetime
+  as the commonMain KDoc promises. **There is no `wasmJsTest` source set, so nothing proves this.**
+- **P1-10, the muxer poison, both backends. Code CLOSED, NO TEST EXISTS.** `addCopyStream` called
+  `avformat_new_stream` and then did work that can throw, with no poison on either backend, so a
+  failure left the muxer holding a half configured stream while the sink still looked usable.
+  `newStreamFor` has poisoned since the original P1-10 and this path mutates identically. Both are
+  now wrapped. **No test, and the reason is worth writing down rather than leaving as an omission:**
+  after the mutation the only remaining steps are `avcodec_parameters_copy` and a time base write,
+  neither of which the public API can make fail. Forging a bad `StreamInfo` used to be the lever,
+  and fixing P1-11 in this same surge deliberately removed it. Testing this needs a fault-injection
+  seam that does not exist. New row opened.
+
+**KC-P0-05-LEAK. The register was two thirds wrong, and is now closed.** The row said the leak sat
+in `decodeStreams` and `extractFrame`. On the JVM and on Native both were rewritten onto
+`demuxRouted` at some point after the row was written, and neither has the shape any more: the
+decoders are opened inside the one `try` whose `finally` owns their cleanup. **The leak was live on
+Wasm only, and on both halves.** In `decodeStreams`, `openPacketReader` sat between the `catch` that
+unwinds the built decoders and the `try` that owns them, so a throw there leaked one codec context
+per stream, which is precisely the defect P0-05 was opened to fix. In `extractFrame`, the reader and
+the decoder were both opened outside the `try`, so a throwing `openDecoder` left `readerActive` true
+for ever and that `MediaSource` could never open another reader again. Both are now inside the try.
+**No test, same reason as above.**
+
+**Found by this pass, and it is the same disease.** `./gradlew :kitecodec-core:apiCheck
+-Pkitecodec.hostTargetsOnly=true`, which is the exact command `ci.yml` runs, **fails on a clean
+checkout of main.** Verified by stashing every change in this surge and running it on the untouched
+tree. The committed dump was produced across all thirteen targets while the flag restricts the run
+to three, so the target headers disagree and the check fails before it compares a single
+declaration. What that means in plain terms: **the public API ratchet is not currently guarding
+anything.** It is the third standing red in the same family as KC-CI-KONAN and the Docs workflow.
+New row opened.
+
+**Gate.** All eight C suites, `plain` and `asan`: 8 passed, 0 failed, both. `:kitecodec-core:jvmTest`
+green. `:kitecodec-core:macosArm64Test` green. `:buildSrc:test` green. `checkCinteropCoupling` green.
+`check-deleted-surface.sh` PASS. `compileKotlinWasmJs` green. `apiCheck` red, pre-existing and
+proven pre-existing, recorded above rather than absorbed.
+
+**What this surge did NOT do.** It did not build the `wasmJsTest` source set, which is item 3 of the
+17.20 order and is now the blocker on three rows rather than the twelve it was already carrying. It
+did not touch KitePlayer, which still has no CI at all.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

@@ -2476,7 +2476,7 @@ locating each symbol by name, because every line number in both audit documents 
 | L | libass: JVM bridge, wasm, the animated hook, the mpv corpus | [V] 08-19 | 17.12, here |
 | KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |
 | KP-API | throwing stubs, unusable default factory, five dead knobs, global logger | [V] 08-19 | 17.16, here |
-| KP-B1..B13 | player build and release; no CI of any kind exists | [V] 08-19 | 17.16, here |
+| KP-B1..B13 | player build and release; no CI of any kind, so its nine C suites have never run off this laptop | [V] 08-23 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |
@@ -2503,10 +2503,10 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-PERF | 10 hot paths; per-byte Web interop, the JVM copy chain | [V] 08-19 | 17.16, here |
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | 11 documentation contradictions; the build file contradicts itself | [V] 08-19 | 17.16, here |
-| KC-CI-C | CI runs ONE of EIGHT C suites; the other seven guard only a laptop | [V] 08-19 | 17.16, here |
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
-| KC-NOTDONE | six rows logged DONE that are not done on every backend | [V] 08-19 | 17.16, here |
-| KC-P0-05-LEAK | the P0-05 fix introduced two new leaks | [V] 08-19 | 17.16, here |
+| KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
+| KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
+| KC-APICHECK-RED | apiCheck fails on clean main, so the public API ratchet guards nothing | [V] 08-23 | 17.16, here |
 | P0-11..P0-19 | REDUCED 08-22: full 22-asset v0.1.0 release live and verified; ONLY Maven Central remains | [V] 08-22 [owner] | 17.17, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
@@ -2516,6 +2516,14 @@ locating each symbol by name, because every line number in both audit documents 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
 trees it described no longer exist.
+
+**The count did not move on 2026-08-23 and that is the honest number** (PAST 14.130). Three rows
+left (`KC-CI-C`, `KC-NOTDONE`, `KC-P0-05-LEAK`, eight separate defects between them, all fixed) and
+three arrived (`KC-EVIDENCE-WASM`, `KC-EVIDENCE-MUX`, `KC-APICHECK-RED`). Two of the three arrivals
+are the same defects with their code half done and their evidence half missing, which under this
+register's own law is not done. The third was found by running the gate rather than trusting it.
+**A surge that fixes eight things and closes zero rows is what it looks like when evidence, not
+code, is the bottleneck.** That is the argument for 17.20 items 1 to 3 in one sentence.
 
 **The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
 file under RULE TWO (PAST 14.115).
@@ -2604,45 +2612,48 @@ simulator green as device green (the exact confusion phase 2 exists to end).
 Written 2026-08-19 from the distillation. Every anchor here was located by symbol name against
 KiteCodec `dd2823c` and KitePlayer `e201186`.
 
-#### KC-NOTDONE. Six rows the execution log calls DONE that are not done everywhere
+#### KC-EVIDENCE-WASM. Three Wasm fixes exist in code and nothing can prove them
 
-**Read this row before any other, because it is the one that costs money.** A row marked DONE is a
-row nobody revisits. Each of these was logged as closed, and each is genuinely closed on at least
-one backend, which is why they read as finished. They are not.
+Opened 2026-08-23 as the remainder of KC-NOTDONE and KC-P0-05-LEAK, both of which closed in code
+that day (PAST 14.130). Three of those fixes live in `wasmJsMain` and **there is no `wasmJsTest`
+source set**, so no test could fail if any of them were reverted tomorrow:
 
-- **P1-11 is not done on the JVM at all.** `MediaSource.jvm.kt:239`, `withCodecParameters`, takes a
-  `StreamInfo` and immediately does `Internals.fmtStream(checkOpen(), stream.index)` with no
-  ownership check, **while the same class defines `requireOwnStream` at `:336` and calls it in
-  three other places.** Native's equivalent does call it (`MediaSource.native.kt:423`). So
-  `MediaSink.jvm.addCopyStream` still accepts a `StreamInfo` from a different `MediaSource` and
-  writes this file's codec parameters under the other file's time base, which is the defect
-  verbatim. The falsifying test lives only in `nativeTest`.
-- **P1-04 is not done on the Native muxer.** `MediaSink.native.kt:263` still throws
-  `FFmpegError.Internal("No encoder named ...")` while its JVM twin was converted in the same
-  commit, so `addVideoEncoder` and `addAudioEncoder` on Native cannot be caught by kind.
-- **P1-10 is incomplete on both backends, in the same place.** The poison is wired into
-  `newStreamFor` only. `addCopyStream` calls `avformat_new_stream` and then does work that can
-  throw, with no poison on either backend, so the muxer is left holding a half configured stream
-  and the sink still looks usable. Nothing tests the state machine at all.
-- **P0-08's guard is Native only, and the row said so, but the JVM hole is real:**
-  `MediaSink.jvm.kt:399` has no media type guard, so a video frame into a JVM audio encoder still
-  reaches FFmpeg.
-- **P0-07 is incomplete inside Native itself.** `Frame.withPlanes` and `Frame.hardwareSurface` are
-  shipped public API that still dereference through `checkedNative`, which **its own KDoc says is
-  not a lease**. That is the render path.
-- **P1-05 behaves differently on Wasm.** `MediaSource.wasmJs.kt:143` resets the skipped count at the
-  start of every `decodeStreams` and writes it only in the `finally`, so a Wasm caller reading it
-  mid flow always sees zero, while JVM and Native accumulate live for the source's lifetime. The
-  commonMain KDoc promises the second behaviour.
+- P1-05's live `corruptDataSkipped` accumulation in `MediaSource.wasmJs.decodeStreams`.
+- The decoder leak in the same function, where `openPacketReader` used to sit outside the `try` that
+  owns the decoders it had just built.
+- The permanent `readerActive` leak in `MediaSource.wasmJs.extractFrame`, where the reader and the
+  decoder were both opened outside the `try`.
 
-#### KC-P0-05-LEAK. The fix for P0-05 introduced two leaks of its own
+This is the same blocker the Web reader row already names and the same one 17.20 item 3 exists for.
+It is recorded separately because those three fixes now carry a claim, and a claim with no test is
+what this register was rebuilt to stop. **Building the source set retires this row, the twelve it
+already carried, and the Web reader's testability caveat in one move.**
 
-In `decodeStreams`, `val reader = openPacketReader(streams)` sits BETWEEN the `catch` that unwinds
-the built decoders and the `try/finally` that owns their cleanup. `openPacketReader` can throw,
-because it is the call that takes the new cursor lease. When it does, **every decoder just built
-leaks its codec context**, which is precisely the defect P0-05 was opened to fix. In `extractFrame`
-the reader and the decoder are both opened outside the `try`, so a throwing `openDecoder` leaves
-`readerActive` true for ever and that `MediaSource` can never open another reader again.
+#### KC-EVIDENCE-MUX. The muxer state machine has no way to fail on purpose
+
+Opened 2026-08-23, from P1-10's fix (PAST 14.130). `addCopyStream` now poisons the sink on both
+backends when a step after `avformat_new_stream` throws, which is correct and matches what
+`newStreamFor` has always done. **Nothing tests it, and nothing can from the public API:** the only
+steps left after the mutation are `avcodec_parameters_copy` and a time base write, and no caller can
+make either fail. Forging a `StreamInfo` was the one available lever and closing P1-11 in the same
+surge removed it on purpose. Testing this needs a fault-injection seam in the sink, which does not
+exist and should not be improvised into production code without deciding its shape first. Size S for
+the seam, and it is the only thing standing between P1-10 and being genuinely done.
+
+#### KC-APICHECK-RED. The public API ratchet has stopped guarding anything
+
+Opened 2026-08-23. `./gradlew :kitecodec-core:apiCheck -Pkitecodec.hostTargetsOnly=true`, the exact
+line `ci.yml` runs, **fails on a clean checkout of main.** Proven pre-existing: every change of the
+2026-08-23 surge was stashed and the command failed on the untouched tree. The committed dump was
+produced across all thirteen targets; the flag restricts the run to three; the target headers
+therefore disagree and the check fails before comparing a single declaration.
+
+So a public API change cannot currently fail here, which is the entire purpose of the file. Fixing
+it is a decision, not a repair: either re-dump under the same flag CI uses, so the baseline and the
+gate describe the same set, or give CI an FFmpeg tree per target so the full dump can be checked.
+The first takes minutes and narrows what the ratchet covers; the second is the honest one and is the
+same work `PAR-5` and the Windows rows want anyway. **Third standing red in this family**, after
+KC-CI-KONAN and the Docs workflow, and they should be swept together.
 
 #### 2026-08-21: the repository went public, and what that changed
 
@@ -2688,18 +2699,12 @@ binary archaeology to learn the answer was "the installed app was stale". Two la
 Size S for the runtime query plus the named refusal; the error-message half pays for itself the
 first time any decoder is missing anywhere.
 
-#### KC-CI-C. Continuous integration runs one of the eight C suites
+#### KitePlayer runs none of its own C suites
 
-`ci.yml:167` and `:174` both run `./scripts/run-c-tests.sh <variant> test_identity`, while
-`run-c-tests.sh` defines EIGHT suites since the 2026-08-19 safety surge added `test_append`.
-`test_ownership`, `test_buffers`, `test_rescale`, `test_strerror_thread`, `test_convert`,
-`test_args` and `test_append` run **only on a developer's laptop**. Every "C suites green" line in
-the execution logs is therefore a true statement about a local run and a false impression about the
-project's guard rails. Cheap to fix and it changes what every future green means.
-
-**KitePlayer has the same gap and it is worse there**, because KitePlayer has no CI at all
-(`KP-B1..B13`): `kiteplayer-rt` has eight C suites and `kiteplayer-libass` gained a ninth on
-2026-08-19, and nothing outside this laptop has ever run any of them.
+Left standing when KC-CI-C closed on 2026-08-23 (PAST 14.130), because only the KiteCodec half of
+it was ever about KiteCodec. **KitePlayer has no CI at all** (`KP-B1..B13`): `kiteplayer-rt` has
+eight C suites and `kiteplayer-libass` gained a ninth on 2026-08-19, and nothing outside one laptop
+has ever run any of them. KiteCodec's fix is the template, and it was two words on two lines.
 
 #### Correctness, KiteCodec, still open
 
@@ -2946,19 +2951,26 @@ whether anything else is true.
 
 #### First: buy back the ability to know things. All cheap, all high leverage
 
-1. **`KC-CI-C`.** Continuous integration runs `test_identity` and nothing else. There are EIGHT
-   suites since the safety surge added `test_append`, so seven of them guard nothing outside a
-   laptop. `.github/workflows/ci.yml:167,174`. Change two lines.
+1. **DONE 2026-08-23 (PAST 14.130).** CI ran `test_identity` and nothing else; it now runs all
+   eight suites in both variants. **Its replacement at the head of this list is `KC-APICHECK-RED`**,
+   found while closing it: `apiCheck` fails on a clean checkout of main, so the public API ratchet
+   is not guarding anything either. Same disease, one level up, and it should be swept with
+   `KC-CI-KONAN` and the Docs workflow. `KP-CI-C` is the same job for the other repository and
+   belongs to phase 1 of `KP-PROD`.
 2. **`KC-WASM-MIRROR`.** The generated Wasm binding and the file that actually compiles are two
    copies nothing compares, and the drift fails only at runtime in a browser. **The project already
    wrote this check for a sibling file**; apply it here.
 3. **A `wasmJsTest` source set.** Twelve rows are marked done with no test that could ever fail, and
    they will stay that way for ever without it. This is the single biggest lie-per-hour reduction
    available.
-4. **`KC-NOTDONE` and `KC-P0-05-LEAK`.** Six rows logged DONE that are not done on every backend,
-   plus one fix that introduced two leaks. **Do these before anything new**, because they are
-   already counted as finished and nobody will come back to them otherwise. P1-11 on the JVM is the
-   worst: it is a whole missing ownership check in a class that already has the helper.
+4. **DONE 2026-08-23 (PAST 14.130), except for the evidence.** All six `KC-NOTDONE` rows and both
+   `KC-P0-05-LEAK` halves are fixed. Four of the six carry a falsifying test that was watched to
+   fail first. The remainder is `KC-EVIDENCE-WASM` and `KC-EVIDENCE-MUX`, and it is not code: three
+   of the fixes are in `wasmJsMain` where no test source set exists, and P1-10's poison cannot be
+   made to fail from the public API. **That remainder is why item 3 above moved from useful to
+   blocking.** One correction the pass had to make: `KC-P0-05-LEAK` described a leak on JVM and
+   Native that both backends had already lost in a rewrite, and a leak on Wasm that no edition of
+   this register ever mentioned. It was live on Wasm only, on both of its halves.
 
 #### Second: the correctness rows that are actually left
 

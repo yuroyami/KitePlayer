@@ -70,9 +70,34 @@
  * interleave reaches the right speakers without a remap. See `kprt_layout_tag_for`, which replaced
  * the old rule of tagging EVERY count above two as MPEG 5.1 A (audit 15.3.3). Counts above 6 clamp
  * to 2 rather than 6, because the pipeline's mixer downmixes to stereo but cannot yet fold 8 into
- * 6 (SOL-P8); stereo is the honest fallback that always sounds right. */
+ * 6 (SOL-P8); stereo is the honest fallback that always sounds right.
+ *
+ * This is the CEILING, not the answer. The DEVICE's own channel count bounds it further at create
+ * time, because the input scope accepts a width the hardware does not have and reports success, so
+ * a count taken from the caller alone silently drops every channel past the route's own. */
 #define KPRT_MIN_CHANNELS 1
 #define KPRT_MAX_CHANNELS 6
+
+/* How many channels the DEVICE behind this unit actually has.
+ *
+ * The output scope of the output bus is the hardware side, so this is the route's own answer
+ * rather than the caller's wish. It has to be asked, because the input scope ACCEPTS a format the
+ * hardware cannot carry: setting six channels on a two channel device returns noErr and then plays
+ * the first two, which is a movie losing its centre channel and with it every line of dialogue,
+ * reported as "only part of the audio is playing" (owner report 2026-08-23). Zero means the unit
+ * would not say, and the caller then keeps its own count rather than trusting a number nobody gave. */
+static int32_t kprt_device_channels(AudioComponentInstance instance)
+{
+    AudioStreamBasicDescription hardware;
+    UInt32 size = (UInt32)sizeof(hardware);
+    memset(&hardware, 0, sizeof(hardware));
+    if (AudioUnitGetProperty(instance, kAudioUnitProperty_StreamFormat,
+                             kAudioUnitScope_Output, KPRT_OUTPUT_BUS,
+                             &hardware, &size) != noErr) {
+        return 0;
+    }
+    return (int32_t)hardware.mChannelsPerFrame;
+}
 
 static void report_status(int32_t *out_os_status, OSStatus status)
 {
@@ -370,6 +395,18 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     }
 
     /* From here on every failure disposes the instance before returning. */
+
+    /* The device's own channel count bounds the accepted one. Asking is the whole point: the input
+     * scope would take six channels on a two channel route without complaint, and the engine reads
+     * the accepted count as permission to skip its downmix, so the surround content would simply
+     * never be folded into the two speakers that exist. Bounding here instead makes the pipeline
+     * fold 5.1 to stereo through the matrix it already has and `ReferencePcmTest` already pins. A
+     * unit that will not answer leaves the caller's count alone. */
+    {
+        int32_t device_channels = kprt_device_channels(instance);
+        if (device_channels > 0 && device_channels < accepted_channels)
+            accepted_channels = device_channels;
+    }
 
     sink = (kprt_sink *)calloc(1, sizeof(kprt_sink));
     if (sink == NULL) {

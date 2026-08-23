@@ -239,6 +239,52 @@ class CoreAudioSinkRealTimeTest {
     }
 
     @Test
+    fun `a surround request never comes back wider than the route can carry`() = runBlocking {
+        // The case a nine channel request cannot reach, because nine is refused by the ceiling before
+        // any device is consulted. Six is UNDER that ceiling, so it used to be handed straight to the
+        // unit, and the unit accepts a width its route does not have: setting six channels on a two
+        // channel output returns noErr and then plays the first two. The engine reads the accepted
+        // count as permission to skip its downmix, so a 5.1 film lost its centre channel and with it
+        // the dialogue, while the level meters and the tests both looked healthy (owner report
+        // 2026-08-23).
+        //
+        // The assertion is written against the route rather than against a number, so it holds on a
+        // stereo laptop and on a machine with a real surround interface: whatever comes back must be
+        // something the device can actually carry, and asking for more than stereo must not silently
+        // widen a stereo route.
+        val stereoProbe = CoreAudioSink()
+        val routeWidth = stereoProbe.openWithRing(
+            AudioFormat(sampleRate = 48_000, channels = 6, sampleFormat = SampleFormat.F32),
+        ) { 4_800 }.format.channels
+        stereoProbe.close()
+
+        val plainStereo = CoreAudioSink()
+        val stereoWidth = plainStereo.openWithRing(
+            AudioFormat(sampleRate = 48_000, channels = 2, sampleFormat = SampleFormat.F32),
+        ) { 4_800 }.format.channels
+        plainStereo.close()
+
+        assertTrue(
+            routeWidth >= stereoWidth,
+            "a six channel request came back narrower ($routeWidth) than a stereo one ($stereoWidth)",
+        )
+        assertTrue(
+            routeWidth <= 6,
+            "a six channel request must never come back wider than it asked for, was $routeWidth",
+        )
+        // The real point: on a route that only carries stereo, six must be folded rather than kept.
+        // stereoWidth IS that route's width, because two is what every Apple output carries at least.
+        if (stereoWidth == 2) {
+            assertEquals(
+                2,
+                routeWidth,
+                "this machine's output carries two channels, so a six channel request must come back " +
+                    "as two and let the engine downmix; keeping six drops the centre channel silently",
+            )
+        }
+    }
+
+    @Test
     fun `the anchor advances with the device rather than with the clock`() = runBlocking {
         // Two readings a fixed wall time apart. The media time between them must grow by about that wall
         // time, because the device consumes at real speed; a clock derived from submissions instead would

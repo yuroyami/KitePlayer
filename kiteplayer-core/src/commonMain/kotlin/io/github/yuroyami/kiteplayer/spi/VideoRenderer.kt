@@ -87,6 +87,20 @@ public interface VideoRenderer : AutoCloseable {
      * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
      */
     public val events: Flow<RendererEvent>
+
+    /**
+     * The surface this renderer draws into, in PHYSICAL pixels, or null when it cannot say.
+     *
+     * Subtitles are the reason this exists. Text rasterised on a canvas the size of the VIDEO and
+     * then stretched to the surface is text resampled once before it is ever seen: an 800p film on
+     * a 1125 pixel tall phone drew 40 pixel glyphs and scaled them up by 1.4, which is the soft,
+     * pixellated lettering every other player avoids by rasterising at the size it will actually
+     * draw at. A renderer that answers here gets its text drawn at 1:1 instead.
+     *
+     * Null keeps the old behaviour, so a renderer that does not know its own size loses nothing.
+     * The engine reads this only when the cue set changes, never per frame.
+     */
+    public val outputSize: io.github.yuroyami.kiteplayer.VideoSize? get() = null
 }
 
 public sealed interface RendererEvent {

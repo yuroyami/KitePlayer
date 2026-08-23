@@ -632,6 +632,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoFrame : kotlin/AutoClo
 abstract interface io.github.yuroyami.kiteplayer.spi/VideoRenderer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/VideoRenderer|null[0]
     abstract val events // io.github.yuroyami.kiteplayer.spi/VideoRenderer.events|{}events[0]
         abstract fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.spi/VideoRenderer.events.<get-events>|<get-events>(){}[0]
+    open val outputSize // io.github.yuroyami.kiteplayer.spi/VideoRenderer.outputSize|{}outputSize[0]
+        open fun <get-outputSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.spi/VideoRenderer.outputSize.<get-outputSize>|<get-outputSize>(){}[0]
 
     abstract fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.spi/VideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
     abstract fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.spi/VideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]

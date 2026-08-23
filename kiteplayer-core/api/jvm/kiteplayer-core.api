@@ -1978,6 +1978,7 @@ public final class io/github/yuroyami/kiteplayer/spi/VideoFrame$DefaultImpls {
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer : java/lang/AutoCloseable {
 	public abstract fun getEvents ()Lkotlinx/coroutines/flow/Flow;
+	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public abstract fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public abstract fun setOverlay (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -1991,6 +1992,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/VideoRenderer 
 }
 
 public final class io/github/yuroyami/kiteplayer/spi/VideoRenderer$DefaultImpls {
+	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
 	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
 	public static fun setScaleMode (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public static fun setTransform (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;Lio/github/yuroyami/kiteplayer/VideoTransform;)V

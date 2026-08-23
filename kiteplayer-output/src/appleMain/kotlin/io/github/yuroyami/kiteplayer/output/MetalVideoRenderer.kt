@@ -300,6 +300,21 @@ public class MetalVideoRenderer public constructor(
         viewportHeight.value = (height * scale).toInt()
     }
 
+    /**
+     * The same two numbers the encode path already resolves: the reported viewport when a host
+     * gave one, and the layer's own drawable size otherwise. Both are physical pixels, which is
+     * what the engine needs to rasterise subtitles at 1:1 instead of stretching them.
+     */
+    override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
+        get() {
+            val width = viewportWidth.value.takeIf { it > 0 }
+                ?: layer.drawableSize.useContents { width }.toInt()
+            val height = viewportHeight.value.takeIf { it > 0 }
+                ?: layer.drawableSize.useContents { height }.toInt()
+            if (width <= 0 || height <= 0) return null
+            return io.github.yuroyami.kiteplayer.VideoSize(width, height)
+        }
+
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         this.overlay.value = overlay
         // SOL-R1: a paused picture shows the change too; the render worker re-encodes the

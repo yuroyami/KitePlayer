@@ -9411,6 +9411,47 @@ build measurable at all. Synkplay's `KiteStats` line gained `fps`, `videoQms`, `
 
 KitePlayer 0.0.13, this commit. Synkplay took the pin and the stats line in c8b08c25.
 
+### 14.124 The device-truth pair, 2026-08-23: 5.1 audio and subtitle sharpness
+
+Two owner reports from a real iPhone XS, both root-caused to the same shape of mistake: a layer
+believing a number nobody had asked the hardware for.
+
+**Only part of the audio played.** A 5.1 film lost its centre channel, so it lost its dialogue.
+`kprt_sink_create` accepted any channel count up to six and never asked the DEVICE what it had;
+above six it clamped to two, so 5.1 sailed through untouched. A probe written for this entry
+proves the trap: on a two channel output, `AudioUnitGetProperty` on the OUTPUT scope reports
+`channels=2`, and setting a SIX channel input format on the same unit returns `noErr`. The unit
+accepts a width the route cannot carry. The engine then reads the accepted count as permission to
+skip its downmix, so the surround content was never folded into the two speakers that exist. The
+mixer was never at fault: `ReferencePcmTest` pins it against `ffmpeg -ac 2` and passes, because it
+uses `CapturingSink(accepts = stereo)`. The real negotiation had no test at all. Fixed by asking
+the unit for its output-scope channel count and bounding the accepted count by it; a Mac with a
+real surround interface still gets six. Pinned by a new appleTest that FAILS without the fix
+("this machine's output carries two channels..."). Measured on the owner's phone: negotiated
+6 channels before, 2 after, audio queue healthy at 682 ms with zero underruns.
+
+**Subtitles looked soft and distorted.** The engine rasterised text onto a canvas the size of the
+VIDEO and left the renderer to stretch it, so an 800p film on a 1125 pixel tall phone drew 40 pixel
+glyphs and scaled them up about 1.4x. Worse than softness: the overlay's two axes scale
+independently, so a landscape video canvas on a differently shaped surface SQUASHED the letters on
+one axis and stretched them on the other. Fixed by letting a renderer state its surface size
+(`VideoRenderer.outputSize`, default null) and rasterising onto that; the apparent size does not
+move, because every size in the rasteriser is a fraction of the canvas height, so only the pixel
+detail changes. Measured on the phone: `subtitles: surface=1125x2436 canvas=1125x2436`, scale
+exactly 1.
+
+The property is OPT-IN for a reason worth recording: Metal and KiteVideo composite overlays in
+OUTPUT space, but `AndroidSurfaceVideoRenderer` maps them onto the fitted VIDEO rectangle, so it
+must NOT answer or its text would shrink. That also corrects a claim in this register, which said
+overlays composite in output space on every renderer; the Android code has always said otherwise.
+
+Both fixes are pinned by tests proven red first, and both were verified on the owner's device
+rather than argued. Gates: C suites plain, asan and tsan 8/8 each, render audit 46 checks, source
+discipline 18 checks, ABI dumps updated additively, and the Kotlin suites across core, output,
+compose-video, view and ffmpeg on JVM, macOS and the iOS simulator.
+
+These ship in the next patch release; this commit carries the code and the register, not the bump.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

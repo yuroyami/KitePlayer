@@ -52,6 +52,72 @@ class PlaybackSubtitleTest {
     }
 
     @Test
+    fun cuesAreRasterisedOntoTheSurfaceRatherThanTheVideo() = runTest {
+        // A phone showing a film smaller than its own screen. Rasterising on the VIDEO's canvas and
+        // letting the renderer stretch it is one resampling pass before the text is ever seen, which
+        // is the soft, ragged lettering the owner reported on 2026-08-23. The scripted video is
+        // 1920x1080; the surface here is deliberately neither that nor a multiple of it.
+        val surface = io.github.yuroyami.kiteplayer.VideoSize(2436, 1125)
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 4_000_000,
+                subtitleCues = listOf(cue(1_000, 3_000, "hello")),
+            ),
+            config = subtitleConfig(),
+        )
+        harness.renderer!!.outputSizeOverride = surface
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+
+        val shown = harness.renderer.overlays.filterNotNull().first { it.images.isNotEmpty() }
+        assertEquals(
+            surface.width to surface.height,
+            shown.viewportWidth to shown.viewportHeight,
+            "the text was rasterised onto the video's canvas and left for the renderer to stretch",
+        )
+
+        // A surface that changes size must redraw the same text, which a video-sized canvas never
+        // had to do. Without this the first raster would be stretched for the rest of the session.
+        harness.renderer.outputSizeOverride = io.github.yuroyami.kiteplayer.VideoSize(1125, 2436)
+        harness.run(300.milliseconds)
+        val after = harness.renderer.overlays.filterNotNull().last { it.images.isNotEmpty() }
+        assertEquals(
+            1125 to 2436,
+            after.viewportWidth to after.viewportHeight,
+            "a rotation left the text rasterised for the old surface",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun aRendererThatCannotSayItsSizeKeepsTheVideoCanvas() = runTest {
+        // The fallback every other renderer still relies on: no answer means the video's own size,
+        // exactly as before, so nothing that cannot measure itself is made worse.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 4_000_000,
+                subtitleCues = listOf(cue(1_000, 3_000, "hello")),
+            ),
+            config = subtitleConfig(),
+        )
+        harness.renderer!!.outputSizeOverride = null
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1500.milliseconds)
+
+        val shown = harness.renderer.overlays.filterNotNull().first { it.images.isNotEmpty() }
+        assertEquals(
+            1920 to 1080,
+            shown.viewportWidth to shown.viewportHeight,
+            "a renderer with no size must leave the canvas on the video, as it was",
+        )
+        harness.close()
+    }
+
+    @Test
     fun anUnchangedActiveSetPublishesNothingNew() = runTest {
         val harness = CoreHarness(
             this,

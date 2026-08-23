@@ -2938,8 +2938,12 @@ internal class PlaybackCore(
         // The cues themselves are the identity, not their timestamps: two different texts or
         // styles over the same interval are different overlays, and a (start, end) key republished
         // nothing for them (audit P1-14). Structural equality on the data classes is exact.
-        if (active != session.publishedCueKey) {
+        // The canvas is now the surface, so a rotation or a resize changes what the text should
+        // have been rasterised onto. Cheap to ask, and asked only here, where cue timing already runs.
+        val canvasNow = session.renderer.outputSize?.let { it.width to it.height }
+        if (active != session.publishedCueKey || canvasNow != session.publishedCanvas) {
             session.publishedCueKey = active.toList()
+            session.publishedCanvas = canvasNow
             publishOverlay(session, active)
         }
 
@@ -2978,9 +2982,20 @@ internal class PlaybackCore(
         active: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
     ) {
         val rasterizer = output.subtitleRasterizer ?: return
+        // The canvas is the SURFACE, not the video. Text drawn at the video's size and stretched to
+        // the surface is resampled before it is ever seen, which on a phone showing an 800p film is
+        // 40 pixel glyphs blown up by 1.4: the soft, ragged lettering the owner reported on
+        // 2026-08-23. Rasterising at the size the renderer draws at makes that scale exactly 1, and
+        // the apparent size does not move, because every size in the rasteriser is a fraction of the
+        // canvas height. A renderer that cannot say falls back to the video's own size.
+        val canvas = session.renderer.outputSize
         val size = session.videoStream?.videoSize
-        val width = size?.displayWidth?.takeIf { it > 0 } ?: DEFAULT_SUBTITLE_CANVAS_WIDTH
-        val height = size?.height?.takeIf { it > 0 } ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT
+        val width = canvas?.width?.takeIf { it > 0 }
+            ?: size?.displayWidth?.takeIf { it > 0 }
+            ?: DEFAULT_SUBTITLE_CANVAS_WIDTH
+        val height = canvas?.height?.takeIf { it > 0 }
+            ?: size?.height?.takeIf { it > 0 }
+            ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT
         val generation = session.overlayGeneration.incrementAndGet()
         if (active.isEmpty()) {
             // A clear costs no rasterisation; publish it inline so text vanishes on time.
@@ -4421,6 +4436,10 @@ internal class PlaybackCore(
             "than the session)")
         // Actor liveness: passes stop counting when the loop is stuck in a long step.
         appendLine("  actor passes=$loopPasses $debugState")
+        // What subtitles were actually drawn at. A canvas smaller than the surface means the text
+        // is being stretched, which is the difference between crisp lettering and soft lettering.
+        appendLine("  subtitles: surface=" + (session?.renderer?.outputSize?.let { "${it.width}x${it.height}" } ?: "unreported") +
+            " canvas=" + (session?.publishedCanvas?.let { "${it.first}x${it.second}" } ?: "video-sized"))
         appendLine()
         appendLine("kd artifacts")
         // The filter the media item actually carries. This line used to say "none attached"
@@ -5167,6 +5186,9 @@ internal class PlaybackCore(
 
         /** What the last published overlay showed, so an unchanged set publishes nothing. */
         var publishedCueKey: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>? = null
+
+        /** The surface size the published overlay was rasterised for, so a resize can redraw it. */
+        var publishedCanvas: Pair<Int, Int>? = null
 
         /**
          * Monotonic overlay identity. A hash of the cue content is collision-prone; a counter

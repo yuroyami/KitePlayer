@@ -7,6 +7,7 @@ import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
+import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
@@ -342,6 +343,16 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         var player = KitePlayer.create(scenarioConfig())
         playerView.player = player
         var sampler = scope.launch { sampleScenario(player, trace) }
+        val events = scope.launch {
+            player.events.collect { event ->
+                when (event) {
+                    is PlayerEvent.AudioFormatChanged ->
+                        trace.line("AUDIO negotiated ${event.channels} channels at ${event.sampleRate} Hz")
+                    is PlayerEvent.Warning -> trace.line("WARN ${event.warning.message}")
+                    else -> Unit
+                }
+            }
+        }
         try {
             withTimeout(SCENARIO_TIMEOUT) {
                 trace.line("### hardwareDecode=" + (if (hwdecOff) "Off" else "Auto"))
@@ -370,6 +381,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
             trace.line("scenario failed: ${failure.stackTraceToString()}")
         } finally {
             sampler.cancel()
+            events.cancel()
             runCatching { trace.line(player.diagnosticsDump()) }
             runCatching { withTimeout(CLOSE_TIMEOUT) { player.closeAndAwait() } }
                 .onFailure { trace.line("final close failed: $it") }

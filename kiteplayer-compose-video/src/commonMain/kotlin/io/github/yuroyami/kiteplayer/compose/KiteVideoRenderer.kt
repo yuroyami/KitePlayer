@@ -299,8 +299,28 @@ internal class KiteVideoRenderer(
     override fun vsyncIntervalNanos(): Long? = null
 
     override fun setViewport(width: Int, height: Int, scale: Float) {
+        surfaceWidth.value = (width * scale).toInt()
+        surfaceHeight.value = (height * scale).toInt()
         if (!closed.value) hardwareRenderer?.setViewport(width, height, scale)
     }
+
+    private val surfaceWidth = atomic(0)
+    private val surfaceHeight = atomic(0)
+
+    /**
+     * KiteVideo composites overlays in OUTPUT space, mapping the overlay's viewport onto the whole
+     * component, so the engine can rasterise text at these pixels and have it drawn at 1:1 instead
+     * of stretched from the video's smaller canvas. A renderer that maps overlays onto the fitted
+     * VIDEO rectangle instead must NOT answer here, which is why the Android surface renderer does
+     * not: an output-sized canvas mapped into the video rectangle would shrink the text.
+     */
+    override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
+        get() {
+            val width = surfaceWidth.value
+            val height = surfaceHeight.value
+            if (width <= 0 || height <= 0) return null
+            return io.github.yuroyami.kiteplayer.VideoSize(width, height)
+        }
 
     /**
      * Converts and publishes the overlay (S2.d). Inline rather than on the worker: cues change

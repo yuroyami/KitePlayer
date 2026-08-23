@@ -91,6 +91,8 @@ final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.
         final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.events.<get-events>|<get-events>(){}[0]
     final val failedFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.failedFrames|{}failedFrames[0]
         final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val outputSize // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.outputSize|{}outputSize[0]
+        final fun <get-outputSize>(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.outputSize.<get-outputSize>|<get-outputSize>(){}[0]
     final val presentedFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.presentedFrames|{}presentedFrames[0]
         final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
     final val supersededFrames // io.github.yuroyami.kiteplayer.output/MetalVideoRenderer.supersededFrames|{}supersededFrames[0]

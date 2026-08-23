@@ -147,6 +147,12 @@ internal class RecordingRenderer(
     var scaleMode: VideoScale? = null
         private set
 
+    /** What this renderer claims its surface is, so a test can prove which canvas the text used. */
+    var outputSizeOverride: io.github.yuroyami.kiteplayer.VideoSize? = null
+
+    override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
+        get() = outputSizeOverride
+
     override fun setScaleMode(mode: VideoScale) {
         scaleMode = mode
     }

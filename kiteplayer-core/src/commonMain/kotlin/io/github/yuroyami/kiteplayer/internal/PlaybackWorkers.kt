@@ -232,6 +232,9 @@ internal class AttachableRenderer : VideoRenderer {
 
     override fun vsyncIntervalNanos(): Long? = delegate?.vsyncIntervalNanos()
 
+    override val outputSize: io.github.yuroyami.kiteplayer.VideoSize?
+        get() = delegate?.outputSize
+
     override fun setViewport(width: Int, height: Int, scale: Float) {
         delegate?.setViewport(width, height, scale)
     }

@@ -9728,6 +9728,30 @@ needs an Activity and a real SurfaceView and does not complete on this emulator;
 in CI or anywhere else because of KP-ADEX, so it is characterised here as untested rather than as
 a regression.
 
+### 14.129 KitePlayer 0.0.14, 2026-08-23: the cut
+
+Owner-approved patch bump. 0.0.13 was the last published build, and five commits had piled up
+behind it because publishing waits on the owner's word by rule. What 0.0.14 carries:
+
+- **The 5.1 downmix fix** (14.124). A CoreAudio sink accepted six channels on a two channel route
+  and the engine read that as permission to skip its downmix, so a 5.1 film lost its centre channel
+  and with it the dialogue.
+- **The subtitle canvas fix** (14.124). Cues were rasterised onto the video's own size and then
+  stretched to the surface, with the two axes scaling independently.
+- **KP-RQ rungs 1 to 3** (14.125 to 14.128): dithering, debanding with chroma siting, and the
+  Catmull-Rom kernel, on the Metal body and the Android GL blit both. Every one of them is opt-in
+  and `RenderQuality.Off` is byte-for-byte the pre-17.21 picture, so this bump changes nothing a
+  viewer sees until something asks it to.
+- Three incidental repairs found while verifying: KP-ADEX closed (no instrumented suite in the
+  repository could be dexed), the `iosSimulatorArm64` test target compiling again after a missed
+  call site from W-18, and `KiteVideoRenderer` finally forwarding render quality to the platform
+  GPU tier under it.
+
+Published to mavenLocal across the full target matrix, which is how Synkplay consumes this library;
+KitePlayer has no public Maven venue yet and no CI publish, so mavenLocal plus the pushed tag of
+record in the log IS the release. Synkplay still pins 0.0.13 and moving that pin is its own act in
+its own repository.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

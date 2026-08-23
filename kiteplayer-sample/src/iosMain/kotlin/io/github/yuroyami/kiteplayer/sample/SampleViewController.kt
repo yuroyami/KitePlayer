@@ -85,6 +85,9 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
 
     /** `--dither` turns RQ-1 on, so its cost can be measured against the same run without it. */
     private val ditherOn = NSProcessInfo.processInfo.arguments.contains(DITHER_ARGUMENT)
+
+    /** `--deband` turns RQ-2 on, so the taps it costs can be measured against a run without them. */
+    private val debandOn = NSProcessInfo.processInfo.arguments.contains(DEBAND_ARGUMENT)
     private var scenarioStarted = false
     private val controlButtons = mutableListOf<UIButton>()
 
@@ -360,8 +363,9 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         try {
             withTimeout(SCENARIO_TIMEOUT) {
                 trace.line("### hardwareDecode=" + (if (hwdecOff) "Off" else "Auto") +
-            " dither=" + (if (ditherOn) "on" else "off"))
-        player.setRenderQuality(RenderQuality(dither = ditherOn))
+            " dither=" + (if (ditherOn) "on" else "off") +
+            " deband=" + (if (debandOn) "on" else "off"))
+        player.setRenderQuality(RenderQuality(dither = ditherOn, deband = debandOn))
         trace.line("### phase 1: first open, fresh player")
                 openAndSettle(player, trace, first, stopFirst = false)
 
@@ -648,6 +652,7 @@ private const val SMOKE_ARGUMENT = "--s1b-smoke"
 private const val SCENARIO_ARGUMENT = "--scenario"
 private const val HWDEC_OFF_ARGUMENT = "--hwdec-off"
 private const val DITHER_ARGUMENT = "--dither"
+private const val DEBAND_ARGUMENT = "--deband"
 private const val SCENARIO_TRACE_NAME = "scenario-trace.log"
 private val SCENARIO_TIMEOUT = 10.minutes
 private val SCENARIO_SAMPLE_INTERVAL = 250.milliseconds

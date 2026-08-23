@@ -2438,6 +2438,7 @@ locating each symbol by name, because every line number in both audit documents 
 |---|---|---|---|
 | KP-PROD | THE PRODUCTION PROGRAM, owner-ordered 2026-08-22: the ordered handoff from here to a shippable player; every row below maps into one of its four phases | [V] 08-22 | 17.16, here |
 | KP-RQ | THE RENDER-QUALITY LADDER, owner-ordered 2026-08-23: dither, deband, scaler, linear light, Anime4K; libplacebo REJECTED with reasons | [V] 08-23 | 17.21, here |
+| KP-ADEX | androidDeviceTest cannot be BUILT for a device below API 31: backtick test names with spaces fail dexing ("not allowed prior to DEX version 040"), so no instrumented suite runs on older hardware | [V] 08-23 | 17.21, here |
 | SOL-S3 | overlay draws the SOURCE bitmap's size, never the region's own | [V] 08-19 | 17.11, here |
 | SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
 | SOL-S8 | positioned bottom cues still consume implicit stacking space | [V] 08-19 | 17.11, here |
@@ -3165,7 +3166,7 @@ textures into the shader. Proof: a synthetic 10-bit gradient clip added to `test
 golden asserts no flat run longer than the dither period, and the bit-exact-off golden pins the
 disabled path. Estimate: under one session, both shader bodies.
 
-**RQ-2, debanding, plus chroma siting in the same surge.** mpv's shape: for each plane sample the
+**RQ-2, debanding, plus chroma siting in the same surge. METAL HALF LANDED 2026-08-23, PAST 14.126; Android half compiles but is unmeasured, and the device cost is still owed.** mpv's shape: for each plane sample the
 average of taps at a small random-radius ring around the texel, replace the sample when it differs
 by less than a threshold, then add low-amplitude grain; one iteration first, thresholds as config
 with mpv's defaults as the reference point. Run it on the sampled Y, Cb, Cr BEFORE the matrix,

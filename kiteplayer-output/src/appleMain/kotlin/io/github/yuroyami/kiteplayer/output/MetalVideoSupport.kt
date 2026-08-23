@@ -128,10 +128,14 @@ struct AdjustUniforms {
 };
 
 struct QualityUniforms {
-    int   flags;        // bit 0 dither. Later rungs claim the higher bits; 0 is the pre-17.21 write.
-    float ditherScale;  // one output step, so the pattern is exactly +/- half a step
-    float pad0;
-    float pad1;
+    int   flags;          // bit 0 dither, bit 1 deband. 0 is the pre-17.21 write.
+    float ditherScale;    // one output step, so the pattern is exactly +/- half a step
+    float debandThreshold;// how flat a neighbourhood must be to count as a band, in 0..1
+    float debandRange;    // ring radius at the first iteration, in source pixels
+    float debandGrain;    // grain added back after smoothing, in 0..1
+    float frameSeed;      // varies the ring per frame so the grain does not sit still
+    float lumaTexelX;     // one luma texel, for the ring and for chroma siting
+    float lumaTexelY;
 };
 
 struct ToneUniforms {
@@ -168,6 +172,58 @@ static inline float3 kp_dither(float3 rgb, float2 position, float step) {
     uint y = uint(position.y) & 7u;
     float pattern = (KP_BAYER8[y * 8u + x] + 0.5) / 64.0 - 0.5;
     return rgb + pattern * step;
+}
+
+/* A cheap hash to a 0..1 value, from the fragment's own position and the frame seed.
+ *
+ * Deterministic per pixel per frame, which is what the ring and the grain both need: a static
+ * pattern would show as a fixed texture on flat areas, and a truly random one would shimmer. */
+static inline float kp_hash(float2 p, float seed) {
+    float3 v = float3(p.x, p.y, seed);
+    return fract(sin(dot(v, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+}
+
+/* One debanding iteration on a single plane, mpv's shape.
+ *
+ * Four taps on a ring around the texel. If all four agree with the centre to within the threshold,
+ * the neighbourhood is FLAT, which for real content means a band rather than an edge, and the
+ * average of the ring is a better estimate of the true value than the quantised centre. If any tap
+ * disagrees, this is an edge and the centre is kept untouched, which is what stops debanding from
+ * smearing detail.
+ *
+ * The ring is rotated by a per-pixel hash so the four taps do not all sample the same direction,
+ * which would leave a directional artefact on gradients. */
+static inline float kp_deband_plane(
+    texture2d<float> plane,
+    sampler s,
+    float2 coord,
+    float2 texel,
+    float radius,
+    float threshold,
+    float2 position,
+    float seed
+) {
+    float centre = plane.sample(s, coord).r;
+    float angle = kp_hash(position, seed) * 6.2831853;
+    float2 dir = float2(cos(angle), sin(angle)) * texel * radius;
+    float2 perp = float2(-dir.y, dir.x);
+
+    float a = plane.sample(s, coord + dir).r;
+    float b = plane.sample(s, coord - dir).r;
+    float c = plane.sample(s, coord + perp).r;
+    float d = plane.sample(s, coord - perp).r;
+    float avg = (a + b + c + d) * 0.25;
+
+    /* The test is the centre against the ring's AVERAGE, not against the worst single tap.
+     *
+     * That is libplacebo's shape and it is not a detail: real banding in 8-bit content is a ONE
+     * STEP difference, and a worst-tap test rejects exactly that, because one step is already
+     * larger than any sane threshold. Averaging first halves the difference a band presents while
+     * leaving an edge's difference enormous, which is what lets one threshold separate them. */
+    if (abs(centre - avg) >= threshold) {
+        return centre;
+    }
+    return avg;
 }
 
 // SMPTE ST 2084 (PQ) constants.
@@ -275,15 +331,38 @@ fragment float4 kp_picture(
         float rawY;
         float rawCb;
         float rawCr;
+        /* 4:2:0 chroma is sited half a LUMA texel to the left of the luma sample in every format
+         * this player decodes. Sampling both planes at the same coordinate therefore shifts colour
+         * a quarter of a chroma texel right, which shows as a coloured seam on hard vertical edges.
+         * The shift is applied to the chroma coordinate only, and only when debanding is on: it is
+         * part of the same correctness rung and must not move pixels in a build that asked for
+         * nothing (17.21 RQ-2). */
+        float2 chromaCoord = in.texcoord;
+        if ((q.flags & 2) != 0) {
+            chromaCoord.x -= q.lumaTexelX * 0.5;
+        }
+        bool deband = (q.flags & 2) != 0;
         if (c.mode == 1) {
-            rawY = planeA.sample(s, in.texcoord).r;
-            float2 uv = planeB.sample(s, in.texcoord).rg;
+            rawY = deband
+                ? kp_deband_plane(planeA, s, in.texcoord, float2(q.lumaTexelX, q.lumaTexelY),
+                                  q.debandRange, q.debandThreshold, in.position.xy, q.frameSeed)
+                : planeA.sample(s, in.texcoord).r;
+            float2 uv = planeB.sample(s, chromaCoord).rg;
             rawCb = uv.x;
             rawCr = uv.y;
         } else {
-            rawY = planeA.sample(s, in.texcoord).r;
-            rawCb = planeB.sample(s, in.texcoord).r;
-            rawCr = planeC.sample(s, in.texcoord).r;
+            rawY = deband
+                ? kp_deband_plane(planeA, s, in.texcoord, float2(q.lumaTexelX, q.lumaTexelY),
+                                  q.debandRange, q.debandThreshold, in.position.xy, q.frameSeed)
+                : planeA.sample(s, in.texcoord).r;
+            rawCb = planeB.sample(s, chromaCoord).r;
+            rawCr = planeC.sample(s, chromaCoord).r;
+        }
+        /* Grain goes back on the LUMA only, after smoothing. Chroma is left alone on purpose:
+         * grain in chroma reads as coloured noise, and the banding a viewer sees is a luma
+         * phenomenon almost every time. */
+        if (deband && q.debandGrain > 0.0) {
+            rawY += (kp_hash(in.position.xy + 17.0, q.frameSeed) - 0.5) * q.debandGrain;
         }
         float y = (rawY * c.sampleScale * 255.0 - c.lumaOffset) * c.lumaScale;
         float cb = (rawCb * c.sampleScale * 255.0 - 128.0) * c.chromaScale;
@@ -350,15 +429,35 @@ internal val DISABLED_TONE_UNIFORMS: FloatArray = FloatArray(4)
 internal fun packQualityUniforms(
     quality: io.github.yuroyami.kiteplayer.RenderQuality,
     targetBits: Int = 8,
+    sourceWidth: Int = 0,
+    sourceHeight: Int = 0,
+    frameSeed: Float = 0f,
 ): FloatArray {
     var flags = 0
     if (quality.dither) flags = flags or 1
+    // Debanding needs the source's texel size to walk a ring in it. Without a size there is no
+    // ring, so the pass turns itself off rather than sampling a wrong neighbourhood.
+    val sized = sourceWidth > 0 && sourceHeight > 0
+    if (quality.deband && sized) flags = flags or 2
     val levels = (1 shl targetBits) - 1
+    // The thresholds are mpv's units, 1/16384 of full scale, converted here rather than in the
+    // shader so the constant is not written twice in two languages.
+    //
+    // The scale is what makes the pass work at all, and it is worth the sentence: banding in 8-bit
+    // content is a ONE STEP difference, 1/255, which a ring average halves to about 1/510, or
+    // 0.00196. A real edge presents tenths. So a usable threshold sits between those, and mpv's
+    // default of 48 lands at 0.0029 on this scale, just above a half step. Divided by 65536
+    // instead it lands at 0.00073, BELOW a half step, and every band is then classified as an edge
+    // and left alone: the pass compiles, runs, costs its taps and does nothing at all.
     return floatArrayOf(
         Float.fromBits(flags),
         1f / levels,
-        0f,
-        0f,
+        quality.debandThreshold / 16384f,
+        quality.debandRange,
+        quality.debandGrain / 16384f,
+        frameSeed,
+        if (sized) 1f / sourceWidth else 0f,
+        if (sized) 1f / sourceHeight else 0f,
     )
 }
 

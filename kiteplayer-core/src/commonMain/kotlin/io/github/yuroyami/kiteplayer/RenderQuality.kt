@@ -33,13 +33,18 @@ public data class RenderQuality(
      * Works like mpv's: sample a small ring around each texel, and where the neighbourhood is flat
      * enough to be a band rather than an edge, replace the sample with its average and add a little
      * grain. Costs real texture taps, so it is the pass to measure before defaulting on.
+     *
+     * Pairs with [dither], and the pairing is not a suggestion: into an 8-bit target this pass can
+     * only redistribute a hard step into a mixed transition, because there is no value between two
+     * adjacent 8-bit levels for the smoothed result to land on. [RenderQuality.Standard] turns both
+     * on for that reason.
      */
     public val deband: Boolean = false,
-    /** How flat a neighbourhood must be to count as a band, in 1/65536 of full scale. mpv's 48. */
+    /** How flat a neighbourhood must be to count as a band, in 1/16384 of full scale. mpv's 48. */
     public val debandThreshold: Float = 48f,
     /** How far the ring reaches, in source pixels, at the first iteration. mpv's 16. */
     public val debandRange: Float = 16f,
-    /** Grain added back after smoothing, in 1/65536 of full scale. mpv's 48. */
+    /** Grain added back after smoothing, in 1/16384 of full scale. mpv's 48. */
     public val debandGrain: Float = 48f,
     /** Which kernel resamples the picture when it is not drawn at its own size. */
     public val scaler: VideoScaler = VideoScaler.Bilinear,

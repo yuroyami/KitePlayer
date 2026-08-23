@@ -80,6 +80,27 @@ class MetalFrameComposerTest {
         )
     }
 
+    /** A luma plane the caller paints, so a test can build a band or an edge. Flat grey chroma. */
+    private fun lumaNv12(width: Int, height: Int, luma: (x: Int, y: Int) -> Int): MetalPicture.SoftwarePlanes {
+        val plane = ByteArray(width * height) { luma(it % width, it / width).toByte() }
+        val chroma = ByteArray(width * height / 2)
+        var i = 0
+        while (i < chroma.size) {
+            chroma[i] = 128.toByte()
+            chroma[i + 1] = 128.toByte()
+            i += 2
+        }
+        return MetalPicture.SoftwarePlanes(
+            width = width,
+            height = height,
+            format = PlayerPixelFormat.Nv12,
+            planes = listOf(
+                MetalPicture.SoftwarePlanes.Plane(plane, width, height),
+                MetalPicture.SoftwarePlanes.Plane(chroma, width, height / 2),
+            ),
+        )
+    }
+
     private fun bt(matrix: ColorMatrix) = ColorSpaceInfo(
         matrix = matrix,
         primaries = ColorPrimaries.Bt709,
@@ -396,6 +417,81 @@ class MetalFrameComposerTest {
             kotlin.math.abs(drift) < 0.6,
             "dithering shifted the average by $drift steps, so the pattern is not centred on zero",
         )
+    }
+
+    @Test
+    fun `debanding flattens a band and leaves a real edge alone`() {
+        // The two halves of the pass, in one picture, because a deband that only does the first is
+        // a blur. The left half is a one-step BAND, the kind quantisation leaves in a gradient; the
+        // right half is a hard EDGE of many steps, the kind real detail is made of.
+        //
+        // Grain is off here on purpose: it is a separate decision from the smoothing, and leaving
+        // it on would make the assertions probabilistic for no gain.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val size = 32
+        val picture = lumaNv12(size, size) { x, _ ->
+            when {
+                x < size / 2 -> if (x < size / 4) 120 else 121   // a one-step band
+                else -> if (x < 3 * size / 4) 80 else 200        // a hard edge
+            }
+        }
+        val frame = TestFrame(size, size, bt(ColorMatrix.Bt709))
+        val quality = RenderQuality(deband = true, debandGrain = 0f, debandRange = 3f)
+
+        val plain = render(composer, frame, picture, targetWidth = size, targetHeight = size)
+        val debanded = render(
+            composer, frame, picture, targetWidth = size, targetHeight = size,
+            qualityUniforms = packQualityUniforms(quality, sourceWidth = size, sourceHeight = size),
+        )
+
+        // The edge must survive: sample well clear of it so the ring cannot legitimately reach across.
+        val darkPlain = bgraAt(plain, size, size / 2 + 2, size / 2)[1]
+        val darkDeband = bgraAt(debanded, size, size / 2 + 2, size / 2)[1]
+        val brightPlain = bgraAt(plain, size, size - 2, size / 2)[1]
+        val brightDeband = bgraAt(debanded, size, size - 2, size / 2)[1]
+        assertTrue(
+            kotlin.math.abs(darkDeband - darkPlain) <= 1 && kotlin.math.abs(brightDeband - brightPlain) <= 1,
+            "debanding moved a hard edge: dark $darkPlain to $darkDeband, bright $brightPlain to $brightDeband",
+        )
+
+        // The band must SOFTEN. What that can mean in an 8-bit target is worth being exact about,
+        // because the obvious assertion is wrong: an 8-bit write cannot hold a value between two
+        // adjacent 8-bit levels, so debanding can never invent a third one here. What it does is
+        // break the hard step into a mixed transition, which is why this rung pairs with RQ-1.
+        //
+        // So the property is ORDER, not value: undebanded, the row is a clean step, every low
+        // sample before every high one. Debanded, that monotonicity is broken.
+        val bandRow = (2 until size / 2 - 2).map { bgraAt(debanded, size, it, size / 2)[1] }
+        val plainRow = (2 until size / 2 - 2).map { bgraAt(plain, size, it, size / 2)[1] }
+        fun nonDecreasing(row: List<Int>) = row.zipWithNext().all { (a, b) -> b >= a }
+        assertTrue(nonDecreasing(plainRow), "the undebanded band must be a clean step: $plainRow")
+        assertTrue(
+            !nonDecreasing(bandRow),
+            "debanding left the step exactly as it was, so it did nothing: $bandRow",
+        )
+        assertTrue(
+            bandRow.toSet() == plainRow.toSet(),
+            "debanding moved a sample outside the band's own two levels: $bandRow",
+        )
+    }
+
+    @Test
+    fun `debanding off leaves the write untouched`() {
+        // The ladder's first law again, for the second rung: asking for nothing must change nothing,
+        // including the chroma coordinate, which this rung also shifts.
+        val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
+        val composer = MetalFrameComposer(device)
+        val picture = solidNv12(16, 16, y = 120, cb = 100, cr = 150)
+        val frame = TestFrame(16, 16, bt(ColorMatrix.Bt709))
+        val before = render(composer, frame, picture, targetWidth = 16, targetHeight = 16)
+        val after = render(
+            composer, frame, picture, targetWidth = 16, targetHeight = 16,
+            qualityUniforms = packQualityUniforms(
+                RenderQuality.Off, sourceWidth = 16, sourceHeight = 16,
+            ),
+        )
+        assertTrue(before.contentEquals(after), "the neutral value changed the write")
     }
 
     private fun pqEncode1(y: Double): Double {

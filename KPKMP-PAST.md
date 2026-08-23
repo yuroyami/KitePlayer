@@ -9486,6 +9486,60 @@ NOT covered, and recorded rather than discovered later: the Apple KiteVideo read
 (`MetalPictureReader`) renders through the composer with the DISABLED block, so KiteVideo on Apple
 does not dither yet; Android's shipping interop tier has no shader at all. Both are stated in 17.21.
 
+### 14.126 KP-RQ rung 2, 2026-08-23: debanding and chroma siting
+
+The rung that matters for this project's content, and the one whose two wrong turns are worth more
+than the code.
+
+**What landed.** Four taps on a ring around each texel, rotated by a per-pixel hash so the taps do
+not all face one way; where the neighbourhood is flat the sample is replaced by the ring's average,
+and grain goes back on afterwards. In the Metal body it runs on the Y, Cb and Cr planes BEFORE the
+matrix, which is where mpv does it. Chroma siting rides the same rung: 4:2:0 chroma is sited half a
+luma texel left, and sampling both planes at one coordinate shifts colour a quarter of a chroma
+texel right, which shows as a coloured seam on hard vertical edges. Both are gated on the same flag,
+so a build that asked for nothing still writes the pre-17.21 pixels, pinned by its own test.
+
+**The first wrong turn: the wrong comparison.** The obvious test, "is any tap further from the
+centre than the threshold", rejects exactly what this pass exists to fix. Banding in 8-bit content
+is a ONE STEP difference, 1/255, which is already larger than any usable threshold, so every band
+was classified as an edge and the pass did nothing while costing all four taps. libplacebo compares
+the centre against the ring's AVERAGE, which halves what a band presents while leaving an edge's
+difference enormous, and that is what lets a single threshold separate them. Fixed to the reference
+shape.
+
+**The second wrong turn: the wrong unit.** mpv's threshold of 48 was read as 1/65536, which lands
+at 0.00073, BELOW the half step a band presents after averaging. The correct scale is 1/16384,
+which lands at 0.0029, just above it. Wrong by a factor of four and the symptom is identical to
+having no pass at all. The packer now carries the derivation in a comment, because the number is
+meaningless without it.
+
+**The third correction was to the TEST, and it is a real finding about the pass.** The natural
+assertion, "debanding produces a value between the two band levels", is impossible: an 8-bit target
+has no value between two adjacent 8-bit levels for the smoothed result to land on. Into 8 bits this
+pass can only redistribute a hard step into a mixed transition. That is why RQ-1 and RQ-2 belong
+together and why `RenderQuality.Standard` turns both on; the KDoc now says so. The test therefore
+asserts ORDER, not value: the undebanded row is monotonic across the step and the debanded row is
+not, while a hard edge elsewhere in the same picture moves by at most one step. Proven red by
+neutering the shader branch.
+
+**Coverage, honestly.** The Metal half is implemented, tested and proven red on the host. The
+Android GL half is implemented and COMPILES but is UNTESTED and UNMEASURED on hardware, and the
+register keeps that as an open remainder rather than a claim. Two reasons, both discovered today.
+The Android GPU tier gates at API 31 and the only Android device to hand is a Redmi Note 8 at API
+29, so the blit cannot run there at all. And the instrumented suites cannot even be BUILT for that
+device: `connectedAndroidTest` fails in dexing with "Space characters in SimpleName ... are not
+allowed prior to DEX version 040", because the suites use backtick test names with spaces, which
+dex only for minSdk 31. That is pre-existing and unrelated to this rung; `FrameLayoutTest` is the
+first file it trips over. It is now a register row of its own.
+
+The Android blit also differs from Metal in a way the code states: MediaCodec hands over an external
+texture that is already RGB, so the ring is walked on converted colour rather than on planes, and
+the ring is sized in OUTPUT texels because the external texture's own size is not exposed there.
+
+**Owed:** the device fps measurement that the ladder's second law requires before any default moves.
+The owner's iPhone left the bus mid-session, so RQ-2 has no cost number yet. RQ-1's measurement
+stands (free on an A12); RQ-2's is the next thing to take.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

@@ -94,6 +94,10 @@ public class AndroidGpuImageVideoRenderer(
      */
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
         bridge.ditherStep.set(if (quality.dither) 1f / 255f else 0f)
+        // Same 1/16384 scale as the Metal packer, for the same reason recorded there: a one step
+        // band survives a smaller threshold and the pass would then do nothing.
+        bridge.debandThreshold.set(if (quality.deband) quality.debandThreshold / 16384f else 0f)
+        bridge.debandRange.set(quality.debandRange)
     }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
@@ -386,6 +390,12 @@ private class OesRgbaBridge(
 
     /** One output step when dithering is on, zero when it is off. Read by the blit. */
     val ditherStep = java.util.concurrent.atomic.AtomicReference(0f)
+
+    /** Above zero turns debanding on and is the flatness threshold in 0..1. Read by the blit. */
+    val debandThreshold = java.util.concurrent.atomic.AtomicReference(0f)
+
+    /** Ring radius in source pixels at the first iteration. */
+    val debandRange = java.util.concurrent.atomic.AtomicReference(16f)
     private val startup = AtomicReference<Result<GlState>>()
     private val ready = CountDownLatch(1)
     @Volatile private var closed = false
@@ -409,6 +419,8 @@ private class OesRgbaBridge(
                         requestedViewport,
                         adjust,
                         ditherStep,
+                        debandThreshold,
+                        debandRange,
                         publish,
                         recordSuperseded,
                         reportFailure,
@@ -559,7 +571,14 @@ internal class GlState private constructor(
     private val adjust: AtomicReference<FloatArray?>,
     private val ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
     private val ditherStepUniform: Int,
+    private val debandThreshold: java.util.concurrent.atomic.AtomicReference<Float>,
+    private val debandRange: java.util.concurrent.atomic.AtomicReference<Float>,
+    private val debandThresholdUniform: Int,
+    private val debandStepUniform: Int,
+    private val debandSeedUniform: Int,
 ) : AutoCloseable {
+    /** Advances per draw so the debanding ring and its grain do not sit still. */
+    private val debandSeed = java.util.concurrent.atomic.AtomicInteger(0)
     private val transform = FloatArray(16)
     private var outputQueue: OutputQueue? = null
     private var outputSurface: EGLSurface = EGL14.EGL_NO_SURFACE
@@ -670,6 +689,18 @@ internal class GlState private constructor(
                 GLES20.glUniform1f(colorEnabledUniform, 1f)
             }
             GLES20.glUniform1f(ditherStepUniform, ditherStep.get())
+            GLES20.glUniform1f(debandThresholdUniform, debandThreshold.get())
+            // The ring is walked in OUTPUT texels on this tier, which is an approximation the Metal
+            // body does not need: there the source's own size is known, here the external texture's
+            // is not exposed. At or near 1:1 the two agree; on a large upscale the ring is wider in
+            // source terms than asked for, which softens more, so the range is the knob to lower.
+            val ring = debandRange.get()
+            GLES20.glUniform2f(
+                debandStepUniform,
+                ring / outputSize.width.coerceAtLeast(1),
+                ring / outputSize.height.coerceAtLeast(1),
+            )
+            GLES20.glUniform1f(debandSeedUniform, (debandSeed.getAndIncrement() % 1024).toFloat())
             GLES20.glEnableVertexAttribArray(position)
             GLES20.glEnableVertexAttribArray(texCoord)
             VERTICES.position(0)
@@ -913,7 +944,14 @@ internal class GlState private constructor(
             uniform vec3 uColorOffset;
             uniform float uColorEnabled;
             uniform float uDitherStep;
+            uniform float uDebandThreshold;
+            uniform vec2 uDebandStep;
+            uniform float uDebandSeed;
             varying vec2 vTexCoord;
+
+            float kpHash(vec2 p, float seed) {
+                return fract(sin(dot(vec3(p, seed), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+            }
 
             /* The 8x8 ordered Bayer value for a pixel, in 0..63.
              *
@@ -938,6 +976,28 @@ internal class GlState private constructor(
 
             void main() {
                 vec4 c = texture2D(uTexture, vTexCoord);
+                /* Debanding, this tier's version of RQ-2.
+                 *
+                 * It differs from the Metal body in a way worth stating rather than hiding: there
+                 * the pass runs on the Y, Cb and Cr planes BEFORE the matrix, which is where mpv
+                 * does it. Here MediaCodec hands over an external texture that is already RGB, so
+                 * the ring is walked on the converted colour instead. Same shape, same threshold
+                 * law, one conversion later. */
+                if (uDebandThreshold > 0.0) {
+                    float angle = kpHash(gl_FragCoord.xy, uDebandSeed) * 6.2831853;
+                    vec2 dir = vec2(cos(angle), sin(angle)) * uDebandStep;
+                    vec2 perp = vec2(-dir.y, dir.x);
+                    vec3 a = texture2D(uTexture, vTexCoord + dir).rgb;
+                    vec3 b = texture2D(uTexture, vTexCoord - dir).rgb;
+                    vec3 d = texture2D(uTexture, vTexCoord + perp).rgb;
+                    vec3 e = texture2D(uTexture, vTexCoord - perp).rgb;
+                    vec3 avg = (a + b + d + e) * 0.25;
+                    /* Per channel, and against the AVERAGE rather than the worst tap: a one step
+                     * band is smaller than any usable worst-tap threshold, so that test would
+                     * reject exactly what this pass exists to fix. */
+                    vec3 flat3 = step(abs(c.rgb - avg), vec3(uDebandThreshold));
+                    c.rgb = mix(c.rgb, avg, flat3);
+                }
                 if (uColorEnabled > 0.5) {
                     c.rgb = clamp(uColorMatrix * c.rgb + uColorOffset, 0.0, 1.0);
                 }
@@ -976,6 +1036,8 @@ internal class GlState private constructor(
             requestedViewport: AtomicReference<GpuViewport?>,
             adjust: AtomicReference<FloatArray?>,
             ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
+            debandThreshold: java.util.concurrent.atomic.AtomicReference<Float>,
+            debandRange: java.util.concurrent.atomic.AtomicReference<Float>,
             publish: (AndroidGpuImageFrame) -> Unit,
             recordSuperseded: (Long) -> Unit,
             reportFailure: (Throwable) -> Unit,
@@ -1055,6 +1117,9 @@ internal class GlState private constructor(
                 val colorOffsetUniform = GLES20.glGetUniformLocation(program, "uColorOffset")
                 val colorEnabledUniform = GLES20.glGetUniformLocation(program, "uColorEnabled")
                 val ditherStepUniform = GLES20.glGetUniformLocation(program, "uDitherStep")
+                val debandThresholdUniform = GLES20.glGetUniformLocation(program, "uDebandThreshold")
+                val debandStepUniform = GLES20.glGetUniformLocation(program, "uDebandStep")
+                val debandSeedUniform = GLES20.glGetUniformLocation(program, "uDebandSeed")
                 check(position >= 0 && texCoord >= 0 && sampler >= 0 && texMatrixUniform >= 0) {
                     "Android GPU image shader interface was optimized away"
                 }
@@ -1084,6 +1149,11 @@ internal class GlState private constructor(
                     adjust = adjust,
                     ditherStep = ditherStep,
                     ditherStepUniform = ditherStepUniform,
+                    debandThreshold = debandThreshold,
+                    debandRange = debandRange,
+                    debandThresholdUniform = debandThresholdUniform,
+                    debandStepUniform = debandStepUniform,
+                    debandSeedUniform = debandSeedUniform,
                 )
                 surfaceTexture.setOnFrameAvailableListener(
                     {

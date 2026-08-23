@@ -76,7 +76,25 @@ public class MetalVideoRenderer public constructor(
 
     /** The picture controls, pre-packed for the shader once per setting. Read per draw. */
     private val adjustUniforms = atomic(DISABLED_ADJUST_UNIFORMS)
-    private val qualityUniforms = atomic(DISABLED_QUALITY_UNIFORMS)
+    private val quality = atomic(io.github.yuroyami.kiteplayer.RenderQuality.Off)
+
+    /**
+     * Advances once per encode and seeds the debanding ring, so its taps and its grain differ from
+     * frame to frame. A fixed seed would freeze the pattern into a visible texture on flat areas.
+     */
+    private val qualitySeed = atomic(0)
+
+    /**
+     * The quality block for THIS frame: the passes are the player's, but the ring is walked in the
+     * SOURCE's texels, so the size has to come from the frame rather than from the setter.
+     */
+    private fun qualityUniformsFor(frame: VideoFrame): FloatArray = packQualityUniforms(
+        quality.value,
+        targetBits = 8,
+        sourceWidth = frame.size.width,
+        sourceHeight = frame.size.height,
+        frameSeed = (qualitySeed.incrementAndGet() % 1024).toFloat(),
+    )
 
     /** The ruling framing controls, under the same ownership as the scale mode. */
     private val videoTransform = atomic(io.github.yuroyami.kiteplayer.VideoTransform.Identity)
@@ -195,7 +213,7 @@ public class MetalVideoRenderer public constructor(
                 scaleMode = scaleMode.value,
                 videoTransform = videoTransform.value,
                 adjustUniforms = adjustUniforms.value,
-                qualityUniforms = qualityUniforms.value,
+                qualityUniforms = qualityUniformsFor(frame),
                 toneMapped = true,
             )
             presented.incrementAndGet()
@@ -271,7 +289,7 @@ public class MetalVideoRenderer public constructor(
                 scaleMode = scaleMode.value,
                 videoTransform = videoTransform.value,
                 adjustUniforms = adjustUniforms.value,
-                qualityUniforms = qualityUniforms.value,
+                qualityUniforms = qualityUniformsFor(meta),
                 toneMapped = true,
             )
         } catch (failure: Throwable) {
@@ -302,7 +320,7 @@ public class MetalVideoRenderer public constructor(
      * dither spreads a value across; a paused picture re-encodes so a change is visible at once.
      */
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
-        qualityUniforms.value = packQualityUniforms(quality, targetBits = 8)
+        this.quality.value = quality
         // SOL-R1 retired the old paused-picture limit: the retained picture re-encodes now.
         requestRedraw()
     }

@@ -2437,6 +2437,7 @@ locating each symbol by name, because every line number in both audit documents 
 | Row | Open item, in one line | Ver | Detail |
 |---|---|---|---|
 | KP-PROD | THE PRODUCTION PROGRAM, owner-ordered 2026-08-22: the ordered handoff from here to a shippable player; every row below maps into one of its four phases | [V] 08-22 | 17.16, here |
+| KP-RQ | THE RENDER-QUALITY LADDER, owner-ordered 2026-08-23: dither, deband, scaler, linear light, Anime4K; libplacebo REJECTED with reasons | [V] 08-23 | 17.21, here |
 | SOL-S3 | overlay draws the SOURCE bitmap's size, never the region's own | [V] 08-19 | 17.11, here |
 | SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
 | SOL-S8 | positioned bottom cues still consume implicit stacking space | [V] 08-19 | 17.11, here |
@@ -3104,3 +3105,107 @@ inside the lines. These are rules, not advice.
 8. **Report deviations louder than successes.** A skipped step, a flaky test, a widened
    tolerance, anything ASSUMED: its own sentence in the log entry. A deviation reported is
    process; a deviation hidden is corruption.
+
+
+### 17.21 KP-RQ: the render-quality ladder, owner-ordered 2026-08-23
+
+**The question this answers.** The owner asked what gives KitePlayer a visible edge instead of
+integrating libplacebo. This section is the whole answer, written as a handoff: an agent with this
+section, the code, and section 17.20's working laws needs nothing else. Every claim below about the
+tree was verified against the source on 2026-08-23, the same day the audio channel and subtitle
+canvas fixes were staged (register entry pending with the 0.0.14 commit).
+
+#### The verdict on libplacebo, and the four reasons
+
+REJECTED. (1) It is a large C dependency wanting Vulkan or GL or a Metal translation layer on every
+target, and it ends the one-dependency-line story KC-EMBED was built to earn; that story is a
+product feature. (2) It cannot follow the engine to wasm, and phase W says the web target is real.
+(3) Its playback-correctness core is already SHIPPED here: M3's PQ and HLG decode, the BT.2100
+OOTF, gamut conversion in linear light and an EETF roll-off all live in `MetalVideoSupport.kt` and
+were measured, not assumed. (4) The part of libplacebo a viewer would actually notice on this
+project's content is about 150 lines of shader, written below as RQ-1 to RQ-4.
+
+#### What the tree has today, verified, with the gaps stated as defects
+
+The Apple picture shader (`METAL_SHADER_SOURCE` in `kiteplayer-output` `MetalVideoSupport.kt`,
+fragment `kp_picture`): correct YUV matrices keyed on the declared colour space, limited and full
+range, 16-bit plane textures for 10-bit content, tone mapping and eq as separate bit-exact-off
+uniform blocks. The gaps: sampling is BILINEAR IN GAMMA SPACE (`mag_filter::linear`), the target is
+`BGRA8Unorm` with NO DITHER (10-bit sources are truncated to 8 at the write), there is NO DEBAND,
+and chroma is sampled with no siting correction. On the owner's iPhone XS an 800p film is upscaled
+about 1.4x bilinearly; banding on gradients and soft edges are both visible today.
+
+#### The surfaces, so nobody discovers coverage the hard way
+
+| Surface | Programmable stage today | Gets the ladder? |
+|---|---|---|
+| Apple, ALL paths: Metal interop layer AND KiteVideo (the readback `MetalPictureReader` WRAPS `MetalFrameComposer`, verified) | one shared shader body | YES, written once |
+| Android, KiteVideo GPU tier (API 31+) | the GL blit in `AndroidGpuImageVideoRenderer.kt` (fragment at its line ~893, colour matrix already a uniform) | YES, the second copy |
+| Android, INTEROP (the shipping default): MediaCodec decodes DIRECT to the SurfaceView Surface | NONE, no shader runs on the picture | NO. Honest row: closing this means routing interop through a GL compositor, which is SOL-R14 and AGW territory, not this ladder |
+| CPU paths (Android pre-31 KiteVideo, desktop JVM, web canvas, Apple CG fallback) | none | NO, out of scope |
+
+So Apple gets full coverage in one place; Android gets it only where a shader already runs. That
+asymmetry is stated here so it is chosen, not discovered.
+
+#### The ladder
+
+Every rung obeys the same four laws. (1) DISABLED IS BIT-EXACT, the discipline the adjust uniforms
+and tone mapping already prove: off means the write is identical to today's, byte for byte, and a
+golden test pins it. (2) NOTHING DEFAULTS ON WITHOUT A DEVICE MEASUREMENT: the XS runs hard 800p
+AV1 at 17 to 21 fps against a 24 fps target, so headroom is thin and every pass states its measured
+fps delta from the sample app's `--scenario` harness before its default is decided. (3) One knob
+surface: a `RenderQuality` config on `PlayerConfig` plus a live setter, modelled exactly on
+`VideoAdjustments`. (4) A rung lands in the Metal body and the Android GL blit in the SAME surge,
+or the surge opens a row saying which half it skipped and why.
+
+**RQ-1, dithering.** At the final write, after every other stage: an 8x8 ordered Bayer matrix (a
+64x64 blue-noise texture is the upgrade if the pattern is visible), amplitude 1/255. This is the
+cheapest rung and the precision to dither FROM already exists, because 10-bit planes ride R16
+textures into the shader. Proof: a synthetic 10-bit gradient clip added to `testmedia.sh`; the
+golden asserts no flat run longer than the dither period, and the bit-exact-off golden pins the
+disabled path. Estimate: under one session, both shader bodies.
+
+**RQ-2, debanding, plus chroma siting in the same surge.** mpv's shape: for each plane sample the
+average of taps at a small random-radius ring around the texel, replace the sample when it differs
+by less than a threshold, then add low-amplitude grain; one iteration first, thresholds as config
+with mpv's defaults as the reference point. Run it on the sampled Y, Cb, Cr BEFORE the matrix,
+which is where mpv does it and what the plane textures make natural. Chroma siting rides along: a
+half-texel horizontal offset for left-sited 4:2:0 in the sampler coordinates, two lines. This rung
+is the single most visible one on this project's anime content. Gate: measured fps delta on the XS
+under 5 percent at 800p, else it defaults off on A-series below A14. Estimate: one session.
+
+**RQ-3, the upscaling kernel.** Catmull-Rom bicubic for luma, using the standard four-bilinear-
+fetch formulation so it costs four samples, not sixteen; chroma stays bilinear until measured.
+Fit-mode upscales only; downscale stays bilinear for now and says so. Proof: a checkerboard and
+text-card clip, golden plus eyeball; the sharpness difference at the XS's 1.4x is the point.
+Estimate: one session.
+
+**RQ-4, linear-light scaling.** The structural rung, deliberately last of the four: today decode
+and scale are ONE pass, with scaling done by the sampler in gamma space. Correct light-linear
+scaling needs two passes: decode to a linear RGBA16F intermediate at source size, then the scaled
+draw with the RQ-3 kernel. Touches `MetalFrameComposer`'s encode and the GL tier's FBO setup, so
+it carries the regression risk the first three rungs avoid. Do it only after RQ-1 to RQ-3 are
+measured in. Estimate: two sessions.
+
+**RQ-5, Anime4K, the flagship.** A curated, built-in port of the Anime4K shader chains at two
+quality tiers, not a user-shader format: mpv compatibility is explicitly out of scope. Its own
+config surface, default OFF everywhere, device-gated guidance (A14 and M-class up), and its own
+measurement story per tier per device. This is the one rung that is an EDGE rather than parity,
+because the project's dominant content is exactly what those chains were built for. Its own
+program, planned when RQ-1 to RQ-4 are done; rough shape two to four sessions.
+
+**RQ-6, a horizon row, not scheduled.** True HDR passthrough on capable Apple displays: skip the
+tone map, float16 target, `wantsExtendedDynamicRange` on the layer. The one libplacebo capability
+worth envying that the ladder does not cover. Recorded so it is not forgotten; nothing below
+depends on it.
+
+#### Why this is the edge, stated once so the ladder is not mistaken for the strategy
+
+The ladder buys parity with mpv's defaults on the things a viewer sees. The EDGE is what the
+architecture already does that libplacebo's hosts structurally cannot: one Kotlin engine on
+Android, iOS, desktop and web; video as a true Compose primitive; a virtual-time engine whose
+device bugs reproduce in unit tests (this week: a 10 s device stall reproduced at 10190 ms virtual,
+twice); and one dependency line. The ladder exists so nobody can dismiss the picture while those
+advantages do the winning. Build RQ-1 and RQ-2 first, measure on the owner's XS, show the owner a
+before and after on a gradient and an anime clip, and only then decide how far up the ladder to
+climb.

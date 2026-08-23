@@ -1454,8 +1454,9 @@ road's order: W.
   - **M5, the demuxer cache.** Forward RAM cache with a seek-back window in the engine's own
     Kotlin, `Progress.bufferedRanges` stops being the honest empty list. The one mpv advantage
     that is core engine work rather than a dependency. Sized at entry.
-  - **M owner riders:** the iPhone KiteStats background-slideshow run and the physical device
-    session AGW-1, both owner-blocked, both unchanged.
+  - **M owner riders:** the physical device session AGW-1 alone. The iPhone rider is CLOSED:
+    the device session ran on 2026-08-22 and 08-23 and did not need KiteStats, because the
+    slideshow was not a decode or a renderer problem at all. PAST 14.122 has the whole finding.
 
 **W. REAL ON DESKTOP AND WEB.** (ENTERED 2026-08-17. The expansion is 17.13. Progress: W.1, W.2,
 W.5, W.8 and W.9 CLOSED; W.3 and the Kotlin/Native desktop targets landed; W.6 landed its split
@@ -2469,7 +2470,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |
 | KP-API | throwing stubs, unusable default factory, five dead knobs, global logger | [V] 08-19 | 17.16, here |
 | KP-B1..B13 | player build and release; no CI of any kind exists | [V] 08-19 | 17.16, here |
-| M riders | the iPhone KiteStats run and the physical device session | [owner] | 17.12, here |
+| M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |
 
@@ -2562,9 +2563,9 @@ this phase is mechanical; nothing needs a device.
 
 **Phase 2: DEVICE-TRUE. Convert one-Mac claims into device claims.** Mostly owner-gated hardware
 sessions, which is why phase 1 goes first: [owner] AGW-1 (Android GPU on a physical phone), the
-M riders (iPhone KiteStats run, the physical-device session), the W riders (the Windows matrix
-has NEVER run on Windows; mingw links are not runs), F-ALPHA1/ROT1/POS1 (real pixels on real
-screens), 17.17 boxes 12 and 13, and the iOS background slideshow evidence (memory row). Also
+M rider that is left (the physical-device session; the iPhone run is done, PAST 14.122), the
+W riders (the Windows matrix has NEVER run on Windows; mingw links are not runs),
+F-ALPHA1/ROT1/POS1 (real pixels on real screens), 17.17 boxes 12 and 13. Also
 here: PAR-3 (android-x64 zero SIMD), PAR-1 [owner] and PAR-2 (hwaccel truth on mingw and linux),
 PAR-6 (hardware AV1 cannot engage; needs the by-name decoder policy KC-CAPS also wants). Exit:
 every platform the README advertises has at least one physical-device green run recorded.

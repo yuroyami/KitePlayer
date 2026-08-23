@@ -2,6 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.sample
 
+import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
@@ -32,6 +33,7 @@ import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSSelectorFromString
 import platform.Foundation.NSUserDomainMask
+import platform.UIKit.UIApplication
 import platform.UIKit.UIButton
 import platform.UIKit.UIButtonTypeSystem
 import platform.UIKit.UIColor
@@ -42,10 +44,15 @@ import platform.posix.fclose
 import platform.posix.fflush
 import platform.posix.fileno
 import platform.posix.fopen
+import platform.posix.fputs
 import platform.posix.fsync
 import platform.posix.fwrite
 import platform.posix.rename
+import kotlin.math.roundToInt
 import kotlin.system.exitProcess
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -62,6 +69,14 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
     private val playerView = KitePlayerUIView().apply { installMobileRenderer() }
     private val scope = MainScope()
     private val smokeMode = NSProcessInfo.processInfo.arguments.contains(SMOKE_ARGUMENT)
+
+    /** `--scenario a.mkv b.mp4`: clip names under Documents, run in order by [runScenario]. */
+    private val scenarioClips: List<String> = NSProcessInfo.processInfo.arguments.let { arguments ->
+        val at = arguments.indexOf(SCENARIO_ARGUMENT)
+        if (at < 0) emptyList() else arguments.drop(at + 1).map { it.toString() }
+    }
+    private val scenarioMode = scenarioClips.isNotEmpty()
+    private var scenarioStarted = false
     private val controlButtons = mutableListOf<UIButton>()
 
     private var smokeStarted = false
@@ -74,7 +89,9 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         super.viewDidLoad()
         view.backgroundColor = UIColor.blackColor
         view.addSubview(playerView)
-        if (!smokeMode) installControls()
+        if (!smokeMode && !scenarioMode) installControls()
+        // A scripted run outlives the auto-lock timer, and a locked phone suspends the app.
+        if (scenarioMode) UIApplication.sharedApplication.idleTimerDisabled = true
     }
 
     override fun viewDidLayoutSubviews() {
@@ -85,7 +102,11 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
 
     override fun viewDidAppear(animated: Boolean) {
         super.viewDidAppear(animated)
-        if (smokeMode) {
+        if (scenarioMode) {
+            if (scenarioStarted) return
+            scenarioStarted = true
+            scope.launch { runScenario() }
+        } else if (smokeMode) {
             if (smokeStarted) return
             smokeStarted = true
             scope.launch { runSmoke() }
@@ -97,7 +118,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
 
     override fun viewDidDisappear(animated: Boolean) {
         super.viewDidDisappear(animated)
-        if (!smokeMode) closeSample()
+        if (!smokeMode && !scenarioMode) closeSample()
     }
 
     private fun installControls() {
@@ -302,12 +323,217 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         }
     }
 
+
+    // ---------------------------------------------------------------------------------------------
+    // The device scenario: open, play, pause, seek, open the next clip, with every step timed.
+    // Writes Documents/scenario-trace.log, which `xcrun devicectl device copy from` pulls back.
+    // ---------------------------------------------------------------------------------------------
+
+    private suspend fun runScenario() {
+        val documents = documentsDirectory()
+        val trace = ScenarioTrace("$documents/$SCENARIO_TRACE_NAME")
+        KiteLog.install { tag, message -> trace.line("log $tag: $message") }
+        val first = "$documents/${scenarioClips[0]}"
+        val second = "$documents/${scenarioClips.getOrElse(1) { scenarioClips[0] }}"
+        var player = KitePlayer.create(PlayerConfig(backends = mobileBackends()))
+        playerView.player = player
+        var sampler = scope.launch { sampleScenario(player, trace) }
+        try {
+            withTimeout(SCENARIO_TIMEOUT) {
+                trace.line("### phase 1: first open, fresh player")
+                openAndSettle(player, trace, first, stopFirst = false)
+
+                trace.line("### phase 2: SECOND open, same player, same file")
+                openAndSettle(player, trace, first, stopFirst = true)
+
+                trace.line("### phase 3: third open, same player, other file")
+                openAndSettle(player, trace, second, stopFirst = true)
+
+                trace.line("### phase 4: same file, BRAND NEW player")
+                sampler.cancel()
+                val closeStarted = TimeSource.Monotonic.markNow()
+                runCatching { withTimeout(CLOSE_TIMEOUT) { player.closeAndAwait() } }
+                    .onFailure { trace.line("phase 4 close failed: $it") }
+                trace.line("close took ${closeStarted.elapsedNow().inWholeMilliseconds} ms")
+                runCatching { playerView.player = null }
+                player = KitePlayer.create(PlayerConfig(backends = mobileBackends()))
+                playerView.player = player
+                sampler = scope.launch { sampleScenario(player, trace) }
+                openAndSettle(player, trace, second, stopFirst = false)
+            }
+        } catch (failure: Throwable) {
+            trace.line("scenario failed: ${failure.stackTraceToString()}")
+        } finally {
+            sampler.cancel()
+            runCatching { trace.line(player.diagnosticsDump()) }
+            runCatching { withTimeout(CLOSE_TIMEOUT) { player.closeAndAwait() } }
+                .onFailure { trace.line("final close failed: $it") }
+            runCatching { playerView.player = null }
+            trace.line("scenario done")
+            trace.close()
+            KiteLog.install(null)
+            exitProcess(0)
+        }
+    }
+
+    private suspend fun openAndSettle(
+        player: KitePlayer,
+        trace: ScenarioTrace,
+        path: String,
+        stopFirst: Boolean,
+    ) {
+        if (stopFirst) {
+            val stopStarted = TimeSource.Monotonic.markNow()
+            player.stop()
+            trace.line("stop took ${stopStarted.elapsedNow().inWholeMilliseconds} ms")
+        }
+        val openStarted = TimeSource.Monotonic.markNow()
+        player.open(MediaItem(path))
+        val snapshot = player.state.value
+        trace.line(
+            "open $path took ${openStarted.elapsedNow().inWholeMilliseconds} ms " +
+                "status=${snapshot.status} duration=${snapshot.duration} " +
+                "hwdec=${player.stats.value.hardwareDecode} " +
+                "tracks=${snapshot.tracks.all.joinToString { "${it.kind}:${it.codec}" }}",
+        )
+        scenarioPlay(player, trace)
+        delay(5.seconds)
+        // The seek is the whole point of the ordering: it moves the player's epoch, and the NEXT
+        // open is the one that used to sit out both startup deadlines and land on no picture.
+        val target = (snapshot.duration ?: 30.seconds) / 2
+        val preciseStarted = TimeSource.Monotonic.markNow()
+        player.seek(target, SeekMode.Precise)
+        trace.line(
+            "precise seek to $target took ${preciseStarted.elapsedNow().inWholeMilliseconds} ms " +
+                "landed=${player.position()} status=${player.state.value.status}",
+        )
+        delay(3.seconds)
+        scenarioPause(player, trace)
+        trace.line(player.diagnosticsDump())
+    }
+
+    private suspend fun scenarioPlay(player: KitePlayer, trace: ScenarioTrace) {
+        val submittedBefore = player.stats.value.submittedFrames
+        player.play()
+        val playingAfter = awaitWithin(5.seconds) { player.state.value.status == PlaybackStatus.Playing }
+        val frameAfter = awaitWithin(5.seconds) { player.stats.value.submittedFrames > submittedBefore }
+        trace.line("play: Playing after $playingAfter ms, next frame submitted after $frameAfter ms (-1 = not within 5 s)")
+    }
+
+    private suspend fun scenarioPause(player: KitePlayer, trace: ScenarioTrace) {
+        val started = TimeSource.Monotonic.markNow()
+        player.pause()
+        val pausedAfter = awaitWithin(5.seconds) { player.state.value.status == PlaybackStatus.Paused }
+        // When the picture really stops: the last time the submitted count moved after the call.
+        var lastSubmitted = player.stats.value.submittedFrames
+        var lastChangeMs = 0L
+        val watchStarted = TimeSource.Monotonic.markNow()
+        while (watchStarted.elapsedNow() < 3.seconds) {
+            delay(50.milliseconds)
+            val submitted = player.stats.value.submittedFrames
+            if (submitted != lastSubmitted) {
+                lastSubmitted = submitted
+                lastChangeMs = started.elapsedNow().inWholeMilliseconds
+            }
+        }
+        trace.line(
+            "pause: Paused after $pausedAfter ms, last frame submitted at +$lastChangeMs ms, " +
+                "position=${player.position()} (-1 = not within 5 s)",
+        )
+    }
+
+    private suspend fun scenarioSeekLater(player: KitePlayer, trace: ScenarioTrace, target: Duration) {
+        val submittedBefore = player.stats.value.submittedFrames
+        player.seekLater(target, SeekMode.KeyframeThenRefine)
+        val frameAfter = awaitWithin(15.seconds) { player.stats.value.submittedFrames > submittedBefore }
+        val nearAfter = awaitWithin(15.seconds) {
+            (player.position() - target).absoluteValue < 2.seconds && player.stats.value.submittedFrames > submittedBefore
+        }
+        trace.line(
+            "seekLater to $target: first frame after $frameAfter ms, within 2 s of target after $nearAfter ms, " +
+                "position=${player.position()} status=${player.state.value.status}",
+        )
+    }
+
+    /** Milliseconds until [condition] holds, polled every 10 ms, or -1 when [limit] passes first. */
+    private suspend fun awaitWithin(limit: Duration, condition: () -> Boolean): Long {
+        val started = TimeSource.Monotonic.markNow()
+        while (started.elapsedNow() < limit) {
+            if (condition()) return started.elapsedNow().inWholeMilliseconds
+            delay(10.milliseconds)
+        }
+        return -1
+    }
+
+    /** One line every [SCENARIO_SAMPLE_INTERVAL]: the counters, and how fast the position moves against wall time. */
+    private suspend fun sampleScenario(player: KitePlayer, trace: ScenarioTrace) {
+        val started = TimeSource.Monotonic.markNow()
+        var lastPosition = player.position()
+        var lastMark = TimeSource.Monotonic.markNow()
+        while (true) {
+            delay(SCENARIO_SAMPLE_INTERVAL)
+            val stats = player.stats.value
+            val position = player.position()
+            val wall = lastMark.elapsedNow()
+            val rate = if (wall > Duration.ZERO) (position - lastPosition) / wall else 0.0
+            lastPosition = position
+            lastMark = TimeSource.Monotonic.markNow()
+            trace.line(
+                "t=${started.elapsedNow().inWholeMilliseconds} ${liveActorState(player)} " +
+                    "status=${player.state.value.status} " +
+                    "pos=${position.inWholeMilliseconds} rate=${(rate * 100).roundToInt()}% " +
+                    "decoded=${stats.decodedVideoFrames} submitted=${stats.submittedFrames} " +
+                    "presented=${playerView.presentedFrames} droppedLate=${stats.droppedFramesLate} " +
+                    "refused=${stats.refusedFrames} repeated=${stats.repeatedFrames} " +
+                    "videoQ=${stats.videoQueueDepth.inWholeMilliseconds} audioQ=${stats.audioQueueDepth.inWholeMilliseconds} " +
+                    "underruns=${stats.audioUnderruns} drift=${stats.avDrift.inWholeMilliseconds} " +
+                    "fps=${stats.videoDecodeFps.roundToInt()} hw=${stats.hardwareDecode} master=${stats.masterClock}",
+            )
+        }
+    }
+
     private suspend fun awaitPresentationAfter(previous: Long) {
         while (playerView.presentedFrames <= previous || !playerView.hasPicture) {
             delay(PRESENTATION_POLL)
         }
     }
 }
+
+
+/**
+ * The actor and worker line out of a live diagnostics dump.
+ *
+ * The stats flow is published by the actor, so it freezes while the actor sits inside a long open.
+ * This reads the same state directly, which is the only way to see WHICH side is starving there.
+ */
+private fun liveActorState(player: KitePlayer): String =
+    runCatching {
+        player.diagnosticsDump().lineSequence().first { it.contains("actor passes=") }.trim()
+    }.getOrElse { "actorState unavailable: $it" }
+
+/** One stamped line per event, appended to a file under Documents and echoed to stdout. */
+private class ScenarioTrace(path: String) {
+    private val file = fopen(path, "a") ?: error("cannot open $path")
+    private val started = TimeSource.Monotonic.markNow()
+
+    /** Safe from any thread: one stdio call per line, and stdio locks the stream per call. */
+    fun line(text: String) {
+        val stamped = "[+${started.elapsedNow().inWholeMilliseconds}] $text\n"
+        println(stamped.trimEnd())
+        fputs(stamped, file)
+        fflush(file)
+    }
+
+    fun close() {
+        fclose(file)
+    }
+}
+
+private fun documentsDirectory(): String = NSSearchPathForDirectoriesInDomains(
+    directory = NSDocumentDirectory,
+    domainMask = NSUserDomainMask,
+    expandTilde = true,
+).firstOrNull() as? String ?: error("the application has no Documents directory")
 
 private val PlaybackStatus.isTerminal: Boolean
     get() = this == PlaybackStatus.Ended || this == PlaybackStatus.Failed
@@ -391,6 +617,10 @@ private fun SmokeResult.toJson(): String = buildString {
 }
 
 private const val SMOKE_ARGUMENT = "--s1b-smoke"
+private const val SCENARIO_ARGUMENT = "--scenario"
+private const val SCENARIO_TRACE_NAME = "scenario-trace.log"
+private val SCENARIO_TIMEOUT = 10.minutes
+private val SCENARIO_SAMPLE_INTERVAL = 250.milliseconds
 private const val SMOKE_RESOURCE = "sync1080p30"
 private const val SMOKE_EXTENSION = "mp4"
 private const val RESULT_NAME = "s1b-smoke.json"

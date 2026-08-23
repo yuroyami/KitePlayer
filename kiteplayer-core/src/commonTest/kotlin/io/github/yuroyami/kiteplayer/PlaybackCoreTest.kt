@@ -766,6 +766,40 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `a second open after a seek primes its pipeline instead of discarding every frame`() = runTest {
+        val harness = CoreHarness(this)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(400.milliseconds)
+
+        // The one thing the sibling test above never does. A seek moves the player's epoch, and
+        // everything the NEXT session is built from has to be aligned to that epoch, not just the
+        // packet queues: a schedule left at the initial generation rejects every frame the new
+        // session decodes as stale, so nothing is ever presented (owner report 2026-08-22).
+        harness.core.seek(Pts(1_000_000), SeekMode.Precise)
+        harness.core.pause()
+        harness.run(100.milliseconds)
+
+        val presentedBefore = harness.renderer!!.count
+        val startedAt = harness.scheduler.currentTime
+        harness.core.stop()
+        harness.core.open(MediaItem("scripted://second"))
+        val elapsed = harness.scheduler.currentTime - startedAt
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+        assertTrue(
+            elapsed < 2_000,
+            "the replacement open took ${elapsed}ms: a seek before it must not cost the new session " +
+                "the initial-fill and first-frame deadlines",
+        )
+        assertTrue(
+            harness.renderer.count > presentedBefore,
+            "the open after a seek presented no frame at all: the new session decoded into a " +
+                "schedule still at the initial generation, so every frame was discarded as stale",
+        )
+        harness.close()
+    }
+
+    @Test
     fun `play and pause are idempotent in their own state and queue during an open`() = runTest {
         val harness = CoreHarness(this)
         harness.backend.openGate = kotlinx.coroutines.CompletableDeferred()

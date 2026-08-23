@@ -9280,6 +9280,75 @@ let it).
 mavenCentral() and one dependency line downloaded 0.1.1 from repo1, linked a macOS executable
 and an iOS simulator framework, and RAN: avcodec 62.11.100, dav1d true.
 
+### 14.122 KP-EPOCH, 2026-08-23: every open after the first was dead, and it was one line
+
+**The owner's report.** On an iPhone XS (iOS 18): the first video plays and seeks fine, then
+pause "ceases to abide". Sometimes it pauses, sometimes late, sometimes never. Seeking the same.
+Every format, and both Compose renderer paths. An earlier report from the same device said an
+800p AV1 clip played at about one frame every five to ten seconds.
+
+**None of the suspects was the cause.** Not dav1d, not VideoToolbox, not the Skia raster path,
+not the UIKit layer, not the audio clock, not iOS. The engine defect is in `commonMain` and every
+platform had it.
+
+**What it was.** `runOpen` tore the old session down and then built the new one while leaving
+`requestedEpoch` at whatever a previous SEEK had raised it to. A fresh session's packet queues
+were aligned to that carried epoch (`buildSession` did that deliberately), but a fresh session's
+DECODERS and its SCHEDULE start at `Generation.Initial`, and a decoder's only epoch boundary is
+`flush()`, which cannot run before it has decoded anything. So every frame the new file decoded
+was stamped gen0 while the workers ran at gen2, and `handOver` discarded all of them as stale.
+The initial fill and the first-frame push then each expired against their ten second deadlines,
+the open finished on no picture, and the session settled in **Ended at position 0**, which is the
+state where `pause()` is a documented no-op and `play()` silently restarts from zero.
+
+That is the whole owner report. The first file always worked because nothing had seeked yet. Any
+later seek flushed the decoders and repaired the session by accident, which is what made it look
+intermittent. In Synkplay the room broadcasts a rewind about once a second, so the repair kept
+happening and letting roughly one frame through per seek: the slideshow.
+
+**The fix is one line**, `requestedEpoch = Generation.Initial` in `runOpen` after the teardown,
+because the epoch exists to invalidate work still in flight inside ONE session and that session
+is gone. The other two rebuild paths were checked and deliberately NOT changed: the software
+recovery reopen already flushes its decoders into the epoch itself, and a track change
+repositions with a seek that does the same. The track-change path was suspected, tested twice
+including at position zero where its reposition seek does not fire, and could not be made to
+fail, so it was left alone rather than changed on a theory.
+
+**Evidence, in the order it was taken.**
+
+1. The device's own Synkplay log, pulled with `xcrun devicectl`, showed the shape: a 10.6 second
+   second open and the engine's own `StartupIncomplete` warning saying no frame left the schedule.
+2. A pure virtual-time unit test reproduced it on the JVM at **10190 ms**, which is the same
+   stall as the phone. It is committed as `a second open after a seek primes its pipeline instead
+   of discarding every frame`. The sibling test one line above it, which asserts the same property
+   without seeking first, passed throughout: that is exactly why this survived.
+3. Live `debugState` sampled during the stalled open (the stats flow freezes while the actor sits
+   inside a long open, which is what had hidden this) reported `frames=0` with the queues drained
+   and every stream at EOF: decoded, and thrown away.
+4. On the iPhone XS, before against after: second open **10625 ms to 162 ms**, third open
+   **10134 ms to 221 ms**, pause **ignored to 21-33 ms**, `pipeline not primed` warnings **2 to
+   0**, and the reopened sessions play at 99 to 101 percent of real time with zero dropped and
+   zero refused frames on AV1 800p and HEVC 1080p.
+
+**What this closes.** The iPhone half of the M owner riders, and the iOS background-slideshow
+evidence item in KP-PROD phase 2. AGW-1 and the Windows riders are untouched and still owner
+blocked.
+
+**What it left behind, on purpose.** `kiteplayer-sample`'s iOS host gained a `--scenario a.mkv
+b.mkv` mode: it drives open, play, pause, seek and reopen on a real device, writes
+`Documents/scenario-trace.log`, and samples the live diagnostics dump every 250 ms so a blocked
+actor cannot hide the state again. `diagnosticsDump()` gained an `actor passes=` liveness line.
+The sample's Xcode build phase lost its `kitecodec.ffmpeg.localRoot` plumbing, dead since the
+klibs started carrying FFmpeg.
+
+**One process warning for whoever runs the next device session.** Xcode staged a STALE app binary
+twice during this work, and a stale binary looks exactly like a fix that did not work. Verify the
+built `.app` actually contains the new code before believing any device run; searching the binary
+for a UTF-16LE marker string is enough.
+
+KitePlayer 0.0.12, this commit. Synkplay took the pin in 4f1116f2, its iOS framework
+linking green against it.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

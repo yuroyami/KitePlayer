@@ -1506,6 +1506,13 @@ internal class PlaybackCore(
         lastSeekAtNanos = 0
         framesShownAtLastSeek = 0
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+        // The epoch exists to invalidate work still in flight inside ONE session, and the session it
+        // referred to has just been torn down. Carrying its number into the replacement is what broke
+        // every open after a seek: the queues and workers took the carried epoch while the new
+        // decoders and schedule started at the initial one, so handOver dropped every frame decoded,
+        // both startup deadlines expired on no picture, and playback landed in Ended at position zero
+        // until some later seek happened to realign it (owner report 2026-08-22).
+        requestedEpoch = Generation.Initial
         // For the same reason as the pending seek above: a waiting selection names a track id from
         // the PREVIOUS media's table, and running it against the new file would rebuild the wrong
         // stream or silently change nothing and report success.
@@ -1852,9 +1859,11 @@ internal class PlaybackCore(
             videoStream?.videoSize?.let { emitEvent(PlayerEvent.VideoSizeChanged(it)) }
 
             val softLimitUs = config.buffer.softTarget.inWholeMicroseconds
-            // A queue starts at the initial generation, and a session built after a track change starts at
-            // whatever epoch the player has reached. Aligning them here is what stops the demuxer's very
-            // first packet from being rejected as stale, which would leave the new session with nothing.
+            // A queue starts at the initial generation, and a rebuild starts at whatever epoch the
+            // player has reached. Aligning them here is what stops the demuxer's very first packet
+            // from being rejected as stale, which would leave the new session with nothing. A rebuild
+            // realigns the rest of itself afterwards: the recovery reopen flushes its decoders into
+            // the epoch explicitly, and a track change repositions with a seek that does the same.
             val videoQueue = videoStream?.let {
                 PacketQueue(it.index, softLimitUs).also { queue -> queue.flushTo(requestedEpoch) }
             }
@@ -4382,6 +4391,8 @@ internal class PlaybackCore(
         // report that reasons from the events needs to know before it reasons (audit KP-P1-09).
         appendLine("  eventsDropped=${liveStats.droppedEvents} (a full buffer: the collector was slower " +
             "than the session)")
+        // Actor liveness: passes stop counting when the loop is stuck in a long step.
+        appendLine("  actor passes=$loopPasses $debugState")
         appendLine()
         appendLine("kd artifacts")
         // The filter the media item actually carries. This line used to say "none attached"

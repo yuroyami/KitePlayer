@@ -36,6 +36,12 @@
 #     the proving Mac across a cleaned build. The NODE half runs here. Row KP-WEBPACK-CONTEXT.
 #   - Android DEVICE tests (`connectedAndroidTest`) and the physical-device rows. Those need
 #     hardware and stay owner-gated exactly as the register says.
+#   - `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone`, which have test
+#     TASKS and no test SOURCES. They were named here on the first run and came back NO-SOURCE.
+#     Naming a task that cannot run is how a job looks broader than it is, so they are gone from
+#     the lists and the gap is a register row instead. Row KP-UNTESTED-MODULES.
+#   - A PINNED fixture generator. The clips are made by whatever ffmpeg Homebrew ships that week,
+#     which is 8.1.2 today and 8.0 on the proving Mac. Row KP-FIXTURE-PIN.
 name: CI
 
 on:
@@ -130,15 +136,26 @@ jobs:
       # reads /opt/homebrew/include, which is the same source the desktop FFmpeg profile links its
       # text stack from. ffmpeg is the fixture generator below.
       #
-      # WHY THE FIXTURES ARE GENERATED ON macOS AND NOWHERE ELSE. Homebrew's ffmpeg is 8.0, which is
-      # exactly what the proving machine has, so the clips a runner makes are the clips the
-      # developer tested against. Ubuntu's apt ffmpeg is a different release with a different codec
-      # set, and fixtures that differ per runner turn one red into an argument about which machine
-      # was right. The register already records the deeper problem (testmedia/ is gitignored and has
-      # no pin or checksum, KP-B1..B13); pinning the GENERATOR is what this job can do about it
-      # today, and it is not the same as pinning the OUTPUT.
+      # WHY THE FIXTURES ARE GENERATED ON macOS AND NOWHERE ELSE: one codec set, one place, so a
+      # red is about the player rather than about which runner made the clips. Ubuntu's apt ffmpeg
+      # is a different release again.
+      #
+      # AND THIS DOES NOT PIN THE GENERATOR, which the first version of this comment claimed it did.
+      # Homebrew's ffmpeg is a MOVING formula: the proving Mac has 8.0 and the first CI run
+      # installed 8.1.2. That difference immediately mattered, and the way it mattered is worth
+      # keeping: 8.1.2 interleaves the subtitle packet in multitrack.mkv later than 8.0 does, so a
+      # matrix row that stopped reading at its video quota stopped before the first cue and reported
+      # a well-formed file as broken. The TEST was fixed to read until it has the cue it asked for,
+      # which is the right fix, and the row for the unpinned generator is KP-FIXTURE-PIN.
+      # KiteCodec learned the same lesson from the other direction and its ci.yml says it in one
+      # line: a pin against a moving formula is a calendar, not a gate.
       - name: Install libass and the ffmpeg CLI
         run: brew install libass ffmpeg
+
+      # One line in the log so the next fixture divergence is diagnosable by reading rather than by
+      # bisecting. This is what turned "multitrack.mkv decoded no subtitle cue" into an answer.
+      - name: Say which ffmpeg made the clips
+        run: ffmpeg -version | head -1
 
       # BEFORE any Gradle task that could reach compileKiteRtCFor<Target>. See the file header.
       - name: Warm the Kotlin/Native toolchain
@@ -156,9 +173,15 @@ jobs:
       - name: The ratchets
         run: ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
 
-      # Every module with a jvm test task. The three that need the clips (ffmpeg, mobile,
+      # Every module that HAS jvm tests. The three that need the clips (ffmpeg, mobile,
       # compose-video) are here rather than on Linux for the generator reason above.
-      - name: JVM tests, every module
+      #
+      # `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` were in this
+      # list for the first run and came back NO-SOURCE: they have a jvmTest TASK and no test
+      # SOURCES, so naming them made the job look broader than it is. Removed. That those three
+      # published modules have zero tests is a real gap and it belongs in the register, not in a
+      # green tick here.
+      - name: JVM tests, every module that has them
         run: |
           ./gradlew --stacktrace \
             :kiteplayer-core:jvmTest \
@@ -168,10 +191,7 @@ jobs:
             :kiteplayer-network:jvmTest \
             :kiteplayer-ffmpeg:jvmTest \
             :kiteplayer-mobile:jvmTest \
-            :kiteplayer-compose-video:jvmTest \
-            :kiteplayer-compose-interop:jvmTest \
-            :kiteplayer-compose:jvmTest \
-            :kiteplayer-phone:jvmTest
+            :kiteplayer-compose-video:jvmTest
 
       # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the 17.5 format matrix against
       # real clips, and :kiteplayer-output's CoreAudio suites need the real audio device this
@@ -269,6 +289,8 @@ jobs:
       # Only the modules whose tests need no clips. The media-backed suites run on macos-host,
       # where the fixture generator is the one the developer used. This job therefore proves the
       # PURE half on a second operating system, which is what it is for.
+      # Same NO-SOURCE removal as the macOS job: compose, compose-interop and phone have test
+      # tasks and no test sources.
       - name: JVM tests, media-free modules
         run: |
           ./gradlew --stacktrace \
@@ -276,10 +298,7 @@ jobs:
             :kiteplayer-subtitles:jvmTest \
             :kiteplayer-output:jvmTest \
             :kiteplayer-view:jvmTest \
-            :kiteplayer-network:jvmTest \
-            :kiteplayer-compose-interop:jvmTest \
-            :kiteplayer-compose:jvmTest \
-            :kiteplayer-phone:jvmTest
+            :kiteplayer-network:jvmTest
 
       # Android HOST tests, which are ordinary JVM tests against the Android variant. Device tests
       # are a different claim and are not made here.
@@ -290,8 +309,7 @@ jobs:
             :kiteplayer-subtitles:testAndroidHostTest \
             :kiteplayer-output:testAndroidHostTest \
             :kiteplayer-view:testAndroidHostTest \
-            :kiteplayer-network:testAndroidHostTest \
-            :kiteplayer-compose-interop:testAndroidHostTest
+            :kiteplayer-network:testAndroidHostTest
 
       - name: Upload test reports
         if: failure()

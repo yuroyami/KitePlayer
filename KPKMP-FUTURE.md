@@ -1191,11 +1191,40 @@ Metal frames, failed CoreAudio shutdown with a live callback, attached-picture-f
 negative start times, foreign StreamInfo, decoder output diverging from codec parameters,
 empty-output MediaSink finalization, midstream format changes, and secure-protocol link
 smokes. Each stage's expansion names the ones it owes.
-**Sampled 2026-08-18 rather than assumed:** the list is PARTLY addressed and has never been
-reconciled. Test files matching the wrap, quiescence, ASan and attached-picture rows exist; nothing
-in either repository matches "negative start times" or "midstream format changes". Whoever next
-owns this list should walk all nineteen and strike the ones already written, because carrying a
-closed row costs the same attention as a real one.
+**WALKED, all nineteen, 2026-08-24.** The 08-18 note sampled four of them and asked whoever came
+next to walk the rest. Every test name in both repositories was collected (1,364 of them, Kotlin
+backtick names plus the C suites' case strings) and each row was searched against that corpus; the
+ones that matched nothing were searched again over test file CONTENT, so an absence is an absence
+rather than a naming difference.
+
+**Nine are already written, and the row should stop carrying them:**
+
+| Row | The test that covers it |
+|---|---|
+| concurrent JNI op and close | "non suspending close and concurrent awaited closes share one success" |
+| 32-bit near-boundary ring allocation under ASan | `test_ring_alloc.c`, run in the asan variant by `run-c-tests.sh` |
+| the 24-hour AudioTrack wrap simulation | "the timestamp frame position wrap-extends exactly like the head", "a frame position past thirty two bits is read as is, with no wrap fold" |
+| simultaneous subtitle images | "overlapping cues are kept and sorted by start time" |
+| alpha golden tests | "the alpha row never touches colour", "no pixel ever carries more colour than alpha" |
+| non-planar and odd-sized Metal frames | "an odd 17x9 frame converts, and the colour survives the half chroma row", "a packed BGRA pixel buffer wraps at the buffer's own size and passes through" |
+| failed CoreAudio shutdown with a live callback | "closing while the device is running is safe and stops the callbacks" |
+| attached-picture-first media | "a cover art still image is shown for five seconds and then finishes" |
+| secure-protocol link smokes | "an https manifest cannot be talked down to http" |
+
+**Ten are genuinely owed**: cached `Frame.info` after close, filter-callback frame retention, failed
+quiescence during renderer replacement, cancellation after partial audio submission, device-sleep
+clock epochs, negative start times, foreign `StreamInfo`, decoder output diverging from codec
+parameters, empty-output `MediaSink` finalization, and midstream format changes.
+
+**Four of those ten were checked twice** because a near-miss is easy to mistake for a hit: "the C
+callback holds its deadline" is the audio callback and not filter-frame retention; "a flush after
+both sides are quiescent" is the ring and not renderer replacement; "partial writes loop until the
+block is fully submitted" is about writing and not about cancelling; and every `codecpar` test is a
+NULL-argument refusal rather than a divergence check.
+
+**The honest bound on this walk**: it matches what a test is NAMED, which is the strongest claim a
+search can make. A test can cover a behaviour without naming it, so a struck row is "somebody wrote
+a test for this" and not "the behaviour is fully covered".
 
 **Register addition 2026-08-18 (the parity sweep: every shipped archive read with llvm-nm rather
 than trusted from its configure record).** Closed the same day: KC-AV1SW above; the iOS assembly
@@ -2481,7 +2510,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
 | AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
-| test debt | nineteen named missing regressions, never reconciled | [V] 08-19 | 17.11, here |
+| test debt | RECONCILED 08-24: nineteen walked against all 1,364 test names in both repositories. NINE are already written and struck; TEN are genuinely owed | [V] 08-19 | 17.11, here |
 | F-ABI1 | no Android ABI dump exists in any of the twelve `api/` dirs | [V] 08-19 [owner] | 17.11.b, here |
 | F-COV1 | six of twenty surfaces; tvos blocked by a missing RUNTIME, not an SDK | [V] 08-19 | 17.11.b, here |
 | F-ALPHA1/ROT1/POS1 | the device-only halves: real pixels on a real screen | [owner] | 17.11.b, here |

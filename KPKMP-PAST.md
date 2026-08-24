@@ -10582,6 +10582,40 @@ three of these four corrections are falsifiable and one rests on reading the cod
 frame drops inside one stats interval under a virtual clock is test-design work, not a fixture flag,
 and inventing it at speed is how a test comes to pass for the wrong reason.
 
+### 14.142 The test-debt list walked, nineteen down to ten, 2026-08-24
+
+The `test debt` row has carried nineteen named missing regressions since the 2026-08-18 audit. That
+edition sampled four of them and wrote, in the row itself, that whoever came next should walk the
+rest "because carrying a closed row costs the same attention as a real one". This is that walk.
+
+**Method, because a search result is only as good as its corpus.** Every test name in both
+repositories was collected into one file: Kotlin backtick names plus the C suites' case strings,
+**1,364 of them**. Each of the nineteen rows was searched against that corpus, and any row that
+matched nothing was searched a second time over test file CONTENT, so an absence is an absence
+rather than a naming difference.
+
+**Nine were already written.** The ones worth naming because the match is exact: the AudioTrack
+24-hour wrap is covered by "a frame position past thirty two bits is read as is, with no wrap fold";
+non-planar and odd-sized Metal frames by "an odd 17x9 frame converts, and the colour survives the
+half chroma row" and "a packed BGRA pixel buffer wraps at the buffer's own size"; and a failed
+CoreAudio shutdown with a live callback by "closing while the device is running is safe and stops
+the callbacks".
+
+**Ten are genuinely owed**, and four of those ten were checked twice because a near-miss reads
+exactly like a hit at a glance:
+
+| Looked like a hit | Is actually about |
+|---|---|
+| "the C callback holds its deadline through ten minutes of hard collector pressure" | the audio callback, not filter-frame retention |
+| "a flush after both sides are quiescent leaves an empty, usable ring" | the ring, not renderer replacement |
+| "partial writes loop until the block is fully submitted" | writing, not cancelling |
+| every `codecpar` test | NULL-argument refusal, not decoder-output divergence |
+
+**The honest bound, written on the row rather than left for a reader to discover.** This matches
+what a test is NAMED, which is the strongest claim a search can make. A test can cover a behaviour
+without naming it, so a struck row means "somebody wrote a test for this", not "the behaviour is
+fully covered". Nine strikes with that caveat is still better than nineteen rows nobody trusts.
+
 
 ## 15. Horizon B execution: B1
 

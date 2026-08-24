@@ -29,6 +29,9 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_read_stats
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_ring
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_sink_stats
 import cnames.structs.kprt_ring
+import kotlin.experimental.ExperimentalNativeApi
+import kotlin.native.OsFamily
+import kotlin.native.Platform
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.allocPointerTo
@@ -251,22 +254,39 @@ class KiteRtBindingTest {
 
 
     @Test
-    fun `the device surface is bound and refuses a bad argument without touching a device`() {
+    @OptIn(ExperimentalNativeApi::class)
+    fun `the device surface is bound and refuses without touching a device`() {
         // The wiring check for the second half of this library, and deliberately one that opens no
         // device and makes no sound. What it can fail on is exactly what this suite is for: a
         // `kprt_sink_*` symbol missing from the archive, a struct cinterop did not bind, or a verdict
         // constant that did not reach the Kotlin side. The device itself is driven by
         // `kiteplayer-output`'s appleTest, which is where a real AudioUnit belongs.
+        //
+        // THE VERDICT DEPENDS ON THE TARGET, and this used to assert only the Apple one. This file
+        // is `nativeTest`, so it runs on every native target, but the assertion was
+        // KPRT_SINK_BAD_ARGUMENT, which only macOS and iOS give: everywhere else
+        // kite_rt_sink_unsupported.c answers KPRT_SINK_UNSUPPORTED_PLATFORM before it looks at a
+        // single argument. It went unnoticed because these tests had never EXECUTED off an Apple
+        // host; the first linuxX64 run in CI failed on it. The rule below is the one that holds
+        // everywhere: the call is refused, it is refused with the verdict this target's
+        // implementation documents, and no OS call was made either way.
+        val deviceGlueIsImplementedHere =
+            Platform.osFamily == OsFamily.MACOSX || Platform.osFamily == OsFamily.IOS
+        val expected = if (deviceGlueIsImplementedHere) {
+            KPRT_SINK_BAD_ARGUMENT.toInt()
+        } else {
+            KPRT_SINK_UNSUPPORTED_PLATFORM.toInt()
+        }
         memScoped {
             val accepted = alloc<kprt_sink_format>()
             val status = alloc<kotlinx.cinterop.IntVar>()
-            // No out pointer for the sink, which is the one argument C refuses before it touches
-            // CoreAudio at all.
+            // No out pointer for the sink, which is the one argument the Apple implementation
+            // refuses before it touches CoreAudio at all.
             val verdict = kprt_sink_create(48_000, 2, null, accepted.ptr, status.ptr)
             assertEquals(
-                KPRT_SINK_BAD_ARGUMENT.toInt(),
+                expected,
                 verdict,
-                "a create with nowhere to put the sink must be refused as a bad argument",
+                "a create with nowhere to put the sink must be refused, with this target's verdict",
             )
             assertEquals(0, status.value, "no CoreAudio call was made, so there is no status to report")
         }

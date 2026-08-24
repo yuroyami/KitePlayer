@@ -1162,7 +1162,14 @@ Build and publication:
 - SOL-B6 [C] The twin repos are not one atomic graph: mavenLocal-first resolution can shadow
   the sibling checkout with stale artifacts; the audit proposes a composite build or shared
   root plus cross-repo CI. Home: S5, with S7's CI.
-- SOL-B7 [C] Both builds emit deprecated Gradle API warnings that become Gradle 10 breaks.
+- SOL-B7 **REDUCED to nothing either project can fix, measured 2026-08-24.** Both builds emit
+  exactly ONE Gradle 10 deprecation, and it is the same one in both: "Using a Project object as a
+  dependency notation". It does not come from either project's build scripts. Gradle's own problems
+  report names the source, which is how this stopped being a guess:
+  `"locations":[{"pluginId":"com.android.internal.kotlin.multiplatform.library"}]`, that is AGP
+  9.2.1's Android KMP library plugin. Checked by swapping the two `project(":x")` calls in
+  `:kiteplayer-compose-interop` for type-safe accessors: the warning did not move. **Waits on an AGP
+  release, and the row's job now is to be re-measured after the next one**, not to be worked.
   Home: S5.
 - SOL-B8 [C] Remote publication still lacks the ordinary JVM and Android artifacts (the
   portable placeholders exist locally since 3f0f1e3). Home: S5, windows 4.
@@ -2468,7 +2475,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-B4 | three macOS floors disagree: 26.0, 12.0 and 11.0, measured | [V] 08-19 | 17.11, here |
 | SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-19 [owner] | 17.11, here |
 | SOL-B6 | the twin repos are not one graph; mavenLocal shadows a sibling | [V] 08-19 | 17.11, here |
-| SOL-B7 | both builds emit warnings that become Gradle 10 breaks, MEASURED | [V] 08-19 | 17.11, here |
+| SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
 | AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
 | test debt | nineteen named missing regressions, never reconciled | [V] 08-19 | 17.11, here |
@@ -2489,7 +2496,6 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |
 | KP-API | throwing stubs, unusable default factory, five dead knobs, global logger | [V] 08-19 | 17.16, here |
 | KP-B1..B13 | REDUCED 08-24: `.github/workflows/ci.yml` exists, seven jobs on four operating systems. The RELEASE half is untouched: debug signing, no wrapper checksum, no lockfiles, NDK by string sort, no signing or Sonatype configuration, gitignored unpinned fixtures | [V] 08-24 | 17.16, here |
-| KP-CI-BILLING | every CI job is refused before its first step: KitePlayer is a PRIVATE repository, so Actions minutes are billed, and the account's spending limit or payment is blocking them. Nothing to do with the workflow, which GitHub parsed and scheduled | [V] 08-24 [owner] | 17.16, here |
 | KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
 | KP-UNTESTED-MODULES | `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` are PUBLISHED and have zero test sources. Their test tasks exist and answer NO-SOURCE, which is how they looked covered | [V] 08-24 | 17.16, here |
@@ -2519,7 +2525,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-DSL | 11 DSL defects; untyped steps, no marker, raw map wins | [V] 08-19 | 17.16, here |
 | KC-PERF | 10 hot paths; per-byte Web interop, the JVM copy chain | [V] 08-19 | 17.16, here |
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
-| KC-DOCTRUTH | 11 documentation contradictions; the build file contradicts itself | [V] 08-19 | 17.16, here |
+| KC-DOCTRUTH | REDUCED 08-24: the FFmpeg-profile half is CLOSED (encoder table, GPL tasks, NOTICE, CONTRIBUTING, FFmpegPaths KDoc, all measured with `nm` against the shipped archives). What is left is the register codes in shipped sources: 128 mentions of 35 distinct codes across 40 files, counted 08-24, not the 180 this row used to claim | [V] 08-24 | 17.16, here |
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
 | KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
@@ -2552,7 +2558,14 @@ found `KP-WASM-RUNBLOCKING` and `KP-WEBPACK-CONTEXT` before a single job ran, an
 anything about the code. **A CI that opens three rows on the day it lands is a CI doing its job**,
 and none of the three is new breakage: all three were already true and nothing could see them.
 
-**2026-08-24, later the same day (PAST 14.134), counted again: 44 KitePlayer rows and 25 KiteCodec
+**2026-08-24, end of day (PAST 14.135), counted again: 47 KitePlayer rows and 25 KiteCodec rows, so
+72 open in total.** The KitePlayer table GREW by three on the day it got CI, and that is the CI
+working: `KP-WASM-RUNBLOCKING`, `KP-WEBPACK-CONTEXT`, `KP-UNTESTED-MODULES` and `KP-FIXTURE-PIN` were
+all found by writing or running the workflow, and `KP-CI-BILLING` opened and closed inside the same
+day. `SOL-B7` reduced to a measurement that belongs to AGP, and `KC-DOCTRUTH` lost its whole
+FFmpeg-profile half.
+
+**2026-08-24, midday (PAST 14.134), counted: 44 KitePlayer rows and 25 KiteCodec
 rows, so 69 open in total.** `KC-PAGES` closed, and the SITE was fetched rather than the job read.
 `P0-11..P0-19` closed as ALREADY SATISFIED: its one line said "ONLY Maven Central remains" and
 Central went live the same day that line was written (PAST 14.121). Gate box 16 in 17.17 goes GREEN

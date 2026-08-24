@@ -224,7 +224,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-host-reports
-          path: '**/build/reports/tests/**'
+          # test-results carries the XML, and the XML carries stdout, stderr and the message of a
+          # NATIVE crash. reports/ alone renders an empty "Failure details" box when the test
+          # process dies instead of asserting, which is exactly the failure worth diagnosing.
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
           retention-days: 14
           if-no-files-found: ignore
 
@@ -279,7 +284,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-reports
-          path: '**/build/reports/tests/**'
+          # test-results carries the XML, and the XML carries stdout, stderr and the message of a
+          # NATIVE crash. reports/ alone renders an empty "Failure details" box when the test
+          # process dies instead of asserting, which is exactly the failure worth diagnosing.
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
           retention-days: 14
           if-no-files-found: ignore
 
@@ -328,7 +338,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-jvm-android-reports
-          path: '**/build/reports/tests/**'
+          # test-results carries the XML, and the XML carries stdout, stderr and the message of a
+          # NATIVE crash. reports/ alone renders an empty "Failure details" box when the test
+          # process dies instead of asserting, which is exactly the failure worth diagnosing.
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
           retention-days: 14
           if-no-files-found: ignore
 
@@ -380,7 +395,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-native-reports
-          path: '**/build/reports/tests/**'
+          # test-results carries the XML, and the XML carries stdout, stderr and the message of a
+          # NATIVE crash. reports/ alone renders an empty "Failure details" box when the test
+          # process dies instead of asserting, which is exactly the failure worth diagnosing.
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
           retention-days: 14
           if-no-files-found: ignore
 
@@ -426,7 +446,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-native-reports
-          path: '**/build/reports/tests/**'
+          # test-results carries the XML, and the XML carries stdout, stderr and the message of a
+          # NATIVE crash. reports/ alone renders an empty "Failure details" box when the test
+          # process dies instead of asserting, which is exactly the failure worth diagnosing.
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
           retention-days: 14
           if-no-files-found: ignore
 
@@ -467,6 +492,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-reports
-          path: '**/build/reports/tests/**'
+          # test-results carries the XML, and the XML carries stdout, stderr and the message of a
+          # NATIVE crash. reports/ alone renders an empty "Failure details" box when the test
+          # process dies instead of asserting, which is exactly the failure worth diagnosing.
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
           retention-days: 14
           if-no-files-found: ignore

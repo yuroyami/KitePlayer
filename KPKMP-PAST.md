@@ -10313,6 +10313,114 @@ the same runner, in the same hour, and one is an environment the runner cannot p
 other is a test that would eventually have failed on a busy laptop too. Filtering both would have
 hidden a real defect behind a true statement about hardware.
 
+#### And then a crash, which was a third kind again
+
+The next run died differently: `Test running process exited unexpectedly. Current test: seeks and a
+close hammered through a real thread pipeline hold every invariant`. No assertion, no message, and
+the HTML report's "Failure details" box was EMPTY, because the process had died rather than failed.
+
+**The first fix was to CI's evidence, not to the test.** The artifact steps uploaded
+`build/reports/tests/**` only, and that tree renders nothing when a native test process dies. They
+now upload `build/test-results/**` beside it, which is where the XML lives, and the XML carries
+stdout, stderr and the crash text. A red that cannot be read is a red that gets guessed at.
+
+**Reproduced on this laptop before anything was changed: 1 failure in 25 runs, then 2 in 40.** So it
+was never a CI artifact. Running the test binary directly with `--ktest_filter` rather than through
+Gradle is what made forty runs cheap enough to bother.
+
+The cause, once a run was captured whole:
+
+```
+kotlin.ConcurrentModificationException
+  at kotlin.collections.ArrayList.Itr.next
+  at RealThreadStressTest.kt:132
+```
+
+**A test bug, and not a subtle one.** `RecordingRenderer` keeps a plain `ArrayList` that the raster
+worker appends to on its own thread, and the test iterated that list to check presentation ordering
+**while the pipeline was still running**, ten lines before it called `closeAndAwait`. The engine did
+nothing wrong; the test raced its own fixture. Every read of the renderer now happens after close,
+which removes the race and makes the ordering check cover the whole run instead of whatever prefix
+had landed mid-storm. **Falsified: 90 runs, zero failures**, against roughly five percent before.
+
+**Worth separating from the two above.** Three failures in one file family, three different kinds:
+one needed hardware CI does not have, one measured the wrong quantity, and one was a data race in
+the test's own bookkeeping. The runner did not cause any of them. It ran the tests on three cores
+instead of ten, and that was enough.
+
+#### KP-CI-BILLING closed, and what the seven jobs cost
+
+The repository went public, the jobs ran, and the row has no subject left. The cost was measured
+rather than guessed, because the KiteCodec side spent weeks acting on a number nobody had checked:
+**a full run is 5 minutes wall clock**, jobs in parallel. Per job, from the two most recent runs:
+macOS 292 and 296 seconds, Windows 266 and 275, iOS simulator 153 and 228, wasmJs 158 and 166,
+Linux native 127 and 154, Linux JVM 61 and 79, and **the nine C suites 21 and 37 seconds**. macOS
+sets the clock, and the suites this whole row was about are the cheapest thing in the run.
+
+### 14.136 KiteCodec's docs promised encoders that were never in the box, 2026-08-24
+
+`KC-DOCTRUTH`'s FFmpeg-profile half, closed. The row has said "11 documentation contradictions"
+since 08-19; this is the part of it a consumer would actually have tripped over.
+
+#### What the published builds encode, measured rather than read off a configure line
+
+`nm` over `libavcodec.a` in the `ffmpeg-n8.0-r2` trees that 0.1.3 embeds:
+
+| Where | Encoders |
+|---|---|
+| every target | `mpeg4`, `mjpeg`, `png`, `apng`, `h263`, `h263p`, `aac`, `flac`, `pcm_s16le`, `pcm_s24le`, `pcm_f32le` |
+| macOS only | + `h264_videotoolbox`, `hevc_videotoolbox`, `prores_videotoolbox` |
+| Android only | + `h264_mediacodec`, `hevc_mediacodec` |
+
+**Zero `libsvtav1`, `libx264`, `libx265`, `libopus`, `libmp3lame` symbols in any of them.** The
+README's encoder table advertised `libsvtav1` as the LGPL software video encoder and
+`libopus`/`libmp3lame` as its audio. A consumer following that table got `FFmpegException` out of
+`addVideoEncoder` before a frame was read. Same family as the aac bug in 14.133, and the same cause:
+the documentation described a profile that had been replaced.
+
+A second measurement worth keeping: **the trees on this laptop are stale.** `native-libs/lgpl/`
+still has the pre-08-24 build with no aac on Linux, Windows or iOS. Reading the RELEASE assets rather
+than the local ones is what made the table right, and reading the local ones first is what nearly
+made it wrong again.
+
+#### Six documents still told readers to run a task deleted three days earlier
+
+`buildFFmpegFor<Target>Gpl` was deleted on 2026-08-21. `README`, `docs/platforms.md`,
+`docs/licensing.md`, `docs/about.md`, `docs/troubleshooting.md` and `CONTRIBUTING.md` still
+instructed readers to run it, one of them with a copy-pasteable command block.
+`docs/getting-started.md` managed both: it stated the truth at line 57 and contradicted itself at
+line 126. What survives is stated once now: the GPL flavour labels a tree YOU build, and
+`-Pkitecodec.ffmpeg.license=gpl` still selects it.
+
+#### The one that mattered most was NOTICE
+
+`NOTICE` listed thirteen third-party components under "components the linked FFmpeg may bundle".
+The published artifacts contain FFmpeg and dav1d, and link zlib from the platform. That list is now
+split in two: what is actually in the artifact, stated definitively, and what a tree you build
+yourself may add, which is where x264 and x265 now appear by name. **`THIRD-PARTY.txt`, the file
+frozen INSIDE the published artifacts, was already correct**, which is the good news: the drift was
+in the documentation, not in the compliance payload.
+
+#### Also corrected, each verified against the tree
+
+- `platforms.md` told Windows users to fetch a BtbN autobuild, "what CI does". CI stopped using BtbN
+  on 2026-08-24 and fetches this repository's own checksummed static tree.
+- `CONTRIBUTING.md`'s first-build block `brew install`ed eleven media libraries for the fat profile
+  deleted on 2026-08-22, then ran the deleted GPL task. Both would fail a new contributor's first
+  attempt.
+- `FFmpegPaths.kt`'s own KDoc described the deleted tasks and pointed at "the plugin", a module
+  KC-EMBED deleted on 2026-08-22.
+- The README claimed the `apiCheck` ratchet "has not run yet" in CI. It runs on every push, green.
+
+Verified: `buildSrc` builds and its tests pass, and `mkdocs build --strict` is clean.
+
+#### What is left of KC-DOCTRUTH, with a number that was actually counted
+
+The register codes in shipped sources. The row said 180; counted today it is **128 mentions of 35
+distinct codes across 40 files** under `kitecodec-core/src`. Not touched tonight on purpose: many of
+those comments explain WHY using the code as shorthand, so removing them mechanically would delete
+the reasoning along with the jargon. It is 40 files of judgement, not a `sed`.
+
 
 ## 15. Horizon B execution: B1
 

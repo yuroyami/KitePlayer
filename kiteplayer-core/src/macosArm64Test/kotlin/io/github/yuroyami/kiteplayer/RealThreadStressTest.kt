@@ -127,9 +127,21 @@ class RealThreadStressTest {
                     "generation tags alone cannot stop and quiescence exists to close",
             )
 
-            // Presentation order, across every epoch the storm went through.
-            var highest = renderer.presentations.firstOrNull()?.generation
-            renderer.presentations.forEach { presentation ->
+            // Close while everything is still running, which is the other half of the hammer.
+            val closing = TimeSource.Monotonic.markNow()
+            core.closeAndAwait()
+            val closeTook = closing.elapsedNow()
+
+            // NOTHING READS THE RENDERER UNTIL AFTER CLOSE, and that is not tidiness.
+            // `RecordingRenderer` keeps a plain `ArrayList` that the raster worker appends to on its
+            // own thread. Iterating it while the pipeline is running is a data race, and it behaved
+            // like one: `ConcurrentModificationException` out of `ArrayList.Itr.next`, about one run
+            // in twenty, on CI and on this laptop alike. `closeAndAwait` has joined the raster worker
+            // by the time it returns, so the list is complete and still here, and the ordering check
+            // now covers the WHOLE run instead of whatever prefix had landed mid-storm.
+            val presented = renderer.presentations
+            var highest = presented.firstOrNull()?.generation
+            presented.forEach { presentation ->
                 val seen = highest
                 assertTrue(
                     seen == null || presentation.generation >= seen,
@@ -137,12 +149,7 @@ class RealThreadStressTest {
                 )
                 highest = presentation.generation
             }
-            assertTrue(renderer.count > SEEKS, "the pipeline kept playing throughout: ${renderer.count} frames")
-
-            // Close while everything is still running, which is the other half of the hammer.
-            val closing = TimeSource.Monotonic.markNow()
-            core.closeAndAwait()
-            val closeTook = closing.elapsedNow()
+            assertTrue(presented.size > SEEKS, "the pipeline kept playing throughout: ${presented.size} frames")
 
             assertTrue(
                 closeTook < CLOSE_BUDGET,

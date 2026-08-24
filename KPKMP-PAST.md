@@ -10112,6 +10112,71 @@ release pages no longer exist. It was uploaded to the Central Portal by `publish
 `--ref v0.1.3`, and released by the owner in the portal, which is the manual gate
 `publishToMavenCentral()` deliberately leaves in place.
 
+### 14.134 The Docs site goes live, and two rows that were open only because nobody counted, 2026-08-24
+
+14.133 ended with CI at 11 of 11 and the Docs BUILD green while its deploy still 404ed. This closes
+that, records the KitePlayer pin, and corrects two register rows that had been satisfied for days.
+
+#### The Docs site deploys, and the SITE was read rather than the job
+
+GitHub Pages had never been enabled on the KiteCodec repository, so `actions/deploy-pages` had
+nothing to deploy INTO. A repository setting, not a workflow defect, which is why the row was
+owner-gated. Enabled with `build_type=workflow`, the mode that takes the artifact the Docs job
+already uploads instead of serving a branch.
+
+**Green deploy and correct site are two different claims, so both were checked.** The root answers
+200 with `<title>KiteCodec</title>`, and `/api/` answers 200 with Dokka's `All modules` page listing
+`kitecodec-core`. The second check is the one worth having: the job builds MkDocs and Dokka
+separately and copies one into the other, so "green job, empty `/api/`" is a shape this build can
+produce, and only fetching the page tells them apart.
+
+#### KitePlayer pins 0.1.3 (`ece9410`)
+
+Not housekeeping. 0.1.1 is the version whose Linux and Windows builds carry no AAC encoder (14.133),
+and two of 0.1.3's other fixes reach this repository's own paths: video frames could be freed while
+the renderer read them through `withPlanes`/`hardwareSurface`, and a missing encoder threw an untyped
+error on every Kotlin/Native target instead of `EncoderNotFound`.
+
+**Verified rather than assumed, because this repository still has no CI of any kind.** 0.1.3 is NOT
+in mavenLocal, so the resolve proves Central serves it rather than a local copy shadowing it, which
+is the `SOL-B6` hazard exactly. `:kiteplayer-ffmpeg` resolves
+`io.github.yuroyami:kitecodec-core:0.1.3 -> kitecodec-core-jvm:0.1.3`; its jvm compile and tests
+pass, `:kiteplayer-core`'s jvm tests pass, and the macosArm64 compile of the consuming module
+succeeds.
+
+#### Two rows were open because the register was not counted, not because work was left
+
+- **`P0-11..P0-19`, the whole KiteCodec distribution program.** Its one line said "ONLY Maven Central
+  remains" and carried `[V] 08-22`. Central went live THE SAME DAY (14.121), proved by a consumer
+  project with only `mavenCentral()` and one dependency line that downloaded 0.1.1, linked a macOS
+  executable and an iOS simulator framework, and ran. The row was written before that proof landed
+  and nobody went back. Re-checked at the source today: `pom`, `module`, `jar` and the `-jvm` jar for
+  0.1.3 all answer 200 from `repo1.maven.org`. CLOSED, and gate box 16 goes GREEN with it.
+- **`KC-PAGES`** closes on the site above.
+
+Both were `[owner]` rows, and closing them leaves **zero owner-gated KiteCodec rows**. All nine that
+remain are KitePlayer, and they split in two: five need hardware this machine does not have
+(`AGW-1`, `F-ALPHA1/ROT1/POS1`, `M riders`, `W riders`, `PAR-1`), and four need a decision rather
+than work (`SOL-B5` armeabi-v7a in or out, `4K` re-decided or not, `F-ABI1`'s Android ABI freeze,
+`PAR-5`'s declared-but-sourceless targets).
+
+#### What the closures exposed above them
+
+**17.20's fourth tier named three blockers and all three were already gone**: Central credentials
+are on the repository, the signing keys have signed the three versions Central serves (0.1.0, 0.1.1
+and 0.1.3; 0.1.2 was cut and superseded the same day and never deployed), and `P0-14` closed by
+deletion on 08-21. The tier now says what is actually left, which is the KitePlayer half, and that
+half is not owner-blocked, it is work: `KP-PROD` phase 1, opening on this repository having no CI at
+all.
+Section 6's verdict said the distribution half "has not started and cannot start on this machine"
+and carried the same three reasons; corrected to match.
+
+**The counts drifted again, one day after the register wrote a paragraph about counts drifting.**
+14.133 added `KC-PAGES` to the KiteCodec table and left the total at 26. Counted line by line today:
+**44 KitePlayer rows, 25 KiteCodec rows, 69 open.** The fix is not a better number, it is that the
+number is only ever produced by counting the tables, never by adjusting the last one.
+
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

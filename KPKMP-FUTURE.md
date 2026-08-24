@@ -370,8 +370,10 @@ the logs close ten of twenty release blockers, and of the ten still open, nine a
 **KC-WEB-IO is the only correctness blocker left**. Read "closed" with one caution the
 2026-08-19 pass earned: two of those ten are overstated, four are real code that no test can
 falsify because the Wasm backend has no test source set, and one of them introduced two leaks while
-fixing one. 17.16 names each. The DISTRIBUTION half has not started and cannot start on this
-machine: it needs credentials and one licence decision that belong to the owner (17.17).
+fixing one. 17.16 names each. The DISTRIBUTION half, written when it had not started, is now half
+finished: KiteCodec is on Maven Central and its whole `P0-11..P0-19` program closed on 2026-08-24.
+KitePlayer's half has not started, and it is not owner-blocked any more, it is work: see `KP-PROD`
+phase 1, which begins with this repository having no CI at all.
 ---
 
 ## 7. Constants
@@ -2504,11 +2506,9 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | 11 documentation contradictions; the build file contradicts itself | [V] 08-19 | 17.16, here |
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
-| KC-PAGES | the Docs site cannot deploy: GitHub Pages has never been enabled on the repository, so actions/deploy-pages 404s. Build is green; this is a repo setting | [V] 08-24 [owner] | 17.16, here |
 | KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
-| P0-11..P0-19 | REDUCED 08-22: full 22-asset v0.1.0 release live and verified; ONLY Maven Central remains | [V] 08-22 [owner] | 17.17, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
@@ -2529,6 +2529,19 @@ Two rows were added to it at some point without the total being moved, exactly t
 corrections note at the end of this section describes for the previous edition. The numbers here
 are now measured, and the way to keep them true is to count rather than to adjust.
 
+**2026-08-24, later the same day (PAST 14.134), counted again: 44 KitePlayer rows and 25 KiteCodec
+rows, so 69 open in total.** `KC-PAGES` closed, and the SITE was fetched rather than the job read.
+`P0-11..P0-19` closed as ALREADY SATISFIED: its one line said "ONLY Maven Central remains" and
+Central went live the same day that line was written (PAST 14.121). Gate box 16 in 17.17 goes GREEN
+with it, and 17.20's fourth tier loses its three stated blockers, all of which were resolved days
+ago.
+
+**The 14.132 paragraph two up was already wrong when it was written, which makes twice in two
+days.** It says 26 KiteCodec rows, and the same commit that wrote it added `KC-PAGES` to that table
+without moving the total. The rule it states in its own last sentence, count rather than adjust, is
+the only thing that catches this, so both tables are now counted line by line every time this
+number moves.
+
 **The count did not move on 2026-08-23 and that is the honest number** (PAST 14.130). Three rows
 left (`KC-CI-C`, `KC-NOTDONE`, `KC-P0-05-LEAK`, eight separate defects between them, all fixed) and
 three arrived (`KC-EVIDENCE-WASM`, `KC-EVIDENCE-MUX`, `KC-APICHECK-RED`). Two of the three arrivals
@@ -2540,10 +2553,11 @@ code, is the bottleneck.** That is the argument for 17.20 items 1 to 3 in one se
 **The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
 file under RULE TWO (PAST 14.115).
 
-Of the 42 open KitePlayer rows, **37 carry [V] and none carry [C]**: all eight rows that were
-carried and unverified before this pass have now been read against the tree. The remaining 5 carry
-neither mark because they need hardware this machine does not have, and 10 rows in total are
-[owner] gated. **So nothing in this register is unverified except what cannot be verified here.**
+Of the 44 open KitePlayer rows, **40 carry [V] and none carry [C]**: every row that was carried and
+unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
+because they need hardware this machine does not have, and 9 rows in total are [owner] gated, all of
+them KitePlayer rows now that both KiteCodec [owner] rows have closed. **So nothing in this register
+is unverified except what cannot be verified here.**
 
 SOL-P10 is gone too: the previous edition struck it through and said it would go "next time", and
 RULE TWO says there is no next time.
@@ -2840,7 +2854,7 @@ distribution half has not started.**
 | 13 | Android Native attaches the JavaVM and device tests MediaCodec, or does not advertise it | RED |
 | 14 | The Wasm `.mjs` and `.wasm` runtime is in a versioned package and browser tested | RED |
 | 15 | GPL and LGPL names, configure flags, capabilities, link dependencies and licences agree | GREEN as of 08-22: GPL producers deleted 08-21, every profile portable and LGPL, packaging bundles nothing and verifies the dav1d flavour both ways |
-| 16 | Prebuilt assets exist and a clean consumer installs and runs without this checkout | AMBER as of 08-22: all 22 assets live and a checkout-free project fetched three of them through the plugin; still gated on `kitecodec-core` being mavenLocal-only (Central, row P0-11..P0-19) |
+| 16 | Prebuilt assets exist and a clean consumer installs and runs without this checkout | GREEN as of 08-24: all 22 assets live, and `kitecodec-core` resolves from Maven Central with no mavenLocal in the graph. Proved twice, on two machines' worth of evidence: a consumer project with only `mavenCentral()` ran 0.1.1 (PAST 14.121), and KitePlayer pins 0.1.3 from Central with 0.1.3 absent from mavenLocal (PAST 14.134) |
 | 17 | Every published KitePlayer variant resolves one matching KiteCodec variant | RED |
 | 18 | The player modules and the exact Web codec runtime release together; no Maven Local | RED |
 | 19 | Licence, SBOM and provenance accompany every bundled native dependency | RED |
@@ -2991,11 +3005,17 @@ stated as 24 in seven places when it is 26, six KDocs that deny features which s
 promise recovery that does not exist, and one SPI file that contradicts itself sixteen lines apart.
 None of this is hard. All of it is why the last two audits disagreed with the tree.
 
-#### Fourth: the distribution program, when the owner is ready
+#### Fourth: the distribution program, and what is left of it
 
-The whole `P0-11` to `P0-19` cluster is ONE program and must not be started piecemeal (17.17).
-**It is blocked on the owner, not on work:** Maven Central credentials, signing keys, and the
-`P0-14` licence decision. Do not advertise any target it has not shipped.
+**The KiteCodec half is DONE** (`P0-11..P0-19` closed 2026-08-24). All three blockers this tier used
+to name are gone: the Central credentials are on the repository, the signing keys have signed the three
+versions Central serves (0.1.0, 0.1.1, 0.1.3; 0.1.2 was cut and superseded the same day and never
+deployed), and `P0-14` closed by deletion on 08-21. A stranger can resolve `kitecodec-core` from
+Central today.
+
+What is left is the KitePlayer half, and it does not belong in this tier: it is `KP-PROD` phase 1,
+which opens on the fact that **this repository has no CI of any kind**. The old rule still holds:
+do not advertise any target that has not shipped.
 
 #### Everything else
 

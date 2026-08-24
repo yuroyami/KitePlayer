@@ -10479,6 +10479,35 @@ What is still open on the row: nothing pins the ffmpeg VERSION, so two machines 
 That needs either a pinned toolchain in CI or clips committed as artifacts, and both are decisions
 with a cost, not cleanups.
 
+### 14.139 The wasm binding gets the check it was missing, 2026-08-24
+
+`KC-WASM-MIRROR`, closed. `generateWasmBinding` writes `KiteCodecWasm.kt` into `native-libs/`, which
+is gitignored, so the file the wasmJs compilation actually reads is a committed copy under
+`wasmJsMain`. Two copies, nothing comparing them, and a drift that surfaces only at runtime in a
+browser, which is the most expensive place this project has to find anything.
+
+`checkWasmBindingMirror` regenerates the expected text in memory from `signature-baseline.txt`, the
+same gated input the generator reads, and compares. **It never writes.** A check that repairs what
+it checks teaches nobody anything, and the repair here is two commands, which the failure message
+prints.
+
+**It found nothing, and that is the honest result.** The two copies were byte-identical: 607 lines,
+196 externals. What was bought is not a fix, it is that the next drift fails in a build.
+
+**Proved able to fail** before it was believed, by changing one external's parameter from `Int` to
+`Long` in the committed copy. The message names line 310 and prints both sides:
+
+```
+first difference at line 310 (608 generated lines, 608 committed):
+  generated: internal external fun ffkmp_frame_width(module: JsAny, a0: Int): Int
+  committed: internal external fun ffkmp_frame_width(module: JsAny, a0: Long): Int
+```
+
+It runs in the macOS ratchets job beside `apiCheck`, `checkCinteropCoupling` and
+`check-deleted-surface.sh`, and hangs off `check`. It needs no build output, only the tree, which is
+why it belongs with those and not with a test suite. One stale comment went with it: that step's
+header said "KitePlayer has no CI yet", which stopped being true earlier the same day.
+
 
 ## 15. Horizon B execution: B1
 

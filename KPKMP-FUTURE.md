@@ -2526,7 +2526,6 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-PERF | 10 hot paths; per-byte Web interop, the JVM copy chain | [V] 08-19 | 17.16, here |
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | REDUCED 08-24: the FFmpeg-profile half is CLOSED (encoder table, GPL tasks, NOTICE, CONTRIBUTING, FFmpegPaths KDoc, all measured with `nm` against the shipped archives). What is left is the register codes in shipped sources: 128 mentions of 35 distinct codes across 40 files, counted 08-24, not the 180 this row used to claim | [V] 08-24 | 17.16, here |
-| KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
 | KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
@@ -3054,9 +3053,12 @@ whether anything else is true.
    is not guarding anything either. Same disease, one level up, and it should be swept with
    `KC-CI-KONAN` and the Docs workflow. `KP-CI-C` is the same job for the other repository and
    belongs to phase 1 of `KP-PROD`.
-2. **`KC-WASM-MIRROR`.** The generated Wasm binding and the file that actually compiles are two
-   copies nothing compares, and the drift fails only at runtime in a browser. **The project already
-   wrote this check for a sibling file**; apply it here.
+2. **DONE 2026-08-24.** `checkWasmBindingMirror` regenerates the binding in memory from
+   `signature-baseline.txt` and compares it to the committed copy under `wasmJsMain`, failing with
+   the first differing line and the two-command repair. It is in the macOS ratchets job and in
+   `check`. The two copies were IDENTICAL when the check was written, 607 lines and 196 externals,
+   so this bought no fix; it bought the guarantee that the next drift fails in a build rather than
+   in a browser.
 3. **A `wasmJsTest` source set.** Twelve rows are marked done with no test that could ever fail, and
    they will stay that way for ever without it. This is the single biggest lie-per-hour reduction
    available.

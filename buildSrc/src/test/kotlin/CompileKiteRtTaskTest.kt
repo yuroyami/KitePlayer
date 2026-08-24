@@ -89,6 +89,41 @@ class CompileKiteRtTaskTest {
     }
 
     @Test
+    fun `a Windows COFF object is accepted under either spelling of the same format`() {
+        // MEASURED ON TWO HOSTS, which is the whole point of this case. This Mac's `file` calls a
+        // mingw object "Intel amd64 COFF object file"; a GitHub windows-latest runner calls the
+        // object its own konan clang just produced "x86-64 COFF object file". Same format, same
+        // architecture, two spellings, and pinning only the one this machine says turned the first
+        // real Windows CI run red on a correct object.
+        CompileKiteRtTask.verifyObjectArchitecture(
+            "mingw_x64",
+            someObject,
+            "x86-64 COFF object file, not stripped, 5 sections, symbol offset=0x178, 14 symbols, " +
+                "1st section name \".text\", 2nd section name \".data\"",
+        )
+        CompileKiteRtTask.verifyObjectArchitecture(
+            "mingw_x64",
+            someObject,
+            "Intel amd64 COFF object file, not stripped, 5 sections",
+        )
+    }
+
+    @Test
+    fun `a Windows slot still refuses an object that is not COFF at all`() {
+        // Widening the accepted set must not widen it to everything: an ELF in the mingw slot is the
+        // B1-11 mix and stays refused.
+        val failure = assertFailsWith<GradleException> {
+            CompileKiteRtTask.verifyObjectArchitecture(
+                "mingw_x64",
+                someObject,
+                "ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), not stripped",
+            )
+        }
+        assertContains(failure.message.orEmpty(), "mingw_x64")
+        assertContains(failure.message.orEmpty(), "B1-11")
+    }
+
+    @Test
     fun `the exact mix register item B1-11 records is refused`() {
         // A linuxX64 ELF object where the macosArm64 one belongs. Measured during reconnaissance to
         // be embedded by cinterop without complaint and to fail only at the consumer's final link.

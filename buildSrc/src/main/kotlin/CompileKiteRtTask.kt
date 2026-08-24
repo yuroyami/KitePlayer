@@ -383,22 +383,41 @@ abstract class CompileKiteRtTask @Inject constructor(
          * link. The platform is fixed by the triple and the sysroot, and cross-target mixing is
          * prevented by keying [outputDir] on the target name.
          */
-        fun expectedObjectDescription(konanTargetName: String): String = when (konanTargetName) {
+        fun expectedObjectDescription(konanTargetName: String): String =
+            acceptedObjectDescriptions(konanTargetName).first()
+
+        /**
+         * Every `file -b` prefix that is a CORRECT object for [konanTargetName]. The first entry is
+         * the canonical one and is what an error message names.
+         *
+         * There is more than one entry for exactly one reason, and it is worth stating rather than
+         * hiding: **`file` is not the same program everywhere.** The description above was measured
+         * on the proving Mac, and a GitHub windows-latest runner describes the object its own konan
+         * clang just produced as "x86-64 COFF object file" instead of "Intel amd64 COFF object
+         * file". Same format, same architecture, two spellings. Pinning only the one this machine
+         * says turned the first real Windows CI run red on a perfectly good object.
+         *
+         * Widening this list is not the same as weakening the check. B1-11 is about an object of the
+         * wrong ARCHITECTURE reaching a target, which cinterop embeds without complaint and which
+         * fails only at a consumer's final link. An ELF in the mingw slot is still refused, and a
+         * test pins that.
+         */
+        fun acceptedObjectDescriptions(konanTargetName: String): List<String> = when (konanTargetName) {
             "macos_arm64", "ios_arm64", "ios_simulator_arm64",
             "tvos_arm64", "tvos_simulator_arm64",
             "watchos_device_arm64", "watchos_simulator_arm64",
-            -> "Mach-O 64-bit object arm64"
-            "macos_x64", "ios_x64" -> "Mach-O 64-bit object x86_64"
-            "watchos_arm32" -> "Mach-O object arm_v7k"
-            "watchos_arm64" -> "Mach-O object arm64_32"
-            "linux_x64", "android_x64" -> "ELF 64-bit LSB relocatable, x86-64"
-            "linux_arm64", "android_arm64" -> "ELF 64-bit LSB relocatable, ARM aarch64"
-            "android_arm32" -> "ELF 32-bit LSB relocatable, ARM, EABI5"
-            "android_x86" -> "ELF 32-bit LSB relocatable, Intel 80386"
-            "mingw_x64" -> "Intel amd64 COFF object file"
+            -> listOf("Mach-O 64-bit object arm64")
+            "macos_x64", "ios_x64" -> listOf("Mach-O 64-bit object x86_64")
+            "watchos_arm32" -> listOf("Mach-O object arm_v7k")
+            "watchos_arm64" -> listOf("Mach-O object arm64_32")
+            "linux_x64", "android_x64" -> listOf("ELF 64-bit LSB relocatable, x86-64")
+            "linux_arm64", "android_arm64" -> listOf("ELF 64-bit LSB relocatable, ARM aarch64")
+            "android_arm32" -> listOf("ELF 32-bit LSB relocatable, ARM, EABI5")
+            "android_x86" -> listOf("ELF 32-bit LSB relocatable, Intel 80386")
+            "mingw_x64" -> listOf("Intel amd64 COFF object file", "x86-64 COFF object file")
             else -> throw GradleException(
                 "No expected object architecture is known for konan target '$konanTargetName'. Add " +
-                    "one to CompileKiteRtTask.expectedObjectDescription.",
+                    "one to CompileKiteRtTask.acceptedObjectDescriptions.",
             )
         }
 
@@ -408,8 +427,9 @@ abstract class CompileKiteRtTask @Inject constructor(
          * the wrong architecture and a real `file` output.
          */
         fun verifyObjectArchitecture(konanTargetName: String, objectFile: File, fileOutput: String) {
-            val expected = expectedObjectDescription(konanTargetName)
-            if (fileOutput.startsWith(expected)) return
+            val accepted = acceptedObjectDescriptions(konanTargetName)
+            if (accepted.any(fileOutput::startsWith)) return
+            val expected = accepted.first()
             throw GradleException(
                 "Wrong object architecture for konan target '$konanTargetName': " +
                     "${objectFile.absolutePath} is '$fileOutput', expected '$expected'.\n" +

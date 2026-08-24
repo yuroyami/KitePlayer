@@ -604,9 +604,14 @@ private class KiteCodecVideoDecoder(
      * Two colours reach the converter that it can only approximate, and both approximate in the same
      * way, by running the matrix and nothing else:
      *
-     * - PQ and HLG are high dynamic range transfer functions. There is no tone mapping anywhere in the
-     *   engine, so a 1000 nit picture is displayed as if its code values were standard dynamic range.
-     *   Highlights flatten and the whole image reads dull.
+     * - PQ and HLG are high dynamic range transfer functions. The FRAME THIS SOURCE HANDS OUT is not
+     *   tone mapped, so a caller converting it themselves shows a 1000 nit picture as if its code
+     *   values were standard dynamic range: highlights flatten and the image reads dull.
+     *   **This is no longer true of the engine as a whole and this comment used to claim it was.**
+     *   Since 2026-08-16 `HdrToneMap` rolls HDR off through BT.2390 on both software conversion
+     *   paths (`Conversions.kt`, `SoftwareConverter.native.kt`) and `kp_tone_map` does the same
+     *   arithmetic in the Metal shader. Whether this half of the warning should still fire is an
+     *   open register question; what it can honestly say today is that the SOURCE does not tone map.
      * - BT.2020 constant luminance encodes luma after the transfer function rather than before it, so
      *   the non-constant luminance matrix is the wrong inverse for it. Chroma-heavy areas shift.
      *

@@ -10508,6 +10508,45 @@ It runs in the macOS ratchets job beside `apiCheck`, `checkCinteropCoupling` and
 why it belongs with those and not with a test suite. One stale comment went with it: that step's
 header said "KitePlayer has no CI yet", which stopped being true earlier the same day.
 
+### 14.140 The engine tone maps, and tells the user it does not, 2026-08-24
+
+Found while auditing `KP-API`'s "six KDoc blocks deny features that shipped". This is one of them,
+and it is the one that escaped the comments and reached a user-visible message.
+
+**Tone mapping shipped on 2026-08-16** (M3). `HdrToneMap` linearizes PQ or HLG per channel, folds
+BT.2020 primaries to BT.709, rolls luminance off through the BT.2390 EETF anchored at 203 nits, and
+re-encodes at gamma 2.2. It runs on both software conversion paths, `Conversions.kt:211` and
+`SoftwareConverter.native.kt:92`, and `forColorSpaceOrNull` returns a map for EVERY `isHdr` colour
+space, not a subset. The Metal shader does the same arithmetic in `kp_tone_map`.
+
+**And `KiteCodecSource.warnIfColorIsApproximated` warns `TonemappingUnavailable` on every HDR
+stream**, with the detail "Pq transfer converted as standard dynamic range". Its own KDoc, in the
+same module as the tone mapper, said "There is no tone mapping anywhere in the engine".
+
+Three things were corrected, and **none of them changes behaviour**, which is the point:
+
+- The public warning's KDoc called a tone-mapped path "Horizon B", a plan. It shipped eight days
+  before this was read.
+- The emission site's KDoc stated the falsehood above. It now says what is true of the SOURCE, which
+  really does hand out a frame nobody has tone mapped, and names where the mapping does happen.
+- `WarningAuditTest`'s table named the emission site as "PlaybackCore's open path". It is
+  `KiteCodecSource` in a different module. **That table's entire job is naming emission sites**, and
+  it is a document enforced by an exhaustive `when`, so the compiler guarantees a row EXISTS and
+  guarantees nothing about whether the row is right.
+
+**What was deliberately NOT changed, and why it is a row rather than a fix.** Whether the HDR half
+of that warning should fire at all is a product question. Both statements are true of different
+stages: the source hands out an unmapped frame, and a caller who converts it themselves gets no
+roll-off, while a caller using the engine's own conversion or the Metal renderer does. Deciding that
+changes a user-visible warning and two pinned tests, which is not a 3am judgement call. `ColorPolicyTest`
+already separates the two halves, so whoever takes it has the seam.
+
+**A correction this entry has to make about its own first reading.** The first grep for the warning
+covered `kiteplayer-core/src` only, found nothing, and the working conclusion for about a minute was
+"dead public API that nothing emits". It is emitted, from another module. The lesson is the cheap
+one: a repository-wide grep costs the same as a module-wide grep and is the only one that can be
+trusted for a claim about the whole engine.
+
 
 ## 15. Horizon B execution: B1
 

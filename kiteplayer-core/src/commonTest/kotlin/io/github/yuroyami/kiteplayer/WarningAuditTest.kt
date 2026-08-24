@@ -61,7 +61,9 @@ class WarningAuditTest {
             "PlaybackCore's open path, when the sink reports LatencyQuality.Unreliable",
         )
         is PlaybackWarning.TonemappingUnavailable -> listOf(
-            "PlaybackCore's open path, when an HDR transfer converts without tone mapping (D16)",
+            "KiteCodecSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
+                "an HDR transfer or BT.2020 constant luminance (D16). NOT PlaybackCore, which this " +
+                "row claimed until 2026-08-24",
         )
         is PlaybackWarning.ChannelLayoutUnknown -> listOf(
             "the audio path's layout negotiation, when a mask is absent and the count is guessed (D30)",

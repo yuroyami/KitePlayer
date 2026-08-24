@@ -203,13 +203,19 @@ public sealed class PlaybackWarning {
     }
 
     /**
-     * The stream carries HDR transfer characteristics and there is no tone mapping, so it is
-     * converted with the matrix alone: highlights clip and the picture looks flat next to a
-     * tone-mapped one. Emitted once per stream.
+     * The colour of this stream is APPROXIMATED, and it is shown anyway. Emitted once per stream.
      *
-     * This is the documented behaviour and not a failure. A real tone-mapped path is Horizon B
-     * (KPKMP-PAST.md section 11, B5), after which approximate output becomes something a caller asks for
-     * rather than the only thing on offer.
+     * Two causes share this warning, and the `detail` is what tells them apart: an HDR transfer
+     * (PQ or HLG), and BT.2020 constant luminance, which the non-constant luminance matrix is the
+     * wrong inverse for.
+     *
+     * **The name is now narrower than the truth, and this is deliberately written down rather than
+     * quietly renamed.** Tone mapping DOES exist since 2026-08-16: `HdrToneMap` on the software
+     * conversion path and `kp_tone_map` in the Metal shader both roll HDR off through BT.2390. What
+     * this warning marks is that the DECODED frame this source hands out is not colour managed, so a
+     * caller converting it themselves gets no roll-off. A caller using the engine's own conversion
+     * or the Metal renderer does. Whether the HDR half should still fire at all is an open question
+     * in the register; it fires today, and saying so is better than a name that reads as a promise.
      */
     public data class TonemappingUnavailable(val detail: String) : PlaybackWarning() {
         override val message: String get() = "no tone mapping: $detail"

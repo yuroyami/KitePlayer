@@ -10258,9 +10258,60 @@ produces a startup failure with a parse error and no job graph at all. Everythin
 on the proving machine first: all 49 module-scoped task names were verified against the real task
 list, and every command block that can run on a Mac was run exactly as written.
 
-This one is the owner's, and it has three shapes: raise the spending limit, make the repository
-public, or cut the three macOS jobs down so the bill is mostly Linux minutes. The choice changes the
-workflow, so the workflow waits.
+This one is the owner's, and it had three shapes: raise the spending limit, make the repository
+public, or cut the three macOS jobs down so the bill is mostly Linux minutes.
+
+#### The owner chose public, and then the jobs ran
+
+**KitePlayer is a PUBLIC repository as of 2026-08-24**, confirmed twice, the second time after being
+told that this register goes public with it: 21,000 lines, all 72 open rows, and the blunt
+self-criticism in them. A secret scan ran BEFORE the switch and was clean, and it was a real scan
+rather than a glance: no key, token or credential shape in the working tree or across all 315
+commits, `local.properties` never committed, and the two author emails already public through
+KiteCodec.
+
+**First run, and the nine C suites went green off this laptop for the first time: 558 cases, 558
+passed**, across plain, interpose, asan and tsan for `kiteplayer-rt` and plain and asan for
+`kiteplayer-libass`. The ratchets passed on a runner too, and the fixture generator worked there:
+560 MB of clips in under half a minute.
+
+**Four of seven jobs were green on that first run and the three reds were all real defects**, listed
+in 17.16 under `KP-B1..B13`. Each was found by the job built to find it, which is the only argument
+for a CI that matters: Linux found a shared native test asserting an Apple-only verdict, Windows
+found the B1-11 architecture guard knowing one spelling of COFF, and macOS found a subtitle-cue row
+that was passing on muxer interleaving rather than on the player. A fourth came from reading the
+job's own log rather than its result: four of the tasks the workflow named answered NO-SOURCE.
+
+#### Then the macOS job found two more, and only one of them was about hardware
+
+Both live in `:kiteplayer-output`'s CoreAudio suites, both surfaced only once a machine that is not
+this laptop ran them, and they are different in kind, which is the part worth keeping.
+
+- **A real hardware boundary.** `CoreAudioSinkTest.the anchor the device publishes is in the near
+  future on the engine clock` measured **-451.7 ms against a window of -5 to +500 ms**. That is the
+  DEVICE, not the clock bases: a base mismatch would be enormous rather than half a second, as the
+  test's own note already said. A runner's virtual output device lags where real hardware leads.
+  `-Pkiteplayer.noAudioHardware=true` drops that one test by name and nothing else, so a developer on
+  a real Mac still runs all 95 without knowing the flag exists. **A filter and not an early return
+  inside the test**, because a test that returns early reports as PASSED, and a green tick over an
+  assertion nobody made is the exact failure this project keeps paying for. Measured both ways before
+  it was wired in: with the flag, 94 tests and that one absent from the results; without it, 95 and
+  all green.
+
+- **A test defect wearing a hardware costume.** `CoreAudioSinkRealTimeTest.the anchor advances with
+  the device rather than with the clock` then failed with **277,333 us of media time across a
+  `delay(200)`**, against a hardcoded expectation of 200,000 plus or minus 60,000. The easy reading is
+  "another device that CI cannot supply", and it is wrong. `delay(200)` promises AT LEAST 200 ms, and
+  on a runner with seven jobs in flight it overshot to about 277. **The device was tracking real time
+  correctly and the test was measuring the wrong thing**: its own comment says "two readings a fixed
+  wall time apart", and nothing was reading wall time. It now marks a `TimeSource.Monotonic` between
+  the two anchor reads and compares against what actually elapsed. Falsified before it was believed:
+  with the advance forced to zero, the test goes red, so it still catches a device that stops.
+
+**The distinction cost one extra look and it is the whole lesson.** Two failures in the same file, on
+the same runner, in the same hour, and one is an environment the runner cannot provide while the
+other is a test that would eventually have failed on a busy laptop too. Filtering both would have
+hidden a real defect behind a true statement about hardware.
 
 
 ## 15. Horizon B execution: B1

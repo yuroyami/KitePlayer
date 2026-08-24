@@ -13,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.TimeSource
 
 /**
  * The real-time path, as far as Kotlin can still see it.
@@ -286,9 +287,14 @@ class CoreAudioSinkRealTimeTest {
 
     @Test
     fun `the anchor advances with the device rather than with the clock`() = runBlocking {
-        // Two readings a fixed wall time apart. The media time between them must grow by about that wall
+        // Two readings some wall time apart. The media time between them must grow by about that wall
         // time, because the device consumes at real speed; a clock derived from submissions instead would
         // jump ahead as fast as the feeder could write.
+        //
+        // The gap is MEASURED rather than assumed to be delay()'s argument. `delay(200)` promises at
+        // least 200 ms and overshoots on a loaded machine: CI measured the clock advancing 277 ms and
+        // failed a device that was tracking real time correctly, because the expectation was hardcoded
+        // at 200. The property under test is "media time tracks wall time", so wall time has to be read.
         val sink = CoreAudioSink()
         val handoff = sink.openWithRing(format) { 48_000 }
         val ring = handoff.ringPointer()
@@ -297,15 +303,18 @@ class CoreAudioSinkRealTimeTest {
             sink.start()
             delay(80)
             val first = ringAnchor(ring)
+            val sinceFirst = TimeSource.Monotonic.markNow()
             delay(200)
             val second = ringAnchor(ring)
+            val wallUs = sinceFirst.elapsedNow().inWholeMicroseconds
             sink.stop()
 
             assertTrue(first.valid && second.valid, "both readings must be real anchors")
             val advancedUs = second.ptsUs - first.ptsUs
             assertTrue(
-                abs(advancedUs - 200_000) < 60_000,
-                "200 ms of wall time must advance the media clock by about 200 ms, was $advancedUs us",
+                abs(advancedUs - wallUs) < 60_000,
+                "the media clock must advance with wall time: $wallUs us passed and the clock moved " +
+                    "$advancedUs us",
             )
         } finally {
             sink.close()

@@ -1110,9 +1110,16 @@ Performance (the open remainder):
   KiteCodec window, as a five-minute reading rather than work.
 
 C-reduction (the charter, owner-scheduled, earliest after S4):
-- SOL-C1 [V] STILL OPEN, and now with a number: 213 exported helper functions across eleven C
-  sources (helpers_codec, codecpar, error, filter, format, frame, hwaccel, packet, playback, stream,
-  and kitecodec_abi), measured 2026-08-18. Replace the one-line helper C (packet, codecpar, stream,
+- SOL-C1 [V] STILL OPEN, and the number is **198**, corrected 2026-08-24. The detail said 213 while
+  the index said 198, and the index was right: this row's own rule is that the DETAIL wins when they
+  disagree, so it is the detail that had to be re-measured rather than the index adjusted to match.
+  Two independent measurements agree. `nm -g` on the built `macos_arm64` archive reports exactly 198
+  exported `T` symbols and no others, and the two public headers declare 191 (`kitecodec_helpers.h`)
+  plus 7 (`kitecodec_abi.h`), which is the same 198. A grep for definitions across the eleven `.c`
+  files returns 214, and that is the trap the old figure fell into: it counts `static` helpers and
+  multi-line signatures the build never exports. The eleven sources are unchanged (helpers_codec,
+  codecpar, error, filter, format, frame, hwaccel, packet, playback, stream, and kitecodec_abi).
+  Replace the one-line helper C (packet, codecpar, stream,
   error, trivial frame and codec, most of format and playback) with direct cinterop on
   Kotlin/Native. KEEP: the JNI adapter, the ABI/identity probe, the get_format callback, FFmpeg
   itself, and the whole real-time C island. The goal is no redundant C, not no C.
@@ -1125,8 +1132,12 @@ C-reduction (the charter, owner-scheduled, earliest after S4):
   them (P0 closed the overflow; the composition itself is still C). Home: with SOL-C1.
 
 Kotlin modernization (hygiene, no schedule, no syntax churn before ownership work):
-- SOL-K1 [V] STILL OPEN, re-verified 2026-08-18 at kitecodec-core/build.gradle.kts:74:
-  -Xcontext-parameters is still passed and is redundant on Kotlin 2.4. Drop at the next window.
+- SOL-K1 **DONE 2026-08-24.** `-Xcontext-parameters` is gone from `kitecodec-core/build.gradle.kts`.
+  It was two kinds of dead: the flag is no longer needed on this Kotlin, and this module declares no
+  context parameter anywhere, which was checked rather than assumed (a grep for a context
+  declaration across every source set returns nothing; the only `context(` hits are FFmpeg function
+  names like `ffkmp_codecpar_from_context`). Verified by compiling jvm, macosArm64, wasmJs and
+  linuxX64 plus the jvm suite with the flag removed.
 - SOL-K2 [C] The adopted guidance: context parameters only for the worker helper cluster and a
   codec execution context; higher-value moves are sealed transactional outcomes, structured
   finalizer scopes, ownership-aware lease APIs, inline plane iteration, checked-size helpers
@@ -2450,10 +2461,9 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-API2 | five, not four, accepted-and-unused config knobs | [V] 08-19 | 17.11, here |
 | SOL-API4 | five stats placeholders, untouched by the new real counters | [V] 08-19 | 17.11, here |
 | SOL-API7 | REDUCED: refusal is typed; the engine never calls `supports()` | [V] 08-19 | 17.11, here |
-| SOL-C1 | 198 exported C symbols, not the 213 this row has always said | [V] 08-19 | 17.11, here |
+| SOL-C1 | 198 exported C symbols, measured two ways 08-24; the C-reduction itself is untouched | [V] 08-24 | 17.11, here |
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
 | SOL-C3 | filter composition still builds into a fixed `char args[512]` | [V] 08-19 | 17.11, here |
-| SOL-K1 | `-Xcontext-parameters` still passed for nothing | [V] 08-19 | 17.11, here |
 | SOL-K2 | the modernization posture; UNFALSIFIABLE as written | [V] 08-19 | 17.11, here |
 | SOL-B4 | three macOS floors disagree: 26.0, 12.0 and 11.0, measured | [V] 08-19 | 17.11, here |
 | SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-19 [owner] | 17.11, here |
@@ -2482,6 +2492,8 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-CI-BILLING | every CI job is refused before its first step: KitePlayer is a PRIVATE repository, so Actions minutes are billed, and the account's spending limit or payment is blocking them. Nothing to do with the workflow, which GitHub parsed and scheduled | [V] 08-24 [owner] | 17.16, here |
 | KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
+| KP-UNTESTED-MODULES | `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` are PUBLISHED and have zero test sources. Their test tasks exist and answer NO-SOURCE, which is how they looked covered | [V] 08-24 | 17.16, here |
+| KP-FIXTURE-PIN | the whole 17.5 matrix runs on clips made by whatever ffmpeg Homebrew ships that week: 8.0 on this Mac, 8.1.2 on the runner. Already produced one false red. `testmedia/` is gitignored, unpinned and unchecksummed | [V] 08-24 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |
@@ -2743,9 +2755,32 @@ fine and this is the evidence: GitHub PARSED it and scheduled all seven jobs und
 names**, which a malformed file cannot do. This is an owner decision, and the shape of it matters,
 because macOS runners bill at ten times the Linux rate and this workflow has three macOS jobs.
 
-**Three defects were found while writing it, before any of it ran.** They are the argument for the
-whole exercise: `KP-WASM-RUNBLOCKING`, `KP-WEBPACK-CONTEXT`, and one already fixed, a renderer test
-that asserted a node-only answer while its own module declares a browser target (`2d5ba40`).
+**Three defects were found while WRITING it, before any of it ran**, and **three more on the day it
+first ran**. That is the argument for the whole exercise, and none of the six is new breakage: every
+one was already true and nothing could see it.
+
+Found while writing: `KP-WASM-RUNBLOCKING`, `KP-WEBPACK-CONTEXT`, and a renderer test that asserted
+a node-only answer while its own module declares a browser target (fixed, `2d5ba40`).
+
+Found by the first run, each by the job built to find it:
+
+- **Linux.** `KiteRtBindingTest` is in `nativeTest`, so it runs on every native target, and it
+  asserted `KPRT_SINK_BAD_ARGUMENT`. Only macOS and iOS give that; everywhere else
+  `kite_rt_sink_unsupported.c` answers `KPRT_SINK_UNSUPPORTED_PLATFORM` before it reads an argument,
+  which the NEXT TEST IN THE SAME FILE already documented. Fixed, `86974ea`.
+- **Windows.** The B1-11 architecture guard refused a correct object: `file` on the runner says
+  "x86-64 COFF object file" where this Mac says "Intel amd64 COFF object file". The guard's own KDoc
+  admitted the flaw, "every string here was measured on this host". Fixed, `a2be55b`, with a watched
+  red test first. **This is the same defect KiteCodec fixed today in its own C task**, which is what
+  makes it worth writing down: a description measured on one host is a claim about that host.
+- **macOS.** The subtitle-cue matrix row was passing on MUXER INTERLEAVING. `decodeUntil` stopped at
+  ten video frames and ten audio buffers, a third of a second at 30 fps, and the first cue is at
+  half a second, so the row only saw a cue when the muxer put the packet early. ffmpeg 8.0 does;
+  8.1.2 does not. Fixed, `8f0be06`: a row that wants a cue reads until it has one, proved able to
+  fail by arming the flag on a clip with no subtitle track. `KP-FIXTURE-PIN` is the generator half.
+
+And one correction to the workflow itself, from reading its own log: four tasks it named came back
+NO-SOURCE, so `KP-UNTESTED-MODULES` replaced them.
 
 #### Correctness, KiteCodec, still open
 

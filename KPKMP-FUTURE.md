@@ -2499,7 +2499,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
 | KP-UNTESTED-MODULES | `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` are PUBLISHED and have zero test sources. Their test tasks exist and answer NO-SOURCE, which is how they looked covered | [V] 08-24 | 17.16, here |
-| KP-FIXTURE-PIN | the whole 17.5 matrix runs on clips made by whatever ffmpeg Homebrew ships that week: 8.0 on this Mac, 8.1.2 on the runner. Already produced one false red. `testmedia/` is gitignored, unpinned and unchecksummed | [V] 08-24 | 17.16, here |
+| KP-FIXTURE-PIN | REDUCED 08-24: the clips now carry a MANIFEST (generator version, host, per-file SHA-256) that CI prints, so a version difference is a diff rather than an investigation. What is left is the PIN itself: nothing fixes the ffmpeg version, so two machines can still disagree | [V] 08-24 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |

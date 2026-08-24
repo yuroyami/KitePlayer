@@ -10350,12 +10350,17 @@ instead of ten, and that was enough.
 
 #### KP-CI-BILLING closed, and what the seven jobs cost
 
-The repository went public, the jobs ran, and the row has no subject left. The cost was measured
-rather than guessed, because the KiteCodec side spent weeks acting on a number nobody had checked:
-**a full run is 5 minutes wall clock**, jobs in parallel. Per job, from the two most recent runs:
-macOS 292 and 296 seconds, Windows 266 and 275, iOS simulator 153 and 228, wasmJs 158 and 166,
-Linux native 127 and 154, Linux JVM 61 and 79, and **the nine C suites 21 and 37 seconds**. macOS
-sets the clock, and the suites this whole row was about are the cheapest thing in the run.
+The repository went public, the jobs ran, and the row has no subject left.
+
+**All seven jobs green on run 32742835779, commit `412c443`, which is the first time this
+repository has ever been green off this laptop.** It began the day at zero of seven.
+
+The cost was measured rather than guessed, because the KiteCodec side spent weeks acting on a number
+nobody had checked. **A full run is 5 to 8 minutes wall clock**, jobs in parallel; the spread is the
+macOS job, which measured 292, 296 and 455 seconds across three runs and sets the clock every time.
+The rest, from the green run: Windows 270, iOS simulator 208, wasmJs 141, Linux native 133, Linux
+JVM 65, and **the nine C suites 37 seconds**. The suites this whole row was about are the cheapest
+thing in the run.
 
 ### 14.136 KiteCodec's docs promised encoders that were never in the box, 2026-08-24
 
@@ -10452,6 +10457,27 @@ every existing suite is byte-identical.
 Kotlin/Native rejects it: `Name contains illegal characters: ","`. The JVM accepted the same name
 without complaint. Compiling the new test for wasmJs, iOS simulator, linuxX64 and mingwX64 before
 pushing is what turned that into a rename instead of a red run.
+
+### 14.138 The clips now say what made them, 2026-08-24
+
+`KP-FIXTURE-PIN`, the recordable half. The whole 17.5 matrix runs on clips that `testmedia/`
+regenerates from whatever `ffmpeg` is on PATH, and `testmedia/` is gitignored, so nothing anywhere
+recorded which encoder produced them. That already cost a day: the subtitle-cue row passed here
+against ffmpeg 8.0 and failed on a runner against 8.1.2, because the two muxers interleave the first
+cue differently.
+
+`scripts/testmedia.sh` now writes `testmedia/MANIFEST.txt`: the generator's full version line, the
+host triple, and every clip's size and SHA-256. CI prints it, and the macOS job's failure artifact
+carries it beside the test reports.
+
+**It does not gate, and that is the design rather than laziness.** A checksum gate would turn every
+legitimate ffmpeg upgrade into a red build, which is a worse failure than the one it prevents: the
+team would learn to regenerate the baseline without reading it. A printed manifest makes the next
+difference a diff between two logs.
+
+What is still open on the row: nothing pins the ffmpeg VERSION, so two machines can still disagree.
+That needs either a pinned toolchain in CI or clips committed as artifacts, and both are decisions
+with a cost, not cleanups.
 
 
 ## 15. Horizon B execution: B1

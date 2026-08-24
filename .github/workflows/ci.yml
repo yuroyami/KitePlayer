@@ -170,6 +170,13 @@ jobs:
       - name: Generate the test clips
         run: ./scripts/testmedia.sh
 
+      # KP-FIXTURE-PIN. The script writes testmedia/MANIFEST.txt: the ffmpeg that made the clips,
+      # and every clip's size and SHA-256. Printed rather than verified, deliberately. A checksum
+      # GATE would turn every legitimate ffmpeg upgrade into a red build; a printed manifest turns
+      # "why did that matrix row behave differently on the runner" into a diff between two logs.
+      - name: The clips, and what made them
+        run: cat testmedia/MANIFEST.txt
+
       # The ratchets first, because a surface change should fail before a two-minute test suite
       # does. checkKotlinAbi is Kotlin's own ABI validation (checkLegacyAbi is its deprecated
       # spelling); checkKitertCoupling holds the kitert boundary against a committed baseline;
@@ -230,6 +237,7 @@ jobs:
           path: |
             **/build/reports/tests/**
             **/build/test-results/**
+            testmedia/MANIFEST.txt
           retention-days: 14
           if-no-files-found: ignore
 

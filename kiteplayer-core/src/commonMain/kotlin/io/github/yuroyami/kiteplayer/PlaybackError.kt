@@ -151,21 +151,21 @@ public sealed class PlaybackWarning {
     /**
      * Frames are being dropped to keep up with the clock.
      *
-     * Never emitted: the drops are counted as `PlaybackStats.droppedFramesLate`, and a rate over the last
-     * second is something a caller works out by diffing two samples. A warning would have to be rate
-     * limited to be useful, which is a policy nothing has decided.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Emitted from the stats tick when 5 or more frames were dropped since the previous one, so the
+     * rate limit is `PlayerConfig.statsInterval`, one second by default. The running total is also in
+     * `PlaybackStats.droppedFramesLate` for a caller who would rather diff two samples.
      */
     public data class FrameDropping(val droppedInLastSecond: Int) : PlaybackWarning() {
         override val message: String get() = "dropping frames: $droppedInLastSecond in the last second"
     }
 
     /**
-     * The audio device restarted, changed or was replaced. Playback recovered.
+     * The audio device restarted, changed or was replaced.
      *
-     * Never emitted: the engine does not collect `AudioSink.events`, so a device that changes underneath
-     * playback is not noticed and nothing recovers from it.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Emitted when the sink reports `AudioSinkEvent.DeviceLost` (detail prefixed "device lost: ") or
+     * `AudioSinkEvent.DeviceChanged`. **It reports; it does not mean the engine recovered.** Nothing
+     * rebuilds the sink or reopens the device yet, so treat this as an observation rather than a
+     * repair. `AudioSinkEventTest` pins exactly which events reach here and which are dropped.
      */
     public data class AudioDeviceChanged(val detail: String) : PlaybackWarning() {
         override val message: String get() = "audio device changed: $detail"
@@ -174,9 +174,10 @@ public sealed class PlaybackWarning {
     /**
      * The audio device ran out of data.
      *
-     * Never emitted: an underrun is counted as `PlaybackStats.audioUnderruns`, which is a number a caller
-     * can diff, and the sink's own event feed that would carry the occurrence has no reader.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Emitted from the stats tick on the RISING EDGE of the player-level underrun total, so a reopen
+     * cannot silently re-baseline it, and [totalSoFar] is that whole-player total rather than this
+     * session's. The same number is in `PlaybackStats.audioUnderruns`. Note the sink's own
+     * `AudioSinkEvent.Underrun` is a different path and is currently dropped unread.
      */
     public data class AudioUnderrun(val totalSoFar: Long) : PlaybackWarning() {
         override val message: String get() = "audio underrun, $totalSoFar so far"
@@ -295,9 +296,9 @@ public sealed class PlaybackWarning {
     /**
      * The renderer lost its surface. Audio continues and video frames are discarded.
      *
-     * Never emitted: the engine does not collect `VideoRenderer.events`. A renderer that refuses a frame
-     * still costs nothing more than that frame, because a refusal is counted as a drop and playback
-     * carries on. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Emitted when an attached renderer reports `RendererEvent.SurfaceLost`. A renderer that merely
+     * refuses a frame does not raise this: a refusal costs that frame, is counted as a drop, and
+     * playback carries on.
      */
     public data class NoRenderSurface(val detail: String) : PlaybackWarning() {
         override val message: String get() = "no render surface: $detail"

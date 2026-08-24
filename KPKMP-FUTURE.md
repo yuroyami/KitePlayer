@@ -2894,7 +2894,21 @@ One release blocker is left and it is the Web reader; everything else here is a 
   FFmpeg option strings and filter chains at the public edge; a process wide logger beside a per
   player one nothing reads; `Pts` arithmetic that is naked `Long` and prints garbage at
   `Long.MIN_VALUE`; unchecked geometry in `CapturedFrame`; and no Java or Swift adaptation of any
-  kind. Six KDoc blocks deny features that shipped and three promise behaviour that does not exist.
+  kind. Three KDoc blocks still promise behaviour that does not exist.
+  **The "six KDoc blocks deny features that shipped" half is CLOSED, 2026-08-24, and there were
+  five, all in the public warning surface.** Four in `PlaybackError.kt` opened with the words "Never
+  emitted" while `PlaybackCore` emits all four: `FrameDropping` (stats tick, 5 drops per interval),
+  `AudioDeviceChanged` (sink `DeviceLost`/`DeviceChanged`), `AudioUnderrun` (rising edge of the
+  player-level total) and `NoRenderSurface` (`RendererEvent.SurfaceLost`). The code says the cause
+  itself, three lines above two of them: "F-WRN1: the audit found these two documented warnings
+  wired to nothing". **F-WRN1 wired them and updated none of the KDoc**, so a consumer reading the
+  docs would not write a handler for warnings the engine actually sends. The fifth is
+  `KP-TONEMAP-WARN`. Two neighbours were re-checked and are correctly documented:
+  `DecoderUnavailable` and `AudioDeviceUnavailable` have zero emission sites. **One gap left:
+  `FrameDropping` is the only one of the four with no test.** `AudioUnderrun` is pinned by
+  `EngineAuditRegressionTest`, `NoRenderSurface` by `DiagnosticsTest`, `AudioDeviceChanged` by the
+  new `AudioSinkEventTest`. Forcing five late drops inside one stats interval under a virtual clock
+  is test-design work, not a fixture flag.
   **The `spi/AudioSink.kt` self-contradiction is CLOSED, 2026-08-24.** All four of its claims were
   wrong, not the two the row named: it said the engine collects nothing from the events feed (it
   collects), that an underrun is counted and may rebuffer (it is dropped), that a device change

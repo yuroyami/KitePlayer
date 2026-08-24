@@ -10547,6 +10547,41 @@ covered `kiteplayer-core/src` only, found nothing, and the working conclusion fo
 one: a repository-wide grep costs the same as a module-wide grep and is the only one that can be
 trusted for a claim about the whole engine.
 
+### 14.141 Four public warnings said "Never emitted" while the engine emitted them, 2026-08-24
+
+The rest of `KP-API`'s "six KDoc blocks deny features that shipped". There were five, all in the
+public warning surface, and 14.140 covered the first. These are the other four, and they share one
+cause.
+
+| Warning | KDoc opened with | Actually emitted from |
+|---|---|---|
+| `FrameDropping` | "Never emitted" | the stats tick, when 5 or more frames dropped since the last one |
+| `AudioDeviceChanged` | "Never emitted: the engine does not collect `AudioSink.events`" | the sink-event collector, on `DeviceLost` and `DeviceChanged` |
+| `AudioUnderrun` | "Never emitted" | the stats tick, on the rising edge of the player-level total |
+| `NoRenderSurface` | "Never emitted: the engine does not collect `VideoRenderer.events`" | `watchRendererEvents`, on `RendererEvent.SurfaceLost` |
+
+**The cause is written in the code, three lines above two of the emissions**: "F-WRN1: the audit
+found these two documented warnings wired to nothing." F-WRN1 wired them up and updated none of the
+KDoc. So the surge that fixed the defect left the documentation stating the defect, and the
+documentation is the half a consumer reads. **Nobody would write a handler for a warning the docs
+say is never sent.**
+
+Each KDoc now says when its warning fires, and the two that need a caveat get one: `AudioDeviceChanged`
+REPORTS a device change and does not mean anything recovered, and `AudioUnderrun` carries a
+whole-player total rather than a per-session one, which is deliberate so a reopen cannot silently
+re-baseline it.
+
+**Two neighbours were re-checked rather than assumed guilty.** `DecoderUnavailable` and
+`AudioDeviceUnavailable` have zero emission sites anywhere in the tree, so their "Not implemented
+yet" is accurate and they were left alone.
+
+**One honest gap, recorded rather than papered over.** Of the four, only `FrameDropping` has no
+test: `AudioUnderrun` is pinned by `EngineAuditRegressionTest`, `NoRenderSurface` by
+`DiagnosticsTest`, and `AudioDeviceChanged` by `AudioSinkEventTest` written earlier the same day. So
+three of these four corrections are falsifiable and one rests on reading the code. Forcing five late
+frame drops inside one stats interval under a virtual clock is test-design work, not a fixture flag,
+and inventing it at speed is how a test comes to pass for the wrong reason.
+
 
 ## 15. Horizon B execution: B1
 

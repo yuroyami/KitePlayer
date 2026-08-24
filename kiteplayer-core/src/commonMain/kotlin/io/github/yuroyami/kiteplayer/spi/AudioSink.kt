@@ -80,9 +80,11 @@ public interface AudioSink : AutoCloseable {
     /**
      * Device loss, underrun, format change. The sink reports; the engine decides what to do.
      *
-     * The engine collects nothing from this feed yet, so a sink is free to publish honestly and no
-     * decision follows. Device-change and device-loss recovery is what will read it.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * **What the engine does with this today, per event, so a sink author is not guessing.** It
+     * collects the feed on the session lane. `DeviceLost` and `DeviceChanged` become a
+     * `PlaybackWarning.AudioDeviceChanged`. `Underrun` and `FormatChangeRequested` are read and
+     * dropped. Nothing here rebuilds a sink or recovers a device yet: publish honestly, and expect a
+     * warning rather than a repair.
      */
     public val events: Flow<AudioSinkEvent>
 }
@@ -176,20 +178,21 @@ public interface AudioSinkBuffer {
 }
 
 public sealed interface AudioSinkEvent {
-    /** The device ran dry. The engine counts it and may rebuffer. */
+    /** The device ran dry. The engine currently ignores this; it does not count or rebuffer on it. */
     public data class Underrun(val detail: String) : AudioSinkEvent
 
     /** The device disappeared: unplugged, taken by another application, session interrupted. */
     public data class DeviceLost(val detail: String) : AudioSinkEvent
 
-    /** The default device changed. The engine tears the sink down and builds a new one. */
+    /** The default device changed. The engine warns (`AudioDeviceChanged`) and keeps the sink. */
     public data class DeviceChanged(val detail: String) : AudioSinkEvent
 
     /**
      * The device wants a different format than the one negotiated.
      *
-     * The engine responds by recreating the sink, never by reconfiguring in place. In-place
-     * reconfiguration of an audio device is where every player's device-change bugs live.
+     * The engine currently ignores this. When it does act it will recreate the sink rather than
+     * reconfigure in place, because in-place reconfiguration is where every player's device-change
+     * bugs live.
      */
     public data class FormatChangeRequested(val detail: String) : AudioSinkEvent
 }

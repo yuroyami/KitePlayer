@@ -10421,6 +10421,38 @@ distinct codes across 40 files** under `kitecodec-core/src`. Not touched tonight
 those comments explain WHY using the code as shorthand, so removing them mechanically would delete
 the reasoning along with the jargon. It is 40 files of judgement, not a `sed`.
 
+### 14.137 A public SPI described four behaviours it does not have, 2026-08-24
+
+`KP-API`'s worst half, closed. The row said `spi/AudioSink.kt` contradicts itself inside one file.
+It does, and it is worse than the row said: **all four of its claims about the engine were wrong**,
+and the file is a PUBLIC SPI, so every one of them is an instruction to somebody writing a sink.
+
+| The KDoc said | `PlaybackCore.kt:4578-4591` does |
+|---|---|
+| "The engine collects nothing from this feed yet" | it collects, on the session lane |
+| `Underrun`: "The engine counts it and may rebuffer" | dropped, `else -> Unit` |
+| `DeviceChanged`: "tears the sink down and builds a new one" | warns `AudioDeviceChanged`, keeps the sink |
+| `FormatChangeRequested`: "responds by recreating the sink" | dropped, `else -> Unit` |
+
+**The reason all four could be wrong at once is that nothing ever ran the path.** Every fixture in
+the repository published `emptyFlow()` for `events`, so the collector had never received a single
+event in any test on any target. The code was written, reviewed, shipped, and never executed.
+
+`AudioSinkEventTest` fixes that with two tests: the two device events produce warnings in order
+carrying the sink's own detail, and the other two are read and dropped without a warning, without
+failing the player and without tearing the sink down. **Proved able to fail** by routing `Underrun`
+to the warning instead of `DeviceLost`, which reddens both.
+
+**The fixture change is opt-in and that was deliberate.** A live event flow never completes, so the
+core's collector parks instead of finishing, and switching that on for three hundred existing tests
+to serve two is a change nobody asked for. `ScriptedSink(publishesEvents = false)` is the default and
+every existing suite is byte-identical.
+
+**One cross-target lesson, found here rather than in CI.** The first test name contained a comma and
+Kotlin/Native rejects it: `Name contains illegal characters: ","`. The JVM accepted the same name
+without complaint. Compiling the new test for wasmJs, iOS simulator, linuxX64 and mingwX64 before
+pushing is what turned that into a rename instead of a red run.
+
 
 ## 15. Horizon B execution: B1
 

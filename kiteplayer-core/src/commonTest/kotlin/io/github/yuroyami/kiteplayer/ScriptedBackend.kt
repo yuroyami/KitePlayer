@@ -23,6 +23,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
@@ -779,6 +780,12 @@ internal class ScriptedSink(
     override val deviceBufferFrames: Int = 512,
     private val faults: FaultPlan = FaultPlan.None,
     private val trace: ScriptTrace = ScriptTrace(),
+    /**
+     * Opt-in, and false by default ON PURPOSE. A live [events] flow never completes, so the core's
+     * collector stays parked instead of finishing, and switching that on for every suite at once is a
+     * change to three hundred tests to serve one. Only the suite that emits events asks for it.
+     */
+    private val publishesEvents: Boolean = false,
 ) : AudioSink {
 
     private var render: AudioRenderCallback? = null
@@ -854,7 +861,15 @@ internal class ScriptedSink(
 
     override val latencyQuality: LatencyQuality = LatencyQuality.Estimated
 
-    override val events: Flow<AudioSinkEvent> = emptyFlow()
+    private val published = MutableSharedFlow<AudioSinkEvent>(extraBufferCapacity = 16)
+
+    override val events: Flow<AudioSinkEvent> = if (publishesEvents) published else emptyFlow()
+
+    /** Emit a device event as the platform would, for a test that constructed this with events on. */
+    suspend fun publish(event: AudioSinkEvent) {
+        check(publishesEvents) { "construct ScriptedSink(publishesEvents = true) to emit events" }
+        published.emit(event)
+    }
 
     override fun close() {
         closed = true

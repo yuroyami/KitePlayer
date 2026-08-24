@@ -1,0 +1,442 @@
+# KitePlayer's first continuous integration, 2026-08-24 (register row KP-B1..B13).
+#
+# Until today this repository had no `.github` directory at all, which meant every claim about its
+# health was a claim about ONE laptop: nine C suites that had never run anywhere else, a Linux
+# native target that only ever CROSS-LINKED, and a Windows target that had never executed a single
+# test. KiteCodec's ci.yml is the template and its lessons are carried over deliberately rather
+# than rediscovered:
+#
+#   - The Kotlin/Native toolchain is WARMED before anything reaches a C task. CompileKiteRtTask
+#     compiles the audio ring with konan's own clang, from
+#     `<konan data>/dependencies/<llvm package>/bin/clang`, and konan fetches that on demand when a
+#     Kotlin/Native task first runs. On a fresh runner the C task gets there first and dies with
+#     "no clang under ...". That single race was six of KiteCodec's ten failing jobs.
+#     `downloadKotlinNativeDistribution` is the provisioning task, so the warmup here asks for it
+#     by name instead of relying on a compile that happens to run early.
+#   - `~/.konan` is cached in every job that touches a native target, because it holds the LLVM and
+#     the per-target sysroots and re-fetching them is the single largest cost in the run.
+#   - Every job says what it does NOT cover. A green tick that quietly skipped something is the
+#     failure mode this project keeps paying for.
+#
+# WHAT THIS RUN DOES NOT COVER, stated once here rather than discovered later:
+#
+#   - `:kiteplayer-output`'s CoreAudio suites on the iOS SIMULATOR. They open a real audio unit and
+#     the simulator answers -10851 (kAudioUnitErr_InvalidPropertyValue), so the whole
+#     CoreAudioSink family fails there for the environment rather than for the code. Reproduced on
+#     the proving Mac before this file existed. They DO run in the macos-host job, where the audio
+#     device is real.
+#   - `:kiteplayer-ffmpeg` on the iOS simulator: RealMediaSeekTest cannot see the host's testmedia
+#     tree through the simctl spawn boundary, and VideoToolboxDecodeTest needs hardware the
+#     simulator does not have. Four failures, all environment.
+#   - `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` on wasmJs: their commonTest DOES NOT COMPILE for
+#     that target, because `DecoderFallbackTest` and `FilterAttachmentTest` use `runBlocking`, which
+#     does not exist on wasmJs. That target has therefore never been built. Row KP-WASM-RUNBLOCKING.
+#   - `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with
+#     "RangeError: Invalid array length" while it timestamps a context directory. Deterministic on
+#     the proving Mac across a cleaned build. The NODE half runs here. Row KP-WEBPACK-CONTEXT.
+#   - Android DEVICE tests (`connectedAndroidTest`) and the physical-device rows. Those need
+#     hardware and stay owner-gated exactly as the register says.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Gradle's own daemon is pointless on a runner that exits after one build, and the file-watching
+  # it enables costs startup time. Everything else stays as gradle.properties has it, including the
+  # configuration cache, because CI should build the way the developer builds.
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+
+  # ---------------------------------------------------------------------------------------------
+  # The headline. Nine C suites, off this project's one laptop for the first time.
+  # ---------------------------------------------------------------------------------------------
+  c-suites:
+    name: The nine C suites (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # No JDK, no Gradle, no network. build-host.sh drives /usr/bin/clang directly and the ring
+      # includes stdint, stdlib, string and stdatomic and nothing else. That is why this job is the
+      # cheapest one here and also the one with the least that can go wrong.
+      #
+      # WHY macOS AND ONLY macOS, and it is not a preference. The allocation interposer is a Mach-O
+      # __DATA,__interpose dylib, which only dyld honours; the device suites link
+      # -framework AudioToolbox -framework CoreAudio. Neither has a Linux or Windows form, so a
+      # second runner would not be broader coverage, it would be a rewrite.
+      - name: kiteplayer-rt, plain (the correctness and allocation variant)
+        working-directory: kiteplayer-rt/native
+        run: ./scripts/build-host.sh plain && ./scripts/run-c-tests.sh plain
+
+      # NOT a fourth build. It reruns the PLAIN binaries with KPRT_REQUIRE_ALLOC_ACCOUNTING=1, so a
+      # suite that cannot observe the interposer FAILS instead of quietly recording a zero. Without
+      # it, "nothing allocated" and "nothing was counting" look identical.
+      - name: kiteplayer-rt, interpose (prove the instrument is live)
+        working-directory: kiteplayer-rt/native
+        run: ./scripts/run-c-tests.sh interpose
+
+      - name: kiteplayer-rt, asan + ubsan
+        working-directory: kiteplayer-rt/native
+        run: ./scripts/build-host.sh asan && ./scripts/run-c-tests.sh asan
+
+      # The variant that earns its keep: the ring is two seqlocks and two lock-free counters, and a
+      # seqlock written with plain fields instead of C11 atomics is a real race TSan reports.
+      - name: kiteplayer-rt, tsan
+        working-directory: kiteplayer-rt/native
+        run: ./scripts/build-host.sh tsan && ./scripts/run-c-tests.sh tsan
+
+      # The ninth suite. It borrows kiteplayer-rt's harness on purpose (same repository, same build
+      # layer, same prefix) and needs neither jni.h nor libass: it covers the packed-buffer size
+      # arithmetic, which lives in a header precisely so it can be proven without a renderer.
+      - name: kiteplayer-libass, plain then asan
+        working-directory: kiteplayer-libass/native
+        run: ./scripts/run-c-tests.sh plain && ./scripts/run-c-tests.sh asan
+
+  # ---------------------------------------------------------------------------------------------
+  # The macOS host: the only runner that gets the real media, plus every ratchet.
+  # ---------------------------------------------------------------------------------------------
+  macos-host:
+    name: macOS arm64 (real media, JVM + native, the ratchets)
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-macos-arm64-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-macos-arm64-
+
+      # libass is a REAL dependency of :kiteplayer-libass on this host: its macosArm64 cinterop
+      # reads /opt/homebrew/include, which is the same source the desktop FFmpeg profile links its
+      # text stack from. ffmpeg is the fixture generator below.
+      #
+      # WHY THE FIXTURES ARE GENERATED ON macOS AND NOWHERE ELSE. Homebrew's ffmpeg is 8.0, which is
+      # exactly what the proving machine has, so the clips a runner makes are the clips the
+      # developer tested against. Ubuntu's apt ffmpeg is a different release with a different codec
+      # set, and fixtures that differ per runner turn one red into an argument about which machine
+      # was right. The register already records the deeper problem (testmedia/ is gitignored and has
+      # no pin or checksum, KP-B1..B13); pinning the GENERATOR is what this job can do about it
+      # today, and it is not the same as pinning the OUTPUT.
+      - name: Install libass and the ffmpeg CLI
+        run: brew install libass ffmpeg
+
+      # BEFORE any Gradle task that could reach compileKiteRtCFor<Target>. See the file header.
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      # 27 seconds and about 560 MB on the proving machine, which is why this is generated per run
+      # rather than cached: the cache would cost more to move than the clips cost to make.
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+
+      # The ratchets first, because a surface change should fail before a two-minute test suite
+      # does. checkKotlinAbi is Kotlin's own ABI validation (checkLegacyAbi is its deprecated
+      # spelling); checkKitertCoupling holds the kitert boundary against a committed baseline;
+      # checkPublicationReadiness reads all 116 generated POMs and the project dependency edges.
+      - name: The ratchets
+        run: ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
+
+      # Every module with a jvm test task. The three that need the clips (ffmpeg, mobile,
+      # compose-video) are here rather than on Linux for the generator reason above.
+      - name: JVM tests, every module
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:jvmTest \
+            :kiteplayer-subtitles:jvmTest \
+            :kiteplayer-output:jvmTest \
+            :kiteplayer-view:jvmTest \
+            :kiteplayer-network:jvmTest \
+            :kiteplayer-ffmpeg:jvmTest \
+            :kiteplayer-mobile:jvmTest \
+            :kiteplayer-compose-video:jvmTest \
+            :kiteplayer-compose-interop:jvmTest \
+            :kiteplayer-compose:jvmTest \
+            :kiteplayer-phone:jvmTest
+
+      # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the 17.5 format matrix against
+      # real clips, and :kiteplayer-output's CoreAudio suites need the real audio device this
+      # runner has and the iOS simulator does not.
+      - name: Kotlin/Native macosArm64 tests
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:macosArm64Test \
+            :kiteplayer-subtitles:macosArm64Test \
+            :kiteplayer-output:macosArm64Test \
+            :kiteplayer-rt:macosArm64Test \
+            :kiteplayer-libass:macosArm64Test \
+            :kiteplayer-network:macosArm64Test \
+            :kiteplayer-ffmpeg:macosArm64Test
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-host-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  # iOS, on the simulator, for the suites that do not need a device.
+  # ---------------------------------------------------------------------------------------------
+  ios-simulator:
+    name: iOS simulator arm64 (device-free suites)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-ios-sim-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-ios-sim-
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      # The list is exactly the modules whose iOS suites pass without a device or the host's disk.
+      # :kiteplayer-output and :kiteplayer-ffmpeg are absent for the reasons in the file header, and
+      # their absence is the honest form: a job that ran them and ignored the result would be worse
+      # than one that says it did not run them.
+      - name: iosSimulatorArm64 tests
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:iosSimulatorArm64Test \
+            :kiteplayer-subtitles:iosSimulatorArm64Test \
+            :kiteplayer-rt:iosSimulatorArm64Test \
+            :kiteplayer-view:iosSimulatorArm64Test \
+            :kiteplayer-network:iosSimulatorArm64Test
+
+      # Compiling the device triples is a weaker claim than running them and is still worth making:
+      # it is what catches an appleMain change that only breaks on the real target.
+      - name: Compile the iOS device targets
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:compileKotlinIosArm64 \
+            :kiteplayer-output:compileKotlinIosArm64 \
+            :kiteplayer-ffmpeg:compileKotlinIosArm64 \
+            :kiteplayer-view:compileKotlinIosArm64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  # Linux, JVM and Android host. No Kotlin/Native here at all, which is what makes it fast.
+  # ---------------------------------------------------------------------------------------------
+  linux-jvm-android:
+    name: Linux x64 (JVM + Android host tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Only the modules whose tests need no clips. The media-backed suites run on macos-host,
+      # where the fixture generator is the one the developer used. This job therefore proves the
+      # PURE half on a second operating system, which is what it is for.
+      - name: JVM tests, media-free modules
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:jvmTest \
+            :kiteplayer-subtitles:jvmTest \
+            :kiteplayer-output:jvmTest \
+            :kiteplayer-view:jvmTest \
+            :kiteplayer-network:jvmTest \
+            :kiteplayer-compose-interop:jvmTest \
+            :kiteplayer-compose:jvmTest \
+            :kiteplayer-phone:jvmTest
+
+      # Android HOST tests, which are ordinary JVM tests against the Android variant. Device tests
+      # are a different claim and are not made here.
+      - name: Android host tests, media-free modules
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:testAndroidHostTest \
+            :kiteplayer-subtitles:testAndroidHostTest \
+            :kiteplayer-output:testAndroidHostTest \
+            :kiteplayer-view:testAndroidHostTest \
+            :kiteplayer-network:testAndroidHostTest \
+            :kiteplayer-compose-interop:testAndroidHostTest
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-jvm-android-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  # Linux, Kotlin/Native. These binaries have been cross-linked on a Mac for months; this is where
+  # they actually EXECUTE on a Linux kernel without a container in the way.
+  # ---------------------------------------------------------------------------------------------
+  linux-native:
+    name: Linux x64 (Kotlin/Native, executed not just linked)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-linux-x64-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-linux-x64-
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      # linuxX64 is the HOST triple here, so Gradle enables the test tasks instead of disabling them
+      # the way it does on a Mac. scripts/linux-tests.sh exists for the macOS developer loop and
+      # runs the same binaries in a container; this needs no container.
+      #
+      # :kiteplayer-ffmpeg is absent because its suites read the clips, which are generated on the
+      # macOS job only. Linking it is still covered below.
+      - name: linuxX64 tests, media-free modules
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:linuxX64Test \
+            :kiteplayer-subtitles:linuxX64Test \
+            :kiteplayer-output:linuxX64Test \
+            :kiteplayer-rt:linuxX64Test
+
+      # The player's FFmpeg backend links its embedded KiteCodec on Linux. This is the step that
+      # would catch kitecodec-core shipping a klib whose linuxX64 half does not resolve.
+      - name: Link the FFmpeg backend for linuxX64
+        run: ./gradlew --stacktrace :kiteplayer-ffmpeg:linkDebugTestLinuxX64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-native-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  # Windows. The register has said for weeks that "the Windows matrix has NEVER run on Windows;
+  # mingw links are not runs". This is the job that changes that sentence.
+  # ---------------------------------------------------------------------------------------------
+  windows-native:
+    name: Windows x64 (Kotlin/Native, the first real Windows run)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-mingw-x64-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-mingw-x64-
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      # mingwX64 is the host triple on this runner, so these EXECUTE. Media-free modules only, for
+      # the same fixture reason as Linux.
+      - name: mingwX64 tests, media-free modules
+        run: >
+          ./gradlew --stacktrace
+          :kiteplayer-core:mingwX64Test
+          :kiteplayer-subtitles:mingwX64Test
+          :kiteplayer-output:mingwX64Test
+          :kiteplayer-rt:mingwX64Test
+
+      - name: Link the FFmpeg backend for mingwX64
+        run: ./gradlew --stacktrace :kiteplayer-ffmpeg:linkDebugTestMingwX64
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-native-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
+  # The web target. Node and a headless browser are two different environments and both are run,
+  # which is how the one test that only held in node was found.
+  # ---------------------------------------------------------------------------------------------
+  web:
+    name: wasmJs (node and headless browser)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      # wasmJsTest is BOTH halves: wasmJsNodeTest and wasmJsBrowserTest. Running only the node half
+      # is what let WebCanvasVideoRendererTest assert a node-only refusal for as long as it did; the
+      # browser really has OffscreenCanvas, so the same call draws there.
+      - name: wasmJs tests, node and browser
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:wasmJsTest \
+            :kiteplayer-subtitles:wasmJsTest \
+            :kiteplayer-output:wasmJsTest
+
+      # NODE ONLY, and the reason is in the file header: the browser half aborts inside webpack
+      # while it timestamps a context directory. That is a row, not a skip, and the node half is
+      # real coverage in the meantime.
+      - name: wasmJs tests, network (node half only)
+        run: ./gradlew --stacktrace :kiteplayer-network:wasmJsNodeTest
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 14
+          if-no-files-found: ignore

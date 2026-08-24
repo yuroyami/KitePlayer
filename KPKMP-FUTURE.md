@@ -2590,8 +2590,8 @@ found `KP-WASM-RUNBLOCKING` and `KP-WEBPACK-CONTEXT` before a single job ran, an
 anything about the code. **A CI that opens three rows on the day it lands is a CI doing its job**,
 and none of the three is new breakage: all three were already true and nothing could see them.
 
-**2026-08-24, end of day (PAST 14.135 to 14.139), counted again: 47 KitePlayer rows and 24 KiteCodec
-rows, so 71 open in total.** The KitePlayer table GREW by three on the day it got CI, and that is
+**2026-08-24, end of day (PAST 14.135 to 14.142), counted again: 48 KitePlayer rows and 24 KiteCodec
+rows, so 72 open in total, with 10 owner-gated and every one of those KitePlayer's.** The KitePlayer table GREW by three on the day it got CI, and that is
 the CI working: `KP-WASM-RUNBLOCKING`, `KP-WEBPACK-CONTEXT`, `KP-UNTESTED-MODULES` and
 `KP-FIXTURE-PIN` were all found by writing or running the workflow, and `KP-CI-BILLING` opened and
 closed inside the same day. Against that, `KC-WASM-MIRROR` closed, `SOL-B7` reduced to a measurement
@@ -2624,8 +2624,9 @@ file under RULE TWO (PAST 14.115).
 
 Of the 47 open KitePlayer rows, **43 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
-because they need hardware this machine does not have, and **9 rows in total are [owner] gated**,
-all of them KitePlayer rows now that every KiteCodec [owner] row has closed. **So nothing in this
+because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
+all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is
+`KP-TONEMAP-WARN`, opened at the end of the day and a product decision rather than hardware. **So nothing in this
 register is unverified except what cannot be verified here.** A tenth [owner] row existed for a few
 hours and was a new KIND for this list, neither hardware nor a product decision but a payment
 setting: `KP-CI-BILLING`. The owner chose to make the repository public and it closed the same day.

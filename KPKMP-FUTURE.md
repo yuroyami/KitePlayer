@@ -1034,8 +1034,11 @@ API truth:
   typed sugar (preOpenOptions, unit-tested pure).
 - SOL-API2 [C] REDUCED by the S4.g surge: preservePitch is REAL (tempo stage against a
   speed-folded resampler, epoch-adopted at flush exactly like the rate; setPreservePitch on the
-  facade). Still accepted and unused: logger (superseded by KiteLog, KDoc says so),
-  liveBackBuffer, liveMaxLag, startDisabled. Home: S4.e.
+  facade). Still accepted and unused: logger, liveBackBuffer, liveMaxLag, startDisabled.
+  **Re-read 2026-08-24: all four already say so in their own KDoc**, in the words "Not implemented
+  yet; see the roadmap", and `liveBackBuffer` goes further and states there is no live path at all.
+  So this row is about UNBUILT features, not about documentation that lies, and it should not be
+  swept with the doc-truth rows. Home: S4.e.
 - SOL-API3: CLOSED by the S4.g surge. KeyframeThenRefine runs the seek machine's ladder loop in
   two phases: the keyframe lands and PRESENTS first, then an ordinary precise landing on the
   exact frame; SeekCompleted and the replies carry the exact landing only, and a keyframe
@@ -2498,7 +2501,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-B1..B13 | REDUCED 08-24: `.github/workflows/ci.yml` exists, seven jobs on four operating systems. The RELEASE half is untouched: debug signing, no wrapper checksum, no lockfiles, NDK by string sort, no signing or Sonatype configuration, gitignored unpinned fixtures | [V] 08-24 | 17.16, here |
 | KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
-| KP-UNTESTED-MODULES | `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` are PUBLISHED and have zero test sources. Their test tasks exist and answer NO-SOURCE, which is how they looked covered | [V] 08-24 | 17.16, here |
+| KP-UNTESTED-MODULES | MEASURED 08-24: `:kiteplayer-compose` (1 file, 3 code lines, an internal marker with NO public surface), `:kiteplayer-compose-interop` (6 files, ~90 lines, every one `@Composable`, 1 public declaration) and `:kiteplayer-phone` (3 files, ~71 lines, 10 public declarations, all deprecated delegations). PUBLISHED with zero test sources; their test tasks answered NO-SOURCE, which is how they looked covered until CI named them. The compose halves need Compose UI test infrastructure this repository does not have; the phone half is testable today | [V] 08-24 | 17.16, here |
 | KP-FIXTURE-PIN | REDUCED 08-24: the clips now carry a MANIFEST (generator version, host, per-file SHA-256) that CI prints, so a version difference is a diff rather than an investigation. What is left is the PIN itself: nothing fixes the ffmpeg version, so two machines can still disagree | [V] 08-24 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
@@ -2557,12 +2560,13 @@ found `KP-WASM-RUNBLOCKING` and `KP-WEBPACK-CONTEXT` before a single job ran, an
 anything about the code. **A CI that opens three rows on the day it lands is a CI doing its job**,
 and none of the three is new breakage: all three were already true and nothing could see them.
 
-**2026-08-24, end of day (PAST 14.135), counted again: 47 KitePlayer rows and 25 KiteCodec rows, so
-72 open in total.** The KitePlayer table GREW by three on the day it got CI, and that is the CI
-working: `KP-WASM-RUNBLOCKING`, `KP-WEBPACK-CONTEXT`, `KP-UNTESTED-MODULES` and `KP-FIXTURE-PIN` were
-all found by writing or running the workflow, and `KP-CI-BILLING` opened and closed inside the same
-day. `SOL-B7` reduced to a measurement that belongs to AGP, and `KC-DOCTRUTH` lost its whole
-FFmpeg-profile half.
+**2026-08-24, end of day (PAST 14.135 to 14.139), counted again: 47 KitePlayer rows and 24 KiteCodec
+rows, so 71 open in total.** The KitePlayer table GREW by three on the day it got CI, and that is
+the CI working: `KP-WASM-RUNBLOCKING`, `KP-WEBPACK-CONTEXT`, `KP-UNTESTED-MODULES` and
+`KP-FIXTURE-PIN` were all found by writing or running the workflow, and `KP-CI-BILLING` opened and
+closed inside the same day. Against that, `KC-WASM-MIRROR` closed, `SOL-B7` reduced to a measurement
+that belongs to AGP rather than to either project, `KC-DOCTRUTH` lost its whole FFmpeg-profile half,
+`KP-FIXTURE-PIN` lost its recordable half, and `KP-API` lost the `AudioSink` self-contradiction.
 
 **2026-08-24, midday (PAST 14.134), counted: 44 KitePlayer rows and 25 KiteCodec
 rows, so 69 open in total.** `KC-PAGES` closed, and the SITE was fetched rather than the job read.
@@ -2590,10 +2594,11 @@ file under RULE TWO (PAST 14.115).
 
 Of the 47 open KitePlayer rows, **43 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
-because they need hardware this machine does not have, and 10 rows in total are [owner] gated, all
-of them KitePlayer rows now that both KiteCodec [owner] rows have closed. **So nothing in this
-register is unverified except what cannot be verified here.** The tenth [owner] row, `KP-CI-BILLING`,
-is a new KIND for this list: not hardware and not a product decision, but a payment setting.
+because they need hardware this machine does not have, and **9 rows in total are [owner] gated**,
+all of them KitePlayer rows now that every KiteCodec [owner] row has closed. **So nothing in this
+register is unverified except what cannot be verified here.** A tenth [owner] row existed for a few
+hours and was a new KIND for this list, neither hardware nor a product decision but a payment
+setting: `KP-CI-BILLING`. The owner chose to make the repository public and it closed the same day.
 
 SOL-P10 is gone too: the previous edition struck it through and said it would go "next time", and
 RULE TWO says there is no next time.
@@ -2759,13 +2764,13 @@ a macOS host; the device-free iOS simulator suites; JVM and Android host tests o
 EXECUTED on a Linux kernel with no container; `mingwX64` on Windows, which the register had said for
 weeks has never happened; and wasmJs in node AND a headless browser.
 
-**And every job was refused before its first step** (`KP-CI-BILLING`). KitePlayer is a PRIVATE
-repository, so its Actions minutes are billed, and the account's payment or spending limit is
-blocking them: "The job was not started because recent account payments have failed or your spending
-limit needs to be increased." All seven, the same message, zero steps each. **The workflow itself is
-fine and this is the evidence: GitHub PARSED it and scheduled all seven jobs under their real
-names**, which a malformed file cannot do. This is an owner decision, and the shape of it matters,
-because macOS runners bill at ten times the Linux rate and this workflow has three macOS jobs.
+**And every job was refused before its first step** (`KP-CI-BILLING`, opened and CLOSED the same
+day). KitePlayer was a PRIVATE repository, so its Actions minutes were billed and the account's
+payment or spending limit blocked them: "The job was not started because recent account payments
+have failed or your spending limit needs to be increased." All seven, the same message, zero steps
+each. **The workflow itself was fine and that was the evidence: GitHub PARSED it and scheduled all
+seven jobs under their real names**, which a malformed file cannot do. The owner made the repository
+public, which is the option that costs nothing per minute, and the jobs ran. See PAST 14.135.
 
 **Three defects were found while WRITING it, before any of it ran**, and **three more on the day it
 first ran**. That is the argument for the whole exercise, and none of the six is new breakage: every

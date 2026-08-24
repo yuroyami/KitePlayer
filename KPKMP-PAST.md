@@ -9924,6 +9924,107 @@ build on a cold cache. It did not move the Windows job onto this project's own r
 is the only thing that ends KC-BTBN-ROT. It did not widen `apiCheck` back to thirteen targets. All
 three are written down rather than left as folklore.
 
+### 14.132 The CI excavation and KiteCodec 0.1.2, 2026-08-23/24
+
+14.131 fixed seven reasons every CI job was red and assumed that was the list. It was the first
+layer. Each fix let a job reach a step that had not run in weeks, and that step had its own
+defect. This entry records the whole dig, because the pattern matters more than any one fix:
+**a pipeline that has been red long enough stops having ONE cause and starts having a stack of
+them, and you cannot see layer N+1 until layer N is gone.**
+
+**Start: 0 of 11 CI jobs passing, and no successful `ci.yml` run in its last 40.**
+
+#### The owner's question, and the answer, because it is the important one
+
+Asked directly: were the jobs that built and published KiteCodec corrupt too? **No, and the
+distinction is worth keeping.** `publish.yml` and `release-binaries.yml` are separate pipelines
+and both SUCCEEDED. `publish.yml` contains ZERO build-from-source or `git clone` steps; it
+downloads this repository's own prebuilt FFmpeg assets and `shasum -a 256 -c` verifies each one
+before unpacking. None of the CI defects touch it. **What the red CI cost was verification, not
+packaging.** Code landed on `main` with nothing checking it, and 0.1.1 shipped carrying seven
+real code defects as a direct result.
+
+#### The second layer, and what it taught
+
+- **The konan warmup was ordered wrong, which is why it kept HALF working.** It only provisions
+  LLVM when no FFmpeg tree is present. Once a tree exists, `compileKotlin<Target>` depends on the
+  cinterop, which depends on the C helper task, so the C task runs FIRST and dies on "No LLVM
+  package with a usable clang" before the Kotlin/Native compiler has run at all. With no tree the
+  cinterop is skipped, the compiler runs, LLVM lands, and the compile fails on unresolved `ffmpeg`
+  into the `|| true`. It appeared to work once and not again purely on whether a cached tree
+  happened to be there. **Warm BEFORE fetch, everywhere.**
+- **Windows was failing on a string, not an architecture.** The B1-11 guard compared `file -b`
+  output to one spelling; `file` renamed it, so a correct mingw object was refused. It now holds a
+  list of accepted spellings per target.
+- **Build metadata could not reach the C on Windows at all.** `-DNAME="value"` loses its quotes
+  through Java's process launcher (`use of undeclared identifier 'n8'`), and the provisioning path
+  there is `D:\a\...`, whose backslashes are C escape sequences anyway. Values now go into a
+  generated header with escaped literals, force-included with `-include`.
+- **The consumer smoke test was applying a Gradle plugin KC-EMBED deleted** (aae752e). mavenLocal
+  confirmed it from the other side: the plugin marker exists for 0.0.1 to 0.0.11 and nothing after.
+  Rewritten to what a real consumer writes, which is one dependency line.
+- **`signAllPublications()` was unconditional** while the comment above it claimed signing only
+  activates with a key present. A keyless `publishToMavenLocal` therefore died on "no configured
+  signatory". Now conditional on a present AND non-blank key.
+
+#### The third layer, and the finding that settles the Linux question for good
+
+The link errors named what the header errors had only hinted at. **A distro FFmpeg cannot be
+linked by Kotlin/Native on a modern Ubuntu, and no flag fixes it:** Ubuntu 24.04's libav* `.so`
+files reference `exp@GLIBC_2.29` and `pthread_once@GLIBC_2.34`, while Kotlin/Native links against
+its own glibc 2.19 sysroot for binary portability, so `ld.lld` refuses. The multiarch header
+collision fixed earlier was the same incompatibility one stage upstream. Headers can be staged
+around; a shared library's glibc floor cannot.
+
+**And the consumer smoke test was not merely broken, it was invalid.** It brew/apt installed
+FFmpeg, so `FFmpegPaths` resolved a SYSTEM DYNAMIC install, `isStaticVendored` was false, and the
+klib it published did not embed FFmpeg at all. The generated consumer then failed with `ld:
+library 'avformat' not found`. **The job whose entire purpose is proving "one dependency line"
+was publishing and consuming the one configuration that is never shipped, and could not have
+passed.**
+
+Windows had the same shape from the other direction: BtbN publishes SHARED builds, so there is no
+`libavformat.a` for the embed to take (`Could not find 'libavformat.a' binary in neither of ...`).
+
+**So every remaining failure had one answer: stop using system FFmpeg in CI.** Linux, Windows,
+both consumer jobs and Docs now fetch the same prebuilt STATIC trees `publish.yml` uses, from this
+repository's own companion release, each zip checksum-verified. Docs takes all eleven triples
+because `dokkaGenerate` compiles the shared `nativeMain` metadata and needs every native target's
+cinterop at once. **That also closes KC-BTBN-ROT by deletion rather than deferral**, and the side
+effect is the real prize: these jobs now exercise the artifact that actually ships.
+
+#### What was proven on a runner, not asserted
+
+All 8 C suites under ASan and plain (the original KC-CI-C fix). The fuzz job passing outright
+after thirty minutes of fuzzing plus the corpus replay. `apiCheck` live, demonstrated by adding a
+throwaway public function and watching it be named and refused. **And both consumer smoke jobs
+green on macOS and Linux, which is the first time the one-dependency-line claim has been shown end
+to end rather than stated.**
+
+#### KiteCodec 0.1.2, cut 2026-08-24
+
+Tag `v0.1.2` and a GitHub release carrying the seven correctness fixes 0.1.1 shipped with. No API
+change. **Maven Central deliberately NOT deployed: owner-gated, `gh workflow run publish.yml -f
+version=0.1.2`.** README is left pointing at 0.1.1 on purpose, because that is what Central
+actually serves; both lines move in the commit that publishes.
+
+The changelog was rewritten once on owner feedback. The first draft opened with four lines
+explaining why the bugs were hard to notice before reaching the list. That is preamble, and a
+release page is read for the list. Kept the one line a reader acts on, "Bug fixes only. No API
+change", and cut the rest.
+
+#### Commits
+
+KiteCodec `dacab34` (the eight fake-DONE fixes), `a9fb5d1`, `abb323f`, `c01b3b1`, `c4e2a58`,
+`26ec03e`, `54f5b54`, `a5b59a3`, `bd14a01`, `b51bc39`, `67bdd06` (the 0.1.2 cut), `3ce2ce6`,
+`755f135`, `e5e8e8e`. KitePlayer `1d4c18c`, `f31f0d6`, and this entry.
+
+#### What is NOT done
+
+KitePlayer still has no CI at all, and its nine C suites have never run off one laptop. The two
+macOS jobs still duplicate a from-source FFmpeg build on a cold cache; merging them is obvious and
+untouched. `KC-ABI-SCOPE` still stands: the API ratchet is live but watches 3 targets of 13.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

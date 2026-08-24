@@ -2507,16 +2507,20 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
-| KC-BTBN-ROT | the Windows job depends on BtbN's retention policy and 404s on a schedule nobody sets | [V] 08-23 | 17.16, here |
 | P0-11..P0-19 | REDUCED 08-22: full 22-asset v0.1.0 release live and verified; ONLY Maven Central remains | [V] 08-22 [owner] | 17.17, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-CI-KONAN | REDUCED 08-23: the konan flake and the macOS System job are fixed; Linux and Windows still link an FFmpeg the project does not ship, and the two macOS jobs duplicate a from-source build | [V] 08-23 | 17.16, here |
+| KC-CI-KONAN | REDUCED 08-24: no CI job links a system FFmpeg any more; all read the prebuilt static trees. Remainder is cosmetic: the two macOS jobs duplicate a from-source build on a cold cache | [V] 08-24 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
 trees it described no longer exist.
+
+**2026-08-24 (PAST 14.132): 67 rows.** `KC-BTBN-ROT` closed by deletion, the way `P0-14` did: the
+Windows job no longer depends on BtbN at all, so the row has no subject left. `KC-CI-KONAN` reduced
+to one cosmetic remainder. Nothing new opened, which is the first time in this stretch that a surge
+closed more than it created.
 
 **The count did not move on 2026-08-23 and that is the honest number** (PAST 14.130). Three rows
 left (`KC-CI-C`, `KC-NOTDONE`, `KC-P0-05-LEAK`, eight separate defects between them, all fixed) and
@@ -2658,54 +2662,21 @@ tree per target in CI, the same work `PAR-5` and the Windows rows want. Until th
 three-target gate is worth more than the dead thirteen-target record it replaced. Related: `F-ABI1`,
 the Android half of the same theme.
 
-#### KC-BTBN-ROT. The Windows job rents its FFmpeg from someone else's retention policy
+#### KC-CI-KONAN. REDUCED 2026-08-24. Only the duplicate macOS build is left
 
-Opened 2026-08-23 (PAST 14.131). The job downloads a pinned BtbN autobuild, and **BtbN prunes old
-autobuilds**, so the pin 404s after a few weeks and the job goes red on a schedule nobody set. It
-was re-pinned that day to a current tag with a freshly computed sha256, which is a delay, not a fix.
-The comment above the pin refuses `latest` because it is a moving tag, and that is right; the answer
-is not to pick a different stranger's tag.
+**Closed on 2026-08-24 (PAST 14.132): no CI job links a system FFmpeg any more.** Linux, Windows,
+both consumer smoke jobs and the Docs workflow all fetch the prebuilt STATIC trees `publish.yml`
+uses, from this repository's own companion release, each zip checksum-verified. That was not a
+preference in the end, it was forced: a distro FFmpeg CANNOT be linked by Kotlin/Native on a modern
+Ubuntu, because its `.so` files reference glibc 2.29 and 2.34 while Kotlin/Native links its own
+2.19 sysroot. **KC-BTBN-ROT closed with it, by deletion:** BtbN publishes shared builds, which carry
+no `libavformat.a` for the embed to take, so that dependency had to go regardless of its retention
+policy. The konan warmup was also fixed properly, by running it BEFORE the tree exists; see 14.132
+for why that ordering is the whole mechanism.
 
-**The durable fix is that this project already publishes a mingw-x64 FFmpeg.** The v0.1.0 release
-carries all 22 prebuilt zips across 11 triples, verified (PAST 14.118). Feeding this job that asset
-makes Windows CI link what Windows consumers actually get, ends the rot, and is the same move
-`KC-CI-KONAN` asks for on the other host jobs. Size S.
-
-#### 2026-08-21: the repository went public, and what that changed
-
-KiteCodec is PUBLIC as of 2026-08-21, licensed Apache-2.0, version 0.1.0. Three things that
-blocked a release are gone, and two remain.
-
-**Closed.** The repository had NO valid licence file: what was there was a 955-byte stub, not the
-Apache-2.0 text, so GitHub could not even detect a licence and nobody could legally use the code.
-LICENSE is now the full canonical text and NOTICE states the FFmpeg LGPL position and the three
-obligations it puts on a consumer. **All GPL flavours are gone** by owner decision: no GPL build
-tasks, no GPL release jobs, `FFmpegLicense.GPL` surviving only as a label for a tree a consumer
-built themselves. That deletes P0-14 rather than fixing it.
-
-**Everything that stood here about missing assets closed on 2026-08-22** (PAST 14.118): the
-v0.1.0 release carries all 22 zips, verified, and `hasPrebuiltAsset` is true for all 11 triples
-because it is true. **The one remaining owner gate is Maven Central publication**, deliberately
-LAST: Central is permanently immutable, so nothing ships there until the pair is worth freezing.
-
-#### KC-CI-KONAN. REDUCED 2026-08-23. What is left of the pre-embed CI
-
-Two thirds closed in PAST 14.131; the remainder is worth keeping separate from the noise around it.
-
-**Closed.** The konan toolchain-ordering flake: the C helper tasks compile with konan's own LLVM,
-which only lands in `~/.konan/dependencies` after a Kotlin/Native compile, so a fresh runner raced it
-and died with "No LLVM package with a usable clang". `publish.yml` had carried the warmup for this
-exact reason since this row was opened; it is now in the consumer e2e jobs too. Also closed: the
-macOS host job no longer exercises the System path. It reads the vendored LGPL tree, and with it went
-the Homebrew version assert that had been turning every formula bump into a red gate.
-
-**Open.** Two host jobs still link an FFmpeg the project does not ship. **Linux** links apt's, which
-now works (the multiarch include defect that had been failing it is fixed) but is not the shipped
-profile, so the suite can still drift into depending on codecs the released artifact lacks with
-nothing noticing. **Windows** links a third party's build, which is `KC-BTBN-ROT`. Both want the
-answer the macOS job just took: read the release assets. Also open and cheaper: **the two macOS jobs
-now share a cache key and duplicate a from-source FFmpeg build on a cold cache.** Merging them is
-obvious and was deliberately not done in the same surge that changed what they link.
+**Open, and it is cosmetic.** The two macOS jobs share a cache key but still both build the
+vendored FFmpeg from source on a cold cache. Merging them is obvious, cheap, and was deliberately
+not done in the same surge that changed what every job links. Size S.
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 

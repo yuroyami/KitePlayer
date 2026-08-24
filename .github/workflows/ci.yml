@@ -42,6 +42,10 @@
 #     the lists and the gap is a register row instead. Row KP-UNTESTED-MODULES.
 #   - A PINNED fixture generator. The clips are made by whatever ffmpeg Homebrew ships that week,
 #     which is 8.1.2 today and 8.0 on the proving Mac. Row KP-FIXTURE-PIN.
+#   - `:kiteplayer-output`'s CoreAudio ANCHOR assertion, on macOS too. See the macos-host job: this
+#     runner's audio device lags where real hardware leads, so the one assertion that depends on
+#     that is filtered out by name and reported as not run. The other 94 tests in the module,
+#     CoreAudio ones included, do run here.
 name: CI
 
 on:
@@ -194,11 +198,19 @@ jobs:
             :kiteplayer-compose-video:jvmTest
 
       # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the 17.5 format matrix against
-      # real clips, and :kiteplayer-output's CoreAudio suites need the real audio device this
-      # runner has and the iOS simulator does not.
+      # real clips.
+      #
+      # -Pkiteplayer.noAudioHardware=true drops ONE assertion and nothing else. This runner opens
+      # CoreAudio fine and passes 94 of the module's 95 macosArm64 tests, the other CoreAudio suites
+      # included; the one it cannot pass is "the anchor the device publishes is in the near future
+      # on the engine clock", which measured -451.7 ms against a window of -5 to +500. That is the
+      # DEVICE and not the clock bases, since a base mismatch would be enormous rather than half a
+      # second: a virtual output device lags where real hardware leads. Gradle reports the test as
+      # NOT RUN rather than passed, which is the honest form, and a developer on a real Mac never
+      # passes this flag and runs all 95. Both directions were measured before this line was added.
       - name: Kotlin/Native macosArm64 tests
         run: |
-          ./gradlew --stacktrace \
+          ./gradlew --stacktrace -Pkiteplayer.noAudioHardware=true \
             :kiteplayer-core:macosArm64Test \
             :kiteplayer-subtitles:macosArm64Test \
             :kiteplayer-output:macosArm64Test \

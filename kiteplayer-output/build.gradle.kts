@@ -88,3 +88,30 @@ kotlin {
         }
     }
 }
+
+/*
+ * One assertion in CoreAudioSinkTest needs REAL AUDIO HARDWARE, and CI has none.
+ *
+ * `-Pkiteplayer.noAudioHardware=true` drops exactly that test and nothing else. Everything else in
+ * this module, the rest of the CoreAudio suites included, still runs: a GitHub macOS runner opens
+ * CoreAudio successfully and passes 94 of the 95 macosArm64 tests. The one that cannot pass is
+ * `the anchor the device publishes is in the near future on the engine clock`, which measured
+ * -451.7 ms against a window of -5 to +500 ms. That is the DEVICE, not the clock bases: a base
+ * mismatch would be enormous, as the test's own note says, rather than half a second. A runner's
+ * virtual output device lags where real hardware leads.
+ *
+ * WHY A FILTER AND NOT A SKIP INSIDE THE TEST. A test that returns early reports as PASSED, and a
+ * green tick over an assertion nobody made is the exact failure this project keeps paying for. A
+ * filter makes Gradle report it as not run, which is the truth. The default is unset, so a developer
+ * on a real Mac runs it without knowing this flag exists.
+ */
+if (providers.gradleProperty("kiteplayer.noAudioHardware").map(String::toBoolean).getOrElse(false)) {
+    tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+        filter.isFailOnNoMatchingTests = false
+        filter.excludeTestsMatching("*CoreAudioSinkTest.the anchor the device publishes*")
+    }
+    logger.lifecycle(
+        "[kiteplayer-output] kiteplayer.noAudioHardware=true: the CoreAudio anchor assertion is " +
+            "NOT run. Every other test in this module still is.",
+    )
+}

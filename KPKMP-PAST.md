@@ -10177,6 +10177,92 @@ and carried the same three reasons; corrected to match.
 number is only ever produced by counting the tables, never by adjusting the last one.
 
 
+### 14.135 KitePlayer gets CI, and the three things writing it found, 2026-08-24
+
+Until today this repository had **no `.github` directory at all**, which is why the register kept
+saying that every claim about its health was a claim about one laptop. Nine C suites had never run
+anywhere else, `linuxX64` had only ever been CROSS-LINKED from a Mac, and `mingwX64` had never
+executed a single test on Windows.
+
+#### The workflow, seven jobs on four operating systems
+
+| Job | Runner | What it proves |
+|---|---|---|
+| `c-suites` | macOS | All nine C suites, in six variant runs: `kiteplayer-rt` plain, interpose, asan, tsan, then `kiteplayer-libass` plain and asan |
+| `macos-host` | macOS | The clips, then every JVM and `macosArm64` suite, then all three ratchets |
+| `ios-simulator` | macOS | The device-free simulator suites, plus a compile of the iOS device triples |
+| `linux-jvm-android` | Linux | JVM and Android host tests for the media-free modules, no Kotlin/Native at all |
+| `linux-native` | Linux | `linuxX64Test` EXECUTED on a Linux kernel, no container, plus the FFmpeg backend link |
+| `windows-native` | Windows | `mingwX64Test` on Windows, which had never happened |
+| `web` | Linux | wasmJs in node AND a headless browser |
+
+Three decisions in it are worth keeping, because each is a lesson already paid for:
+
+- **The Kotlin/Native warmup, carried straight over from `KC-CI-KONAN`.** `CompileKiteRtTask`
+  compiles the audio ring with konan's OWN clang out of `~/.konan/dependencies`, and konan fetches
+  that on demand when a Kotlin/Native task first runs. On a fresh runner the C task gets there first
+  and dies with "no clang under ...". That one race was six of KiteCodec's ten failing jobs. Every
+  native job here asks for `downloadKotlinNativeDistribution` BY NAME first, which is better than
+  KiteCodec's version: that one relied on a compile that happened to run early.
+- **The C suites are macOS only by construction, not by preference.** The allocation interposer is a
+  Mach-O `__DATA,__interpose` dylib, which only dyld honours, and the device suites link
+  `AudioToolbox` and `CoreAudio`. A Linux runner would not be broader coverage, it would be a
+  rewrite.
+- **The fixtures are generated on macOS and nowhere else.** Homebrew's ffmpeg is 8.0, exactly what
+  the proving machine has, so a runner's clips are the clips the developer tested against. Ubuntu's
+  apt ffmpeg is a different release with a different codec set, and fixtures that differ per runner
+  turn one red into an argument about which machine was right. 27 seconds and about 560 MB, measured
+  rather than guessed, which is why they are generated per run instead of cached.
+
+#### Three defects, all found before a single job ran
+
+- **A renderer test asserted a node-only answer.** `WebCanvasVideoRendererTest` did a flat
+  `assertFalse` on `present()`, which is right only where the offscreen stage cannot be built. The
+  renderer builds it from `OffscreenCanvas` or `document`, and a browser really has both, so the
+  same call that refuses under node DRAWS under `wasmJsBrowserTest`. `:kiteplayer-output` declares
+  `browser()` and `nodejs()`, so `wasmJsTest` runs both halves; only the node task had ever been
+  invoked. **Fixed in `2d5ba40`, and the fix is stronger than the old assertion**: the test now asks
+  the same two globals the renderer asks, in the same order, and pins the answer to the environment
+  instead of assuming one. Watched red first, then green on both sides, 11 tests and 0 failures in
+  each.
+- **`KP-WASM-RUNBLOCKING`.** `:kiteplayer-ffmpeg`'s commonTest does not COMPILE for wasmJs:
+  `DecoderFallbackTest` and `FilterAttachmentTest` use `runBlocking`, which does not exist there, at
+  31 call sites. So that target has never been built, and `:kiteplayer-mobile` inherits it. Left
+  open rather than converted: those suites read real clips from a disk wasmJs does not have, so
+  every one of them would early-return, and 31 mechanical `runTest` conversions with virtual-clock
+  semantics is real risk for no evidence.
+- **`KP-WEBPACK-CONTEXT`.** `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with
+  `RangeError: Invalid array length` while `FileSystemInfo` timestamps a context directory.
+  Deterministic across a cleaned `build/wasm`. The node half passes and is what CI runs.
+
+Two exclusions are environment rather than defects and are named in the workflow so a reader is
+never left guessing: `:kiteplayer-output`'s CoreAudio suites cannot open an audio unit on the iOS
+simulator (`-10851`), and they DO run on `macos-host` where the device is real; and
+`:kiteplayer-ffmpeg` on the simulator loses the clips across the simctl spawn boundary and has no
+VideoToolbox hardware. That is the same class the KiteCodec side already recorded.
+
+#### Then every job was refused before its first step
+
+`KP-CI-BILLING`. All seven, zero steps each, two seconds apiece, and one identical message:
+
+> The job was not started because recent account payments have failed or your spending limit needs
+> to be increased.
+
+**KitePlayer is a PRIVATE repository and KiteCodec is public**, which is the whole difference: public
+repositories get Actions free, private ones bill every minute, and macOS bills at ten times the
+Linux rate while Windows bills at two.
+
+**The workflow itself is fine, and the failure is the evidence for that.** GitHub PARSED the file and
+scheduled all seven jobs under their real names before refusing to start them; a malformed workflow
+produces a startup failure with a parse error and no job graph at all. Everything else was checked
+on the proving machine first: all 49 module-scoped task names were verified against the real task
+list, and every command block that can run on a Mac was run exactly as written.
+
+This one is the owner's, and it has three shapes: raise the spending limit, make the repository
+public, or cut the three macOS jobs down so the bill is mostly Linux minutes. The choice changes the
+workflow, so the workflow waits.
+
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

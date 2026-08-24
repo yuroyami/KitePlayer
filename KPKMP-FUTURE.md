@@ -2478,7 +2478,10 @@ locating each symbol by name, because every line number in both audit documents 
 | L | libass: JVM bridge, wasm, the animated hook, the mpv corpus | [V] 08-19 | 17.12, here |
 | KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |
 | KP-API | throwing stubs, unusable default factory, five dead knobs, global logger | [V] 08-19 | 17.16, here |
-| KP-B1..B13 | player build and release; no CI of any kind, so its nine C suites have never run off this laptop | [V] 08-23 | 17.16, here |
+| KP-B1..B13 | REDUCED 08-24: `.github/workflows/ci.yml` exists, seven jobs on four operating systems. The RELEASE half is untouched: debug signing, no wrapper checksum, no lockfiles, NDK by string sort, no signing or Sonatype configuration, gitignored unpinned fixtures | [V] 08-24 | 17.16, here |
+| KP-CI-BILLING | every CI job is refused before its first step: KitePlayer is a PRIVATE repository, so Actions minutes are billed, and the account's spending limit or payment is blocking them. Nothing to do with the workflow, which GitHub parsed and scheduled | [V] 08-24 [owner] | 17.16, here |
+| KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
+| KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |
@@ -2529,6 +2532,14 @@ Two rows were added to it at some point without the total being moved, exactly t
 corrections note at the end of this section describes for the previous edition. The numbers here
 are now measured, and the way to keep them true is to count rather than to adjust.
 
+**2026-08-24, third count of the day (PAST 14.135): 47 KitePlayer rows and 25 KiteCodec rows, so
+72 open in total.** The count went UP by three and that is the right direction for this one.
+KitePlayer's CI was written and merged, so `KP-B1..B13` reduced to its release half; writing it
+found `KP-WASM-RUNBLOCKING` and `KP-WEBPACK-CONTEXT` before a single job ran, and running it found
+`KP-CI-BILLING`, which is a private repository meeting an Actions spending limit rather than
+anything about the code. **A CI that opens three rows on the day it lands is a CI doing its job**,
+and none of the three is new breakage: all three were already true and nothing could see them.
+
 **2026-08-24, later the same day (PAST 14.134), counted again: 44 KitePlayer rows and 25 KiteCodec
 rows, so 69 open in total.** `KC-PAGES` closed, and the SITE was fetched rather than the job read.
 `P0-11..P0-19` closed as ALREADY SATISFIED: its one line said "ONLY Maven Central remains" and
@@ -2553,11 +2564,12 @@ code, is the bottleneck.** That is the argument for 17.20 items 1 to 3 in one se
 **The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
 file under RULE TWO (PAST 14.115).
 
-Of the 44 open KitePlayer rows, **40 carry [V] and none carry [C]**: every row that was carried and
+Of the 47 open KitePlayer rows, **43 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
-because they need hardware this machine does not have, and 9 rows in total are [owner] gated, all of
-them KitePlayer rows now that both KiteCodec [owner] rows have closed. **So nothing in this register
-is unverified except what cannot be verified here.**
+because they need hardware this machine does not have, and 10 rows in total are [owner] gated, all
+of them KitePlayer rows now that both KiteCodec [owner] rows have closed. **So nothing in this
+register is unverified except what cannot be verified here.** The tenth [owner] row, `KP-CI-BILLING`,
+is a new KIND for this list: not hardware and not a product decision, but a payment setting.
 
 SOL-P10 is gone too: the previous edition struck it through and said it would go "next time", and
 RULE TWO says there is no next time.
@@ -2715,12 +2727,25 @@ binary archaeology to learn the answer was "the installed app was stale". Two la
 Size S for the runtime query plus the named refusal; the error-message half pays for itself the
 first time any decoder is missing anywhere.
 
-#### KitePlayer runs none of its own C suites
+#### KitePlayer's CI exists and cannot run, 2026-08-24
 
-Left standing when KC-CI-C closed on 2026-08-23 (PAST 14.130), because only the KiteCodec half of
-it was ever about KiteCodec. **KitePlayer has no CI at all** (`KP-B1..B13`): `kiteplayer-rt` has
-eight C suites and `kiteplayer-libass` gained a ninth on 2026-08-19, and nothing outside one laptop
-has ever run any of them. KiteCodec's fix is the template, and it was two words on two lines.
+**Written and merged** (PAST 14.135, `a8f3dc4`): `.github/workflows/ci.yml`, seven jobs. The nine C
+suites in six variant runs on macOS; real-media JVM and macosArm64 suites plus all three ratchets on
+a macOS host; the device-free iOS simulator suites; JVM and Android host tests on Linux; `linuxX64`
+EXECUTED on a Linux kernel with no container; `mingwX64` on Windows, which the register had said for
+weeks has never happened; and wasmJs in node AND a headless browser.
+
+**And every job was refused before its first step** (`KP-CI-BILLING`). KitePlayer is a PRIVATE
+repository, so its Actions minutes are billed, and the account's payment or spending limit is
+blocking them: "The job was not started because recent account payments have failed or your spending
+limit needs to be increased." All seven, the same message, zero steps each. **The workflow itself is
+fine and this is the evidence: GitHub PARSED it and scheduled all seven jobs under their real
+names**, which a malformed file cannot do. This is an owner decision, and the shape of it matters,
+because macOS runners bill at ten times the Linux rate and this workflow has three macOS jobs.
+
+**Three defects were found while writing it, before any of it ran.** They are the argument for the
+whole exercise: `KP-WASM-RUNBLOCKING`, `KP-WEBPACK-CONTEXT`, and one already fixed, a renderer test
+that asserted a node-only answer while its own module declares a browser target (`2d5ba40`).
 
 #### Correctness, KiteCodec, still open
 

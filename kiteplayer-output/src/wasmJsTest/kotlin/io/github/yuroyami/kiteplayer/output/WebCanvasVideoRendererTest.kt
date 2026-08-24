@@ -25,10 +25,13 @@ import kotlin.test.assertTrue
  * invisible in a demo and fatal in a session, because each leaked frame holds decoder memory that
  * is 3.11 MB at 1080p and 24.9 MB at 4K.
  *
- * These tests run in node, which has no `OffscreenCanvas`, no `document` and no `ImageData`, so
- * every path here is a REFUSAL path. That is the point rather than a limitation: refusal is exactly
- * where ownership bugs hide, and the success path needs a browser and belongs to X-14. Nothing here
- * claims a pixel was drawn.
+ * These tests run in BOTH environments this module declares, node and a headless browser, and
+ * that is the whole reason the assertions below read the environment instead of assuming it. In
+ * node there is no `OffscreenCanvas`, no `document` and no `ImageData`, so every path is a REFUSAL
+ * path; in a browser those globals are real, so the same call draws. Refusal is where ownership
+ * bugs hide, which is why most of this file lives there, but the ownership rule is the same on both
+ * sides and is asserted on both. Nothing here claims a PIXEL was correct: that needs a real browser
+ * comparison and belongs to X-14.
  */
 class WebCanvasVideoRendererTest {
 
@@ -95,17 +98,25 @@ class WebCanvasVideoRendererTest {
     }
 
     /**
-     * With a context but no way to build the offscreen stage, which is node exactly. The frame is
-     * still closed and the refusal is COUNTED, so a session that draws nothing says how much.
+     * The frame is closed exactly once whichever way the stage goes, and the counters agree with
+     * the answer.
+     *
+     * This used to assert a flat `assertFalse` and it was RIGHT ONLY IN NODE. The renderer builds
+     * its offscreen stage from `OffscreenCanvas` or `document`, both of which a browser really has,
+     * so the same call that refuses under node draws under `wasmJsBrowserTest` and the test failed
+     * there. It had never run there. The fix is not to pick an environment: it is to state the rule
+     * that holds in both, which is that the answer follows the stage and the frame is owned either
+     * way.
      */
     @Test
-    fun aFrameIsClosedAndCountedWhenTheStageCannotBeBuilt() = runTest {
+    fun aFrameIsClosedExactlyOnceWhicheverWayTheStageGoes() = runTest {
         val renderer = WebCanvasVideoRenderer(fakeCanvas(), painter)
         val frame = CountingFrame()
-        assertFalse(renderer.present(frame, 0))
-        assertEquals(1, frame.closes)
-        assertEquals(1, renderer.failedFrames, "a refusal must be counted, not silent")
-        assertEquals(0, renderer.presentedFrames)
+        val drawn = renderer.present(frame, 0)
+        assertEquals(stageIsBuildable(), drawn, "the environment decides the stage, and the stage decides the answer")
+        assertEquals(1, frame.closes, "a frame must be closed exactly once, drawn or refused")
+        assertEquals(if (drawn) 1 else 0, renderer.presentedFrames)
+        assertEquals(if (drawn) 0 else 1, renderer.failedFrames, "a refusal must be counted, not silent")
         renderer.close()
     }
 
@@ -175,6 +186,15 @@ class WebCanvasVideoRendererTest {
 
 @JsFun("() => ({ notACanvas: true })")
 private external fun notACanvas(): JsAny
+
+/**
+ * Whether this environment lets the renderer build its offscreen stage.
+ *
+ * The same two globals `ensureStage` tries, in the same order, so the test cannot disagree with the
+ * code about what the environment offers. A browser has both, node has neither.
+ */
+@JsFun("() => typeof OffscreenCanvas !== 'undefined' || typeof document !== 'undefined'")
+private external fun stageIsBuildable(): Boolean
 
 /**
  * A canvas whose 2d context accepts every call and remembers nothing.

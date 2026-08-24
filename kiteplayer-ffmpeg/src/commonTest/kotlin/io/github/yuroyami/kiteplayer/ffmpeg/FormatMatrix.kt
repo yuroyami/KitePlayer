@@ -247,6 +247,7 @@ internal object FormatMatrixRunner {
                     subtitleIndex = subtitle?.index,
                     subtitleDecoder = subtitleDecoder,
                     onCue = { text -> if (decodedCueText == null) decodedCueText = text },
+                    requireCue = row.decodeSubtitleCue,
                 )
                 if (row.decodeSubtitleCue) {
                     checkNotNull(decodedCueText) { "${row.clip} decoded no subtitle cue" }
@@ -319,8 +320,21 @@ internal object FormatMatrixRunner {
         subtitleIndex: Int? = null,
         subtitleDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null,
         onCue: ((String) -> Unit)? = null,
+        requireCue: Boolean = false,
     ) {
-        fun done(): Boolean = progress.video >= videoQuota && progress.audio >= audioQuota
+        // A ROW THAT WANTS A CUE READS UNTIL IT HAS ONE, and this used to stop at the video and
+        // audio quotas instead. Ten video frames at 30 fps is a third of a second and the first cue
+        // in multitrack.mkv is at half a second, so whether the row saw a cue came down to where
+        // the MUXER happened to interleave the subtitle packet. It passed on the proving Mac with
+        // ffmpeg 8.0 and failed in CI with ffmpeg 8.1.2 on a file that is perfectly well formed.
+        // The old test was not proving the player decodes cues, it was proving one muxer's
+        // interleaving. EOF still ends the loop, so a file with genuinely no cue fails on the
+        // checkNotNull below rather than spinning.
+        var sawCue = false
+        fun done(): Boolean =
+            progress.video >= videoQuota &&
+                progress.audio >= audioQuota &&
+                (!requireCue || sawCue)
 
         suspend fun drainVideo() {
             if (videoDecoder == null) return
@@ -355,9 +369,10 @@ internal object FormatMatrixRunner {
                     subtitleDecoder.send(packet)
                     subtitleDecoder.receive().forEach { cue ->
                         if (cue is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text &&
-                            cue.plainText.isNotBlank() && onCue != null
+                            cue.plainText.isNotBlank()
                         ) {
-                            onCue.invoke(cue.plainText)
+                            sawCue = true
+                            onCue?.invoke(cue.plainText)
                         }
                     }
                 }

@@ -10025,6 +10025,93 @@ KitePlayer still has no CI at all, and its nine C suites have never run off one 
 macOS jobs still duplicate a from-source FFmpeg build on a cold cache; merging them is obvious and
 untouched. `KC-ABI-SCOPE` still stands: the API ratchet is live but watches 3 targets of 13.
 
+### 14.133 CI reaches 11 of 11, and the bug it found on the way, 2026-08-24
+
+14.132 left CI at 8 green with the remaining reds diagnosed. This entry finishes that and records
+what the last two failures turned out to be, because one of them was not a CI defect at all.
+
+**End state: all eleven CI jobs green.** The morning began at zero of eleven.
+
+#### The last CI causes
+
+- **Nine test files each grew their own temp-directory helper, and they disagreed.** Five demanded
+  `TMPDIR`/`TEMP`/`TMP` and called `error()` when none was set, which is every GitHub Ubuntu runner,
+  so those suites threw before touching a codec. `KdIntegrationTest` had the opposite bug: it fell
+  back to `/tmp`, which does not exist on Windows, so its fixtures could not be created and the
+  failures surfaced as `FFmpegException` from inside FFmpeg. **Neither is wrong on the machine it
+  was written on**, which is exactly why both survived: a Mac sets `TMPDIR`, so neither failing path
+  was reachable locally. One `systemTempRoot()` now, with its pure half unit tested on both cases.
+- **The warmup was ordered wrong, and that is why it kept HALF working.** It only provisions konan's
+  LLVM when no FFmpeg tree exists yet; once a tree is there, `compileKotlin<Target>` depends on the
+  cinterop, which depends on the C helper task, so the C task runs FIRST and dies before the
+  Kotlin/Native compiler has ever run. Warm BEFORE fetch, everywhere.
+- **Docs was handed all eleven triples and choked on `xcrun`.** Giving the Apple targets FFmpeg
+  trees on an Ubuntu runner registered their C tasks. Own goal, corrected the same hour: host triple
+  only, `dokkaGenerate` scoped to match.
+
+#### The finding that was not a CI defect
+
+The e2e aborted on Linux and Windows with exit 134. The cause, read out of the crash rather than
+guessed: `FFmpegException: No encoder named 'aac'` inside `MediaSink.addAudioEncoder`.
+
+**`aac` was enabled in `desktopAppleArgs()` and in the Android profile and nowhere else.** Measured
+on the released trees rather than inferred: `ff_aac_encoder` present in `macos-arm64`, **zero
+symbols in `linux-x64` and `mingw-x64`**. So a consumer calling `Transcoder.transcode` with default
+audio settings got that exception on Linux and Windows, and that was true of 0.1.1 as published.
+
+Nothing justified the split. The build's own comment said aac "stays because the NATIVE encoder is
+dependency-free", which is an argument for every profile carrying it. The flag had simply landed in
+an Apple-only block. **This is precisely what the vendored-profile job was built to catch** ("the
+test suite and the sample can drift into depending on codecs the shipped artifact does not
+contain"), and it caught it the first time a Linux job ever ran against the shipped profile.
+
+Three `buildSrc` tests pin the exact configure arguments and went red on the change, which is what
+they are for; their expectations were moved to the deliberate value rather than relaxed.
+
+The suite's own half of it: the e2e asserted a literal `aac` in eight places while the sample
+hard-coded `CodecId.Aac`. The video side had probed since the libx264 lesson; audio had never been
+asked. The sample now probes and reports `KITECODEC_AUDIO_ENCODER`, and the script asserts what it
+reports. The literal `aac` assertions that remain are correct: they cover stream-COPY paths, which
+carry the source's aac through without re-encoding.
+
+#### Fuzzing left the push path, after measuring rather than assuming
+
+Individual jobs run one to four minutes; a full run measured 31. **One job accounted for the gap:**
+the fuzzer does six targets at five minutes each by design, and since jobs run in parallel it set
+the whole run's clock. It moved to `fuzz.yml`, nightly and on demand and still on any change under
+`native/kitecodec-c/`. The cheap half, replaying the committed corpus under ASan and UBSan, stayed
+in `ci.yml` on every push, because that is a regression test rather than a search. Two jobs also had
+no `~/.konan` cache while every other Kotlin/Native job did; the docs one was cold every single run.
+
+**A correction worth keeping:** the earlier working assumption, stated repeatedly, was that every CI
+run costs about forty minutes and changes should therefore be batched. Measured, the useful signal
+lands in about four. The batching was waiting on a fuzzer that had nothing new to say.
+
+#### 0.1.3, and what was deliberately NOT deleted
+
+Owner asked to delete everything before 0.1.3 and start fresh. Two things were kept, and the reason
+is not tidiness:
+
+- **`ffmpeg-n8.0` stays.** `NOTICE` names that release as the LGPL source offer for the artifacts,
+  and **0.1.0 and 0.1.1 are on Maven Central, which is immutable**. Deleting it would strip the
+  source half of an LGPL obligation from two versions that can never be withdrawn.
+- **`v0.1.1` stays**, being on Central. `v0.1.0` and `v0.1.2` release pages were deleted on owner
+  instruction; **their git tags were kept**, so the code at those points is still reachable, which
+  is what someone auditing a Central download needs.
+
+One correction the owner needed before deciding: the changelog claimed "0.1.0 existed only as source
+and local artifacts". **It is fully published on Central** (pom, module, jar, sources, javadoc, all
+HTTP 200). It was not useless; deleting its page leaves a downloadable version unexplained.
+
+New binaries went to **`ffmpeg-n8.0-r2`**, verified by reading `ff_aac_encoder` out of the downloaded
+`linux-x64` and `mingw-x64` archives rather than trusting the config that produced them. Workflows
+now split "which tag" from "which FFmpeg version", because as of today those are different strings.
+
+0.1.3 carries cumulative notes covering 0.1.0 through 0.1.2 plus the aac fix, since two of those
+release pages no longer exist. It was uploaded to the Central Portal by `publish.yml` against
+`--ref v0.1.3`, and released by the owner in the portal, which is the manual gate
+`publishToMavenCentral()` deliberately leaves in place.
+
 ## 15. Horizon B execution: B1
 
 Written 2026-08-09, after Horizon A completed, from five reconnaissance reports and two

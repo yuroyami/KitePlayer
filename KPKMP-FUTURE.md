@@ -2504,6 +2504,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | 11 documentation contradictions; the build file contradicts itself | [V] 08-19 | 17.16, here |
 | KC-WASM-MIRROR | the generated binding and its compiled mirror; nothing compares them | [V] 08-19 | 17.19, here |
+| KC-PAGES | the Docs site cannot deploy: GitHub Pages has never been enabled on the repository, so actions/deploy-pages 404s. Build is green; this is a repo setting | [V] 08-24 [owner] | 17.16, here |
 | KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
@@ -2511,16 +2512,22 @@ locating each symbol by name, because every line number in both audit documents 
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-CI-KONAN | REDUCED 08-24: no CI job links a system FFmpeg any more; all read the prebuilt static trees. Remainder is cosmetic: the two macOS jobs duplicate a from-source build on a cold cache | [V] 08-24 | 17.16, here |
+| KC-CI-KONAN | REDUCED 08-24: CI is 11/11 green and no job links a system FFmpeg. Remainder is cosmetic: the two macOS jobs duplicate a from-source build on a cold cache | [V] 08-24 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
 trees it described no longer exist.
 
-**2026-08-24 (PAST 14.132): 67 rows.** `KC-BTBN-ROT` closed by deletion, the way `P0-14` did: the
-Windows job no longer depends on BtbN at all, so the row has no subject left. `KC-CI-KONAN` reduced
-to one cosmetic remainder. Nothing new opened, which is the first time in this stretch that a surge
-closed more than it created.
+**2026-08-24 (PAST 14.132), COUNTED off the tables rather than carried forward: 44 KitePlayer rows
+and 26 KiteCodec rows, so 70 open in total.** `KC-BTBN-ROT` closed by deletion, the way `P0-14` did:
+the Windows job no longer depends on BtbN at all, so the row has no subject left. `KC-CI-KONAN`
+reduced to one cosmetic remainder, and nothing new opened.
+
+**And the arithmetic above it was wrong, which is worth leaving visible.** The counts paragraph has
+said "42 KitePlayer rows" since 2026-08-19; counted directly today the KitePlayer table holds 44.
+Two rows were added to it at some point without the total being moved, exactly the drift the
+corrections note at the end of this section describes for the previous edition. The numbers here
+are now measured, and the way to keep them true is to count rather than to adjust.
 
 **The count did not move on 2026-08-23 and that is the honest number** (PAST 14.130). Three rows
 left (`KC-CI-C`, `KC-NOTDONE`, `KC-P0-05-LEAK`, eight separate defects between them, all fixed) and

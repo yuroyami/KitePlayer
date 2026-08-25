@@ -19154,3 +19154,35 @@ document was wrong about working code.
 
 Gate: `:kiteplayer-ffmpeg:compileKotlinMingwX64` green, which is the target whose comment changed.
 64 open, owner-gated 7 to 6.
+
+### 14.158 A row's own pointer nearly deleted the only record of it, 2026-08-25
+
+`SOL-API4` reclassified from defect to ROADMAP, owner-decided. Fourth item of the S-tier walk, and
+the first where the proposed action was withdrawn mid-question because its premise was false.
+
+**What was proposed and why it was wrong.** The row was offered to the owner for closure as a
+duplicate of the section 11 roadmap, on the authority of its own last line: "Home: their section 11
+items". Checking before acting showed section 11 is a SUPERSEDED roadmap, marked so by its own
+banner on 2026-08-11, living in KPKMP-PAST.md since the split, and naming **none** of the five
+fields. There was nothing for the row to be a duplicate of. It is the only record anywhere that
+`droppedFramesDecode`, `audioLatency`, `containerBitrate`, `SyncMode.ExternalMaster` and
+`LateAndDecode` are declared and unbuilt. Closing it would have deleted that record, which is
+precisely the failure 17.15's preamble exists to prevent.
+
+**The rule, and it is about this document rather than the code.** 17.11 and 17.15 carry pointers
+written before the PAST/FUTURE split, and a pointer into PAST is an archive reference, not
+tracking. Verify a pointer before acting on it, and above all before DELETING on its authority.
+Three of this week's closes were rows that described the tree wrongly; this is the first that
+described the REGISTER wrongly, and it was the most dangerous, because acting on it destroys
+information instead of merely wasting time.
+
+**Why reclassify rather than leave alone.** The row scans as cleanup. "Five stats placeholders"
+reads like something an afternoon fixes, which is how it kept reappearing in effort sweeps as a
+phantom quick win and how it was mis-sized S in the first place. It is five unwritten features.
+Nothing in it lies: the fields are declared and their KDoc says not implemented, which is a promise
+not yet kept rather than a promise broken. It is now marked ROADMAP so the board distinguishes
+BROKEN from NOT BUILT YET, and its false pointer is deleted rather than followed.
+
+Doc-only pass. Gate: the split checker and both counts; 64 open, unchanged, because a
+reclassification is not a closure and saying otherwise would be the kind of count this register
+keeps catching.

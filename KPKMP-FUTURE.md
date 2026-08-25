@@ -1070,11 +1070,23 @@ API truth:
   exact frame; SeekCompleted and the replies carry the exact landing only, and a keyframe
   already on the target skips the refine. The coalescing test now pins two flush cycles for one
   merged two-phase seek.
-- SOL-API4 [V] REDUCED. `bufferedRanges` is REAL since M5's demuxer cache (PlaybackCore computes
-  it from the cache window; CachingMediaIo's KDoc names it), so it is no longer a placeholder and
-  is struck from this row. Still honestly KDoc'd as not implemented, verified 2026-08-18:
-  droppedFramesDecode, audioLatency, containerBitrate, SyncMode.ExternalMaster and LateAndDecode.
-  They stay open as section 11 roadmap facts, not silent lies. Home: their section 11 items.
+- SOL-API4 **RECLASSIFIED 2026-08-25 (PAST 14.158) from defect to FEATURE ROADMAP, owner-decided.**
+  `bufferedRanges` is REAL since M5's demuxer cache (PlaybackCore computes it from the cache window;
+  CachingMediaIo's KDoc names it) and was struck earlier. Still declared and honestly KDoc'd as not
+  implemented, verified 2026-08-18 and unchanged since: `droppedFramesDecode`, `audioLatency`,
+  `containerBitrate`, `SyncMode.ExternalMaster` and `LateAndDecode`.
+
+  **Its old pointer was FALSE and nearly cost the record.** The row said "Home: their section 11
+  items", and section 11 is a superseded roadmap that has lived in KPKMP-PAST.md since the split,
+  was marked superseded on 2026-08-11 by its own banner, and **does not name any of these five
+  fields**. Closing this row as a duplicate of that roadmap, which is what its own text invited on
+  2026-08-25, would have deleted the only record anywhere that five public API fields are unbuilt.
+  The pointer is deleted rather than followed.
+
+  **Kept, and marked ROADMAP so it stops being triaged as a defect.** Nothing here lies to a
+  consumer: the fields exist, the KDoc says they are not implemented, and that is a promise not yet
+  kept rather than a promise broken. It kept surfacing in effort sweeps as a phantom quick win
+  because a row that says "five placeholders" reads like a cleanup. It is five features.
 - SOL-API5: CLOSED by S4.d (46ac28b): renderer events collect into typed warnings, the bounded
   history and the dump.
 - SOL-API6: CLOSED by W-18 (8becb00, "Take the C ring pointer off the public ABI"), which landed
@@ -2576,7 +2588,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
 | SOL-P9 | a track change reopens the whole session, so live media cannot | [V] 08-19 | 17.11, here |
 | SOL-API2 | five, not four, accepted-and-unused config knobs | [V] 08-19 | 17.11, here |
-| SOL-API4 | five stats placeholders, untouched by the new real counters | [V] 08-19 | 17.11, here |
+| SOL-API4 | **ROADMAP, not a defect** (reclassified 08-25). Five stats fields declared and honestly KDoc'd as unbuilt: `droppedFramesDecode`, `audioLatency`, `containerBitrate`, `SyncMode.ExternalMaster`, `LateAndDecode`. Nothing lies; they are simply not written yet. This row is their ONLY record anywhere, which is why it is kept rather than closed | [V] 08-25 | 17.11, here |
 | SOL-API7 | REDUCED: refusal is typed; the engine never calls `supports()` | [V] 08-19 | 17.11, here |
 | SOL-C1 | 198 exported C symbols, measured two ways 08-24; the C-reduction itself is untouched | [V] 08-24 | 17.11, here |
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
@@ -2851,6 +2863,27 @@ actually false. Here the behaviour was correct (Windows offers no hardware route
 is not plumbed) and only the sentence was wrong. Moving the binary instead would have cost a rebake
 and a release to delete code the product will want back. **Cure a contradiction at its false end,
 not its convenient one.**
+
+**2026-08-25, fourteenth pass (PAST 14.158): 41 KitePlayer rows and 23 KiteCodec rows, 64 open,
+unchanged.** `SOL-API4` reclassified from DEFECT to ROADMAP rather than closed, owner-decided after
+the closure premise turned out to be false.
+
+**This pass nearly deleted a record by believing a row's own pointer.** SOL-API4 said "Home: their
+section 11 items", so it was offered for closure as a duplicate of the roadmap. Section 11 is
+superseded, has lived in KPKMP-PAST.md since the split, and **names none of the five fields**. The
+row was not a duplicate; it was the ONLY record that five public API fields are unbuilt. Closing it
+would have been the exact loss the 17.15 preamble was written to prevent.
+
+**So the register earns a third rule this week, and it is about itself.** Sections 17.11 and 17.15
+carry pointers written before the PAST/FUTURE split, and a pointer into PAST is not tracking, it is
+an archive reference. **Verify a pointer before acting on it, especially when the action is
+deletion.** The pointer here was deleted rather than followed.
+
+**And the classification matters, not just the content.** A row reading "five stats placeholders"
+scans as cleanup and kept surfacing in effort sweeps as a phantom quick win; it is five unwritten
+features. Nothing in it lies to a consumer: the fields are declared, the KDoc says not implemented,
+which is a promise not yet kept rather than a promise broken. The board should separate BROKEN from
+NOT BUILT YET, and this is the first row marked that way.
 
 Of the 41 open KitePlayer rows, **37 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

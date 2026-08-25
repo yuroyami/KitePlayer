@@ -19041,3 +19041,31 @@ Gate: `:kiteplayer-core:jvmTest` 321, `:kiteplayer-ffmpeg:jvmTest` 60,
 side: `wasmJsNodeTest` 72, `jsNodeTest` 52, `apiCheck` green. KitePlayer has no ABI ratchet
 (F-ABI1), so the three added public declarations are reviewed rather than ratcheted; said here
 rather than implied.
+
+### 14.154 32-bit ARM stays, by owner ruling, 2026-08-25
+
+`SOL-B5` decided: **every ABI stays supported, and the proposal to drop armeabi-v7a was REJECTED
+BY YUROYAMI.** The row loses its [owner] gate and becomes plain engineering.
+
+**How the proposal died, recorded because the reasoning is the durable part.** The drop argument
+was: minSdk 26 excludes the 32-bit-only fleet, and 32-bit support drags in a correctness class
+(64-bit atomics on ARMv7) nobody could device-verify. The owner supplied the fact that breaks it:
+**Synkplay ships all ABIs, Android TV first among them.** On TV the minSdk argument inverts.
+Fire-TV-class sticks are 32-bit-only for apps while running modern Android, and budget boxes ship
+32-bit userspace on 64-bit silicon to save RAM. A watch-together app lives on exactly that
+hardware. The performance objection also shrinks there: the shipping Android tier is MediaCodec
+hardware decode, so v7a is mostly JNI plumbing, demux and the audio ring rather than software AV1.
+The owner's own kite3d already publishes androidNativeArm32, so the toolchain precedent exists.
+
+**What "supported" costs, named as gates rather than hopes.** The ABI is not CLAIMED until:
+(1) the kiteplayer-rt ring's 64-bit published positions are audited for real lock-free atomics on
+ARMv7 (LDREXD class), with a compile-time assert so it cannot silently regress; (2) a CI compile
+lane exists for v7a; (3) one smoke run happens on a real TV stick. That is the device-true law
+applied to a new ABI, and it is what separates this decision from the "advertise first, verify
+never" failure the register keeps recording.
+
+x86-32 is not refused either, per "nothing out": it is added the day Synkplay actually ships it,
+and not before.
+
+A planning ruling, no code moved. The gate for a doc pass is the split checker and the counts:
+both run, 66 open unchanged, owner-gated 9 to 8.

@@ -1195,10 +1195,21 @@ Build and publication:
   `BuildFFmpegTask.MACOS_DEPLOYMENT_TARGET = "12.0"`, is now read by both macOS FFmpeg branches
   and by both macOS C targets. 12.0 because konan imposes it whatever anything else says. Left
   open as its own row: the pin is invisible to the staleness check (`KC-FLOOR-DRIFT`).
-- SOL-B5 [V] STILL OPEN, re-verified 2026-08-18: LinkKiteCodecJniTask's ABI recipes name arm64-v8a
-  and x86_64 only. The same two-ABI limit now also governs the libass JNI adapter, which took its
-  ABI list from the same reasoning, so the owner decision covers both. Owner decision required:
-  either armeabi-v7a is a target (add it) or it is not (record the refusal in 17.6). Home: S5 entry.
+- SOL-B5 **DECIDED 2026-08-25 (PAST 14.154): every ABI stays supported. The proposal to drop
+  32-bit ARM was REJECTED BY YUROYAMI.** The reasoning is recorded so no future pass re-argues it:
+  the "minSdk 26 already excludes the 32-bit fleet" argument is true for phones and FALSE for TV.
+  Fire-TV-class sticks are 32-bit-only for apps on modern Android, budget TV boxes ship 32-bit
+  userspace on 64-bit silicon to save RAM, Synkplay ships all ABIs with Android TV first among
+  them, and the owner's own kite3d already publishes androidNativeArm32. The performance objection
+  also shrinks on TV: the shipping Android path is MediaCodec hardware decode, so v7a support is
+  mostly JNI plumbing, demux and the audio ring, not software AV1.
+
+  What remains is ENGINEERING, not a decision: add armeabi-v7a to LinkKiteCodecJniTask's ABI
+  recipes and the libass JNI adapter. Three gates before the ABI is CLAIMED, per the device-true
+  law: (1) the kiteplayer-rt ring publishes 64-bit positions, and 32-bit ARM only reads them
+  untorn through real atomic ops (LDREXD class), so the ring gets an audit plus a compile-time
+  lock-free assert; (2) a CI compile lane so it cannot rot; (3) one smoke run on a real TV stick.
+  x86-32 is not refused either; it is added the day Synkplay actually ships it. Home: S5 entry.
 - SOL-B6: **CLOSED 2026-08-25 (PAST 14.147). The defect was real and live; the audit's proposed
   fix was not the defect.** `mavenLocal()` sat FIRST in both of `settings.gradle.kts`'s resolution
   blocks. The trap measured: KiteCodec's working tree says `VERSION=0.1.3`, KitePlayer pins
@@ -2550,7 +2561,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
 | SOL-C3 | NOT a truncation risk, re-read 08-25: `snprintf` bounds every write and `test_buffers.c` already measures the widest input at 162 bytes of 512. What is open is the C-reduction slice, moving composition to Kotlin, and it belongs to SOL-C1 | [V] 08-25 | 17.11, here |
 | SOL-K2 | the modernization posture; UNFALSIFIABLE as written | [V] 08-19 | 17.11, here |
-| SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-19 [owner] | 17.11, here |
+| SOL-B5 | DECIDED 08-25: ALL ABIs stay supported; the drop proposal was REJECTED BY YUROYAMI. No ABI is ever formally refused. Remainder is engineering: add armeabi-v7a to the JNI recipes and the libass adapter, behind three gates (ARMv7 64-bit-atomics audit of the RT ring with a compile-time assert, a CI compile lane, one TV-stick smoke before support is claimed). x86-32 on demand if Synkplay ships it | [V] 08-25 | 17.11, here |
 | SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
 | AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
@@ -2782,6 +2793,12 @@ renderer event rather than a converter callback, and why renderer publication is
 than something quietly skipped. **A spec written from the register rather than from the tree
 inherits the register's blind spots**, which is the fourth time this week that reading beat trusting.
 
+**2026-08-25, tenth pass (PAST 14.154): 43 KitePlayer rows and 23 KiteCodec rows, 66 open,
+unchanged, and the [owner]-gated count drops from 9 to 8.** `SOL-B5` stopped being a decision and
+became work: the owner ruled that EVERY ABI stays supported and the drop proposal was REJECTED BY
+YUROYAMI. The row now carries the reasoning in full, because a decision whose grounds are not
+written down gets re-argued by the next agent who only sees the phone numbers and not the TV ones.
+
 Of the 43 open KitePlayer rows, **39 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
@@ -2829,7 +2846,7 @@ it, mirroring KiteCodec's ci/release/publish trio, konan warmup included per KC-
 SOL-B8 (the AAR publication), F-ABI1 (Android ABI dump before anything is frozen), SOL-B7
 (Gradle 10 warnings become breaks; fix before CI pins green), SOL-B6 (the twin repos resolve as
 one graph or with explicit Central pins, never mavenLocal shadows), SOL-B4 (one macOS floor,
-decided once), SOL-B5 [owner] (armeabi-v7a in or formally out), 17.17 boxes 11, 17, 18, 19, 20.
+decided once), SOL-B5 (armeabi-v7a IN, decided 08-25, three gates), 17.17 boxes 11, 17, 18, 19, 20.
 Exit: `implementation("io.github.yuroyami:kiteplayer-mobile:0.0.x")` from a machine that has
 never seen this checkout, resolving KiteCodec 0.1.x from Central, building green. Everything in
 this phase is mechanical; nothing needs a device.

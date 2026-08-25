@@ -2559,7 +2559,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-PERF | 10 hot paths; per-byte Web interop, the JVM copy chain | [V] 08-19 | 17.16, here |
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | REDUCED 08-24: the FFmpeg-profile half is CLOSED (encoder table, GPL tasks, NOTICE, CONTRIBUTING, FFmpegPaths KDoc, all measured with `nm` against the shipped archives). What is left is the register codes in shipped sources: 128 mentions of 35 distinct codes across 40 files, counted 08-24, not the 180 this row used to claim | [V] 08-24 | 17.16, here |
-| KC-EVIDENCE-WASM | three Wasm fixes landed 08-23 with no source set that could test them | [V] 08-23 | 17.16, here |
+| KC-EVIDENCE-WASM | REDUCED 08-24: the source set exists, runs 15 tests over a fake emscripten module and is in CI. The three `MediaSource.wasmJs` fixes are still untested; the blocker is now the fake's coverage, not the tree | [V] 08-24 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
 
@@ -2622,7 +2622,15 @@ code, is the bottleneck.** That is the argument for 17.20 items 1 to 3 in one se
 **The safety table that stood here is gone**: all six rows were fixed on 2026-08-19 and left this
 file under RULE TWO (PAST 14.115).
 
-Of the 47 open KitePlayer rows, **43 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25 (PAST 14.143), counted line by line: 48 KitePlayer rows and 24 KiteCodec rows, so 72
+open, unchanged.** The wasm test source set landed and closed NOTHING, which is the correct outcome
+and worth stating plainly: `KC-EVIDENCE-WASM` reduced from "there is nowhere to test this" to "this
+is untested", and a row that still names three untested fixes has not closed. The count also carried
+a stale number into this paragraph's predecessor, which said 47 KitePlayer rows against a table
+holding 48. That is the third time in three days the same drift has been caught the same way, by
+counting rather than adjusting.
+
+Of the 48 open KitePlayer rows, **44 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is
@@ -2713,8 +2721,10 @@ KiteCodec `dd2823c` and KitePlayer `e201186`.
 #### KC-EVIDENCE-WASM. Three Wasm fixes exist in code and nothing can prove them
 
 Opened 2026-08-23 as the remainder of KC-NOTDONE and KC-P0-05-LEAK, both of which closed in code
-that day (PAST 14.130). Three of those fixes live in `wasmJsMain` and **there is no `wasmJsTest`
-source set**, so no test could fail if any of them were reverted tomorrow:
+that day (PAST 14.130). **REDUCED 2026-08-24 (PAST 14.143): the source set now exists and the three
+fixes are still untested.** The blocker is gone and the work is not done; those two are different
+claims and this row previously conflated them. No test could fail today if any of these were
+reverted tomorrow:
 
 - P1-05's live `corruptDataSkipped` accumulation in `MediaSource.wasmJs.decodeStreams`.
 - The decoder leak in the same function, where `openPacketReader` used to sit outside the `try` that
@@ -2722,10 +2732,11 @@ source set**, so no test could fail if any of them were reverted tomorrow:
 - The permanent `readerActive` leak in `MediaSource.wasmJs.extractFrame`, where the reader and the
   decoder were both opened outside the `try`.
 
-This is the same blocker the Web reader row already names and the same one 17.20 item 3 exists for.
-It is recorded separately because those three fixes now carry a claim, and a claim with no test is
-what this register was rebuilt to stop. **Building the source set retires this row, the twelve it
-already carried, and the Web reader's testability caveat in one move.**
+**What is left is three tests, not infrastructure.** All three live in `MediaSource.wasmJs`, which
+the harness cannot reach yet: `FakeCodecModule` implements the report and string entry points that
+`FFmpeg.identity` reads, and a decode path needs the packet and decoder entry points too. That is an
+extension of an existing fake, which is ordinary work, rather than the missing-source-set problem it
+used to be.
 
 #### KC-EVIDENCE-MUX. The muxer state machine has no way to fail on purpose
 
@@ -2840,7 +2851,9 @@ One release blocker is left and it is the Web reader; everything else here is a 
   ever closes the `MediaByteSource`. **Two of those five break a written contract rather than a
   quality bar.** `MediaByteSource` KDoc promises close runs exactly once and that seek is never
   called on a nonseekable source. JVM honours both, Native honours seekable, Wasm honours neither
-  and says nothing. Size L, and untestable until a `wasmJsTest` source set exists.
+  and says nothing. Size L. **The "untestable until a `wasmJsTest` source set exists" caveat this
+  row carried is retired (PAST 14.143): the source set exists and the fake-module seam reaches this
+  file.** Nothing about the five defects changed.
 - **KC-CANCEL (was P1-07).** A repo-wide grep for `interrupt_callback` returns zero hits. The only
   cancellation is one `ensureActive()` per demux iteration, so a network open, read or seek blocks
   for ever, and `Transcoder.transcode` never leaves the calling dispatcher. Size L, C ABI change on
@@ -2972,7 +2985,7 @@ distribution half has not started.**
 | 1 | Invalid C pixel formats cannot abort; the test fails on any signal | GREEN |
 | 2 | Native frame, decoder, filter and sink operations hold a lifetime lease for the whole FFI call | GREEN |
 | 3 | JVM and Native sink close is a terminal atomic state machine | GREEN |
-| 4 | Wasm send, drain, EOF, wrong stream, seek, extraction, options and ownership match the shared suite | CODE ONLY. The code changed and no test can fail: there is NO `wasmJsTest` source set in KiteCodec |
+| 4 | Wasm send, drain, EOF, wrong stream, seek, extraction, options and ownership match the shared suite | STILL CODE ONLY, for a smaller reason. The source set exists since 2026-08-24 (PAST 14.143) and covers module adoption and the identity report; NO test reaches `MediaSource.wasmJs`, which is what this box is about |
 | 5 | Web input is worker backed or explicitly small; no per byte interop, exactly once close | RED. KC-WEB-IO |
 | 6 | Every custom I/O failure path preserves its cause and closes once | GREEN on JVM and Native. RED on Wasm, which never closes the source at all |
 | 7 | Player EOF waits for decoded handoffs, every buffering stage, the video and subtitle lanes, and the sink | AMBER. Demux, both decoders, packet queues, the video frame queue, decoded audio in flight and the DSP tail and the sink drain are all in the gate, each bounded. The SUBTITLE lane is not |
@@ -3109,9 +3122,13 @@ whether anything else is true.
    `check`. The two copies were IDENTICAL when the check was written, 607 lines and 196 externals,
    so this bought no fix; it bought the guarantee that the next drift fails in a build rather than
    in a browser.
-3. **A `wasmJsTest` source set.** Twelve rows are marked done with no test that could ever fail, and
-   they will stay that way for ever without it. This is the single biggest lie-per-hour reduction
-   available.
+3. **DONE 2026-08-25 (PAST 14.143).** `src/wasmJsTest` exists, 15 tests over two suites, in CI.
+   **It needed no build-script change, only the convention directory**, so twelve rows sat
+   unprovable for the price of a `mkdir`. The seam is a FAKE emscripten module, available all along
+   because every generated external takes the codec module as its first argument. Two corrections:
+   46 `commonTest` tests already ran on wasmJs, and NO CI job ran any wasm or js test, so all 46
+   were laptop results. **Its replacement here is the three `KC-EVIDENCE-WASM` fixes**, which now
+   have somewhere to be tested and still are not.
 4. **DONE 2026-08-23 (PAST 14.130), except for the evidence.** All six `KC-NOTDONE` rows and both
    `KC-P0-05-LEAK` halves are fixed. Four of the six carry a falsifying test that was watched to
    fail first. The remainder is `KC-EVIDENCE-WASM` and `KC-EVIDENCE-MUX`, and it is not code: three

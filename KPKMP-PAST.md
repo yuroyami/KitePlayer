@@ -18468,3 +18468,73 @@ by construction and are named here so no reader mistakes their absence for an ov
 Windows matrix run needs a Windows machine, and the physical-device halves of the desktop
 measurements need machines that are not this one.
 
+
+### 14.143 The web backend gets a test tree, and it cost a mkdir, 2026-08-25
+
+17.20 item 3, done. `kitecodec-core/src/wasmJsTest` exists, carries 15 tests over two suites, and
+runs in CI. Twelve rows had been sitting unprovable behind it.
+
+**It needed no build-script change.** `wasmJsTest` is a source set Kotlin Multiplatform already
+creates, and `src/wasmJsTest/kotlin` is already its convention path, so the entire "missing source
+set" was a directory nobody had made. That was established before writing a line of real test, with
+a throwaway suite containing one `fail()`, which the build duly reported. A blocker described in
+three separate places for two days was a `mkdir`.
+
+**Two corrections the tree forced on the register.** First, 46 `commonTest` tests were ALREADY
+running on wasmJs under node; the register's "no source set that could test them" was true only of
+a wasm-SPECIFIC tree. Second, and worse, **no CI job in KiteCodec ran any wasm or js test task at
+all**, so every one of those 46 was a laptop result. The first correction makes the hole smaller
+than written, the second makes it bigger, and the second is the one that mattered.
+
+**The seam is a fake emscripten module, and it was available all along.** Every one of the 196
+generated externals takes the codec module as its FIRST argument, because the codec lives in a
+separate wasm module with its own linear memory and Kotlin/Wasm cannot link to it directly. That
+argument is an injection point: a JS object carrying a real `ArrayBuffer` heap, a bump `_malloc`,
+and the handful of `_kc_` entry points under test is indistinguishable from the real codec to the
+Kotlin side. **No FFmpeg wasm build is needed to test this layer**, which is worth recording because
+the assumption that one was is why nobody tried.
+
+What the two suites pin:
+
+- `KiteCodecWebTest`, 8 tests: module adoption. Attaching the same module twice is a no-op,
+  attaching a different one is refused and the established module survives, a module built without
+  the runtime methods the backend reads is refused with a diagnostic naming only what is ABSENT, and
+  `load` on an already-attached module completes without ever suspending. That last one is asserted
+  by driving the suspend function with a hand-written `Continuation` and failing if it suspends,
+  because a `load` that reached the network would have to. There is no `runBlocking` on wasmJs and
+  no coroutines-test dependency here, and adding one for this would have been a dependency added
+  without a register item.
+- `WebIdentityTest`, 7 tests: the 2,176-byte `kc_ffmpeg_report` crossing out of codec memory. A
+  synthetic report is staged into the fake heap and `FFmpeg.identity` is asserted field for field,
+  including all six library rows with a distinct value per column, so a field reading its
+  neighbour's slot lands on a number this file names. Also the rejected-runtime path, the mixed
+  install comma list, the bypass flag reading its own slot rather than being derived from a status
+  that is 0 in exactly the case the flag exists for, and that the report is cached per module.
+
+**Proved able to fail, twice, before any of it was believed.** Moving `ReportLayout.bypassed` from
+4 to 8, a four-byte lie of exactly the kind that file is generated to prevent, failed
+`aHealthyReportDecodesFieldForField`. Deleting the identity check in `KiteCodecWeb.attach` so a
+second different module is adopted silently failed
+`attachingASecondDifferentModuleIsRefusedAndTheFirstKeepsWinning`. Both edits were reverted and
+`git diff` confirmed clean against production sources before commit.
+
+One test failed on first run and the TEST was wrong, not the code: it asserted `ccall` was absent
+from the `IncompleteModule` message, and the remediation half of that message quotes every runtime
+method including the present ones. Rewritten to scope the assertion to the missing-list clause,
+which is a stronger check than the one intended: a diagnostic that degraded into "here is the full
+list" would now fail.
+
+**CI.** A new step in the host-checks job runs `:kitecodec-core:wasmJsNodeTest`. It sits there
+because it needs nothing that job does not already have: no FFmpeg, no konan, no native toolchain.
+NODE, not browser: the browser task drives the same code through webpack, which is unproven here and
+which KitePlayer has already seen abort with `RangeError: Invalid array length`. Claiming browser
+coverage from a node run is the kind of untrue green this suite exists to stop.
+
+**What did NOT close.** `KC-EVIDENCE-WASM` reduced and did not close. Its three fixes all live in
+`MediaSource.wasmJs.decodeStreams` and `extractFrame`, and the fake implements the report and string
+entry points, not the packet and decoder ones. Extending it is ordinary work now instead of a
+missing tree. The register count did not move: 72 open, 48 and 24.
+
+Gate: `:kitecodec-core:wasmJsNodeTest` green at 61 tests, 15 of them new. `apiCheck` and
+`checkWasmBindingMirror` green, both re-run because a new test source set is exactly the kind of
+change that can move a published surface without anyone intending it. Neither moved.

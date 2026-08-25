@@ -1013,11 +1013,15 @@ Subtitles:
   own comments state that every Create-rule object is released on every exit, naming the leak this
   row described (a two-hour film's cue edges used to leak the framesetter and its laid-out glyphs
   once per span per cue). The leak-test half of the row rides the existing cue-churn coverage.
-- SOL-S3 [V] STILL OPEN, re-verified 2026-08-18 with the line in hand:
-  AppKitVideoRenderer.drawOverlayInto computes `drawWidth = image.bitmap.width * sx` and
-  `drawHeight = image.bitmap.height * sy`, so the SOURCE bitmap's dimensions are scaled by the
-  viewport ratio while the region's own `width`/`height` are never read. Position is scaled from
-  authoring space exactly as this row said. Home: S4.f.
+- SOL-S3: **CLOSED BY CORRECTION 2026-08-25. The row was false, and had been since it was
+  written.** It says the region's own `width`/`height` are "never read". `OverlayImage` has no
+  `width` or `height` to read: it is `(x, y, bitmap)` and `git show 0759064` proves it was born
+  that way and never carried anything else. The bitmap IS the region, so `bitmap.width * sx` is
+  not a substitute for the region size, it is the region size. Two things this pass also
+  established, because the row named only one renderer: `UIKitVideoRenderer.drawOverlayInto` is
+  byte-identical to the AppKit one, so had the defect been real it was always two defects, not
+  one. Re-shaping `OverlayImage` to carry a target rect is a public API change and a design act
+  (18.3 rule 6), not the edit this row described.
 - SOL-S4 to SOL-S6: CLOSED by S4.f's slice (7e9bb12): open-end resolution in both parsers,
   word-boundary block keywords, and span-text entity decoding.
 - SOL-S7 [C] Public cue styling exceeds what the rasterizers apply (first span chooses global
@@ -1156,8 +1160,14 @@ Build and publication:
 - SOL-B3: CLOSED, verified by running it 2026-08-18 rather than by reading the diff, which is what
   the row asked for: `-Pkitecodec.hostTargetsOnly=true` configures :kitecodec-core cleanly with no
   compileSdk failure. 3f0f1e3's conditional plugin did close it; nobody had re-run it since.
-- SOL-B4 [C] Vendored archives carry a macOS 26 deployment version while Kotlin/Native links
-  macOS 12 (and the shim uses 11); pin one deployment floor in BuildFFmpegTask. Same window.
+- SOL-B4: **CLOSED 2026-08-25 (PAST 14.144), and every number in it was true.** Measured, not
+  carried: `otool -l` on the committed `libavutil.a` read `minos 26.0`, `CompileKiteCodecCTask`
+  compiled at `macos11.0`, and `minVersion.macos` in konan.properties for Kotlin 2.4.10 is 12.0.
+  The macOS branches of `BuildFFmpegTask` passed no `-mmacosx-version-min` at all while every iOS
+  branch always passed `-mios-version-min`, which is how the SDK's floor got in. One constant,
+  `BuildFFmpegTask.MACOS_DEPLOYMENT_TARGET = "12.0"`, is now read by both macOS FFmpeg branches
+  and by both macOS C targets. 12.0 because konan imposes it whatever anything else says. Left
+  open as its own row: the pin is invisible to the staleness check (`KC-FLOOR-DRIFT`).
 - SOL-B5 [V] STILL OPEN, re-verified 2026-08-18: LinkKiteCodecJniTask's ABI recipes name arm64-v8a
   and x86_64 only. The same two-ABI limit now also governs the libass JNI adapter, which took its
   ABI list from the same reasoning, so the owner decision covers both. Owner decision required:
@@ -2490,7 +2500,6 @@ locating each symbol by name, because every line number in both audit documents 
 |---|---|---|---|
 | KP-PROD | THE PRODUCTION PROGRAM, owner-ordered 2026-08-22: the ordered handoff from here to a shippable player; every row below maps into one of its four phases | [V] 08-22 | 17.16, here |
 | KP-RQ | THE RENDER-QUALITY LADDER, owner-ordered 2026-08-23: rungs 1 to 3 (dither, deband, kernel) are CLOSED on both renderers, PAST 14.125 to 14.128; linear light, Anime4K and HDR passthrough remain, and every rung still owes a phone measurement | [V] 08-23 | 17.21, here |
-| SOL-S3 | overlay draws the SOURCE bitmap's size, never the region's own | [V] 08-19 | 17.11, here |
 | SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
 | SOL-S8 | positioned bottom cues still consume implicit stacking space | [V] 08-19 | 17.11, here |
 | SOL-A6 | passthrough, offload, device selection, route recovery absent | [V] 08-19 | 17.11, here |
@@ -2504,7 +2513,6 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
 | SOL-C3 | filter composition still builds into a fixed `char args[512]` | [V] 08-19 | 17.11, here |
 | SOL-K2 | the modernization posture; UNFALSIFIABLE as written | [V] 08-19 | 17.11, here |
-| SOL-B4 | three macOS floors disagree: 26.0, 12.0 and 11.0, measured | [V] 08-19 | 17.11, here |
 | SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-19 [owner] | 17.11, here |
 | SOL-B6 | the twin repos are not one graph; mavenLocal shadows a sibling | [V] 08-19 | 17.11, here |
 | SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
@@ -2559,12 +2567,13 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-PERF | 10 hot paths; per-byte Web interop, the JVM copy chain | [V] 08-19 | 17.16, here |
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | REDUCED 08-24: the FFmpeg-profile half is CLOSED (encoder table, GPL tasks, NOTICE, CONTRIBUTING, FFmpegPaths KDoc, all measured with `nm` against the shipped archives). What is left is the register codes in shipped sources: 128 mentions of 35 distinct codes across 40 files, counted 08-24, not the 180 this row used to claim | [V] 08-24 | 17.16, here |
-| KC-EVIDENCE-WASM | REDUCED 08-24: the source set exists, runs 15 tests over a fake emscripten module and is in CI. The three `MediaSource.wasmJs` fixes are still untested; the blocker is now the fake's coverage, not the tree | [V] 08-24 | 17.16, here |
+| KC-EVIDENCE-WASM | RESIZED 08-25, was S: the source set exists and is in CI, but the three `MediaSource.wasmJs` fixes need a fake that drives a real decode. MEASURED: 40 distinct `ffkmp_`/`kc_` entry points in that file alone, before `StreamDecoder` and `PacketReader`. That is a fake demuxer, so size M at best | [V] 08-25 | 17.16, here |
 | KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
+| KC-FLOOR-DRIFT | the macOS deployment floor is pinned (SOL-B4) but rides inside `--cc`, which `MACHINE_SPECIFIC_CONFIGURE_KEYS` strips from the recipe fingerprint, so a locally-baked tree at the OLD floor is never reported stale. `native-libs/` is gitignored and CI bakes from source, so this bites a developer's laptop, not a release | [V] 08-25 | 17.16, here |
 | KC-CI-KONAN | REDUCED 08-24: CI is 11/11 green and no job links a system FFmpeg. Remainder is cosmetic: the two macOS jobs duplicate a from-source build on a cold cache | [V] 08-24 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
@@ -2630,7 +2639,22 @@ a stale number into this paragraph's predecessor, which said 47 KitePlayer rows 
 holding 48. That is the third time in three days the same drift has been caught the same way, by
 counting rather than adjusting.
 
-Of the 48 open KitePlayer rows, **44 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25 (PAST 14.144), counted line by line: 46 KitePlayer rows and 25 KiteCodec rows, so 71
+open.** Two closed and one opened. `SOL-B4` closed on measurement and is the only row in this pass
+that was a real, mechanical fix. `SOL-S3` **closed by correction: it was false when written**, and
+had been for the life of the row. It described reading `width`/`height` off `OverlayImage`, a type
+that has only ever been `(x, y, bitmap)`, so there was nothing to fix and never had been. That is
+the second false row this register has caught in two days and the first one that was false at
+BIRTH rather than gone stale.
+
+**One row was re-sized rather than closed, and the direction matters.** `KC-EVIDENCE-WASM` was rated
+S while the belief was "the test source set is the only blocker". The source set landed on 08-24, so
+the real blocker became visible and was measured: 40 distinct C entry points in
+`MediaSource.wasmJs.kt` alone, before `StreamDecoder` and `PacketReader`. A fake that drives a real
+decode is a fake demuxer. **An estimate made behind a blocker is a guess about what the blocker
+hides**, and this register should treat S ratings on unreached code as provisional.
+
+Of the 46 open KitePlayer rows, **42 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is

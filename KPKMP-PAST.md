@@ -18538,3 +18538,70 @@ missing tree. The register count did not move: 72 open, 48 and 24.
 Gate: `:kitecodec-core:wasmJsNodeTest` green at 61 tests, 15 of them new. `apiCheck` and
 `checkWasmBindingMirror` green, both re-run because a new test source set is exactly the kind of
 change that can move a published surface without anyone intending it. Neither moved.
+
+### 14.144 One macOS floor, and a row that was false at birth, 2026-08-25
+
+A sweep of every S-rated row that needs no owner and no device. Of roughly twenty, **one was a real
+mechanical fix**. The rest were owner-gated, design acts under 18.3 rule 6, or mis-sized. That ratio
+is the finding, not a complaint: an S rating written next to a row nobody has opened is a guess.
+
+**SOL-B4, closed, and every number in it was true.** Measured rather than carried:
+
+| Floor | Where | Value |
+|---|---|---|
+| Vendored FFmpeg archives | `otool -l native-libs/lgpl/macos-arm64/lib/libavutil.a` | `minos 26.0` |
+| C helper layer | `CompileKiteCodecCTask.specFor` | `arm64-apple-macos11.0` |
+| Kotlin/Native | `konan.properties` `minVersion.macos`, Kotlin 2.4.10 | `12.0` |
+
+The cause is one line that was never written. Every iOS branch of `BuildFFmpegTask` passes
+`-mios-version-min=14.0`; neither macOS branch passed `-mmacosx-version-min` at all, so clang took
+the SDK's. **26.0 is the dangerous direction**: an object built for a NEWER floor than the binary
+linking it means the product claims macOS 12 support while carrying code that asks for 26.
+
+`BuildFFmpegTask.MACOS_DEPLOYMENT_TARGET = "12.0"` is now the single definition, read by both macOS
+FFmpeg branches and both macOS C targets. **12.0 is not a preference**: it is konan's own
+`minVersion.macos`, so it is the floor the linker imposes whatever anything else says. Raising the C
+layer from 11.0 to 12.0 drops nothing real, because konan already refused 11.
+
+Three tests, each proved able to fail before it was believed. Dropping the flag from the x86_64
+branch alone failed two; reverting the C layer to a literal `11.0` failed the third; moving the
+constant to `13.0` failed the konan-agreement assertion. All three edits reverted.
+
+One test was **weak on first writing and was tightened**: the drift test extracted the floor with
+`substringAfter`, which returns the whole string when the flag is absent, so a fix deleted from BOTH
+branches would have satisfied its equality check vacuously. It asserts presence first now.
+
+**What this fix does NOT do, opened as `KC-FLOOR-DRIFT`.** The floor rides inside `--cc`, and `--cc`
+is in `MACHINE_SPECIFIC_CONFIGURE_KEYS`, which `recipeFingerprint` strips before comparing. So a
+tree baked at the old floor is **not** reported stale. `native-libs/` is gitignored and CI bakes from
+source, so this bites a laptop rather than a release, but the shape is exactly the silent drift this
+project keeps re-finding, and the honest place for it is a row rather than an improvised `otool`
+call inside `verifyInstall`, which today spawns no process at all.
+
+**SOL-S3, closed by correction. The row was false when it was written.** It reads: the overlay draw
+scales the source bitmap "while the region's own `width`/`height` are never read". `OverlayImage` is
+`(x, y, bitmap)`. It has no `width` and no `height`, and `git show 0759064` shows it was born that
+way and never carried anything else. The bitmap is not a stand-in for the region; it IS the region,
+rasterized at viewport scale, and scaling it by the viewport-to-output ratio is correct. Nothing was
+changed. **The row also named only `AppKitVideoRenderer`, and `UIKitVideoRenderer.drawOverlayInto`
+is byte-identical**, so had the defect been real it was two defects and the row undercounted it.
+Giving `OverlayImage` a target rect is a public API change and a design act, not this edit.
+
+**KC-EVIDENCE-WASM re-sized, not closed.** Rated S while the test source set was the visible
+blocker. That landed on 08-24, so what it was hiding became measurable: 40 distinct `ffkmp_`/`kc_`
+entry points in `MediaSource.wasmJs.kt` alone, before `StreamDecoder` and `PacketReader`. Driving
+`decodeStreams` through a fake means emulating format contexts, streams, codec parameters, codec
+contexts, packets and frames in JavaScript. That is a fake demuxer and its own body of work. Not
+built, because half a fake proves nothing.
+
+**Ruled out, with the reason, so the next sweep does not re-litigate them.** `SOL-API2` and
+`SOL-API4` are UNBUILT features, not documentation that lies; their own KDoc already says so, so
+there is no cheap half. `SOL-API7`, `KC-EVIDENCE-MUX` and `KC-CAPS`'s inventory query are design
+acts: a surface model, a fault-injection seam, and public API on a library Central already serves.
+`SOL-K2` is a style, not a fix. `PAR-7` names its own close as retiring `fd:` for positional reads,
+which is a redesign. `KC-CI-KONAN`'s remainder is merging two macOS jobs whose own comments say they
+exist to test different things; it cannot be verified from here and it trades away independent
+failure signal, which is worth more than a cold-cache build.
+
+Gate: `:buildSrc:test` green at 93 tests, 3 of them new. No Kotlin source in either published module
+was touched, so no ratchet could move.

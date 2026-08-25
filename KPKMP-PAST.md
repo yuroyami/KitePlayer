@@ -19094,3 +19094,29 @@ cannot be finished is a category error rather than a small item. The test is one
 would make this DONE? If the honest answer is "nothing, you just keep doing it", it is guidance.
 
 Doc-only pass. Gate: the split checker and both counts, run; 65 open, KitePlayer 43 to 42.
+
+### 14.156 4K was a hardware question filed under software, 2026-08-25
+
+The `4K` row closed by absorption into `PAR-6`, on the owner's call. Second item of the S-tier walk.
+
+The row read "the non-goal was set at 1.0x software, never re-decided" and had sat since 08-18. The
+reason nobody re-decided it is that it could not be decided where it stood. The non-goal came from
+one software measurement, 4K HEVC 10-bit running at exactly 1.0x, and no amount of re-deciding
+changes what a phone CPU does with four times 1080p's pixels. Software 4K was never the winnable
+question.
+
+**The evidence that settles it was already in this document**, in 17.14's web decode spike: hardware
+decode measured 715 fps against 182 fps software on comparable 1080p, roughly 3.9 times faster, with
+the capability probe answering YES for HEVC Main10. 4K is about four times the pixels, so the margin
+is wide. What is missing is a 4K clip run through a hardware path that WORKS, and the row blocking
+that is `PAR-6`: hardware AV1 cannot engage at all today because libdav1d wins the decoder lookup.
+
+So the question moved to where it can be answered. Software 4K stays a non-goal by decision rather
+than by inheritance, and "one 4K clip through the hardware path" is now an exit criterion of
+`PAR-6`, recorded against the row that can actually satisfy it.
+
+**Two rows in two passes closed for being unanswerable as posed, and the faults differ.** `SOL-K2`
+had no finish line. `4K` had one, but was filed against the wrong subsystem. The shared tell is a
+row every sweep reaches and leaves untouched: that is a signal about the ROW, not about the effort.
+
+Doc-only pass. Gate: the split checker and both counts; 64 open, owner-gated 8 to 7.

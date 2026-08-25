@@ -1327,6 +1327,22 @@ by the same sweep and NOT yet answered:
   hardware was missing. Reading the code around the claim showed the route CANNOT complete on any
   build this project ships.
 
+  **ABSORBED THE `4K` ROW, 2026-08-25, owner decision.** That row asked whether 4K should stay a
+  v1 non-goal, and it had sat unanswered since 08-18 because it was pointed at the wrong thing. The
+  non-goal was set on a SOFTWARE measurement, 4K HEVC 10-bit at exactly 1.0x, and 4K on a phone was
+  never going to be won in software. It is a hardware question, so it belongs to the hardware row.
+
+  **The measurement that decides it is already on record and is not an opinion** (17.14, the web
+  decode spike): hardware decode reached 715 fps against 182 fps software on comparable 1080p,
+  about 3.9 times faster, and the capability probe answered YES for HEVC Main10. 4K is roughly four
+  times 1080p's pixels, so that margin is wide. What is missing is a 4K clip run through a working
+  hardware path, which is exactly what this row is blocking.
+
+  **So 4K stops being a question and becomes an EXIT CRITERION here.** Software 4K remains a
+  non-goal, permanently and by decision rather than by inheritance. When hardware decode can engage,
+  one 4K clip through the hardware path settles what 4K support means, and the answer is recorded
+  against this row rather than a separate one nobody could close.
+
   **What was fixed on 2026-08-19.** `appleHwaccelDecodeArgs()` pinned only `h264_videotoolbox` and
   `hevc_videotoolbox`, so `av1_videotoolbox` was never named. It is pinned now, and the two
   configure goldens moved with it. This takes effect the next time an Apple FFmpeg tree is built;
@@ -2567,12 +2583,11 @@ locating each symbol by name, because every line number in both audit documents 
 | X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-19 | 17.14, here |
 | X-13 | no artifact layout and no deployment story | [V] 08-19 | 17.14, here |
 | X-14 | the format matrix runs under node, never in a browser | [V] 08-19 | 17.14, here |
-| 4K | the non-goal was set at 1.0x software, never re-decided | [V] 08-18 [owner] | 17.14, here |
 | PAR-1 | mingw carries 18 hwaccels; no `--disable-autodetect` on that path | [V] 08-19 [owner] | 17.11, here |
 | PAR-2 | Linux compiles zero hwaccels | [V] 08-19 | 17.11, here |
 | PAR-3 | android-x64 has 0 SIMD symbols against arm64's 1365 | [V] 08-19 | 17.11, here |
 | PAR-5 | native linux and mingw declare targets with no source set | [V] 08-19 [owner] | 17.11, here |
-| PAR-6 | REWRITTEN: hardware AV1 cannot engage at all; libdav1d wins the decoder lookup | [V] 08-19 | 17.11, here |
+| PAR-6 | REWRITTEN: hardware AV1 cannot engage at all; libdav1d wins the decoder lookup. ABSORBED the `4K` row 08-25 by owner decision: 4K stays a software non-goal and becomes an EXIT CRITERION here, because 4K was only ever a hardware question | [V] 08-25 | 17.11, here |
 | PAR-7 | `fd:` still mutates the caller's descriptor | [V] 08-19 | 17.11, here |
 | L | libass: JVM bridge, wasm, the animated hook, the mpv corpus | [V] 08-19 | 17.12, here |
 | KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |
@@ -2805,7 +2820,18 @@ A row that cannot be finished is not a small row, it is a category error, and it
 count it sits in. The test is one question: what would make this DONE? If the answer is "nothing,
 you just keep doing it", it is guidance and belongs in the fence.
 
-Of the 42 open KitePlayer rows, **38 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25, twelfth pass (PAST 14.156): 41 KitePlayer rows and 23 KiteCodec rows, 64 open, and
+the [owner]-gated count drops to 7.** The `4K` row closed by ABSORPTION into `PAR-6`, owner-decided.
+It had been unanswered since 08-18 because it was aimed at the wrong thing: the non-goal was set on
+a SOFTWARE measurement, and 4K on a phone was never going to be won in software. It is a hardware
+question and now lives with the hardware row as an exit criterion.
+
+**Second row in two passes to close because it could not be answered as posed**, after `SOL-K2`.
+Different fault, same family: K2 asked for something with no finish line, 4K asked a question of the
+wrong subsystem. **A row nobody can answer is not always small; sometimes it is misfiled**, and the
+tell is that every sweep reaches it and moves on without doing anything.
+
+Of the 41 open KitePlayer rows, **37 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is

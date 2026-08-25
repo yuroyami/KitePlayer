@@ -1027,8 +1027,14 @@ Subtitles:
 - SOL-S7 [C] Public cue styling exceeds what the rasterizers apply (first span chooses global
   properties; family, shadow, wrapping, decoration and stroke are partial). Implement per-span
   layout or narrow the claims. Home: S4.f.
-- SOL-S8 [C] Explicitly positioned bottom cues still consume implicit stacking space, shifting
-  later implicit cues. Home: S4.f.
+- SOL-S8: **CLOSED 2026-08-25 (PAST 14.148). True as written, and it was THREE defects, not one.**
+  Every rasterizer grew `stackedBottom` on `alignment.isBottom` alone, so a cue carrying an authored
+  `positionY` reserved room in a stack it never stood in and lifted every later ordinary subtitle by
+  its own height. The row named the behaviour once; `DesktopSubtitleRasterizer`, `AppleSubtitleRasterizer`
+  and `AndroidSubtitleRasterizer` each held their own copy, each with a private
+  `CueAlignment.isBottom` that had exactly one caller. One shared
+  `CueLayout.usesImplicitBottomStack` in `kiteplayer-output` commonMain replaces all three, so the
+  rule cannot drift a fourth time.
 
 API truth:
 - SOL-API1: CLOSED by the S4.g surge. startPosition is honoured in two halves (pre-worker
@@ -1134,9 +1140,14 @@ C-reduction (the charter, owner-scheduled, earliest after S4):
   is present and carries the setup. Move non-real-time CoreAudio setup, session policy,
   route/interruption handling, capability queries and error mapping to Kotlin; unsupported-platform
   C stubs become expect/actual. Home: S3.
-- SOL-C3 [V] STILL OPEN, re-verified 2026-08-18: helpers_filter.c still composes into fixed
-  `char args[512]` and `char layout_str[128]` buffers. Composition moves to common Kotlin, retiring
-  them (P0 closed the overflow; the composition itself is still C). Home: with SOL-C1.
+- SOL-C3 [V] STILL OPEN as a C-REDUCTION item, and it is worth saying loudly what it is NOT,
+  because a triage pass read this row as a live truncation bug on 2026-08-25. **Nothing truncates.**
+  Every site is `snprintf(args, sizeof(args), ...)`, the format string carries only `%d` integers
+  and a pixel-format name, and `native/kitecodec-c/tests/test_buffers.c` already measures the widest
+  reachable input at 162 bytes against 512, with six cases pinning it. The caller's own
+  `description` never enters `args`; it goes to `full_desc[2048]`, whose overflow closed under D27.
+  What is open is only that the composition is still C: it moves to common Kotlin, retiring the
+  buffers. Home: with SOL-C1, and it is that row's size, not an M.
 
 Kotlin modernization (hygiene, no schedule, no syntax churn before ownership work):
 - SOL-K1 **DONE 2026-08-24.** `-Xcontext-parameters` is gone from `kitecodec-core/build.gradle.kts`.
@@ -2512,7 +2523,6 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-PROD | THE PRODUCTION PROGRAM, owner-ordered 2026-08-22: the ordered handoff from here to a shippable player; every row below maps into one of its four phases | [V] 08-22 | 17.16, here |
 | KP-RQ | THE RENDER-QUALITY LADDER, owner-ordered 2026-08-23: rungs 1 to 3 (dither, deband, kernel) are CLOSED on both renderers, PAST 14.125 to 14.128; linear light, Anime4K and HDR passthrough remain, and every rung still owes a phone measurement | [V] 08-23 | 17.21, here |
 | SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
-| SOL-S8 | positioned bottom cues still consume implicit stacking space | [V] 08-19 | 17.11, here |
 | SOL-A6 | passthrough, offload, device selection, route recovery absent | [V] 08-19 | 17.11, here |
 | SOL-P3 | frame access copies twice and boxes its plane list | [V] 08-19 | 17.11, here |
 | SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
@@ -2522,7 +2532,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-API7 | REDUCED: refusal is typed; the engine never calls `supports()` | [V] 08-19 | 17.11, here |
 | SOL-C1 | 198 exported C symbols, measured two ways 08-24; the C-reduction itself is untouched | [V] 08-24 | 17.11, here |
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
-| SOL-C3 | filter composition still builds into a fixed `char args[512]` | [V] 08-19 | 17.11, here |
+| SOL-C3 | NOT a truncation risk, re-read 08-25: `snprintf` bounds every write and `test_buffers.c` already measures the widest input at 162 bytes of 512. What is open is the C-reduction slice, moving composition to Kotlin, and it belongs to SOL-C1 | [V] 08-25 | 17.11, here |
 | SOL-K2 | the modernization posture; UNFALSIFIABLE as written | [V] 08-19 | 17.11, here |
 | SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-19 [owner] | 17.11, here |
 | SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
@@ -2683,7 +2693,22 @@ wrong was one repository line sitting above another. **A row that names a remedy
 to be mistaken for the defect**, and the three cheap closes of the last two days all came from
 reading the tree instead of the proposal.
 
-Of the 45 open KitePlayer rows, **41 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25, fourth pass (PAST 14.148), counted line by line: 44 KitePlayer rows and 24 KiteCodec
+rows, so 68 open.** `SOL-S8` closed, and it is the FIRST carried row this week that was true exactly
+as written. The three before it were not: `SOL-S3` was false at birth, `KC-CAPS` denied a query that
+existed, and `SOL-B6` proposed a composite build for a one-line ordering bug. **What SOL-S8 got
+wrong was only its size**: it described one behaviour and there were three copies of it, one per
+rasterizer, each with its own private helper that had exactly one caller.
+
+**A correction this pass had to make to its own triage, not to the register.** `SOL-C3` was pitched
+to the owner as a live truncation bug worth an M. It is not a bug at all. Every write is
+`snprintf` bounded, the widest reachable input measures 162 bytes against a 512 buffer, and
+`test_buffers.c` has pinned that with six cases since B1-10. The row's real content is the
+C-reduction slice it always said it was, and it says "Home: with SOL-C1" in its own last line. **The
+row was read for its title instead of its last sentence**, which is the same failure mode as reading
+a row for its proposed remedy rather than its defect.
+
+Of the 44 open KitePlayer rows, **40 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is

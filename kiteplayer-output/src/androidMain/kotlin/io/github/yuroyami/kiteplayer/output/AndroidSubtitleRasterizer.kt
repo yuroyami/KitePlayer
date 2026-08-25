@@ -49,7 +49,7 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
                 is SubtitleCue.Text -> rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position)
                     ?.let { image ->
                         images += image
-                        if (cue.layout.alignment.isBottom) {
+                        if (cue.layout.usesImplicitBottomStack) {
                             stackedBottom += image.bitmap.height + STACK_GAP_PX
                         }
                     }
@@ -203,9 +203,6 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, pixels))
     }
 
-    private val CueAlignment.isBottom: Boolean
-        get() = this == CueAlignment.BottomLeft || this == CueAlignment.BottomCenter ||
-            this == CueAlignment.BottomRight
 
     private companion object {
         private const val STACK_GAP_PX: Int = 8

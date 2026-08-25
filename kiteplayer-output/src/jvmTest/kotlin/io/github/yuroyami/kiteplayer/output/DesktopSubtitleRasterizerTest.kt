@@ -248,4 +248,69 @@ class DesktopSubtitleRasterizerTest {
         assertTrue(rasterize(cue("x"), height = 0).isEmpty())
         assertTrue(rasterize(cue("")).isEmpty())
     }
+    /**
+     * SOL-S8. A cue the author PLACED must not consume space in the stack it never stood in.
+     *
+     * The implicit bottom stack is a running offset: each bottom cue rasterized pushes the next one
+     * up by its own height plus the gap. A cue carrying an explicit `positionY` is laid out from
+     * that fraction instead and never reads the offset, but it was still ADDING to it, so an
+     * authored caption anywhere on screen silently shoved every later ordinary subtitle upward by
+     * its height. The taller the placed cue, the further the shove.
+     */
+    @Test
+    fun `a positioned cue does not consume implicit stacking space`() {
+        val alone = rasterize(cue("ordinary")).single()
+
+        val placed = cue(
+            "placed up here",
+            layout = CueLayout(
+                alignment = CueAlignment.BottomCenter,
+                positionX = 0.5f,
+                positionY = 0.2f,
+            ),
+        )
+        val images = rasterize(placed, cue("ordinary"))
+        assertEquals(2, images.size)
+
+        assertEquals(
+            alone.y,
+            images[1].y,
+            "the ordinary cue must sit where it would have sat with no placed cue present",
+        )
+    }
+
+    /** The stack itself still works: two ordinary bottom cues DO stack. */
+    @Test
+    fun `two ordinary bottom cues still stack`() {
+        val alone = rasterize(cue("first")).single()
+        val images = rasterize(cue("first"), cue("second"))
+        assertEquals(2, images.size)
+        assertEquals(alone.y, images[0].y, "the first cue is unmoved")
+        assertTrue(
+            images[1].y < images[0].y,
+            "the second cue (y=${images[1].y}) must sit above the first (y=${images[0].y})",
+        )
+    }
+
+    /**
+     * A placed cue is still PLACED, which is the other half of the contract.
+     *
+     * Without this, deleting the whole positioned branch would satisfy the row above.
+     */
+    @Test
+    fun `a positioned cue is still laid out from its own fraction`() {
+        val placed = cue(
+            "placed",
+            layout = CueLayout(
+                alignment = CueAlignment.BottomCenter,
+                positionX = 0.5f,
+                positionY = 0.2f,
+            ),
+        )
+        val withNeighbour = rasterize(cue("ordinary"), placed)[1]
+        val onItsOwn = rasterize(placed).single()
+        assertEquals(onItsOwn.y, withNeighbour.y, "a placed cue never moves with the stack either")
+        assertEquals((360 * 0.2f).toInt() - onItsOwn.bitmap.height, onItsOwn.y)
+    }
+
 }

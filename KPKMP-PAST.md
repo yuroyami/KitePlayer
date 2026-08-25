@@ -18750,3 +18750,49 @@ and is being called weaker rather than counted as one.
 
 Gate: `:kiteplayer-core:jvmTest` 316 and `:kiteplayer-subtitles:jvmTest` 28, both green on a forced
 rerun, which is what proves plugin resolution survived losing mavenLocal from `pluginManagement`.
+
+### 14.148 A placed subtitle stops shoving the ordinary ones, 2026-08-25
+
+`SOL-S8`, closed. The first carried row this week that was true exactly as written.
+
+**The defect.** The implicit bottom stack is a running offset: each bottom cue rasterized pushes the
+next one up by its own height plus an 8px gap. The offset grew for any cue whose alignment was
+bottom, and the check stopped there. A cue carrying an authored `positionY` is laid out from that
+fraction and never reads the offset, so it was reserving room in a stack it does not stand in. Every
+later ordinary subtitle rose by the placed cue's height, and the taller the placed cue the further
+the shove.
+
+**It was three defects.** The row named the behaviour once. `DesktopSubtitleRasterizer`,
+`AppleSubtitleRasterizer` and `AndroidSubtitleRasterizer` each carried their own copy of the
+accumulation AND their own `private val CueAlignment.isBottom`, byte-identical in all three, with
+exactly one caller each. This is the second time in two days a row undercounted its own blast radius
+the same way; `SOL-S3` named only the AppKit renderer while UIKit's was identical.
+
+So the fix is a consolidation rather than a third edit of the same line: one
+`CueLayout.usesImplicitBottomStack` in `kiteplayer-output` commonMain, three callers, and the three
+private helpers deleted. The predicate answers the question that was actually being asked, "does
+this cue take its place FROM the stack", which is why it can also answer "does it take space IN it".
+
+Three tests. The row's own case, plus two guards that exist because the first one alone is passed by
+deleting the feature: ordinary bottom cues must still stack, and a placed cue must still land on its
+own fraction.
+
+**Proved able to fail, both directions.** Removing the `positionY == null` guard, which is exactly
+the old code, failed the row's test alone. Inverting the predicate failed three, two of them written
+today and one that has guarded plain stacking since before this surge.
+
+**A correction this surge owes the owner, about its own triage rather than the tree.** `SOL-C3` was
+pitched as a live truncation bug: filter chains built into a fixed 512-byte C buffer that could
+silently cut off a long chain. **It cannot.** Every site is `snprintf(args, sizeof(args), ...)`, the
+format carries only `%d` integers and a pixel-format name, `native/kitecodec-c/tests/test_buffers.c`
+measures the widest reachable input at 162 bytes and pins it with six cases, and the caller's own
+`description` never enters that buffer at all: it goes to `full_desc[2048]`, whose overflow closed
+under D27. The row's last line says "P0 closed the overflow; the composition itself is still C" and
+"Home: with SOL-C1". It was read for its title and not its last sentence. No code was changed for
+it; the row is corrected to say plainly what it is not.
+
+Gate: `:kiteplayer-output:jvmTest` 66 and `:kiteplayer-output:macosArm64Test` 95 green, plus
+`:kiteplayer-core:jvmTest` 316 and `:kiteplayer-subtitles:jvmTest` 28 on a forced rerun. The Apple
+and Android rasterizers were COMPILED after losing their private helpers
+(`compileKotlinMacosArm64`, `compileAndroidMain`), because only the desktop copy has a test here and
+a shared predicate that breaks two silent backends would be a worse defect than the one it fixed.

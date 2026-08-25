@@ -204,20 +204,61 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * HDR was rolled off to standard dynamic range so this display can show it. Once per open.
+     *
+     * Not a defect and not a fallback: PQ and HLG carry more range than an SDR panel can present,
+     * so a player either tone maps or shows a flat, dull picture. This says which happened, because
+     * a viewer comparing two devices deserves to know the picture was CHANGED for one of them.
+     *
+     * **Emitted where tone mapping ENGAGES, never from the stream's metadata.** That distinction is
+     * the whole point of the type: a path that hands HDR straight to a display which can show it
+     * (the Android MediaCodec interop tier today, HDR passthrough when it lands) must stay SILENT,
+     * and metadata-based emission cannot tell those apart. It arrives as
+     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.ToneMapEngaged] from the renderer that did it.
+     */
+    public data class HdrToneMapped(val transfer: String, val streamIndex: Int) : PlaybackWarning() {
+        override val message: String
+            get() = "HDR ($transfer) tone mapped to standard dynamic range for this display on " +
+                "stream $streamIndex"
+    }
+
+    /**
      * The colour of this stream is APPROXIMATED, and it is shown anyway. Emitted once per stream.
      *
-     * Two causes share this warning, and the `detail` is what tells them apart: an HDR transfer
-     * (PQ or HLG), and BT.2020 constant luminance, which the non-constant luminance matrix is the
-     * wrong inverse for.
+     * BT.2020 constant luminance encodes luma AFTER the transfer function rather than before it, so
+     * the non-constant luminance matrix every conversion path here runs is the wrong inverse for it
+     * and chroma-heavy areas shift. Unlike HDR, this is not fixable by rolling off a curve; it needs
+     * the transfer function inside the conversion loop, which is the colour-managed pipeline this
+     * engine does not have.
      *
-     * **The name is now narrower than the truth, and this is deliberately written down rather than
-     * quietly renamed.** Tone mapping DOES exist since 2026-08-16: `HdrToneMap` on the software
-     * conversion path and `kp_tone_map` in the Metal shader both roll HDR off through BT.2390. What
-     * this warning marks is that the DECODED frame this source hands out is not colour managed, so a
-     * caller converting it themselves gets no roll-off. A caller using the engine's own conversion
-     * or the Metal renderer does. Whether the HDR half should still fire at all is an open question
-     * in the register; it fires today, and saying so is better than a name that reads as a promise.
+     * Metadata-based on purpose, unlike [HdrToneMapped]: the approximation is a property of the
+     * conversion the engine WILL do, it is known at open, and it is true of every path that
+     * converts at all.
      */
+    public data class ColorApproximated(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "colour approximated: $detail"
+    }
+
+    /**
+     * DEPRECATED 2026-08-25 and NEVER EMITTED (KP-TONEMAP-WARN, spec 17.22.A).
+     *
+     * It said two things at once and one of them was false. The engine has tone mapped HDR since
+     * 2026-08-16, `HdrToneMap` on both software conversion paths and `kp_tone_map` in the Metal
+     * shader, so "no tone mapping" was wrong for every built-in display path. It stayed true only
+     * for BT.2020 constant luminance, which now has its own type.
+     *
+     * Handle [HdrToneMapped] and [ColorApproximated] instead. The one case where "not tone mapped"
+     * is still true, a caller taking RAW frames and converting them itself, is documented on the
+     * frame-access surface where that caller will meet it, rather than as a warning every viewer
+     * sees.
+     *
+     * Kept rather than deleted because consumers pin 0.x source compatibility; removal is a
+     * version decision.
+     */
+    @Deprecated(
+        "The engine tone maps HDR. Handle HdrToneMapped and ColorApproximated instead.",
+        ReplaceWith("ColorApproximated(detail)"),
+    )
     public data class TonemappingUnavailable(val detail: String) : PlaybackWarning() {
         override val message: String get() = "no tone mapping: $detail"
     }

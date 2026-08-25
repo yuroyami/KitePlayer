@@ -1442,6 +1442,9 @@ internal class PlaybackCore(
      */
     private var rendererEventsJob: kotlinx.coroutines.Job? = null
 
+    /** Latches [PlaybackWarning.HdrToneMapped] to once per open. Reset with the session. */
+    private var toneMapWarned: Boolean = false
+
     private fun watchRendererEvents(renderer: VideoRenderer?) {
         rendererEventsJob?.cancel()
         rendererEventsJob = renderer?.let { attached ->
@@ -1466,6 +1469,20 @@ internal class PlaybackCore(
                                 ),
                             )
                             commands.trySend(CoreCommand.DetachRenderer(CompletableDeferred()))
+                        }
+                        // Once per open, not once per frame: a renderer that publishes this on
+                        // every tone mapped frame is behaving correctly and must not flood the
+                        // warning feed for it. The latch is reset when a session opens.
+                        is RendererEvent.ToneMapEngaged -> {
+                            if (!toneMapWarned) {
+                                toneMapWarned = true
+                                warn(
+                                    PlaybackWarning.HdrToneMapped(
+                                        transfer = event.transfer,
+                                        streamIndex = event.streamIndex,
+                                    ),
+                                )
+                            }
                         }
                         is RendererEvent.SurfaceAvailable, is RendererEvent.VsyncChanged -> Unit
                     }
@@ -1514,6 +1531,7 @@ internal class PlaybackCore(
         // is still running arrives after this line and is honoured, which is what queueing it means.
         playRequested = false
         loopRefusalWarned = false
+        toneMapWarned = false
         pendingVideoRecovery = null
         videoRecoveryAttempted = false
         forceBackendSoftwareForMedia = false

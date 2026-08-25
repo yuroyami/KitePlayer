@@ -2574,7 +2574,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-B1..B13 | REDUCED 08-24: `.github/workflows/ci.yml` exists, seven jobs on four operating systems. The RELEASE half is untouched: debug signing, no wrapper checksum, no lockfiles, NDK by string sort, no signing or Sonatype configuration, gitignored unpinned fixtures | [V] 08-24 | 17.16, here |
 | KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
-| KP-TONEMAP-WARN | DECIDED 08-25, owner delegated, [owner] gate gone: the warning SPLITS. `HdrToneMapped` fires where tone mapping engages (never from metadata, so the Android interop tier stays silent), `ColorApproximated` keeps the true BT.2020 CL half, `TonemappingUnavailable` is deprecated and never emitted, the raw-frame caveat moves to frame-access KDoc. Executor-ready | [V] 08-25 | 17.22.A, here |
+| KP-TONEMAP-WARN | REDUCED 08-25 (PAST 14.153): the LIE IS GONE. Split shipped, `TonemappingUnavailable` deprecated and sited nowhere, `ColorApproximated` keeps the true half, `HdrToneMapped` maps from `RendererEvent.ToneMapEngaged` latched once per open, raw-frame caveat on `CapturedFrame`. Remainder: no built-in renderer PUBLISHES the event yet, so the notice is silent until each is wired, one truthful decision per renderer | [V] 08-25 | 17.22.A, here |
 | KP-UNTESTED-MODULES | REDUCED 08-25 from three modules to ONE. `:kiteplayer-phone` now has a test source set and 3 tests, both falsified. `:kiteplayer-compose` is struck as debt rather than tested: it is one `internal object CompatibilityMarker` with NO public surface, so zero tests is the CORRECT state and counting it was a miscount. What is left is `:kiteplayer-compose-interop` alone, one public `@Composable` with five platform actuals, which needs the Compose UI test infrastructure this repository does not have | [V] 08-25 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
@@ -2584,7 +2584,6 @@ locating each symbol by name, because every line number in both audit documents 
 
 | Row | Open item, in one line | Ver | Detail |
 |---|---|---|---|
-| KC-WEB-IO | SPEC'D 08-25, executor-ready, FIRST in order: four of five defects close inside the staged architecture (chunk-crossing writes, seek contract, close exactly once, typed pre-allocation refusal); the fifth, sync staging, is structural to `MediaByteSource.read` and joins X-08 with the reason on record | [V] 08-25 | 17.22.B, here |
 | KC-CANCEL | a blocking FFmpeg call cannot be cancelled; no interrupt callback | [V] 08-19 | 17.16, here |
 | KC-SPEC | output specs carry no colour, HDR, pixel aspect or exact layout | [V] 08-19 | 17.16, here |
 | KC-REMUX | a "lossless" remux drops tags, disposition, rotation and side data | [V] 08-19 | 17.16, here |
@@ -2768,6 +2767,20 @@ expanded into 17.22 by owner delegation: `KP-TONEMAP-WARN` stopped being a decis
 spec, and `KC-WEB-IO` gained the expansion 17.20 always said it needed before execution. Nothing
 closed, which is correct for a planning pass; what changed is that both items now start with 17.2
 satisfied instead of stopping at 18.3 rule 6.
+
+**2026-08-25, ninth pass (PAST 14.153): 43 KitePlayer rows and 23 KiteCodec rows, 66 open.** Both
+Criticals executed from 17.22. `KC-WEB-IO` CLOSED. `KP-TONEMAP-WARN` reduced: the false message is
+gone, which is the whole of what made it Critical, and what is left is wiring each renderer to
+publish the new event.
+
+**The spec was wrong about one thing in each item, and both were found by reading the code rather
+than trusting the spec.** For B, the typed refusal before allocation was ALREADY implemented, so it
+was verified and pinned instead of written. For A, the spec said kiteplayer-ffmpeg owns both the
+converter and `warn(...)`; it does not. `SoftwareConverter` is a public stateless object consumed by
+the OUTPUT layer, so the source can never observe engagement. That is why emission moved to a
+renderer event rather than a converter callback, and why renderer publication is a remainder rather
+than something quietly skipped. **A spec written from the register rather than from the tree
+inherits the register's blind spots**, which is the fourth time this week that reading beat trusting.
 
 Of the 43 open KitePlayer rows, **39 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

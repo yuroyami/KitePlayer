@@ -18981,3 +18981,63 @@ exactly once owned by the bridge, typed `Unsupported` refusal before any allocat
 Both specs carry their own hostile-review section inline, single-threaded per the owner's Fable
 rule. Order: B then A. No code moved; the gate for a doc pass is the split checker and the counts,
 both run.
+
+### 14.153 Both criticals executed, 2026-08-25
+
+Spec 17.22, both halves. `KC-WEB-IO` closed (KiteCodec `3675be9`); `KP-TONEMAP-WARN` reduced to a
+wiring remainder with the false message gone, which is the whole of what made it Critical.
+
+**B, the staged web reader.** `MediaByteSource` promises close runs exactly once and that seek is
+never called on a source that says it cannot seek. JVM honoured both, Native honoured seekable, and
+this backend honoured neither and said nothing. The bridge now OWNS the source, because staging
+consumes it whole: closed once on every path including both typed refusals, and a close that throws
+on the success path releases the bridge rather than leaking its callbacks. Seek is gated on
+`seekable`, because a non-seekable source that is mid-stream is CORRUPTED by a rewind rather than
+merely unhelped by one. And `writeBytes` crossed into JavaScript once per BYTE, so a 200 MB file
+made 200 million calls; bytes now travel as one latin-1 string per 64 KiB chunk with the write loop
+JS-side.
+
+**A, the tone-map warning.** `TonemappingUnavailable` said two things and one was false. Split into
+`HdrToneMapped` (from `RendererEvent.ToneMapEngaged`, latched once per open) and
+`ColorApproximated` (BT.2020 CL, metadata-based, true on every converting path). The old type is
+deprecated, sited nowhere, and kept only for 0.x source compatibility. The raw-frame caveat moved to
+`CapturedFrame`, where the one caller it concerns will meet it.
+
+**Each spec was wrong about one thing, and the code said so.**
+
+- B: the typed refusal before allocation was ALREADY implemented for both oversize and unknown-size
+  sources. Verified and pinned rather than written.
+- A: the spec placed emission in kiteplayer-ffmpeg on the grounds that it owns both the converter
+  and `warn(...)`. It does not. `SoftwareConverter` is a public stateless object consumed by the
+  OUTPUT layer, and the source that owns `warn` never calls it, so the source can never observe
+  engagement. Emission therefore became a renderer EVENT, which is also the more honest shape: only
+  the renderer can tell tone mapping apart from handing HDR to a display able to show it.
+
+**A spec written from the register rather than from the tree inherits the register's blind spots.**
+That is the fourth time this week reading beat trusting, and the first where the wrong document was
+one this project wrote yesterday.
+
+**Two tests were rewritten because they PINNED THE LIE.** `ColorPolicyTest` required a PQ clip to
+warn "tone mapping unavailable" once per stream. It now requires the source to warn NOTHING about
+HDR, and its sibling asserts the CL case as `ColorApproximated`.
+
+`WarningAuditTest` gained a real never-emitted concept. It asserted that every warning type names an
+emission site, which a deprecated type cannot; rather than punch a hole in it, deliberately
+never-emitted types are now a named map with the reason, the audit refuses a type that is both, and
+a second arm refuses a never-emitted name that is no longer a type at all.
+
+**Falsified, six ways, each hitting its own arm.** B: unconditional seek restored, packing masked to
+0x7F, each close path removed. A: the once-per-open latch removed, the carried transfer replaced by
+a re-derived one, and emission regressed to fire without any renderer having tone mapped, which is
+the trap the spec named and the arm that exists for it.
+
+**The remainder, stated plainly.** No built-in renderer publishes `ToneMapEngaged` yet, so the new
+notice is silent today. That is deliberate: each renderer needs its own truthful answer, and the
+Android MediaCodec interop tier must answer NO because it touches no pixel and its display may be
+showing real HDR. Wiring them is mechanical now that the contract and its tests exist.
+
+Gate: `:kiteplayer-core:jvmTest` 321, `:kiteplayer-ffmpeg:jvmTest` 60,
+`:kiteplayer-ffmpeg:macosArm64Test` 99, `:kiteplayer-output:macosArm64Test` 95, all green. KiteCodec
+side: `wasmJsNodeTest` 72, `jsNodeTest` 52, `apiCheck` green. KitePlayer has no ABI ratchet
+(F-ABI1), so the three added public declarations are reviewed rather than ratcheted; said here
+rather than implied.

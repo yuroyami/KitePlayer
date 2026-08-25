@@ -63,8 +63,18 @@ class ColorPolicyTest {
         return warnings to frames
     }
 
+    /**
+     * KP-TONEMAP-WARN. This test used to assert the OPPOSITE and it was pinning a lie.
+     *
+     * It required a PQ clip to warn "tone mapping unavailable" once per stream, from the source's
+     * metadata. The engine has tone mapped HDR since 2026-08-16 on every built-in display path, so
+     * that message was false wherever a viewer would actually see the picture. The source now says
+     * nothing about HDR: tone mapping announces itself from the renderer that performs it, as
+     * `RendererEvent.ToneMapEngaged`, because only the renderer can tell tone mapping apart from
+     * handing HDR to a display able to show it.
+     */
     @Test
-    fun `a PQ clip reports tone mapping unavailable exactly once`() = runBlocking {
+    fun `a PQ clip warns nothing from the source because the source is not what tone maps`() = runBlocking {
         val (warnings, frames) = warningsFromDecodingAll("colors-pq.mp4")
         try {
             assertTrue(frames.size > 1, "the fixture must have more than one frame, or once is trivial")
@@ -74,15 +84,9 @@ class ColorPolicyTest {
                 "the fixture must decode as PQ, or nothing here is about HDR",
             )
             assertEquals(
-                1,
-                warnings.size,
-                "one warning per stream and not one per frame, and ${frames.size} frames were decoded. " +
-                    "Got: ${warnings.map { it.message }}",
-            )
-            val warning = assertNotNull(warnings.single() as? PlaybackWarning.TonemappingUnavailable)
-            assertTrue(
-                warning.detail.contains("Pq"),
-                "the warning must name what was approximated: ${warning.detail}",
+                emptyList(),
+                warnings.map { it.message },
+                "an HDR transfer alone is not an approximation the SOURCE can report",
             )
         } finally {
             frames.forEach { it.close() }
@@ -104,10 +108,11 @@ class ColorPolicyTest {
     }
 
     @Test
-    fun `a BT2020 constant luminance clip reports the same warning once`() = runBlocking {
-        // Constant luminance is converted with the non-constant luminance matrix, which is wrong in the
-        // same unfixable way HDR is: both need the transfer function in the loop. Same policy, same
-        // warning, and the detail is what tells the two apart.
+    fun `a BT2020 constant luminance clip reports an approximation once`() = runBlocking {
+        // The half of the old warning that was always TRUE, and is now its own type. Constant
+        // luminance is converted with the non-constant luminance matrix, which no roll-off can fix
+        // because it needs the transfer function inside the conversion loop. Unlike HDR it is a
+        // property of the conversion the engine WILL do, known at open, so the source is its home.
         val (warnings, frames) = warningsFromDecodingAll("colors-bt2020cl.mp4")
         try {
             assertEquals(
@@ -116,7 +121,7 @@ class ColorPolicyTest {
                 "the fixture must decode as constant luminance",
             )
             assertEquals(1, warnings.size, "once per stream. Got: ${warnings.map { it.message }}")
-            val warning = assertNotNull(warnings.single() as? PlaybackWarning.TonemappingUnavailable)
+            val warning = assertNotNull(warnings.single() as? PlaybackWarning.ColorApproximated)
             assertTrue(
                 warning.detail.contains("constant luminance"),
                 "the detail must say which approximation was made: ${warning.detail}",

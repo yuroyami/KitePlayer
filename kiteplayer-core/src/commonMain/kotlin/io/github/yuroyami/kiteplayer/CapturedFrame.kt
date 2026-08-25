@@ -11,6 +11,18 @@ import io.github.yuroyami.kiteplayer.spi.VideoFrame
  * owned outright by the caller. This is the documented use of [SoftwareReadableFrame]: every
  * plane here is a copy taken before the renderer took ownership, so nothing the decoder or the
  * renderer does afterwards can touch it, and [close] has nothing to release.
+ *
+ * ## These pixels are DECODED, not colour managed
+ *
+ * The engine's display paths roll HDR off to standard dynamic range before you see it, and they
+ * say so with [PlaybackWarning.HdrToneMapped]. **A captured frame has had none of that done to
+ * it.** Its samples carry the source's own transfer function, so a PQ or HLG capture converted
+ * naively as if it were SDR shows flat highlights and reads dull. [colorSpace] carries what it
+ * actually is; convert accordingly.
+ *
+ * This used to be announced as a `TonemappingUnavailable` warning during playback, which told
+ * every viewer about a caveat that only concerns a caller doing its own conversion
+ * (KP-TONEMAP-WARN, 2026-08-25). It lives here now, where that caller will meet it.
  */
 public class CapturedFrame internal constructor(
     override val pts: Pts,

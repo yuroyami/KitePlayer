@@ -20,7 +20,10 @@ class WarningAuditTest {
         PlaybackWarning.AudioUnderrun(1),
         PlaybackWarning.AudioDrainIncomplete("x"),
         PlaybackWarning.AudioLatencyUnreliable("x"),
+        @Suppress("DEPRECATION")
         PlaybackWarning.TonemappingUnavailable("x"),
+        PlaybackWarning.HdrToneMapped("PQ", 0),
+        PlaybackWarning.ColorApproximated("x"),
         PlaybackWarning.ChannelLayoutUnknown(6, "x"),
         PlaybackWarning.BadTimestamps("x"),
         PlaybackWarning.TrackDeselected(TrackId(0), "x"),
@@ -60,11 +63,18 @@ class WarningAuditTest {
         is PlaybackWarning.AudioLatencyUnreliable -> listOf(
             "PlaybackCore's open path, when the sink reports LatencyQuality.Unreliable",
         )
-        is PlaybackWarning.TonemappingUnavailable -> listOf(
-            "KiteCodecSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
-                "an HDR transfer or BT.2020 constant luminance (D16). NOT PlaybackCore, which this " +
-                "row claimed until 2026-08-24",
+        is PlaybackWarning.HdrToneMapped -> listOf(
+            "PlaybackCore.watchRendererEvents, on RendererEvent.ToneMapEngaged from the renderer " +
+                "that actually rolled HDR off, latched once per open",
         )
+        is PlaybackWarning.ColorApproximated -> listOf(
+            "KiteCodecSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
+                "BT.2020 constant luminance alone since 2026-08-25",
+        )
+        // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25 (KP-TONEMAP-WARN): it conflated a true
+        // BT.2020 CL claim with an HDR claim that was false on every built-in display path. Kept
+        // for 0.x source compatibility; both emission sites are gone.
+        is PlaybackWarning.TonemappingUnavailable -> emptyList()
         is PlaybackWarning.ChannelLayoutUnknown -> listOf(
             "the audio path's layout negotiation, when a mask is absent and the count is guessed (D30)",
         )
@@ -97,16 +107,46 @@ class WarningAuditTest {
         )
     }
 
+    /**
+     * Types that are DELIBERATELY never emitted, each with the reason it still exists.
+     *
+     * A warning with no emission site is normally a defect, which is what the audit below is for.
+     * A deprecated one kept for source compatibility is the exception, and it has to be named here
+     * rather than allowed to look like an oversight. Being in this set and naming a site is a
+     * contradiction the audit refuses.
+     */
+    private val deliberatelyNeverEmitted: Map<String, String> = mapOf(
+        "TonemappingUnavailable" to
+            "deprecated 2026-08-25 (KP-TONEMAP-WARN): it conflated a true BT.2020 CL claim with " +
+            "an HDR claim false on every built-in display path. Split into ColorApproximated and " +
+            "HdrToneMapped; kept for 0.x source compatibility, both emission sites deleted",
+    )
+
     @Test
     fun `every warning type names its emission sites and its message carries its facts`() {
         for (warning in samples) {
+            val name = warning::class.simpleName
             val sites = documentedEmissionSites(warning)
-            assertTrue(sites.isNotEmpty(), "${warning::class.simpleName} documents no emission site")
-            assertTrue(
-                warning.message.isNotBlank(),
-                "${warning::class.simpleName} has a blank message",
-            )
+            val neverEmitted = deliberatelyNeverEmitted[name]
+            if (neverEmitted != null) {
+                assertTrue(
+                    sites.isEmpty(),
+                    "$name is listed as never emitted ($neverEmitted) and also names a site: $sites",
+                )
+            } else {
+                assertTrue(sites.isNotEmpty(), "$name documents no emission site")
+            }
+            assertTrue(warning.message.isNotBlank(), "$name has a blank message")
         }
         assertTrue(samples.size >= 15, "the census lost a row: ${samples.size}")
+    }
+
+    /** A name in the never-emitted set that is not in the census is a row that outlived its type. */
+    @Test
+    fun `the never emitted set names only types that still exist`() {
+        val census = samples.map { it::class.simpleName }.toSet()
+        for (name in deliberatelyNeverEmitted.keys) {
+            assertTrue(name in census, "$name is excused from emission but is not a warning type")
+        }
     }
 }

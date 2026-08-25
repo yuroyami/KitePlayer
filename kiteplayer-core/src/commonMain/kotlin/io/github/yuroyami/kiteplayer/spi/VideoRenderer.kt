@@ -123,6 +123,20 @@ public sealed interface RendererEvent {
     public data class VsyncChanged(val intervalNanos: Long) : RendererEvent
 
     /**
+     * This renderer rolled HDR off to standard dynamic range to show it (KP-TONEMAP-WARN).
+     *
+     * Published by the renderer that DID it, at the moment it did, and by no one else. A renderer
+     * that hands HDR to a display able to present it publishes NOTHING, which is why this is an
+     * event rather than something the engine derives from the stream's metadata: only the renderer
+     * knows which of those two happened. The engine turns the first one per open into
+     * [io.github.yuroyami.kiteplayer.PlaybackWarning.HdrToneMapped] and ignores the rest.
+     *
+     * [transfer] is the SOURCE transfer that was rolled off, `PQ` or `HLG`, carried rather than
+     * re-derived so a mid-stream transfer change cannot be misreported.
+     */
+    public data class ToneMapEngaged(val transfer: String, val streamIndex: Int) : RendererEvent
+
+    /**
      * The renderer failed in a way it cannot recover from.
      *
      * The engine DETACHES it and carries on without a picture, warning

@@ -599,38 +599,29 @@ private class KiteCodecVideoDecoder(
     }
 
     /**
-     * Says once, out loud, that the picture is not colour correct and will still be shown.
+     * Says once, out loud, that this stream's colour will be APPROXIMATED and shown anyway.
      *
-     * Two colours reach the converter that it can only approximate, and both approximate in the same
-     * way, by running the matrix and nothing else:
+     * One cause now, not two (KP-TONEMAP-WARN, spec 17.22.A). BT.2020 constant luminance encodes
+     * luma after the transfer function rather than before it, so the non-constant luminance matrix
+     * every conversion path here runs is the wrong inverse for it and chroma-heavy areas shift.
+     * That is not fixable with a matrix; it needs the transfer function in the loop, which is the
+     * colour-managed pipeline this engine does not have.
      *
-     * - PQ and HLG are high dynamic range transfer functions. The FRAME THIS SOURCE HANDS OUT is not
-     *   tone mapped, so a caller converting it themselves shows a 1000 nit picture as if its code
-     *   values were standard dynamic range: highlights flatten and the image reads dull.
-     *   **This is no longer true of the engine as a whole and this comment used to claim it was.**
-     *   Since 2026-08-16 `HdrToneMap` rolls HDR off through BT.2390 on both software conversion
-     *   paths (`Conversions.kt`, `SoftwareConverter.native.kt`) and `kp_tone_map` does the same
-     *   arithmetic in the Metal shader. Whether this half of the warning should still fire is an
-     *   open register question; what it can honestly say today is that the SOURCE does not tone map.
-     * - BT.2020 constant luminance encodes luma after the transfer function rather than before it, so
-     *   the non-constant luminance matrix is the wrong inverse for it. Chroma-heavy areas shift.
-     *
-     * Neither is fixable with a matrix, because both need the transfer function in the loop, which is
-     * the colour managed pipeline this engine does not have. The honest behaviour is to convert
-     * approximately and say so, which is also the documented default until that pipeline exists.
+     * **The HDR half was REMOVED from here on 2026-08-25 and it was the false one.** It warned
+     * `TonemappingUnavailable` on every HDR stream from the stream's METADATA, while the engine
+     * has tone mapped HDR since 2026-08-16 on every built-in display path. Metadata cannot tell a
+     * path that tone maps from one that hands HDR to a display able to show it, so this site could
+     * only ever have been right by accident. Tone mapping now announces itself where it ENGAGES,
+     * as `RendererEvent.ToneMapEngaged` from the renderer that did it.
      */
     private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
-        val detail = when {
-            color.isHdr -> "${color.transfer} transfer converted as standard dynamic range on stream ${stream.index}"
-            color.matrix == ColorMatrix.Bt2020Cl ->
-                "BT.2020 constant luminance converted with the non-constant luminance matrix on " +
-                    "stream ${stream.index}"
-            else -> return
-        }
+        if (color.matrix != ColorMatrix.Bt2020Cl) return
+        val detail = "BT.2020 constant luminance converted with the non-constant luminance matrix " +
+            "on stream ${stream.index}"
         if (!continuity.claimColorWarning()) return
         // Latched before the callback runs, so a callback that throws cannot turn a one-time warning
         // into one per frame.
-        warn(PlaybackWarning.TonemappingUnavailable(detail))
+        warn(PlaybackWarning.ColorApproximated(detail))
     }
 
     override suspend fun flush(newGeneration: Generation) {

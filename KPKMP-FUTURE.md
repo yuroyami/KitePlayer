@@ -1058,13 +1058,26 @@ API truth:
   StartPositionIgnored, typed). headers and formatHint ride KD-4's pre-open funnel as the http
   `headers` option and a `format_whitelist` of one; an explicit openOptions key wins over the
   typed sugar (preOpenOptions, unit-tested pure).
-- SOL-API2 [C] REDUCED by the S4.g surge: preservePitch is REAL (tempo stage against a
-  speed-folded resampler, epoch-adopted at flush exactly like the rate; setPreservePitch on the
-  facade). Still accepted and unused: logger, liveBackBuffer, liveMaxLag, startDisabled.
-  **Re-read 2026-08-24: all four already say so in their own KDoc**, in the words "Not implemented
-  yet; see the roadmap", and `liveBackBuffer` goes further and states there is no live path at all.
-  So this row is about UNBUILT features, not about documentation that lies, and it should not be
-  swept with the doc-truth rows. Home: S4.e.
+- SOL-API2 **CLOSED 2026-08-25 (PAST 14.159) BY SUBTRACTION, owner-decided: the knobs are gone.**
+  `preservePitch` was real and struck earlier. The rest are deleted from the public surface rather
+  than documented or built.
+
+  **The index row said FIVE and the detail bullet listed FOUR; the index was right.** Counted in the
+  tree on 2026-08-25: `logger`, `liveBackBuffer`, `liveMaxLag`, `startDisabled` AND
+  `assumedLatencyWhenUnreliable`, all declared, three of them validated in an `init` block, and
+  every one of them read by nothing outside its own declaration. The fifth had been dropped from
+  the detail on 08-24 and only the index kept it.
+
+  **Deleted, on the production plan's own terms**, which say the dead knobs stop lying. Building
+  them was not available: three are live-streaming settings and there is no live path at all, which
+  `liveBackBuffer`'s own KDoc admitted. An API that ACCEPTS a setting and ignores it is worse than
+  one that does not accept it, because the caller who sets it believes it took effect. This is 0.x,
+  and the live knobs return with the live work.
+
+  `PlayerLogger` and `LogLevel` went with them. `logger` was their only consumer, their KDoc already
+  said "Nothing calls it", and they duplicated `KiteLog.Sink`, which is the shipped seam that
+  actually works. Leaving a public interface nothing accepts would have been the same defect one
+  level down.
 - SOL-API3: CLOSED by the S4.g surge. KeyframeThenRefine runs the seek machine's ladder loop in
   two phases: the keyframe lands and PRESENTS first, then an ordinary precise landing on the
   exact frame; SeekCompleted and the replies carry the exact landing only, and a keyframe
@@ -2587,7 +2600,6 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-P3 | frame access copies twice and boxes its plane list | [V] 08-19 | 17.11, here |
 | SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
 | SOL-P9 | a track change reopens the whole session, so live media cannot | [V] 08-19 | 17.11, here |
-| SOL-API2 | five, not four, accepted-and-unused config knobs | [V] 08-19 | 17.11, here |
 | SOL-API4 | **ROADMAP, not a defect** (reclassified 08-25). Five stats fields declared and honestly KDoc'd as unbuilt: `droppedFramesDecode`, `audioLatency`, `containerBitrate`, `SyncMode.ExternalMaster`, `LateAndDecode`. Nothing lies; they are simply not written yet. This row is their ONLY record anywhere, which is why it is kept rather than closed | [V] 08-25 | 17.11, here |
 | SOL-API7 | REDUCED: refusal is typed; the engine never calls `supports()` | [V] 08-19 | 17.11, here |
 | SOL-C1 | 198 exported C symbols, measured two ways 08-24; the C-reduction itself is untouched | [V] 08-24 | 17.11, here |
@@ -2885,7 +2897,19 @@ features. Nothing in it lies to a consumer: the fields are declared, the KDoc sa
 which is a promise not yet kept rather than a promise broken. The board should separate BROKEN from
 NOT BUILT YET, and this is the first row marked that way.
 
-Of the 41 open KitePlayer rows, **37 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25, fifteenth pass (PAST 14.159): 40 KitePlayer rows and 23 KiteCodec rows, 63 open.**
+`SOL-API2` closed BY SUBTRACTION, owner-decided: five accepted-and-ignored config knobs deleted from
+the public surface, plus the `PlayerLogger` interface and `LogLevel` enum that existed only to be
+passed to one of them.
+
+**The row's own two halves disagreed and the index was the correct one.** It read "five, not four"
+while its detail bullet listed four; the tree says five, because `assumedLatencyWhenUnreliable` is
+declared, validated in an `init` block, and read by nothing. It had been dropped from the detail on
+08-24. **When the index and the detail disagree the DETAIL usually wins, and this is the exception
+that proves the rule is about evidence rather than position**: the detail was newer and still wrong,
+so the tie was broken by counting rather than by precedence.
+
+Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is

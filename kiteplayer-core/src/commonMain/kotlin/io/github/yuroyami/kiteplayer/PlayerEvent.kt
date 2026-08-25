@@ -68,15 +68,3 @@ public sealed interface PlayerEvent {
     public data class ChapterChanged(val chapter: Chapter?) : PlayerEvent
 }
 
-/**
- * Where the engine will send its diagnostics.
- *
- * Nothing calls it. No engine code writes a log line, so one supplied through [PlayerConfig] stays
- * silent, and the diagnostics that do exist are [KitePlayer.stats] and [KitePlayer.events].
- * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
- */
-public fun interface PlayerLogger {
-    public fun log(level: LogLevel, tag: String, message: String, throwable: Throwable?)
-}
-
-public enum class LogLevel { Trace, Debug, Info, Warn, Error }

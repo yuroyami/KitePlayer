@@ -19186,3 +19186,38 @@ BROKEN from NOT BUILT YET, and its false pointer is deleted rather than followed
 Doc-only pass. Gate: the split checker and both counts; 64 open, unchanged, because a
 reclassification is not a closure and saying otherwise would be the kind of count this register
 keeps catching.
+
+### 14.159 Five knobs that took an answer and threw it away, 2026-08-25
+
+`SOL-API2` closed by SUBTRACTION on the owner's call. Fifth item of the S-tier walk, and the first
+in this walk that changed code rather than prose.
+
+**The count was wrong in the row and right in its own title.** The index said "five, not four,
+accepted-and-unused config knobs"; the detail bullet listed four. Counted in the tree: `logger`,
+`liveBackBuffer`, `liveMaxLag`, `startDisabled` and `assumedLatencyWhenUnreliable`. All five
+declared, three validated in `init` blocks, and every one read by NOTHING outside its own
+declaration, confirmed by grep across every module. The fifth was dropped from the detail on 08-24
+and survived only in the index.
+
+That is the reverse of this register's usual tie-break. The standing rule says the DETAIL wins over
+the index, because the detail sits next to the evidence. Here the detail was newer and still wrong.
+**The rule is really about evidence, not position, and the tie was broken by counting.**
+
+**Why deletion and not documentation or implementation.** Building was not on offer: three of the
+five are live-streaming settings and there is no live path at all, which `liveBackBuffer`'s own
+KDoc stated. Documenting was already done and did not help, because these are INPUTS. A read-only
+field marked "not implemented" tells the truth to whoever reads it; a settable knob that swallows a
+value lies to the caller at the moment they set it, and they have no way to notice. The production
+plan already required the dead knobs to stop lying, and subtraction is the half of that which was
+available today. The project is 0.x, and the live knobs come back with the live work.
+
+**Two public types went with them.** `PlayerLogger` and `LogLevel` existed only to be passed to
+`logger`. Their own KDoc said "Nothing calls it", and they duplicated `KiteLog.Sink`, the seam that
+actually ships and works. Deleting the field while keeping an interface nothing accepts would have
+been the same defect one level down.
+
+Gate: `:kiteplayer-core:jvmTest`, `:kiteplayer-ffmpeg:jvmTest` and `:kiteplayer-output:jvmTest` all
+green on a forced rerun, plus `compileKotlinMacosArm64` and `:kiteplayer-mobile:compileKotlinJvm` to
+prove the removal did not break a platform with no test here. No ABI ratchet exists on this
+repository (F-ABI1), so the removed public surface is reviewed rather than gated; said plainly
+rather than implied. 63 open.

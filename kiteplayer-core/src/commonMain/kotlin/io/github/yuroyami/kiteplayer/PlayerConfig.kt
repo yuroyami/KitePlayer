@@ -48,15 +48,6 @@ public data class PlayerConfig(
     val progressInterval: Duration = 200.milliseconds,
     /** How often [KitePlayer.stats] is sampled. */
     val statsInterval: Duration = 1.seconds,
-    /**
-     * Where the engine's diagnostics go.
-     *
-     * Superseded before it was ever read: [io.github.yuroyami.kiteplayer.KiteLog.install] is the
-     * shipped logging seam (S4.d), and nothing reads this field. It remains only because deleting
-     * a config field is an ABI break scheduled for the S5 publication sweep, and its emptiness is
-     * stated here rather than discovered.
-     */
-    val logger: PlayerLogger? = null,
     /** The backends to build the pipeline from. Replace them for a test or a new platform. */
     val backends: Backends = Backends(),
     /**
@@ -164,19 +155,6 @@ public data class BufferPolicy(
     val totalDuration: Duration = 30.seconds,
     /** Decoded video frames held ahead of the one on screen. Bounded by the hardware pool. */
     val videoFrameQueue: Int = 4,
-    /**
-     * How far back a live stream may seek.
-     *
-     * There is no live path: no network source, no live window, no seekable range published for one.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
-     */
-    val liveBackBuffer: Duration = 20.seconds,
-    /**
-     * Drop to the live edge when further behind than this.
-     *
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
-     */
-    val liveMaxLag: Duration = 10.seconds,
 ) {
     init {
         // A budget of zero or less never admits a packet and wedges the demuxer before the first
@@ -190,8 +168,6 @@ public data class BufferPolicy(
         // Two, not one: timing a frame needs the NEXT frame's timestamp, which is FrameQueue's
         // own bound. One slot passed here and crashed the first open instead (audit F-CFG1).
         require(videoFrameQueue >= 2) { "videoFrameQueue must hold at least two frames, was $videoFrameQueue" }
-        require(liveBackBuffer >= Duration.ZERO) { "liveBackBuffer must not be negative, was $liveBackBuffer" }
-        require(liveMaxLag >= Duration.ZERO) { "liveMaxLag must not be negative, was $liveMaxLag" }
     }
 }
 
@@ -204,29 +180,9 @@ public data class AudioConfig(
      * for [KitePlayer.setPreservePitch], which can change it at runtime.
      */
     val preservePitch: Boolean = true,
-    /**
-     * Latency to assume when the sink reports [LatencyQuality.Unreliable]. A wrong value here is a
-     * constant A/V offset, so it is exposed rather than hidden.
-     *
-     * No sink reports that quality and no code reads this value.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
-     */
-    val assumedLatencyWhenUnreliable: Duration = 80.milliseconds,
-    /**
-     * Start with audio disabled. Useful for a thumbnail scrubber.
-     *
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
-     */
-    val startDisabled: Boolean = false,
     /** How multichannel audio is folded down when the device has fewer speakers. */
     val downmix: DownmixConfig = DownmixConfig(),
-) {
-    init {
-        require(assumedLatencyWhenUnreliable >= Duration.ZERO) {
-            "assumedLatencyWhenUnreliable must not be negative, was $assumedLatencyWhenUnreliable"
-        }
-    }
-}
+)
 
 /**
  * How a multichannel mix is folded into fewer speakers.

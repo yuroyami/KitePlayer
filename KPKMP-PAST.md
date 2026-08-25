@@ -19069,3 +19069,28 @@ and not before.
 
 A planning ruling, no code moved. The gate for a doc pass is the split checker and the counts:
 both run, 66 open unchanged, owner-gated 9 to 8.
+
+### 14.155 A style stopped pretending to be a task, 2026-08-25
+
+`SOL-K2`, closed by reclassification on the owner's call. First item of a walk through the whole
+S-complexity tier, one decision at a time.
+
+The row listed the house Kotlin preferences: sealed transactional outcomes, structured finalizer
+scopes, ownership-aware lease APIs, inline plane iteration, checked-size helpers, resource ledgers,
+and context parameters limited to two clusters. Good guidance. Not work.
+
+**It had been open since 2026-08-16 and could never have closed**, which the row said about itself
+in its own index summary: "UNFALSIFIABLE as written". There is no state of the tree that makes a
+preference finished, so every sweep that reached it moved on and every count carried it.
+
+The text is now rule 9 of the 18.3 executor fence, next to the rules about touching only named
+files and building the smallest change that passes. That is where a rule about HOW to write code
+belongs; the register tracks WHAT is left. The move is lossless and the guidance now actually
+reaches the executor, who reads 18.3 before their first edit and had no reason to read a register
+row about style at all.
+
+**The rule this earns, written into the counts note so the next pass applies it wider.** A row that
+cannot be finished is a category error rather than a small item. The test is one question: what
+would make this DONE? If the honest answer is "nothing, you just keep doing it", it is guidance.
+
+Doc-only pass. Gate: the split checker and both counts, run; 65 open, KitePlayer 43 to 42.

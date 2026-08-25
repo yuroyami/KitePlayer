@@ -1172,10 +1172,6 @@ Kotlin modernization (hygiene, no schedule, no syntax churn before ownership wor
   declaration across every source set returns nothing; the only `context(` hits are FFmpeg function
   names like `ffkmp_codecpar_from_context`). Verified by compiling jvm, macosArm64, wasmJs and
   linuxX64 plus the jvm suite with the flag removed.
-- SOL-K2 [C] The adopted guidance: context parameters only for the worker helper cluster and a
-  codec execution context; higher-value moves are sealed transactional outcomes, structured
-  finalizer scopes, ownership-aware lease APIs, inline plane iteration, checked-size helpers
-  and resource ledgers. Not a stage; a style the stages apply.
 
 Build and publication:
 - SOL-B1: CLOSED by phase W (KiteCodec e7a8868). The three stale goldens now pin the wide
@@ -2560,7 +2556,6 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-C1 | 198 exported C symbols, measured two ways 08-24; the C-reduction itself is untouched | [V] 08-24 | 17.11, here |
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
 | SOL-C3 | NOT a truncation risk, re-read 08-25: `snprintf` bounds every write and `test_buffers.c` already measures the widest input at 162 bytes of 512. What is open is the C-reduction slice, moving composition to Kotlin, and it belongs to SOL-C1 | [V] 08-25 | 17.11, here |
-| SOL-K2 | the modernization posture; UNFALSIFIABLE as written | [V] 08-19 | 17.11, here |
 | SOL-B5 | DECIDED 08-25: ALL ABIs stay supported; the drop proposal was REJECTED BY YUROYAMI. No ABI is ever formally refused. Remainder is engineering: add armeabi-v7a to the JNI recipes and the libass adapter, behind three gates (ARMv7 64-bit-atomics audit of the RT ring with a compile-time assert, a CI compile lane, one TV-stick smoke before support is claimed). x86-32 on demand if Synkplay ships it | [V] 08-25 | 17.11, here |
 | SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
@@ -2799,7 +2794,18 @@ became work: the owner ruled that EVERY ABI stays supported and the drop proposa
 YUROYAMI. The row now carries the reasoning in full, because a decision whose grounds are not
 written down gets re-argued by the next agent who only sees the phone numbers and not the TV ones.
 
-Of the 43 open KitePlayer rows, **39 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25, eleventh pass (PAST 14.155): 42 KitePlayer rows and 23 KiteCodec rows, 65 open.**
+`SOL-K2` closed by RECLASSIFICATION, owner-decided. It was a Kotlin style list, and a style has no
+exit criterion, which the row admitted in its own one-line summary by calling itself UNFALSIFIABLE.
+Nothing was lost: the guidance is now rule 9 of the 18.3 executor fence, where it governs HOW work
+is done, and the register went back to tracking only WHAT is left.
+
+**Worth naming as a rule, because this register has been carrying the confusion for nine days.**
+A row that cannot be finished is not a small row, it is a category error, and it inflates every
+count it sits in. The test is one question: what would make this DONE? If the answer is "nothing,
+you just keep doing it", it is guidance and belongs in the fence.
+
+Of the 42 open KitePlayer rows, **38 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is
@@ -3585,6 +3591,18 @@ inside the lines. These are rules, not advice.
 8. **Report deviations louder than successes.** A skipped step, a flaky test, a widened
    tolerance, anything ASSUMED: its own sentence in the log entry. A deviation reported is
    process; a deviation hidden is corruption.
+9. **The house Kotlin style, when a sub-phase gives you a choice.** Prefer sealed transactional
+   outcomes over thrown control flow, structured finalizer scopes over hand-paired cleanup,
+   ownership-aware lease APIs over raw handles, inline plane iteration over per-pixel calls,
+   checked-size helpers over bare arithmetic, and resource ledgers over close-and-hope. Context
+   parameters only for the worker helper cluster and a codec execution context.
+
+   **This is guidance, not work.** It arrived here on 2026-08-25 from register row `SOL-K2`, which
+   sat open from 2026-08-16 because it was UNFALSIFIABLE by its own admission: a style has no
+   exit criterion, so no pass could ever close it. A register whose rows cannot be finished
+   inflates every count it appears in. Style belongs in the fence that governs HOW work is done;
+   the register tracks WHAT is left. Applying this list is never a task on its own, and a
+   sub-phase that wants one of these moves specifically says so.
 
 
 ### 17.21 KP-RQ: the render-quality ladder, owner-ordered 2026-08-23

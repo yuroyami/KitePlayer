@@ -19283,3 +19283,42 @@ it with the reasoning attached is what turns it into a decision rather than an o
 reader re-discovers and re-proposes.
 
 Doc-only pass, no CI touched. Gate: the split checker and both counts; 62 open, KiteCodec 23 to 22.
+
+### 14.162 A seam built to prove one thing found another, 2026-08-25
+
+`KC-EVIDENCE-MUX` closed by building the fault-injection seam, on the owner's call. Eighth item of
+the S-tier walk, and the second in it that changed code.
+
+**The problem.** `addCopyStream` poisons the sink when a step after `avformat_new_stream` throws,
+because FFmpeg cannot take a stream back and the format context is already mutated. Correct, and
+unprovable: the only steps left in the guarded block are a codec-parameter copy and a time-base
+write, neither of which any caller can make fail, and the one lever that existed, forging a
+`StreamInfo`, was deliberately removed when P1-11 closed. By this register's own law, a fix whose
+evidence cannot exist is not done.
+
+**The seam.** `MuxFaults` in commonMain: an `internal` one-shot, self-disarming switch, consulted as
+the first statement inside the guarded block on both backends. One relaxed atomic read per
+`addCopyStream`, a call that happens once per stream at setup and never per packet or frame. Nothing
+public arms it, so unarmed is the only state a shipped consumer can reach. One-shot and
+self-disarming so a test that forgets to clean up cannot poison the next one.
+
+**Falsified two ways, and the second is the one that matters.** Replacing `poison(error)` with
+`throw error`, which is the pre-P1-10 behaviour, turns the contract suite red. So does DELETING the
+seam call while leaving the poison intact: without that arm the test would pass whether or not the
+injection ever reached the code, which is evidence theatre rather than evidence.
+
+**Then it found something, which is the whole argument for building it.** On its first native run
+the test failed at an assertion nobody expected to be contentious: after the poison, `setMetadata`
+is refused on JVM and ACCEPTED on Native. The JVM path goes through `checkOpen`; the native one
+checks only `headerWritten` and `closed` and never consults the poison, and it takes no `muxLock`
+either while the JVM does. One of those two is wrong, and deciding which is a contract question
+rather than an edit, so the assertion was NARROWED to what both backends actually keep and the
+divergence became `KC-POISON-SCOPE` with the measurement attached. Pinning either behaviour would
+have frozen a disagreement as if it were the contract.
+
+**The count did not move: one row closed, one opened.** That is the honest result and the useful
+one. Evidence does not only confirm, it discovers.
+
+Gate: `:kitecodec-core:jvmTest` 68 and `:kitecodec-core:macosArm64Test` 145 green, both running the
+same shared contract suite, plus `wasmJsNodeTest` and `apiCheck` green. The seam is `internal`, so
+the ratchet confirms no public surface moved rather than my asserting it.

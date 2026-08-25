@@ -2665,7 +2665,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-BUILD | 23 build defects, including `/usr/lib/include` on Linux | [V] 08-19 | 17.16, here |
 | KC-DOCTRUTH | REDUCED 08-24: the FFmpeg-profile half is CLOSED (encoder table, GPL tasks, NOTICE, CONTRIBUTING, FFmpegPaths KDoc, all measured with `nm` against the shipped archives). What is left is the register codes in shipped sources: 128 mentions of 35 distinct codes across 40 files, counted 08-24, not the 180 this row used to claim | [V] 08-24 | 17.16, here |
 | KC-EVIDENCE-WASM | RESIZED 08-25, was S: the source set exists and is in CI, but the three `MediaSource.wasmJs` fixes need a fake that drives a real decode. MEASURED: 40 distinct `ffkmp_`/`kc_` entry points in that file alone, before `StreamDecoder` and `PacketReader`. That is a fake demuxer, so size M at best | [V] 08-25 | 17.16, here |
-| KC-EVIDENCE-MUX | the muxer poison is right and unfalsifiable; no fault-injection seam | [V] 08-23 | 17.16, here |
+| KC-POISON-SCOPE | FOUND 08-25 by the new fault seam on its first run: the two backends DISAGREE about what a poisoned sink still accepts. JVM `setMetadata` goes through `checkOpen` and refuses; native checks only `headerWritten` and `closed` and accepts. Native also takes no `muxLock` there while JVM does. One of the two is wrong and deciding which is a contract question | [V] 08-25 | 17.16, here |
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
@@ -2939,6 +2939,16 @@ priced, and chosen. Leaving such a row open implies somebody will eventually fix
 and quietly wrong; closing it with the reasoning recorded is what makes it a decision instead of an
 oversight the next reader re-discovers.
 
+**2026-08-25, eighteenth pass (PAST 14.162): 40 KitePlayer rows and 22 KiteCodec rows, 62 open,
+unchanged.** `KC-EVIDENCE-MUX` CLOSED by building the fault seam, owner-decided, and
+`KC-POISON-SCOPE` opened in its place by what the seam immediately found.
+
+**The count not moving is the honest result and the interesting one.** A row closed because its fix
+became provable, and a new row opened because proving it revealed the two backends disagree about
+what a poisoned sink still accepts. **Evidence does not only confirm, it discovers**, and a seam
+built to test one claim found a second defect on its first execution. That is the return on the
+whole evidence-before-code law this register runs on.
+
 Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
@@ -3047,16 +3057,24 @@ the harness cannot reach yet: `FakeCodecModule` implements the report and string
 extension of an existing fake, which is ordinary work, rather than the missing-source-set problem it
 used to be.
 
-#### KC-EVIDENCE-MUX. The muxer state machine has no way to fail on purpose
+#### KC-EVIDENCE-MUX. CLOSED 2026-08-25 (PAST 14.162). The seam exists and the poison is proven
 
-Opened 2026-08-23, from P1-10's fix (PAST 14.130). `addCopyStream` now poisons the sink on both
+Opened 2026-08-23, from P1-10's fix (PAST 14.130). `addCopyStream` poisons the sink on both
 backends when a step after `avformat_new_stream` throws, which is correct and matches what
-`newStreamFor` has always done. **Nothing tests it, and nothing can from the public API:** the only
-steps left after the mutation are `avcodec_parameters_copy` and a time base write, and no caller can
-make either fail. Forging a `StreamInfo` was the one available lever and closing P1-11 in the same
-surge removed it on purpose. Testing this needs a fault-injection seam in the sink, which does not
-exist and should not be improvised into production code without deciding its shape first. Size S for
-the seam, and it is the only thing standing between P1-10 and being genuinely done.
+`newStreamFor` has always done. Nothing could test it: the only steps left after the mutation are
+`avcodec_parameters_copy` and a time base write, no caller can make either fail, and forging a
+`StreamInfo` was the one available lever until P1-11 removed it.
+
+**CLOSED 2026-08-25, owner-decided, by building the seam.** `MuxFaults` in commonMain is an
+`internal` one-shot, self-disarming switch consulted as the first statement inside the guarded block
+on both backends. Production cost is one relaxed atomic read per `addCopyStream`, which happens once
+per stream at setup; nothing public can arm it. The contract suite now proves the poison on JVM and
+Native from one test, and it was falsified two ways: replacing `poison(error)` with `throw error`
+turns it red, and so does deleting the seam call while leaving the poison in place, which is the arm
+that stops the evidence being theatre.
+
+**The seam found a divergence on its first run, which is the argument for building it.** See
+`KC-POISON-SCOPE`: the backends disagree about what a poisoned sink still accepts.
 
 #### KC-ABI-SCOPE. The API ratchet is live again, and now watches 3 targets of 13
 

@@ -2670,7 +2670,6 @@ locating each symbol by name, because every line number in both audit documents 
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | REDUCED 08-25: the named refusal is DONE on all three backends, and the row's other claim was wrong. `FFmpeg.hasDecoder(name)` is public common API and always was, so a build CAN be asked about a decoder; what is missing is ENUMERATION and a measured build-time inventory | [V] 08-25 | 17.16, here |
-| KC-CI-KONAN | REDUCED 08-24: CI is 11/11 green and no job links a system FFmpeg. Remainder is cosmetic: the two macOS jobs duplicate a from-source build on a cold cache | [V] 08-24 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
 **68 open rows in total.** P0-14 was CLOSED BY DELETION on 2026-08-21: the GPL build tasks whose
@@ -2929,6 +2928,17 @@ six items so far were not small work at all: one had no finish line, one was fil
 subsystem, one was five unwritten features, and this one belongs to a third party. **An effort
 estimate on a row nobody can act on is a category error wearing a number.**
 
+**2026-08-25, seventeenth pass (PAST 14.161): 40 KitePlayer rows and 22 KiteCodec rows, 62 open.**
+`KC-CI-KONAN` closed as a DELIBERATE ACCEPTED COST, owner-decided. Not a deferral and not a fix: the
+duplicate cold-cache build stays, because the two macOS jobs test different things and the
+duplication buys independent failure signal.
+
+**A fifth shape of open row, and the register should be able to say it.** Alongside BROKEN, NOT
+BUILT YET, NOT OURS and NEEDS-HARDWARE, there is ACCEPTED: a real property of the system, understood,
+priced, and chosen. Leaving such a row open implies somebody will eventually fix it, which is false
+and quietly wrong; closing it with the reasoning recorded is what makes it a decision instead of an
+oversight the next reader re-discovers.
+
 Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
@@ -3065,7 +3075,7 @@ tree per target in CI, the same work `PAR-5` and the Windows rows want. Until th
 three-target gate is worth more than the dead thirteen-target record it replaced. Related: `F-ABI1`,
 the Android half of the same theme.
 
-#### KC-CI-KONAN. REDUCED 2026-08-24. Only the duplicate macOS build is left
+#### KC-CI-KONAN. CLOSED 2026-08-25 as a DELIBERATE ACCEPTED COST (PAST 14.161)
 
 **Closed on 2026-08-24 (PAST 14.132): no CI job links a system FFmpeg any more.** Linux, Windows,
 both consumer smoke jobs and the Docs workflow all fetch the prebuilt STATIC trees `publish.yml`
@@ -3077,9 +3087,20 @@ no `libavformat.a` for the embed to take, so that dependency had to go regardles
 policy. The konan warmup was also fixed properly, by running it BEFORE the tree exists; see 14.132
 for why that ordering is the whole mechanism.
 
-**Open, and it is cosmetic.** The two macOS jobs share a cache key but still both build the
-vendored FFmpeg from source on a cold cache. Merging them is obvious, cheap, and was deliberately
-not done in the same surge that changed what every job links. Size S.
+**CLOSED 2026-08-25, owner-decided: the duplicate build is a COST WORTH PAYING, and that is a
+decision rather than a deferral.** The two macOS jobs share a cache key but each build the vendored
+FFmpeg from source on a cold cache. Warm runs, which are almost all runs, pay nothing.
+
+What the duplication buys is INDEPENDENT FAILURE SIGNAL, and the jobs' own comments say why they
+are separate: one runs the ratchets, the other exists specifically because every other desktop job
+links the runner's full GPL brew FFmpeg while users get the reduced vendored LGPL profile, so it
+builds the real profile and runs the whole suite and the e2e against THAT. Two jobs that test
+different things are not duplication just because they share a build step.
+
+Each cure was worse than the disease. Chaining them removes the second job's parallelism on every
+run, warm ones included, and makes a failure in the first block the second entirely. Merging them
+loses the independent signal outright. **A cold-cache build is cheap; finding out which of two
+things broke is not.**
 
 #### KC-CAPS. A build cannot be asked which decoders it carries
 

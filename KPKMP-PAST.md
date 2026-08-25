@@ -19253,3 +19253,33 @@ nothing.
 
 Doc-only pass. Gate: the split checker and both counts; 63 open, unchanged, because a label is not
 a closure.
+
+### 14.161 A duplicate build that is worth paying for, 2026-08-25
+
+`KC-CI-KONAN` closed as a deliberate accepted cost, on the owner's call. Seventh item of the S-tier
+walk. The bulk of this row closed on 08-24 when no CI job linked a system FFmpeg any more; what was
+left was described in its own text as cosmetic.
+
+**The remainder.** KiteCodec's two macOS jobs share a cache key and each build the vendored FFmpeg
+from source when that cache is cold. Warm runs, which are nearly all runs, pay nothing.
+
+**Why it stays.** The jobs are not two copies of one thing. Their own comments say so: one runs the
+ratchets, and the other exists precisely because every other desktop job links the runner's full GPL
+brew FFmpeg while users receive the reduced vendored LGPL profile, so it builds the real profile and
+runs the whole suite and the e2e against that. Two jobs testing different things are not duplication
+because they happen to share a build step.
+
+Both cures cost more than the disease. Chaining them removes the second job's parallelism on every
+run including warm ones, and turns any failure in the first into a total block on the second.
+Merging them destroys the independent signal outright. **A cold-cache build is cheap. Finding out
+which of two things broke is not.** There was also no honest way to verify a CI restructure from
+this machine, which would have meant landing an unproven change on a pipeline that is currently
+green.
+
+**A fifth shape of open row, named because this walk keeps meeting shapes.** After BROKEN, NOT BUILT
+YET, NOT OURS and NEEDS-HARDWARE, this is ACCEPTED: a real property of the system, understood,
+priced and chosen. Leaving it open implies somebody will eventually fix it, which is false. Closing
+it with the reasoning attached is what turns it into a decision rather than an oversight the next
+reader re-discovers and re-proposes.
+
+Doc-only pass, no CI touched. Gate: the split checker and both counts; 62 open, KiteCodec 23 to 22.

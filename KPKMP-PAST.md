@@ -18605,3 +18605,48 @@ failure signal, which is worth more than a cold-cache build.
 
 Gate: `:buildSrc:test` green at 93 tests, 3 of them new. No Kotlin source in either published module
 was touched, so no ratchet could move.
+
+### 14.145 The floor the staleness check could not see, 2026-08-25
+
+`KC-FLOOR-DRIFT`, closed the day after it opened. SOL-B4 pinned the macOS deployment floor and the
+check that exists to catch exactly this kind of drift could not see the pin.
+
+**Why it was invisible on both sides.** The floor rides inside `--cc`, and `--cc` is in
+`MACHINE_SPECIFIC_CONFIGURE_KEYS` because it carries an SDK path that moves with every Xcode update.
+So the task's side was dropped by key. The installed side fared no better for a different reason:
+`staleReason` splits the `config.log` line on spaces, which shreds
+`--cc='clang -arch arm64 -mmacosx-version-min=12.0'` into fragments, and the fragment
+`-mmacosx-version-min=12.0'` starts with ONE dash, so the `--` filter dropped it too. Two different
+mechanisms, same silence.
+
+**The fix reads the floor back out of that shredding.** Which OS version a tree runs on is a
+CAPABILITY, not a build location, so it belongs in the fingerprint even though its carrier does not.
+A regex scans every token, before the `--` filter, and files what it finds under one synthetic key.
+Quoting needs no special handling: the value pattern stops before the quote. The platform name
+pattern allows a hyphen so `ios-simulator` stays distinct from `ios`, which are different products.
+
+**Then the real task found what four unit tests had not.** Run against the actual vendored trees,
+the check reported every iOS tree stale for a floor that had never moved. The cause is a trap worth
+writing down: **`recipeFingerprint` must be IDEMPOTENT.** `CheckFFmpegRecipesTask` stores
+`expectedRecipeFingerprint()` as its `@Input` and hands that already-fingerprinted set back to
+`staleReason`, which fingerprints it a second time. Every token had survived that for as long as
+every token was a real `--flag`. A bare `deployment-floor=macosx:12.0` did not survive the `--`
+filter, so the expected side lost it while the installed side kept it. The token is `--` prefixed
+now, and the invariant has its own test naming the call site that depends on it.
+
+**That is the lesson of the entry.** Four unit tests, each proved able to fail, all green, and the
+feature was still broken in the only place it runs. The tests were right about the function and
+silent about the caller.
+
+Proved able to fail, three ways. Dropping the union of floors from the returned set failed all three
+staleness tests. Changing the platform pattern from `[a-z][a-z-]*` to `[a-z]+` collapsed
+`ios-simulator` onto `ios` and failed exactly the one test written for it. The idempotence test was
+watched failing before the `--` prefix went on. All reverted.
+
+**Measured on the real trees, before and after.** 11 of 11 stamped trees were already stale on this
+laptop from unrelated encoder drift, and 11 after, so the change invented no failures. The only
+floor token appearing in any diff is `--deployment-floor=macosx:12.0`, listed as asked for and
+absent from the tree, which is exactly true: those trees were baked before SOL-B4. No iOS tree
+mentions a floor any more.
+
+Gate: `:buildSrc:test` green at 98 tests, 5 of them new. No published Kotlin source touched.

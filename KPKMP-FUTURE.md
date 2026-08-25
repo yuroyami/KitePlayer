@@ -2573,7 +2573,6 @@ locating each symbol by name, because every line number in both audit documents 
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
 | KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
-| KC-FLOOR-DRIFT | the macOS deployment floor is pinned (SOL-B4) but rides inside `--cc`, which `MACHINE_SPECIFIC_CONFIGURE_KEYS` strips from the recipe fingerprint, so a locally-baked tree at the OLD floor is never reported stale. `native-libs/` is gitignored and CI bakes from source, so this bites a developer's laptop, not a release | [V] 08-25 | 17.16, here |
 | KC-CI-KONAN | REDUCED 08-24: CI is 11/11 green and no job links a system FFmpeg. Remainder is cosmetic: the two macOS jobs duplicate a from-source build on a cold cache | [V] 08-24 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
@@ -2653,6 +2652,19 @@ the real blocker became visible and was measured: 40 distinct C entry points in
 `MediaSource.wasmJs.kt` alone, before `StreamDecoder` and `PacketReader`. A fake that drives a real
 decode is a fake demuxer. **An estimate made behind a blocker is a guess about what the blocker
 hides**, and this register should treat S ratings on unreached code as provisional.
+
+**2026-08-25, second pass (PAST 14.145), counted line by line: 46 KitePlayer rows and 24 KiteCodec
+rows, so 70 open.** `KC-FLOOR-DRIFT` closed the day after it opened, which is the right lifetime for
+a row that exists because a fix could not be seen by the check watching it.
+
+**It found a trap on the way, and the trap is the part worth keeping.** `recipeFingerprint` has to
+be IDEMPOTENT, because `CheckFFmpegRecipesTask` stores an already-fingerprinted set as its `@Input`
+and hands it back to `staleReason`, which fingerprints it a second time. Every token survived that
+for as long as every token was a real `--flag`. The first synthetic token added to the set did not,
+so the EXPECTED side silently lost it while the installed side kept it, and every iOS tree was
+reported stale for a floor that had never moved. **No unit test caught this; running the real task
+did.** The invariant is now pinned by its own test, and the reason is written where the next person
+will meet it.
 
 Of the 46 open KitePlayer rows, **42 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

@@ -2575,7 +2575,6 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
 | KP-TONEMAP-WARN | the engine TONE MAPS HDR (`HdrToneMap` on both software conversion paths since 08-16, `kp_tone_map` in the Metal shader) and simultaneously warns `TonemappingUnavailable` on every HDR stream. Both halves are true of different stages, the source does not tone map and the converter does, but the user-visible message says "converted as standard dynamic range" about a picture that was rolled off through BT.2390. Needs a decision, not a cleanup | [V] 08-24 [owner] | 17.16, here |
 | KP-UNTESTED-MODULES | REDUCED 08-25 from three modules to ONE. `:kiteplayer-phone` now has a test source set and 3 tests, both falsified. `:kiteplayer-compose` is struck as debt rather than tested: it is one `internal object CompatibilityMarker` with NO public surface, so zero tests is the CORRECT state and counting it was a miscount. What is left is `:kiteplayer-compose-interop` alone, one public `@Composable` with five platform actuals, which needs the Compose UI test infrastructure this repository does not have | [V] 08-25 | 17.16, here |
-| KP-FIXTURE-PIN | REDUCED 08-24: the clips now carry a MANIFEST (generator version, host, per-file SHA-256) that CI prints, so a version difference is a diff rather than an investigation. What is left is the PIN itself: nothing fixes the ffmpeg version, so two machines can still disagree | [V] 08-24 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |
@@ -2749,7 +2748,20 @@ compose halves need Compose UI test infrastructure". The measurement was right t
 conclusion drawn from it was not. That is the same shape as SOL-C3 being read for its title rather
 than its last sentence, twice in one day.
 
-Of the 44 open KitePlayer rows, **40 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25, seventh pass (PAST 14.151): 43 KitePlayer rows and 24 KiteCodec rows, 67 open.**
+`KP-FIXTURE-PIN` closed. `scripts/testmedia.sh` now REFUSES to build the clips with an ffmpeg
+outside the pinned series, compared at major.minor, with a named override and a `--check-only` mode
+CI runs in a second before the warmup.
+
+**This one deliberately accepts a cost the register should record.** CI installs ffmpeg from
+Homebrew, so the day brew moves to 8.1 this gate turns CI red. That is the gate working, not
+failing: the same move is what cost a day on 2026-08-24 when it arrived disguised as an unrelated
+subtitle-cue failure. The fix when it fires is one line and a regeneration. **The existing argument
+in that script against gating was about CHECKSUMS**, which differ on every legitimate regeneration;
+a version fires only when the toolchain actually moves, which is exactly when somebody should look.
+If the owner would rather have a warning than a refusal, the change is the `exit 2`.
+
+Of the 43 open KitePlayer rows, **39 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is

@@ -158,8 +158,11 @@ jobs:
 
       # One line in the log so the next fixture divergence is diagnosable by reading rather than by
       # bisecting. This is what turned "multitrack.mkv decoded no subtitle cue" into an answer.
-      - name: Say which ffmpeg made the clips
-        run: ffmpeg -version | head -1
+      # KP-FIXTURE-PIN: the version is CHECKED here, not just printed, and it costs a second.
+      # The same check runs inside testmedia.sh below, but that is after the Kotlin/Native warmup
+      # and 27 seconds of encoding, and a toolchain move should not be paid for twice.
+      - name: Check the ffmpeg the clips are pinned to
+        run: ./scripts/testmedia.sh --check-only
 
       # BEFORE any Gradle task that could reach compileKiteRtCFor<Target>. See the file header.
       - name: Warm the Kotlin/Native toolchain

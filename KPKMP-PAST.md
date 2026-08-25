@@ -18902,3 +18902,56 @@ compilation is a worse defect than the missing coverage it was meant to fix.
 
 Gate: `:kiteplayer-phone:jvmTest` 3 tests across 2 suites on a forced rerun, from a module that
 reported NO-SOURCE yesterday.
+
+### 14.151 The clips refuse to be made by the wrong ffmpeg, 2026-08-25
+
+`KP-FIXTURE-PIN`, closed. The recordable half landed on 08-24: the clips carry a MANIFEST naming the
+generator, the host and every file's SHA-256. The half that was missing is that nothing STOPPED a
+different generator from making them.
+
+**The incident this row exists for is written in the script itself.** On 2026-08-24 the subtitle-cue
+matrix row passed on this Mac against ffmpeg 8.0 and failed on a runner against 8.1.2, because the
+two muxers interleave the first cue differently. The test was wrong to depend on interleaving and
+was fixed, but the day was spent finding that out, and the failure arrived disguised as a subtitle
+bug rather than a toolchain move.
+
+**Pinned at MAJOR.MINOR, and the granularity is the whole design.** 8.0 against 8.1 is what the
+incident was, so minor has to fire. A patch build (8.0.1) or a distro's `n8.0-static` must not,
+because a gate that fires on a rebuild is a gate somebody turns off. The version is read from field
+three of ffmpeg's first line and reduced by regex, which tolerates the leading `n` and any suffix.
+
+**Why gating the version is not the thing the script already argued against.** Its own comment
+refuses a CHECKSUM gate, on the grounds that every legitimate ffmpeg upgrade would turn the build
+red. That is correct and still stands: checksums differ on every regeneration. A version differs
+only when the toolchain actually moves, which is precisely the event nobody noticed last time. Both
+halves of that distinction are now written where the next reader meets them.
+
+Proved in both directions with stub `ffmpeg` scripts on PATH rather than by reasoning:
+
+| Stub reports | Result |
+|---|---|
+| 8.1.2 | refuses, exit 2, message names both versions |
+| 8.0.1 | proceeds, patch builds are not a toolchain move |
+| n8.0-static | proceeds, the suffix is tolerated |
+| 8.1.2 with `TESTMEDIA_ALLOW_ANY_FFMPEG=1` | proceeds, and SAYS it did not match |
+| nothing on PATH | exit 1, naming what is missing |
+
+**Two defects this surge found in its own work, both caught by running rather than reading.** The
+first draft's `--check-only` printed "matches the pin" after the OVERRIDE waved a mismatch through,
+which is the check telling its own lie; it re-derives the comparison now. And correcting the
+manifest header by one line exposed that the fixture count was `wc -l` minus a magic 6: it had been
+reporting 51 for 49 files since the manifest was added, and my extra line made it 52. It counts the
+files now, and the reported count, the directory and the manifest's own rows agree at 49.
+
+The manifest prose was corrected with the code, because "Nothing verifies this file" became half
+false the moment the version was gated.
+
+**An accepted cost, stated rather than discovered later.** CI installs ffmpeg from Homebrew, so the
+day brew moves to 8.1 this gate turns CI red. That is the gate working: the fix is one line and a
+regeneration, and the alternative is the same move arriving as a mystery test failure. If a warning
+is preferred to a refusal, the change is the `exit 2`.
+
+CI checks the pin in a second now, before the Kotlin/Native warmup, instead of paying for it after
+27 seconds of encoding.
+
+Gate: the full script run end to end, 49 fixtures, generator 8.0, unchanged output.

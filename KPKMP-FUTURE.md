@@ -1109,13 +1109,26 @@ API truth:
   appears in kiteplayer-core's public surface at all. The C type survives only inside CoreAudioSink's
   implementation, which is where the row wanted it. @RawRingApi remains as the marker on the raw
   path and is no longer the only thing standing between a consumer and the ABI.
-- SOL-API7: REDUCED by W-13, and the reduction was never recorded here. Verified 2026-08-18: all
-  three sites in :kiteplayer-compose-video (ios, jvm, android) are now `as?` followed by
+- SOL-API7 **RE-RATED 2026-08-25 (PAST 14.163) from S to L and labelled NEEDS-DESIGN,
+  owner-decided.** REDUCED by W-13, and the reduction was never recorded here. Verified 2026-08-18:
+  all three sites in :kiteplayer-compose-video (ios, jvm, android) are now `as?` followed by
   `throw UnsupportedFrameType(actual, expected)`, so an unsupported pairing fails as a typed,
-  readable refusal rather than a ClassCastException. THE REMAINDER, unchanged and still open: there
-  is no sealed hardware-surface model and no renderer capability negotiation, so the refusal still
-  arrives at the first frame rather than at bind time. That half is a design act, not an edit
-  (18.3 rule 6). Home: the next stage that touches the surface model.
+  readable refusal rather than a ClassCastException.
+
+  THE REMAINDER, unchanged: there is no sealed hardware-surface model and no renderer capability
+  negotiation, so the refusal still arrives at the first frame rather than at bind time.
+
+  **The S rating was the defect in this row.** It was inherited from the whole row before W-13 fixed
+  the dangerous half, and it kept this item in every "small and doable" sweep while its actual
+  content is a surface model plus a negotiation step across three renderers. 18.3 rule 6 forbids
+  authoring a design and executing it in the same breath, so no sweep could ever have taken it.
+  **An effort number that outlives the work it was estimated for is worse than no number**, because
+  it looks measured.
+
+  A cheap partial was considered and refused: calling the existing `supports()` at attach would
+  catch obvious pixel-format mismatches early, but it cannot answer the hardware-surface question
+  that is the real content, and shipping it would make the row LOOK addressed while the negotiation
+  gap stayed. Home: the renderer SPI work the `KP-TONEMAP-WARN` wiring already requires.
 
 Performance (the open remainder):
 - SOL-P1: CLOSED for the software tier by the M4 surge: software planes convert on the CPU
@@ -2610,7 +2623,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
 | SOL-P9 | a track change reopens the whole session, so live media cannot | [V] 08-19 | 17.11, here |
 | SOL-API4 | **ROADMAP, not a defect** (reclassified 08-25). Five stats fields declared and honestly KDoc'd as unbuilt: `droppedFramesDecode`, `audioLatency`, `containerBitrate`, `SyncMode.ExternalMaster`, `LateAndDecode`. Nothing lies; they are simply not written yet. This row is their ONLY record anywhere, which is why it is kept rather than closed | [V] 08-25 | 17.11, here |
-| SOL-API7 | REDUCED: refusal is typed; the engine never calls `supports()` | [V] 08-19 | 17.11, here |
+| SOL-API7 | **NEEDS-DESIGN**, re-rated 08-25 from S to L. The dangerous half is DONE: an unsupported pairing is a typed `UnsupportedFrameType`, not a `ClassCastException`. What is left is that the refusal arrives at the FIRST FRAME rather than at attach, and curing that needs a sealed hardware-surface model plus renderer capability negotiation. That is a design act (18.3 rule 6), not an edit, and it lands with the renderer SPI work the HDR notice wiring already requires | [V] 08-25 | 17.11, here |
 | SOL-C1 | 198 exported C symbols, measured two ways 08-24; the C-reduction itself is untouched | [V] 08-24 | 17.11, here |
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
 | SOL-C3 | NOT a truncation risk, re-read 08-25: `snprintf` bounds every write and `test_buffers.c` already measures the widest input at 162 bytes of 512. What is open is the C-reduction slice, moving composition to Kotlin, and it belongs to SOL-C1 | [V] 08-25 | 17.11, here |
@@ -2948,6 +2961,17 @@ became provable, and a new row opened because proving it revealed the two backen
 what a poisoned sink still accepts. **Evidence does not only confirm, it discovers**, and a seam
 built to test one claim found a second defect on its first execution. That is the return on the
 whole evidence-before-code law this register runs on.
+
+**2026-08-25, nineteenth pass (PAST 14.163): 40 KitePlayer rows and 22 KiteCodec rows, 62 open,
+unchanged.** `SOL-API7` re-rated from S to L and labelled NEEDS-DESIGN, owner-decided. A sixth shape
+of open row after BROKEN, NOT BUILT YET, NOT OURS, NEEDS-HARDWARE and ACCEPTED.
+
+**Nine items into this walk, the S tier's real defect is now measurable: it was a stale-estimate
+tier, not a small-work tier.** Of nine, exactly two were small code changes. The other seven were a
+style with no finish line, a question filed against the wrong subsystem, five unwritten features, a
+third party's warning, an accepted cost, an unprovable fix needing a seam, and now an effort number
+that outlived the work it was estimated for. **An estimate is a claim about the tree and rots
+exactly like any other**, which is the same law this register already applies to prose.
 
 Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

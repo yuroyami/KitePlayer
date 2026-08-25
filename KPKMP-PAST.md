@@ -19322,3 +19322,39 @@ one. Evidence does not only confirm, it discovers.
 Gate: `:kitecodec-core:jvmTest` 68 and `:kitecodec-core:macosArm64Test` 145 green, both running the
 same shared contract suite, plus `wasmJsNodeTest` and `apiCheck` green. The seam is `internal`, so
 the ratchet confirms no public surface moved rather than my asserting it.
+
+### 14.163 An effort number that outlived its work, 2026-08-25
+
+`SOL-API7` re-rated from S to L and labelled NEEDS-DESIGN, on the owner's call. Ninth item of the
+S-tier walk. No code moved, because there is no edit here to make.
+
+**What is already done.** W-13 fixed the dangerous half: all three sites in
+`:kiteplayer-compose-video` are `as?` followed by `throw UnsupportedFrameType(actual, expected)`, so
+an unsupported frame-and-renderer pairing fails as a typed, readable refusal instead of a
+`ClassCastException` out of a cast nobody wrote deliberately.
+
+**What is left.** The refusal arrives at the FIRST FRAME rather than at attach, because there is no
+sealed hardware-surface model and no capability negotiation between engine and renderer. Curing
+that is a design act across three renderers, and 18.3 rule 6 forbids authoring a design and
+executing it in the same breath.
+
+**The S rating was the actual defect in this row.** It was estimated for the whole row BEFORE W-13
+removed the dangerous half, and it stayed after the remainder became a design question. So the item
+sat in every "small and doable" sweep, was picked up, read, and put down again, because no sweep
+could legally have taken it. **An effort number that outlives the work it was estimated for is worse
+than no number, because it looks measured.** An estimate is a claim about the tree and rots exactly
+like prose does; this register already re-verifies claims and had never thought to re-verify sizes.
+
+**A cheap partial was considered and refused.** Calling the existing `supports()` when a renderer is
+attached would convert many first-frame failures into attach-time ones, and it is genuinely small.
+It was refused because it cannot answer the hardware-surface question that is the row's real
+content, and landing it would make the row LOOK addressed while the negotiation gap stayed open.
+That is how a row becomes a lie with a commit attached.
+
+**The walk's tally, nine in.** Two were small code changes. The other seven were a style with no
+finish line, a question filed against the wrong subsystem, five unwritten features, a third party's
+warning, an accepted cost, an unprovable fix that needed a seam built, and a stale estimate. The S
+tier was never a small-work tier; it was where mis-shaped rows accumulated.
+
+Doc-only pass. Gate: the split checker and both counts; 62 open, unchanged, because a re-rating is
+not a closure.

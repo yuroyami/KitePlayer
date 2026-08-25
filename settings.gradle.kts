@@ -2,23 +2,49 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
     repositories {
-        // KiteCodec is not on a public Maven repository yet, so it resolves from a local
-        // publication. Since KC-EMBED (kitecodec-core 0.1.0) FFmpeg rides INSIDE the klibs,
-        // so one full publication serves every target and no localRoot plumbing exists:
-        //   cd ../KiteCodec && ./gradlew :kitecodec-core:publishToMavenLocal
-        mavenLocal()
+        // mavenLocal is GONE from here, not made optional (SOL-B6). No plugin in this build comes
+        // from the sibling repository: every id in the version catalog is JetBrains, Android or
+        // vanniktech. It sat FIRST anyway, so any locally published artifact matching a plugin
+        // coordinate would have quietly won over the real one, for no benefit at all.
         mavenCentral()
         gradlePluginPortal()
         google()
     }
 }
 
+/*
+ * SOL-B6: mavenLocal is OPT-IN for dependencies, because when it is on it wins SILENTLY.
+ *
+ * KiteCodec has been on Maven Central since 0.1.0 (2026-08-24), so the ordinary build resolves it
+ * exactly as any other consumer does. The comment that used to sit here said the opposite, that
+ * KiteCodec "is not on a public Maven repository yet", and it instructed the
+ * `publishToMavenLocal` that is precisely the dangerous move.
+ *
+ * Why it is dangerous: KiteCodec's working tree and Central BOTH say 0.1.3. A local publication
+ * therefore replaces Central's bytes with the working tree's under the same version string, and
+ * nothing in the build or the log distinguishes them. A snapshot suffix would at least be visible;
+ * an identical release version is not. That is a stale sibling shadowing a released artifact,
+ * which is what this row was opened for.
+ *
+ * Turn it on deliberately when developing the two repositories together, and it says so out loud:
+ *   ./gradlew -Pkiteplayer.useMavenLocal=true <task>
+ */
+val useMavenLocal = providers.gradleProperty("kiteplayer.useMavenLocal").orNull == "true"
+
 dependencyResolutionManagement {
     repositories {
-        mavenLocal()
+        if (useMavenLocal) mavenLocal()
         google()
         mavenCentral()
     }
+}
+
+if (useMavenLocal) {
+    println(
+        "[KitePlayer] mavenLocal is ENABLED and is consulted FIRST, so a locally published " +
+            "kitecodec-core shadows the one Maven Central serves under the same version. " +
+            "Drop -Pkiteplayer.useMavenLocal to resolve released artifacts only.",
+    )
 }
 
 plugins {

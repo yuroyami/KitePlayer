@@ -1172,9 +1172,20 @@ Build and publication:
   and x86_64 only. The same two-ABI limit now also governs the libass JNI adapter, which took its
   ABI list from the same reasoning, so the owner decision covers both. Owner decision required:
   either armeabi-v7a is a target (add it) or it is not (record the refusal in 17.6). Home: S5 entry.
-- SOL-B6 [C] The twin repos are not one atomic graph: mavenLocal-first resolution can shadow
-  the sibling checkout with stale artifacts; the audit proposes a composite build or shared
-  root plus cross-repo CI. Home: S5, with S7's CI.
+- SOL-B6: **CLOSED 2026-08-25 (PAST 14.147). The defect was real and live; the audit's proposed
+  fix was not the defect.** `mavenLocal()` sat FIRST in both of `settings.gradle.kts`'s resolution
+  blocks. The trap measured: KiteCodec's working tree says `VERSION=0.1.3`, KitePlayer pins
+  `kitecodec = "0.1.3"`, and Central serves 0.1.3, so the `publishToMavenLocal` the file's own
+  comment INSTRUCTED would republish the same version string with different bytes and nothing
+  anywhere would tell them apart. It was one command from biting, and only missed because this
+  machine's `~/.m2` happened to stop at 0.1.1. mavenLocal is now opt-in behind
+  `-Pkiteplayer.useMavenLocal=true` and says so out loud when on; it is DELETED outright from
+  `pluginManagement`, where every plugin id is JetBrains, Android or vanniktech and it could only
+  ever have shadowed something. **The composite build the audit proposed is declined**: it is a
+  design act, and the defect this row actually describes did not need it. Accepted limitation,
+  stated rather than hidden: nothing automated stops mavenLocal being re-added unconditionally.
+  A CI grep would cry wolf on a reformat, and this file warns elsewhere that a check which cries
+  wolf gets disabled within a day.
 - SOL-B7 **REDUCED to nothing either project can fix, measured 2026-08-24.** Both builds emit
   exactly ONE Gradle 10 deprecation, and it is the same one in both: "Using a Project object as a
   dependency notation". It does not come from either project's build scripts. Gradle's own problems
@@ -2514,7 +2525,6 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-C3 | filter composition still builds into a fixed `char args[512]` | [V] 08-19 | 17.11, here |
 | SOL-K2 | the modernization posture; UNFALSIFIABLE as written | [V] 08-19 | 17.11, here |
 | SOL-B5 | JNI and the libass adapter both omit armeabi-v7a | [V] 08-19 [owner] | 17.11, here |
-| SOL-B6 | the twin repos are not one graph; mavenLocal shadows a sibling | [V] 08-19 | 17.11, here |
 | SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
 | AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
@@ -2666,7 +2676,14 @@ reported stale for a floor that had never moved. **No unit test caught this; run
 did.** The invariant is now pinned by its own test, and the reason is written where the next person
 will meet it.
 
-Of the 46 open KitePlayer rows, **42 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25, third pass (PAST 14.147), counted line by line: 45 KitePlayer rows and 24 KiteCodec
+rows, so 69 open.** `SOL-B6` closed. It is the third row this week whose DEFECT was real while the
+fix written beside it was not the fix: the row proposed a composite build, and what was actually
+wrong was one repository line sitting above another. **A row that names a remedy invites the remedy
+to be mistaken for the defect**, and the three cheap closes of the last two days all came from
+reading the tree instead of the proposal.
+
+Of the 45 open KitePlayer rows, **41 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is

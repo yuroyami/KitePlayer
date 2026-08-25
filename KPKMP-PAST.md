@@ -18694,3 +18694,59 @@ No test anywhere pinned the old strings, checked before changing them.
 Gate: `wasmJsNodeTest` 65, `jsNodeTest` 52, `macosArm64Test` 145, `jvmTest` 68, all green, plus
 `apiCheck` green. The formatter is `internal`, so no public surface moved and the ratchet confirms
 it.
+
+### 14.147 One repository line above another, 2026-08-25
+
+`SOL-B6`, closed. The row read "the twin repos are not one atomic graph" and proposed a composite
+build or a shared root. The defect underneath it was one line of ordering, and the proposal was not
+needed to fix it.
+
+**What was actually there.** `mavenLocal()` sat FIRST in BOTH of `settings.gradle.kts`'s resolution
+blocks, above `mavenCentral()`. The comment justifying it read: KiteCodec "is not on a public Maven
+repository yet, so it resolves from a local publication", and it printed the command to run. That
+comment stopped being true on 2026-08-24, when KiteCodec 0.1.3 went to Central.
+
+**Why that is worse than an ordinary stale-artifact risk.** Measured: KiteCodec's working tree is
+`VERSION=0.1.3`, KitePlayer pins `kitecodec = "0.1.3"`, and Central serves 0.1.3. So the
+`publishToMavenLocal` this file INSTRUCTED would replace Central's bytes with the working tree's
+under the SAME version string. Nothing in the build, the log or a lockfile distinguishes them. A
+snapshot suffix would at least be visible. An identical release version is invisible by
+construction, and the file was telling people to create one.
+
+It was one command away from biting and had not bitten only by accident: this machine's `~/.m2`
+carries kitecodec-core 0.0.1 through 0.1.1 and stops there, so today's 0.1.3 pin falls through to
+Central. Nothing arranged that.
+
+**The fix, and one part of it is a deletion rather than a flag.** `mavenLocal` is now opt-in behind
+`-Pkiteplayer.useMavenLocal=true`, and prints a warning naming the hazard when it is on, because a
+silent win is the whole complaint. In `pluginManagement` it is simply GONE: every plugin id in the
+version catalog is JetBrains, Android or vanniktech, so nothing there ever came from a local
+publication and its only possible effect was to shadow a real plugin.
+
+One implementation note worth keeping: a hoisted `val` is an unresolved reference inside
+`pluginManagement`, because Gradle evaluates that block in an isolated early pass before the script
+body exists. Deleting mavenLocal from that block removed the need to solve it.
+
+**Proved in both directions against the real caches, not by reasoning about repository order.**
+Pinning `kitecodec = "0.0.10"`, a version present in `~/.m2` and never on Central:
+
+| Flag | Result |
+|---|---|
+| off | `io.github.yuroyami:kitecodec-core:0.0.10 FAILED`, so mavenLocal genuinely is not consulted |
+| on | resolves, with the warning printed, so the two-repo dev loop still works and announces itself |
+
+Then the real pin restored: `kitecodec-core:0.1.3` resolves from Central with the flag off.
+
+**The audit's proposal is declined, on the record.** A composite build is a design act (18.3 rule 6)
+and the defect did not need it. Both repositories have their own CI as of 2026-08-24, which is the
+other half of what that proposal wanted.
+
+**Accepted limitation, stated rather than hidden.** Nothing automated stops mavenLocal being
+re-added unconditionally. CI cannot catch it: a runner's `~/.m2` is empty, so a re-added mavenLocal
+resolves from Central anyway and every job stays green. A text check over the settings file would
+fail on a reformat, and this project's own build script warns that a check which cries wolf is
+disabled within a day. The guard here is the comment and this entry, which is weaker than a ratchet
+and is being called weaker rather than counted as one.
+
+Gate: `:kiteplayer-core:jvmTest` 316 and `:kiteplayer-subtitles:jvmTest` 28, both green on a forced
+rerun, which is what proves plugin resolution survived losing mavenLocal from `pluginManagement`.

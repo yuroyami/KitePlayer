@@ -34,5 +34,11 @@ kotlin {
             api(project(":kiteplayer-mobile"))
             api(project(":kiteplayer-view"))
         }
+        // KP-UNTESTED-MODULES: this module is PUBLISHED and had no test source set at all, so its
+        // test tasks answered NO-SOURCE and it looked covered until CI named it. An umbrella that
+        // owns no implementation still owns one contract: that it keeps delegating.
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }

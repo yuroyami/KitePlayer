@@ -2574,7 +2574,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
 | KP-TONEMAP-WARN | the engine TONE MAPS HDR (`HdrToneMap` on both software conversion paths since 08-16, `kp_tone_map` in the Metal shader) and simultaneously warns `TonemappingUnavailable` on every HDR stream. Both halves are true of different stages, the source does not tone map and the converter does, but the user-visible message says "converted as standard dynamic range" about a picture that was rolled off through BT.2390. Needs a decision, not a cleanup | [V] 08-24 [owner] | 17.16, here |
-| KP-UNTESTED-MODULES | MEASURED 08-24: `:kiteplayer-compose` (1 file, 3 code lines, an internal marker with NO public surface), `:kiteplayer-compose-interop` (6 files, ~90 lines, every one `@Composable`, 1 public declaration) and `:kiteplayer-phone` (3 files, ~71 lines, 10 public declarations, all deprecated delegations). PUBLISHED with zero test sources; their test tasks answered NO-SOURCE, which is how they looked covered until CI named them. The compose halves need Compose UI test infrastructure this repository does not have; the phone half is testable today | [V] 08-24 | 17.16, here |
+| KP-UNTESTED-MODULES | REDUCED 08-25 from three modules to ONE. `:kiteplayer-phone` now has a test source set and 3 tests, both falsified. `:kiteplayer-compose` is struck as debt rather than tested: it is one `internal object CompatibilityMarker` with NO public surface, so zero tests is the CORRECT state and counting it was a miscount. What is left is `:kiteplayer-compose-interop` alone, one public `@Composable` with five platform actuals, which needs the Compose UI test infrastructure this repository does not have | [V] 08-25 | 17.16, here |
 | KP-FIXTURE-PIN | REDUCED 08-24: the clips now carry a MANIFEST (generator version, host, per-file SHA-256) that CI prints, so a version difference is a diff rather than an investigation. What is left is the PIN itself: nothing fixes the ffmpeg version, so two machines can still disagree | [V] 08-24 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
@@ -2735,6 +2735,19 @@ was identical. SOL-S8 named the behaviour once and there were three copies. SOL-
 partial" where the truth is that family works on the one platform nobody ships on and is ignored on
 both phones. Measuring per backend, and writing the result as a table rather than a sentence, is
 what the last three closes have in common.
+
+**2026-08-25, sixth pass (PAST 14.150): 44 KitePlayer rows and 24 KiteCodec rows, 68 open, count
+unchanged.** `KP-UNTESTED-MODULES` reduced from three modules to one. Two thirds of it went for
+different reasons and only one of them was work: `:kiteplayer-phone` got a test source set and three
+tests, and `:kiteplayer-compose` was STRUCK AS A MISCOUNT. It is a single `internal object` with no
+public surface, so zero tests is the correct state for it, and the row had lumped it in with a
+module that genuinely needs Compose UI test infrastructure.
+
+**The row said this in its own text and still counted it wrong.** It reads ":kiteplayer-compose (1
+file, 3 code lines, an internal marker with NO public surface)" and then classes it with "the
+compose halves need Compose UI test infrastructure". The measurement was right there and the
+conclusion drawn from it was not. That is the same shape as SOL-C3 being read for its title rather
+than its last sentence, twice in one day.
 
 Of the 44 open KitePlayer rows, **40 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

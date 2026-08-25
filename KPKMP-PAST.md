@@ -18851,3 +18851,54 @@ Gate: `:kiteplayer-output:jvmTest` 70, `:kiteplayer-output:macosArm64Test` 95,
 `:kiteplayer-core:jvmTest` 316, all green on a forced rerun. No `apiCheck` was run because
 KitePlayer has none; that is F-ABI1, still open, and the change is KDoc plus tests so no declaration
 moved.
+
+### 14.150 A published module stops answering NO-SOURCE, 2026-08-25
+
+`KP-UNTESTED-MODULES`, reduced from three modules to one. Only one third of it was work.
+
+**`:kiteplayer-phone` now has tests.** It is PUBLISHED, it is 74 lines across three files, and it
+had no test source set at all, so every test task it owned answered NO-SOURCE and it read as covered
+until CI named it. The source set was picked up from the convention path with one build change, the
+`kotlin("test")` dependency; proved before writing anything real by a throwaway suite containing one
+`fail()`, which the build duly reported.
+
+**What an umbrella that owns no implementation is actually for.** It is a compatibility shim for
+0.0.2 source consumers, three thin delegations to `kiteplayer-mobile` and `kiteplayer-view`. So it
+owns exactly one contract, that it keeps DELEGATING, and one property, that it stays deprecated. A
+shim that quietly grows its own behaviour is worse than no shim, because a consumer who never
+migrated gets a second implementation without asking for one.
+
+**The delegation is compared by SHAPE, not by equality, and the reason is the interesting part.**
+`Backends` is a data class, so equality looks like the obvious assertion. It is the wrong one: on an
+available JVM `backendsOrNull` builds a FRESH `KiteCodecMediaBackend()` on every call, so two
+CORRECT calls are already unequal and the test would have failed for a reason that has nothing to do
+with the shim. Comparing the class names of the assembled pair answers the question actually being
+asked, and it is non-vacuous on both sides of the availability check.
+
+**Whether it was vacuous here was measured, not assumed.** Replacing the delegation with a bare
+`Backends()` turned the test red, which is only possible because this JVM resolves a populated
+backend. Had it stayed green, the test would have been worthless on this machine and this entry
+would say so.
+
+The third test is JVM-only and guards the deprecation itself: removing `@Deprecated` from
+`phoneBackends` fails it. An umbrella is only harmless while it stays deprecated, because that is
+what tells a consumer to migrate and what lets the module eventually be deleted. Un-deprecating it
+in a commit that touched one annotation is exactly the change nobody would make on purpose.
+
+**`:kiteplayer-compose` is struck as a MISCOUNT, not tested.** It is one `internal object
+CompatibilityMarker` with no public surface, existing only to keep the deprecated aggregate a
+physical KLIB. There is nothing to test and a test would be theatre. **The row already said this**:
+it reads "1 file, 3 code lines, an internal marker with NO public surface" and then classes it with
+"the compose halves need Compose UI test infrastructure". The measurement was correct and the
+conclusion drawn from it was not.
+
+**What is left is `:kiteplayer-compose-interop` alone**, one public `@Composable KitePlayerSurface`
+with five platform actuals. That needs Compose UI test infrastructure this repository does not have,
+which is a real blocker and correctly sized.
+
+The `commonTest` was compiled for iOS as well as run on the JVM
+(`compileTestKotlinIosSimulatorArm64`), because a common test that breaks a platform's test
+compilation is a worse defect than the missing coverage it was meant to fix.
+
+Gate: `:kiteplayer-phone:jvmTest` 3 tests across 2 suites on a forced rerun, from a module that
+reported NO-SOURCE yesterday.

@@ -18650,3 +18650,47 @@ absent from the tree, which is exactly true: those trees were baked before SOL-B
 mentions a floor any more.
 
 Gate: `:buildSrc:test` green at 98 tests, 5 of them new. No published Kotlin source touched.
+
+### 14.146 A missing codec says which codec, 2026-08-25
+
+`KC-CAPS`, reduced to its enumeration half. The row was opened by the owner from a real incident: a
+device threw FFmpeg's bare `-78` on an AV1 file and nothing on hand could say whether that build
+carried dav1d. An hour of binary archaeology later, the answer was "the installed app was stale".
+
+**Seven refusal sites, three message shapes, none of them actionable.** Three printed
+`No decoder for codec id $codecId`, which is the integer the caller already could not act on. The
+stream's own codec name was in scope at every one of those three. The two wasm sites did name the
+codec but ended at "in the web build", which says where the failure happened and nothing about what
+to do next. One JVM site built its text with an inline `what` fragment that read differently again.
+
+**One formatter in `commonMain`, seven callers.** It names the codec, and then names the two calls
+the founding incident actually needed: `FFmpeg.hasDecoder(name)` for "does this build carry it" and
+`FFmpeg.identity` for "which build am I even running", which is the question that took the hour.
+
+It also splits two failures that read alike and mean opposite things. A stream whose codec has no
+decoder at all is a different problem from a decoder requested BY NAME that this build lacks, where
+the default decoder may still play the stream perfectly. The old JVM text half-made that
+distinction and the old native text made it in wording that did not survive being read quickly.
+
+**The row's other half was FALSE and is corrected rather than carried.** It says nothing can ask a
+build "which decoders do you carry". `FFmpeg.hasDecoder(name)` is public common API, is implemented
+on native, JVM and wasm, and predates the row. The question was always answerable one name at a
+time. What is genuinely absent is ENUMERATION, and adding it is public API on a library Central
+already serves, so it stays open as a design act rather than being improvised here.
+
+Four tests in `commonTest`, so they run on every target rather than on whichever backend happened to
+be convenient. Each was proved able to fail: putting the raw id back failed the naming test,
+replacing `FFmpeg.hasDecoder` with prose failed two, and making both branches render identically
+failed the split test.
+
+**One of the four was weak and the falsification is what exposed it.** `theTwoRefusalsReadDifferently`
+asserted only inequality, and the first attempt to falsify it, a degenerate rendering that still
+differed by one word, passed. It was falsified properly only when the two branches were made
+genuinely identical. An inequality assertion is a weak guard and it is worth knowing which of your
+tests are weak; this one is kept because the three beside it carry the real content.
+
+No test anywhere pinned the old strings, checked before changing them.
+
+Gate: `wasmJsNodeTest` 65, `jsNodeTest` 52, `macosArm64Test` 145, `jvmTest` 68, all green, plus
+`apiCheck` green. The formatter is `internal`, so no public surface moved and the ratchet confirms
+it.

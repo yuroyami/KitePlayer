@@ -2572,7 +2572,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KC-ABI-SCOPE | the API ratchet is live again but covers 3 of 13 targets, so an iOS-only surface change passes | [V] 08-23 | 17.16, here |
 
 | SEAM | 8 Gemini seam failures; version, targets, `api` leak, close order | [V] 08-19 | 17.16, here |
-| KC-CAPS | nothing can ask a build "which decoders do you carry"; a missing decoder is a bare -78 | [V] 08-19 | 17.16, here |
+| KC-CAPS | REDUCED 08-25: the named refusal is DONE on all three backends, and the row's other claim was wrong. `FFmpeg.hasDecoder(name)` is public common API and always was, so a build CAN be asked about a decoder; what is missing is ENUMERATION and a measured build-time inventory | [V] 08-25 | 17.16, here |
 | KC-CI-KONAN | REDUCED 08-24: CI is 11/11 green and no job links a system FFmpeg. Remainder is cosmetic: the two macOS jobs duplicate a from-source build on a cold cache | [V] 08-24 | 17.16, here |
 
 **Counts, measured off these tables rather than estimated.** 42 KitePlayer rows. 26 KiteCodec rows.
@@ -2824,9 +2824,14 @@ Opened 2026-08-19 by the owner, from a real failure: an iOS device threw FFmpeg'
 (ENOSYS) on an AV1 file, and NOTHING could say whether that build carried dav1d. It took an hour of
 binary archaeology to learn the answer was "the installed app was stale". Two layers are missing:
 
-- **Runtime.** `MediaSource`/the C layer expose no "decoders in this build" query, and a decoder
-  refusal surfaces as the raw error code instead of "codec av1: no software decoder in this build".
-  FFmpeg has the answer cheap (`av_codec_iterate`); nothing binds it.
+- **Runtime. HALF DONE 2026-08-25 (PAST 14.146), and half of the claim was false.** The refusal
+  half is closed: all seven decoder-lookup sites across native, JVM and wasm now name the codec and
+  point at the two calls the founding incident needed, `FFmpeg.hasDecoder` and `FFmpeg.identity`.
+  Three of them printed `codec id 226` while the stream's own name sat in scope. **The row also
+  said no "decoders in this build" query exists. `FFmpeg.hasDecoder(name)` is public common API on
+  every backend and predates this row**, so the question was always answerable per name. What is
+  genuinely missing is ENUMERATION: FFmpeg has it cheap (`av_codec_iterate`) and nothing binds it.
+  Adding it is public API and therefore a design act, not this edit.
 - **Build time.** Plugin 0.0.11 closed the biggest half (the dav1d contract is now two-way, and
   `kitecodecInfo` prints the provisioning per target), but the info line reports the TOGGLES, not a
   measured inventory of the tree it links.

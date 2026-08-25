@@ -19390,3 +19390,36 @@ against the tree and has never re-verified a size. **A size is a claim and shoul
 discipline**; until it does, the S tier keeps filling with work nobody can take.
 
 Doc-only pass. Gate: the split checker and both counts; 62 open, unchanged.
+
+### 14.165 The tool was already installed; only one variant is missing, 2026-08-25
+
+`F-ABI1`'s mechanism decided on the owner's call: Kotlin's shipped ABI validator, no hand-rolled
+twin. Labelled BLOCKED-UPSTREAM, [owner] gate removed. Eleventh item of the S-tier walk.
+
+**The row asked a question that was already half-answered in the tree.** It read: "Needs either a
+KGP release that supports it or a hand-rolled classes.jar signature check. Owner decision on the
+mechanism." That phrasing implies nothing is in place. In fact `abiValidation {}` is declared in
+ALL TWELVE modules and every one has committed dumps. The tracking was never missing; one VARIANT
+is.
+
+**Measured rather than argued.** Running `:kiteplayer-view:internalDumpKotlinAbi` on Kotlin 2.4.10
+produced exactly two files, `jvm/kiteplayer-view.api` and `kiteplayer-view.klib.api`. Grepping every
+committed dump for `KitePlayerView`, which is real public Android API living in `androidMain`,
+returns nothing. So renaming or removing an Android public member ships with no gate anywhere, on
+the project's primary shipping target. The row's claim was true; its framing of the options was not.
+
+**The hand-rolled checker was refused on the owner's standing preference for shipped tooling**, and
+18.3 rule 2 agrees: writing a second signature checker beside one Kotlin already provides is
+overbuild, and it would need maintaining exactly until the day it becomes redundant.
+
+**The gap is now written where someone will trip on it**, in `kiteplayer-view/build.gradle.kts`
+beside that module's `abiValidation` block, naming the measurement, the two variants that ARE
+emitted, the two Android classes that are not covered, and the recheck trigger. A developer editing
+an Android view meets it there; nobody reads a register row before renaming a method.
+
+**Third row in this walk whose framing outlived its facts**, after `SOL-API7`'s and `PAR-7`'s stale
+sizes. The cure was the same each time: run the thing and look at the output. A register row is a
+claim about the tree, and so is the shape of the question it asks.
+
+Gate: `:kiteplayer-view:checkKotlinAbi` green, which is the ratchet this row is about. 62 open,
+owner-gated 6 to 5.

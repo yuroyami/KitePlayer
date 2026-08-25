@@ -1559,10 +1559,26 @@ commands; the shipped-object audit in render-audit.sh covers what flag parity al
 
 **OPEN, honestly.**
 
-- F-ABI1 [V] STILL OPEN, re-verified 2026-08-18: the `api/` directories carry a `jvm` dump and a
-  `.klib.api` and no Android dump at all, so KitePlayerView and the other androidMain public APIs
-  have nothing to disagree with. Needs either a KGP release that supports it or a hand-rolled
-  classes.jar signature check. Owner decision on the mechanism.
+- F-ABI1 **MECHANISM DECIDED 2026-08-25 (PAST 14.165), owner-decided: Kotlin's shipped validator,
+  no hand-rolled twin. Labelled BLOCKED-UPSTREAM.** [V] re-verified 2026-08-18 and re-measured
+  2026-08-25: the `api/` directories carry a `jvm` dump and a `.klib.api` and no Android dump at
+  all, so `KitePlayerView` and the other androidMain public APIs have nothing to disagree with.
+
+  **Half of this row was already done and the row did not know it.** `abiValidation {}` is declared
+  in ALL TWELVE modules, and every one has committed dumps; the tracking was never missing. What is
+  missing is one VARIANT.
+
+  **Measured rather than assumed, on Kotlin 2.4.10:** `:kiteplayer-view:internalDumpKotlinAbi`
+  emits exactly two files, `jvm/kiteplayer-view.api` and `kiteplayer-view.klib.api`. Grepping every
+  committed dump for `KitePlayerView`, which is real Android public API in `androidMain`, returns
+  nothing. So a rename or removal on the Android surface ships with no gate anywhere, on the
+  project's primary shipping target.
+
+  **A hand-rolled classes.jar signature check was refused**, as duplicating tooling Kotlin already
+  ships and that 18.3 rule 2 would call overbuild. The cost of waiting is written into
+  `kiteplayer-view/build.gradle.kts` beside its `abiValidation` block, where a developer editing an
+  Android view will meet it, rather than only here. Recheck trigger: **each Kotlin bump**, and the
+  measurement above is the one to repeat.
 - F-COV1: REDUCED 2026-08-18 to SIX of twenty. wasmJs now executes (kiteplayer-network runs 12
   tests on wasmJs/node, and the DASH manifest parser is covered there for the first time), and a
   real Android DEVICE surface ran for the first time (kiteplayer-libass, 2 of 2 on the Pixelu16KB
@@ -2649,7 +2665,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
 | AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
 | test debt | RECONCILED 08-24: nineteen walked against all 1,364 test names in both repositories. NINE are already written and struck; TEN are genuinely owed | [V] 08-19 | 17.11, here |
-| F-ABI1 | no Android ABI dump exists in any of the twelve `api/` dirs | [V] 08-19 [owner] | 17.11.b, here |
+| F-ABI1 | **BLOCKED-UPSTREAM**, decided 08-25, [owner] gate gone. The mechanism question is ANSWERED: Kotlin's own `abiValidation` is the tool, and it is already enabled in all 12 modules with jvm and klib dumps committed. MEASURED on Kotlin 2.4.10: it emits only those two variants, so Android public API such as `KitePlayerView` is in no dump and ships unguarded. Hand-rolling a second checker was refused. Re-measure on each Kotlin bump | [V] 08-25 | 17.11.b, here |
 | F-COV1 | six of twenty surfaces; tvos blocked by a missing RUNTIME, not an SDK | [V] 08-19 | 17.11.b, here |
 | F-ALPHA1/ROT1/POS1 | the device-only halves: real pixels on a real screen | [owner] | 17.11.b, here |
 | X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-19 | 17.14, here |
@@ -2999,6 +3015,17 @@ was inherited from a row's first draft and never revisited while the row itself 
 it. The register re-verifies every CLAIM against the tree and has never once re-verified a SIZE.
 **Sizes should carry the same [V] discipline as claims**, and until they do, an S tier will keep
 filling with work nobody can take.
+
+**2026-08-25, twenty-first pass (PAST 14.165): 40 KitePlayer rows and 22 KiteCodec rows, 62 open,
+unchanged, and the [owner]-gated count drops to 5.** `F-ABI1`'s mechanism question is answered and
+the row is labelled BLOCKED-UPSTREAM.
+
+**The row asked for a decision it did not need to ask for.** It offered "a KGP release that supports
+it or a hand-rolled classes.jar check", implying nothing was in place. `abiValidation {}` was
+already declared in all twelve modules with dumps committed. **A row that describes a gap can be
+right about the gap and wrong about everything around it**, and the way this was caught was running
+the dump task and looking at what came out, which is the same move that has closed most of this
+walk.
 
 Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

@@ -19358,3 +19358,35 @@ tier was never a small-work tier; it was where mis-shaped rows accumulated.
 
 Doc-only pass. Gate: the split checker and both counts; 62 open, unchanged, because a re-rating is
 not a closure.
+
+### 14.164 The small fix that a POSIX dup would not have fixed, 2026-08-25
+
+`PAR-7` re-rated from S to M and labelled NEEDS-DESIGN, on the owner's call. Tenth item of the
+S-tier walk.
+
+**The defect, and it is user-facing.** Opening by an already-open descriptor rewinds it first, and a
+dup SHARES the file offset, so the caller's own descriptor seeks to zero underneath them. An
+unseekable descriptor degrades silently to the streamed case. The descriptor's lifetime belongs to
+nobody in writing. This is the Android `content://` route, which is how a real user opens a real
+file from their gallery.
+
+**Three cheaper cures were weighed and all three are worse than the row's own suggestion.**
+Documenting the behaviour leaves the descriptor moving and helps only whoever reads the doc.
+Duplicating inside the engine is the one that LOOKS small and is the trap: a POSIX dup shares the
+file offset, which is precisely the property that causes this bug, so it relocates the symptom
+without curing it and does nothing for the unseekable case. Only positional reads, `pread` or
+`FileChannel.read` at an explicit offset, answer all three defects at once, because they remove the
+shared cursor by construction rather than by remembering to rewind.
+
+**Deferred deliberately, and the reason is scheduling rather than difficulty.** It touches the
+native and JVM IO paths together and changes a protocol contract, so it belongs with `KC-CANCEL` and
+`KP-NET` in one IO pass. Taking it alone would reshape the read path twice, and the second reshape
+would land on code the first one just rewrote. The user-facing weight is written on the row so the
+deferral stays visible instead of quietly aging.
+
+**Second stale estimate in two passes.** Like `SOL-API7`, the S was inherited from the row's first
+draft and never revisited while the row changed underneath it. This register re-verifies every claim
+against the tree and has never re-verified a size. **A size is a claim and should carry the same [V]
+discipline**; until it does, the S tier keeps filling with work nobody can take.
+
+Doc-only pass. Gate: the split checker and both counts; 62 open, unchanged.

@@ -1419,12 +1419,29 @@ by the same sweep and NOT yet answered:
   and hevc. Size M. After that it still needs an A17 Pro / M3 or newer machine for positive proof,
   because this one is an M2 with no AV1 silicon, so it can only ever prove the refusal path. Owner
   device fare for the proof, ordinary work for the route.
-- PAR-7 [V] The `fd:` protocol's contract stays spooky even after F-FD1's fix: rewinding before
-  every open MUTATES the caller's descriptor (a dup shares the offset), an unseekable descriptor
-  degrades silently to the streamed case, and the descriptor's lifetime is the caller's problem.
-  Candidate close: retire `fd:` in favour of a positional-read MediaIo (pread / FileChannel.read at
-  an offset), which removes the shared offset entirely and makes the reopen safe by construction
-  rather than by rewind. Plain files keep FFmpeg's own file protocol, which has none of this.
+- PAR-7 **RE-RATED 2026-08-25 (PAST 14.164) from S to M and labelled NEEDS-DESIGN, owner-decided.**
+  [V] The `fd:` protocol's contract stays spooky even after F-FD1's fix: rewinding before every open
+  MUTATES the caller's descriptor (a dup shares the offset), an unseekable descriptor degrades
+  silently to the streamed case, and the descriptor's lifetime is the caller's problem.
+
+  Candidate close, unchanged and still the right one: retire `fd:` in favour of a positional-read
+  MediaIo (`pread` / `FileChannel.read` at an offset), which removes the shared offset ENTIRELY and
+  makes the reopen safe by construction rather than by remembering to rewind. Plain files keep
+  FFmpeg's own file protocol, which has none of this.
+
+  **Three cheaper cures were weighed on 2026-08-25 and all three are worse.** Documenting the
+  behaviour leaves a caller's descriptor moving under them and only helps whoever reads the doc.
+  Duplicating the descriptor inside the engine looks like the small fix and is not one: a POSIX dup
+  SHARES the file offset, which is the very property that makes this bug, so it would move the
+  symptom without curing it, and it does nothing for the unseekable case. Only positional reads
+  answer all three defects at once.
+
+  **Why it is deferred rather than taken now, stated so it is a decision and not a drift.** It
+  touches the native and JVM IO paths together and changes a protocol contract, so it belongs to a
+  deliberate IO pass beside `KC-CANCEL` and `KP-NET`, which are the other rows that reshape how this
+  project reads bytes. Taking it alone would reshape the read path twice. **Its user-facing weight
+  is recorded here so the deferral is visible**: this is the Android `content://` route, so it is a
+  real path real users take, not a theoretical one.
 
 **Register addition 2026-08-16 (from the mpv dependency study, 17.12):**
 - KP-TLS: CLOSED by the network surge (same day). VERIFIED by configure evidence rather than a
@@ -2643,7 +2660,7 @@ locating each symbol by name, because every line number in both audit documents 
 | PAR-3 | android-x64 has 0 SIMD symbols against arm64's 1365 | [V] 08-19 | 17.11, here |
 | PAR-5 | native linux and mingw declare targets with no source set | [V] 08-19 [owner] | 17.11, here |
 | PAR-6 | REWRITTEN: hardware AV1 cannot engage at all; libdav1d wins the decoder lookup. ABSORBED the `4K` row 08-25 by owner decision: 4K stays a software non-goal and becomes an EXIT CRITERION here, because 4K was only ever a hardware question | [V] 08-25 | 17.11, here |
-| PAR-7 | `fd:` still mutates the caller's descriptor | [V] 08-19 | 17.11, here |
+| PAR-7 | **NEEDS-DESIGN**, re-rated 08-25 from S to M. `fd:` rewinds before every open and a dup SHARES the offset, so the caller's own descriptor seeks to zero underneath them; an unseekable descriptor degrades silently; lifetime is unowned. This is the Android `content://` path, so it is user-facing. The close is positional reads (`pread`/`FileChannel.read` at an offset), which removes the shared cursor by construction rather than by remembering to rewind, and it lands with a wider IO pass | [V] 08-25 | 17.11, here |
 | L | libass: JVM bridge, wasm, the animated hook, the mpv corpus | [V] 08-19 | 17.12, here |
 | KP-NET | the network module: unvalidated 206, no resilience, unpublished | [V] 08-19 | 17.16, here |
 | KP-API | throwing stubs, unusable default factory, five dead knobs, global logger | [V] 08-19 | 17.16, here |
@@ -2972,6 +2989,16 @@ style with no finish line, a question filed against the wrong subsystem, five un
 third party's warning, an accepted cost, an unprovable fix needing a seam, and now an effort number
 that outlived the work it was estimated for. **An estimate is a claim about the tree and rots
 exactly like any other**, which is the same law this register already applies to prose.
+
+**2026-08-25, twentieth pass (PAST 14.164): 40 KitePlayer rows and 22 KiteCodec rows, 62 open,
+unchanged.** `PAR-7` re-rated from S to M and labelled NEEDS-DESIGN, owner-decided. Second stale
+estimate corrected in two passes, after `SOL-API7`.
+
+**Both were S for the same reason and it is worth naming.** Neither number was ever measured; each
+was inherited from a row's first draft and never revisited while the row itself changed underneath
+it. The register re-verifies every CLAIM against the tree and has never once re-verified a SIZE.
+**Sizes should carry the same [V] discipline as claims**, and until they do, an S tier will keep
+filling with work nobody can take.
 
 Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

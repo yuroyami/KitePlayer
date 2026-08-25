@@ -1024,9 +1024,24 @@ Subtitles:
   (18.3 rule 6), not the edit this row described.
 - SOL-S4 to SOL-S6: CLOSED by S4.f's slice (7e9bb12): open-end resolution in both parsers,
   word-boundary block keywords, and span-text entity decoding.
-- SOL-S7 [C] Public cue styling exceeds what the rasterizers apply (first span chooses global
-  properties; family, shadow, wrapping, decoration and stroke are partial). Implement per-span
-  layout or narrow the claims. Home: S4.f.
+- SOL-S7 **REDUCED 2026-08-25 (PAST 14.149) by the second of the two fixes it offered: the claims
+  are narrowed, and pinned by tests so they cannot drift back.** The row was true and vaguer than
+  the tree. Measured across all three rasterizers rather than described:
+
+  | Field | Desktop | Apple | Android |
+  |---|---|---|---|
+  | `primaryColor`, `bold`, `italic`, `underline`, `strikeThrough` | per span | per span | per span |
+  | `fontFamily` | per span | IGNORED | IGNORED |
+  | `fontSizePx`, `outlineColor`, `outlineWidthPx` | first span, whole cue | first span, whole cue | first span, whole cue |
+  | `shadowColor`, `shadowOffsetPx` | IGNORED | IGNORED | IGNORED |
+  | `CueLayout.wrap` | IGNORED | IGNORED | IGNORED |
+
+  Two things the row did not say. **`fontFamily` is desktop-only**, so the phone backends, which are
+  the product, use the platform face whatever a script asks for. **`shadowColor` defaults to a
+  visible 50% black at a 1px offset and nothing has ever drawn it**, so that default was inert on
+  every platform. The remainder is feature work, not documentation: a shadow pass needs each cue's
+  bitmap grown by the offset and its placement moved with it, which is layout, not a colour.
+  Home: S4.f, unchanged.
 - SOL-S8: **CLOSED 2026-08-25 (PAST 14.148). True as written, and it was THREE defects, not one.**
   Every rasterizer grew `stackedBottom` on `alignment.isBottom` alone, so a cue carrying an authored
   `positionY` reserved room in a stack it never stood in and lifted every later ordinary subtitle by
@@ -2522,7 +2537,7 @@ locating each symbol by name, because every line number in both audit documents 
 |---|---|---|---|
 | KP-PROD | THE PRODUCTION PROGRAM, owner-ordered 2026-08-22: the ordered handoff from here to a shippable player; every row below maps into one of its four phases | [V] 08-22 | 17.16, here |
 | KP-RQ | THE RENDER-QUALITY LADDER, owner-ordered 2026-08-23: rungs 1 to 3 (dither, deband, kernel) are CLOSED on both renderers, PAST 14.125 to 14.128; linear light, Anime4K and HDR passthrough remain, and every rung still owes a phone measurement | [V] 08-23 | 17.21, here |
-| SOL-S7 | public cue styling claims more than the rasterizers apply | [V] 08-19 | 17.11, here |
+| SOL-S7 | REDUCED 08-25: the claims are narrowed and PINNED, so the type no longer promises what no rasterizer does. What is left is the features themselves, each a real body of work: per-span size and outline, a shadow pass, `CueWrap`, and `fontFamily` on Apple and Android | [V] 08-25 | 17.11, here |
 | SOL-A6 | passthrough, offload, device selection, route recovery absent | [V] 08-19 | 17.11, here |
 | SOL-P3 | frame access copies twice and boxes its plane list | [V] 08-19 | 17.11, here |
 | SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
@@ -2707,6 +2722,19 @@ to the owner as a live truncation bug worth an M. It is not a bug at all. Every 
 C-reduction slice it always said it was, and it says "Home: with SOL-C1" in its own last line. **The
 row was read for its title instead of its last sentence**, which is the same failure mode as reading
 a row for its proposed remedy rather than its defect.
+
+**2026-08-25, fifth pass (PAST 14.149): 44 KitePlayer rows and 24 KiteCodec rows, 68 open, and the
+count did NOT move.** `SOL-S7` reduced rather than closed, and the honest reading is that a row
+offering two fixes had one cheap half and one expensive half, and only the cheap half was taken. The
+type stops lying today; the features it stopped promising are still not built.
+
+**This surge's contribution to the register's own method.** SOL-S7 is the fourth carried row this
+week whose text was vaguer than the tree, and the pattern is now specific enough to name: **a row
+written as prose describes ONE backend and the project has three.** SOL-S3 named AppKit and UIKit
+was identical. SOL-S8 named the behaviour once and there were three copies. SOL-S7 said "family is
+partial" where the truth is that family works on the one platform nobody ships on and is ignored on
+both phones. Measuring per backend, and writing the result as a table rather than a sentence, is
+what the last three closes have in common.
 
 Of the 44 open KitePlayer rows, **40 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

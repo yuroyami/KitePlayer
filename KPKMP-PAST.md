@@ -18796,3 +18796,58 @@ Gate: `:kiteplayer-output:jvmTest` 66 and `:kiteplayer-output:macosArm64Test` 95
 and Android rasterizers were COMPILED after losing their private helpers
 (`compileKotlinMacosArm64`, `compileAndroidMain`), because only the desktop copy has a test here and
 a shared predicate that breaks two silent backends would be a worse defect than the one it fixed.
+
+### 14.149 The style type stops promising what nothing draws, 2026-08-25
+
+`SOL-S7`, reduced. The row offered two fixes, "implement per-span layout or narrow the claims", and
+this took the second. The first is feature work across three backends and is what remains.
+
+**The row was true and vaguer than the tree.** It said "family, shadow, wrapping, decoration and
+stroke are partial". Measured per rasterizer instead of described:
+
+| Field | Desktop | Apple | Android |
+|---|---|---|---|
+| `primaryColor`, `bold`, `italic`, `underline`, `strikeThrough` | per span | per span | per span |
+| `fontFamily` | per span | IGNORED | IGNORED |
+| `fontSizePx`, `outlineColor`, `outlineWidthPx` | first span, whole cue | first span, whole cue | first span, whole cue |
+| `shadowColor`, `shadowOffsetPx` | IGNORED | IGNORED | IGNORED |
+| `CueLayout.wrap` | IGNORED | IGNORED | IGNORED |
+
+**Two findings the row did not carry.** `fontFamily` is honoured on DESKTOP ONLY, so both phone
+backends, which are the product, use the platform face whatever the script asks for. And
+`shadowColor` defaults to a visible 50% black at a 1px offset while nothing has ever drawn it, so
+that default has been inert on every platform since it was written. A defaulted property that no
+code reads is the same defect shape as a KDoc that denies a feature which shipped, just pointing the
+other way.
+
+`CueWrap` turned out to be ignored on all three, not two: Android's only two `wrap` matches are a
+doc comment and `ByteBuffer.wrap`, so the grep that suggested Android honoured it was counting the
+wrong thing. Checked before it reached the table.
+
+**What changed.** `CueStyle`'s KDoc carries that table, each affected property says on itself what
+happens to it, and `CueLayout.wrap` says it is not applied. The libass renderer is excluded from the
+table in writing, because it reads the original script and does its own styling.
+
+**Four contract tests, and they are labelled as contract tests in the file.** They assert what the
+KDoc now promises: a red 12px shadow changes no pixel, a second span's 48px size changes no pixel, a
+second span's outline changes no pixel, and `CueWrap.None` and `Never` render like `Balanced`. The
+comment above them says that a red here means the KDoc needs updating, not the assertion, so nobody
+later reads them as a wish that the features stay unbuilt.
+
+**Each was proved able to fail by IMPLEMENTING the thing it denies**, which is the only honest way
+to falsify a test that passes the moment it is written. A shadow pass failed the shadow arm (and the
+premultiplied-alpha arm with it, which is correct: drawing a shadow changes pixels). Per-span size
+failed the size arm. Taking the outline from the last span failed the outline arm. Honouring
+`CueWrap.Never` failed the wrap arm. Each hit its own test and nothing else. All four reverted, and
+`git diff` on `jvmMain` confirmed empty before commit.
+
+**What is NOT done, and why it is not a documentation problem.** A shadow needs each cue's bitmap
+grown by the offset and its placement moved with it, so it is a change to layout arithmetic that
+existing placement tests pin, not a colour. Per-span size and outline mean the outline pass stops
+being per-line. `fontFamily` on the phones means font resolution on two platforms. Each is real work
+and none of it is what "narrow the claims" asked for.
+
+Gate: `:kiteplayer-output:jvmTest` 70, `:kiteplayer-output:macosArm64Test` 95,
+`:kiteplayer-core:jvmTest` 316, all green on a forced rerun. No `apiCheck` was run because
+KitePlayer has none; that is F-ABI1, still open, and the change is KDoc plus tests so no declaration
+moved.

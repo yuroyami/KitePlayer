@@ -49,18 +49,49 @@ public data class StyledSpan(
  * Sizes are in the authoring resolution's pixels when [CueLayout.authoredHeight] is set, and in
  * points otherwise. Colours are ARGB with a non-premultiplied alpha, which is the form every
  * subtitle format uses.
+ *
+ * ## What the built-in rasterizers actually apply
+ *
+ * A parser fills every field it can read. The three built-in rasterizers do NOT all use every one,
+ * so this is what a consumer can rely on. Measured against the tree 2026-08-25 (SOL-S7).
+ *
+ * | Field | Desktop | Apple | Android |
+ * |---|---|---|---|
+ * | [primaryColor], [bold], [italic], [underline], [strikeThrough] | per span | per span | per span |
+ * | [fontFamily] | per span | ignored | ignored |
+ * | [fontSizePx], [outlineColor], [outlineWidthPx] | first span, whole cue | first span, whole cue | first span, whole cue |
+ * | [shadowColor], [shadowOffsetPx] | ignored | ignored | ignored |
+ *
+ * "First span, whole cue" means a cue whose spans disagree renders with the FIRST span's value
+ * everywhere, so mixed sizes or mixed outlines in one cue are flattened.
+ *
+ * The optional libass renderer is not covered by this table: it does its own ASS styling and reads
+ * the original script rather than this type.
  */
 public data class CueStyle(
+    /** Honoured on desktop only; the Apple and Android rasterizers use the platform default face. */
     val fontFamily: String? = null,
+    /** Taken from the cue's FIRST span and applied to all of them. */
     val fontSizePx: Float? = null,
     val bold: Boolean = false,
     val italic: Boolean = false,
     val underline: Boolean = false,
     val strikeThrough: Boolean = false,
     val primaryColor: Int = 0xFFFFFFFF.toInt(),
+    /** Taken from the cue's FIRST span and applied to all of them. */
     val outlineColor: Int = 0xFF000000.toInt(),
+    /**
+     * Not drawn by any built-in rasterizer, so the default below is inert (SOL-S7).
+     *
+     * Kept because the parsers read it from the source and libass renders its own shadow. Drawing
+     * one here means growing each cue's bitmap by the offset and moving its placement with it,
+     * which is a change to layout rather than a colour, and is why this is stated instead of
+     * quietly defaulted.
+     */
     val shadowColor: Int = 0x80000000.toInt(),
+    /** Taken from the cue's FIRST span and applied to all of them. */
     val outlineWidthPx: Float = 2f,
+    /** Not drawn by any built-in rasterizer. See [shadowColor]. */
     val shadowOffsetPx: Float = 1f,
 )
 
@@ -84,6 +115,13 @@ public data class CueLayout(
      * looks the same on a 4K display.
      */
     val authoredHeight: Int? = null,
+    /**
+     * Not applied by any built-in rasterizer (SOL-S7).
+     *
+     * All three break at the safe width with their platform's own line breaker, so every cue wraps
+     * that way whatever this says. It is parsed and carried because libass and any custom
+     * [io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer] can honour it.
+     */
     val wrap: CueWrap = CueWrap.Balanced,
     /**
      * Linear fade lengths from an ASS `\fad` tag, in microseconds from the cue's edges.

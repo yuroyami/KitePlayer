@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.subtitle.BitmapRegion
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
 import io.github.yuroyami.kiteplayer.subtitle.CueStyle
+import io.github.yuroyami.kiteplayer.subtitle.CueWrap
 import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
@@ -311,6 +312,83 @@ class DesktopSubtitleRasterizerTest {
         val onItsOwn = rasterize(placed).single()
         assertEquals(onItsOwn.y, withNeighbour.y, "a placed cue never moves with the stack either")
         assertEquals((360 * 0.2f).toInt() - onItsOwn.bitmap.height, onItsOwn.y)
+    }
+
+    /*
+     * SOL-S7: the three arms below pin what CueStyle's KDoc now PROMISES, which is less than the
+     * type used to imply. They are contract tests, not aspiration tests. If one goes red because
+     * the feature was implemented, the KDoc table in SubtitleCue.kt is what needs updating; the
+     * assertion is only here so the documentation and the pixels cannot drift apart in silence.
+     */
+
+    private fun spans(vararg parts: Pair<String, CueStyle>) = SubtitleCue.Text(
+        startMicros = 0,
+        endMicros = 1_000_000,
+        spans = parts.map { (text, style) -> StyledSpan(text, style) },
+        layout = CueLayout(alignment = CueAlignment.BottomCenter),
+    )
+
+    @Test
+    fun `shadow colour and offset change nothing, which is what the docs now say`() {
+        val plain = rasterize(cue("shadowed")).single()
+        val shadowed = rasterize(
+            cue("shadowed", style = CueStyle(shadowColor = 0xFFFF0000.toInt(), shadowOffsetPx = 12f)),
+        ).single()
+        assertEquals(plain.bitmap.width, shadowed.bitmap.width)
+        assertEquals(plain.bitmap.height, shadowed.bitmap.height)
+        assertTrue(
+            plain.bitmap.pixels.contentEquals(shadowed.bitmap.pixels),
+            "no built-in rasterizer draws a shadow, so a red 12px one must change no pixel",
+        )
+    }
+
+    @Test
+    fun `the first span's size wins for the whole cue`() {
+        val firstSmall = rasterize(
+            spans("aa" to CueStyle(fontSizePx = 12f), "bb" to CueStyle(fontSizePx = 48f)),
+        ).single()
+        val bothSmall = rasterize(
+            spans("aa" to CueStyle(fontSizePx = 12f), "bb" to CueStyle(fontSizePx = 12f)),
+        ).single()
+        assertTrue(
+            firstSmall.bitmap.pixels.contentEquals(bothSmall.bitmap.pixels),
+            "the second span's 48px must be ignored, so these two cues must render identically",
+        )
+    }
+
+    @Test
+    fun `the first span's outline wins for the whole cue`() {
+        val mixed = rasterize(
+            spans("aa" to CueStyle(outlineWidthPx = 0f), "bb" to CueStyle(outlineWidthPx = 9f)),
+        ).single()
+        val uniform = rasterize(
+            spans("aa" to CueStyle(outlineWidthPx = 0f), "bb" to CueStyle(outlineWidthPx = 0f)),
+        ).single()
+        assertTrue(
+            mixed.bitmap.pixels.contentEquals(uniform.bitmap.pixels),
+            "the second span's outline must be ignored, so these two cues must render identically",
+        )
+    }
+
+    @Test
+    fun `the wrap mode changes nothing, which is what the docs now say`() {
+        val long = "a subtitle long enough that the safe width forces it onto more than one line"
+        fun withWrap(mode: CueWrap) = rasterize(
+            SubtitleCue.Text(
+                startMicros = 0,
+                endMicros = 1_000_000,
+                spans = listOf(StyledSpan(long, CueStyle())),
+                layout = CueLayout(alignment = CueAlignment.BottomCenter, wrap = mode),
+            ),
+        ).single()
+
+        val balanced = withWrap(CueWrap.Balanced)
+        for (mode in listOf(CueWrap.None, CueWrap.Never)) {
+            assertTrue(
+                balanced.bitmap.pixels.contentEquals(withWrap(mode).bitmap.pixels),
+                "no built-in rasterizer reads CueWrap, so $mode must render like Balanced",
+            )
+        }
     }
 
 }

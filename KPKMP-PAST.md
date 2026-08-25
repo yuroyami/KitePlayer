@@ -18955,3 +18955,29 @@ CI checks the pin in a second now, before the Kotlin/Native warmup, instead of p
 27 seconds of encoding.
 
 Gate: the full script run end to end, 49 fixtures, generator 8.0, unchanged output.
+
+### 14.152 The two criticals become specs, 2026-08-25
+
+A planning pass, not an execution one. The owner delegated the judgement calls on both Criticals
+and the decisions landed as expansion 17.22, so each item now starts with 17.2 satisfied.
+
+**KP-TONEMAP-WARN was never one question.** Reading the emitter
+(`KiteCodecSource.warnIfColorIsApproximated`) showed the warning conflates an HDR half that is
+FALSE for every built-in display path with a BT.2020 constant-luminance half that is TRUE
+everywhere. So the decision is a split, not a reword: `HdrToneMapped` emitted where tone mapping
+ENGAGES (metadata-based emission is the named trap, because the Android interop tier never
+converts and its platform may show real HDR), `ColorApproximated` keeps the true half,
+`TonemappingUnavailable` deprecated and silent, the raw-frame caveat becomes frame-access KDoc.
+Two `ColorPolicyTest` cases currently pin the lie and are named in the spec for rewrite.
+
+**KC-WEB-IO shrank by one defect for a structural reason.** `MediaByteSource.read` is synchronous
+by contract ("block until a byte exists"), so "open does not suspend" cannot be fixed inside this
+item without redesigning a common API that Central already serves. That remainder joins X-08 with
+the reason written down. The other four defects are decided in place: chunk-level crossings via
+latin1 packing (the 0..255 ramp test guards the encoding trap), seek gated on `seekable`, close
+exactly once owned by the bridge, typed `Unsupported` refusal before any allocation, cap kept at
+512 MiB. The existing `FakeCodecModule` seam suffices; no fake demuxer.
+
+Both specs carry their own hostile-review section inline, single-threaded per the owner's Fable
+rule. Order: B then A. No code moved; the gate for a doc pass is the split checker and the counts,
+both run.

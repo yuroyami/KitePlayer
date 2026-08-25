@@ -199,6 +199,7 @@ and still one document; its other half, KPKMP-PAST.md, is finished business you 
 > | 17.12 | **the current road**: which phase is being bought now |
 > | 17.14 | the web stage and its open rows |
 > | **17.15** | **THE CONSOLIDATED OPEN REGISTER. Start here if you want to know what is left.** |
+| **17.22** | **The two criticals, decided and expanded: KP-TONEMAP-WARN and KC-WEB-IO, executor-ready.** |
 > | 18 | the skeleton, for an executor with no context |
 
 KitePlayer Kotlin Multiplatform, the piloting plan. Written 2026-08-09, revised the same
@@ -2573,7 +2574,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-B1..B13 | REDUCED 08-24: `.github/workflows/ci.yml` exists, seven jobs on four operating systems. The RELEASE half is untouched: debug signing, no wrapper checksum, no lockfiles, NDK by string sort, no signing or Sonatype configuration, gitignored unpinned fixtures | [V] 08-24 | 17.16, here |
 | KP-WASM-RUNBLOCKING | `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest DOES NOT COMPILE for wasmJs: `runBlocking` does not exist there, 31 call sites across two files. That target has never been built | [V] 08-24 | 17.16, here |
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
-| KP-TONEMAP-WARN | the engine TONE MAPS HDR (`HdrToneMap` on both software conversion paths since 08-16, `kp_tone_map` in the Metal shader) and simultaneously warns `TonemappingUnavailable` on every HDR stream. Both halves are true of different stages, the source does not tone map and the converter does, but the user-visible message says "converted as standard dynamic range" about a picture that was rolled off through BT.2390. Needs a decision, not a cleanup | [V] 08-24 [owner] | 17.16, here |
+| KP-TONEMAP-WARN | DECIDED 08-25, owner delegated, [owner] gate gone: the warning SPLITS. `HdrToneMapped` fires where tone mapping engages (never from metadata, so the Android interop tier stays silent), `ColorApproximated` keeps the true BT.2020 CL half, `TonemappingUnavailable` is deprecated and never emitted, the raw-frame caveat moves to frame-access KDoc. Executor-ready | [V] 08-25 | 17.22.A, here |
 | KP-UNTESTED-MODULES | REDUCED 08-25 from three modules to ONE. `:kiteplayer-phone` now has a test source set and 3 tests, both falsified. `:kiteplayer-compose` is struck as debt rather than tested: it is one `internal object CompatibilityMarker` with NO public surface, so zero tests is the CORRECT state and counting it was a miscount. What is left is `:kiteplayer-compose-interop` alone, one public `@Composable` with five platform actuals, which needs the Compose UI test infrastructure this repository does not have | [V] 08-25 | 17.16, here |
 | M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
@@ -2583,7 +2584,7 @@ locating each symbol by name, because every line number in both audit documents 
 
 | Row | Open item, in one line | Ver | Detail |
 |---|---|---|---|
-| KC-WEB-IO | the Web reader stages whole files a byte at a time and never closes | [V] 08-19 | 17.16, here |
+| KC-WEB-IO | SPEC'D 08-25, executor-ready, FIRST in order: four of five defects close inside the staged architecture (chunk-crossing writes, seek contract, close exactly once, typed pre-allocation refusal); the fifth, sync staging, is structural to `MediaByteSource.read` and joins X-08 with the reason on record | [V] 08-25 | 17.22.B, here |
 | KC-CANCEL | a blocking FFmpeg call cannot be cancelled; no interrupt callback | [V] 08-19 | 17.16, here |
 | KC-SPEC | output specs carry no colour, HDR, pixel aspect or exact layout | [V] 08-19 | 17.16, here |
 | KC-REMUX | a "lossless" remux drops tags, disposition, rotation and side data | [V] 08-19 | 17.16, here |
@@ -2760,6 +2761,13 @@ subtitle-cue failure. The fix when it fires is one line and a regeneration. **Th
 in that script against gating was about CHECKSUMS**, which differ on every legitimate regeneration;
 a version fires only when the toolchain actually moves, which is exactly when somebody should look.
 If the owner would rather have a warning than a refusal, the change is the `exit 2`.
+
+**2026-08-25, eighth pass (PAST 14.152): 43 KitePlayer rows and 24 KiteCodec rows, 67 open,
+unchanged, and the [owner]-gated count drops from 10 to 9.** The two Criticals were decided and
+expanded into 17.22 by owner delegation: `KP-TONEMAP-WARN` stopped being a decision and became a
+spec, and `KC-WEB-IO` gained the expansion 17.20 always said it needed before execution. Nothing
+closed, which is correct for a planning pass; what changed is that both items now start with 17.2
+satisfied instead of stopping at 18.3 rule 6.
 
 Of the 43 open KitePlayer rows, **39 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
@@ -3318,6 +3326,128 @@ another, a fixture built so a disagreement could not surface, three "covered by 
 lines that were false, and a count contradicting its own table two paragraphs later. The order above
 spends its first two tiers buying back the ability to detect that, because every later estimate
 depends on it.
+
+### 17.22 THE TWO CRITICALS, DECIDED AND EXPANDED, 2026-08-25
+
+**Provenance.** Both items below carried judgement calls. The owner delegated them on 2026-08-25
+("take care of the judgement call, write the spec"), so the decisions here are DECIDED, not
+options, and `KP-TONEMAP-WARN` loses its [owner] gate. Execute B first (17.20 names it the last
+correctness release blocker), then A. One executor session each. Obey 18.3; every test is watched
+RED before its fix and falsified after. Line numbers below are hints at KitePlayer `2af73f2` and
+KiteCodec `11fe17d`; anchor by SYMBOL, and on any contradiction with the tree, STOP (18.3 rule 5).
+
+#### 17.22.A KP-TONEMAP-WARN: the warning splits into the true half and the fixed half
+
+**The finding that shapes the fix.** `TonemappingUnavailable` conflates two causes
+(`KiteCodecSource.warnIfColorIsApproximated`, ~:622). The BT.2020 constant-luminance half is TRUE
+everywhere: the converter runs the wrong-inverse matrix and nothing corrects it. The HDR half is
+FALSE for every built-in display path: `HdrToneMap` (`Conversions.kt`,
+`SoftwareConverter.native.kt`) rolls PQ/HLG off through BT.2390, and `kp_tone_map` does the same
+in the Metal shader. It stays TRUE for one consumer only: a caller taking RAW frames from the
+frame-access API and converting them itself. A per-stream runtime warning is the wrong tool for
+that caveat; KDoc on the frame-access surface is the right one.
+
+**Decided.**
+
+1. Two new public warnings in `PlaybackError.kt`, one per cause:
+   - `HdrToneMapped(transfer: String, streamIndex: Int)`, message:
+     `"HDR ($transfer) tone mapped to standard dynamic range for this display on stream $streamIndex"`.
+   - `ColorApproximated(detail: String)`, message: `"colour approximated: $detail"`. Carries the
+     BT.2020 CL case with the existing detail text.
+2. **Emission contract for `HdrToneMapped`: it fires where tone mapping ENGAGES, never from stream
+   metadata.** Software path: the site where `HdrToneMap` first processes a frame for this open
+   (kiteplayer-ffmpeg owns both the converter and `warn(...)`; reuse the
+   `continuity.claimColorWarning` once-per-open latch pattern, ~:354). Metal path: the renderer
+   publishes a new `RendererEvent.ToneMapEngaged(transfer)` (`spi/VideoRenderer.kt`) and the
+   existing event-to-warning mapping (the SOL-API5 machinery that `AudioSinkEventTest` pins for
+   audio) converts it, deduplicated once per open. Paths where the engine never touches pixels
+   (Android MediaCodec interop tier; RQ-6 passthrough when it lands) emit NOTHING, which falls out
+   of engagement-based emission by construction.
+3. `ColorApproximated` keeps the metadata-based site: the CL approximation is a property of the
+   conversion the engine will do, known at open, and it is true on every path that converts.
+4. `TonemappingUnavailable` becomes `@Deprecated("the engine tone maps HDR; handle HdrToneMapped
+   and ColorApproximated", ReplaceWith(...))`, is NEVER emitted, and its KDoc says exactly that
+   with the date. Kept at 0.x for source compatibility (Synkplay pins 0.0.13); removal is a bump
+   decision that stays with the owner. Both emission sites are deleted.
+5. The raw-frame caveat moves to KDoc on the frame-access surface (`CapturedFrame` and the frame
+   API): frames are decoded, not colour managed; the display pipeline tone maps, captured frames
+   are not.
+6. `WarningAuditTest` moves the old type to the deliberately-never-emitted set with the reason,
+   and adds both new types with their sites. The two `ColorPolicyTest` cases (~:82, ~:119) are
+   rewritten to the new types; they were pinning the lie.
+
+**Tests, red first.** `HdrToneMapWarningTest` (commonTest, ScriptedBackend, virtual clock):
+PQ stream through the software converter emits exactly one `HdrToneMapped` carrying "PQ", twice
+through two opens emits twice; SDR stream emits nothing; an HDR-flagged stream whose frames never
+reach a converting path emits NOTHING (this is the arm that dies if anyone regresses to
+metadata-based emission, and the falsification is exactly that regression); a scripted renderer
+publishing `ToneMapEngaged` maps to one warning, wrong-event routing falsified as
+`AudioSinkEventTest` did. CL stream emits `ColorApproximated` and not `HdrToneMapped`.
+
+**Gate.** Tier by path: `:kiteplayer-core:jvmTest`, `:kiteplayer-ffmpeg:jvmTest` and
+`:kiteplayer-output:macosArm64Test`. No ABI dump exists (F-ABI1), so the API addition is reviewed,
+not ratcheted; say so in the log. Size M. Exit: the four decided behaviours demonstrable, the old
+type deprecated and silent, register row deleted into PAST per RULE TWO.
+
+**Hostile review, written against this spec.** (1) The trap is emission on the interop tier: any
+implementation that consults stream metadata re-creates the lie for users whose platform shows
+real HDR; the no-convert test exists for exactly this. (2) The Metal event must carry the
+transfer, not re-derive it in core, or a mid-stream transfer change misreports. (3) Deleting the
+old emission sites must not delete the CL warning with them; the CL test pins it.
+
+#### 17.22.B KC-WEB-IO: the staged web reader stops breaking its own contract
+
+**Architecture decision.** Staging into codec memory STAYS. Worker-backed streaming is X-08's
+program and is out of scope here; this makes the shipped architecture correct and honest. One
+register defect is REDUCED rather than fixed, with the reason on the record: "open does not
+suspend" is structural, because `MediaByteSource.read` is synchronous by contract ("block until a
+byte exists", `MediaByteSource.kt:28`), and an async source is common-API surgery on a library
+Central serves. That remainder joins X-08. The other four defects close.
+
+**Decided.** All in `WebIoBridge.kt` and `WebMemory.kt` (hand-written; the generated binding is
+not touched). Fake seam: `FakeCodecModule` already carries `_malloc` and `HEAPU8`; extend it with
+only what the bridge calls, never a demuxer.
+
+1. **Per-byte interop dies.** `writeBytes` (`WebMemory.kt`, the per-byte loop) becomes one JS
+   crossing per CHUNK: pack the chunk as a latin1 string Kotlin-side (one char per byte, 0..255),
+   one `@JsFun` writes `charCodeAt` into `HEAPU8` JS-side. Requirement: O(1) crossings per chunk;
+   the JIT-speed loop lives in JS. If measurement favours a `Uint8Array` view over Kotlin's
+   exported linear memory and it is reachable from `@JsFun`, that is an acceptable substitute; the
+   requirement is the crossing count, not the mechanism.
+2. **The seek contract holds.** `drain` calls `io.seek(0)` only when `io.seekable`; a non-seekable
+   source is staged from its CURRENT position, and the wasm actual's KDoc says so. The common
+   contract already promises seek is never called otherwise (`MediaByteSource.kt:22,33`); the JVM
+   and Native backends honour it and the web one now does.
+3. **Close runs exactly once, owned by the bridge.** The source is fully consumed once staging
+   ends, so it is closed immediately after `drain` returns or throws, flag-guarded, in a finally
+   beside the existing buffer-free.
+4. **Oversize and unknown size refuse BEFORE allocation, typed.** `size == null` (live stream) or
+   `size > 512 MiB` throws `FFmpegException(FFmpegError.Unsupported(...))` naming the size, the
+   cap, and the design: the web backend stages whole sources; streaming input is not implemented
+   on this target. The cap stays 512 MiB. Nothing is `wasmAlloc`ed on the refusal path.
+
+**Tests, red first.** `WebIoBridgeTest` (wasmJsTest, FakeCodecModule + a fake `MediaByteSource`
+with a seekable flag, a fail-on-seek arm, a close counter, scripted chunks and an optional
+mid-read throw): close==1 on success; close==1 when a read throws mid-stage; a non-seekable
+source is never seeked; a seekable one is rewound once; a 0..255 byte ramp crossing chunk
+boundaries lands byte-identical in the fake heap (this is the arm that catches latin1/encoding
+bugs, which are the real risk of the packing trick); an oversize source and a null-size source
+refuse with `Unsupported`, allocate nothing (fake malloc counter), and still close once.
+Falsifications: unconditional seek(0) back in, the close finally removed, the packing masked to
+0x7F, the cap checked after allocation. Each must hit its own test.
+
+**Gate.** `:kitecodec-core:wasmJsNodeTest`, `:kitecodec-core:jsNodeTest`, `apiCheck` (the bridge
+is internal; the ratchet proves no surface moved). Size was L; with the harness standing and the
+architecture decided it executes as M. Exit: the four contract tests green and falsified, gate
+box 5 re-graded with the streaming remainder named, gate box 6 loses its "RED on Wasm" half, the
+row REDUCED to the X-08 streaming remainder or closed if the register agrees the remainder
+belongs wholly to X-08.
+
+**Hostile review, written against this spec.** (1) The latin1 pack corrupts bytes over 0x7F if
+anything UTF-8-encodes the string in transit; the ramp test exists for exactly this, do not
+weaken it to ASCII. (2) Closing the source too early, before `installCallbacks`, breaks nothing
+today because callbacks read the STAGED buffer, but verify that before relying on it. (3) The
+refusal must not regress the error path that already frees the buffer on a drain throw.
 
 ## 18. The skeleton, for any executor
 

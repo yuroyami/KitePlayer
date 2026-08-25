@@ -1251,9 +1251,18 @@ Build and publication:
   report names the source, which is how this stopped being a guess:
   `"locations":[{"pluginId":"com.android.internal.kotlin.multiplatform.library"}]`, that is AGP
   9.2.1's Android KMP library plugin. Checked by swapping the two `project(":x")` calls in
-  `:kiteplayer-compose-interop` for type-safe accessors: the warning did not move. **Waits on an AGP
-  release, and the row's job now is to be re-measured after the next one**, not to be worked.
-  Home: S5.
+  `:kiteplayer-compose-interop` for type-safe accessors: the warning did not move.
+
+  **LABELLED BLOCKED-UPSTREAM 2026-08-25, owner-decided, and that label is the whole point of this
+  edit.** The row was correct and kept costing attention anyway: every sweep looking for something
+  small found a one-warning build row, read the measurement, and moved on. A row nobody can act on
+  should say so in its first three words rather than in its last sentence.
+
+  **It is kept rather than closed because the recheck matters**: this deprecation becomes an ERROR
+  in Gradle 10, so the day AGP ships a fix is the day this must be re-measured. The trigger is
+  written down: **the next AGP bump, and only then.** Suppressing the warning was refused for the
+  same reason, since silencing a deprecation you did not write is how you discover it as a build
+  break instead of a warning. Home: S5.
 - SOL-B8 [C] Remote publication still lacks the ordinary JVM and Android artifacts (the
   portable placeholders exist locally since 3f0f1e3). Home: S5, windows 4.
 - AGW-1 [V] The Android GPU path's physical qualification is owed in full: before/after
@@ -2606,7 +2615,7 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-C2 | non-real-time CoreAudio setup still lives in C, and GREW | [V] 08-19 | 17.11, here |
 | SOL-C3 | NOT a truncation risk, re-read 08-25: `snprintf` bounds every write and `test_buffers.c` already measures the widest input at 162 bytes of 512. What is open is the C-reduction slice, moving composition to Kotlin, and it belongs to SOL-C1 | [V] 08-25 | 17.11, here |
 | SOL-B5 | DECIDED 08-25: ALL ABIs stay supported; the drop proposal was REJECTED BY YUROYAMI. No ABI is ever formally refused. Remainder is engineering: add armeabi-v7a to the JNI recipes and the libass adapter, behind three gates (ARMv7 64-bit-atomics audit of the RT ring with a compile-time assert, a CI compile lane, one TV-stick smoke before support is claimed). x86-32 on demand if Synkplay ships it | [V] 08-25 | 17.11, here |
-| SOL-B7 | REDUCED 08-24: ONE deprecation left in each repo and it belongs to AGP 9.2.1's KMP library plugin, named by Gradle's own problems report. Waits on AGP | [V] 08-24 | 17.11, here |
+| SOL-B7 | **BLOCKED-UPSTREAM** (labelled 08-25). ONE deprecation left in each repo, owned by AGP 9.2.1's KMP library plugin and named by Gradle's own problems report, not by either project's scripts. NOTHING here is workable. Recheck trigger: the next AGP bump, and only then | [V] 08-25 | 17.11, here |
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
 | AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
 | test debt | RECONCILED 08-24: nineteen walked against all 1,364 test names in both repositories. NINE are already written and struck; TEN are genuinely owed | [V] 08-19 | 17.11, here |
@@ -2908,6 +2917,17 @@ declared, validated in an `init` block, and read by nothing. It had been dropped
 08-24. **When the index and the detail disagree the DETAIL usually wins, and this is the exception
 that proves the rule is about evidence rather than position**: the detail was newer and still wrong,
 so the tie was broken by counting rather than by precedence.
+
+**2026-08-25, sixteenth pass (PAST 14.160): 40 KitePlayer rows and 23 KiteCodec rows, 63 open,
+unchanged.** `SOL-B7` labelled BLOCKED-UPSTREAM, owner-decided. Second label in this walk after
+`SOL-API4`'s ROADMAP, and the register now carries three kinds of open row rather than one: BROKEN,
+NOT BUILT YET, and NOT OURS.
+
+**That distinction is what the S tier actually needed.** This walk started because every "what is
+small and doable" sweep kept returning the same handful of rows and nothing got done. Four of the
+six items so far were not small work at all: one had no finish line, one was filed against the wrong
+subsystem, one was five unwritten features, and this one belongs to a third party. **An effort
+estimate on a row nobody can act on is a category error wearing a number.**
 
 Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

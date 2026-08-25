@@ -19221,3 +19221,35 @@ green on a forced rerun, plus `compileKotlinMacosArm64` and `:kiteplayer-mobile:
 prove the removal did not break a platform with no test here. No ABI ratchet exists on this
 repository (F-ABI1), so the removed public surface is reviewed rather than gated; said plainly
 rather than implied. 63 open.
+
+### 14.160 A warning that is not ours says so in its first three words, 2026-08-25
+
+`SOL-B7` labelled BLOCKED-UPSTREAM, owner-decided. Sixth item of the S-tier walk, and no code
+moved because there is no code here to move.
+
+The row was already correct and already measured: both builds emit exactly one Gradle 10
+deprecation, "Using a Project object as a dependency notation", and Gradle's own problems report
+names the owner as `com.android.internal.kotlin.multiplatform.library`, which is AGP 9.2.1's Android
+KMP library plugin. It was proved not to be ours by swapping the two `project(":x")` calls in
+`:kiteplayer-compose-interop` for type-safe accessors and watching the warning not move.
+
+**So the defect was never the row's content; it was the row's shape.** "Waits on AGP" sat in the
+last sentence of a nine-line entry, and the index row's first words were a measurement. Every sweep
+hunting for something small found a build-warning row, read the whole thing, learned it was
+unactionable, and moved on. The label is now the first thing either half says.
+
+**Kept rather than closed, for one specific reason.** This deprecation becomes an ERROR in Gradle
+10, so the day AGP ships a fix is the day it must be re-measured. That trigger is now written on
+the row: the next AGP bump, and only then. Suppression was refused on the same logic, because
+silencing a deprecation you did not write is how you meet it again as a build break rather than a
+warning.
+
+**The pattern this walk keeps finding, stated plainly.** Six items in, four were not small work:
+`SOL-K2` had no finish line, `4K` was filed against the wrong subsystem, `SOL-API4` is five unwritten
+features, and this one belongs to a third party. The register had one kind of open row and needed
+three: BROKEN, NOT BUILT YET, and NOT OURS. An effort estimate on a row nobody can act on is a
+category error wearing a number, and that is why the S tier kept looking full while producing
+nothing.
+
+Doc-only pass. Gate: the split checker and both counts; 63 open, unchanged, because a label is not
+a closure.

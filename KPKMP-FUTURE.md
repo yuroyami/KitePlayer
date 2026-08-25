@@ -1286,12 +1286,21 @@ than trusted from its configure record).** Closed the same day: KC-AV1SW above; 
 and AudioToolbox gaps; libass on every Kotlin/Native target plus Android; https on the web. Opened
 by the same sweep and NOT yet answered:
 
-- PAR-1 [V] mingw-x64's libavcodec.a carries EIGHTEEN d3d11va/d3d11va2/dxva2 hwaccels, compiled
-  because the mingw profile never passed --disable-autodetect, while decision W-D4 and
-  PlatformDecoderSelection.mingw.kt both state that no D3D11VA hwaccel is compiled. The binary and
-  the decision contradict each other. Owner decision: plumb them (KiteCodec needs a hw device
-  context and a frame download for Windows, which is feature work and NOT the one-line route the
-  Apple axis took) or add --disable-autodetect so the binary matches the recorded decision.
+- PAR-1 **CLOSED 2026-08-25 (PAST 14.157) by moving the PROSE, owner-decided. Reopened narrower as
+  `PAR-WIN-HW`.** mingw-x64's `libavcodec.a` carries EIGHTEEN d3d11va/d3d11va2/dxva2 hwaccels,
+  compiled because the mingw profile never passed `--disable-autodetect`, while decision W-D4 and
+  `PlatformDecoderSelection.mingw.kt` both stated that no D3D11VA hwaccel is compiled.
+
+  **Either side of a contradiction can move, and here the cheap side was the true one.** The
+  BEHAVIOUR was never wrong: Windows offers no hardware route, which is correct, because compiled
+  is not plumbed and an unplumbed hwaccel would fail every attach and appear in diagnostics as a
+  decoder that never ran. Only the sentence was wrong. Stripping the hwaccels instead would change
+  the configure recipe, make every baked Windows tree stale, and cost a rebake and a binary release
+  to DELETE code that Windows video output will want back.
+
+  The comment now says compiled, not plumbed, planned. What remains is the plumbing, which is real
+  KiteCodec work needing a hardware device context and a frame download path, plus a Windows machine
+  to prove it: that is `PAR-WIN-HW`, and it lands with Windows video output rather than alone.
 - PAR-2 [V] Linux x64 and arm64 compile ZERO hwaccels, so those trees decode everything on the CPU.
   Honest and recorded, unlike PAR-1. VAAPI is the candidate. Home: with PAR-1's decision.
 - PAR-3 [V] android-x64 still builds with --disable-asm, so the emulator ABI has no SSE/AVX in
@@ -2583,7 +2592,7 @@ locating each symbol by name, because every line number in both audit documents 
 | X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-19 | 17.14, here |
 | X-13 | no artifact layout and no deployment story | [V] 08-19 | 17.14, here |
 | X-14 | the format matrix runs under node, never in a browser | [V] 08-19 | 17.14, here |
-| PAR-1 | mingw carries 18 hwaccels; no `--disable-autodetect` on that path | [V] 08-19 [owner] | 17.11, here |
+| PAR-WIN-HW | Windows carries 18 D3D11VA/DXVA2 hwaccels that are COMPILED and NOT PLUMBED, so no hardware route is offered. Opened 08-25 when `PAR-1` closed by correcting the prose instead of the binary. Needs a hardware device context and a frame download path in KiteCodec, and a Windows machine to prove it. Lands with Windows video output | [V] 08-25 | 17.11, here |
 | PAR-2 | Linux compiles zero hwaccels | [V] 08-19 | 17.11, here |
 | PAR-3 | android-x64 has 0 SIMD symbols against arm64's 1365 | [V] 08-19 | 17.11, here |
 | PAR-5 | native linux and mingw declare targets with no source set | [V] 08-19 [owner] | 17.11, here |
@@ -2830,6 +2839,18 @@ question and now lives with the hardware row as an exit criterion.
 Different fault, same family: K2 asked for something with no finish line, 4K asked a question of the
 wrong subsystem. **A row nobody can answer is not always small; sometimes it is misfiled**, and the
 tell is that every sweep reaches it and moves on without doing anything.
+
+**2026-08-25, thirteenth pass (PAST 14.157): 41 KitePlayer rows and 23 KiteCodec rows, 64 open,
+unchanged, and the [owner]-gated count drops to 6.** `PAR-1` closed and reopened narrower as
+`PAR-WIN-HW`, owner-decided. The count did not move and that is the honest result: a contradiction
+was cured and a smaller, truer row took its place.
+
+**The principle is worth keeping, because this register meets contradictions constantly.** When the
+BINARY and the PROSE disagree, both sides can move, and the right one to move is whichever is
+actually false. Here the behaviour was correct (Windows offers no hardware route, because compiled
+is not plumbed) and only the sentence was wrong. Moving the binary instead would have cost a rebake
+and a release to delete code the product will want back. **Cure a contradiction at its false end,
+not its convenient one.**
 
 Of the 41 open KitePlayer rows, **37 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark

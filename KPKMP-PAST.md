@@ -19120,3 +19120,37 @@ had no finish line. `4K` had one, but was filed against the wrong subsystem. The
 row every sweep reaches and leaves untouched: that is a signal about the ROW, not about the effort.
 
 Doc-only pass. Gate: the split checker and both counts; 64 open, owner-gated 8 to 7.
+
+### 14.157 The Windows binary was right and the sentence was wrong, 2026-08-25
+
+`PAR-1` closed by correcting the prose, on the owner's call, and reopened narrower as
+`PAR-WIN-HW`. Third item of the S-tier walk.
+
+mingw-x64's `libavcodec.a` carries eighteen d3d11va, d3d11va2 and dxva2 hwaccels, compiled because
+the mingw configure profile never passed `--disable-autodetect`. Decision W-D4 described a reduced
+profile, and `PlatformDecoderSelection.mingw.kt` opened with "the reduced desktop profile compiles
+no D3D11VA hwaccel". Binary and prose disagreed, and the row had been owner-gated since 08-19 on
+the question of which one to move.
+
+**The behaviour was never in question.** Windows offers no hardware route, and that is correct:
+COMPILED is not PLUMBED. A D3D11VA hwaccel needs a hardware device context and a frame download
+path on the KiteCodec side, and neither exists. Offering the route would make every open pay an
+attach that always fails, and would list a hardware decoder in diagnostics that never ran. So the
+only wrong thing in the whole row was one sentence in a comment.
+
+**Stripping would have been the expensive way to become honest.** Adding the flag changes the
+configure recipe, which makes every baked Windows tree stale by the staleness check landed
+yesterday, which forces a rebake and a binary release. All to delete code that Windows video output
+will want the day it arrives, since software-decoding video on Windows laptops is not a plan.
+
+The comment now reads compiled, not plumbed, planned, and says why the hwaccels are deliberately
+left in the binary. What remains is the plumbing itself, which is real work needing a Windows
+machine to prove: `PAR-WIN-HW`, landing with Windows video output rather than on its own.
+
+**The rule this earns.** When the binary and the prose disagree, either side can move. Move the
+one that is FALSE, not the one that is convenient. Three rows into this walk, the register has now
+closed one item with no finish line, one filed against the wrong subsystem, and one where the
+document was wrong about working code.
+
+Gate: `:kiteplayer-ffmpeg:compileKotlinMingwX64` green, which is the target whose comment changed.
+64 open, owner-gated 7 to 6.

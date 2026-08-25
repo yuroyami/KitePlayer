@@ -19423,3 +19423,41 @@ claim about the tree, and so is the shape of the question it asks.
 
 Gate: `:kiteplayer-view:checkKotlinAbi` green, which is the ratchet this row is about. 62 open,
 owner-gated 6 to 5.
+
+### 14.166 Three rows were one afternoon, and the S-tier walk ends, 2026-08-25
+
+`AGW-1`, `F-ALPHA1/ROT1/POS1` and the `M riders` remainder merged into `DEVICE-DAY`, on the owner's
+call, with a run sheet at 17.23. Items twelve through fourteen of the S-tier walk, and its end.
+
+**Why they merged.** All three needed a device in hand, all three had been [owner]-gated for a week,
+and all three would be answered in the same sitting with the same phone. Three rows for one
+afternoon is three chances to think the work is bigger than it is.
+
+**Why the merge came with a sheet rather than a label.** Each row described its checks in register
+language: "physical qualification owed in full", "the device-only halves: real pixels on a real
+screen". True, and useless to somebody holding a phone. 17.23 rewrites all of it as actions: play
+this clip, look at that, PASS means this, FAIL means that, in the order you would really do them.
+It also folds in the TV-stick smoke `SOL-B5` began requiring earlier the same day, because that is
+the same afternoon with one more device on the table, and it says plainly to stop and report if the
+32-bit build does not exist yet rather than improvising.
+
+**The sheet asks for evidence in the form the register can use**: pass, fail or not-run per numbered
+step, one line of what was seen, screenshots for the three pixel checks, and the KiteStats numbers.
+That converts a device session from a judgement into a recording.
+
+**What the walk measured, and it is the finding worth keeping.** Fourteen S items were walked, one
+decision at a time. **Two were small code changes.** The other twelve: a style with no finish line,
+a question filed against the wrong subsystem, five unwritten features behind one summary, a third
+party's warning, a deliberate accepted cost, an unprovable fix that needed a seam built (which then
+found a backend divergence on its first run), two size estimates that outlived the work they were
+made for, a row whose own pointer would have deleted the only record of it, and three rows that were
+one session.
+
+**So the S tier was never a small-work tier. It was where mis-shaped rows collected**, and every
+count including them overstated what was actually available to do. That is why sweep after sweep
+returned the same handful of items and nothing moved. The register now distinguishes six shapes of
+open row, BROKEN, NOT BUILT YET, NOT OURS, NEEDS-HARDWARE, NEEDS-DESIGN and ACCEPTED, so the next
+sweep can tell work from weather without re-reading nine lines to find out.
+
+Doc-only pass. Gate: the split checker and both counts; 60 open, KitePlayer 40 to 38, owner-gated
+5 to 3.

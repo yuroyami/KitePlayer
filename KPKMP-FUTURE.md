@@ -200,6 +200,7 @@ and still one document; its other half, KPKMP-PAST.md, is finished business you 
 > | 17.14 | the web stage and its open rows |
 > | **17.15** | **THE CONSOLIDATED OPEN REGISTER. Start here if you want to know what is left.** |
 | **17.22** | **The two criticals, decided and expanded: KP-TONEMAP-WARN and KC-WEB-IO, executor-ready.** |
+| **17.23** | **DEVICE-DAY: the hardware run sheet, written to be followed with a phone in hand.** |
 > | 18 | the skeleton, for an executor with no context |
 
 KitePlayer Kotlin Multiplatform, the piloting plan. Written 2026-08-09, revised the same
@@ -2663,11 +2664,9 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-B5 | DECIDED 08-25: ALL ABIs stay supported; the drop proposal was REJECTED BY YUROYAMI. No ABI is ever formally refused. Remainder is engineering: add armeabi-v7a to the JNI recipes and the libass adapter, behind three gates (ARMv7 64-bit-atomics audit of the RT ring with a compile-time assert, a CI compile lane, one TV-stick smoke before support is claimed). x86-32 on demand if Synkplay ships it | [V] 08-25 | 17.11, here |
 | SOL-B7 | **BLOCKED-UPSTREAM** (labelled 08-25). ONE deprecation left in each repo, owned by AGP 9.2.1's KMP library plugin and named by Gradle's own problems report, not by either project's scripts. NOTHING here is workable. Recheck trigger: the next AGP bump, and only then | [V] 08-25 | 17.11, here |
 | SOL-B8 | REDUCED: the JVM half landed; no AAR ever reaches Maven Central | [V] 08-19 | 17.11, here |
-| AGW-1 | the Android GPU path has no physical qualification at all | [owner] | 17.11, here |
 | test debt | RECONCILED 08-24: nineteen walked against all 1,364 test names in both repositories. NINE are already written and struck; TEN are genuinely owed | [V] 08-19 | 17.11, here |
 | F-ABI1 | **BLOCKED-UPSTREAM**, decided 08-25, [owner] gate gone. The mechanism question is ANSWERED: Kotlin's own `abiValidation` is the tool, and it is already enabled in all 12 modules with jvm and klib dumps committed. MEASURED on Kotlin 2.4.10: it emits only those two variants, so Android public API such as `KitePlayerView` is in no dump and ships unguarded. Hand-rolling a second checker was refused. Re-measure on each Kotlin bump | [V] 08-25 | 17.11.b, here |
 | F-COV1 | six of twenty surfaces; tvos blocked by a missing RUNTIME, not an SDK | [V] 08-19 | 17.11.b, here |
-| F-ALPHA1/ROT1/POS1 | the device-only halves: real pixels on a real screen | [owner] | 17.11.b, here |
 | X-08 | nothing runs the player in a Worker, and X-06 waits on it | [V] 08-19 | 17.14, here |
 | X-13 | no artifact layout and no deployment story | [V] 08-19 | 17.14, here |
 | X-14 | the format matrix runs under node, never in a browser | [V] 08-19 | 17.14, here |
@@ -2685,7 +2684,7 @@ locating each symbol by name, because every line number in both audit documents 
 | KP-WEBPACK-CONTEXT | `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with `RangeError: Invalid array length` while it timestamps a context directory. Deterministic across a cleaned build; the node half is fine | [V] 08-24 | 17.16, here |
 | KP-TONEMAP-WARN | REDUCED 08-25 (PAST 14.153): the LIE IS GONE. Split shipped, `TonemappingUnavailable` deprecated and sited nowhere, `ColorApproximated` keeps the true half, `HdrToneMapped` maps from `RendererEvent.ToneMapEngaged` latched once per open, raw-frame caveat on `CapturedFrame`. Remainder: no built-in renderer PUBLISHES the event yet, so the notice is silent until each is wired, one truthful decision per renderer | [V] 08-25 | 17.22.A, here |
 | KP-UNTESTED-MODULES | REDUCED 08-25 from three modules to ONE. `:kiteplayer-phone` now has a test source set and 3 tests, both falsified. `:kiteplayer-compose` is struck as debt rather than tested: it is one `internal object CompatibilityMarker` with NO public surface, so zero tests is the CORRECT state and counting it was a miscount. What is left is `:kiteplayer-compose-interop` alone, one public `@Composable` with five platform actuals, which needs the Compose UI test infrastructure this repository does not have | [V] 08-25 | 17.16, here |
-| M riders | REDUCED: the physical device session; the iPhone run closed 2026-08-23 (PAST 14.122) | [owner] | 17.12, here |
+| DEVICE-DAY | **NEEDS-HARDWARE**, merged 08-25 from `AGW-1`, `F-ALPHA1/ROT1/POS1` and the `M riders` remainder, which were three rows for ONE afternoon with the same devices in hand. Also carries the TV-stick smoke `SOL-B5` requires. The run sheet is 17.23: every check written as a thing to do and a thing to look at, in order, with pass and fail stated | [owner] | 17.23, here |
 | W riders | the Windows matrix run and the physical desktop measurements | [owner] | PAST 17.13 |
 | B-horizon | REDUCED: items 4 and 9 are dead; the rest hold | [V] 08-19 | PAST 15.5, 16.4 |
 
@@ -3027,7 +3026,27 @@ right about the gap and wrong about everything around it**, and the way this was
 the dump task and looking at what came out, which is the same move that has closed most of this
 walk.
 
-Of the 40 open KitePlayer rows, **36 carry [V] and none carry [C]**: every row that was carried and
+**2026-08-25, twenty-second pass (PAST 14.166): 38 KitePlayer rows and 22 KiteCodec rows, 60 open,
+and the [owner]-gated count drops from 5 to 3.** `AGW-1`, `F-ALPHA1/ROT1/POS1` and the `M riders`
+remainder merged into one `DEVICE-DAY` row with a run sheet at 17.23. This ENDS the S-tier walk:
+fourteen items, all decided.
+
+**Three rows were one afternoon written three times.** Each needed a device in hand, each had sat
+[owner]-gated for a week, and each described its checks in register language rather than as things
+to do. So the merge came with the sheet: every check written as an action, a thing to look at, and
+what counts as pass or fail, in the order you would actually do them. It also carries the TV-stick
+smoke `SOL-B5` now requires, because that is the same afternoon with one more device.
+
+**What the whole walk measured, stated once.** Fourteen S items. **Two were small code changes.**
+The rest were a style with no finish line, a question filed against the wrong subsystem, five
+unwritten features, a third party's warning, an accepted cost, an unprovable fix needing a seam
+built, two stale size estimates, a row whose own pointer would have deleted it, and three rows that
+were one session. **The S tier was never a small-work tier; it was where mis-shaped rows collected**,
+and every count that included them overstated what was available to do. The register now carries six
+shapes of open row (BROKEN, NOT BUILT YET, NOT OURS, NEEDS-HARDWARE, NEEDS-DESIGN, ACCEPTED) so the
+next sweep can tell work from weather at a glance.
+
+Of the 38 open KitePlayer rows, **34 carry [V] and none carry [C]**: every row that was carried and
 unverified before this pass has now been read against the tree. The remaining 4 carry neither mark
 because they need hardware this machine does not have, and **10 rows in total are [owner] gated**,
 all of them KitePlayer rows now that every KiteCodec [owner] row has closed. The tenth is
@@ -3725,6 +3744,78 @@ anything UTF-8-encodes the string in transit; the ramp test exists for exactly t
 weaken it to ASCII. (2) Closing the source too early, before `installCallbacks`, breaks nothing
 today because callbacks read the STAGED buffer, but verify that before relying on it. (3) The
 refusal must not regress the error path that already frees the buffer on a drain throw.
+
+### 17.23 DEVICE-DAY: the run sheet
+
+**What this is.** Everything in the project that cannot be answered without hardware, collected into
+one session so the devices come out once. Merged 2026-08-25 from three rows that were the same
+afternoon described three times. **Written to be followed by someone holding a phone, not read by
+someone holding this document**: each check says what to do, what to look at, and what counts as
+pass or fail. Record every answer, including the ugly ones; a failed check answered is worth more
+than a check not run.
+
+**What you need.** An Android phone (any, but a Main10-capable one covers more), an Android TV stick
+or box (Fire TV class, for the 32-bit check), and an iPhone or iPad. A stopwatch is not needed;
+KiteStats prints the numbers.
+
+**Before you start.** Build the sample app for each device. If a build fails, stop and say so: that
+is a finding too, and it is the first thing this session would prove.
+
+#### Part 1, Android phone: does the GPU path actually help
+
+1. **Play a 1080p clip, note the numbers.** Open the sample, play `sync1080p30.mp4`, let it run 30
+   seconds, read KiteStats. Write down: frames presented, frames dropped, and the frame time.
+2. **Compare against the recorded baseline.** `ANDROID_GPU_WORK.baseline.txt` holds what the old
+   path did. PASS: the GPU path is not slower and drops no more frames. FAIL: it is worse, which is
+   worth knowing immediately because the GPU path is the newer one.
+3. **Seek hard, ten times fast.** Drag the scrubber back and forth quickly for about a minute. PASS:
+   picture always comes back, no freeze, no black frame that stays. FAIL: any state it does not
+   recover from without pausing.
+4. **Background and return, five times.** Home button, wait five seconds, reopen. PASS: playback
+   resumes with picture every time. FAIL: black picture, or audio without video.
+5. **The 30-minute soak.** Play for 30 minutes, watching graphics memory in Android Studio's
+   profiler. PASS: memory settles and stays flat. FAIL: it climbs steadily, which is a leak.
+6. **A Main10 clip, if the phone supports it.** Play `hevc4k10.mp4`. PASS: it plays. FAIL or refuse:
+   note which, because that is `PAR-6` territory.
+
+#### Part 2, Android phone: do the pixels land where they should
+
+These three were fixed in code and never seen on glass. Take a screenshot for each.
+
+7. **Transparency.** Play a clip with subtitles over a bright scene. PASS: subtitle edges are clean,
+   no dark halo or grey box around the letters. FAIL: a visible box or muddy edges, which means the
+   alpha is being applied twice.
+8. **Rotation.** Play a clip recorded in portrait on a phone. PASS: picture is upright AND the
+   subtitles are upright with it. FAIL: subtitles sideways while the picture is correct, which is
+   the exact bug that was fixed blind.
+9. **Positioning.** Play a clip with a subtitle placed somewhere other than the bottom, then one
+   with ordinary bottom subtitles. PASS: the placed one sits where authored, and ordinary ones sit
+   at the bottom unaffected by it. FAIL: ordinary subtitles pushed upward, which would mean the
+   2026-08-25 stacking fix did not survive to real pixels.
+
+#### Part 3, TV stick: the 32-bit smoke that `SOL-B5` requires
+
+Only possible once armeabi-v7a is added to the build; if it is not built yet, stop here and say so.
+
+10. **Install and play.** Sideload the sample onto the stick, play `sync1080p30.mp4` for two
+    minutes. PASS: video and audio, in sync, no crash. FAIL: anything else, especially a crash on
+    open, which would point at the 64-bit atomics question that gates this ABI.
+11. **Audio, specifically.** Listen for clicks, drift, or audio drifting ahead of or behind the
+    picture over those two minutes. PASS: stays in sync. FAIL: drift, which is the ring's 32-bit
+    behaviour and the single reason that ABI needs proving rather than assuming.
+
+#### Part 4, iPhone or iPad: the last M rider
+
+12. **Play, seek, background, return.** Same shape as steps 3 and 4, on iOS. PASS: picture returns
+    every time. FAIL: note where.
+13. **Read KiteStats once at the end** and write the numbers down. That is the evidence the M phase
+    is missing; it is not asking for a judgement, only for the numbers off a real device.
+
+#### What to send back
+
+For each numbered step: pass, fail, or not run, and one line of what you saw. Screenshots for steps
+7, 8 and 9. The KiteStats numbers from steps 1 and 13. That closes `DEVICE-DAY`, unblocks the
+`SOL-B5` ABI claim, and turns three years of "never measured" into measured.
 
 ## 18. The skeleton, for any executor
 

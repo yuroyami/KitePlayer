@@ -13,4 +13,6 @@
     <string name="demo_compose_interop_detail">KitePlayerSurface hosts the native KitePlayerView through AndroidView.</string>
     <string name="demo_compose_native">GPU Compose</string>
     <string name="demo_compose_native_detail">KiteVideo draws GPU-backed frames inside Compose so modifiers affect the pixels.</string>
+    <string name="demo_compose_swap">Live renderer swap</string>
+    <string name="demo_compose_swap_detail">KitePlayerVideo switches between the native view and the Compose canvas while the clip keeps playing.</string>
 </resources>

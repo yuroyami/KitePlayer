@@ -59,6 +59,7 @@ dependencies {
     implementation(project(":kiteplayer-mobile"))
     implementation(project(":kiteplayer-compose-interop"))
     implementation(project(":kiteplayer-compose-video"))
+    implementation(project(":kiteplayer-compose-ui"))
     implementation(compose.runtime)
     implementation(compose.ui)
     implementation(compose.foundation)

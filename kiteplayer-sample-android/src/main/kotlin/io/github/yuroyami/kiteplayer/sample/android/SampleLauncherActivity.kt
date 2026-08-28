@@ -28,6 +28,9 @@ internal class SampleLauncherActivity : Activity() {
         findViewById<Button>(R.id.compose_native).setOnClickListener {
             open(ComposeVideoActivity::class.java)
         }
+        findViewById<Button>(R.id.compose_swap).setOnClickListener {
+            open(ComposeSwapActivity::class.java)
+        }
     }
 
     private fun open(activity: Class<out Activity>) {

@@ -32,5 +32,10 @@
             android:exported="false"
             android:label="@string/demo_compose_native"
             android:configChanges="orientation|screenSize" />
+        <activity
+            android:name=".ComposeSwapActivity"
+            android:exported="false"
+            android:label="@string/demo_compose_swap"
+            android:configChanges="orientation|screenSize" />
     </application>
 </manifest>

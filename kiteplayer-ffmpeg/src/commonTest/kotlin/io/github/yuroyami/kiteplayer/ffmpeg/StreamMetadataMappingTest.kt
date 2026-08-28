@@ -30,6 +30,13 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotSame
 
 class StreamMetadataMappingTest {
+
+    @Test
+    fun fullRangeJpegPixelFormatsMapToTheirYuvTwins() {
+        assertEquals(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat.Yuv420p, PixelFormat("yuvj420p").toPlayerFormat())
+        assertEquals(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat.Yuv422p, PixelFormat("yuvj422p").toPlayerFormat())
+        assertEquals(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat.Yuv444p, PixelFormat("yuvj444p").toPlayerFormat())
+    }
     @Test
     fun streamColorVp9AndExtradataCrossTheBackendBoundaryLosslessly() {
         val extradata = byteArrayOf(1, 2, 3)

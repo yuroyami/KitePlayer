@@ -24,9 +24,11 @@ import io.github.yuroyami.kitecodec.SampleFormat as KiteSampleFormat
  */
 
 internal fun PixelFormat.toPlayerFormat(): PlayerPixelFormat = when (name) {
-    "yuv420p" -> PlayerPixelFormat.Yuv420p
-    "yuv422p" -> PlayerPixelFormat.Yuv422p
-    "yuv444p" -> PlayerPixelFormat.Yuv444p
+    // The deprecated JPEG twins are the same plane layout; FFmpeg still reports them for
+    // full-range streams, and the range itself arrives through ColorInfo, not the format name.
+    "yuv420p", "yuvj420p" -> PlayerPixelFormat.Yuv420p
+    "yuv422p", "yuvj422p" -> PlayerPixelFormat.Yuv422p
+    "yuv444p", "yuvj444p" -> PlayerPixelFormat.Yuv444p
     "yuv420p10le" -> PlayerPixelFormat.Yuv420p10le
     "yuv422p10le" -> PlayerPixelFormat.Yuv422p10le
     "nv12" -> PlayerPixelFormat.Nv12

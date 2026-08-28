@@ -88,6 +88,7 @@ include(":kiteplayer-view")
 include(":kiteplayer-mobile")
 include(":kiteplayer-compose-interop")
 include(":kiteplayer-compose-video")
+include(":kiteplayer-compose-ui")
 
 // Source-compatibility umbrellas for the local 0.0.2 coordinates. New modules never depend on
 // these leaves, so the old packaging cannot dictate the clean target matrices.

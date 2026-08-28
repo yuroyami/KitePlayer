@@ -1,0 +1,21 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-compose-ui>
+final enum class io.github.yuroyami.kiteplayer.compose/KiteRenderPath : kotlin/Enum<io.github.yuroyami.kiteplayer.compose/KiteRenderPath> { // io.github.yuroyami.kiteplayer.compose/KiteRenderPath|null[0]
+    enum entry Auto // io.github.yuroyami.kiteplayer.compose/KiteRenderPath.Auto|null[0]
+    enum entry ComposeCanvas // io.github.yuroyami.kiteplayer.compose/KiteRenderPath.ComposeCanvas|null[0]
+    enum entry NativeView // io.github.yuroyami.kiteplayer.compose/KiteRenderPath.NativeView|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.compose/KiteRenderPath.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.compose/KiteRenderPath> // io.github.yuroyami.kiteplayer.compose/KiteRenderPath.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.compose/KiteRenderPath // io.github.yuroyami.kiteplayer.compose/KiteRenderPath.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.compose/KiteRenderPath> // io.github.yuroyami.kiteplayer.compose/KiteRenderPath.values|values#static(){}[0]
+}
+
+final fun io.github.yuroyami.kiteplayer.compose/KitePlayerVideo(io.github.yuroyami.kiteplayer/KitePlayer?, androidx.compose.ui/Modifier?, io.github.yuroyami.kiteplayer.compose/KiteRenderPath?, kotlin/Function1<io.github.yuroyami.kiteplayer.compose/KiteRenderPath, kotlin/Unit>?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.compose/KitePlayerVideo|KitePlayerVideo(io.github.yuroyami.kiteplayer.KitePlayer?;androidx.compose.ui.Modifier?;io.github.yuroyami.kiteplayer.compose.KiteRenderPath?;kotlin.Function1<io.github.yuroyami.kiteplayer.compose.KiteRenderPath,kotlin.Unit>?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]

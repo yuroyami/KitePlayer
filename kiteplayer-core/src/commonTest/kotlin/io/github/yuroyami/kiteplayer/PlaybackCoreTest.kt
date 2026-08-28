@@ -1224,6 +1224,133 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `replacing a coupled renderer rebuilds the video path against the new one`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        val factoryA = coupledFactory(script, ledger)
+        val rendererA = RecordingRenderer(decoderFactories = listOf(factoryA))
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            ledger = ledger,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Require),
+            renderer = rendererA,
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+        assertEquals(1, harness.backend.openCalls)
+        assertEquals(1, factoryA.createCount)
+
+        val factoryB = coupledFactory(script, ledger)
+        val rendererB = RecordingRenderer(decoderFactories = listOf(factoryB))
+        harness.core.attachRenderer(rendererB)
+        harness.run(500.milliseconds)
+
+        assertEquals(2, harness.backend.openCalls, "the coupled swap reopened the source exactly once")
+        assertEquals(1, factoryB.createCount, "the rebuild selected the new renderer's decoder")
+        assertTrue(rendererB.count > 0, "the new renderer receives frames after the rebuild")
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun `reattaching the same coupled renderer does not rebuild`() = runTest {
+        val script = MediaScript()
+        val ledger = LeakLedger()
+        val factory = coupledFactory(script, ledger)
+        val renderer = RecordingRenderer(decoderFactories = listOf(factory))
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            ledger = ledger,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Require),
+            renderer = renderer,
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(200.milliseconds)
+
+        harness.core.detachRenderer(expected = renderer)
+        harness.core.attachRenderer(renderer)
+        harness.run(300.milliseconds)
+
+        assertEquals(1, harness.backend.openCalls, "the same coupled renderer must not force a reopen")
+        assertEquals(1, factory.createCount)
+        harness.close()
+    }
+
+    @Test
+    fun `a backend-origin swap does not rebuild and keeps frames flowing`() = runTest {
+        val harness = CoreHarness(this, renderer = null)
+        harness.open()
+        harness.core.play()
+        val first = RecordingRenderer()
+        harness.core.attachRenderer(first)
+        harness.run(200.milliseconds)
+
+        val second = RecordingRenderer()
+        harness.core.attachRenderer(second)
+        harness.run(300.milliseconds)
+
+        assertEquals(1, harness.backend.openCalls, "portable frames need no reopen")
+        assertTrue(second.count > 0, "the second renderer receives frames immediately")
+        harness.close()
+    }
+
+    @Test
+    fun `a paused swap repaints one frame on the new renderer`() = runTest {
+        val harness = CoreHarness(this, renderer = null)
+        harness.open()
+        val first = RecordingRenderer()
+        harness.core.attachRenderer(first)
+        harness.core.play()
+        harness.run(300.milliseconds)
+        harness.core.pause()
+        harness.run(100.milliseconds)
+
+        val second = RecordingRenderer()
+        harness.core.attachRenderer(second)
+        harness.run(500.milliseconds)
+
+        assertTrue(second.count > 0, "the paused swap must hand the new renderer a picture")
+        assertEquals(1, harness.backend.openCalls, "the repaint is a seek, not a reopen")
+        assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
+    @Test
+    fun `a coupled swap on an unseekable source warns and stays put`() = runTest {
+        val script = MediaScript(seekable = false)
+        val ledger = LeakLedger()
+        val factoryA = coupledFactory(script, ledger)
+        val rendererA = RecordingRenderer(decoderFactories = listOf(factoryA))
+        val harness = CoreHarness(
+            scope = this,
+            script = script,
+            ledger = ledger,
+            config = PlayerConfig(hardwareDecode = HwdecPolicy.Require),
+            renderer = rendererA,
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(200.milliseconds)
+
+        val rendererB = RecordingRenderer(decoderFactories = listOf(coupledFactory(script, ledger)))
+        harness.core.attachRenderer(rendererB)
+        harness.run(300.milliseconds)
+
+        assertEquals(1, harness.backend.openCalls, "an unseekable source must not be reopened")
+        val refused = harness.events
+            .filterIsInstance<PlayerEvent.Warning>()
+            .map { it.warning }
+            .filterIsInstance<PlaybackWarning.CommandRefused>()
+            .filter { it.member == "attachRenderer" }
+        assertTrue(refused.isNotEmpty(), "the impossible rebuild must be said out loud")
+        harness.close()
+    }
+
+    @Test
     fun `loop all is accepted and stands beside one`() = runTest {
         val harness = CoreHarness(this)
         harness.open()
@@ -1709,6 +1836,17 @@ class PlaybackCoreTest {
         )
     }
 }
+
+/** A renderer-coupled decoder factory whose decoder reports hardware zero-copy, for swap tests. */
+private fun coupledFactory(script: MediaScript, ledger: LeakLedger): RecordingVideoDecoderFactory =
+    RecordingVideoDecoderFactory { _, _ ->
+        ScriptedVideoDecoder(
+            script = script,
+            ledger = ledger,
+            faults = FaultPlan.None,
+            hardwareStatus = ScriptedVideoDecoderStatus(HwdecStatus.HardwareZeroCopy(HwdecKind.MediaCodec)),
+        )
+    }
 
 private class RecordingVideoDecoderFactory(
     private val createDecoder: suspend (PlayerStreamInfo, HwdecPolicy) -> VideoDecoder?,

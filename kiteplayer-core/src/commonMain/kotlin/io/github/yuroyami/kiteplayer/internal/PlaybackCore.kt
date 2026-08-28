@@ -1275,8 +1275,11 @@ internal class PlaybackCore(
                 }
             }
             is CoreCommand.AttachRenderer -> {
-                if (setRenderer(command.renderer)) command.reply.complete(Unit)
-                else {
+                val previous = pendingRenderer
+                if (setRenderer(command.renderer)) {
+                    command.reply.complete(Unit)
+                    rendererSwapFollowUp(previous, command.renderer)
+                } else {
                     // Warned as well as thrown (audit F-API1): the facade's fire-and-forget form
                     // discards the reply, and a refused attach with no trace is a permanently
                     // black surface nothing explains.
@@ -1484,6 +1487,42 @@ internal class PlaybackCore(
         pendingRenderer = renderer
         watchRendererEvents(renderer)
         return true
+    }
+
+    /**
+     * What a successful renderer replacement still owes the picture. A decoder coupled to the
+     * replaced renderer decodes into that renderer's dead surface, so the video path is rebuilt
+     * against the new one through the ordinary track-change rebuild (same pass, position kept,
+     * play state kept). An uncoupled swap while not playing repaints once by precise seek,
+     * because a parked scheduler presents nothing on its own.
+     */
+    private fun rendererSwapFollowUp(previous: VideoRenderer?, attached: VideoRenderer) {
+        val active = session ?: return
+        if (previous === attached) return
+        val stream = active.videoStream ?: return
+        val coupledElsewhere = active.videoDecoderOrigin == VideoDecoderOrigin.Renderer &&
+            active.coupledRenderer !== attached
+        if (coupledElsewhere) {
+            // A waiting video selection already carries the rebuild; queueing another for the
+            // same kind would supersede the caller's.
+            if (TrackKind.Video in pendingSelections) return
+            if (!active.source.seekable) {
+                warn(
+                    PlaybackWarning.CommandRefused(
+                        "attachRenderer",
+                        "the active video decoder is coupled to the replaced renderer and this " +
+                            "source cannot seek, so the picture cannot follow the new renderer " +
+                            "until the media is reopened",
+                    ),
+                )
+                return
+            }
+            queueSelection(TrackKind.Video, TrackId(stream.index), CompletableDeferred())
+            return
+        }
+        if (!playRequested && pendingSeek == null) {
+            queueSeek(SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise), null)
+        }
     }
 
     /** A renderer attached before anything was open, kept for the session that follows. */
@@ -1998,6 +2037,11 @@ internal class PlaybackCore(
                 videoStream = videoStream,
                 videoDecoder = if (videoStream == null) null else videoDecoder,
                 videoDecoderOrigin = if (videoStream == null) null else selectedVideoDecoder?.origin,
+                coupledRenderer = if (videoStream != null && selectedVideoDecoder?.origin == VideoDecoderOrigin.Renderer) {
+                    pendingRenderer
+                } else {
+                    null
+                },
                 videoQueue = videoQueue,
                 audioLane = audioLane,
                 audioQueues = audioQueues,
@@ -5901,6 +5945,8 @@ internal class PlaybackCore(
         val videoStream: PlayerStreamInfo?,
         val videoDecoder: VideoDecoder?,
         val videoDecoderOrigin: VideoDecoderOrigin?,
+        /** The renderer whose factory made [videoDecoder], null for a backend decoder. */
+        val coupledRenderer: VideoRenderer?,
         val videoQueue: PacketQueue?,
         audioLane: AudioLane?,
         /** One epoch-aligned compressed cache for every audio stream in the container. */

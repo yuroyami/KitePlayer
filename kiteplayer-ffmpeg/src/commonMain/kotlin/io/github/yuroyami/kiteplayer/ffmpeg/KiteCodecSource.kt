@@ -22,6 +22,7 @@ import io.github.yuroyami.kiteplayer.spi.MediaSourceFactory
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
+import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
@@ -85,7 +86,6 @@ public class KiteCodecSourceFactory : MediaSourceFactory {
 
 public class KiteCodecSource internal constructor(private val source: MediaSource) : PlayerMediaSource {
 
-    private val byIndex: Map<Int, StreamInfo> = source.streams.associateBy { it.index }
     private var reader: PacketReader? = null
 
     /**
@@ -106,7 +106,15 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
      */
     private val mapper = TimestampMapper(source.startTimeMicros)
 
-    override val streams: List<PlayerStreamInfo> = source.streams.mapNotNull { it.toPlayerStream(mapper) }
+    /** One canonical table for both the public track list and every reader selection. */
+    private val selectableStreams: List<Pair<StreamInfo, PlayerStreamInfo>> = source.streams.mapNotNull { stream ->
+        stream.toPlayerStream(mapper)?.let { exposed -> stream to exposed }
+    }
+
+    override val streams: List<PlayerStreamInfo> = selectableStreams.map { it.second }
+
+    /** Raw KiteCodec descriptors only for indices actually exposed through [streams]. */
+    private val byIndex: Map<Int, StreamInfo> = selectableStreams.associate { (raw, _) -> raw.index to raw }
 
     /** The length of the content, which is an interval and so carries no origin. */
     override val duration: Pts? = mapper.mapDuration(source.durationMicros)
@@ -148,6 +156,13 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
         val selected = indices.mapNotNull { byIndex[it] }
         require(selected.isNotEmpty()) { "no selectable stream among $indices" }
         reader = source.openPacketReader(selected)
+    }
+
+    override fun interrupt(): Boolean {
+        // KC-CANCEL: a single volatile write on the format context; KiteCodec documents this as
+        // the one member callable while another thread is blocked in a read or seek.
+        source.interrupt()
+        return true
     }
 
     override suspend fun readPacket(): PlayerPacket? {
@@ -812,7 +827,7 @@ public class KiteCodecVideoFrame internal constructor(
      * site drop the rotation silently, which is the exact bug this phase exists to remove.
      */
     override val rotationDegrees: Int,
-) : VideoFrame {
+) : VideoFrame, SoftwareReadableFrame {
 
     private val info = frame.info
 
@@ -860,10 +875,71 @@ public class KiteCodecVideoFrame internal constructor(
         return downloadedTwin ?: frame.downloadFromHardware().also { downloadedTwin = it }
     }
 
+    /**
+     * Tightly packed planes, copied out of native memory ONCE on first plane read (SALANKE N01).
+     * [KiteFrame.copyPlanesToByteArray] documents the layout: plane after plane, no padding, so
+     * every stride below is exactly the plane's width in bytes.
+     */
+    private val packedPlanes: ByteArray by lazy { readableFrame().copyPlanesToByteArray() }
+
+    private val planeLayout: List<PlaneSpec> by lazy {
+        planeLayoutFor(pixelFormat, info.width, info.height)
+    }
+
+    override val planeCount: Int get() = planeLayout.size
+
+    override fun planeStride(index: Int): Int = planeLayout[index].strideBytes
+
+    override fun planeHeight(index: Int): Int = planeLayout[index].height
+
+    override fun copyPlane(index: Int, into: ByteArray, offset: Int) {
+        val plane = planeLayout[index]
+        packedPlanes.copyInto(
+            destination = into,
+            destinationOffset = offset,
+            startIndex = plane.offset,
+            endIndex = plane.offset + plane.strideBytes * plane.height,
+        )
+    }
+
     override fun close() {
         downloadedTwin?.close()
         downloadedTwin = null
         frame.close()
+    }
+}
+
+internal class PlaneSpec(val strideBytes: Int, val height: Int, val offset: Int)
+
+/**
+ * The tightly packed geometry of each modelled software format, matching FFmpeg's own
+ * `av_image_copy_to_buffer(align = 1)` layout that [KiteFrame.copyPlanesToByteArray] produces.
+ * Chroma dimensions use ceiling division, exactly as libavutil computes them for odd sizes.
+ */
+internal fun planeLayoutFor(format: PlayerPixelFormat, width: Int, height: Int): List<PlaneSpec> {
+    val chromaW = (width + 1) / 2
+    val chromaH = (height + 1) / 2
+    fun specs(vararg dims: Pair<Int, Int>): List<PlaneSpec> {
+        var offset = 0
+        return dims.map { (stride, planeHeight) ->
+            PlaneSpec(stride, planeHeight, offset).also { offset += stride * planeHeight }
+        }
+    }
+    return when (format) {
+        PlayerPixelFormat.Yuv420p -> specs(width to height, chromaW to chromaH, chromaW to chromaH)
+        PlayerPixelFormat.Yuv422p -> specs(width to height, chromaW to height, chromaW to height)
+        PlayerPixelFormat.Yuv444p -> specs(width to height, width to height, width to height)
+        PlayerPixelFormat.Yuv420p10le ->
+            specs(width * 2 to height, chromaW * 2 to chromaH, chromaW * 2 to chromaH)
+        PlayerPixelFormat.Yuv422p10le ->
+            specs(width * 2 to height, chromaW * 2 to height, chromaW * 2 to height)
+        PlayerPixelFormat.Nv12 -> specs(width to height, chromaW * 2 to chromaH)
+        PlayerPixelFormat.P010le -> specs(width * 2 to height, chromaW * 4 to chromaH)
+        PlayerPixelFormat.Rgba, PlayerPixelFormat.Bgra -> specs(width * 4 to height)
+        PlayerPixelFormat.Rgb24 -> specs(width * 3 to height)
+        PlayerPixelFormat.Opaque -> throw UnsupportedOperationException(
+            "an Opaque frame has no modelled plane layout; capture needs a format the engine models",
+        )
     }
 }
 

@@ -46,6 +46,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecSource : io.github.yur
 
     final fun audioDecoderFactories(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/AudioDecoderFactory> // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecSource.audioDecoderFactories|audioDecoderFactories(){}[0]
     final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecSource.close|close(){}[0]
+    final fun interrupt(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecSource.interrupt|interrupt(){}[0]
     final fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
     final fun videoDecoderFactories(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/VideoDecoderFactory> // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecSource.videoDecoderFactories|videoDecoderFactories(){}[0]
     final suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecSource.readPacket|readPacket(){}[0]
@@ -65,7 +66,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoDecoderFactory : 
     final suspend fun create(io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo, io.github.yuroyami.kiteplayer/HwdecPolicy): io.github.yuroyami.kiteplayer.spi/VideoDecoder? // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoDecoderFactory.create|create(io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo;io.github.yuroyami.kiteplayer.HwdecPolicy){}[0]
 }
 
-final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame : io.github.yuroyami.kiteplayer.spi/VideoFrame { // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame|null[0]
+final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame : io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame, io.github.yuroyami.kiteplayer.spi/VideoFrame { // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame|null[0]
     final val colorSpace // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.colorSpace|{}colorSpace[0]
         final fun <get-colorSpace>(): io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.colorSpace.<get-colorSpace>|<get-colorSpace>(){}[0]
     final val duration // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.duration|{}duration[0]
@@ -80,6 +81,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame : io.github
         final fun <get-hasPts>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.hasPts.<get-hasPts>|<get-hasPts>(){}[0]
     final val pixelFormat // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.pixelFormat|{}pixelFormat[0]
         final fun <get-pixelFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.pixelFormat.<get-pixelFormat>|<get-pixelFormat>(){}[0]
+    final val planeCount // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.planeCount|{}planeCount[0]
+        final fun <get-planeCount>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.planeCount.<get-planeCount>|<get-planeCount>(){}[0]
     final val pts // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.pts|{}pts[0]
         final fun <get-pts>(): io.github.yuroyami.kiteplayer/Pts // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.pts.<get-pts>|<get-pts>(){}[0]
     final val rotationDegrees // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.rotationDegrees|{}rotationDegrees[0]
@@ -88,6 +91,9 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame : io.github
         final fun <get-size>(): io.github.yuroyami.kiteplayer/VideoSize // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.size.<get-size>|<get-size>(){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.close|close(){}[0]
+    final fun copyPlane(kotlin/Int, kotlin/ByteArray, kotlin/Int) // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.copyPlane|copyPlane(kotlin.Int;kotlin.ByteArray;kotlin.Int){}[0]
+    final fun planeHeight(kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.planeHeight|planeHeight(kotlin.Int){}[0]
+    final fun planeStride(kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/KiteCodecVideoFrame.planeStride|planeStride(kotlin.Int){}[0]
 }
 
 final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]

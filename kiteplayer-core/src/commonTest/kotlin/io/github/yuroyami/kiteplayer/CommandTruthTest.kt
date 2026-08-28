@@ -342,8 +342,9 @@ class CommandTruthTest {
         assertEquals(1, made.size, "the open must build exactly one reader")
         val first = made.single()
 
-        // Any rebuild does it: a track switch, a decoder recovery, a loop, a queue coming back.
-        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Audio, null))
+        // Audio/subtitle now swap inside the live graph. Video still deliberately rebuilds, so use
+        // that lane to keep this test about reader ownership rather than obsolete track semantics.
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Video, null))
         harness.run(500.milliseconds)
 
         assertEquals(2, made.size, "the rebuild must ask the factory for its own reader")

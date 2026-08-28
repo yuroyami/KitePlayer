@@ -135,6 +135,8 @@ kotlin {
         }
         getByName("androidDeviceTest").dependencies {
             implementation(kotlin("test"))
+            // Same reason appleTest has it: the full-player device tests need a real output backend.
+            implementation(project(":kiteplayer-output"))
             implementation(libs.androidx.test.core)
             implementation(libs.androidx.test.runner)
             implementation(libs.androidx.test.ext.junit)

@@ -299,8 +299,17 @@ internal class ChannelMixer(
                 if (layout == null || targetLayout == null || layout == targetLayout) return null
                 return reorder(layout, targetLayout)
             }
-            if (targetChannels != 2 || layout == null) return null
-            return downmix(layout, sourceChannels, policy)
+            if (layout == null) return null
+            if (targetChannels == 2) return downmix(layout, sourceChannels, policy)
+            // The fold to a smaller surround target (SALANKE, SOL-P8 remainder): 7.1 into a 5.1
+            // device used to truncate the side surrounds away. A device that named no mask gets
+            // the conventional layout for its count, which is what Android reports by count.
+            if (targetChannels < sourceChannels) {
+                val resolved = targetLayout ?: MixLayout.forChannelCount(targetChannels) ?: return null
+                return fold(layout, resolved, policy)
+            }
+            // A wider target is an upmix, which this stage does not do: pass through, extras silent.
+            return null
         }
 
         /**
@@ -355,6 +364,9 @@ internal class ChannelMixer(
         private fun speakersOf(layout: MixLayout): List<Int> =
             (0 until 64).filter { bit -> (layout.mask shr bit) and 1L == 1L }
 
+        private const val FRONT_LEFT_BIT: Int = 0
+        private const val FRONT_RIGHT_BIT: Int = 1
+        private const val BACK_CENTER_BIT: Int = 8
         private const val BACK_LEFT_BIT: Int = 4
         private const val BACK_RIGHT_BIT: Int = 5
         private const val SIDE_LEFT_BIT: Int = 9
@@ -378,21 +390,78 @@ internal class ChannelMixer(
                     rows[sourceChannels + lfe] = 0f
                 }
             }
-            if (policy.normalize) {
-                // The largest row sum is the loudest a full-scale input can drive an output. Divide
-                // the WHOLE matrix by it, not each row by its own: scaling rows independently moves
-                // the balance between left and right, which is a worse defect than the level.
-                var peak = 0f
-                for (out in 0 until 2) {
-                    var sum = 0f
-                    for (channel in 0 until sourceChannels) sum += rows[out * sourceChannels + channel]
-                    if (sum > peak) peak = sum
+            if (policy.normalize) normalizeAgainstClipping(rows, 2, sourceChannels)
+            return rows
+        }
+
+        /**
+         * The largest row sum is the loudest a full-scale input can drive an output. Divide the
+         * WHOLE matrix by it, not each row by its own: scaling rows independently moves the
+         * balance between speakers, which is a worse defect than the level.
+         */
+        private fun normalizeAgainstClipping(rows: FloatArray, outChannels: Int, sourceChannels: Int) {
+            var peak = 0f
+            for (out in 0 until outChannels) {
+                var sum = 0f
+                for (channel in 0 until sourceChannels) sum += rows[out * sourceChannels + channel]
+                if (sum > peak) peak = sum
+            }
+            if (peak > 1f) {
+                val scale = 1f / peak
+                for (i in rows.indices) rows[i] *= scale
+            }
+        }
+
+        /**
+         * Folds a wider layout into a smaller surround one, by speaker and never by position.
+         *
+         * Each source channel lands in the target speaker of the same name, or its side/back
+         * equivalent when the name is absent, the same rule [reorder] uses. A back centre with no
+         * home of its own splits into the surround pair at -3 dB each, so 6.1 content is kept
+         * rather than dropped. An LFE with no target LFE follows [policy]: folded into the front
+         * pair at -3 dB when included, dropped when not. Anything still unplaced is dropped,
+         * because filling it would be upmixing.
+         */
+        private fun fold(
+            source: MixLayout,
+            target: MixLayout,
+            policy: io.github.yuroyami.kiteplayer.DownmixConfig,
+        ): FloatArray {
+            val sourceSpeakers = speakersOf(source)
+            val targetSpeakers = speakersOf(target)
+            val rows = FloatArray(target.channels * source.channels)
+            fun route(out: Int, sourceChannel: Int, gain: Float) {
+                rows[out * source.channels + sourceChannel] += gain
+            }
+            for (sourceChannel in sourceSpeakers.indices) {
+                val speaker = sourceSpeakers[sourceChannel]
+                var out = targetSpeakers.indexOf(speaker)
+                if (out < 0) out = targetSpeakers.indexOf(equivalentOf(speaker))
+                if (out >= 0) {
+                    route(out, sourceChannel, 1f)
+                    continue
                 }
-                if (peak > 1f) {
-                    val scale = 1f / peak
-                    for (i in rows.indices) rows[i] *= scale
+                if (speaker == BACK_CENTER_BIT) {
+                    val left = targetSpeakers.indexOf(BACK_LEFT_BIT)
+                        .takeIf { it >= 0 } ?: targetSpeakers.indexOf(SIDE_LEFT_BIT)
+                    val right = targetSpeakers.indexOf(BACK_RIGHT_BIT)
+                        .takeIf { it >= 0 } ?: targetSpeakers.indexOf(SIDE_RIGHT_BIT)
+                    if (left >= 0 && right >= 0) {
+                        route(left, sourceChannel, MINUS_3_DB)
+                        route(right, sourceChannel, MINUS_3_DB)
+                        continue
+                    }
+                }
+                if (speaker == LFE_BIT && policy.includeLfe) {
+                    val left = targetSpeakers.indexOf(FRONT_LEFT_BIT)
+                    val right = targetSpeakers.indexOf(FRONT_RIGHT_BIT)
+                    if (left >= 0 && right >= 0) {
+                        route(left, sourceChannel, MINUS_3_DB)
+                        route(right, sourceChannel, MINUS_3_DB)
+                    }
                 }
             }
+            if (policy.normalize) normalizeAgainstClipping(rows, target.channels, source.channels)
             return rows
         }
 

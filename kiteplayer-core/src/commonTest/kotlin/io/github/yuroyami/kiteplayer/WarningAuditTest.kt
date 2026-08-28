@@ -30,6 +30,7 @@ class WarningAuditTest {
         PlaybackWarning.StartupIncomplete("x"),
         PlaybackWarning.StartPositionIgnored(kotlin.time.Duration.ZERO, "x"),
         PlaybackWarning.PathologicalInterleaving(TrackId(0), 1),
+        PlaybackWarning.AudioDeviceUnderrun("x"),
         PlaybackWarning.NoRenderSurface("x"),
         PlaybackWarning.OptionsUnused(listOf("x")),
         PlaybackWarning.CommandRefused("setSpeed", "x"),
@@ -48,7 +49,12 @@ class WarningAuditTest {
             "PlaybackCore's stats pass, when late drops in the last second cross the threshold",
         )
         is PlaybackWarning.AudioDeviceChanged -> listOf(
-            "PlaybackCore's sink-event collection, on AudioSinkEvent.DeviceLost and DeviceChanged",
+            "PlaybackCore's sink-event collection, on AudioSinkEvent.DeviceLost and DeviceChanged, " +
+                "and on FormatChangeRequested naming the request (SALANKE N11)",
+        )
+        is PlaybackWarning.AudioDeviceUnderrun -> listOf(
+            "PlaybackCore's sink-event collection, on AudioSinkEvent.Underrun, once per session " +
+                "(SALANKE N11; the feed used to be read and dropped)",
         )
         is PlaybackWarning.AudioUnderrun -> listOf(
             "PlaybackCore's stats pass, when the sink's underrun total moves",

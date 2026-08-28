@@ -82,9 +82,10 @@ public interface AudioSink : AutoCloseable {
      *
      * **What the engine does with this today, per event, so a sink author is not guessing.** It
      * collects the feed on the session lane. `DeviceLost` and `DeviceChanged` become a
-     * `PlaybackWarning.AudioDeviceChanged`. `Underrun` and `FormatChangeRequested` are read and
-     * dropped. Nothing here rebuilds a sink or recovers a device yet: publish honestly, and expect a
-     * warning rather than a repair.
+     * `PlaybackWarning.AudioDeviceChanged`. `Underrun` becomes an `AudioDeviceUnderrun` warning,
+     * once per session. `FormatChangeRequested` becomes an `AudioDeviceChanged` warning naming the
+     * request. Nothing here rebuilds a sink or recovers a device yet: publish honestly, and expect
+     * a warning rather than a repair.
      */
     public val events: Flow<AudioSinkEvent>
 }
@@ -178,7 +179,7 @@ public interface AudioSinkBuffer {
 }
 
 public sealed interface AudioSinkEvent {
-    /** The device ran dry. The engine currently ignores this; it does not count or rebuffer on it. */
+    /** The device ran dry. The engine warns (`AudioDeviceUnderrun`), once per session; it does not rebuffer on it. */
     public data class Underrun(val detail: String) : AudioSinkEvent
 
     /** The device disappeared: unplugged, taken by another application, session interrupted. */
@@ -190,7 +191,8 @@ public sealed interface AudioSinkEvent {
     /**
      * The device wants a different format than the one negotiated.
      *
-     * The engine currently ignores this. When it does act it will recreate the sink rather than
+     * The engine warns (`AudioDeviceChanged`, naming the request) and keeps the sink: it cannot
+     * renegotiate a device yet (SOL-A6). When it does act it will recreate the sink rather than
      * reconfigure in place, because in-place reconfiguration is where every player's device-change
      * bugs live.
      */

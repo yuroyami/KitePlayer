@@ -19461,3 +19461,124 @@ sweep can tell work from weather without re-reading nine lines to find out.
 
 Doc-only pass. Gate: the split checker and both counts; 60 open, KitePlayer 40 to 38, owner-gated
 5 to 3.
+
+### 14.167 Two mechanisms get their register entries, 2026-08-26
+
+Two codes shipped in the 0.0.19 track-switch surge and appeared only in code comments and in
+HANDOFF.md, in neither register file. That is the RULE ONE failure this file's own index warns
+about, caught this time by the SALANKE verification pass (SALANKE_SUPREME.md, Tier 0 item 4).
+These entries are the fix. Both mechanisms are DONE and tested; nothing here is open.
+
+**KP-SEEKPRE, seek preemption (owner report 2026-08-26).** A running seek drains the command
+mailbox from inside its own long waits and abandons the landing when a NEWER seek is waiting.
+A scrub is many requests in quick succession, and digesting each one fully made the player run
+seconds behind the finger on slow hardware, on both phones. mpv answers a new seek by abandoning
+the one in flight; this is that rule. The abandoned request resolves as Superseded, never
+Rejected, and every reply still completes exactly once. Anchors: `seekSuperseded()` and its
+KDoc in PlaybackCore.kt, the three KP-SEEKPRE comment sites in runSeek and awaitLanding, and
+the SeekMachineTest preemption cases.
+
+**KP-PLAYACK, the honest Buffering on play (owner report 2026-08-25).** Reverses the older
+"never declare Buffering from the restart handler" rule. A play against a pipeline that cannot
+supply it yet IS Buffering by that state's own definition; leaving Paused standing made every
+tap after a seek look dropped on a slow source, because the restart honoured the play seconds
+later and nothing ever said a wait was happening. Entered only from Paused with playRequested
+true, so the paused-seek rule in runSeek and the open's own states are untouched, and
+handleBuffering still owns the during-playback entry and its rebuffer count. Anchor: the
+KP-PLAYACK comment in handlePlaybackRestart.
+
+Doc-only entry; no code changed. The 0.0.19 surge these belong to is still uncommitted, so this
+entry rides the same commit when it lands, which is what RULE ONE asks for.
+
+### 14.168 KC-CANCEL grows its seam, and two SALANKE rows close with it, 2026-08-27
+
+The row said "a blocking FFmpeg call cannot be cancelled; no interrupt callback", and that
+sentence is no longer true. Every input open, path or custom AVIO, now installs an interrupt
+callback whose opaque is a plain per-open int cell: inside the io bridge for custom opens, its
+own allocation freed by the paired close for path opens. `MediaSource.interrupt()` sets the cell
+from any thread, which is the ONE member with that permission, and `AVERROR_EXIT` surfaces as
+the new typed `FFmpegError.Interrupted`.
+
+The finding that shaped the implementation: FFmpeg itself polls the seam ONLY inside
+avformat_find_stream_info and the URL protocol retry loop. A fully buffered read never sees it,
+and a custom AVIO never sees it at all. So the fail-fast half lives in KiteCodec's own read and
+seek entry helpers, and the mid-flight half for custom sources lives in the two AVIO bridge
+callbacks, which is exactly where a network stall spins. Contract test on jvm and native: read,
+interrupt, next read fails typed, seek fails typed, close stays legal.
+
+KitePlayer consumes it twice. A container seek now runs as a child on the demux lane under
+SEEK_NATIVE_DEADLINE; on expiry the source is interrupted, the call gets a grace period, and the
+session fails as SourceUnavailable with every waiting seek answered, instead of the actor
+freezing behind one wedged scan (SALANKE S05's player half, and the T1-10 deferral repaid). And
+releaseSession interrupts the source before its quiesce and joins, so a stop against a wedged
+read completes instead of hanging (SALANKE S17). The mutation check on that second consumer did
+not fail a test, it hung the whole suite, which is the exact failure mode the guard removes.
+
+New public API both repos: KiteCodec `MediaSource.interrupt()` plus `FFmpegError.Interrupted`
+(apiDump moved, wasm binding regenerated through the mirror check), KitePlayer
+`PlayerMediaSource.interrupt(): Boolean = false` with the KiteCodec override answering true.
+Suites: KiteCodec 70 jvm, 147 macosArm64, 74 wasm; KitePlayer core 355, ffmpeg 61, output
+androidHostTest 127; both ABI gates green.
+
+### 14.169 The Sol missions land: live track switching, and the subtitle ghost convicted, 2026-08-26
+
+Two owner reports from the 2026-08-26 device session went to ChatGPT Sol 5.6 as HANDOFF.md
+Missions A and B. Both are implemented and host-proven. Independently re-verified against this
+tree on 2026-08-27: root cause re-derived from the pre-fix code, every fix mechanism read, and
+the suites re-run rather than trusted. SOL_AB_REPORT.md is Sol's own account; this entry is the
+register's.
+
+**Mission A, KP-SUBSWAP and its audio twin (owner report: "disable subtitles does nothing", and
+every track change visibly interrupted playback).** Container audio and subtitle changes no
+longer ride the rebuild that was built for video. At open the source selects the chosen video
+stream plus EVERY container audio and subtitle stream, and compressed packets route into a queue
+per track, so history at the presentation position already exists when a switch asks for it. A
+switch is an actor transaction against the running graph: prepare and epoch-align the target
+decoder, park only the audio decode and feed workers (a subtitle change parks nothing), sample
+the commit position again AFTER the park because preparation takes real wall time, swap the
+lane, close the retired decoder on its owner dispatcher. No reopen, no seek, no epoch change, no
+status entry, frames keep presenting, proven down to an unseekable source. A target whose cache
+cannot prove coverage at the commit position is a typed `TrackChange.Discarded` and the old
+track keeps playing. Video selection deliberately keeps the rebuild. Memory stays bounded: every
+queue counts against the byte budget, only selected queues gate readiness, inactive audio keeps
+at least the ready window and at most half the duration budget, inactive subtitles keep 30
+seconds, pruning runs on a 250 ms cadence, and a packet with no timestamp stops a trim instead
+of being guessed away. KiteCodec 0.1.4 grew the narrow `PacketReader.reselect` for sources that
+want live delivery changes; the engine-side seam was deleted days later by SALANKE Tier 0
+because the retained caches left it caller-less (SALANKE_LEDGER.md).
+
+**Mission B, the dense-subtitle command lag (owner report: pause, play and seek lagged on the
+dense Kaguya ASS file and not on its `-sn` remux; days were spent chasing it as a ghost).** The
+ghost was real and it was the actor. `handleSubtitles` drained the whole subtitle backlog inline
+in one pass, re-sorted the entire cue table after every packet, and ran a full prune scan per
+packet, with no mailbox probe anywhere, so a dense read-ahead backlog kept the single actor
+inside subtitle work while commands sat in the mailbox. The fix: 32-packet and 32-receive-batch
+budgets per pass; `actorWorkWaiting()` probes before any work and at every decoder boundary,
+moving waiting items into the held queues so drain order and exactly-once replies are untouched
+and `awaitWork` returns immediately while anything is held; an ordered append fast path with a
+stable linear merge only for reordered output; pruning once per pass and at most once per media
+second. The regression posts `pause()` from inside the scripted decoder's `send()`, which is a
+command arriving mid-drain with no thread races: 70,000 cues and 100 cues now show IDENTICAL
+command wait, one packet boundary at most, no pass over 32 packets, one keyed lookup per packet,
+zero cold merges. The old scripted harness was itself the 4.8-billion-comparison artifact and
+was corrected with the fix. Honest residuals, measurements to keep rather than open defects: one
+oversized decoded batch is still indivisible, and cue timing stays a linear scan over the pruned
+window (external tables are never pruned because nothing re-supplies them).
+
+Anchors: `handleSubtitles`, `insertCues`, `pruneCueHistory`, `actorWorkWaiting` and the
+`SUBTITLE_*` constants in PlaybackCore.kt; `inPlaceAudioChange` and the KP-SUBSWAP comment in
+`handleTrackChanges`; MissionBSubtitleRegressionTest, MissionATrackSwitchAcceptanceTest,
+MissionAAudioFastPathRiskTest. Suites re-run for this entry on 2026-08-27: core 355/355, ffmpeg
+61/61 against kitecodec 0.1.4 from Maven Local, both ABI gates green. Sol's own final audit
+caught four defects and all four are closed in the surge: a disabled audio path restarted by
+`play()`, a stale pre-park commit position, a double device start in one pass, and a Native
+reader close that could strand the cursor lease plus the adapter accepting a hidden raw stream
+index.
+
+Register effects: decision 14 in section 11 is superseded, SOL-P9 is reduced to its video half,
+and DEVICE-DAY's run sheet gains Part 5, the Kaguya acceptance run, the one thing still owed
+before these missions count as device-true. Sol's report is accurate for its date with three
+bullets since overtaken by SALANKE Tiers 0 to 2: the scripted seek model now pins S16 honestly
+instead of redelivering spanning cues, engine `reselectStreams` is gone, and the suite counts
+moved from 344 and 60 to 355 and 61. The 0.0.19 surge is still uncommitted; this entry rides
+the same commit, which is what RULE ONE asks for.

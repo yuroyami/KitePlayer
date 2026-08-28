@@ -25,6 +25,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -486,7 +487,7 @@ class PlaybackCoreTest {
     }
 
     @Test
-    fun `track rebuild after recovery stays backend software only`() = runTest {
+    fun `live audio track change after recovery stays backend software only`() = runTest {
         val script = MediaScript(durationUs = 4_000_000)
         val hardwareFrames = LeakLedger()
         val factory = RecordingVideoDecoderFactory { _, _ ->
@@ -506,8 +507,8 @@ class PlaybackCoreTest {
         harness.core.selectTrack(TrackKind.Audio, null)
         harness.run(200.milliseconds)
 
-        assertEquals(3, harness.backend.openCalls)
-        assertEquals(1, factory.createCount, "a post-recovery rebuild reselected renderer hardware")
+        assertEquals(2, harness.backend.openCalls, "the live audio change reopened the recovered graph")
+        assertEquals(1, factory.createCount, "a live audio change reselected renderer hardware")
         assertEquals(listOf<HwdecPolicy>(HwdecPolicy.Off), harness.session.videoDecoderPolicies)
         assertEquals(HwdecStatus.Software, harness.core.stats.value.hardwareDecode)
         assertNull(harness.core.snapshots.value.tracks.selectedAudio)
@@ -795,6 +796,48 @@ class PlaybackCoreTest {
             harness.renderer.count > presentedBefore,
             "the open after a seek presented no frame at all: the new session decoded into a " +
                 "schedule still at the initial generation, so every frame was discarded as stale",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun `a play issued after a paused seek reports Buffering while the pipeline refills`() = runTest {
+        // A slow source: every packet read costs 10ms, so the queues a seek flushed refill over
+        // most of a virtual second instead of instantly, which is what a phone reading a long-GOP
+        // file looks like (owner report 2026-08-25, iPhone XS). Slow enough that the refill window
+        // is real, fast enough that steady playback holds once it starts.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 120_000_000, readDelayUs = 10_000),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(400.milliseconds)
+        harness.core.pause()
+        harness.run(100.milliseconds)
+
+        // Pause, drag the bar, then tap play while the flushed pipeline is still refilling. The
+        // status must acknowledge the intent at once: Buffering is by its own definition "the user
+        // asked for playback and the engine cannot supply it", and a silent Paused here is what
+        // made every tap on the device look ignored.
+        harness.core.seek(Pts(2_000_000), SeekMode.Precise)
+        harness.core.play()
+        // One actor pass: the acknowledgment is level-triggered in the restart handler, not a
+        // property of the play command itself. 50ms is far below the seconds the refill takes.
+        harness.run(50.milliseconds)
+        val acknowledged = harness.core.snapshots.value.status
+        assertTrue(
+            acknowledged == PlaybackStatus.Buffering || acknowledged == PlaybackStatus.Playing,
+            "a play against a refilling pipeline reported $acknowledged: the intent was accepted " +
+                "but nothing visible changed, so the caller cannot tell the tap from a dropped one",
+        )
+
+        // Level-triggered as before: the restart honours the play the moment the streams are ready.
+        harness.run(10.seconds)
+        assertEquals(
+            PlaybackStatus.Playing,
+            harness.core.snapshots.value.status,
+            "the play issued during the refill was never honoured",
         )
         harness.close()
     }
@@ -1109,13 +1152,17 @@ class PlaybackCoreTest {
     }
 
     @Test
-    fun `selectTrack is refused on a source that cannot seek and reopens one that can`() = runTest {
+    fun `audio deselection stays live on a source that cannot seek`() = runTest {
         val fixed = CoreHarness(this, script = MediaScript(seekable = false))
         fixed.openWithRenderer()
-        val refusal = assertFailsWith<UnsupportedOperationException> {
-            fixed.core.selectTrack(TrackKind.Audio, TrackId(1))
-        }
-        assertTrue(refusal.message?.contains("seek back") == true, "the refusal says why: ${refusal.message}")
+        val source = fixed.source
+
+        assertIs<TrackChange.Applied>(fixed.core.selectTrack(TrackKind.Audio, null))
+
+        assertNull(fixed.core.snapshots.value.tracks.selectedAudio)
+        assertEquals(1, fixed.backend.openCalls, "the live audio transaction reopened the source")
+        assertSame(source, fixed.source, "the live audio transaction replaced the source")
+        assertEquals(0, source.seeks, "the live audio transaction tried to reposition the source")
         fixed.close()
     }
 
@@ -1313,21 +1360,196 @@ class PlaybackCoreTest {
     }
 
     @Test
-    fun `selecting no audio track reopens the session without it`() = runTest {
+    fun `auto selection never picks a descriptive audio track over an ordinary sibling`() = runTest {
+        // Container order puts the described track first, which is how broadcast files arrive.
+        // The picker must still hand the ordinary track to a caller who asked for nothing special.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 2_000_000,
+                hasAudio = false,
+                additionalAudioTracks = listOf(
+                    ScriptedAudioTrack(index = 1, marker = 2f, language = "eng", isAccessibility = true),
+                    ScriptedAudioTrack(index = 3, marker = 3f, language = "eng"),
+                ),
+            ),
+            config = PlayerConfig(audio = AudioConfig(preferredLanguages = listOf("eng"))),
+        )
+        harness.openWithRenderer()
+        assertEquals(
+            TrackId(3),
+            harness.core.snapshots.value.tracks.selectedAudio,
+            "the described track was auto-picked over the ordinary one",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun `forced subtitles follow the audio language even with no language preference`() = runTest {
+        // A forced track is authored for the viewers of this audio: foreign lines inside audio
+        // they otherwise understand. That pairing must not hide behind preferredLanguages.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 2_000_000,
+                additionalSubtitleTracks = listOf(
+                    ScriptedSubtitleTrack(
+                        index = 3,
+                        cues = emptyList(),
+                        language = "eng",
+                        isForced = true,
+                    ),
+                ),
+            ),
+            config = PlayerConfig(),
+        )
+        harness.openWithRenderer()
+        assertEquals(
+            TrackId(3),
+            harness.core.snapshots.value.tracks.selectedSubtitle,
+            "the forced track matching the audio language was not auto-selected",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun `a forced track in an unrelated language is never auto-selected`() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 2_000_000,
+                additionalSubtitleTracks = listOf(
+                    ScriptedSubtitleTrack(
+                        index = 3,
+                        cues = emptyList(),
+                        language = "fra",
+                        isForced = true,
+                    ),
+                ),
+            ),
+            config = PlayerConfig(),
+        )
+        harness.openWithRenderer()
+        assertEquals(
+            null,
+            harness.core.snapshots.value.tracks.selectedSubtitle,
+            "a forced track for a different audience was auto-selected",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun `a device that refuses to open fails typed and rolls the whole build back`() = runTest {
+        // The one open-path fault the scripted device can inject, and until now nothing injected:
+        // the reverse-order rollback ledger in buildSession was a guard no test could fail.
+        val faults = FaultPlan().apply { sinkOpenFails = true }
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 2_000_000), faults = faults)
+
+        val failure = assertFailsWith<PlaybackException> { harness.openWithRenderer() }
+        val error = assertIs<PlaybackError.Internal>(failure.error)
+        assertTrue(error.detail.contains("audio output"), "wrong classification: ${error.detail}")
+        assertEquals(PlaybackStatus.Failed, harness.core.snapshots.value.status)
+        assertTrue(
+            harness.backend.sessions.single().closeCount > 0,
+            "the failed build did not close the backend session it had acquired",
+        )
+        assertEquals(0, harness.sink.openCount, "the refusing device counted an open it never made")
+
+        // The rollback's whole point: the same player instance recovers once the device does.
+        faults.sinkOpenFails = false
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(500.milliseconds)
+        assertTrue(
+            harness.core.snapshots.value.status != PlaybackStatus.Failed,
+            "the player did not survive its own rollback: ${harness.core.snapshots.value.error}",
+        )
+        assertTrue(harness.sink.framesPlayed > 0, "recovered playback never reached the device")
+
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+        assertEquals(0, harness.ledger.doubleCloseCount)
+    }
+
+    @Test
+    fun `an inactive switch cache that hoards the byte budget is truncated rather than wedging`() = runTest {
+        // Audio B is cached for instant switching but never selected. Its packets are large and
+        // carry no duration, FFmpeg's routine shape, so its retained history alone can hold the
+        // whole byte cap. Relief must be able to sacrifice the inactive lane, or the demuxer
+        // waits forever on a drain that cannot fire (SALANKE S26).
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 3_000_000,
+                additionalAudioTracks = listOf(
+                    ScriptedAudioTrack(
+                        index = 3,
+                        marker = 2f,
+                        language = "jpn",
+                        packetSizeBytes = 8 * 1024,
+                        packetDurationKnown = false,
+                    ),
+                ),
+            ),
+            config = PlayerConfig(
+                // readyDuration must be reachable under totalDuration, or readiness itself wedges.
+                buffer = BufferPolicy(
+                    readyDuration = 200.milliseconds,
+                    totalDuration = 400.milliseconds,
+                    totalBytes = 48 * 1024,
+                ),
+            ),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(25.seconds)
+
+        assertEquals(
+            PlaybackStatus.Ended,
+            harness.core.snapshots.value.status,
+            "the inactive cache held the byte budget and playback wedged: ${harness.core.debugState}",
+        )
+        // The budget was freed from the inactive lane, so the media being played was never cut:
+        // a PathologicalInterleaving warning here would mean playback paid for B's hoard.
+        val selectedCuts = harness.events
+            .filterIsInstance<PlayerEvent.Warning>()
+            .map { it.warning }
+            .filterIsInstance<PlaybackWarning.PathologicalInterleaving>()
+        assertEquals(
+            emptyList(),
+            selectedCuts,
+            "relief gapped the selected media instead of the inactive cache",
+        )
+        harness.close()
+        assertEquals(0, harness.ledger.liveCount)
+    }
+
+    @Test
+    fun `selecting no audio track stays inside the live session`() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 3_000_000))
         harness.openWithRenderer()
         harness.core.play()
         harness.run(500.milliseconds)
         val before = harness.core.position()
+        val originalSource = harness.source
+        val statusEntries = harness.core.statusHistory.size
+        val frames = harness.renderer!!.count
 
-        harness.core.selectTrack(TrackKind.Audio, null)
+        assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Audio, null))
         harness.run(500.milliseconds)
 
         assertEquals(
-            2,
+            1,
             harness.backend.openCalls,
-            "a track change reopens the source, because one selection is all a source allows",
+            "an audio change must not reopen the source",
         )
+        assertSame(originalSource, harness.source, "an audio change replaced the live source")
+        assertEquals(
+            emptyList(),
+            harness.core.statusHistory.drop(statusEntries),
+            "an audio change interrupted playback status",
+        )
+        assertTrue(harness.renderer!!.count > frames, "video presentation stopped during audio deselection")
         assertNull(
             harness.core.snapshots.value.tracks.selectedAudio,
             "a null track id means no track, not a track chosen for me",

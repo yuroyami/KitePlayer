@@ -350,6 +350,64 @@ class AudioTrackSinkTest {
     }
 
     @Test
+    fun `the accepted format names the channel layout the device was opened with`() = runBlocking {
+        // SALANKE R1 (register 17.19): the accepted format carried no channelLayoutMask, so the
+        // ChannelMixer's targetLayout was always null on Android and neither the equal-count
+        // reorder nor the surround fold could ever engage on the one platform with real 5.1 and
+        // 7.1 devices. The driver mapping for these counts existed all along.
+        suspend fun acceptedMask(channels: Int): Long? {
+            val s = sink(FakeAudioTrackDriver())
+            val format = s.open(AudioFormat(48_000, channels, SampleFormat.F32), FullBlockCallback())
+            val mask = format.channelLayoutMask
+            s.close()
+            return mask
+        }
+        assertEquals(0x4L, acceptedMask(1), "mono must name the front-centre layout")
+        assertEquals(0x3L, acceptedMask(2), "stereo must name FL FR")
+        assertEquals(0x3FL, acceptedMask(6), "six channels must name 5.1 with back surrounds")
+        assertEquals(0x63FL, acceptedMask(8), "eight channels must name 7.1")
+    }
+
+    @Test
+    fun `a pre-pause device timestamp cannot anchor the clock after resume`() = runBlocking {
+        // SALANKE S23. Legacy HALs answer the first post-resume getTimestamp with the CACHED
+        // pre-pause reading. Every admission check passes it (the monotone comparisons accept an
+        // unchanged reading), so a pause of N seconds mis-anchored the master clock by up to N.
+        val driver = FakeAudioTrackDriver()
+        val clock = FixedClock(1_000_000L)
+        val s = sink(driver, clock)
+        val callback = FullBlockCallback()
+        s.open(stereo48k, callback)
+        driver.timestampAnswer = DriverTimestamp(framePosition = 0, nanoTime = 500_000L)
+        s.start()
+        while (callback.invocations.get() < 1) Thread.sleep(1)
+        s.setPaused(true)
+
+        // The pause lasts until 2ms on the injected clock; the driver still parrots the old reading.
+        clock.now = 2_000_000L
+        s.setPaused(false)
+        val before = callback.invocations.get()
+        while (callback.invocations.get() < before + 2) Thread.sleep(1)
+        assertEquals(
+            "head",
+            s.observedDeadlineSource,
+            "a pre-pause timestamp anchored the resumed clock",
+        )
+
+        // A reading taken after the resume instant is trusted again.
+        driver.timestampAnswer = DriverTimestamp(framePosition = 0, nanoTime = 2_500_000L)
+        var tries = 0
+        while (s.observedDeadlineSource != "timestamp" && tries++ < 5_000) Thread.sleep(1)
+        assertEquals(
+            "timestamp",
+            s.observedDeadlineSource,
+            "a fresh post-resume timestamp must be accepted, or the clock never re-anchors",
+        )
+        s.stop()
+        s.close()
+    }
+
+    @Test
     fun `the deadline prefers a valid timestamp and uses the exact formula`() = runBlocking {
         val driver = FakeAudioTrackDriver()
         driver.timestampAnswer = DriverTimestamp(framePosition = 0, nanoTime = 1_000_000L)

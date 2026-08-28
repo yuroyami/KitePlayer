@@ -57,6 +57,73 @@ private class LayoutCase(val layout: MixLayout, val expected: List<Pair<Float, F
  */
 class ChannelMixerTest {
 
+    // ── The fold to a smaller surround target (SALANKE, SOL-P8 remainder). ──────────────────
+
+    @Test
+    fun `seven point one folds into five point one instead of truncating the sides away`() {
+        // 7.1: FL FR FC LFE BL BR SL SR into 5.1: FL FR FC LFE BL BR. Before the fold existed
+        // this was a truncating pass-through and the side surrounds vanished entirely.
+        val mixer = ChannelMixer(
+            source = format(channels = 8, mask = MixLayout.Surround71.mask),
+            target = format(channels = 6, mask = MixLayout.Surround51.mask),
+            policy = RAW,
+        )
+        assertTrue(!mixer.isPassThrough, "8 into 6 must mix, not truncate")
+
+        // An impulse on SL (channel 6) must land in BL (output 4), and nowhere else.
+        val input = FloatArray(8).also { it[6] = 1f }
+        val output = FloatArray(6)
+        mixer.mix(input, output, 1)
+        assertTrue(output[4] > 0.5f, "side-left content never reached the back-left speaker: ${output.toList()}")
+        for (channel in listOf(0, 1, 2, 3, 5)) {
+            assertTrue(abs(output[channel]) < TOLERANCE, "side-left leaked into channel $channel")
+        }
+
+        // Direct speakers pass straight through: an impulse on FC stays FC.
+        val centre = FloatArray(8).also { it[2] = 1f }
+        val centreOut = FloatArray(6)
+        mixer.mix(centre, centreOut, 1)
+        assertEquals(1f, centreOut[2], TOLERANCE, "the centre channel did not pass through the fold")
+    }
+
+    @Test
+    fun `normalize bounds a folded output exactly as it bounds the stereo downmix`() {
+        // The DEFAULT policy deliberately does not normalize (FFmpeg and mpv parity; the float
+        // pipeline cannot clip). When a caller asks for the bound, the fold must honour it the
+        // same way the stereo matrix does.
+        val mixer = ChannelMixer(
+            source = format(channels = 8, mask = MixLayout.Surround71.mask),
+            target = format(channels = 6, mask = MixLayout.Surround51.mask),
+            policy = DownmixConfig(normalize = true),
+        )
+        // Full scale on every input channel: no output sample may exceed full scale.
+        val input = FloatArray(8) { 1f }
+        val output = FloatArray(6)
+        mixer.mix(input, output, 1)
+        for (channel in 0 until 6) {
+            assertTrue(output[channel] <= 1f + TOLERANCE, "channel $channel clipped: ${output[channel]}")
+        }
+        // And the unnormalized default really does sum the merged surrounds, like FFmpeg.
+        val raw = ChannelMixer(
+            source = format(channels = 8, mask = MixLayout.Surround71.mask),
+            target = format(channels = 6, mask = MixLayout.Surround51.mask),
+        )
+        val rawOut = FloatArray(6)
+        raw.mix(input, rawOut, 1)
+        assertEquals(2f, rawOut[4], TOLERANCE, "the default fold must keep FFmpeg's unnormalized sum")
+    }
+
+    @Test
+    fun `a six channel device with no mask still receives the fold`() {
+        // Android reports 5.1 by count when no mask reaches the format; the conventional layout
+        // for six channels must carry the fold rather than fall back to truncation.
+        val mixer = ChannelMixer(
+            source = format(channels = 8, mask = MixLayout.Surround71.mask),
+            target = format(channels = 6, mask = null),
+        )
+        assertTrue(!mixer.isPassThrough, "an unmasked six channel device truncated the sides away")
+    }
+
     private val cases = listOf(
         // FC into both, at unity. A mono source is not quieter than a stereo one.
         LayoutCase(MixLayout.Mono, listOf(1f to 1f)),

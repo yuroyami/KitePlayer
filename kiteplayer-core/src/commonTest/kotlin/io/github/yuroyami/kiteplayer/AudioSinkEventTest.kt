@@ -44,23 +44,42 @@ class AudioSinkEventTest {
     }
 
     /**
-     * The other half of the contract, and the half a reader is most likely to get wrong: these two
-     * are collected and DROPPED. Nothing counts an underrun and nothing rebuilds a sink on a format
-     * request. When SOL-A6 changes that, this test is what tells you it changed.
+     * The other half of the contract, closed on 2026-08-27 (SALANKE N11): the sink was already
+     * telling the engine these things and the engine threw them away with `else -> Unit`. A
+     * device-reported underrun now warns once per session, typed; a format-change request is
+     * surfaced as a device warning; and neither fails the player or tears the sink down, because
+     * the engine still cannot renegotiate a device (that remainder is SOL-A6).
      */
     @Test
-    fun `underrun and format-change requests are read and dropped`() = runTest {
+    fun `underrun and format-change requests are surfaced, not dropped`() = runTest {
         val harness = CoreHarness(this, publishesSinkEvents = true)
         harness.openWithRenderer()
         harness.core.play()
         harness.run(200.milliseconds)
 
         harness.sink.publish(AudioSinkEvent.Underrun("ran dry"))
+        harness.run(50.milliseconds)
+        harness.sink.publish(AudioSinkEvent.Underrun("ran dry again"))
+        harness.run(50.milliseconds)
         harness.sink.publish(AudioSinkEvent.FormatChangeRequested("wants 48000 stereo"))
         harness.run(100.milliseconds)
 
-        assertEquals(emptyList(), harness.deviceWarnings(), "neither event produces a device warning")
-        assertTrue(harness.core.snapshots.value.status != PlaybackStatus.Failed, "and neither fails the player")
+        val deviceUnderruns = harness.events
+            .filterIsInstance<PlayerEvent.Warning>()
+            .map { it.warning }
+            .filterIsInstance<PlaybackWarning.AudioDeviceUnderrun>()
+            .map { it.detail }
+        assertEquals(
+            listOf("ran dry"),
+            deviceUnderruns,
+            "the first device-reported underrun warns once per session, repeats stay silent",
+        )
+        assertEquals(
+            listOf("the device requested a format change: wants 48000 stereo"),
+            harness.deviceWarnings(),
+            "a format-change request is a device condition the caller must hear about",
+        )
+        assertTrue(harness.core.snapshots.value.status != PlaybackStatus.Failed, "neither event fails the player")
         assertEquals(0, harness.sink.stopCount, "and the sink is not torn down for either")
         harness.close()
     }

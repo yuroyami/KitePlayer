@@ -78,6 +78,15 @@ public class AudioTrackSink internal constructor(
     /* Timestamp acceptance state (S1.c.4 step 6), written only by the writer thread. */
     @Volatile private var lastAcceptedTimestampFrames = -1L
     @Volatile private var lastAcceptedTimestampNanos = Long.MIN_VALUE
+
+    /**
+     * No device timestamp sampled BEFORE this instant may anchor the clock (SALANKE S23).
+     * Legacy HALs answer the first post-resume getTimestamp with the cached pre-pause reading,
+     * and every monotone admission check accepts an unchanged reading, so a pause of N seconds
+     * mis-anchored the master clock by up to N. Set at resume from the sink's own monotonic
+     * clock, which shares AudioTimestamp's System.nanoTime domain.
+     */
+    private var timestampFloorNanos = Long.MIN_VALUE
     @Volatile private var timestampSourceObserved: String = "none"
 
     /* Unsigned 32-bit playback-head extension, written under [lifecycle] or by the writer. */
@@ -120,7 +129,21 @@ public class AudioTrackSink internal constructor(
                     else -> 2
                 },
                 sampleFormat = SampleFormat.F32,
-            )
+            ).let { chosen ->
+                /* SALANKE R1: name the layout the device is being opened with, in the native
+                 * order the mixer keys on, or its targetLayout is null and neither the
+                 * equal-count reorder nor the surround fold can ever engage on Android. These
+                 * are the layouts behind AudioTrack's CHANNEL_OUT masks for the counts above. */
+                chosen.copy(
+                    channelLayoutMask = when (chosen.channels) {
+                        1 -> 0x4L /* FC */
+                        2 -> 0x3L /* FL FR */
+                        6 -> 0x3FL /* 5.1: FL FR FC LFE BL BR */
+                        8 -> 0x63FL /* 7.1: FL FR FC LFE BL BR SL SR */
+                        else -> null
+                    },
+                )
+            }
             val opened = driverFactory.open(format)
             /* Failed open releases the partially created driver and leaves no writer (step 7). */
             if (opened.bufferSizeInFrames <= 0) {
@@ -250,6 +273,7 @@ public class AudioTrackSink internal constructor(
             recoverIfFailed()
             synchronized(lifecycle) {
                 val d = driver ?: return true
+                timestampFloorNanos = clock.nanos()
                 d.play()
                 startWriterLocked()
             }
@@ -432,6 +456,10 @@ public class AudioTrackSink internal constructor(
         if (ts.framePosition < 0 || ts.framePosition > submittedFrames) return false
         if (ts.framePosition < lastAcceptedTimestampFrames) return false
         if (ts.nanoTime < lastAcceptedTimestampNanos) return false
+        /* A reading sampled before the resume instant is the cached pre-pause value, however
+         * plausible its numbers look (SALANKE S23). The head fallback answers until the HAL
+         * produces a post-resume reading. */
+        if (ts.nanoTime < timestampFloorNanos) return false
         lastAcceptedTimestampFrames = ts.framePosition
         lastAcceptedTimestampNanos = ts.nanoTime
         return true
@@ -460,6 +488,7 @@ public class AudioTrackSink internal constructor(
     private fun resetTimestampState() {
         lastAcceptedTimestampFrames = -1L
         lastAcceptedTimestampNanos = Long.MIN_VALUE
+        timestampFloorNanos = Long.MIN_VALUE
         tsState.lastRaw = 0L
         tsState.wrapBase = 0L
         synchronized(headLock) {

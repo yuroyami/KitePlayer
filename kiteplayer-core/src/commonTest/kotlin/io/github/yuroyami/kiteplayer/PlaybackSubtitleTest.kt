@@ -5,6 +5,8 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -48,6 +50,127 @@ class PlaybackSubtitleTest {
         harness.run(1.seconds)
         val last = renderer.overlays.filterNotNull().last()
         assertTrue(last.images.isEmpty(), "the cue did not clear after its end")
+        harness.close()
+    }
+
+    @Test
+    fun disablingTheSubtitleTrackClearsTheOverlayAndStaysOff() = runTest {
+        // The owner's report (2026-08-26): "disable subtitles does nothing" on a real file. The
+        // contract: deselecting the container subtitle track hides every cue NOW and keeps them
+        // hidden, and the selection answers Applied rather than refusing or vanishing.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 8_000_000,
+                subtitleCues = listOf(cue(500, 7_500, "persistent")),
+            ),
+            config = subtitleConfig(),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        val renderer = harness.renderer!!
+        assertTrue(
+            renderer.overlays.filterNotNull().any { it.images.isNotEmpty() },
+            "the cue never reached the renderer, so the disable below would prove nothing",
+        )
+
+        val change = harness.core.selectTrack(TrackKind.Subtitle, null)
+        assertIs<TrackChange.Applied>(change, "deselecting subtitles was not applied: $change")
+        harness.run(1.seconds)
+        assertNull(
+            harness.core.snapshots.value.tracks.selectedSubtitle,
+            "the snapshot still names a selected subtitle track after the disable",
+        )
+        val after = renderer.overlays.filterNotNull().lastOrNull()
+        assertTrue(
+            after == null || after.images.isEmpty(),
+            "the overlay still draws a cue after the subtitle track was deselected",
+        )
+
+        // And it STAYS off: a later span of playback must not resurrect the cue.
+        harness.run(2.seconds)
+        val later = renderer.overlays.filterNotNull().lastOrNull()
+        assertTrue(
+            later == null || later.images.isEmpty(),
+            "a cue came back after the disable: the rebuild reselected the subtitle stream",
+        )
+
+        // The switching half of the same report: reselecting the track brings the cues back.
+        val overlaysBefore = renderer.overlays.filterNotNull().count { it.images.isNotEmpty() }
+        val reselect = harness.core.selectTrack(
+            TrackKind.Subtitle,
+            harness.core.snapshots.value.tracks.all.first { it.kind == TrackKind.Subtitle }.id,
+        )
+        assertIs<TrackChange.Applied>(reselect, "reselecting the subtitle track was not applied: $reselect")
+        harness.run(2.seconds)
+        assertTrue(
+            renderer.overlays.filterNotNull().count { it.images.isNotEmpty() } > overlaysBefore,
+            "the reselected subtitle track never drew a cue again",
+        )
+        harness.close()
+    }
+
+    @Test
+    fun aContainerSubtitleChangeInterruptsNothing() = runTest {
+        // The owner's report (2026-08-26): disabling or switching a subtitle track visibly
+        // interrupted the video, because a subtitle-only change rode the full reopen built for
+        // video and audio switches. The contract here is the external-subtitle one extended to
+        // container tracks: the video never stops presenting, playback never leaves Playing,
+        // and no repositioning seek runs.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 20_000_000,
+                subtitleCues = listOf(cue(500, 19_500, "persistent")),
+            ),
+            config = subtitleConfig(),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(1.seconds)
+        val renderer = harness.renderer!!
+        assertTrue(
+            renderer.overlays.filterNotNull().any { it.images.isNotEmpty() },
+            "the cue never reached the renderer, so the change below would prove nothing",
+        )
+        val flushesBefore = harness.core.seekFlushCycles
+        val historyBefore = harness.core.statusHistory.size
+        val framesBefore = renderer.count
+
+        val disable = harness.core.selectTrack(TrackKind.Subtitle, null)
+        assertIs<TrackChange.Applied>(disable)
+        harness.run(1.seconds)
+
+        assertEquals(
+            emptyList(),
+            harness.core.statusHistory.drop(historyBefore),
+            "disabling subtitles moved the playback status: that is the reopen the owner saw as an interruption",
+        )
+        assertEquals(
+            flushesBefore,
+            harness.core.seekFlushCycles,
+            "disabling subtitles ran a repositioning seek",
+        )
+        assertTrue(
+            renderer.count > framesBefore + 20,
+            "video presentation stalled across the disable: ${renderer.count - framesBefore} frames in 2s",
+        )
+        assertTrue(
+            renderer.overlays.filterNotNull().last().images.isEmpty(),
+            "the overlay still draws after the in-place disable",
+        )
+
+        // Continuity for the switch leg is MissionATrackSwitchAcceptanceTest's job;
+        // this leg asserts correctness only.
+        val subtitleTrack = harness.core.snapshots.value.tracks.all.first { it.kind == TrackKind.Subtitle }.id
+        val reselect = harness.core.selectTrack(TrackKind.Subtitle, subtitleTrack)
+        assertIs<TrackChange.Applied>(reselect)
+        harness.run(2.seconds)
+        assertTrue(
+            renderer.overlays.filterNotNull().any { it.images.isNotEmpty() },
+            "the reselected subtitle track never drew a cue again",
+        )
         harness.close()
     }
 

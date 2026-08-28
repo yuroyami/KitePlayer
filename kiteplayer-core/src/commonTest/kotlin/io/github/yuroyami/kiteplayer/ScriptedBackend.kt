@@ -45,6 +45,63 @@ import kotlin.random.Random
  * The scripted pieces obey the same contracts a real backend obeys, and the assertions are about what
  * the engine did with them.
  */
+internal data class ScriptedAudioTrack(
+    val index: Int,
+    val marker: Float,
+    val language: String = "und",
+    val title: String? = null,
+    val sampleRate: Int? = null,
+    val channels: Int? = null,
+    val isDefault: Boolean = false,
+    /** False makes the scripted decoder factory refuse this specific track. */
+    val decoderAccepted: Boolean = true,
+    /** True marks the track as descriptive/accessibility audio (SALANKE S11). */
+    val isAccessibility: Boolean = false,
+    /** Optional early packet cutoff, used to model an alternate cache that stops growing. */
+    val packetEndUs: Long? = null,
+    /** Virtual preparation cost before this track's decoder is returned. */
+    val decoderCreateDelayUs: Long = 0,
+    /** Bytes per scripted packet, so one lane can dominate a byte budget the way a lossless track does. */
+    val packetSizeBytes: Int = 1024,
+    /** False models FFmpeg's routine zero duration: the packet carries a start and no duration. */
+    val packetDurationKnown: Boolean = true,
+) {
+    fun format(defaultSampleRate: Int, defaultChannels: Int): AudioFormat = AudioFormat(
+        sampleRate = sampleRate ?: defaultSampleRate,
+        channels = channels ?: defaultChannels,
+        sampleFormat = SampleFormat.F32,
+    )
+
+    init {
+        require(packetEndUs == null || packetEndUs >= 0) { "packetEndUs must not be negative" }
+        require(decoderCreateDelayUs >= 0) { "decoderCreateDelayUs must not be negative" }
+    }
+}
+
+internal data class ScriptedSubtitleTrack(
+    val index: Int,
+    val cues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+    val language: String = "und",
+    val title: String? = null,
+    val isDefault: Boolean = false,
+    /** True marks the track as forced subtitles (SALANKE S02). */
+    val isForced: Boolean = false,
+    /** False makes the scripted decoder factory refuse this specific track. */
+    val decoderAccepted: Boolean = true,
+) {
+    val cuesByStart: Map<Long, List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
+        cues.groupBy { it.startMicros }
+
+    val packets: List<ScriptedSubtitlePacket> = cuesByStart
+        .map { (startMicros, atStart) ->
+            ScriptedSubtitlePacket(
+                startMicros = startMicros,
+                endMicros = atStart.maxOf { it.endMicros },
+            )
+        }
+        .sortedBy { it.startMicros }
+}
+
 internal class MediaScript(
     val durationUs: Long = 4_000_000,
     val hasVideo: Boolean = true,
@@ -90,18 +147,121 @@ internal class MediaScript(
     /** Scripted subtitle cues. Non-empty adds a subtitle stream whose packets carry them. */
     val subtitleCues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> = emptyList(),
     val subtitleLanguage: String = "eng",
+    /** Counts the scripted decoder's work without putting timing assumptions into a virtual-time test. */
+    val subtitleProbe: ScriptedSubtitleProbe = ScriptedSubtitleProbe(),
+    /** Extra container audio tracks. Explicit indices make identity assertions unambiguous. */
+    val additionalAudioTracks: List<ScriptedAudioTrack> = emptyList(),
+    /** Extra container subtitle tracks. Explicit indices make identity assertions unambiguous. */
+    val additionalSubtitleTracks: List<ScriptedSubtitleTrack> = emptyList(),
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
-    val hasSubtitles: Boolean get() = subtitleCues.isNotEmpty()
     val subtitleIndex: Int = (if (hasVideo) 1 else 0) + (if (hasAudio) 1 else 0)
     val audioBufferDurationUs: Long = audioBufferFrames.toLong() * 1_000_000L / sampleRate
+
+    val audioTracks: List<ScriptedAudioTrack> = buildList {
+        if (hasAudio) {
+            add(
+                ScriptedAudioTrack(
+                    index = audioIndex,
+                    marker = 1f,
+                    language = "eng",
+                    title = "scripted audio A",
+                    sampleRate = sampleRate,
+                    channels = channels,
+                    isDefault = true,
+                ),
+            )
+        }
+        addAll(additionalAudioTracks)
+    }
+
+    val subtitleTracks: List<ScriptedSubtitleTrack> = buildList {
+        if (subtitleCues.isNotEmpty()) {
+            add(
+                ScriptedSubtitleTrack(
+                    index = subtitleIndex,
+                    cues = subtitleCues,
+                    language = subtitleLanguage,
+                    title = "scripted subtitle A",
+                    isDefault = true,
+                ),
+            )
+        }
+        addAll(additionalSubtitleTracks)
+    }
+
+    val hasSubtitles: Boolean get() = subtitleTracks.isNotEmpty()
+    val hasAnyAudio: Boolean get() = audioTracks.isNotEmpty()
+
+    /**
+     * One container packet per subtitle timestamp, built once.
+     *
+     * The old script emitted one packet per cue and then made the decoder scan every cue for the
+     * packet's timestamp. Besides turning a 70k-cue regression into billions of test-harness
+     * comparisons, two cues with the same start produced both cues twice. A real subtitle packet
+     * can decode to several cues, so grouping equal starts is both the faithful model and the
+     * constant-time lookup the workload needs.
+     */
+    internal val subtitleCuesByStart:
+        Map<Long, List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
+        subtitleTracks.firstOrNull { it.index == subtitleIndex }?.cuesByStart.orEmpty()
+
+    internal val subtitlePackets: List<ScriptedSubtitlePacket> =
+        subtitleTracks.firstOrNull { it.index == subtitleIndex }?.packets.orEmpty()
+
+    init {
+        val streamIndices = buildList {
+            if (hasVideo) add(videoIndex)
+            addAll(audioTracks.map { it.index })
+            addAll(subtitleTracks.map { it.index })
+        }
+        require(streamIndices.distinct().size == streamIndices.size) {
+            "scripted stream indices must be unique, were $streamIndices"
+        }
+        audioTracks.forEach { track ->
+            require(track.marker.isFinite() && track.marker > 0f) {
+                "audio marker for stream ${track.index} must be finite and positive"
+            }
+        }
+    }
 
     fun format(): AudioFormat = AudioFormat(
         sampleRate = sampleRate,
         channels = channels,
         sampleFormat = SampleFormat.F32,
     )
+}
+
+/** The timing carried by one scripted subtitle packet. Its cues live in [MediaScript.subtitleCuesByStart]. */
+internal data class ScriptedSubtitlePacket(
+    val startMicros: Long,
+    val endMicros: Long,
+)
+
+/**
+ * Operation-counting probe for subtitle tests.
+ *
+ * Virtual time cannot reveal CPU monopolisation. These counters instead expose the algorithmic
+ * work: every packet must perform exactly one keyed lookup, however many cues the whole file has.
+ * [onPacketSent] also lets a test enqueue a real player command from inside the actor's subtitle
+ * drain, reproducing a command that arrives concurrently on a device without thread races.
+ */
+internal class ScriptedSubtitleProbe {
+    var packetsSent: Int = 0
+        private set
+    var cueLookups: Int = 0
+        private set
+    var cuesReturned: Int = 0
+        private set
+    var onPacketSent: ((Int) -> Unit)? = null
+
+    fun recordLookup(cueCount: Int) {
+        cueLookups++
+        cuesReturned += cueCount
+        packetsSent++
+        onPacketSent?.invoke(packetsSent)
+    }
 }
 
 /**
@@ -153,6 +313,15 @@ internal class FaultPlan(
 
     /** True makes opening the sink fail. */
     var sinkOpenFails: Boolean = false
+
+    /** True wedges the next container seek like an uncancellable native scan (KC-CANCEL). */
+    var seekWedges: Boolean = false
+
+    /** Reads beyond this count wedge like an uncancellable native read. Null wedges nothing. */
+    var readWedgesAfter: Int? = null
+
+    /** False models a source whose interrupt() cannot help, the pre-KC-CANCEL world. */
+    var interruptSupported: Boolean = true
 
     /** True makes the sink's drain never finish, which the core must bound rather than wait out. */
     var drainHangs: Boolean = false
@@ -210,10 +379,17 @@ internal class ScriptedSubtitleDecoderFactory(
     private val script: MediaScript,
 ) : SubtitleDecoderFactory {
     override val name: String = "scripted-subtitle"
-    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder = ScriptedSubtitleDecoder(script)
+    override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? {
+        val track = script.subtitleTracks.firstOrNull { it.index == stream.index } ?: return null
+        if (!track.decoderAccepted) return null
+        return ScriptedSubtitleDecoder(track, script.subtitleProbe)
+    }
 }
 
-internal class ScriptedSubtitleDecoder(private val script: MediaScript) : SubtitleDecoder {
+internal class ScriptedSubtitleDecoder(
+    private val track: ScriptedSubtitleTrack,
+    private val probe: ScriptedSubtitleProbe,
+) : SubtitleDecoder {
     private val pending = ArrayDeque<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>()
     var closed: Boolean = false
         private set
@@ -221,7 +397,9 @@ internal class ScriptedSubtitleDecoder(private val script: MediaScript) : Subtit
     override suspend fun send(packet: PlayerPacket?): Boolean {
         if (packet == null) return true
         val pts = packet.pts?.micros ?: return true
-        script.subtitleCues.filterTo(pending) { it.startMicros == pts }
+        val cues = track.cuesByStart[pts].orEmpty()
+        pending.addAll(cues)
+        probe.recordLookup(cues.size)
         return true
     }
 
@@ -344,8 +522,15 @@ internal class ScriptedSession(
             ),
         )
 
+    /** Every audio decoder handed to the core, retained only as a lifecycle probe for tests. */
+    val audioDecoderInstances: MutableList<ScriptedAudioDecoder> = mutableListOf()
+
     override val audioDecoders: List<AudioDecoderFactory> =
-        listOf(ScriptedAudioDecoderFactory(script, ledger, faults, trace))
+        listOf(
+            ScriptedAudioDecoderFactory(script, ledger, faults, trace) { decoder ->
+                audioDecoderInstances += decoder
+            },
+        )
 
     override val subtitleDecoders: List<SubtitleDecoderFactory> =
         if (script.hasSubtitles) listOf(ScriptedSubtitleDecoderFactory(script)) else emptyList()
@@ -389,27 +574,33 @@ internal class ScriptedSource(
                 ),
             )
         }
-        if (script.hasSubtitles) {
+        script.subtitleTracks.forEach { track ->
             add(
                 PlayerStreamInfo(
-                    index = script.subtitleIndex,
+                    index = track.index,
                     kind = TrackKind.Subtitle,
                     codec = "scripted-subtitle",
-                    language = script.subtitleLanguage,
+                    language = track.language,
+                    title = track.title,
+                    isDefault = track.isDefault,
+                    isForced = track.isForced,
                 ),
             )
         }
-        if (script.hasAudio) {
+        script.audioTracks.forEach { track ->
+            val format = track.format(script.sampleRate, script.channels)
             add(
                 PlayerStreamInfo(
-                    index = script.audioIndex,
+                    index = track.index,
                     kind = TrackKind.Audio,
                     codec = "scripted-audio",
-                    language = "eng",
-                    isDefault = true,
+                    language = track.language,
+                    title = track.title,
+                    isDefault = track.isDefault,
+                    isAccessibility = track.isAccessibility,
                     startTime = Pts.Zero,
-                    sampleRate = script.sampleRate,
-                    channels = script.channels,
+                    sampleRate = format.sampleRate,
+                    channels = format.channels,
                 ),
             )
         }
@@ -423,7 +614,16 @@ internal class ScriptedSource(
 
     private var selected: Set<Int> = emptySet()
     private var videoCursorUs = 0L
-    private var audioCursorUs = 0L
+    private val audioCursorsUs: MutableMap<Int, Long> =
+        script.audioTracks.associate { it.index to 0L }.toMutableMap()
+    private val subtitleCursors: MutableMap<Int, Int> =
+        script.subtitleTracks.associate { it.index to 0 }.toMutableMap()
+    private val subtitleSeekFloorsUs: MutableMap<Int, Long> =
+        script.subtitleTracks.associate { it.index to Long.MIN_VALUE }.toMutableMap()
+
+    /** Timestamp of the furthest packet event this one demux cursor has passed. */
+    var demuxFrontierUs: Long = 0L
+        private set
 
     var reads: Int = 0
         private set
@@ -432,6 +632,37 @@ internal class ScriptedSource(
     val seekTargets: MutableList<Long> = mutableListOf()
     var selectCalls: Int = 0
         private set
+    var interruptCalls: Int = 0
+        private set
+    private val interruptGate = kotlinx.coroutines.CompletableDeferred<Unit>()
+    private val wedgeReleased = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+    override fun interrupt(): Boolean {
+        interruptCalls++
+        if (!faults.interruptSupported) return false
+        interruptGate.complete(Unit)
+        return true
+    }
+
+    /** Lets a wedged call return NORMALLY, the way a slow-but-honest scan eventually finishes. */
+    fun releaseWedge() {
+        wedgeReleased.complete(Unit)
+    }
+
+    /**
+     * Models an uncancellable native call: suspends immune to cancellation until either the
+     * interrupt seam fires (the call then fails, a poisoned source) or [releaseWedge] lets it
+     * finish normally. Once released, later calls stop wedging.
+     */
+    private suspend fun wedge(what: String) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            while (!interruptGate.isCompleted && !wedgeReleased.isCompleted) {
+                kotlinx.coroutines.delay(10)
+            }
+        }
+        if (interruptGate.isCompleted) error("the scripted $what was interrupted")
+    }
+    val selectionHistory: MutableList<Set<Int>> = mutableListOf()
     var closed: Boolean = false
         private set
 
@@ -439,71 +670,128 @@ internal class ScriptedSource(
         if (faults.failSelectStreams) error("scripted selectStreams failure (interlude item I-03)")
         check(selectCalls == 0) { "streams must be selected before the first read" }
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
-        selected = indices
+        require(indices.all { wanted -> streams.any { it.index == wanted } }) {
+            "unknown scripted stream in $indices"
+        }
+        selected = indices.toSet()
+        selectionHistory += selected
         selectCalls++
     }
 
-    /** The next scripted cue to emit as a packet. Reset by seeks to redeliver from the landing. */
-    private var subtitleCursor: Int = 0
+    private data class SubtitleCandidate(
+        val track: ScriptedSubtitleTrack,
+        val packet: ScriptedSubtitlePacket,
+    )
+
+    /** Finds the earliest selected subtitle packet that has reached the interleaved A/V cursor. */
+    private fun subtitleCandidate(mediaCursorUs: Long): SubtitleCandidate? {
+        var best: SubtitleCandidate? = null
+        for (track in script.subtitleTracks) {
+            if (track.index !in selected) continue
+            var cursor = subtitleCursors.getValue(track.index)
+            val seekFloor = subtitleSeekFloorsUs.getValue(track.index)
+            // File order, like the real source: a packet interleaved before the seek landing is
+            // behind the demux cursor and is NOT redelivered, even when its cue still spans the
+            // landing. That missing cue is SALANKE S16, and this model must not paper over it.
+            while (
+                cursor < track.packets.size &&
+                track.packets[cursor].startMicros < seekFloor
+            ) {
+                cursor++
+            }
+            subtitleCursors[track.index] = cursor
+            val packet = track.packets.getOrNull(cursor) ?: continue
+            if (packet.startMicros > mediaCursorUs) continue
+            val current = best
+            if (current == null || packet.startMicros < current.packet.startMicros ||
+                packet.startMicros == current.packet.startMicros && track.index < current.track.index
+            ) {
+                best = SubtitleCandidate(track, packet)
+            }
+        }
+        return best
+    }
+
+    private fun audioDurationUs(track: ScriptedAudioTrack): Long =
+        script.audioBufferFrames.toLong() * 1_000_000L /
+            track.format(script.sampleRate, script.channels).sampleRate
+
+    private fun audioCandidate(): ScriptedAudioTrack? = script.audioTracks
+        .asSequence()
+        .filter { track ->
+            val trackEndUs = minOf(script.durationUs, track.packetEndUs ?: Long.MAX_VALUE)
+            track.index in selected && audioCursorsUs.getValue(track.index) < trackEndUs
+        }
+        .minWithOrNull(compareBy({ audioCursorsUs.getValue(it.index) }, { it.index }))
+
+    private fun packetRead(packet: FakePacket): FakePacket {
+        demuxFrontierUs = maxOf(demuxFrontierUs, packet.pts?.micros ?: demuxFrontierUs)
+        return packet
+    }
 
     override suspend fun readPacket(): PlayerPacket? {
         check(selectCalls > 0) { "selectStreams must be called before readPacket" }
         reads++
+        faults.readWedgesAfter?.let { limit ->
+            if (reads > limit && !wedgeReleased.isCompleted) wedge("read")
+        }
         if (faults.failRead(reads)) error("the scripted source failed on read $reads")
         if (script.readDelayUs > 0) delay(script.readDelayUs / 1_000)
-
-        // Subtitle packets interleave by start time, ahead of the picture like a real muxer.
-        if (script.hasSubtitles && script.subtitleIndex in selected && subtitleCursor < script.subtitleCues.size) {
-            val cue = script.subtitleCues[subtitleCursor]
-            val mediaCursor = minOf(
-                if (script.hasVideo) videoCursorUs else Long.MAX_VALUE,
-                if (script.hasAudio) audioCursorUs else Long.MAX_VALUE,
-            )
-            if (cue.startMicros <= mediaCursor) {
-                subtitleCursor++
-                return FakePacket(
-                    streamIndex = script.subtitleIndex,
-                    pts = Pts(cue.startMicros),
-                    duration = Pts(cue.endMicros - cue.startMicros),
-                    isKeyframe = true,
-                    ledger = ledger,
-                )
-            }
-        }
 
         val video = script.videoIndex.takeIf {
             script.hasVideo && it in selected && videoCursorUs < script.durationUs
         }
-        val audio = script.audioIndex.takeIf {
-            script.hasAudio && it in selected && audioCursorUs < script.durationUs
+        val audio = audioCandidate()
+        val mediaCursor = minOf(
+            if (video != null) videoCursorUs else Long.MAX_VALUE,
+            audio?.let { audioCursorsUs.getValue(it.index) } ?: Long.MAX_VALUE,
+        )
+        subtitleCandidate(mediaCursor)?.let { candidate ->
+            subtitleCursors[candidate.track.index] = subtitleCursors.getValue(candidate.track.index) + 1
+            return packetRead(
+                FakePacket(
+                    streamIndex = candidate.track.index,
+                    pts = Pts(candidate.packet.startMicros),
+                    duration = Pts(candidate.packet.endMicros - candidate.packet.startMicros),
+                    isKeyframe = true,
+                    ledger = ledger,
+                ),
+            )
         }
+
         val pickVideo = when {
             video == null -> false
             audio == null -> true
             script.badlyInterleaved -> true
-            else -> videoCursorUs <= audioCursorUs
+            else -> videoCursorUs <= audioCursorsUs.getValue(audio.index)
         }
         return when {
             pickVideo -> {
                 val pts = videoCursorUs
                 videoCursorUs += script.videoFrameDurationUs
-                FakePacket(
-                    streamIndex = script.videoIndex,
-                    pts = Pts(pts),
-                    duration = Pts(script.videoFrameDurationUs),
-                    isKeyframe = pts % script.keyframeIntervalUs == 0L,
-                    ledger = ledger,
+                packetRead(
+                    FakePacket(
+                        streamIndex = script.videoIndex,
+                        pts = Pts(pts),
+                        duration = Pts(script.videoFrameDurationUs),
+                        isKeyframe = pts % script.keyframeIntervalUs == 0L,
+                        ledger = ledger,
+                    ),
                 )
             }
             audio != null -> {
-                val pts = audioCursorUs
-                audioCursorUs += script.audioBufferDurationUs
-                FakePacket(
-                    streamIndex = script.audioIndex,
-                    pts = Pts(pts),
-                    duration = Pts(script.audioBufferDurationUs),
-                    isKeyframe = true,
-                    ledger = ledger,
+                val pts = audioCursorsUs.getValue(audio.index)
+                val durationUs = audioDurationUs(audio)
+                audioCursorsUs[audio.index] = pts + durationUs
+                packetRead(
+                    FakePacket(
+                        streamIndex = audio.index,
+                        pts = Pts(pts),
+                        duration = if (audio.packetDurationKnown) Pts(durationUs) else null,
+                        isKeyframe = true,
+                        sizeBytes = audio.packetSizeBytes,
+                        ledger = ledger,
+                    ),
                 )
             }
             else -> null
@@ -513,14 +801,23 @@ internal class ScriptedSource(
     override suspend fun seekToKeyframe(target: Pts): Pts? {
         check(selectCalls > 0) { "selectStreams must be called before seeking" }
         seeks++
+        if (faults.seekWedges && !wedgeReleased.isCompleted) wedge("seek")
         seekTargets += target.micros
         trace.record("source.seek")
         val aimed = (target.micros + script.seekOvershootUs).coerceIn(0L, script.durationUs)
         val landing = aimed / script.keyframeIntervalUs * script.keyframeIntervalUs
-        subtitleCursor = script.subtitleCues.indexOfFirst { it.startMicros >= landing }
-            .takeIf { it >= 0 } ?: script.subtitleCues.size
+        for (track in script.subtitleTracks) {
+            subtitleSeekFloorsUs[track.index] = landing
+            // Redelivery starts at the landing in FILE order, exactly like a backward
+            // avformat_seek_file: a packet whose start sits before the landing is never re-read,
+            // however long its cue lasts (SALANKE S16).
+            subtitleCursors[track.index] = track.packets.indexOfFirst {
+                it.startMicros >= landing
+            }.takeIf { it >= 0 } ?: track.packets.size
+        }
         videoCursorUs = landing
-        audioCursorUs = landing
+        script.audioTracks.forEach { audioCursorsUs[it.index] = landing }
+        demuxFrontierUs = landing
         // Like libavformat, this cursor does not report where it landed. The engine finds out from the
         // first decoded frame, which is also how it detects an overshoot.
         return null
@@ -647,17 +944,22 @@ private class ScriptedAudioDecoderFactory(
     private val ledger: LeakLedger,
     private val faults: FaultPlan,
     private val trace: ScriptTrace,
+    private val onCreate: (ScriptedAudioDecoder) -> Unit = {},
 ) : AudioDecoderFactory {
     override val name: String = "scripted audio"
     override suspend fun create(stream: PlayerStreamInfo): AudioDecoder? {
         if (stream.kind != TrackKind.Audio) return null
         if (faults.audioDecodersRefuse) return null
-        return ScriptedAudioDecoder(script, ledger, faults, trace)
+        val track = script.audioTracks.firstOrNull { it.index == stream.index } ?: return null
+        if (!track.decoderAccepted) return null
+        if (track.decoderCreateDelayUs > 0) delay(track.decoderCreateDelayUs / 1_000)
+        return ScriptedAudioDecoder(script, track, ledger, faults, trace).also(onCreate)
     }
 }
 
 internal class ScriptedAudioDecoder(
     private val script: MediaScript,
+    private val track: ScriptedAudioTrack,
     private val ledger: LeakLedger,
     private val faults: FaultPlan,
     private val trace: ScriptTrace = ScriptTrace(),
@@ -668,12 +970,14 @@ internal class ScriptedAudioDecoder(
     private var drained = false
     private var ending = false
 
-    override var outputFormat: AudioFormat = script.format()
+    override var outputFormat: AudioFormat = track.format(script.sampleRate, script.channels)
         private set
 
     override val isDrained: Boolean get() = drained
 
     var closed: Boolean = false
+        private set
+    var closeCount: Int = 0
         private set
 
     override suspend fun send(packet: PlayerPacket?): Boolean {
@@ -690,6 +994,7 @@ internal class ScriptedAudioDecoder(
                 format = outputFormat,
                 frameCount = script.audioBufferFrames,
                 generation = generation,
+                trackMarker = track.marker,
                 ledger = ledger,
             ),
         )
@@ -715,6 +1020,7 @@ internal class ScriptedAudioDecoder(
     }
 
     override fun close() {
+        closeCount++
         closed = true
         pending.forEach { it.close() }
         pending.clear()
@@ -740,11 +1046,12 @@ internal class ScriptedAudioBuffer(
     override val format: AudioFormat,
     override val frameCount: Int,
     override val generation: Generation,
+    private val trackMarker: Float = 1f,
     private val ledger: LeakLedger? = null,
 ) : AudioBuffer {
 
     private var isClosed = false
-    private val value: Float = epochSample(generation)
+    private val value: Float = trackSample(generation, trackMarker)
 
     init {
         ledger?.onOpen()
@@ -763,6 +1070,9 @@ internal class ScriptedAudioBuffer(
 /** The sample value one epoch's audio carries: magnitude names it, sign survives the gain stage. */
 internal fun epochSample(generation: Generation): Float =
     (generation.value + 1).toFloat() * if (generation.value % 2L == 0L) 1f else -1f
+
+/** Audio identity that retains the epoch sign while giving each track a distinct magnitude. */
+internal fun trackSample(generation: Generation, marker: Float): Float = epochSample(generation) * marker
 
 /** Which epochs a set of heard sample values could have come from, by sign alone. */
 internal fun epochSign(generation: Generation): Int = if (generation.value % 2L == 0L) 1 else -1
@@ -793,6 +1103,9 @@ internal class ScriptedSink(
     private var negotiated: AudioFormat? = null
     private var running = false
 
+    var openCount: Int = 0
+        private set
+    val openRequests: MutableList<AudioFormat> = mutableListOf()
     var startCount: Int = 0
         private set
     var stopCount: Int = 0
@@ -807,6 +1120,7 @@ internal class ScriptedSink(
         private set
     var silenceFrames: Long = 0
         private set
+    val isRunning: Boolean get() = running
 
     /** Every distinct sample value handed to the device, which names the epochs that were heard. */
     val audibleValues: MutableSet<Float> = mutableSetOf()
@@ -821,6 +1135,8 @@ internal class ScriptedSink(
 
     override suspend fun open(request: AudioFormat, render: AudioRenderCallback): AudioFormat {
         if (faults.sinkOpenFails) error("the scripted device refuses to open")
+        openCount++
+        openRequests += request
         val format = accepts ?: request
         this.render = render
         this.negotiated = format
@@ -961,6 +1277,9 @@ internal class ScriptedOutput(
     val sink: ScriptedSink,
     override val videoRenderer: VideoRendererFactory? = null,
 ) : OutputBackend {
+    /** Cue identities handed to the rasterizer, in publication order. */
+    val rasterizedCueTexts: MutableList<List<String>> = mutableListOf()
+
     override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
         override val name: String = "scripted"
         override suspend fun create(): AudioSink = sink
@@ -975,12 +1294,20 @@ internal class ScriptedOutput(
                 viewportHeight: Int,
                 fontScale: Float,
                 position: Float,
-            ): List<io.github.yuroyami.kiteplayer.spi.OverlayImage> = cues.map { cue ->
-                io.github.yuroyami.kiteplayer.spi.OverlayImage(
-                    x = 0,
-                    y = (viewportHeight * position).toInt() - 1,
-                    bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(1, 1, ByteArray(4)),
-                )
+            ): List<io.github.yuroyami.kiteplayer.spi.OverlayImage> {
+                rasterizedCueTexts += cues.map { cue ->
+                    when (cue) {
+                        is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue.plainText
+                        is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap -> "<bitmap>"
+                    }
+                }
+                return cues.map { cue ->
+                    io.github.yuroyami.kiteplayer.spi.OverlayImage(
+                        x = 0,
+                        y = (viewportHeight * position).toInt() - 1,
+                        bitmap = io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap(1, 1, ByteArray(4)),
+                    )
+                }
             }
         }
 }

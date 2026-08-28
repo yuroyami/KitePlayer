@@ -41,7 +41,14 @@ internal class PacketQueue(
     private val notEmpty = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val drained = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
-    private class Entry(val packet: PlayerPacket, val generation: Generation, val bytes: Int, val durationUs: Long)
+    private class Entry(
+        val packet: PlayerPacket,
+        val generation: Generation,
+        val bytes: Int,
+        val durationUs: Long,
+        val startUs: Long?,
+        val endUs: Long?,
+    )
 
     val count: Int get() = synchronized(lock) { items.size }
     val bytesBuffered: Long get() = synchronized(lock) { bytes }
@@ -69,8 +76,19 @@ internal class PacketQueue(
             if (closed || generation != this.generation) {
                 false
             } else {
-                val durationUs = packet.duration?.micros ?: 0L
-                items.addLast(Entry(packet, generation, packet.sizeBytes, durationUs))
+                val knownDurationUs = packet.duration?.micros
+                val durationUs = knownDurationUs ?: 0L
+                val startUs = packet.pts?.micros ?: packet.dts?.micros
+                items.addLast(
+                    Entry(
+                        packet = packet,
+                        generation = generation,
+                        bytes = packet.sizeBytes,
+                        durationUs = durationUs,
+                        startUs = startUs,
+                        endUs = startUs?.let { start -> knownDurationUs?.let { start + it } },
+                    ),
+                )
                 bytes += packet.sizeBytes
                 this.durationUs += durationUs
                 true
@@ -210,6 +228,49 @@ internal class PacketQueue(
         toClose.forEach { it.close() }
         return toClose.size
     }
+
+    /**
+     * Drops timestamped packets that finish at or before [cutoffUs] from the oldest end.
+     *
+     * This is for inactive audio/subtitle switch caches only. A decoder consuming the queue must
+     * never race it, and video must never use it: compressed video frames can reference packets
+     * before the cutoff. A packet with no timestamp at all stops the trim so a fully opaque packet
+     * is never guessed away. The caller owns the single-consumer guarantee by parking or selecting
+     * another lane.
+     *
+     * @param assumedDurationUs stands in for a missing duration: a packet with a start but no
+     *        duration is treated as ending at start plus this. FFmpeg leaves `AVPacket.duration`
+     *        at zero routinely, and without a stand-in one such packet would stop this trim
+     *        forever and let its lane grow until it owned the whole byte budget. Each caller
+     *        states a bound generous for its lane kind rather than sharing one guess.
+     */
+    fun dropBefore(cutoffUs: Long, assumedDurationUs: Long): Int {
+        val toClose = mutableListOf<PlayerPacket>()
+        synchronized(lock) {
+            while (items.isNotEmpty()) {
+                val entry = items.first()
+                val endUs = entry.endUs
+                    ?: entry.startUs?.let { start -> start + assumedDurationUs }
+                    ?: break
+                if (endUs > cutoffUs) break
+                items.removeFirst()
+                bytes -= entry.bytes
+                durationUs -= entry.durationUs
+                toClose += entry.packet
+            }
+        }
+        if (toClose.isNotEmpty()) drained.trySend(Unit)
+        toClose.forEach { it.close() }
+        return toClose.size
+    }
+
+    /** Oldest timestamp still retained, for validating a current-position switch cache. */
+    val firstTimestampUs: Long?
+        get() = synchronized(lock) { items.firstOrNull()?.startUs }
+
+    /** Newest packet end still retained, for validating a current-position switch cache. */
+    val lastTimestampUs: Long?
+        get() = synchronized(lock) { items.lastOrNull()?.endUs }
 
     fun close() {
         val toClose = synchronized(lock) {

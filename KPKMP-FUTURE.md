@@ -855,12 +855,14 @@ Decisions from the merged reviews, binding on this run:
     plan**: it is linked into KiteCodec and its version is reported, but no `swr_` function is
     called from any Kotlin or C in either repository, and no `SwrContext` exists for anyone to
     own. The library being present keeps the option open; nothing depends on taking it. What
-    remains of the old audio quality row is NOT the rate conversion, it is that `ChannelMixer`
-    folds only to stereo (17.19).
+    remains of the old audio quality row is NOT the rate conversion; the stereo-only fold it
+    used to name was closed on 2026-08-27 (17.19), leaving desktop stereo output and no upmix.
 13. SUPERSEDED 2026-08-19. Speed with audio open works. `TempoStage` does pitch preserving time
     stretch, `preservePitch` is public and published in the snapshot, and the tempo tail is part
     of the end of media gate.
-14. Track switching reopens seekable sources only (D32 gate) until B6.
+14. SUPERSEDED 2026-08-26. Audio and subtitle changes are live in-graph transactions on any
+    source, unseekable included (PAST 14.169). Only video selection still reopens, and the D32
+    seekable-only gate now applies to that video rebuild alone until B6.
 15. HDR and BT.2020 CL render approximately WITH a typed warning in Horizon A; the 1.0
     gate requires the managed path (B5), at which point approximate output becomes an
     explicit opt-in policy.
@@ -1164,11 +1166,12 @@ Performance (the open remainder):
   whoever takes it: SOL-P10 turns out to name a SwrContext that does not exist, so this row, not
   that one, is where the swresample adoption actually lands. Home: B4, pulled by S3 if audio work
   lands there first.
-- SOL-P9 [V] STILL OPEN, re-verified 2026-08-18: PlaybackCore still speaks of "handleTrackChanges
-  to finish its container rebuild", and refuses a track switch on an unseekable source because it
-  "cannot reopen it and seek back". Track changes reopen the whole backend session, which
-  reconnects network inputs and cannot serve live media. Home: rides 17.8; until then it stays the
-  documented limit.
+- SOL-P9 [V] REDUCED 2026-08-26 by the Sol A/B surge (PAST 14.169): audio and subtitle track
+  changes are now live transactions inside the running graph. No reopen, no seek, no epoch or
+  status change, proven down to an unseekable source (MissionATrackSwitchAcceptanceTest,
+  MissionAAudioFastPathRiskTest). Remainder: VIDEO selection still rebuilds the whole backend
+  session on purpose, so live and network media still cannot switch video tracks. Home: rides
+  17.8; until then the video half stays the documented limit.
 - SOL-P10 [V] QUESTIONED 2026-08-18, and the row may be MOOT as written. `swr_` and `SwrContext`
   appear NOWHERE in KiteCodec's eleven C sources; the only mentions in the repository are two audit
   shell scripts. There is no SwrContext for anyone to own persistently, because audio conversion is
@@ -2654,8 +2657,8 @@ locating each symbol by name, because every line number in both audit documents 
 | SOL-S7 | REDUCED 08-25: the claims are narrowed and PINNED, so the type no longer promises what no rasterizer does. What is left is the features themselves, each a real body of work: per-span size and outline, a shadow pass, `CueWrap`, and `fontFamily` on Apple and Android | [V] 08-25 | 17.11, here |
 | SOL-A6 | passthrough, offload, device selection, route recovery absent | [V] 08-19 | 17.11, here |
 | SOL-P3 | frame access copies twice and boxes its plane list | [V] 08-19 | 17.11, here |
-| SOL-P8 | REWRITTEN: the mixer folds ONLY to stereo; 8 into 6 is unmapped | [V] 08-19 | 17.19, here |
-| SOL-P9 | a track change reopens the whole session, so live media cannot | [V] 08-19 | 17.11, here |
+| SOL-P8 | REDUCED 08-27: the surround fold landed (8 into 6 by speaker name, ChannelMixerTest) and Android names its layout mask; the stale "5.1 outputs stereo" claim was never true (RC-1). Remainder: desktop output is stereo only, and no upmix | [V] 08-27 | 17.19, here |
+| SOL-P9 | REDUCED 08-26: audio and subtitle switches are live in-graph, even on an unseekable source (PAST 14.169). Remainder: video selection still rebuilds the session, so live media cannot switch video | [V] 08-27 | 17.11, here |
 | SOL-API4 | **ROADMAP, not a defect** (reclassified 08-25). Five stats fields declared and honestly KDoc'd as unbuilt: `droppedFramesDecode`, `audioLatency`, `containerBitrate`, `SyncMode.ExternalMaster`, `LateAndDecode`. Nothing lies; they are simply not written yet. This row is their ONLY record anywhere, which is why it is kept rather than closed | [V] 08-25 | 17.11, here |
 | SOL-API7 | **NEEDS-DESIGN**, re-rated 08-25 from S to L. The dangerous half is DONE: an unsupported pairing is a typed `UnsupportedFrameType`, not a `ClassCastException`. What is left is that the refusal arrives at the FIRST FRAME rather than at attach, and curing that needs a sealed hardware-surface model plus renderer capability negotiation. That is a design act (18.3 rule 6), not an edit, and it lands with the renderer SPI work the HDR notice wiring already requires | [V] 08-25 | 17.11, here |
 | SOL-C1 | 198 exported C symbols, measured two ways 08-24; the C-reduction itself is untouched | [V] 08-24 | 17.11, here |
@@ -2692,7 +2695,7 @@ locating each symbol by name, because every line number in both audit documents 
 
 | Row | Open item, in one line | Ver | Detail |
 |---|---|---|---|
-| KC-CANCEL | a blocking FFmpeg call cannot be cancelled; no interrupt callback | [V] 08-19 | 17.16, here |
+| KC-CANCEL | REDUCED 08-27: the interrupt seam LANDED on every backend (`MediaSource.interrupt()`, `AVERROR_EXIT` as typed `FFmpegError.Interrupted`, entry polls plus custom-AVIO polls, contract-tested jvm and native), and KitePlayer bounds container seeks and aborts wedged reads at teardown. Remainder: open() itself is not interruptible, a mid-playback stall still waits for the user, and 17.12 C-52 to C-54 stay its network twins | [V] 08-27 | 17.16, here |
 | KC-SPEC | output specs carry no colour, HDR, pixel aspect or exact layout | [V] 08-19 | 17.16, here |
 | KC-REMUX | a "lossless" remux drops tags, disposition, rotation and side data | [V] 08-19 | 17.16, here |
 | KC-AENC | the audio encoder validates and converts nothing | [V] 08-19 | 17.16, here |
@@ -3108,9 +3111,10 @@ PAR-6 (hardware AV1 cannot engage; needs the by-name decoder policy KC-CAPS also
 every platform the README advertises has at least one physical-device green run recorded.
 
 **Phase 3: DAILY-DRIVER. The holes a user hits in the first afternoon, all already documented:**
-SOL-P8 remainder (the mixer folds ONLY to stereo and CoreAudio is clamped to 2ch: on a 5.1
-system this player outputs stereo; the single most user-visible row in the register), SOL-P9 (a
-track change reopens the session, so live media cannot switch tracks), 17.17 box 10 (audio
+SOL-P8 remainder (REDUCED 08-27: the surround fold and the Android layout mask landed; what is
+left is stereo-only desktop output and no upmix; the old "5.1 outputs stereo" claim was wrong,
+see 17.19), SOL-P9 remainder (REDUCED 08-26: audio and subtitle switches are live in-graph;
+what is left is the video rebuild, so live media cannot switch VIDEO tracks), 17.17 box 10 (audio
 device loss only warns), box 7 (the subtitle lane is outside the EOF gate: a trailing cue can be
 cut), SOL-A6 (passthrough, offload, device selection, route recovery), KP-NET (HLS, real DASH
 ABR, cache, reconnect, resume: today it is a range request and a static prototype), the platform
@@ -3294,11 +3298,18 @@ One release blocker is left and it is the Web reader; everything else here is a 
   and says nothing. Size L. **The "untestable until a `wasmJsTest` source set exists" caveat this
   row carried is retired (PAST 14.143): the source set exists and the fake-module seam reaches this
   file.** Nothing about the five defects changed.
-- **KC-CANCEL (was P1-07).** A repo-wide grep for `interrupt_callback` returns zero hits. The only
-  cancellation is one `ensureActive()` per demux iteration, so a network open, read or seek blocks
-  for ever, and `Transcoder.transcode` never leaves the calling dispatcher. Size L, C ABI change on
-  every backend. **This is the same hole 17.12's amended D-4 reopened as C-52 to C-54, so the two
-  rows are one piece of work and should be scheduled once.**
+- **KC-CANCEL (was P1-07). REDUCED 2026-08-27; the seam is built, see PAST 14.168.** Every input
+  open now installs an interrupt callback backed by a per-open int cell, `MediaSource.interrupt()`
+  sets it from any thread, `AVERROR_EXIT` maps to the typed `FFmpegError.Interrupted`, and because
+  FFmpeg itself only polls inside find_stream_info and the URL protocol loop, the read and seek
+  entry helpers and BOTH custom-AVIO callbacks poll it too. KitePlayer consumes it twice: a
+  container seek is deadline-bounded and fails typed instead of holding the actor (SALANKE S05),
+  and teardown interrupts the source before its joins (SALANKE S17). What is LEFT: `open()` has no
+  handle to interrupt, a mid-playback stall still waits for user action rather than self-aborting,
+  `Transcoder.transcode` still never leaves the calling dispatcher, and 17.12's C-52 to C-54
+  remain the network-side twins to schedule with that remainder. One trap already written down for
+  whoever finishes it: FFmpeg's own HLS SAMPLE-AES and subtitle branches never copy the callback
+  into their child contexts.
 - **KC-SPEC (was P1-26).** `MediaSink.kt:77-101` carries codec, size, pixel format, frame rate,
   bitrate, keyframe interval and an untyped options map. Correction to the audit's wording: "cannot
   express" is too strong, because that map reaches `av_opt_set`, so a determined caller can set some
@@ -3498,13 +3509,18 @@ named it for decoder options. The same shape exists for encoders: `MediaSink.nat
 sets the bitrate from `spec.bitrateBps`, then applies `spec.options` immediately after, so
 `options["b"]` wins over the typed spec field. Same at `:225` for audio.
 
-**The mixer only ever folds to stereo, and the C already says so.** `ChannelMixer.kt:302` reads
-`if (targetChannels != 2 || layout == null) return null`. A 7.1 source going to a six speaker
-device therefore gets no matrix at all and falls through to a truncating pass through. This is not
-a hypothetical: `kite_rt_coreaudio.c:347` CLAMPS CoreAudio to 2 channels rather than 6 for exactly
-this reason, with the comment naming the row. **On a real 5.1 setup this player outputs stereo.**
-That is a user visible product limitation and it appears nowhere in any register. It is the true
-remainder of SOL-P8, and it is worth more than the two thirds of that row already closed.
+**The mixer used to fold only to stereo. CORRECTED 2026-08-27 (SALANKE RC-1), twice over.** The
+2026-08-19 reading of the CoreAudio clamp was wrong on the day it was written: `kite_rt_coreaudio.c`
+sets `KPRT_MAX_CHANNELS` to 6 and falls to 2 only ABOVE six, and it already read that way at the
+tree this section names as its verification anchor, because multichannel landed on 2026-08-17.
+The conclusion "on a real 5.1 setup this player outputs stereo" was never true: 5.1 to a 5.1
+device plays 5.1 on Apple and Android. What WAS true, `ChannelMixer` folding only to stereo so a
+7.1 source truncated its side surrounds into a 5.1 device, was fixed on 2026-08-27: `matrixFor`
+now folds any modelled wider layout into a smaller surround target by speaker name, with the
+side/back equivalence, a back-centre split, and the same normalize policy as the stereo path,
+pinned by `ChannelMixerTest`. The Android accepted format also names its layout mask now, so the
+fold and the equal-count reorder can actually engage there. What remains of SOL-P8: JVM desktop
+output is stereo only, and there is no upmix.
 
 **The generated Wasm binding and the file that actually compiles are two copies nothing compares.**
 The generator writes `native-libs/deps/wasm32/binding/KiteCodecWasm.kt` (gitignored); the tree
@@ -3580,7 +3596,8 @@ whether anything else is true.
 
 #### Second: the correctness rows that are actually left
 
-`KC-WEB-IO` first, because it is the last correctness release blocker. Then `KC-CANCEL`, and take it
+`KC-WEB-IO` first, because it is the last correctness release blocker. Then what is LEFT of
+`KC-CANCEL` (reduced 08-27: the seam itself landed), and take it
 together with 17.12's C-52 to C-54, which are the same hole seen from the network side; scheduling
 them twice is how you build the interrupt callback twice. Then `SOL-P8`'s real remainder, the
 stereo only mixer, because it is a user visible product limitation that the C already documents and
@@ -3811,11 +3828,30 @@ Only possible once armeabi-v7a is added to the build; if it is not built yet, st
 13. **Read KiteStats once at the end** and write the numbers down. That is the evidence the M phase
     is missing; it is not asking for a judgement, only for the numbers off a real device.
 
+#### Part 5, iPhone: the Sol A/B acceptance run (PAST 14.169)
+
+Needs the original dense Kaguya ASS file, its `ffmpeg -sn` remux, and Synkplay pinned to
+KitePlayer 0.0.19 from Maven Local. Build Release, never Debug; a Debug feel test measures the
+debugger, not the player. Keep KiteStats on for every step.
+
+14. **Dense against stripped, back to back.** Play the Kaguya file, scrub hard and mash pause/play
+    for a minute, then do the same on the remux. PASS: the two feel identical and every command
+    applies immediately on both. FAIL: any hesitation on the dense file only; capture the KiteStats
+    window around one delayed command. The packet drain is now bounded and host-proven fair, so
+    the next suspects are one oversized decoder batch or the cue-selector scan, not the drain.
+15. **Track cycles while the dense file plays.** Subtitle A, off, on, B; then audio A, B, off, on.
+    PASS: correct text and sound after every step, no picture hitch, no Buffering or Seeking
+    flash, presented frames keep climbing. FAIL: any reopen, stall, or wrong-language audio.
+16. **Repeat step 15 after a precise seek and while paused.** Same pass rule. If a live or
+    unseekable source is handy, run the audio cycle there too; the host proof covers it, glass
+    has not.
+
 #### What to send back
 
 For each numbered step: pass, fail, or not run, and one line of what you saw. Screenshots for steps
 7, 8 and 9. The KiteStats numbers from steps 1 and 13. That closes `DEVICE-DAY`, unblocks the
-`SOL-B5` ABI claim, and turns three years of "never measured" into measured.
+`SOL-B5` ABI claim, and turns three years of "never measured" into measured. Steps 14 to 16 are
+the device half of the Sol A/B missions; they close the acceptance run PAST 14.169 leaves open.
 
 ## 18. The skeleton, for any executor
 

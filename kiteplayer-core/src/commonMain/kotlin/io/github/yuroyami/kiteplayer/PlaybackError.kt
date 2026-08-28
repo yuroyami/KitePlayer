@@ -177,10 +177,22 @@ public sealed class PlaybackWarning {
      * Emitted from the stats tick on the RISING EDGE of the player-level underrun total, so a reopen
      * cannot silently re-baseline it, and [totalSoFar] is that whole-player total rather than this
      * session's. The same number is in `PlaybackStats.audioUnderruns`. Note the sink's own
-     * `AudioSinkEvent.Underrun` is a different path and is currently dropped unread.
+     * `AudioSinkEvent.Underrun` is a different path and surfaces as [AudioDeviceUnderrun].
      */
     public data class AudioUnderrun(val totalSoFar: Long) : PlaybackWarning() {
         override val message: String get() = "audio underrun, $totalSoFar so far"
+    }
+
+    /**
+     * The DEVICE reported that it ran dry, through the sink's own event feed.
+     *
+     * A different path from [AudioUnderrun]: that one is the engine's ring arithmetic on its
+     * stats tick, this one is the platform speaking for itself (SALANKE N11; the feed used to be
+     * read and dropped). Warned once per session, because a stuttering device would otherwise
+     * bury every other warning a caller is listening for.
+     */
+    public data class AudioDeviceUnderrun(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "the audio device reported an underrun: $detail"
     }
 
     /**

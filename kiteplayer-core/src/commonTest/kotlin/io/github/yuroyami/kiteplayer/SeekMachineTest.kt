@@ -176,6 +176,49 @@ class SeekMachineTest {
     }
 
     @Test
+    fun `a newer request aborts the refine in flight instead of waiting behind it`() = runTest {
+        // A slow source and long GOPs: the refine decode-forward costs whole virtual seconds,
+        // which is what a phone scrubbing a long-GOP encode looks like (owner report 2026-08-26,
+        // reproduced on an iPhone XS and a Redmi Note 8 alike). The second target sits exactly on
+        // a keyframe, so its own cost is small and the measured latency is the wait behind the
+        // FIRST seek's refine, which this test forbids.
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(
+                durationUs = 120_000_000,
+                readDelayUs = 10_000,
+                keyframeIntervalUs = 4_000_000,
+            ),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(400.milliseconds)
+
+        harness.core.seekLater(Pts(63_500_000), SeekMode.KeyframeThenRefine)
+        harness.run(200.milliseconds) // the first request is now inside its landing wait
+
+        val issuedAt = harness.scheduler.currentTime
+        harness.core.seekLater(Pts(20_000_000), SeekMode.KeyframeThenRefine)
+        var landedAfterMs: Long? = null
+        while (harness.scheduler.currentTime - issuedAt < 20_000) {
+            harness.run(100.milliseconds)
+            val landedNewest = harness.events.filterIsInstance<PlayerEvent.SeekCompleted>()
+                .any { it.landedAt.inWholeMicroseconds in 19_000_000..21_000_000 }
+            if (landedNewest) {
+                landedAfterMs = harness.scheduler.currentTime - issuedAt
+                break
+            }
+        }
+        assertNotNull(landedAfterMs, "the newest seek never landed at all")
+        assertTrue(
+            landedAfterMs < 2_000,
+            "the newest seek landed after ${landedAfterMs}ms: it waited behind the previous " +
+                "refine instead of aborting it, which is the queued-up scrubbing the owner reported",
+        )
+        harness.close()
+    }
+
+    @Test
     fun `relative requests add up while they wait`() = runTest {
         val harness = CoreHarness(this)
         harness.openWithRenderer()

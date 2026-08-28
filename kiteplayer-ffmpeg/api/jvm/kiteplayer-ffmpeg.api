@@ -24,6 +24,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSource : io/git
 	public fun getSeekable ()Z
 	public fun getStreams ()Ljava/util/List;
 	public fun getTimestampsMayJump ()Z
+	public fun interrupt ()Z
 	public fun readPacket (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun selectStreams (Ljava/util/Set;)V
@@ -45,8 +46,9 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoDecoderFac
 	public fun getName ()Ljava/lang/String;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoFrame : io/github/yuroyami/kiteplayer/spi/VideoFrame {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame, io/github/yuroyami/kiteplayer/spi/VideoFrame {
 	public fun close ()V
+	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public final fun getFrame ()Lio/github/yuroyami/kitecodec/Frame;
@@ -54,9 +56,12 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoFrame : io
 	public fun getHardwareSurface ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
 	public final fun getHasPts ()Z
 	public fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
+	public fun getPlaneCount ()I
 	public fun getPts-BBkgT00 ()J
 	public fun getRotationDegrees ()I
 	public fun getSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
+	public fun planeHeight (I)I
+	public fun planeStride (I)I
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter {

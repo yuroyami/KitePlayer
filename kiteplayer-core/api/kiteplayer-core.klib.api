@@ -309,20 +309,6 @@ final enum class io.github.yuroyami.kiteplayer/LatencyQuality : kotlin/Enum<io.g
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/LatencyQuality> // io.github.yuroyami.kiteplayer/LatencyQuality.values|values#static(){}[0]
 }
 
-final enum class io.github.yuroyami.kiteplayer/LogLevel : kotlin/Enum<io.github.yuroyami.kiteplayer/LogLevel> { // io.github.yuroyami.kiteplayer/LogLevel|null[0]
-    enum entry Debug // io.github.yuroyami.kiteplayer/LogLevel.Debug|null[0]
-    enum entry Error // io.github.yuroyami.kiteplayer/LogLevel.Error|null[0]
-    enum entry Info // io.github.yuroyami.kiteplayer/LogLevel.Info|null[0]
-    enum entry Trace // io.github.yuroyami.kiteplayer/LogLevel.Trace|null[0]
-    enum entry Warn // io.github.yuroyami.kiteplayer/LogLevel.Warn|null[0]
-
-    final val entries // io.github.yuroyami.kiteplayer/LogLevel.entries|#static{}entries[0]
-        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/LogLevel> // io.github.yuroyami.kiteplayer/LogLevel.entries.<get-entries>|<get-entries>#static(){}[0]
-
-    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/LogLevel // io.github.yuroyami.kiteplayer/LogLevel.valueOf|valueOf#static(kotlin.String){}[0]
-    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/LogLevel> // io.github.yuroyami.kiteplayer/LogLevel.values|values#static(){}[0]
-}
-
 final enum class io.github.yuroyami.kiteplayer/LoopMode : kotlin/Enum<io.github.yuroyami.kiteplayer/LoopMode> { // io.github.yuroyami.kiteplayer/LoopMode|null[0]
     enum entry All // io.github.yuroyami.kiteplayer/LoopMode.All|null[0]
     enum entry Off // io.github.yuroyami.kiteplayer/LoopMode.Off|null[0]
@@ -436,10 +422,6 @@ abstract fun interface io.github.yuroyami.kiteplayer.spi/SubtitleFileParser { //
 
 abstract fun interface io.github.yuroyami.kiteplayer/MediaIoResolver { // io.github.yuroyami.kiteplayer/MediaIoResolver|null[0]
     abstract suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIoResolver.resolve|resolve(kotlin.String){}[0]
-}
-
-abstract fun interface io.github.yuroyami.kiteplayer/PlayerLogger { // io.github.yuroyami.kiteplayer/PlayerLogger|null[0]
-    abstract fun log(io.github.yuroyami.kiteplayer/LogLevel, kotlin/String, kotlin/String, kotlin/Throwable?) // io.github.yuroyami.kiteplayer/PlayerLogger.log|log(io.github.yuroyami.kiteplayer.LogLevel;kotlin.String;kotlin.String;kotlin.Throwable?){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/AudioBuffer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/AudioBuffer|null[0]
@@ -556,6 +538,7 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
     abstract fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
     abstract suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.readPacket|readPacket(){}[0]
     abstract suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts){}[0]
+    open fun interrupt(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.interrupt|interrupt(){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/PlayerPacket : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/PlayerPacket|null[0]
@@ -765,6 +748,22 @@ sealed interface io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/RendererEvent.SurfaceLost.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/RendererEvent.SurfaceLost.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/RendererEvent.SurfaceLost.toString|toString(){}[0]
+    }
+
+    final class ToneMapEngaged : io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged|null[0]
+        constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+        final val streamIndex // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.streamIndex|{}streamIndex[0]
+            final fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]
+        final val transfer // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.transfer|{}transfer[0]
+            final fun <get-transfer>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.transfer.<get-transfer>|<get-transfer>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.copy|copy(kotlin.String;kotlin.Int){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.toString|toString(){}[0]
     }
 
     final class VsyncChanged : io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.yuroyami.kiteplayer.spi/RendererEvent.VsyncChanged|null[0]
@@ -1354,25 +1353,19 @@ final class io.github.yuroyami.kiteplayer.subtitle/StyledSpan { // io.github.yur
 }
 
 final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.kiteplayer/AudioConfig|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ...) // io.github.yuroyami.kiteplayer/AudioConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.time.Duration;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ...) // io.github.yuroyami.kiteplayer/AudioConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig){}[0]
 
-    final val assumedLatencyWhenUnreliable // io.github.yuroyami.kiteplayer/AudioConfig.assumedLatencyWhenUnreliable|{}assumedLatencyWhenUnreliable[0]
-        final fun <get-assumedLatencyWhenUnreliable>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/AudioConfig.assumedLatencyWhenUnreliable.<get-assumedLatencyWhenUnreliable>|<get-assumedLatencyWhenUnreliable>(){}[0]
     final val downmix // io.github.yuroyami.kiteplayer/AudioConfig.downmix|{}downmix[0]
         final fun <get-downmix>(): io.github.yuroyami.kiteplayer/DownmixConfig // io.github.yuroyami.kiteplayer/AudioConfig.downmix.<get-downmix>|<get-downmix>(){}[0]
     final val preferredLanguages // io.github.yuroyami.kiteplayer/AudioConfig.preferredLanguages|{}preferredLanguages[0]
         final fun <get-preferredLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/AudioConfig.preferredLanguages.<get-preferredLanguages>|<get-preferredLanguages>(){}[0]
     final val preservePitch // io.github.yuroyami.kiteplayer/AudioConfig.preservePitch|{}preservePitch[0]
         final fun <get-preservePitch>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.preservePitch.<get-preservePitch>|<get-preservePitch>(){}[0]
-    final val startDisabled // io.github.yuroyami.kiteplayer/AudioConfig.startDisabled|{}startDisabled[0]
-        final fun <get-startDisabled>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.startDisabled.<get-startDisabled>|<get-startDisabled>(){}[0]
 
     final fun component1(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/AudioConfig.component1|component1(){}[0]
     final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.component2|component2(){}[0]
-    final fun component3(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/AudioConfig.component3|component3(){}[0]
-    final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.component4|component4(){}[0]
-    final fun component5(): io.github.yuroyami.kiteplayer/DownmixConfig // io.github.yuroyami.kiteplayer/AudioConfig.component5|component5(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ...): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/AudioConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.time.Duration;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig){}[0]
+    final fun component3(): io.github.yuroyami.kiteplayer/DownmixConfig // io.github.yuroyami.kiteplayer/AudioConfig.component3|component3(){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ...): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/AudioConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/AudioConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/AudioConfig.toString|toString(){}[0]
@@ -1436,12 +1429,8 @@ final class io.github.yuroyami.kiteplayer/Backends { // io.github.yuroyami.kitep
 }
 
 final class io.github.yuroyami.kiteplayer/BufferPolicy { // io.github.yuroyami.kiteplayer/BufferPolicy|null[0]
-    constructor <init>(kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin/Long = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer/BufferPolicy.<init>|<init>(kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.Long;kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration){}[0]
+    constructor <init>(kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin/Long = ..., kotlin.time/Duration = ..., kotlin/Int = ...) // io.github.yuroyami.kiteplayer/BufferPolicy.<init>|<init>(kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.Long;kotlin.time.Duration;kotlin.Int){}[0]
 
-    final val liveBackBuffer // io.github.yuroyami.kiteplayer/BufferPolicy.liveBackBuffer|{}liveBackBuffer[0]
-        final fun <get-liveBackBuffer>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/BufferPolicy.liveBackBuffer.<get-liveBackBuffer>|<get-liveBackBuffer>(){}[0]
-    final val liveMaxLag // io.github.yuroyami.kiteplayer/BufferPolicy.liveMaxLag|{}liveMaxLag[0]
-        final fun <get-liveMaxLag>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/BufferPolicy.liveMaxLag.<get-liveMaxLag>|<get-liveMaxLag>(){}[0]
     final val readyDuration // io.github.yuroyami.kiteplayer/BufferPolicy.readyDuration|{}readyDuration[0]
         final fun <get-readyDuration>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/BufferPolicy.readyDuration.<get-readyDuration>|<get-readyDuration>(){}[0]
     final val readyPackets // io.github.yuroyami.kiteplayer/BufferPolicy.readyPackets|{}readyPackets[0]
@@ -1461,9 +1450,7 @@ final class io.github.yuroyami.kiteplayer/BufferPolicy { // io.github.yuroyami.k
     final fun component4(): kotlin/Long // io.github.yuroyami.kiteplayer/BufferPolicy.component4|component4(){}[0]
     final fun component5(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/BufferPolicy.component5|component5(){}[0]
     final fun component6(): kotlin/Int // io.github.yuroyami.kiteplayer/BufferPolicy.component6|component6(){}[0]
-    final fun component7(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/BufferPolicy.component7|component7(){}[0]
-    final fun component8(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/BufferPolicy.component8|component8(){}[0]
-    final fun copy(kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin/Long = ..., kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer/BufferPolicy // io.github.yuroyami.kiteplayer/BufferPolicy.copy|copy(kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.Long;kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.time.Duration){}[0]
+    final fun copy(kotlin.time/Duration = ..., kotlin/Int = ..., kotlin.time/Duration = ..., kotlin/Long = ..., kotlin.time/Duration = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/BufferPolicy // io.github.yuroyami.kiteplayer/BufferPolicy.copy|copy(kotlin.time.Duration;kotlin.Int;kotlin.time.Duration;kotlin.Long;kotlin.time.Duration;kotlin.Int){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/BufferPolicy.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/BufferPolicy.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/BufferPolicy.toString|toString(){}[0]
@@ -1766,7 +1753,7 @@ final class io.github.yuroyami.kiteplayer/PlaybackStats { // io.github.yuroyami.
 }
 
 final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.kiteplayer/PlayerConfig|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., io.github.yuroyami.kiteplayer/PlayerLogger? = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ...) // io.github.yuroyami.kiteplayer/PlayerConfig.<init>|<init>(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;io.github.yuroyami.kiteplayer.PlayerLogger?;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ...) // io.github.yuroyami.kiteplayer/PlayerConfig.<init>|<init>(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig){}[0]
 
     final val audio // io.github.yuroyami.kiteplayer/PlayerConfig.audio|{}audio[0]
         final fun <get-audio>(): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/PlayerConfig.audio.<get-audio>|<get-audio>(){}[0]
@@ -1778,8 +1765,6 @@ final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.k
         final fun <get-frameDrop>(): io.github.yuroyami.kiteplayer/FrameDropPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.frameDrop.<get-frameDrop>|<get-frameDrop>(){}[0]
     final val hardwareDecode // io.github.yuroyami.kiteplayer/PlayerConfig.hardwareDecode|{}hardwareDecode[0]
         final fun <get-hardwareDecode>(): io.github.yuroyami.kiteplayer/HwdecPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.hardwareDecode.<get-hardwareDecode>|<get-hardwareDecode>(){}[0]
-    final val logger // io.github.yuroyami.kiteplayer/PlayerConfig.logger|{}logger[0]
-        final fun <get-logger>(): io.github.yuroyami.kiteplayer/PlayerLogger? // io.github.yuroyami.kiteplayer/PlayerConfig.logger.<get-logger>|<get-logger>(){}[0]
     final val network // io.github.yuroyami.kiteplayer/PlayerConfig.network|{}network[0]
         final fun <get-network>(): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/PlayerConfig.network.<get-network>|<get-network>(){}[0]
     final val progressInterval // io.github.yuroyami.kiteplayer/PlayerConfig.progressInterval|{}progressInterval[0]
@@ -1794,9 +1779,8 @@ final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.k
         final fun <get-syncMode>(): io.github.yuroyami.kiteplayer/SyncMode // io.github.yuroyami.kiteplayer/PlayerConfig.syncMode.<get-syncMode>|<get-syncMode>(){}[0]
 
     final fun component1(): io.github.yuroyami.kiteplayer/RenderQuality // io.github.yuroyami.kiteplayer/PlayerConfig.component1|component1(){}[0]
-    final fun component10(): io.github.yuroyami.kiteplayer/PlayerLogger? // io.github.yuroyami.kiteplayer/PlayerConfig.component10|component10(){}[0]
-    final fun component11(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer/PlayerConfig.component11|component11(){}[0]
-    final fun component12(): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/PlayerConfig.component12|component12(){}[0]
+    final fun component10(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer/PlayerConfig.component10|component10(){}[0]
+    final fun component11(): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/PlayerConfig.component11|component11(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/SyncMode // io.github.yuroyami.kiteplayer/PlayerConfig.component2|component2(){}[0]
     final fun component3(): io.github.yuroyami.kiteplayer/HwdecPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.component3|component3(){}[0]
     final fun component4(): io.github.yuroyami.kiteplayer/FrameDropPolicy // io.github.yuroyami.kiteplayer/PlayerConfig.component4|component4(){}[0]
@@ -1805,7 +1789,7 @@ final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.k
     final fun component7(): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/PlayerConfig.component7|component7(){}[0]
     final fun component8(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerConfig.component8|component8(){}[0]
     final fun component9(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/PlayerConfig.component9|component9(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., io.github.yuroyami.kiteplayer/PlayerLogger? = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ...): io.github.yuroyami.kiteplayer/PlayerConfig // io.github.yuroyami.kiteplayer/PlayerConfig.copy|copy(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;io.github.yuroyami.kiteplayer.PlayerLogger?;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/SyncMode = ..., io.github.yuroyami.kiteplayer/HwdecPolicy = ..., io.github.yuroyami.kiteplayer/FrameDropPolicy = ..., io.github.yuroyami.kiteplayer/BufferPolicy = ..., io.github.yuroyami.kiteplayer/AudioConfig = ..., io.github.yuroyami.kiteplayer/SubtitleConfig = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., io.github.yuroyami.kiteplayer/Backends = ..., io.github.yuroyami.kiteplayer/NetworkConfig = ...): io.github.yuroyami.kiteplayer/PlayerConfig // io.github.yuroyami.kiteplayer/PlayerConfig.copy|copy(io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.SyncMode;io.github.yuroyami.kiteplayer.HwdecPolicy;io.github.yuroyami.kiteplayer.FrameDropPolicy;io.github.yuroyami.kiteplayer.BufferPolicy;io.github.yuroyami.kiteplayer.AudioConfig;io.github.yuroyami.kiteplayer.SubtitleConfig;kotlin.time.Duration;kotlin.time.Duration;io.github.yuroyami.kiteplayer.Backends;io.github.yuroyami.kiteplayer.NetworkConfig){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerConfig.toString|toString(){}[0]
@@ -2540,6 +2524,21 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.toString|toString(){}[0]
     }
 
+    final class AudioDeviceUnderrun : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.<init>|<init>(kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.detail.<get-detail>|<get-detail>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceUnderrun.toString|toString(){}[0]
+    }
+
     final class AudioDrainIncomplete : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDrainIncomplete.<init>|<init>(kotlin.String){}[0]
 
@@ -2618,6 +2617,21 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ChannelLayoutUnknown.toString|toString(){}[0]
     }
 
+    final class ColorApproximated : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.<init>|<init>(kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.detail.<get-detail>|<get-detail>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ColorApproximated.toString|toString(){}[0]
+    }
+
     final class CommandRefused : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused|null[0]
         constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.<init>|<init>(kotlin.String;kotlin.String){}[0]
 
@@ -2667,6 +2681,24 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HardwareDecodeUnavailable.toString|toString(){}[0]
+    }
+
+    final class HdrToneMapped : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped|null[0]
+        constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.message.<get-message>|<get-message>(){}[0]
+        final val streamIndex // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.streamIndex|{}streamIndex[0]
+            final fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]
+        final val transfer // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.transfer|{}transfer[0]
+            final fun <get-transfer>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.transfer.<get-transfer>|<get-transfer>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.copy|copy(kotlin.String;kotlin.Int){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.toString|toString(){}[0]
     }
 
     final class NoRenderSurface : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.NoRenderSurface|null[0]

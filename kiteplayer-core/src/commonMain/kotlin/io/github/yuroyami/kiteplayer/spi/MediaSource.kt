@@ -44,6 +44,20 @@ public interface PlayerMediaSource : AutoCloseable {
     public fun selectStreams(indices: Set<Int>)
 
     /**
+     * Requests that a blocking call another lane is stuck inside return promptly with a typed
+     * failure, and that every later blocking call on this source fail fast (KC-CANCEL).
+     *
+     * One-way: an interrupted source is being abandoned, and the session that owns it is on its
+     * way down. The engine calls this from the actor while the demux lane is wedged inside a
+     * read or seek, which is the ONE concurrency this contract permits; it never runs
+     * concurrently with, or after, the backend session's close.
+     *
+     * @return false when this source cannot interrupt, in which case the caller must keep
+     *         waiting, exactly as every engine before this member existed did.
+     */
+    public fun interrupt(): Boolean = false
+
+    /**
      * Reads the next packet from any selected stream.
      *
      * @return the packet, or null at the end of the media. The engine turns that null into the

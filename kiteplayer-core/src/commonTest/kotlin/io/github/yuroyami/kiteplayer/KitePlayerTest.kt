@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
@@ -468,7 +469,7 @@ class KitePlayerTest {
     }
 
     @Test
-    fun `selectTrack refuses a subtitle track and a source that cannot seek`() = runTest {
+    fun `selectTrack reports a missing subtitle while audio can change without seeking`() = runTest {
         val harness = CoreHarness(this)
         val player = player(harness)
         player.open(MediaItem("scripted://tracks"))
@@ -485,14 +486,10 @@ class KitePlayerTest {
         val fixed = CoreHarness(this, script = MediaScript(seekable = false))
         val fixedPlayer = player(fixed)
         fixedPlayer.open(MediaItem("scripted://not-seekable"))
-        val refusal = assertFailsWith<UnsupportedOperationException> {
-            fixedPlayer.selectTrack(TrackKind.Audio, null)
-        }
-        assertTrue(
-            refusal.message?.contains("seek") == true,
-            "a switch reopens and seeks back, so a source that cannot seek is refused: ${refusal.message}",
-        )
-        // The same source refuses a seek for the same reason, through the same kind of exception.
+        assertIs<TrackChange.Applied>(fixedPlayer.selectTrack(TrackKind.Audio, null))
+        assertNull(fixedPlayer.state.value.tracks.selectedAudio)
+        assertEquals(1, fixed.backend.openCalls, "an audio change must not reopen a non-seekable source")
+        // A real reposition still requires source seekability and remains a typed refusal.
         assertFailsWith<UnsupportedOperationException> { fixedPlayer.seek(1.seconds) }
         fixed.close()
     }

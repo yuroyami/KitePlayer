@@ -240,7 +240,11 @@ public data class DownmixConfig(
 public data class SubtitleConfig(
     /** Select a subtitle track automatically when one matches these languages. */
     val preferredLanguages: List<String> = emptyList(),
-    /** Select a forced-subtitles track when the audio language is not a preferred one. */
+    /**
+     * Select a forced-subtitles track automatically: one in a preferred language when the audio
+     * language is not preferred, and otherwise one matching the audio's own language, which is
+     * the audience a forced track is authored for.
+     */
     val autoSelectForced: Boolean = true,
     /**
      * With no language preference matched, select the container's default-flagged subtitle

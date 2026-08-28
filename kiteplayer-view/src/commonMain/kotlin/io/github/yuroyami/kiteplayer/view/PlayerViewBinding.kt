@@ -39,7 +39,7 @@ package io.github.yuroyami.kiteplayer.view
 internal class PlayerViewBinding<P : Any, R : Any>(
     private val createRenderer: () -> R?,
     private val attach: (P, R) -> Unit,
-    private val detach: (P) -> Unit,
+    private val detach: (P, R) -> Unit,
     private val close: (R) -> Unit,
     private val rendererNeedsSurface: Boolean = true,
 ) {
@@ -119,7 +119,7 @@ internal class PlayerViewBinding<P : Any, R : Any>(
             failure = closeFailure
         }
         try {
-            player?.let(detach)
+            player?.let { detach(it, dropped) }
         } catch (detachFailure: Throwable) {
             val closeFailure = failure
             if (closeFailure == null) {

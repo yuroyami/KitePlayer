@@ -14,7 +14,7 @@ class PlayerViewBindingTest {
     private fun binding(rendererNeedsSurface: Boolean = true) = PlayerViewBinding<String, Int>(
         createRenderer = { (nextRenderer++).also { log += "create $it" } },
         attach = { player, renderer -> log += "attach $player $renderer" },
-        detach = { player -> log += "detach $player" },
+        detach = { player, renderer -> log += "detach $player $renderer" },
         close = { renderer -> log += "close $renderer" },
         rendererNeedsSurface = rendererNeedsSurface,
     )
@@ -59,7 +59,7 @@ class PlayerViewBindingTest {
         b.surfaceReady()
         log.clear()
         b.surfaceGone()
-        assertEquals(listOf("close 0", "detach a"), log)
+        assertEquals(listOf("close 0", "detach a 0"), log)
         assertNull(b.activeRenderer)
     }
 
@@ -101,7 +101,7 @@ class PlayerViewBindingTest {
         b.surfaceReady()
         log.clear()
         b.setPlayer("b")
-        assertEquals(listOf("close 0", "detach a", "create 1", "attach b 1"), log)
+        assertEquals(listOf("close 0", "detach a 0", "create 1", "attach b 1"), log)
         assertEquals(1, b.activeRenderer)
     }
 
@@ -112,7 +112,7 @@ class PlayerViewBindingTest {
         b.surfaceReady()
         log.clear()
         b.setPlayer(null)
-        assertEquals(listOf("close 0", "detach a"), log)
+        assertEquals(listOf("close 0", "detach a 0"), log)
         assertNull(b.activeRenderer)
     }
 
@@ -167,7 +167,7 @@ class PlayerViewBindingTest {
 
         b.setPlayer(null)
 
-        assertEquals(listOf("close 0", "detach a"), log)
+        assertEquals(listOf("close 0", "detach a 0"), log)
         assertNull(b.activeRenderer)
     }
 
@@ -179,7 +179,7 @@ class PlayerViewBindingTest {
 
         b.setPlayer("b")
 
-        assertEquals(listOf("close 0", "detach a", "create 1", "attach b 1"), log)
+        assertEquals(listOf("close 0", "detach a 0", "create 1", "attach b 1"), log)
         assertEquals(1, b.activeRenderer)
     }
 
@@ -191,7 +191,7 @@ class PlayerViewBindingTest {
                 if (rendererAvailable) 7.also { log += "create $it" } else null
             },
             attach = { player, renderer -> log += "attach $player $renderer" },
-            detach = { player -> log += "detach $player" },
+            detach = { player, renderer -> log += "detach $player $renderer" },
             close = { renderer -> log += "close $renderer" },
         )
 
@@ -216,7 +216,7 @@ class PlayerViewBindingTest {
                 log += "attach $player $renderer"
                 throw attachFailure
             },
-            detach = { player -> log += "detach $player" },
+            detach = { player, renderer -> log += "detach $player $renderer" },
             close = { renderer -> log += "close $renderer" },
         )
 
@@ -235,8 +235,8 @@ class PlayerViewBindingTest {
         val b = PlayerViewBinding<String, Int>(
             createRenderer = { 7 },
             attach = { _, _ -> },
-            detach = { player ->
-                log += "detach $player"
+            detach = { player, renderer ->
+                log += "detach $player $renderer"
                 throw detachFailure
             },
             close = { renderer ->
@@ -251,7 +251,7 @@ class PlayerViewBindingTest {
 
         assertSame(closeFailure, thrown)
         assertNull(b.activeRenderer)
-        assertEquals(listOf("close 7", "detach a"), log)
+        assertEquals(listOf("close 7", "detach a 7"), log)
         assertEquals(listOf(detachFailure), thrown.suppressedExceptions)
     }
 }

@@ -85,9 +85,9 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             }
         },
         attach = { player, renderer -> player.attachRenderer(renderer) },
-        detach = { player ->
+        detach = { player, renderer ->
             try {
-                player.detachRenderer()
+                player.detachRenderer(expected = renderer)
             } catch (_: IllegalStateException) {
                 // The ordinary teardown order is close-the-player-then-clear-the-view, and a
                 // closed player refuses every command, including this one. Closing already

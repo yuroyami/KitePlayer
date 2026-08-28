@@ -32,7 +32,9 @@ public interface VideoRenderer : AutoCloseable {
      * Decoder factories that require this renderer's surface or graphics context.
      *
      * When this renderer is attached before open, these candidates are tried before the media
-     * backend's factories. Attaching a renderer after open does not reconfigure the active decoder.
+     * backend's factories. Attaching a renderer after open keeps the active decoder, with one
+     * exception: replacing the renderer the active decoder is coupled to rebuilds the video path
+     * against the replacement (see KitePlayer.attachRenderer).
      */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> = emptyList()
 

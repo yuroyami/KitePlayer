@@ -536,6 +536,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * and releases frames, counting them as `PlaybackStats.headlessFrames`, so detaching costs the picture
      * and nothing else.
      *
+     * Replacing a renderer the active video decoder is coupled to (its factory came from that
+     * renderer) rebuilds the video path against the new renderer at the current position, keeping
+     * the play state; on a source that cannot seek the rebuild is refused with a
+     * `PlaybackWarning.CommandRefused` and playback continues without a usable picture.
+     * Re-attaching the same renderer object never rebuilds. A replacement while not playing
+     * repaints one frame so the new renderer is not blank.
+     *
      * The call returns as soon as the request is queued. The engine parks its scheduler before it swaps
      * renderers, so no submission for the old one is outstanding once the swap has happened, but this call
      * does not wait for that moment. A caller that must know its renderer is idle closes the player, or

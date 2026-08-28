@@ -21,6 +21,12 @@ import io.github.yuroyami.kiteplayer.KitePlayer
  * [path] where a platform cannot honour it (JVM has no native video view). The player is never
  * owned here: opening media, playing, seeking and closing stay the caller's, exactly like
  * [KitePlayerSurface].
+ *
+ * [onRendererAttached] fires once this composable's video output is attached to [player]: the
+ * native view attaches as soon as the player is set (its renderer is headless-capable, so
+ * decoder selection already sees it), the Compose canvas one frame after composition. A caller
+ * that delays media open until output exists releases it here. It fires again after each path
+ * swap, so a one-shot caller must latch it.
  */
 @Composable
 public fun KitePlayerVideo(
@@ -28,14 +34,25 @@ public fun KitePlayerVideo(
     modifier: Modifier = Modifier,
     path: KiteRenderPath = KiteRenderPath.Auto,
     onEffectivePath: ((KiteRenderPath) -> Unit)? = null,
+    onRendererAttached: ((KitePlayer) -> Unit)? = null,
 ) {
     val effective = resolveRenderPath(path)
     val currentOnEffectivePath by rememberUpdatedState(onEffectivePath)
+    val currentOnRendererAttached by rememberUpdatedState(onRendererAttached)
     SideEffect { currentOnEffectivePath?.invoke(effective) }
     key(effective) {
         when (effective) {
-            KiteRenderPath.NativeView -> KitePlayerSurface(player = player, modifier = modifier)
-            KiteRenderPath.ComposeCanvas -> ComposeCanvasVideo(player = player, modifier = modifier)
+            KiteRenderPath.NativeView -> {
+                KitePlayerSurface(player = player, modifier = modifier)
+                SideEffect {
+                    player?.let { currentOnRendererAttached?.invoke(it) }
+                }
+            }
+            KiteRenderPath.ComposeCanvas -> ComposeCanvasVideo(
+                player = player,
+                modifier = modifier,
+                onRendererAttached = { currentOnRendererAttached?.invoke(it) },
+            )
             KiteRenderPath.Auto -> error("resolveRenderPath must never return Auto")
         }
     }
@@ -49,8 +66,13 @@ internal expect fun resolveRenderPath(requested: KiteRenderPath): KiteRenderPath
 internal expect fun rememberPlatformKiteVideoState(): KiteVideoState
 
 @Composable
-private fun ComposeCanvasVideo(player: KitePlayer?, modifier: Modifier) {
+private fun ComposeCanvasVideo(
+    player: KitePlayer?,
+    modifier: Modifier,
+    onRendererAttached: (KitePlayer) -> Unit,
+) {
     val videoState = rememberPlatformKiteVideoState()
+    val currentOnRendererAttached by rememberUpdatedState(onRendererAttached)
 
     KiteVideo(state = videoState, modifier = modifier)
 
@@ -59,6 +81,7 @@ private fun ComposeCanvasVideo(player: KitePlayer?, modifier: Modifier) {
         // One frame so KiteVideo has laid out and, on Android, bound its GPU path to the window.
         withFrameNanos { }
         currentPlayer.attachRenderer(videoState.renderer)
+        currentOnRendererAttached(currentPlayer)
     }
     DisposableEffect(player, videoState) {
         onDispose {

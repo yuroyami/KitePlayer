@@ -1,5 +1,5 @@
 public final class io/github/yuroyami/kiteplayer/compose/KitePlayerVideoKt {
-	public static final fun KitePlayerVideo (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/compose/KiteRenderPath;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
+	public static final fun KitePlayerVideo (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/compose/KiteRenderPath;Lkotlin/jvm/functions/Function1;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
 }
 
 public final class io/github/yuroyami/kiteplayer/compose/KiteRenderPath : java/lang/Enum {

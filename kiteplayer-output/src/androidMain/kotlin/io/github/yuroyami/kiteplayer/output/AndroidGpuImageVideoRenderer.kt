@@ -1801,26 +1801,61 @@ internal fun androidRgbColorSpaceOrNull(color: ColorSpaceInfo): AndroidRgbColorS
     else -> null
 }
 
+/**
+ * Resolves the classification to a DISPLAY-REFERRED Android color space on purpose.
+ *
+ * Android's named BT709/SMPTE_C/BT2020 spaces carry the scene OETF (the 0.45 camera curve).
+ * Tagging SDR video with them makes color management linearize through the inverse OETF and
+ * re-encode for the sRGB destination, which lifts shadows and midtones: measured against
+ * FFmpeg's own conversion, an emulator showed code 126 become 137 and 62 become 76, the exact
+ * washed-out look every reference player avoids. Players display SDR code values through the
+ * display curve, so the tag keeps each standard's PRIMARIES and swaps the transfer for sRGB's.
+ * BT.709's primaries are sRGB's, so that case IS plain sRGB.
+ */
 private fun AndroidRgbColorSpace.toAndroidColorSpace(): ColorSpace = when (this) {
     AndroidRgbColorSpace.Srgb -> ColorSpace.get(ColorSpace.Named.SRGB)
-    AndroidRgbColorSpace.Bt709 -> ColorSpace.get(ColorSpace.Named.BT709)
-    AndroidRgbColorSpace.SmpteC -> ColorSpace.get(ColorSpace.Named.SMPTE_C)
-    AndroidRgbColorSpace.Bt601Pal -> BT601_PAL_COLOR_SPACE
-    AndroidRgbColorSpace.Bt2020 -> ColorSpace.get(ColorSpace.Named.BT2020)
+    AndroidRgbColorSpace.Bt709 -> ColorSpace.get(ColorSpace.Named.SRGB)
+    AndroidRgbColorSpace.SmpteC -> SMPTE_C_DISPLAY_COLOR_SPACE
+    AndroidRgbColorSpace.Bt601Pal -> BT601_PAL_DISPLAY_COLOR_SPACE
+    AndroidRgbColorSpace.Bt2020 -> BT2020_DISPLAY_COLOR_SPACE
 }
 
-private val BT601_PAL_COLOR_SPACE: ColorSpace = ColorSpace.Rgb(
-    "Rec. ITU-R BT.601 PAL",
-    floatArrayOf(0.640f, 0.330f, 0.290f, 0.600f, 0.150f, 0.060f),
-    ColorSpace.ILLUMINANT_D65,
-    ColorSpace.Rgb.TransferParameters(
-        1.0 / 1.099,
-        0.099 / 1.099,
-        1.0 / 4.5,
-        0.081,
-        1.0 / 0.45,
-    ),
-)
+/**
+ * sRGB's transfer curve, reused so the display-referred spaces cannot drift from the platform's.
+ * All four are lazy so loading this file's class on a host-test stub JVM touches no platform API.
+ */
+private val SRGB_DISPLAY_TRANSFER: ColorSpace.Rgb.TransferParameters by lazy {
+    requireNotNull((ColorSpace.get(ColorSpace.Named.SRGB) as ColorSpace.Rgb).transferParameters) {
+        "the platform sRGB space stopped exposing its transfer parameters"
+    }
+}
+
+private val SMPTE_C_DISPLAY_COLOR_SPACE: ColorSpace by lazy {
+    ColorSpace.Rgb(
+        "SMPTE C (display referred)",
+        floatArrayOf(0.630f, 0.340f, 0.310f, 0.595f, 0.155f, 0.070f),
+        ColorSpace.ILLUMINANT_D65,
+        SRGB_DISPLAY_TRANSFER,
+    )
+}
+
+private val BT601_PAL_DISPLAY_COLOR_SPACE: ColorSpace by lazy {
+    ColorSpace.Rgb(
+        "Rec. ITU-R BT.601 PAL (display referred)",
+        floatArrayOf(0.640f, 0.330f, 0.290f, 0.600f, 0.150f, 0.060f),
+        ColorSpace.ILLUMINANT_D65,
+        SRGB_DISPLAY_TRANSFER,
+    )
+}
+
+private val BT2020_DISPLAY_COLOR_SPACE: ColorSpace by lazy {
+    ColorSpace.Rgb(
+        "Rec. ITU-R BT.2020 (display referred)",
+        floatArrayOf(0.708f, 0.292f, 0.170f, 0.797f, 0.131f, 0.046f),
+        ColorSpace.ILLUMINANT_D65,
+        SRGB_DISPLAY_TRANSFER,
+    )
+}
 
 private const val ACQUIRE_FENCE_TIMEOUT_MILLIS = 2_000L
 

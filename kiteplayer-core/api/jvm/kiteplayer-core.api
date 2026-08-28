@@ -283,6 +283,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public fun close ()V
 	public final fun closeAndAwait (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun detachRenderer ()V
+	public final fun detachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public final fun diagnosticsDump ()Ljava/lang/String;
 	public final fun editions ()Ljava/util/List;
 	public final fun getEvents ()Lkotlinx/coroutines/flow/SharedFlow;

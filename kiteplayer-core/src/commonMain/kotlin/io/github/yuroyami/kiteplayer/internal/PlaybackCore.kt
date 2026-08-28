@@ -803,9 +803,9 @@ internal class PlaybackCore(
     }
 
     /** Returns only once no submission to the renderer being detached is outstanding. */
-    suspend fun detachRenderer() {
+    suspend fun detachRenderer(expected: VideoRenderer? = null) {
         val reply = CompletableDeferred<Unit>()
-        send(CoreCommand.DetachRenderer(reply))
+        send(CoreCommand.DetachRenderer(expected, reply))
         awaitReply(reply)
     }
 
@@ -1288,8 +1288,12 @@ internal class PlaybackCore(
                 }
             }
             is CoreCommand.DetachRenderer -> {
-                if (setRenderer(null)) command.reply.complete(Unit)
-                else {
+                if (command.expected != null && pendingRenderer !== command.expected) {
+                    // Stale: something newer is attached, so nothing of the caller's is left to undo.
+                    command.reply.complete(Unit)
+                } else if (setRenderer(null)) {
+                    command.reply.complete(Unit)
+                } else {
                     val reason = "the video scheduler did not quiesce within $QUIESCE_DEADLINE"
                     warn(PlaybackWarning.CommandRefused("detachRenderer", reason))
                     command.reply.completeExceptionally(
@@ -1519,7 +1523,9 @@ internal class PlaybackCore(
                                         "continues without a picture until another is attached",
                                 ),
                             )
-                            commands.trySend(CoreCommand.DetachRenderer(CompletableDeferred()))
+                            // Identity-checked: a failure event that outlives its replacement
+                            // must not remove the healthy renderer attached after it.
+                            commands.trySend(CoreCommand.DetachRenderer(attached, CompletableDeferred()))
                         }
                         // Once per open, not once per frame: a renderer that publishes this on
                         // every tone mapped frame is behaving correctly and must not flood the
@@ -6473,7 +6479,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("attachRenderer", reply)
 
-    class DetachRenderer(val reply: CompletableDeferred<Unit>) : CoreCommand("detachRenderer", reply)
+    class DetachRenderer(
+        val expected: VideoRenderer?,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("detachRenderer", reply)
 
     /** Fire and forget by contract, so its reply is complete before it is sent. */
     class SeekLater(val request: SeekRequest) : CoreCommand("seekLater", CompletableDeferred(Unit))

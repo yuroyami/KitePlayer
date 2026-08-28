@@ -548,7 +548,15 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
     /** Detaches the current renderer. Playback continues without a picture. See [attachRenderer]. */
     public fun detachRenderer() {
-        core.post(CoreCommand.DetachRenderer(CompletableDeferred()))
+        core.post(CoreCommand.DetachRenderer(null, CompletableDeferred()))
+    }
+
+    /**
+     * Detaches [expected] only while it is still the attached renderer; a stale call is a no-op.
+     * This is the safe form for presentation code whose teardown can race a newer attach.
+     */
+    public fun detachRenderer(expected: VideoRenderer) {
+        core.post(CoreCommand.DetachRenderer(expected, CompletableDeferred()))
     }
 
     /**

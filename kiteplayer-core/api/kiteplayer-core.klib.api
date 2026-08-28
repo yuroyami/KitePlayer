@@ -1556,6 +1556,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final fun chapterAt(kotlin.time/Duration): io.github.yuroyami.kiteplayer/Chapter? // io.github.yuroyami.kiteplayer/KitePlayer.chapterAt|chapterAt(kotlin.time.Duration){}[0]
     final fun close() // io.github.yuroyami.kiteplayer/KitePlayer.close|close(){}[0]
     final fun detachRenderer() // io.github.yuroyami.kiteplayer/KitePlayer.detachRenderer|detachRenderer(){}[0]
+    final fun detachRenderer(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.detachRenderer|detachRenderer(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]
     final fun diagnosticsDump(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayer.diagnosticsDump|diagnosticsDump(){}[0]
     final fun editions(): kotlin.collections/List<kotlin/Nothing> // io.github.yuroyami.kiteplayer/KitePlayer.editions|editions(){}[0]
     final fun pause() // io.github.yuroyami.kiteplayer/KitePlayer.pause|pause(){}[0]

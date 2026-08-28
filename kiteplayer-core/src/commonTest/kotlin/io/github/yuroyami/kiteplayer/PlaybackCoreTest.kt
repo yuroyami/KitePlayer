@@ -1190,6 +1190,40 @@ class PlaybackCoreTest {
     }
 
     @Test
+    fun `a stale identity detach is a no-op and the newer renderer keeps its frames`() = runTest {
+        val harness = CoreHarness(this, renderer = null)
+        harness.open()
+        harness.core.play()
+        val old = RecordingRenderer()
+        harness.core.attachRenderer(old)
+        harness.run(200.milliseconds)
+
+        val new = RecordingRenderer()
+        harness.core.attachRenderer(new)
+        harness.core.detachRenderer(expected = old)
+        harness.run(300.milliseconds)
+
+        assertTrue(new.count > 0, "a stale detach must not remove the newer renderer")
+        harness.close()
+    }
+
+    @Test
+    fun `a matching identity detach detaches and fences`() = runTest {
+        val harness = CoreHarness(this, renderer = null)
+        harness.open()
+        harness.core.play()
+        val renderer = RecordingRenderer()
+        harness.core.attachRenderer(renderer)
+        harness.run(200.milliseconds)
+
+        harness.core.detachRenderer(expected = renderer)
+        val atDetach = renderer.count
+        harness.run(300.milliseconds)
+        assertEquals(atDetach, renderer.count, "a matching identity detach stops submissions")
+        harness.close()
+    }
+
+    @Test
     fun `loop all is accepted and stands beside one`() = runTest {
         val harness = CoreHarness(this)
         harness.open()

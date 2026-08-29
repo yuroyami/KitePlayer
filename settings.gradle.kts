@@ -60,9 +60,8 @@ rootProject.name = "KitePlayer-KMP"
 // compiles for every target it declares and is fully testable with a virtual clock.
 include(":kiteplayer-core")
 
-// :kiteplayer-subtitles parses subtitle formats. Pure Kotlin. Today that is SubRip and nothing
-// else: no cue is timed, laid out or drawn, and the player does not read a subtitle track. Cue
-// layout and rasterisation are in KPKMP-PAST.md section 11.
+// :kiteplayer-subtitles parses subtitle formats. Pure Kotlin: SubRip, WebVTT and the ASS
+// dialogue tier. Cue timing, layout and rasterisation live in the engine and :kiteplayer-output.
 include(":kiteplayer-subtitles")
 
 // :kiteplayer-rt is KitePlayer's real-time audio core, in C, with the symbol prefix `kprt_`. It
@@ -73,7 +72,7 @@ include(":kiteplayer-subtitles")
 //
 // It exists as its own module rather than inside KiteCodec because a lock-free audio ring has
 // nothing to do with FFmpeg, and putting it there would make this player's real-time core a
-// transitive consequence of a codec dependency. See KPKMP-PAST.md section 15.2, sub-phase B1.7.
+// transitive consequence of a codec dependency.
 include(":kiteplayer-rt")
 
 // Modules added as their milestones land. Kept commented rather than absent so the intended

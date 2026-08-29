@@ -94,7 +94,7 @@ abstract class CheckKitertCouplingTask : DefaultTask() {
                     for (path in newFiles.sorted()) appendLine("  $ALLOWED_KITERT_FILE $path")
                     appendLine(
                         "The allowlist must move in the same commit, with the old and new file " +
-                            "counts and the reason recorded in KPKMP-PAST.md.",
+                            "counts and the reason recorded in the commit message.",
                     )
                 },
             )

@@ -16,8 +16,9 @@ and decoder are platform-specific.
 > T2 Codec with provisional output evidence, each backed by a local runnable sample and a
 > 27-row format matrix, not a full tier. No physical iPhone or Android device has run any of it:
 > that session needs the owner's hardware and signing and is the one open item of the phone stage.
-> This file states what has been measured and nothing beyond it. [`KPKMP-PAST.md`](KPKMP-PAST.md) is the
-> full plan, defect register and running execution log: every phase, measured number and decision.
+> This file states what has been measured and nothing beyond it. [`MASTER_PLAN.md`](MASTER_PLAN.md) is
+> everything still ahead; [`GOTCHAS.md`](GOTCHAS.md) is the working rules, traps and decisions; history
+> lives in git.
 
 ## Playing a file
 
@@ -202,8 +203,8 @@ and dav1d needs pthreads the shipped wasm profile does not have), and the subtit
 exactly the TEXT path: SubRip and WebVTT decode to cues end to end, from container tracks and
 from external local files alike, with the open-end, keyword and entity corners repaired; ASS
 renders its text through the same path without libass styling, and bitmap subtitles (PGS,
-VobSub, DVB) are not decoded at all. The libass and bitmap half is S4.f's own expansion in
-KPKMP-PAST.md, recorded there as not started.
+VobSub, DVB) are not decoded at all. The bitmap-subtitle bridge and the libass wiring are
+tracked in MASTER_PLAN.md's subtitle program.
 
 **The local iOS substrate.** `kiteplayer-output` and `kiteplayer-ffmpeg` now declare iosArm64 and
 iosSimulatorArm64 alongside macosArm64. The private S1.b.1 software-codec trees feed the FFmpeg backend,
@@ -338,7 +339,7 @@ enough to call any platform supported.
   or dav1d. Both exist now on every native target: dav1d 1.5.4 is cross-built with full SIMD into all
   eight of them, and hardware is asked for first where it exists (VideoToolbox on Apple silicon from
   A17 Pro / M3, the MediaCodec wrapper on Android). A device with no AV1 hardware, an iPhone XS for
-  instance, decodes AV1 in software instead of refusing (KPKMP 17.11, KC-AV1SW).
+  instance, decodes AV1 in software instead of refusing (MASTER_PLAN.md, the hardware AV1 route).
 
   The web is the exception, and deliberately: dav1d takes a hard pthreads dependency while the
   shipped wasm profile is the single-threaded `base` variant, and dav1d ships no wasm SIMD at all,
@@ -370,7 +371,8 @@ enough to call any platform supported.
   applied by KiteVideo (both tiers), the Android canvas renderer and the Metal composer (proven
   live on real Metal, disabled-is-bit-exact for the colour instrument). The UIKit and AppKit CPU
   fallback renderers do not apply it yet, and Android's MediaCodec direct-to-Surface tier cannot:
-  the codec writes the Surface and no canvas ever touches those pixels (KPKMP 17.11, SOL-R14).
+  the codec writes the Surface and no canvas ever touches those pixels (a design limit; the
+  render-quality ladder in MASTER_PLAN.md says what a shader tier can and cannot reach).
   Gamma is absent by design: it is not affine, so it cannot ride the one colour-matrix law, and a
   control honoured by some renderers and ignored by others would be worse than none. The same
   paused-picture limit as overlays applies on the platform renderers (SOL-R1): a control changed
@@ -387,7 +389,7 @@ enough to call any platform supported.
 - **Network input is FFmpeg passthrough, not an application network layer.** The media URI reaches
   FFmpeg unchanged, so only protocols carried by the linked build are reachable. One loopback HTTP
   case has played to completion. There is no protocol allowlist, open or read deadline, or secret
-  redaction over that path yet; network hardening is parked in KPKMP section 17.8. Live or adaptive
+  redaction over that path yet; network hardening is MASTER_PLAN.md's streaming phase. Live or adaptive
   streaming and DRM remain unsupported.
 - **The real-time audio core is C on macOS and the local iOS substrate.** It uses DefaultOutput on
   macOS and RemoteIO on iOS; managed iOS sinks acquire an explicit process-wide playback-session lease,
@@ -409,14 +411,11 @@ its own documentation, pointing at where it is planned.
 
 ## What comes after this, and is not started
 
-The plan is `KPKMP-PAST.md` in this repository, and it has two horizons. Horizon A is the work above, and it
-is finished. Horizon B is everything that turns this engine into a product, it is sequenced and decided,
-and **none of it is done**: a shared C ABI with fuzzing and sanitizers, the rest of the codec layer,
-subtitles end to end with libass, swresample and real tempo control, a Metal renderer with hardware
-decode and a colour-managed pipeline, network and live sources, published artifacts on every ecosystem,
-supply chain and security work, per-platform qualification to T5, a performance constitution with
-published distributions, and the remaining product surface. Read the roadmap as a plan and never as a
-capability.
+The plan is `MASTER_PLAN.md` in this repository: every open item across this repo and KiteCodec,
+ordered into phases, from evidence and correctness work through subtitles, streaming, distribution
+and the performance tails. The largest unstarted blocks are real adaptive streaming (HLS, DASH ABR,
+caching), published KitePlayer artifacts, device qualification beyond one machine, and the fuzzing
+program. Read the plan as a plan and never as a capability.
 
 ## Run it here
 
@@ -600,7 +599,7 @@ proved binary-compatible move. Samples have no dumps because an application has 
 The device tests open the default output and play a short quiet tone. They exist because the one thing
 a mock cannot confirm is that the engine's clock and the audio device share a time base. The separate
 28-test iOS audio proof uses the exact freshly linked Kotlin/Native program inside the minimal simulator
-app host recorded in `KPKMP-PAST.md`; the ordinary bare-kexe simulator runner has no application audio
+app host recorded in git history; the ordinary bare-kexe simulator runner has no application audio
 context. The filtered 8-test renderer proof runs separately on the same named simulator and needs no
 application audio context. The bounded UIKit sample smoke is separate again; it is the measured local
 run behind the simulator candidate row and is not included in any of those test totals.

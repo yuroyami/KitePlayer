@@ -51,7 +51,7 @@ class AudioSinkEventTest {
      * the engine still cannot renegotiate a device (that remainder is SOL-A6).
      */
     @Test
-    fun `underrun and format-change requests are surfaced, not dropped`() = runTest {
+    fun `underrun and format-change requests are surfaced rather than dropped`() = runTest {
         val harness = CoreHarness(this, publishesSinkEvents = true)
         harness.openWithRenderer()
         harness.core.play()

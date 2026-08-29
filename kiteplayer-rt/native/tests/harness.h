@@ -3,11 +3,11 @@
  * Contract, from plan section 15.3: every suite is table driven, prints one line per case, and
  * returns non-zero on the first failure.
  *
- * Deliberately a SEPARATE file from KiteCodec's `native/kitecodec-c/tests/harness.h`, and with a
+ * Deliberately a SEPARATE file from KiteFFmpeg's `native/kitecodec-c/tests/harness.h`, and with a
  * different symbol prefix (`kt_` here, `kc_` there). Plan section 15.2 B1.7 step 1 says the two C
- * build layers must not be shared across repositories: KiteCodec is a public FFmpeg binding and
+ * build layers must not be shared across repositories: KiteFFmpeg is a public FFmpeg binding and
  * KitePlayer is a private player, and a shared harness would make the second a build dependency
- * of the first for no gain. The KiteCodec harness also links `libavutil` to quiet FFmpeg's log,
+ * of the first for no gain. The KiteFFmpeg harness also links `libavutil` to quiet FFmpeg's log,
  * which this library has no business depending on.
  *
  * Shape of a suite:

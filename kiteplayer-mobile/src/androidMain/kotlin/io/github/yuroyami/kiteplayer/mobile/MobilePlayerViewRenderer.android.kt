@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer.mobile
 
 import android.view.Surface
 import io.github.yuroyami.kiteplayer.VideoSize
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
 import io.github.yuroyami.kiteplayer.output.AndroidSurfaceVideoRenderer
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
@@ -11,14 +11,14 @@ import io.github.yuroyami.kiteplayer.view.AndroidPlayerViewRenderer
 import io.github.yuroyami.kiteplayer.view.AndroidPlayerViewRendererFactory
 import io.github.yuroyami.kiteplayer.view.KitePlayerView
 
-/** The default KiteCodec/output adapter for an Android [KitePlayerView]. */
+/** The default KiteFFmpeg/output adapter for an Android [KitePlayerView]. */
 public object MobileAndroidPlayerViewRendererFactory : AndroidPlayerViewRendererFactory {
     override fun create(
         onOverlay: (SubtitleOverlay?) -> Unit,
         onVideoGeometry: (VideoSize, Int) -> Unit,
     ): AndroidPlayerViewRenderer = MobileAndroidPlayerViewRenderer(
         AndroidSurfaceVideoRenderer(
-            convert = { frame -> SoftwareConverter.toRgba(frame as KiteCodecVideoFrame) },
+            convert = { frame -> SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame) },
             onOverlay = onOverlay,
             onVideoGeometry = onVideoGeometry,
         ),

@@ -13,7 +13,7 @@ plugins {
 /*
  * :kiteplayer-rt is KitePlayer's real-time audio core, written in C.
  *
- * WHY IT IS ITS OWN MODULE, AND WHY IT IS HERE RATHER THAN IN KiteCodec. A lock-free audio ring has
+ * WHY IT IS ITS OWN MODULE, AND WHY IT IS HERE RATHER THAN IN KiteFFmpeg. A lock-free audio ring has
  * nothing to do with FFmpeg. Putting it in `kitecodec-c` would make KitePlayer's real-time core a
  * transitive consequence of a codec dependency, and would make a private player's scheduling
  * decisions part of a public binding's surface. Plan section 15.2 B1.7 step 1 settles it: the
@@ -100,7 +100,7 @@ kotlin {
          * cinterop embeds the archive, so it has to exist first AND be a declared input of the
          * cinterop task.
          *
-         * The dependency alone is not enough. Measured in KiteCodec at B1.3 and recorded in plan
+         * The dependency alone is not enough. Measured in KiteFFmpeg at B1.3 and recorded in plan
          * section 15.0: editing only a C body re-executes the compile and writes a new archive, and
          * the cinterop task then reports UP-TO-DATE and keeps the STALE archive inside the klib, with
          * the configuration cache on or off. Gradle says why under `--info`: "CInterop task uses

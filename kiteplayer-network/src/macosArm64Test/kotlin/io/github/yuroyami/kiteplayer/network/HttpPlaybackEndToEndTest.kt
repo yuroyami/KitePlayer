@@ -5,13 +5,13 @@ package io.github.yuroyami.kiteplayer.network
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackKind
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSourceFactory
-import io.github.yuroyami.kitecodec.CodecId
-import io.github.yuroyami.kitecodec.Frame
-import io.github.yuroyami.kitecodec.MediaSink
-import io.github.yuroyami.kitecodec.PixelFormat
-import io.github.yuroyami.kitecodec.Rational
-import io.github.yuroyami.kitecodec.VideoEncoderSpec
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSourceFactory
+import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.Frame
+import io.github.yuroyami.kiteffmpeg.MediaSink
+import io.github.yuroyami.kiteffmpeg.PixelFormat
+import io.github.yuroyami.kiteffmpeg.Rational
+import io.github.yuroyami.kiteffmpeg.VideoEncoderSpec
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
@@ -150,7 +150,7 @@ class HttpPlaybackEndToEndTest {
 
         // A factory, because MediaItem.io became one when KP-P1-03 landed. This file was never
         // compiled after that change, so it had been red on macosArm64 ever since.
-        val source = KiteCodecSourceFactory().open(MediaItem(url, io = { KtorMediaIo.open(url) }))
+        val source = KiteFFmpegSourceFactory().open(MediaItem(url, io = { KtorMediaIo.open(url) }))
         try {
             assertTrue(source.seekable, "a ranged http source must be seekable end to end")
             val video = source.streams.firstOrNull { it.kind == TrackKind.Video }

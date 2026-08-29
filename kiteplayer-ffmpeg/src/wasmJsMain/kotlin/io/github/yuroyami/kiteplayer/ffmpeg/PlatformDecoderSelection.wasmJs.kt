@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kitecodec.CodecId
+import io.github.yuroyami.kiteffmpeg.CodecId
 
 /**
  * Software only, for now, and the "for now" is a registered item rather than a shrug.

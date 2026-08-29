@@ -39,7 +39,7 @@ class KitePlayerTest {
             "a missing backend is a configuration error and not a null pointer later: $backendError",
         )
         assertTrue(
-            backendError.detail.contains("KiteCodecMediaBackend"),
+            backendError.detail.contains("KiteFFmpegMediaBackend"),
             "the error names what to pass: ${backendError.detail}",
         )
 

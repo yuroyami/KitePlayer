@@ -15,7 +15,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
-import io.github.yuroyami.kitecodec.CodecId
+import io.github.yuroyami.kiteffmpeg.CodecId
 import kotlinx.coroutines.runBlocking
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test

@@ -10,21 +10,21 @@ The Kotlin sample consumes `kiteplayer-mobile` for the default iOS backend stack
 the `KitePlayerUIView` owned by `kiteplayer-view`. Compose is not involved. `kiteplayer-phone` is only
 the deprecated 0.0.2 source-migration umbrella and is not part of this sample.
 
-Nothing here is an installation or distribution path. KiteCodec and its FFmpeg trees are local,
+Nothing here is an installation or distribution path. KiteFFmpeg and its FFmpeg trees are local,
 there is no CocoaPods or downloaded framework, the framework is linked statically and is not embedded,
 and no artifact is publicly published. The simulator result is not physical-iPhone qualification or
 T3-Full support. The unsigned device build below proves linking only; it does not install or run.
 
 Run every command from the KitePlayer repository root. The Xcode build phase resolves
-`../KiteCodec/native-libs` to an absolute path, passes it as `kitecodec.ffmpeg.localRoot`, runs Gradle
+`../KiteFFmpeg/native-libs` to an absolute path, passes it as `kiteffmpeg.ffmpeg.localRoot`, runs Gradle
 offline, maps `iphonesimulator` to the debug simulator framework and `iphoneos` to the release arm64
 framework, and rejects every other platform.
 
 Prepare the private phone-target publication first when it is not already present in Maven Local:
 
 ```bash
-cd ../KiteCodec
-./gradlew publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true
+cd ../KiteFFmpeg
+./gradlew publishToMavenLocal -Pkiteffmpeg.applePhoneTargetsOnly=true
 cd ../KitePlayer
 ```
 
@@ -84,7 +84,7 @@ never accepts a partial record.
 
 ```bash
 ./gradlew :kiteplayer-sample:linkReleaseFrameworkIosArm64 \
-  -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs" --rerun-tasks
+  -Pkiteffmpeg.ffmpeg.localRoot="$PWD/../KiteFFmpeg/native-libs" --rerun-tasks
 xcodebuild \
   -project kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj \
   -scheme KitePlayerSample -configuration Release \
@@ -95,4 +95,4 @@ xcodebuild \
 
 The bundle identifier is `io.github.yuroyami.kiteplayer.sample.ios`. The project copies the generated
 `testmedia/sync1080p30.mp4` into the app bundle. Generate that fixture before either build. A missing
-local FFmpeg tree or local KiteCodec publication is an error; this host never downloads a substitute.
+local FFmpeg tree or local KiteFFmpeg publication is an error; this host never downloads a substitute.

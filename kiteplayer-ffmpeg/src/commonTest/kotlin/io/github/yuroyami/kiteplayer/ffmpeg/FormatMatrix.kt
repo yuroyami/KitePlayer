@@ -154,12 +154,12 @@ internal object FormatMatrixRunner {
      * Two source contracts shape this, both learned from the source's own checks on the first
      * baseline run: streams are selected ONCE, before the first read, so every stream the row
      * decodes is selected up front and packets are routed to their decoder in one loop; and
-     * [KiteCodecSource.seekToKeyframe] returns null BY DESIGN (the container reader does not
+     * [KiteFFmpegSource.seekToKeyframe] returns null BY DESIGN (the container reader does not
      * report a landing; the engine learns it from the first decoded frame), so seek success here
      * is the call returning and decoding resuming, never a non-null landing.
      */
     private suspend fun playRow(mediaDir: String, row: MatrixRow): String {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/${row.clip}")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/${row.clip}")) as KiteFFmpegSource
         try {
             val streams = source.streams
             val video = streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt }
@@ -228,7 +228,7 @@ internal object FormatMatrixRunner {
             }
 
             val subtitleDecoder = subtitle?.let { stream ->
-                checkNotNull(KiteCodecSubtitleDecoderFactory().create(stream)) {
+                checkNotNull(KiteFFmpegSubtitleDecoderFactory().create(stream)) {
                     "the text factory refused ${stream.codec}"
                 }
             }
@@ -309,7 +309,7 @@ internal object FormatMatrixRunner {
      * met quota, so nothing decoded is ever left unclosed.
      */
     private suspend fun decodeUntil(
-        source: KiteCodecSource,
+        source: KiteFFmpegSource,
         videoIndex: Int?,
         audioIndex: Int?,
         videoDecoder: io.github.yuroyami.kiteplayer.spi.VideoDecoder?,

@@ -40,7 +40,7 @@ class RotationTest {
      * 270 and not 90, and the sign is the whole point.
      *
      * `ffmpeg`'s `-display_rotation` takes counter-clockwise degrees, so the fixture's matrix asks for a
-     * quarter turn counter-clockwise. KiteCodec reports clockwise degrees, which is what a renderer
+     * quarter turn counter-clockwise. KiteFFmpeg reports clockwise degrees, which is what a renderer
      * applies, and a quarter turn counter-clockwise is three quarters clockwise. Both swap the output
      * width and height, which is the behaviour the renderer test measures.
      */
@@ -48,7 +48,7 @@ class RotationTest {
 
     @Test
     fun `the display matrix reaches the stream and leaves the stored size alone`() = runBlocking {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/rotated90ccw.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/rotated90ccw.mp4")) as KiteFFmpegSource
         try {
             val video = assertNotNull(source.firstVideo, "the fixture has a video stream")
             assertEquals(
@@ -77,7 +77,7 @@ class RotationTest {
     fun `a clip with no display matrix reports no rotation`() = runBlocking {
         // The clip the fixture was remuxed from, so the same pictures with no matrix over them. Without
         // this the assertion above would pass just as well on a source that reported 270 for everything.
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/colors-bt709.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/colors-bt709.mp4")) as KiteFFmpegSource
         try {
             assertEquals(0, assertNotNull(source.firstVideo).rotationDegrees)
         } finally {
@@ -87,7 +87,7 @@ class RotationTest {
 
     @Test
     fun `every decoded frame carries the rotation and none of them is turned before the renderer`() = runBlocking {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/rotated90ccw.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/rotated90ccw.mp4")) as KiteFFmpegSource
         val stream = assertNotNull(source.firstVideo)
         source.selectStreams(setOf(stream.index))
         val decoder = assertNotNull(source.videoDecoderFactories().first().create(stream, HwdecPolicy.Auto))
@@ -130,7 +130,7 @@ class RotationTest {
      * for free in a transform matrix.
      */
     private fun checkFrame(frame: VideoFrame): Int {
-        val kiteFrame = frame as KiteCodecVideoFrame
+        val kiteFrame = frame as KiteFFmpegVideoFrame
         try {
             assertEquals(fixtureRotation, kiteFrame.rotationDegrees, "the frame carries its stream's rotation")
             assertEquals(320, kiteFrame.size.width)

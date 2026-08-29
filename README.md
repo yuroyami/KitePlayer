@@ -2,7 +2,7 @@
 
 A media player for Kotlin Multiplatform, written in Kotlin from the ground up. It does not wrap
 ExoPlayer, AVPlayer or libmpv: the playback engine is pure Kotlin in `commonMain`, so it behaves the
-same wherever it runs. KiteCodec and FFmpeg provide the portable media backend and software decoder;
+same wherever it runs. KiteFFmpeg and FFmpeg provide the portable media backend and software decoder;
 Android can instead couple MediaCodec directly to its renderer. Only the audio device, video surface,
 and decoder are platform-specific.
 
@@ -26,13 +26,13 @@ and decoder are platform-specific.
 val player = KitePlayer.create(
     PlayerConfig(
         backends = Backends(
-            backend = KiteCodecMediaBackend(),   // reads and decodes, over KiteCodec
+            backend = KiteFFmpegMediaBackend(),   // reads and decodes, over KiteFFmpeg
             output = AppleOutputBackend,         // the clock and the audio device, paired so they cannot mismatch
         ),
     ),
 )
 
-player.attachRenderer(AppKitVideoRenderer(window) { SoftwareConverter.toRgba(it as KiteCodecVideoFrame) })
+player.attachRenderer(AppKitVideoRenderer(window) { SoftwareConverter.toRgba(it as KiteFFmpegVideoFrame) })
 player.open(MediaItem(path))                     // suspends, and returns paused with the first frame drawn
 player.play()
 player.seek(5.seconds)                           // suspends, and completes on the position it landed on
@@ -96,8 +96,8 @@ Today, honestly:
 | iOS simulator arm64 | Experimental T2 Codec candidate | One named local simulator app opens and decodes real media through the reusable `KitePlayerUIView`, lands a precise seek, reaches Ended through RemoteIO and completes causally awaited teardown. The 27-row format matrix runs green on the same named simulator (re-run 2026-08-16 through the S2 defaults): every playable row decodes and resumes after a mid-file seek. AV1 refused with a typed error on that run because the phone FFmpeg profile then vendored no software AV1 codec; dav1d has since been cross-built into it and the row is now a MustPlay like every other format. The S2.c Metal-view smoke evidence stays provisional. Real-media cancellation coverage is still absent, so this stays below the full T2 Codec tier. |
 | iOS arm64 | T1 | The same private software-codec, RemoteIO, layer-renderer and sample sources compile and link into an unsigned arm64 app. Nothing was installed or run on a physical iPhone. |
 | Android emulator arm64 (API 36, 16 KiB) | T2 Codec, with provisional output evidence | The sample's direct-XML Activity builds its player from `mobileBackends()` and shows it in the reusable XML-capable `KitePlayerView` from `kiteplayer-view`; two sibling Activities demonstrate Compose/native-view interop and GPU Compose video separately. Runtime GPU evidence is one 1080p30, 8-bit AVC Constrained Baseline fixture whose colour metadata is unspecified. The renderer-coupled MediaCodec path reported `HardwareZeroCopy(MediaCodec)` and the direct Surface tier stabilized at 29 to 31 presented FPS after warm-up. GPU Compose evidence spans 295 to 300 unique VSYNC-matched GPU-proven draws at 29.403 to 29.852 FPS. The newest corrected-gate cold-install passed with 300 decoded/submitted/presented, 299 GPU-proven draws at 29.749 FPS, 1.319 seconds of post-Ended proof drain, 178.274 milliseconds of teardown, +3.275 milliseconds of A/V drift, and no headless frames, drops, supersedes, failures, repeats, rebuffers, underruns, or CPU conversion. An earlier clean post-policy pass proved 297 at 29.403 FPS. A diagnostic repeat remained healthy zero-copy with 299 submitted/presented, one scheduler late drop, and 296 GPU-proven draws at 29.696 FPS; it exposed that the gate must validate the exact decoded-frame partition before applying its drop budget instead of requiring 300 submissions. Forced physical-profile reruns correctly rejected the emulator's variable sub-99% proof coverage. A separate smoke landed a precise seek, reached Ended, and tore down causally. The wider 10-bit, VP9, AV1 and HDR work has parser and host-contract coverage, not successful device playback evidence. Nothing ran on a physical Android device. x86_64 is compile, link, and package qualified only. |
-| JVM (desktop, macOS arm64 host) | Experimental T2 Codec candidate | The JVM variant of KiteCodec carries the JNI adapter in its published artifact, so one `implementation()` line gives a desktop JVM a real FFmpeg backend (avcodec 62.11.100). All 27 rows of the format matrix pass on this host, `KitePlayerPlatform.availability` answers Available, and the default stack pairs that backend with a `javax.sound.sampled` audio sink and an AWT subtitle rasterizer. The audio sink is proved against a fake device seam, not against a sound card, and no Linux or Windows JVM has run it. |
-| Linux x64 and arm64 (Kotlin/Native) | Experimental T2 Codec candidate | FFmpeg n8.0 is cross-built for both from the Kotlin/Native toolchains, at the reduced profile (software codecs, zlib, no third-party encoder or text stack). In an arm64 container: 272 engine tests, 28 subtitle tests, 109 KiteCodec tests and 86 backend tests pass, including every row of the format matrix. x64 runs the engine and subtitle suites under emulation. There is no device audio sink for either, so nothing plays out loud; that is the ALSA half of the register. |
+| JVM (desktop, macOS arm64 host) | Experimental T2 Codec candidate | The JVM variant of KiteFFmpeg carries the JNI adapter in its published artifact, so one `implementation()` line gives a desktop JVM a real FFmpeg backend (avcodec 62.11.100). All 27 rows of the format matrix pass on this host, `KitePlayerPlatform.availability` answers Available, and the default stack pairs that backend with a `javax.sound.sampled` audio sink and an AWT subtitle rasterizer. The audio sink is proved against a fake device seam, not against a sound card, and no Linux or Windows JVM has run it. |
+| Linux x64 and arm64 (Kotlin/Native) | Experimental T2 Codec candidate | FFmpeg n8.0 is cross-built for both from the Kotlin/Native toolchains, at the reduced profile (software codecs, zlib, no third-party encoder or text stack). In an arm64 container: 272 engine tests, 28 subtitle tests, 109 KiteFFmpeg tests and 86 backend tests pass, including every row of the format matrix. x64 runs the engine and subtitle suites under emulation. There is no device audio sink for either, so nothing plays out loud; that is the ALSA half of the register. |
 | Windows x64 (mingw) | T1, link-proven | FFmpeg n8.0 cross-builds and the whole stack links: `:kiteplayer-ffmpeg`'s test binary is a 30 MB PE32+ console executable carrying the engine, the FFmpeg backend and FFmpeg itself. Nothing has been RUN: there is no Windows machine here, and that run is an owner rider like the physical iPhone one. |
 | iOS x64, tvOS, watchOS, Android native, JS, wasmJs | T1 | `kiteplayer-core` compiles for the target. There is no complete platform playback path. |
 | macOS x64, and anything else | Not a target | Not declared in any build file yet. |
@@ -219,7 +219,7 @@ iPhone, iosX64 was not qualified, and no public artifact or full support tier mo
 
 **What changed in this run.** The audio device's real-time callback left managed Kotlin. It is now a
 `static` C function in `kiteplayer-rt`, installed by C, reading a C ring, with no `StableRef` and no
-garbage-collected object anywhere on the device's thread. Alongside it, KiteCodec's 176 FFmpeg helpers
+garbage-collected object anywhere on the device's thread. Alongside it, KiteFFmpeg's 176 FFmpeg helpers
 became a compiled and symbol-audited C library with its own tests, sanitizer runs and fuzz targets, and
 it now refuses an FFmpeg runtime that does not match the headers it was compiled against.
 
@@ -403,7 +403,7 @@ enough to call any platform supported.
   There is no release-mode benchmark, physical-iPhone run or performance budget in this evidence. The
   long runs are those same local binaries watched with `ps`, so they establish only their measured
   duration; no platform here is above the experimental candidate labels in the table.
-- **Nothing is publicly published.** Building this needs a Maven Local KiteCodec publication and an
+- **Nothing is publicly published.** Building this needs a Maven Local KiteFFmpeg publication and an
   FFmpeg on the machine, both set up by hand.
 
 The public API says the same thing about itself: a member that nothing implements carries a marker in
@@ -411,7 +411,7 @@ its own documentation, pointing at where it is planned.
 
 ## What comes after this, and is not started
 
-The plan is `MASTER_PLAN.md` in this repository: every open item across this repo and KiteCodec,
+The plan is `MASTER_PLAN.md` in this repository: every open item across this repo and KiteFFmpeg,
 ordered into phases, from evidence and correctness work through subtitles, streaming, distribution
 and the performance tails. The largest unstarted blocks are real adaptive streaming (HLS, DASH ABR,
 caching), published KitePlayer artifacts, device qualification beyond one machine, and the fuzzing
@@ -422,8 +422,8 @@ program. Read the plan as a plan and never as a capability.
 This is a development loop, not an installation.
 
 ```bash
-# 1. KiteCodec has no public publication, so publish it into the local Maven repository first.
-cd ../KiteCodec && ./gradlew publishToMavenLocal -Pkitecodec.applePhoneTargetsOnly=true
+# 1. KiteFFmpeg has no public publication, so publish it into the local Maven repository first.
+cd ../KiteFFmpeg && ./gradlew publishToMavenLocal -Pkiteffmpeg.applePhoneTargetsOnly=true
 
 # 2. Generate the test clips. Needs ffmpeg on PATH; no media is committed to the repository.
 cd ../KitePlayer && ./scripts/testmedia.sh
@@ -435,7 +435,7 @@ $BIN testmedia/sync1080p30.mp4 --window
 
 # 4. Build the simulator framework, then open the private app in Xcode.
 ./gradlew :kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64 \
-  -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs"
+  -Pkiteffmpeg.ffmpeg.localRoot="$PWD/../KiteFFmpeg/native-libs"
 open kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj
 ```
 
@@ -532,7 +532,7 @@ The presentation artifacts are separated by responsibility:
   Android `View` usable from XML or Kotlin/Java, and `KitePlayerUIView` is its UIKit counterpart.
   Install a renderer adapter before assigning a player; `kiteplayer-mobile` supplies
   `installMobileRenderer()` for the default stack.
-- Use `kiteplayer-mobile` for the default platform stack. Android/iOS carry the real KiteCodec,
+- Use `kiteplayer-mobile` for the default platform stack. Android/iOS carry the real KiteFFmpeg,
   output and native-view implementation. Its JVM, JS and Wasm variants are explicit unavailable
   placeholders, exposed through `KitePlayerPlatform`, so common consumers do not need a custom
   source-set hierarchy.
@@ -552,7 +552,7 @@ when that consumer also compiles a desktop target. The variants differ in what t
 variants: a dependency-compatibility claim, not a playback claim; they carry neither FFmpeg nor
 platform output, `KitePlayerPlatform.isAvailable` is false, `createOrNull()` returns null, and
 `KitePlayerSurface` draws nothing. `kiteplayer-compose-video` publishes a JVM variant with the
-real software frame path (KiteCodec's CPU converter into Skia rasters); it renders frames it is
+real software frame path (KiteFFmpeg's CPU converter into Skia rasters); it renders frames it is
 fed, but the default JVM assembly is still unavailable, so desktop playback additionally requires
 real media, audio and frame adapters. `kiteplayer-view`, `kiteplayer-output` and the two 0.0.2
 umbrellas publish common-surface-only JVM variants with no widget or backend.
@@ -562,12 +562,12 @@ umbrellas publish common-surface-only JVM variants with no widget or backend.
 | `kiteplayer-core` | the engine: the player class, the session loop, clock, synchronisation, queues, buffering, the seek machine, the public API and the service interfaces | every target it declares |
 | `kiteplayer-rt` | the real-time audio core in C: the lock-free sample ring, the device glue and the render callback the audio device actually calls | seventeen native targets compile the C; DefaultOutput is exercised on macOS and RemoteIO by an app-hosted native test on one named iOS simulator |
 | `kiteplayer-output` | the audio sinks and renderers that talk to an operating system: Apple audio and layers, the macOS AppKit window, Android AudioTrack, the direct Surface renderer, and the OES-to-RGBA hardware-image bridge | macOS arm64, iOS arm64, iOS simulator arm64 and Android, plus a common-surface-only JVM variant with no backend; the private simulator sample consumes the iOS path, while the Android sample and `kiteplayer-compose-video` consume the Android paths |
-| `kiteplayer-ffmpeg` | the source and the decoders over KiteCodec, and the CPU colour conversion | macOS arm64, iOS arm64, iOS simulator arm64, JVM and Android; the iOS variants consume private local codec trees |
+| `kiteplayer-ffmpeg` | the source and the decoders over KiteFFmpeg, and the CPU colour conversion | macOS arm64, iOS arm64, iOS simulator arm64, JVM and Android; the iOS variants consume private local codec trees |
 | `kiteplayer-subtitles` | SubRip parsing and nothing else. No cue is timed, laid out or drawn, and it is not connected to playback | every target it declares |
 | `kiteplayer-view` | the Compose-free, backend-agnostic native presentation widgets: XML/programmatic `KitePlayerView` on Android and `KitePlayerUIView` on iOS, plus their renderer-adapter SPI | Android, iOS arm64 and iOS simulator arm64, plus a common-surface-only JVM variant with no widget; the Android XML view is exercised by the Android sample's measured smoke, while the iOS view compiles and links but has no physical-device measurement |
 | `kiteplayer-mobile` | the default-platform facade over `kiteplayer-core`, plus the real FFmpeg/output/view assembly on Android/iOS; exposes `KitePlayerPlatform`, `mobileBackends()` and the mobile renderer installers | playable on Android, iOS arm64 and iOS simulator arm64; explicit unavailable placeholders on JVM, JS and Wasm |
 | `kiteplayer-compose-interop` | `KitePlayerSurface`, a thin Compose host that installs the default mobile adapter and hosts the native view through `AndroidView` or `UIKitView`; re-exports `kiteplayer-mobile` | real native-view hosting on Android/iOS; empty layout-preserving placeholders on JVM, JS and Wasm |
-| `kiteplayer-compose-video` | `KiteVideo`, the true Compose renderer whose pixels participate in Compose drawing | Android, iOS arm64, iOS simulator arm64 and JVM; Android API 31+ has a Window-bound OES-to-RGBA GPU path with exact FrameMetrics GPU-completion leases, nonblocking codec-to-GL metadata handoff, and viewport-sized RGBA output, while API 26 to 30 uses immutable software images. On one API 36 emulator, the 8-bit AVC fixture produced 295 to 300 of 300 unique GPU-proven images at 29.403 to 29.852 FPS draw cadence. The newest corrected-gate cold-install reached 300 decoded/submitted/presented and proved 299 draws at 29.749 FPS; an earlier clean pass proved 297 at 29.403 FPS, and a diagnostic repeat rendered 299 with one budgeted late drop and proved 296 at 29.696 FPS. Every run remained zero-copy with no renderer failure or CPU conversion. Wider codec and HDR claims remain parser/host-contract only, and every physical-device measurement remains open. The Apple path's cost stays unmeasured until the plan's S2 exit, and the JVM variant is the software path only (KiteCodec CPU conversion into Skia rasters), unmeasured |
+| `kiteplayer-compose-video` | `KiteVideo`, the true Compose renderer whose pixels participate in Compose drawing | Android, iOS arm64, iOS simulator arm64 and JVM; Android API 31+ has a Window-bound OES-to-RGBA GPU path with exact FrameMetrics GPU-completion leases, nonblocking codec-to-GL metadata handoff, and viewport-sized RGBA output, while API 26 to 30 uses immutable software images. On one API 36 emulator, the 8-bit AVC fixture produced 295 to 300 of 300 unique GPU-proven images at 29.403 to 29.852 FPS draw cadence. The newest corrected-gate cold-install reached 300 decoded/submitted/presented and proved 299 draws at 29.749 FPS; an earlier clean pass proved 297 at 29.403 FPS, and a diagnostic repeat rendered 299 with one budgeted late drop and proved 296 at 29.696 FPS. Every run remained zero-copy with no renderer failure or CPU conversion. Wider codec and HDR claims remain parser/host-contract only, and every physical-device measurement remains open. The Apple path's cost stays unmeasured until the plan's S2 exit, and the JVM variant is the software path only (KiteFFmpeg CPU conversion into Skia rasters), unmeasured |
 | `kiteplayer-compose-ui` | `KitePlayerVideo` + `KiteRenderPath`, the runtime-choice layer over `kiteplayer-compose-interop` and `kiteplayer-compose-video`; a path change swaps the presentation over the running player, with identity-checked detach and the engine's coupled-decoder rebuild keeping position and play state | Android, iOS arm64, iOS simulator arm64 and JVM (JVM coerces NativeView to the Compose canvas) |
 | `kiteplayer-phone` | deprecated 0.0.2 source-migration umbrella over `kiteplayer-mobile` and `kiteplayer-view`, retaining `phoneBackends()` and the old view package | Android, iOS arm64, iOS simulator arm64 and a JVM umbrella variant; source migration is checked, binary compatibility across the artifact split is not claimed, and new code should not depend on it |
 | `kiteplayer-compose` | deprecated 0.0.2 source-migration umbrella over `kiteplayer-compose-interop`, `kiteplayer-compose-video`, and the old transitive phone aggregate | Android, iOS arm64, iOS simulator arm64 and a JVM umbrella variant; source migration is checked, binary compatibility across the artifact split is not claimed, and new code should choose the rendering model directly |
@@ -608,11 +608,11 @@ run behind the simulator candidate row and is not included in any of those test 
 
 Apache-2.0. See [NOTICE](NOTICE).
 
-Decoding is done by [KiteCodec](https://github.com/yuroyami/KiteCodec), which binds FFmpeg's libav\*
+Decoding is done by [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), which binds FFmpeg's libav\*
 libraries. The FFmpeg build you link carries its own license, and that license decides whether you may
-ship your binary. KiteCodec's Gradle plugin makes that choice explicit and fails the build if it is
+ship your binary. KiteFFmpeg's Gradle plugin makes that choice explicit and fails the build if it is
 left unset.
 
-Part of the Kite family: [KiteCodec](https://github.com/yuroyami/KiteCodec),
+Part of the Kite family: [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg),
 [KiteCore](https://github.com/yuroyami/KiteCore), [KitePDF](https://github.com/yuroyami/KitePDF),
 [KiteImage](https://github.com/yuroyami/KiteImage), [KiteQR](https://github.com/yuroyami/KiteQR).

@@ -625,14 +625,14 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
     /**
      * The container's edition table (S4.e): typed-rejected, never silently empty, because the
-     * container reader exposes no edition table yet. When KiteCodec reads Matroska editions this
+     * container reader exposes no edition table yet. When KiteFFmpeg reads Matroska editions this
      * member returns them; the truth-ledger rule is that an unimplemented member throws rather
      * than answering with a lie-shaped default.
      *
      * @throws UnsupportedOperationException always, naming the missing reader.
      */
     public fun editions(): List<Nothing> = throw UnsupportedOperationException(
-        "the container reader exposes no edition table; when KiteCodec reads Matroska editions " +
+        "the container reader exposes no edition table; when KiteFFmpeg reads Matroska editions " +
             "this member returns them (KPKMP 17.11)",
     )
 
@@ -643,7 +643,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * @throws UnsupportedOperationException always, naming the missing reader.
      */
     public fun programs(): List<Nothing> = throw UnsupportedOperationException(
-        "the container reader exposes no program table; when KiteCodec reads MPEG-TS programs " +
+        "the container reader exposes no program table; when KiteFFmpeg reads MPEG-TS programs " +
             "this member returns them (KPKMP 17.11)",
     )
 
@@ -667,7 +667,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
          * The backends in [PlayerConfig.backends] are resolved here, and nothing is discovered: Kotlin's
          * native targets have no classpath service lookup, so a missing backend is a typed configuration
          * error rather than a reflective search that would fail differently on every platform. On macOS the
-         * explicit pair is `KiteCodecMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from
+         * explicit pair is `KiteFFmpegMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from
          * `kiteplayer-output`; the engine never names either, which is what keeps it free of any platform.
          *
          * The player owns six threads from here until terminal close completes, one for the session actor
@@ -681,7 +681,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             val backend = config.backends.backend ?: throw PlaybackException(
                 PlaybackError.ConfigurationInvalid(
                     "no media backend was supplied in PlayerConfig.backends.backend, and there is nothing " +
-                        "to discover one with. On macOS pass KiteCodecMediaBackend() from kiteplayer-ffmpeg",
+                        "to discover one with. On macOS pass KiteFFmpegMediaBackend() from kiteplayer-ffmpeg",
                 ),
             )
             val output = config.backends.output ?: throw PlaybackException(

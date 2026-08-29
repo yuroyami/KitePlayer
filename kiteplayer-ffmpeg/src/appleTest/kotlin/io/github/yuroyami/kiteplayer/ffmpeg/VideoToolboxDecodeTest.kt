@@ -49,8 +49,8 @@ class VideoToolboxDecodeTest {
     }
 
     /** Decodes the first frame with the platform's own hwdec policy, for the S2.b hardware arm. */
-    private suspend fun firstVideoFrameAuto(file: String): Triple<KiteCodecSource, VideoDecoder, KiteCodecVideoFrame> {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteCodecSource
+    private suspend fun firstVideoFrameAuto(file: String): Triple<KiteFFmpegSource, VideoDecoder, KiteFFmpegVideoFrame> {
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteFFmpegSource
         val stream = assertNotNull(source.firstVideo, "no video stream in $file")
         source.selectStreams(setOf(stream.index))
         val decoder = assertNotNull(
@@ -70,6 +70,6 @@ class VideoToolboxDecodeTest {
             packet.close()
             if (frame == null) frame = decoder.receive()
         }
-        return Triple(source, decoder, assertNotNull(frame, "no frame decoded from $file") as KiteCodecVideoFrame)
+        return Triple(source, decoder, assertNotNull(frame, "no frame decoded from $file") as KiteFFmpegVideoFrame)
     }
 }

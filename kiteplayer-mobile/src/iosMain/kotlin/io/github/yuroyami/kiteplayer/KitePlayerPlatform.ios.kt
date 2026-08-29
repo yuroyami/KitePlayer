@@ -1,6 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecMediaBackend
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.output.AppleOutputBackend
 
 internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
@@ -11,7 +11,7 @@ private object IosKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
     override val supportsPictureInPicture: Boolean = false
 
     override fun backendsOrNull(): Backends = Backends(
-        backend = KiteCodecMediaBackend(),
+        backend = KiteFFmpegMediaBackend(),
         output = AppleOutputBackend,
     )
 }

@@ -17,7 +17,7 @@ plugins {
  * default everywhere.
  *
  * Targets: the macOS host always (Homebrew's libass, the proving ground), and every other
- * Kotlin/Native target this project ships when -Pkiteplayer.libass.root points at a KiteCodec
+ * Kotlin/Native target this project ships when -Pkiteplayer.libass.root points at a KiteFFmpeg
  * `native-libs/deps` tree holding cross-built ass-chain installs (buildAssChainFor<Target>).
  * That now means the iOS pair AND the Linux and Windows desktop triples.
  *
@@ -27,7 +27,7 @@ plugins {
  *
  * Android and the JVM are the ones still missing, and for a reason no link line fixes: this module
  * reaches libass through Kotlin/Native cinterop, and both of those are JVM targets that would need
- * a JNI bridge (a C shim, per-ABI .so packaging) exactly like KiteCodec's. wasm needs libass built
+ * a JNI bridge (a C shim, per-ABI .so packaging) exactly like KiteFFmpeg's. wasm needs libass built
  * to emscripten and a binding besides. Those stay the recorded next slices.
  */
 
@@ -39,7 +39,7 @@ val libassDepsRoot: File? = providers.gradleProperty("kiteplayer.libass.root")
  * The Android NDK, for the JNI adapter only.
  *
  * `local.properties` is consulted as well as the environment, because that is where this project
- * already records its SDK and the NDK lives inside it. The native tasks in KiteCodec read only the
+ * already records its SDK and the NDK lives inside it. The native tasks in KiteFFmpeg read only the
  * environment, which is why an Android build there needs ANDROID_NDK_HOME exported by hand.
  */
 fun resolveNdk(): File? {
@@ -138,12 +138,12 @@ kotlin {
     if (libassDepsRoot == null) {
         logger.lifecycle(
             "[kiteplayer-libass] cross targets skipped: set -Pkiteplayer.libass.root to a " +
-                "KiteCodec native-libs/deps tree with ass-chain installs to enable them.",
+                "KiteFFmpeg native-libs/deps tree with ass-chain installs to enable them.",
         )
     } else if (missing.isNotEmpty()) {
         logger.lifecycle(
             "[kiteplayer-libass] no ass-chain under $libassDepsRoot for: ${missing.joinToString()}. " +
-                "Run :kitecodec-core:buildAssChainFor<Target> for each to enable them.",
+                "Run :kiteffmpeg-core:buildAssChainFor<Target> for each to enable them.",
         )
     }
 

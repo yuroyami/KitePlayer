@@ -34,7 +34,7 @@ class ColorPolicyTest {
 
     /** Decodes every frame of a clip's video track, collecting the warnings the source reported. */
     private suspend fun warningsFromDecodingAll(clip: String): Pair<List<PlaybackWarning>, List<VideoFrame>> {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteFFmpegSource
         val warnings = mutableListOf<PlaybackWarning>()
         source.onWarning = { warnings += it }
 
@@ -99,7 +99,7 @@ class ColorPolicyTest {
         // would be a failure wearing a warning's clothes.
         val (_, frames) = warningsFromDecodingAll("colors-pq.mp4")
         try {
-            val rgba = SoftwareConverter.toRgba(frames.first() as KiteCodecVideoFrame)
+            val rgba = SoftwareConverter.toRgba(frames.first() as KiteFFmpegVideoFrame)
             assertEquals(320 * 240 * 4, rgba.size)
             assertTrue(rgba.any { it.toInt() != 0 }, "an approximated frame is still a frame")
         } finally {
@@ -153,7 +153,7 @@ class ColorPolicyTest {
     fun `the native converter tone maps a pq frame exactly like the packed law`() = runBlocking {
         val (_, frames) = warningsFromDecodingAll("colors-pq.mp4")
         try {
-            val frame = frames.first() as KiteCodecVideoFrame
+            val frame = frames.first() as KiteFFmpegVideoFrame
             val native = SoftwareConverter.toRgba(frame)
             val readable = frame.readableFrame()
             val packed = tightlyPackedToRgba(

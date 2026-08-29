@@ -45,7 +45,7 @@ int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate)
 
     /* Divide first. The naive `frames * 1000000 / rate` overflows a signed 64 bit intermediate
      * once frames exceeds about 9.2e12, which is register item B1-18 and the same shape as
-     * KiteCodec defect D9. This form only overflows once `frames / rate` alone exceeds 9.2e12,
+     * KiteFFmpeg defect D9. This form only overflows once `frames / rate` alone exceeds 9.2e12,
      * which at 48 kHz is a frame count no clock in this universe reaches.
      *
      * Exactness: with frames = whole * rate + rest, the true value is

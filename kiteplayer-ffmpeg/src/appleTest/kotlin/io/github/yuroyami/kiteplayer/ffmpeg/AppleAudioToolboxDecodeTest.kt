@@ -30,14 +30,14 @@ class AppleAudioToolboxDecodeTest {
     private val mediaDir: String = platform.posix.getenv("KITEPLAYER_TESTMEDIA")?.toKString() ?: "testmedia"
 
     private class Opened(
-        val source: KiteCodecSource,
+        val source: KiteFFmpegSource,
         val stream: PlayerStreamInfo,
         val decoder: AudioDecoder,
         val warnings: MutableList<PlaybackWarning>,
     )
 
     private suspend fun open(clip: String, platformPreferred: Boolean): Opened {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteFFmpegSource
         val warnings = mutableListOf<PlaybackWarning>()
         source.onWarning = { warnings += it }
         source.preferPlatformAudioDecoder = platformPreferred

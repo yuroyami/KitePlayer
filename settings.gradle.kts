@@ -15,16 +15,17 @@ pluginManagement {
 /*
  * SOL-B6: mavenLocal is OPT-IN for dependencies, because when it is on it wins SILENTLY.
  *
- * KiteCodec has been on Maven Central since 0.1.0 (2026-08-24), so the ordinary build resolves it
- * exactly as any other consumer does. The comment that used to sit here said the opposite, that
- * KiteCodec "is not on a public Maven repository yet", and it instructed the
- * `publishToMavenLocal` that is precisely the dangerous move.
+ * RIGHT NOW mavenLocal is REQUIRED to build, and that is temporary. The sibling renamed itself to
+ * KiteFFmpeg on 2026-08-29 and restarted its version line at 0.1.0, which Maven Central has never
+ * served: Central carries the old `kitecodec-core` coordinates up to 0.1.3 and nothing under the
+ * new name until the owner publishes. So until that publish, every build here needs the flag below
+ * and resolves the locally published `kiteffmpeg-core:0.1.0`.
  *
- * Why it is dangerous: KiteCodec's working tree and Central BOTH say 0.1.3. A local publication
- * therefore replaces Central's bytes with the working tree's under the same version string, and
- * nothing in the build or the log distinguishes them. A snapshot suffix would at least be visible;
- * an identical release version is not. That is a stale sibling shadowing a released artifact,
- * which is what this row was opened for.
+ * Why it stays opt-in rather than becoming unconditional: when mavenLocal is on it is consulted
+ * FIRST and it wins SILENTLY. The moment Central serves a version string this working tree also
+ * builds, a local publication replaces Central's bytes with the working tree's under the same
+ * name, and nothing in the build or the log tells them apart. A snapshot suffix would at least be
+ * visible; an identical release version is not.
  *
  * Turn it on deliberately when developing the two repositories together, and it says so out loud:
  *   ./gradlew -Pkiteplayer.useMavenLocal=true <task>
@@ -42,7 +43,7 @@ dependencyResolutionManagement {
 if (useMavenLocal) {
     println(
         "[KitePlayer] mavenLocal is ENABLED and is consulted FIRST, so a locally published " +
-            "kitecodec-core shadows the one Maven Central serves under the same version. " +
+            "kiteffmpeg-core shadows the one Maven Central serves under the same version. " +
             "Drop -Pkiteplayer.useMavenLocal to resolve released artifacts only.",
     )
 }
@@ -70,7 +71,7 @@ include(":kiteplayer-subtitles")
 // archive that cinterop embeds per Kotlin/Native target. Its Kotlin wrapper lives in :kiteplayer-core,
 // because that wrapper implements an internal interface of that module.
 //
-// It exists as its own module rather than inside KiteCodec because a lock-free audio ring has
+// It exists as its own module rather than inside KiteFFmpeg because a lock-free audio ring has
 // nothing to do with FFmpeg, and putting it there would make this player's real-time core a
 // transitive consequence of a codec dependency.
 include(":kiteplayer-rt")

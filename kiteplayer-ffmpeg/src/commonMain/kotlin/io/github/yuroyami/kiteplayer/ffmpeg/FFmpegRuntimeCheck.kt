@@ -2,17 +2,17 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
-import io.github.yuroyami.kitecodec.FFmpegError
-import io.github.yuroyami.kitecodec.FFmpegException
+import io.github.yuroyami.kiteffmpeg.FFmpegError
+import io.github.yuroyami.kiteffmpeg.FFmpegException
 
 /**
- * Turns KiteCodec's FFmpeg identity rejection into a typed [PlaybackError].
+ * Turns KiteFFmpeg's FFmpeg identity rejection into a typed [PlaybackError].
  *
- * **What is being reported.** KiteCodec's C layer compares the FFmpeg headers it was compiled against
+ * **What is being reported.** KiteFFmpeg's C layer compares the FFmpeg headers it was compiled against
  * with the FFmpeg runtime it is linked to, once per process, before anything allocates. In the direction
  * that matters, older headers against a newer runtime, every symbol resolves and the link succeeds while
  * struct field offsets are wrong, and the failure that follows is a wrong value read and then a crash
- * inside FFmpeg's own code. KiteCodec refuses to run on a combination it knows is unsafe and throws
+ * inside FFmpeg's own code. KiteFFmpeg refuses to run on a combination it knows is unsafe and throws
  * `FFmpegError.IncompatibleFFmpegRuntime` carrying a report with both version columns.
  *
  * **Why it becomes [PlaybackError.ConfigurationInvalid] and not [PlaybackError.SourceUnavailable].**
@@ -26,7 +26,7 @@ import io.github.yuroyami.kitecodec.FFmpegException
  *
  * The report's own text travels in the message, so the whole diagnosis, both version columns for all six
  * libraries, both licence strings and one actionable sentence, reaches a log or a bug report without
- * anyone having to reach back into KiteCodec for it.
+ * anyone having to reach back into KiteFFmpeg for it.
  */
 internal inline fun <T> mappingFFmpegRuntimeRejection(block: () -> T): T = try {
     block()
@@ -53,7 +53,7 @@ internal fun incompatibleRuntimeDetail(error: FFmpegError.IncompatibleFFmpegRunt
         .joinToString { "${it.name} headers ${it.headerVersion} against runtime ${it.runtimeVersion} (${it.verdict})" }
         .ifEmpty { "the six configure lines disagree: ${identity.configurationsDisagreed.joinToString()}" }
     return buildString {
-        append("the linked FFmpeg does not match the one KiteCodec was built against: ")
+        append("the linked FFmpeg does not match the one KiteFFmpeg was built against: ")
         append(summary)
         if (identity.bypassed) {
             append(". NOTE: the identity gate was bypassed by an environment variable, so this runtime ")

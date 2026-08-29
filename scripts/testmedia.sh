@@ -226,7 +226,7 @@ echo "Rotated clip, for the renderer's quarter turn"
 # What a phone writes: the pixels are stored landscape and a display matrix in the container tells the
 # player to turn them. -display_rotation is an INPUT option and its own unit is counter-clockwise
 # degrees, so 90 here is the matrix for a quarter turn counter-clockwise, which is 270 clockwise, and
-# that is the number KiteCodec reports because it reports clockwise. Either quarter turn swaps the
+# that is the number KiteFFmpeg reports because it reports clockwise. Either quarter turn swaps the
 # output width and height, which is what the test checks.
 # It has to be a two step recipe. Applied to a decoded input with autorotation on, ffmpeg turns the
 # PIXELS at the filter stage and writes no matrix at all, which is the opposite of the fixture wanted.

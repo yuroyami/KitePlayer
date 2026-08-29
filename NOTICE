@@ -7,12 +7,12 @@ Version 2.0.
 
 Third-party components
 ----------------------
-KitePlayer decodes media through KiteCodec (https://github.com/yuroyami/KiteCodec),
+KitePlayer decodes media through KiteFFmpeg (https://github.com/yuroyami/KiteFFmpeg),
 a separate Apache-2.0 project, consumed as a dependency and not vendored into
-this repository. KiteCodec in turn links against FFmpeg's libav* libraries
+this repository. KiteFFmpeg in turn links against FFmpeg's libav* libraries
 (https://ffmpeg.org), licensed under the LGPL-2.1-or-later (or the GPL when
 built with --enable-gpl). FFmpeg is NOT covered by this NOTICE or by
-KitePlayer's Apache-2.0 license, and neither is KiteCodec's own NOTICE.
+KitePlayer's Apache-2.0 license, and neither is KiteFFmpeg's own NOTICE.
 
 Depending on the FFmpeg build flavour a consumer links, the linked FFmpeg may
 additionally bundle third-party codec and rendering libraries (SVT-AV1,
@@ -20,5 +20,5 @@ libvpx, libaom, libopus, libmp3lame, libwebp, FreeType, HarfBuzz, FriBidi,
 libass, x264/x265 in the GPL flavour, and others), each under its own
 license. The complete component list, per-component licenses, and the
 distribution obligations they carry are documented at:
-https://yuroyami.github.io/KiteCodec/licensing/
-(source: docs/licensing.md in the KiteCodec repository).
+https://yuroyami.github.io/KiteFFmpeg/licensing/
+(source: docs/licensing.md in the KiteFFmpeg repository).

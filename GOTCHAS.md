@@ -4,7 +4,7 @@
 does not belong here.** This file holds only what CANNOT be learned from the tree: machine and
 toolchain traps that were paid for, decisions with their reasons, invariants whose violation
 looks fine until a device burns you, and the working rules of this project. It covers BOTH
-repositories (KitePlayer and its sibling `../KiteCodec`). The work that is LEFT lives in
+repositories (KitePlayer and its sibling `../KiteFFmpeg`). The work that is LEFT lives in
 `MASTER_PLAN.md`. History lives in git.
 
 ---
@@ -61,7 +61,7 @@ repositories (KitePlayer and its sibling `../KiteCodec`). The work that is LEFT 
 - Android Media3 and ExoPlayer are Apache-2.0: may be ported directly with credit in NOTICE.
 - `ffmpeg` and `ffprobe` binaries as test oracles: always fine. Differential testing compares
   outputs, never source.
-- KiteCodec's NOTICE names ffmpeg-n8.0 as the LGPL source offer for versions Maven Central can
+- KiteFFmpeg's NOTICE names ffmpeg-n8.0 as the LGPL source offer for versions Maven Central can
   never withdraw; that release tag is kept forever (binaries live at ffmpeg-n8.0-r2).
 
 ## 3. The gate
@@ -72,9 +72,9 @@ gate names the tier and the rule that selected it.
 **Tier 1, every change without exception, seconds:**
 
 ```bash
-cd ../KiteCodec
+cd ../KiteFFmpeg
 ./gradlew checkCinteropCoupling
-./gradlew :kitecodec-core:checkFFmpegRecipes
+./gradlew :kiteffmpeg-core:checkFFmpegRecipes
 ./native/kitecodec-c/scripts/check-deleted-surface.sh
 ./native/kitecodec-c/scripts/run-c-tests.sh plain
 
@@ -89,7 +89,7 @@ kiteplayer-rt/native/scripts/source-discipline.sh
 # Em dash scan, both repos, must print NOTHING. The pattern is the escape text backslash-u2014
 # (expanded by the shell) so no literal em dash exists in the repos, this file included. grep
 # exit 1 IS the passing outcome; do not wrap in set -e and read that exit as failure.
-cd ../KiteCodec  && git ls-files -z | xargs -0 grep -n $'\u2014'
+cd ../KiteFFmpeg  && git ls-files -z | xargs -0 grep -n $'\u2014'
 cd ../KitePlayer && git ls-files -z | xargs -0 grep -n $'\u2014'
 ```
 
@@ -98,12 +98,12 @@ changes, real-media regressions, anything about a target it did not build. It DO
 vendored FFmpeg tree baked from a different recipe than the checkout describes.
 
 **Tier 2, roughly 10 to 15 minutes.** Selected by ANY of: files under `native/` or `buildSrc/`
-in either repo, `kitecodec-gradle-plugin/src/`, any `*.def` or `build.gradle.kts` or version
+in either repo, `kiteffmpeg-gradle-plugin/src/`, any `*.def` or `build.gradle.kts` or version
 catalog, any Kotlin under a platform source set (nativeMain/Test, jvmMain/Test,
 jvmAndAndroidMain/Test, androidMain, androidHostTest, androidDeviceTest, appleMain/Test,
 macos*/ios*/linux*/mingw* Main or Test, realBackendTest), or the completion of any major
-program item. Contents: Tier 1 plus, in KiteCodec: host cinterop + apiCheck (both need
-`-Pkitecodec.hostTargetsOnly=true` on this machine), buildSrc and plugin tests, asan + tsan +
+program item. Contents: Tier 1 plus, in KiteFFmpeg: host cinterop + apiCheck (both need
+`-Pkiteffmpeg.hostTargetsOnly=true` on this machine), buildSrc and plugin tests, asan + tsan +
 interpose C runs, corpus replay, symbol audit, klib metadata diff, macosArm64Test, jvmTest,
 `./scripts/linux-tests.sh`; then the three-flag publish (section 4) when KitePlayer must see
 the change. In KitePlayer: `./scripts/testmedia.sh` FIRST (fixtures are gitignored and
@@ -111,7 +111,7 @@ generated; a clean clone has none), buildSrc test, macosArm64 suites (core, outp
 `:kiteplayer-view:iosSimulatorArm64Test`, asan + tsan + interpose C runs, desktop jvm suites
 (output, mobile, ffmpeg), `:kiteplayer-output:wasmJsNodeTest`, `./scripts/linux-tests.sh`,
 `./scripts/linux-jvm-tests.sh`, the mingw link
-(`:kiteplayer-ffmpeg:linkDebugTestMingwX64 -Pkitecodec.ffmpeg.localRoot="$PWD/../KiteCodec/native-libs"`),
+(`:kiteplayer-ffmpeg:linkDebugTestMingwX64 -Pkiteffmpeg.ffmpeg.localRoot="$PWD/../KiteFFmpeg/native-libs"`),
 cross-compile spot checks (js, wasmJs, android), and the sample runs over
 `sync1080p30.mp4` / `truevfr720.mp4` / `hevc4k10.mp4` / a nonexistent path. A sample miss on a
 loaded machine that passes on two quiet reruns is recorded as a load observation, not rerun
@@ -125,8 +125,8 @@ plus the supervised ten-minute device run and its negative control. Its numbers 
 machine, one operator, a manual observation; never present them as automated qualification.
 
 **Ratchets move by procedure, in the same commit as the change, with the old and new numbers
-in the commit message.** The baselines: KiteCodec API dumps (`apiDump` with the target flags),
-KitePlayer API dumps (`updateKotlinAbi`), `kitert-coupling-baseline.txt`, KiteCodec's
+in the commit message.** The baselines: KiteFFmpeg API dumps (`apiDump` with the target flags),
+KitePlayer API dumps (`updateKotlinAbi`), `kitert-coupling-baseline.txt`, KiteFFmpeg's
 `coupling-baseline.txt`, `klib-metadata-baseline.txt` (`klib-metadata-diff.sh --update`, paste
 the SUMMARY block), `deleted-surface.txt` (status becomes `resurrected-in-<item>`),
 `exported-symbols-baseline.txt` and `signature-baseline.txt`
@@ -139,13 +139,13 @@ Never move one silently.
   task depending on `androidMainClasses`, which AGP 9's KMP library plugin does not create, so
   applying it breaks the Android target. The library dependency is fine. This is the single
   most likely trap to re-trigger by "cleaning up" a build file.
-- **Publishing KiteCodec for KitePlayer needs ALL THREE flags:**
-  `./gradlew publishToMavenLocal -Pkitecodec.phoneTargetsOnly=true -Pkitecodec.withDesktopTargets=true -Pkitecodec.jni.linux=true`.
-  A publish regenerates the root module metadata, so `-Pkitecodec.hostTargetsOnly=true` alone
+- **Publishing KiteFFmpeg for KitePlayer needs ALL THREE flags:**
+  `./gradlew publishToMavenLocal -Pkiteffmpeg.phoneTargetsOnly=true -Pkiteffmpeg.withDesktopTargets=true -Pkiteffmpeg.jni.linux=true`.
+  A publish regenerates the root module metadata, so `-Pkiteffmpeg.hostTargetsOnly=true` alone
   DELETES the ios, linux and mingw variants from it and four unrelated gate steps fail at
   once. Found the hard way 2026-08-17.
-- On this machine every KiteCodec `apiDump`, `apiCheck` and cinterop invocation needs
-  `-Pkitecodec.hostTargetsOnly=true`: only macosArm64 has an FFmpeg tree here.
+- On this machine every KiteFFmpeg `apiDump`, `apiCheck` and cinterop invocation needs
+  `-Pkiteffmpeg.hostTargetsOnly=true`: only macosArm64 has an FFmpeg tree here.
 - mavenLocal is OPT-IN in KitePlayer, behind `-Pkiteplayer.useMavenLocal=true`, and it says so
   when on. Never re-add it unconditionally: same version string with different bytes is
   indistinguishable from Central's, and it nearly bit once.
@@ -155,7 +155,7 @@ Never move one silently.
 - FFmpeg n8.0: `--disable-postproc` does not exist (configure fails), and `--disable-asm`
   silently kills SIMD (a "simd" build carrying it is a base build and its measurement a lie).
 - **This machine's Android SDK is at `/Users/macbook/WORKSTATION/AndroidSDK`, not a standard
-  path**, and KiteCodec's native build only probes `ANDROID_NDK_HOME`/`ANDROID_NDK_ROOT`/
+  path**, and KiteFFmpeg's native build only probes `ANDROID_NDK_HOME`/`ANDROID_NDK_ROOT`/
   `ANDROID_NDK_LATEST_HOME` then `~/Library/Android/sdk/ndk` and `~/Android/Sdk/ndk`. It never
   reads `sdk.dir` from `local.properties`, so any FFmpeg or dav1d build for an Android target
   fails here with "Android NDK not found" unless you export it first:
@@ -165,7 +165,7 @@ Never move one silently.
   is not a declared input of the cinterop, compile, link or test tasks, so after a rebake every
   one of them reports UP-TO-DATE and the test binary keeps linking the OLD archives. `--rerun`
   does not fix it, because the stale link underneath is a different task. Delete the native
-  build outputs (`kitecodec-core/build/bin/<target>`, `build/test-results`, the target's test
+  build outputs (`kiteffmpeg-core/build/bin/<target>`, `build/test-results`, the target's test
   classes) and run with `--rerun-tasks`, or your green proves nothing. Since FFmpeg is embedded
   in the klibs and the build cache is keyed on those same undeclared inputs, `clean` before any
   publish meant to carry new native bytes, then spot-check: `unzip` the published
@@ -173,12 +173,12 @@ Never move one silently.
   the only one that reads the bytes a consumer would get.
 - **mavenLocal accumulates per-target artifacts across publishes with DIFFERENT flags, and a
   narrower publish neither refreshes nor removes the others.** After a
-  `-Pkitecodec.phoneTargetsOnly=true -Pkitecodec.withDesktopTargets=true` publish, the
+  `-Pkiteffmpeg.phoneTargetsOnly=true -Pkiteffmpeg.withDesktopTargets=true` publish, the
   `androidnative*` variants sitting in `~/.m2` were two days old, simply because that flag
   combination does not publish them. Their age is not evidence of a stale build; judge freshness
   only for the variants the run actually published, which the log names as
   `publish<Target>PublicationToMavenLocal`.
-- `-Pkitecodec.jni.linux=true` needs a running Docker daemon (it extracts JDK headers from a
+- `-Pkiteffmpeg.jni.linux=true` needs a running Docker daemon (it extracts JDK headers from a
   container). Without Docker, publish without that flag and accept that the jar carries no Linux
   JNI libraries, which also means `linux-jvm-tests.sh` cannot run.
 - **`./gradlew ... | tail` hides the build's exit code**, because the pipeline reports the exit
@@ -200,9 +200,9 @@ Never move one silently.
   (`KitePlayerView` and friends) is in NO dump and ships unguarded. A hand-rolled checker was
   refused as overbuild. Re-measure at each Kotlin bump.
 - The generated wasm binding has two copies (generator output and the committed
-  `wasmJsMain/.../KiteCodecWasm.kt`); `checkWasmBindingMirror` keeps them identical. If it
+  `wasmJsMain/.../KiteFFmpegWasm.kt`); `checkWasmBindingMirror` keeps them identical. If it
   fires, regenerate and commit both; do not hand-edit the committed copy.
-- KiteCodec CI fetches this repo's own prebuilt static FFmpeg trees (checksum-verified). A
+- KiteFFmpeg CI fetches this repo's own prebuilt static FFmpeg trees (checksum-verified). A
   distro FFmpeg CANNOT be linked by Kotlin/Native on modern Ubuntu (glibc 2.29/2.34 refs vs
   konan's 2.19 sysroot). BtbN builds are shared-only and useless for the static embed.
 - The two macOS CI jobs deliberately both build FFmpeg on a cold cache: one runs ratchets, the
@@ -243,7 +243,7 @@ Never move one silently.
   corrupts every timestamp.
 - Exporting all 196 binding entry points defeats emscripten dead-code elimination: raw module
   4x bigger, gzipped only ~6% bigger. Judge wasm size gzipped.
-- Webpack rewrites `import(url)` at BUILD time, so `KiteCodecWeb.load()` fails inside a
+- Webpack rewrites `import(url)` at BUILD time, so `KiteFFmpegWeb.load()` fails inside a
   bundler ("Cannot find module") even though the file serves; bundled apps use `attach()`.
 - Without COOP and COEP headers, importing the THREADED wasm artifact HANGS, it does not
   error. Feature-detect `self.crossOriginIsolated` before import. The default artifact stays
@@ -302,7 +302,7 @@ Never move one silently.
   reopening an fd item mutates the caller's descriptor. Both backend doors rewind before every
   open as the stopgap; the real cure is positional reads (planned).
 - FFmpeg polls the interrupt callback only inside `find_stream_info` and the URL protocol
-  loop; KiteCodec's read/seek entry helpers and both custom-AVIO callbacks poll it too. And
+  loop; KiteFFmpeg's read/seek entry helpers and both custom-AVIO callbacks poll it too. And
   `hls_read_header` leaves `interrupt_callback` ZEROED on its SAMPLE-AES and
   `init_subtitle_context` branches: child contexts need the callback copied explicitly.
 - `avcodec_find_decoder(AV_CODEC_ID_AV1)` returns libdav1d ahead of the native av1 decoder in
@@ -391,28 +391,32 @@ Never move one silently.
 
 ## 9. Cross-repo facts a reader cannot infer
 
-- KiteCodec has no plan of its own BY DESIGN; one product, two repos, one plan file here.
-- The `kitecodec` Gradle plugin supplies the FFmpeg library search path at link time
-  (KiteCodec's cinterop declares bare `-lavformat` with no `-L`), so `kiteplayer-ffmpeg` and
-  the samples need the plugin applied.
-- KiteCodec release tags carry ALL 22 prebuilts (11 triples x 2 flavours); macOS uses the
-  portable profile. Central serves 0.1.0, 0.1.1, 0.1.3; 0.1.2 was cut and superseded the same
-  day, never deployed. Deleted release PAGES keep their TAGS.
+- KiteFFmpeg has no plan of its own BY DESIGN; one product, two repos, one plan file here.
+- **There is no KiteFFmpeg Gradle plugin, and consumers need no build script.** It died when
+  FFmpeg moved INSIDE the published klibs, so a dependency line is the whole integration. Any
+  doc or memory saying a plugin supplies the link-time search path predates that and is wrong;
+  this bullet used to say exactly that.
+- KiteFFmpeg release tags carry ALL 22 prebuilts (11 triples x 2 flavours); macOS uses the
+  portable profile. Deleted release PAGES keep their TAGS.
 - Synkplay (the consumer, `../../syncplay-mobile`) pins KitePlayer in
   `gradle/libs.versions.toml`; the adapter is `shared/src/commonMain/.../player/kite/KiteImpl.kt`;
   mpv is the Android default engine, KitePlayer is picked on the home-screen wheel.
-- KiteCodec 0.1.4 exists ONLY on this machine's mavenLocal (interrupt seam, disposition fix,
-  `PacketReader.reselect`); Central still serves 0.1.3. By decision (MASTER_PLAN 0.3), 0.1.4
-  never ships under that name: the next Central publish is `kiteffmpeg-core` **0.1.0**, carrying
-  the rename, the 8.1.2 trees and the 0.1.4 work together. The version restarting is deliberate
-  (a new artifactId is a new artifact), so `kiteffmpeg-core` 0.1.0 is NEWER than
-  `kitecodec-core` 0.1.3 despite the smaller number. Never "fix" this by bumping past the old
-  line.
-- `PacketReader.reselect` (KiteCodec) is a committed, tested primitive with NO KitePlayer SPI
+- **The two names, and which one Central serves.** Maven Central serves the OLD coordinates only:
+  `io.github.yuroyami:kitecodec-core` at 0.1.0, 0.1.1 and 0.1.3 (0.1.2 was cut and superseded the
+  same day, never deployed). The repository renamed itself to KiteFFmpeg on 2026-08-29 and its
+  artifact is `kiteffmpeg-core`, which Central has NEVER served: it exists on this machine's
+  mavenLocal at **0.1.0** and nowhere else until the owner publishes. So KitePlayer cannot build
+  without `-Pkiteplayer.useMavenLocal=true` today, and that is expected rather than broken.
+- **The version went backwards on purpose.** `kiteffmpeg-core` 0.1.0 is strictly NEWER than
+  `kitecodec-core` 0.1.3: a new artifactId is a new artifact to Central, so the line restarted
+  with the name. It carries the n8.1.2 trees plus the interrupt-seam and disposition work that
+  never shipped under the old name. Never "fix" the number by bumping past the old line, and say
+  this in the README so a stranger reading two version numbers does not read a regression.
+- `PacketReader.reselect` (KiteFFmpeg) is a committed, tested primitive with NO KitePlayer SPI
   caller, on purpose: the engine's all-lanes subtitle cache made the SPI member unnecessary
   and it was deleted; the primitive stays for a future low-memory or network mode. Do not
   re-add the SPI half without its caller.
-- Two `kitecodec-gradle-plugin` functional tests fail on a clean checkout from before all of
-  this work (`kitecodecDslConfiguredAfterKotlinBlockIsSeenByTasks`,
+- Two `kiteffmpeg-gradle-plugin` functional tests fail on a clean checkout from before all of
+  this work (`kiteffmpegDslConfiguredAfterKotlinBlockIsSeenByTasks`,
   `missingLicenseChoiceFailsConfigurationWithInstructions`). Ignore them, fix nothing about
   them, never let them block a gate.

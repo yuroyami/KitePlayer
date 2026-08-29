@@ -52,7 +52,7 @@ class BackendSeekStressTest {
         val audioContext = newSingleThreadContext("stress-ffmpeg-audio")
         val random = Random(11)
 
-        val backend = KiteCodecMediaBackend()
+        val backend = KiteFFmpegMediaBackend()
         val session: BackendSession = withContext(demuxContext) {
             backend.open(MediaItem("$mediaDir/sync1080p30.mp4"))
         }

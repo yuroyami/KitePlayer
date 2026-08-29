@@ -1,4 +1,4 @@
-@file:OptIn(KiteCodecLowLevelApi::class)
+@file:OptIn(KiteFFmpegLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
@@ -34,33 +34,33 @@ import io.github.yuroyami.kiteplayer.spi.Vp9ChromaSubsampling
 import io.github.yuroyami.kiteplayer.spi.Vp9CodecConfiguration
 import io.github.yuroyami.kiteplayer.spi.Vp9Level
 import io.github.yuroyami.kiteplayer.spi.Vp9Profile
-import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
-import io.github.yuroyami.kitecodec.CodecId
-import io.github.yuroyami.kitecodec.HardwareAccel
-import io.github.yuroyami.kitecodec.dsl.DecoderOptions
-import io.github.yuroyami.kitecodec.MediaSource
-import io.github.yuroyami.kitecodec.MediaType
-import io.github.yuroyami.kitecodec.Packet
-import io.github.yuroyami.kitecodec.PacketReader
-import io.github.yuroyami.kitecodec.SeekDirection
-import io.github.yuroyami.kitecodec.StreamDecoder
-import io.github.yuroyami.kitecodec.StreamInfo
-import io.github.yuroyami.kitecodec.durationMicros
-import io.github.yuroyami.kitecodec.ptsMicros
-import io.github.yuroyami.kitecodec.Frame as KiteFrame
+import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
+import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.HardwareAccel
+import io.github.yuroyami.kiteffmpeg.dsl.DecoderOptions
+import io.github.yuroyami.kiteffmpeg.MediaSource
+import io.github.yuroyami.kiteffmpeg.MediaType
+import io.github.yuroyami.kiteffmpeg.Packet
+import io.github.yuroyami.kiteffmpeg.PacketReader
+import io.github.yuroyami.kiteffmpeg.SeekDirection
+import io.github.yuroyami.kiteffmpeg.StreamDecoder
+import io.github.yuroyami.kiteffmpeg.StreamInfo
+import io.github.yuroyami.kiteffmpeg.durationMicros
+import io.github.yuroyami.kiteffmpeg.ptsMicros
+import io.github.yuroyami.kiteffmpeg.Frame as KiteFrame
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToLong
 
 /**
- * The engine's source and decoders, over KiteCodec.
+ * The engine's source and decoders, over KiteFFmpeg.
  *
  * This is the only module that knows FFmpeg exists. Everything above it works against the interfaces
  * in `kiteplayer-core`, which is what lets a different backend take its place: a browser's WebCodecs,
  * a platform decoder, or a scripted fake in a test.
  */
-public class KiteCodecSourceFactory : MediaSourceFactory {
+public class KiteFFmpegSourceFactory : MediaSourceFactory {
     override suspend fun open(media: MediaItem): PlayerMediaSource {
-        // The same funnel KiteCodecMediaBackend.open runs (audit F-FACT1): this factory used to
+        // The same funnel KiteFFmpegMediaBackend.open runs (audit F-FACT1): this factory used to
         // drop headers, openOptions, formatHint and videoFilter on the floor and skip the
         // FFmpeg identity mapping, so the documented SPI door behaved differently from the
         // backend door for the same MediaItem.
@@ -70,7 +70,7 @@ public class KiteCodecSourceFactory : MediaSourceFactory {
         // reader and is closed with it (audit KP-P1-03).
         val io = media.io?.invoke()
         val source = mappingFFmpegRuntimeRejection {
-            KiteCodecSource(
+            KiteFFmpegSource(
                 when {
                     // M1, the custom AVIO bridge: an item's own byte reader carries the media.
                     io != null -> MediaSource.open(BlockingMediaIo(io), options)
@@ -84,7 +84,7 @@ public class KiteCodecSourceFactory : MediaSourceFactory {
     }
 }
 
-public class KiteCodecSource internal constructor(private val source: MediaSource) : PlayerMediaSource {
+public class KiteFFmpegSource internal constructor(private val source: MediaSource) : PlayerMediaSource {
 
     private var reader: PacketReader? = null
 
@@ -113,7 +113,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
 
     override val streams: List<PlayerStreamInfo> = selectableStreams.map { it.second }
 
-    /** Raw KiteCodec descriptors only for indices actually exposed through [streams]. */
+    /** Raw KiteFFmpeg descriptors only for indices actually exposed through [streams]. */
     private val byIndex: Map<Int, StreamInfo> = selectableStreams.associate { (raw, _) -> raw.index to raw }
 
     /** The length of the content, which is an interval and so carries no origin. */
@@ -130,7 +130,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     /**
      * The container's chapters, empty only when the file declares none.
      *
-     * Mapped from the container's own table (S4.b, KD-5). KiteCodec reports ABSOLUTE microsecond
+     * Mapped from the container's own table (S4.b, KD-5). KiteFFmpeg reports ABSOLUTE microsecond
      * bounds; the engine's timeline starts at zero, so the same mapper every timestamp crosses
      * moves them, and a chapter whose start maps before zero is clamped rather than dropped.
      */
@@ -159,7 +159,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     }
 
     override fun interrupt(): Boolean {
-        // KC-CANCEL: a single volatile write on the format context; KiteCodec documents this as
+        // KC-CANCEL: a single volatile write on the format context; KiteFFmpeg documents this as
         // the one member callable while another thread is blocked in a read or seek.
         source.interrupt()
         return true
@@ -167,12 +167,12 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
 
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
-        return reader.read()?.let { KiteCodecPacket(it, mapper) }
+        return reader.read()?.let { KiteFFmpegPacket(it, mapper) }
     }
 
     override suspend fun seekToKeyframe(target: Pts): Pts? {
         val reader = reader ?: error("selectStreams must be called before seeking")
-        // [target] needs no conversion. KiteCodec's seek already speaks the content-relative
+        // [target] needs no conversion. KiteFFmpeg's seek already speaks the content-relative
         // timeline, and every timestamp this class produces is now on that same timeline.
         reader.seek(target.micros, SeekDirection.Backward)
         // The container reader does not report where it landed. The engine finds out from the first decoded
@@ -206,7 +206,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
      */
     internal var preferPlatformAudioDecoder: Boolean = true
 
-    /** S4.e: the pre-open keys the demuxer never consumed, straight from KiteCodec's funnel. */
+    /** S4.e: the pre-open keys the demuxer never consumed, straight from KiteFFmpeg's funnel. */
     internal val unusedOpenOptions: List<String> get() = source.unusedOpenOptions
 
     internal fun openDecoder(
@@ -236,7 +236,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
         hardwareAccel: HardwareAccel? = null,
         hardware: HwdecStatus = HwdecStatus.Software,
         continuity: VideoDecoderContinuity = VideoDecoderContinuity(),
-    ): VideoDecoder = KiteCodecVideoDecoder(
+    ): VideoDecoder = KiteFFmpegVideoDecoder(
         decoder = openDecoder(
             stream.index,
             lowDelay = videoLowDelay,
@@ -261,7 +261,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
         stream: PlayerStreamInfo,
         decoder: CodecId? = null,
     ): AudioDecoder =
-        KiteCodecAudioDecoder(
+        KiteFFmpegAudioDecoder(
             decoder = openDecoder(stream.index, lowDelay = true, decoder = decoder),
             stream = stream,
             mapper = mapper,
@@ -272,10 +272,10 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
 
     /** Video decoders for this source. The factory applies the caller's platform policy at open. */
     public fun videoDecoderFactories(): List<VideoDecoderFactory> =
-        listOf(KiteCodecVideoDecoderFactory(this))
+        listOf(KiteFFmpegVideoDecoderFactory(this))
 
     public fun audioDecoderFactories(): List<AudioDecoderFactory> =
-        listOf(KiteCodecAudioDecoderFactory(this))
+        listOf(KiteFFmpegAudioDecoderFactory(this))
 
     public val firstVideo: PlayerStreamInfo?
         get() = streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt }
@@ -299,7 +299,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
  *   On an MPEG-TS capture starting at 1401 seconds, a 33 millisecond frame would come out as minus
  *   1401 seconds.
  *
- * Neither function rescales. The values handed in are already microseconds, converted by KiteCodec
+ * Neither function rescales. The values handed in are already microseconds, converted by KiteFFmpeg
  * through `av_rescale_q` and its 128 bit intermediate, because the obvious
  * `ticks * 1_000_000 * num / den` overflows a signed 64 bit multiply on a fine time base.
  */
@@ -308,7 +308,7 @@ internal class TimestampMapper(private val containerStartMicros: Long) {
     /** A point on the timeline. Null in, null out: an absent timestamp is not a timestamp of zero. */
     fun mapTimestamp(micros: Long?): Pts? = micros?.let { Pts(it - containerStartMicros) }
 
-    /** An interval. Rescaled by KiteCodec and shifted by nothing. */
+    /** An interval. Rescaled by KiteFFmpeg and shifted by nothing. */
     fun mapDuration(micros: Long?): Pts? = micros?.let { Pts(it) }
 }
 
@@ -401,7 +401,7 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
                 pixelAspectDenominator = it.sampleAspectRatio.den,
             )
         },
-        // The container's display matrix, already reduced to clockwise degrees by KiteCodec. Only a
+        // The container's display matrix, already reduced to clockwise degrees by KiteFFmpeg. Only a
         // video stream is ever muxed with one, and a value on any other kind reaches no renderer, so
         // no stream kind has to be excluded here.
         rotationDegrees = rotationDegrees,
@@ -433,7 +433,7 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
     )
 }
 
-internal class KiteCodecPacket(val native: Packet, private val mapper: TimestampMapper) : PlayerPacket {
+internal class KiteFFmpegPacket(val native: Packet, private val mapper: TimestampMapper) : PlayerPacket {
     override val streamIndex: Int get() = native.streamIndex
     override val pts: Pts? get() = mapper.mapTimestamp(native.ptsMicros)
 
@@ -450,17 +450,17 @@ internal class KiteCodecPacket(val native: Packet, private val mapper: Timestamp
     override val sizeBytes: Int get() = native.sizeBytes
     override fun copyBytes(): ByteArray = native.copyBytes()
     override val bytePosition: Long? get() = native.bytePosition.takeIf { it >= 0 }
-    internal fun copyForReplay(): KiteCodecPacket = KiteCodecPacket(native.copy(), mapper)
+    internal fun copyForReplay(): KiteFFmpegPacket = KiteFFmpegPacket(native.copy(), mapper)
     override fun close() = native.close()
 }
 
 /**
  * Creates the platform-selected decoder and, where policy allows, its replay-safe software fallback.
  */
-public class KiteCodecVideoDecoderFactory internal constructor(
-    private val source: KiteCodecSource,
+public class KiteFFmpegVideoDecoderFactory internal constructor(
+    private val source: KiteFFmpegSource,
 ) : VideoDecoderFactory {
-    override val name: String = "KiteCodec FFmpeg"
+    override val name: String = "KiteFFmpeg FFmpeg"
 
     override suspend fun create(stream: PlayerStreamInfo, hwdec: HwdecPolicy): VideoDecoder? {
         if (stream.kind != TrackKind.Video) return null
@@ -504,15 +504,15 @@ public class KiteCodecVideoDecoderFactory internal constructor(
                     continuity = continuity,
                 )
             },
-            copyPacket = { packet -> (packet as KiteCodecPacket).copyForReplay() },
-            isKeyframe = { frame -> (frame as? KiteCodecVideoFrame)?.isKeyframe == true },
+            copyPacket = { packet -> (packet as KiteFFmpegPacket).copyForReplay() },
+            isKeyframe = { frame -> (frame as? KiteFFmpegVideoFrame)?.isKeyframe == true },
             prepareReplay = continuity::beginReplay,
             warn = { source.onWarning(it) },
         )
     }
 }
 
-private class KiteCodecVideoDecoder(
+private class KiteFFmpegVideoDecoder(
     private val decoder: StreamDecoder,
     private val stream: PlayerStreamInfo,
     private val mapper: TimestampMapper,
@@ -526,14 +526,14 @@ private class KiteCodecVideoDecoder(
     private var generation: Generation = Generation.Initial
 
     /** The graph, built lazily from the FIRST decoded frame's own geometry and format (S4.e). */
-    private var filterGraph: io.github.yuroyami.kitecodec.FilterGraph? = null
+    private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
     private val filteredPending = ArrayDeque<KiteFrame>()
     private var filterFlushed = false
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
-        decoder.send((packet as KiteCodecPacket?)?.native)
+        decoder.send((packet as KiteFFmpegPacket?)?.native)
 
-    /** KiteCodec's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
+    /** KiteFFmpeg's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
     override val isDrained: Boolean
         // A graph that was never built has nothing to flush (audit F-FLT1): the lazy build waits
         // for the first decoded frame, and a stream that never produced one used to hold the
@@ -553,7 +553,7 @@ private class KiteCodecVideoDecoder(
         )
         // The rotation is the stream's, taken from the container's display matrix once at open. Every
         // frame of the stream carries it, because the renderer sees frames and nothing else.
-        val wrapped = KiteCodecVideoFrame(frame, pts, duration, generation, stream.rotationDegrees)
+        val wrapped = KiteFFmpegVideoFrame(frame, pts, duration, generation, stream.rotationDegrees)
         try {
             warnIfColorIsApproximated(wrapped.colorSpace)
         } catch (failure: Throwable) {
@@ -586,7 +586,7 @@ private class KiteCodecVideoDecoder(
                 return null
             }
             val info = raw.info
-            val graph = filterGraph ?: io.github.yuroyami.kitecodec.FilterGraph.buildVideo(
+            val graph = filterGraph ?: io.github.yuroyami.kiteffmpeg.FilterGraph.buildVideo(
                 description = description,
                 width = info.width,
                 height = info.height,
@@ -601,9 +601,9 @@ private class KiteCodecVideoDecoder(
         return filteredPending.removeFirst()
     }
 
-    private fun frameRateRational(): io.github.yuroyami.kitecodec.Rational {
-        val rate = stream.frameRate?.takeIf { it > 0.0 } ?: return io.github.yuroyami.kitecodec.Rational(25, 1)
-        return io.github.yuroyami.kitecodec.Rational((rate * 1000).toInt(), 1000)
+    private fun frameRateRational(): io.github.yuroyami.kiteffmpeg.Rational {
+        val rate = stream.frameRate?.takeIf { it > 0.0 } ?: return io.github.yuroyami.kiteffmpeg.Rational(25, 1)
+        return io.github.yuroyami.kiteffmpeg.Rational((rate * 1000).toInt(), 1000)
     }
 
     private fun dropFilterState() {
@@ -657,10 +657,10 @@ private class KiteCodecVideoDecoder(
 }
 
 /** Creates audio decoders. */
-public class KiteCodecAudioDecoderFactory internal constructor(
-    private val source: KiteCodecSource,
+public class KiteFFmpegAudioDecoderFactory internal constructor(
+    private val source: KiteFFmpegSource,
 ) : AudioDecoderFactory {
-    override val name: String = "KiteCodec FFmpeg"
+    override val name: String = "KiteFFmpeg FFmpeg"
 
     /**
      * Prefers the platform's own decoder when one exists, and open is the ONLY place it may refuse.
@@ -725,7 +725,7 @@ private fun audioFormat(sampleRate: Int, sourceChannels: Int, mask: Long?): Audi
     )
 }
 
-private class KiteCodecAudioDecoder(
+private class KiteFFmpegAudioDecoder(
     private val decoder: StreamDecoder,
     stream: PlayerStreamInfo,
     private val mapper: TimestampMapper,
@@ -752,9 +752,9 @@ private class KiteCodecAudioDecoder(
         private set
 
     override suspend fun send(packet: PlayerPacket?): Boolean =
-        decoder.send((packet as KiteCodecPacket?)?.native)
+        decoder.send((packet as KiteFFmpegPacket?)?.native)
 
-    /** KiteCodec's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
+    /** KiteFFmpeg's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
     override val isDrained: Boolean get() = decoder.isDrained
 
     override suspend fun receive(): AudioBuffer? {
@@ -791,7 +791,7 @@ private class KiteCodecAudioDecoder(
             if (rate > 0) Pts(anchorMicros + samplesSinceAnchor * 1_000_000L / rate) else Pts(anchorMicros)
         }
         samplesSinceAnchor += info.sampleCount
-        return KiteCodecAudioBuffer(frame, pts, generation, outputFormat)
+        return KiteFFmpegAudioBuffer(frame, pts, generation, outputFormat)
     }
 
     override suspend fun flush(newGeneration: Generation) {
@@ -814,7 +814,7 @@ private class KiteCodecAudioDecoder(
  * That is the whole point: a 1080p frame is 3.11 MB and a 4K 10-bit frame is 24.9 MB, so copying at
  * 60 frames a second would cost between 187 MB/s and 1.5 GB/s for nothing.
  */
-public class KiteCodecVideoFrame internal constructor(
+public class KiteFFmpegVideoFrame internal constructor(
     public val frame: KiteFrame,
     /** Already on the engine's relative timeline, and synthesised when the decoder gave none. */
     override val pts: Pts,
@@ -943,7 +943,7 @@ internal fun planeLayoutFor(format: PlayerPixelFormat, width: Int, height: Int):
     }
 }
 
-internal class KiteCodecAudioBuffer(
+internal class KiteFFmpegAudioBuffer(
     private val frame: KiteFrame,
     /** Already on the engine's relative timeline, and counted from samples when none was given. */
     override val pts: Pts,
@@ -987,7 +987,7 @@ internal class KiteCodecAudioBuffer(
  * anyway to resample and mix.
  */
 public fun AudioBuffer.interleavedFloat(): FloatArray = when (this) {
-    is KiteCodecAudioBuffer -> interleaved()
+    is KiteFFmpegAudioBuffer -> interleaved()
     else -> FloatArray(frameCount * format.channels).also { out ->
         val scratch = FloatArray(frameCount)
         for (channel in 0 until format.channels) {

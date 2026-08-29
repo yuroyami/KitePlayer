@@ -185,8 +185,8 @@ class ReferencePcmTest {
     }
 
     /** Opens a source with only its audio stream selected, and its decoder. */
-    private suspend fun openAudio(clip: String): Triple<KiteCodecSource, Int, AudioDecoder> {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteCodecSource
+    private suspend fun openAudio(clip: String): Triple<KiteFFmpegSource, Int, AudioDecoder> {
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$clip")) as KiteFFmpegSource
         // What this file measures is the DOWNMIX MATRIX and the ring's ordering, against reference PCM
         // that ffmpeg's own native decoders produced. The tolerances below are tight on purpose because
         // both sides are then the same arithmetic. A platform decoder is a different decoder, correct

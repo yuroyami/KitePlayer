@@ -761,7 +761,7 @@ class KiteVideoRendererTest {
 class UnsupportedFrameTypeTest {
 
     private fun foreignConverter(): (VideoFrame) -> ByteArray = { frame ->
-        throw UnsupportedFrameType(actual = frame::class.simpleName ?: "an unnamed frame", expected = "KiteCodecVideoFrame")
+        throw UnsupportedFrameType(actual = frame::class.simpleName ?: "an unnamed frame", expected = "KiteFFmpegVideoFrame")
     }
 
     @Test
@@ -795,7 +795,7 @@ class UnsupportedFrameTypeTest {
             assertEquals(1, conversions, "a dead pairing must not be re-attempted per frame")
 
             val refusals = events.filterIsInstance<RendererEvent.Failed>()
-                .filter { "KiteCodecVideoFrame" in it.detail }
+                .filter { "KiteFFmpegVideoFrame" in it.detail }
             assertEquals(1, refusals.size, "the refusal must be published once, not per frame: $events")
             assertTrue("TestFrame" in refusals.single().detail, "the refusal must name the actual type: ${refusals.single().detail}")
         } finally {

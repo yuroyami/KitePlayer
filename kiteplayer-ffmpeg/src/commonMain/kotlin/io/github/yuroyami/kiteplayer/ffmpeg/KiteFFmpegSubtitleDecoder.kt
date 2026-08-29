@@ -1,4 +1,4 @@
-@file:OptIn(io.github.yuroyami.kitecodec.KiteCodecLowLevelApi::class)
+@file:OptIn(io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
@@ -22,21 +22,21 @@ import io.github.yuroyami.kiteplayer.subtitle.WebVttParser
  * the common override subset; typesetting-grade rendering is the optional libass module's.
  * Bitmap formats still need real engines.
  */
-internal class KiteCodecSubtitleDecoderFactory : SubtitleDecoderFactory {
+internal class KiteFFmpegSubtitleDecoderFactory : SubtitleDecoderFactory {
 
-    override val name: String = "kitecodec-text"
+    override val name: String = "kiteffmpeg-text"
 
     override suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder? = when (stream.codec) {
-        "subrip", "srt", "text" -> KiteCodecTextSubtitleDecoder(SubRipParser::parseCueBody)
+        "subrip", "srt", "text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCueBody)
         // MP4 timed text is NOT raw UTF-8: a tx3g sample is a 2-byte big-endian text length,
         // that many bytes of UTF-8, then optional style boxes. Decoding the whole payload put
         // the binary length prefix and box bytes into the cue (audit P1-15). The styles are
         // dropped for now; the text is exact.
-        "mov_text" -> KiteCodecTextSubtitleDecoder(SubRipParser::parseCueBody, extractBody = ::tx3gText)
-        "webvtt" -> KiteCodecTextSubtitleDecoder(WebVttParser::parseCueBody)
+        "mov_text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCueBody, extractBody = ::tx3gText)
+        "webvtt" -> KiteFFmpegTextSubtitleDecoder(WebVttParser::parseCueBody)
         // The Kotlin ASS dialogue tier (M2). The track header, styles included, travels as
         // codec extradata; each packet is one FFmpeg-normalised event line.
-        "ass", "ssa" -> KiteCodecAssSubtitleDecoder(
+        "ass", "ssa" -> KiteFFmpegAssSubtitleDecoder(
             AssParser.trackParser(stream.codecExtradata?.decodeToString() ?: ""),
         )
         else -> null
@@ -44,7 +44,7 @@ internal class KiteCodecSubtitleDecoderFactory : SubtitleDecoderFactory {
 }
 
 /** ASS packets against the track header's styles: one event line per packet. */
-internal class KiteCodecAssSubtitleDecoder(
+internal class KiteFFmpegAssSubtitleDecoder(
     private val track: AssTrackParser,
 ) : SubtitleDecoder {
 
@@ -55,7 +55,7 @@ internal class KiteCodecAssSubtitleDecoder(
         check(!closed) { "the subtitle decoder is closed" }
         if (packet == null) return true
         val start = packet.pts?.micros ?: return true
-        val line = (packet as KiteCodecPacket).native.copyBytes().decodeToString()
+        val line = (packet as KiteFFmpegPacket).native.copyBytes().decodeToString()
         if (line.isEmpty()) return true
         val durationUs = packet.duration?.micros?.takeIf { it > 0 } ?: DEFAULT_HOLD_MICROS
         track.parseEvent(line, start, start + durationUs)?.let(pending::addLast)
@@ -92,7 +92,7 @@ private fun tx3gText(payload: ByteArray): String {
     return payload.decodeToString(2, end)
 }
 
-internal class KiteCodecTextSubtitleDecoder(
+internal class KiteFFmpegTextSubtitleDecoder(
     private val parseBody: (String) -> List<StyledSpan>,
     private val extractBody: (ByteArray) -> String = { it.decodeToString() },
 ) : SubtitleDecoder {
@@ -104,7 +104,7 @@ internal class KiteCodecTextSubtitleDecoder(
         check(!closed) { "the subtitle decoder is closed" }
         if (packet == null) return true
         val start = packet.pts?.micros ?: return true
-        val body = extractBody((packet as KiteCodecPacket).native.copyBytes())
+        val body = extractBody((packet as KiteFFmpegPacket).native.copyBytes())
         if (body.isEmpty()) return true
         val spans = parseBody(body)
         if (spans.isEmpty()) return true

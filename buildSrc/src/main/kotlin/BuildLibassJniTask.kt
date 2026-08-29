@@ -30,7 +30,7 @@ abstract class BuildLibassJniTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val sourceFile: org.gradle.api.file.RegularFileProperty
 
-    /** A KiteCodec `native-libs/deps` tree holding `<target>/ass-chain` installs. */
+    /** A KiteFFmpeg `native-libs/deps` tree holding `<target>/ass-chain` installs. */
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val assChainRoot: DirectoryProperty
@@ -64,7 +64,7 @@ abstract class BuildLibassJniTask : DefaultTask() {
             if (!chainLib.resolve("libass.a").isFile) {
                 throw GradleException(
                     "No ass chain for ${abi.depsDirName}: ${chainLib}/libass.a is missing. Run " +
-                        "KiteCodec's :kitecodec-core:buildAssChainFor${abi.gradleSuffix} first.",
+                        "KiteFFmpeg's :kiteffmpeg-core:buildAssChainFor${abi.gradleSuffix} first.",
                 )
             }
             // clang++ rather than clang, because harfbuzz is C++ and something has to carry the

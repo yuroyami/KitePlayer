@@ -29,7 +29,7 @@ import platform.UIKit.UIView
  * `kiteplayer-mobile` uses Metal: VideoToolbox frames wrap into textures with no copy and software
  * frames upload in their native format. [preferMetal] set false before the view enters a window
  * asks that adapter for its CPU-converter CALayer fallback. A custom backend can install its own
- * adapter without this view depending on KiteCodec or the output implementation.
+ * adapter without this view depending on KiteFFmpeg or the output implementation.
  *
  * All members must be used from the main thread, where UIKit delivers the callbacks that drive
  * them.

@@ -77,7 +77,7 @@
  * ARITHMETIC. Frame counts become microseconds through `kprt_frames_to_micros`, which divides
  * before it multiplies. The obvious form, `frames * 1000000 / rate`, overflows a 64 bit
  * intermediate at large frame deltas; that is register item B1-18, the same shape recorded
- * against KiteCodec's timestamp helpers as defect D9. The Kotlin ring had it too and was
+ * against KiteFFmpeg's timestamp helpers as defect D9. The Kotlin ring had it too and was
  * corrected in the same sub-phase, so the differential oracle compares two correct
  * implementations rather than two matching bugs.
  */

@@ -1,11 +1,11 @@
 [versions] #######################################################################################
-# Toolchain. Kept in lock-step with KiteImage / KiteAudio / KiteCodec / KitePDF so the Kite
+# Toolchain. Kept in lock-step with KiteImage / KiteAudio / KiteFFmpeg / KitePDF so the Kite
 # lineage builds with one shared stack. Values are pushed here by KiteVersions.
 kotlin = "2.4.10"
 agp = "9.2.1"
 vanniktechPublish = "0.36.0"
 dokka = "2.2.0"
-kitecodec = "0.1.4"
+kiteffmpeg = "0.1.0"
 ktor = "3.5.2"
 
 coroutines = "1.11.0"
@@ -23,7 +23,7 @@ androidxActivityCompose = "1.13.0"
 [libraries]
 # The codec backend. One entry so the library coordinate and the Gradle plugin below cannot drift
 # to different versions: they are the same release and a mismatch resolves two FFmpeg bindings.
-kitecodec-core = { module = "io.github.yuroyami:kitecodec-core", version.ref = "kitecodec" }
+kiteffmpeg-core = { module = "io.github.yuroyami:kiteffmpeg-core", version.ref = "kiteffmpeg" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }

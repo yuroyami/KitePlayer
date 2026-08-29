@@ -1,4 +1,4 @@
-@file:OptIn(KiteCodecLowLevelApi::class, ExperimentalForeignApi::class)
+@file:OptIn(KiteFFmpegLowLevelApi::class, ExperimentalForeignApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
@@ -6,8 +6,8 @@ import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
-import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
-import io.github.yuroyami.kitecodec.withPlanes
+import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
+import io.github.yuroyami.kiteffmpeg.withPlanes
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.get
 
@@ -48,7 +48,7 @@ public object SoftwareConverter {
      * @throws IllegalArgumentException when the pixel format is not one this converter handles.
      * @throws IllegalStateException when the frame lives in hardware memory.
      */
-    public fun toRgba(frame: KiteCodecVideoFrame): ByteArray {
+    public fun toRgba(frame: KiteFFmpegVideoFrame): ByteArray {
         val width = frame.size.width
         val height = frame.size.height
         require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
@@ -93,7 +93,7 @@ public object SoftwareConverter {
         return out
     }
 
-    private fun KiteCodecVideoFrame.convertPlanarYuv(
+    private fun KiteFFmpegVideoFrame.convertPlanarYuv(
         out: ByteArray,
         subsampleX: Int,
         subsampleY: Int,
@@ -133,7 +133,7 @@ public object SoftwareConverter {
         }
     }
 
-    private fun KiteCodecVideoFrame.convertNv12(out: ByteArray, layout: SampleLayout) {
+    private fun KiteFFmpegVideoFrame.convertNv12(out: ByteArray, layout: SampleLayout) {
         val width = size.width
         val height = size.height
         val coefficients = Coefficients.of(colorSpace)
@@ -167,7 +167,7 @@ public object SoftwareConverter {
         }
     }
 
-    private fun KiteCodecVideoFrame.copyPacked(out: ByteArray, sourceComponents: Int, redFirst: Boolean) {
+    private fun KiteFFmpegVideoFrame.copyPacked(out: ByteArray, sourceComponents: Int, redFirst: Boolean) {
         val width = size.width
         val height = size.height
         readableFrame().withPlanes { planes, strides, _ ->
@@ -368,7 +368,7 @@ public object SoftwareConverter {
                         rCr = 1.4746, gCb = 0.164553, gCr = 0.571353, bCb = 1.8814,
                     )
                     // BT.709, and the right default for anything unspecified above standard
-                    // definition. See ColorInfo.guessFor, which KiteCodec applies before this.
+                    // definition. See ColorInfo.guessFor, which KiteFFmpeg applies before this.
                     else -> Coefficients(
                         offset, lumaScale, chromaScale,
                         rCr = 1.5748, gCb = 0.187324, gCr = 0.468124, bCb = 1.8556,

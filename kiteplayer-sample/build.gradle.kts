@@ -2,7 +2,7 @@ import java.io.File
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    // Not optional. The Maven coordinate alone does not link: KiteCodec's cinterop declares its
+    // Not optional. The Maven coordinate alone does not link: KiteFFmpeg's cinterop declares its
     // linker options as bare -lavformat and friends with no -L, so every module whose link task
     // pulls FFmpeg in needs this plugin to supply the library directory.
 }

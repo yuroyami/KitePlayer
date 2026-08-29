@@ -2,15 +2,15 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kitecodec.CodecId
-import io.github.yuroyami.kitecodec.HardwareAccel
+import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.HardwareAccel
 
 /**
  * How a platform reaches its hardware decoder, because FFmpeg has two shapes and they open
  * differently (S2.b). A [NamedDecoder] IS the hardware path under its own decoder name
  * (`h264_mediacodec`); an [Accel] is an HWACCEL attached behind the ordinary decoder before open
  * (VideoToolbox). The policy table below cares only about [kind]; the factory cares which shape
- * it must hand to KiteCodec.
+ * it must hand to KiteFFmpeg.
  */
 internal sealed class HardwareRoute {
     abstract val kind: HwdecKind

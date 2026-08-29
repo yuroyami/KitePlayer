@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import androidx.test.platform.app.InstrumentationRegistry
-import io.github.yuroyami.kitecodec.FFmpeg
+import io.github.yuroyami.kiteffmpeg.FFmpeg
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.HwdecStatus
@@ -103,7 +103,7 @@ internal class AndroidMediaCodecDeviceTest {
             repeat(MAX_DRAIN_STEPS) {
                 if (!drainAccepted) drainAccepted = decoder.send(null)
                 decoder.receive()?.let { frame ->
-                    return DecodedFrame(opened.session, decoder, frame.asKiteCodecFrame())
+                    return DecodedFrame(opened.session, decoder, frame.asKiteFFmpegFrame())
                 }
                 if (decoder.isDrained) error("decoder drained without returning the fixture frame")
             }
@@ -114,13 +114,13 @@ internal class AndroidMediaCodecDeviceTest {
         }
     }
 
-    private suspend fun sendAndReceive(decoder: VideoDecoder, packet: PlayerPacket): KiteCodecVideoFrame? {
-        val pending = ArrayDeque<KiteCodecVideoFrame>()
+    private suspend fun sendAndReceive(decoder: VideoDecoder, packet: PlayerPacket): KiteFFmpegVideoFrame? {
+        val pending = ArrayDeque<KiteFFmpegVideoFrame>()
         try {
             repeat(MAX_BACKPRESSURE_STEPS) {
                 val accepted = decoder.send(packet)
                 val frame = decoder.receive()
-                if (frame != null) pending.addLast(frame.asKiteCodecFrame())
+                if (frame != null) pending.addLast(frame.asKiteFFmpegFrame())
                 if (accepted) {
                     check(pending.size <= 1) {
                         "bounded one-frame fixture produced ${pending.size} frames before one packet was accepted"
@@ -135,7 +135,7 @@ internal class AndroidMediaCodecDeviceTest {
     }
 
     private suspend fun openDecoder(path: String, policy: HwdecPolicy): OpenedDecoder {
-        val session = KiteCodecMediaBackend().open(MediaItem(path))
+        val session = KiteFFmpegMediaBackend().open(MediaItem(path))
         try {
             val stream = session.source.streams.first { it.kind == TrackKind.Video && !it.isCoverArt }
             var decoder: VideoDecoder? = null
@@ -173,10 +173,10 @@ internal class AndroidMediaCodecDeviceTest {
         return (77 * red + 150 * green + 29 * blue + 128) shr 8
     }
 
-    private fun io.github.yuroyami.kiteplayer.spi.VideoFrame.asKiteCodecFrame(): KiteCodecVideoFrame {
-        if (this is KiteCodecVideoFrame) return this
+    private fun io.github.yuroyami.kiteplayer.spi.VideoFrame.asKiteFFmpegFrame(): KiteFFmpegVideoFrame {
+        if (this is KiteFFmpegVideoFrame) return this
         close()
-        error("KiteCodec decoder returned an unexpected frame implementation: ${this::class}")
+        error("KiteFFmpeg decoder returned an unexpected frame implementation: ${this::class}")
     }
 
     private class OpenedDecoder(
@@ -193,7 +193,7 @@ internal class AndroidMediaCodecDeviceTest {
     private class DecodedFrame(
         private val session: BackendSession,
         val decoder: VideoDecoder,
-        val frame: KiteCodecVideoFrame,
+        val frame: KiteFFmpegVideoFrame,
     ) : AutoCloseable {
         override fun close() {
             frame.close()

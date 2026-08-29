@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
-import io.github.yuroyami.kitecodec.MediaByteSource
+import io.github.yuroyami.kiteffmpeg.MediaByteSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 

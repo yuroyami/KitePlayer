@@ -131,7 +131,7 @@ class RelativeTimelineTest {
             var withoutTimestamp = 0
             fun take(frame: VideoFrame) {
                 stamps += frame.pts.micros
-                if (!(frame as KiteCodecVideoFrame).hasPts) withoutTimestamp++
+                if (!(frame as KiteFFmpegVideoFrame).hasPts) withoutTimestamp++
                 frame.close()
             }
 
@@ -229,10 +229,10 @@ class RelativeTimelineTest {
         }
     }
 
-    private suspend fun open(file: String): KiteCodecSource =
-        KiteCodecSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteCodecSource
+    private suspend fun open(file: String): KiteFFmpegSource =
+        KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteFFmpegSource
 
-    private suspend fun videoDecoder(source: KiteCodecSource, index: Int): VideoDecoder =
+    private suspend fun videoDecoder(source: KiteFFmpegSource, index: Int): VideoDecoder =
         assertNotNull(
             source.videoDecoderFactories().first()
                 .create(source.streams.first { it.index == index }, HwdecPolicy.Auto),
@@ -240,7 +240,7 @@ class RelativeTimelineTest {
         )
 
     /** The next packet of [index], skipping and closing everything else. */
-    private suspend fun nextPacket(source: KiteCodecSource, index: Int): PlayerPacket? {
+    private suspend fun nextPacket(source: KiteFFmpegSource, index: Int): PlayerPacket? {
         while (true) {
             val packet = source.readPacket() ?: return null
             if (packet.streamIndex == index) return packet
@@ -254,7 +254,7 @@ class RelativeTimelineTest {
      * A refused packet is offered again after the drain rather than dropped, and anything decoded
      * beyond the one frame wanted is closed here.
      */
-    private suspend fun firstFrame(source: KiteCodecSource, index: Int, decoder: VideoDecoder): VideoFrame? {
+    private suspend fun firstFrame(source: KiteFFmpegSource, index: Int, decoder: VideoDecoder): VideoFrame? {
         var first: VideoFrame? = null
         while (first == null) {
             val packet = nextPacket(source, index)

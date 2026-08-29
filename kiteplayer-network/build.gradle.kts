@@ -28,7 +28,7 @@ kotlin {
 
     macosArm64 {
         // The e2e test binary consumes :kiteplayer-ffmpeg, whose klib names the libav*
-        // libraries; the kitecodec plugin adds the search path only to that module's own
+        // libraries; the kiteffmpeg plugin adds the search path only to that module's own
         // binaries, so the host test here names the System (Homebrew) location itself.
         binaries.all {
             linkerOpts("-L/opt/homebrew/lib")

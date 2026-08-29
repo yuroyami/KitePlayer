@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
-import io.github.yuroyami.kitecodec.MediaByteSource
+import io.github.yuroyami.kiteffmpeg.MediaByteSource
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
@@ -10,7 +10,7 @@ import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
 /**
  * The web cannot block, so this stages the source instead of parking a thread (17.14 X-09).
  *
- * Every other target bridges the engine's suspending [MediaIo] onto KiteCodec's synchronous
+ * Every other target bridges the engine's suspending [MediaIo] onto KiteFFmpeg's synchronous
  * [MediaByteSource] with `runBlocking`, which parks the demux worker and nothing else. A browser
  * has no such primitive: `runBlocking` does not exist in Kotlin/Wasm and blocking the main thread
  * is forbidden outright.

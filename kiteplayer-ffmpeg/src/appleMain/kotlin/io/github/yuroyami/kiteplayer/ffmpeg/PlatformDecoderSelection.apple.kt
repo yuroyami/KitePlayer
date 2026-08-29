@@ -2,8 +2,8 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kitecodec.CodecId
-import io.github.yuroyami.kitecodec.HardwareAccel
+import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.HardwareAccel
 
 /**
  * The Apple native axis is VideoToolbox (S2.b): an

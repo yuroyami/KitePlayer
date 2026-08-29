@@ -21,7 +21,7 @@ import kotlin.js.JsAny
  * This seam exists because of a hard boundary and a hard measurement, and it is the only shape that
  * satisfies both.
  *
- * The boundary: `:kiteplayer-output` must not depend on KiteCodec or FFmpeg, which the module's own
+ * The boundary: `:kiteplayer-output` must not depend on KiteFFmpeg or FFmpeg, which the module's own
  * build file states and the boundary scans enforce. So the renderer cannot read a frame's pixels
  * itself, exactly as `AndroidSurfaceVideoRenderer` cannot and takes a converter function instead.
  *
@@ -31,7 +31,7 @@ import kotlin.js.JsAny
  * against a 33.3 ms budget. Converting in C and writing straight into the array a canvas is about
  * to draw measured 8.5 to 9.7 ms.
  *
- * So this asks for a FILL rather than a return. The implementation lives wherever KiteCodec is
+ * So this asks for a FILL rather than a return. The implementation lives wherever KiteFFmpeg is
  * already a dependency, and the pixels never enter Kotlin memory at all.
  */
 public fun interface WebFramePainter {

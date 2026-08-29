@@ -1,21 +1,21 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
-import io.github.yuroyami.kitecodec.ChromaLocation
-import io.github.yuroyami.kitecodec.CodecId
-import io.github.yuroyami.kitecodec.ColorInfo
-import io.github.yuroyami.kitecodec.ColorMatrix
-import io.github.yuroyami.kitecodec.ColorPrimaries
-import io.github.yuroyami.kitecodec.ColorTransfer
-import io.github.yuroyami.kitecodec.MediaType
-import io.github.yuroyami.kitecodec.PixelFormat
-import io.github.yuroyami.kitecodec.Rational
-import io.github.yuroyami.kitecodec.StreamInfo
-import io.github.yuroyami.kitecodec.VideoStreamInfo
-import io.github.yuroyami.kitecodec.Vp9BitDepth
-import io.github.yuroyami.kitecodec.Vp9ChromaSubsampling
-import io.github.yuroyami.kitecodec.Vp9CodecInfo
-import io.github.yuroyami.kitecodec.Vp9Level
-import io.github.yuroyami.kitecodec.Vp9Profile
+import io.github.yuroyami.kiteffmpeg.ChromaLocation
+import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.ColorInfo
+import io.github.yuroyami.kiteffmpeg.ColorMatrix
+import io.github.yuroyami.kiteffmpeg.ColorPrimaries
+import io.github.yuroyami.kiteffmpeg.ColorTransfer
+import io.github.yuroyami.kiteffmpeg.MediaType
+import io.github.yuroyami.kiteffmpeg.PixelFormat
+import io.github.yuroyami.kiteffmpeg.Rational
+import io.github.yuroyami.kiteffmpeg.StreamInfo
+import io.github.yuroyami.kiteffmpeg.VideoStreamInfo
+import io.github.yuroyami.kiteffmpeg.Vp9BitDepth
+import io.github.yuroyami.kiteffmpeg.Vp9ChromaSubsampling
+import io.github.yuroyami.kiteffmpeg.Vp9CodecInfo
+import io.github.yuroyami.kiteffmpeg.Vp9Level
+import io.github.yuroyami.kiteffmpeg.Vp9Profile
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix as PlayerColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorPrimaries as PlayerColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer as PlayerColorTransfer

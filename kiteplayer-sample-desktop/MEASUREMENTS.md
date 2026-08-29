@@ -43,7 +43,7 @@ collects **320 published frames** (the register asks for at least 300), after a 
 - **upload total**: the CPU cost of one published frame on the renderer's worker thread, from
   before the first pixel is read to after the `ImageBitmap` exists. This is the same window
   `KiteVideoFrameCost` averages; the run's own cross-check line confirms the two agree.
-  - **convert**: `SoftwareConverter.toRgba`, which is KiteCodec's JNI plane copy plus the pure
+  - **convert**: `SoftwareConverter.toRgba`, which is KiteFFmpeg's JNI plane copy plus the pure
     Kotlin per-pixel YUV to RGBA loop in `Conversions.kt`.
   - **image build**: `Image.makeRaster(...).toComposeImageBitmap()`, which copies the bytes again
     into Skia storage.

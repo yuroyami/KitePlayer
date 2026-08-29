@@ -2,11 +2,11 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
-import io.github.yuroyami.kitecodec.FFmpeg
-import io.github.yuroyami.kitecodec.FFmpegError
-import io.github.yuroyami.kitecodec.FFmpegException
-import io.github.yuroyami.kitecodec.FFmpegIdentity
-import io.github.yuroyami.kitecodec.FFmpegLibraryIdentity
+import io.github.yuroyami.kiteffmpeg.FFmpeg
+import io.github.yuroyami.kiteffmpeg.FFmpegError
+import io.github.yuroyami.kiteffmpeg.FFmpegException
+import io.github.yuroyami.kiteffmpeg.FFmpegIdentity
+import io.github.yuroyami.kiteffmpeg.FFmpegLibraryIdentity
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -18,17 +18,17 @@ import kotlin.test.assertTrue
  * An incompatible FFmpeg runtime has to reach the caller as a typed [PlaybackError], and as the RIGHT
  * one.
  *
- * **Why the rejection is synthesised here rather than provoked.** KiteCodec's gate compares the FFmpeg
+ * **Why the rejection is synthesised here rather than provoked.** KiteFFmpeg's gate compares the FFmpeg
  * headers its C layer was compiled against with the runtime it is linked to, and in this process those
  * agree, because the archive this test links was built against the headers of the FFmpeg it loads. Making
  * them disagree needs a second FFmpeg install or a doctored compile, and the doctored compile is exactly
- * what `KiteCodec/native/kitecodec-c/tests/test_identity.c` does: five copies of the gate against five
+ * what `KiteFFmpeg/native/kitecodec-c/tests/test_identity.c` does: five copies of the gate against five
  * shim header trees, one case per verdict, which is where the evidence that the gate FIRES lives.
  *
  * What this file owns is the other half, and it is the half a doctored C compile cannot reach: that the
- * rejection KiteCodec throws arrives at a KitePlayer caller as `PlaybackError.ConfigurationInvalid` and
- * not as `SourceUnavailable`, that it carries the whole report, and that no other KiteCodec failure is
- * caught by the same net. The identity value is built through KiteCodec's own public constructors, so a
+ * rejection KiteFFmpeg throws arrives at a KitePlayer caller as `PlaybackError.ConfigurationInvalid` and
+ * not as `SourceUnavailable`, that it carries the whole report, and that no other KiteFFmpeg failure is
+ * caught by the same net. The identity value is built through KiteFFmpeg's own public constructors, so a
  * change to that shape breaks this test at compile time rather than letting it drift.
  */
 class FFmpegRuntimeRejectionTest {
@@ -61,7 +61,7 @@ class FFmpegRuntimeRejectionTest {
         buildProvisioningDir = "/opt/homebrew/lib",
         runtimeVersionInfo = "8.0",
         runtimeLicense = "GPL version 3 or later",
-        provisioning = "Link the FFmpeg build the headers came from, or rebuild KiteCodec.",
+        provisioning = "Link the FFmpeg build the headers came from, or rebuild KiteFFmpeg.",
     )
 
     @Test
@@ -84,7 +84,7 @@ class FFmpegRuntimeRejectionTest {
         // The whole report travels with it, so a log line or a bug report is complete on its own.
         assertContains(error.detail, "built for FFmpeg n8.0")
         assertContains(error.detail, "GPL version 3 or later")
-        assertContains(error.detail, "rebuild KiteCodec")
+        assertContains(error.detail, "rebuild KiteFFmpeg")
         // And the message a caller sees is the error's own sentence.
         assertContains(failure.message.orEmpty(), "cannot be built as configured")
     }
@@ -93,7 +93,7 @@ class FFmpegRuntimeRejectionTest {
      * A bypassed gate is still reported, and reported first.
      *
      * The diagnostic escape hatch turns a rejection into a warning so that a false rejection is not an
-     * outage inside an application that cannot patch KiteCodec. The condition attached to it is that using
+     * outage inside an application that cannot patch KiteFFmpeg. The condition attached to it is that using
      * it is never quiet, and this is the KitePlayer end of that condition: an investigation that does not
      * know the numbers were judged unsafe and used anyway starts from the wrong place.
      */
@@ -131,7 +131,7 @@ class FFmpegRuntimeRejectionTest {
     }
 
     @Test
-    fun everyOtherKiteCodecFailurePassesThroughUntouched() {
+    fun everyOtherKiteFFmpegFailurePassesThroughUntouched() {
         // The net must catch exactly one thing. A media error rethrown as a configuration error would be
         // worse than no mapping at all, because it would be confidently wrong.
         val original = FFmpegException(FFmpegError.FileNotFound(-2, "No such file or directory"))
@@ -156,7 +156,7 @@ class FFmpegRuntimeRejectionTest {
         assertTrue(FFmpeg.identity.isAcceptable, FFmpeg.identity.describe())
         val failure = assertFailsWith<FFmpegException> {
             mappingFFmpegRuntimeRejection {
-                io.github.yuroyami.kitecodec.MediaSource.open("/definitely/not/a/media/file.mp4")
+                io.github.yuroyami.kiteffmpeg.MediaSource.open("/definitely/not/a/media/file.mp4")
             }
         }
         // A missing file reports a missing file. The identity gate ran first and said nothing.

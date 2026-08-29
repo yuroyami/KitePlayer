@@ -1,7 +1,7 @@
 # MASTER_PLAN
 
 **The one source of truth for what is LEFT to do, in both repositories** (KitePlayer and
-`../KiteCodec`; the sibling has no plan file by design). How to work, the traps, and the
+`../KiteFFmpeg`; the sibling has no plan file by design). How to work, the traps, and the
 decisions live in `GOTCHAS.md`. History lives in git; the old planning documents
 (KPKMP-FUTURE.md, KPKMP-PAST.md, the SALANKE set, HANDOFF.md) were distilled into these two
 files on 2026-08-29 and deleted; `git log --diff-filter=D` finds them.
@@ -21,11 +21,11 @@ commit before execution. [owner] means it needs the owner's hardware, account, o
 ## Where things stand (verified 2026-08-29)
 
 The engine is real and plays: one Kotlin core (actor loop, workers, quiesce handshake, sync
-law, seek machine), FFmpeg via KiteCodec beneath it, audio with a windowed-sinc resampler,
+law, seek machine), FFmpeg via KiteFFmpeg beneath it, audio with a windowed-sinc resampler,
 WSOLA tempo and pitch preservation, subtitles with libass built for seven target families,
 outputs on Android, Apple, desktop JVM, Linux (container-proven), and a web canvas path.
-About 880 Kotlin test functions in KitePlayer, about 260 in KiteCodec, plus nineteen C
-suites. Both repos have CI (KitePlayer 7 jobs on 4 OSes). KiteCodec 0.1.3 is on Maven
+About 880 Kotlin test functions in KitePlayer, about 260 in KiteFFmpeg, plus nineteen C
+suites. Both repos have CI (KitePlayer 7 jobs on 4 OSes). KiteFFmpeg 0.1.3 is on Maven
 Central; 0.1.4 is local-only. KitePlayer has never been published.
 
 Honest support today: macOS arm64 is the proving ground (experimental full playback). Android
@@ -57,20 +57,20 @@ done; distribution half is Phase 8.)
 | 13 | Android Native attaches the JavaVM, MediaCodec device-tested | RED (DEVICE-DAY) |
 | 14 | Wasm runtime in a versioned package, browser-tested | RED (Phase 6) |
 | 15 | Licence/flags/capabilities agree | GREEN |
-| 16 | Prebuilts exist; clean consumer install works (KiteCodec) | GREEN |
-| 17 | Every KitePlayer variant resolves one KiteCodec variant | RED (Phase 8) |
+| 16 | Prebuilts exist; clean consumer install works (KiteFFmpeg) | GREEN |
+| 17 | Every KitePlayer variant resolves one KiteFFmpeg variant | RED (Phase 8) |
 | 18 | Player modules and web runtime release together | RED (Phase 8) |
 | 19 | Licence/SBOM/provenance per bundled native dep | RED (Phase 8) |
 | 20 | RC tests run before publication; publication atomic | RED (Phase 8) |
 
 ---
 
-# PHASE 0: THE RENAME, AND WHAT THE FFMPEG BUMP UNCOVERED
+# PHASE 0: WHAT THE BUMP AND THE RENAME LEFT BEHIND
 
 ### 0.1 A rebaked FFmpeg tree does not invalidate anything downstream. Size M
 
 **Found 2026-08-29 while doing 0.2, and it is the more serious half of that day.** After all 12
-trees were rebuilt from n8.0 to n8.1.2, `:kitecodec-core:macosArm64Test` and `jvmTest` reported
+trees were rebuilt from n8.0 to n8.1.2, `:kiteffmpeg-core:macosArm64Test` and `jvmTest` reported
 UP-TO-DATE, and so did `linkDebugTestMacosArm64`. Gradle sees no input change because the
 installed `native-libs/**` archives are not declared as inputs of the cinterop, link, compile or
 test tasks that consume them. `--rerun` did not help either: it re-runs the named task, not the
@@ -98,72 +98,29 @@ did contain `n8.1.2`. Do not repeat the stronger claim without testing it.
   build, or verified artifact by artifact, until this is fixed. A `clean` before publish is the
   interim rule.
 
-### 0.2 Rename KiteCodec to KiteFFmpeg. Size L, owner-decided 2026-08-29
+### 0.2 The rename remainders. Size S each
 
-**Why.** Discoverability (this niche is searched as "ffmpeg kotlin", and every findable
-project carries the name: ffmpeg-kit, ffmpeg-python, ffmpeg.wasm, ffmpeg-kt) and honesty (the
-repository is solely an FFmpeg binding by standing decision and always will be; "KiteCodec"
-under-claims that). **Timing is the whole argument for doing it in Phase 0:** external
-consumers are approximately zero and KitePlayer has never been published. Phase 8 bakes the
-old coordinates into public POMs forever; after that the rename is permanently half-done.
+The rename LANDED 2026-08-29 (KiteFFmpeg `d03c9c5`, KitePlayer adoption alongside it): modules,
+packages, artifacts, properties, class names, the shipped licence directory and the local
+directory are all `kiteffmpeg`, the internals (`kc_`, `ffkmp_`, `libkitecodec.a`,
+`native/kitecodec-*`) deliberately are not, and the version line restarted at 0.1.0. What is
+left of it:
 
-**The boundary, decided: public renames fully, internals stay.**
-
-- RENAMED: the GitHub repository (KiteCodec to KiteFFmpeg; GitHub redirects old URLs), the
-  Maven artifacts (`kitecodec-core` to `kiteffmpeg-core`, same `io.github.yuroyami` group,
-  same pattern for the gpl module), the Gradle module directories, the Kotlin packages
-  (`io.github.yuroyami.kitecodec` to `...kiteffmpeg`), the buildSrc `kitecodec.buildtools`
-  package, and the `-Pkitecodec.*` property family. **There is no Gradle plugin to rename**:
-  it died with the FFmpeg embedding, so the plugin id, its DSL block and its info task are not
-  part of this work, and KitePlayer applies no such plugin (checked 2026-08-29).
-- KEPT, deliberately, and this is not a half-rename because the line is public vs internal:
-  the C ABI prefixes (`kc_`, `ffkmp_`), the archive names (`libkitecodec.a`,
-  `libkitecodec_jni` and its `System.loadLibrary` string), and every symbol, signature and
-  metadata baseline that pins them. They are invisible to consumers, and moving them churns
-  every ratchet for zero user-facing gain. Old `KC-` item IDs in this file also stay, per the
-  header's stable-handles rule.
-- First version under the new name: **0.1.0**, owner-decided 2026-08-29. A new artifactId is a
-  new artifact as far as Central is concerned, so there is no collision with the
-  `kitecodec-core` 0.1.x line and no reason to inherit its numbering; the name change is the
-  clean break and the version starts over with it. That 0.1.0 carries everything at once: the
-  rename, the 8.1.2 trees from 0.2, and the interrupt-seam and disposition work that sat local
-  as `kitecodec-core` 0.1.4. **Consequence to write into the README, because a version number
-  going backwards looks like a regression:** `kiteffmpeg-core` 0.1.0 is strictly newer than
-  `kitecodec-core` 0.1.3, and the old line's last act is a pointer saying so. The old
-  coordinates stay on Central forever; Central is immutable.
-
-**Order inside the item** (after 0.2's trees are baked, so one publish carries both):
-
-- [ ] Commit 1, the flat rename sweep: packages, module dirs, plugin id, DSL, task and
-  property names, repo-internal references. The JNI adapter's class-path strings in the C
-  (`kj_*.c` carry `io/github/yuroyami/kitecodec/...`) move with the packages, which forces
-  the JNI relink; the trees are already fresh from 0.2. ABI dumps fully regenerate (every
-  declaration moves package); the metadata baseline moves by its procedure.
-- [ ] Commit 2, package-level concern scoping INSIDE the one module: `...kiteffmpeg.demux`,
-  `.decode`, `.encode`, `.filter` and friends. This buys the clarity ffmpeg-kt's module split
-  advertises without the per-module publication tax; an actual module split was considered
-  and declined 2026-08-29 (payload weight lives in the native profile, not Kotlin modules;
-  shared types drag the mass into core; 13-targets-times-N-modules multiplies the config
-  drift the SEAM item already documents). Revisit only if a real external consumer asks for a
-  playback-only artifact, and then additively.
-- [ ] KitePlayer adoption commit: catalog coordinates, plugin id, the `-P` flags in gate
-  commands and CI, every `../KiteCodec` path in scripts and docs (decide the local directory
-  name in the same breath), GOTCHAS and this file swept for the old commands.
-- [ ] README gets the one-line non-affiliation notice: not affiliated with or endorsed by the
-  FFmpeg project ("FFmpeg" is Fabrice Bellard's trademark). NOTICE's source-offer URLs move
-  to the new repository name; old URLs redirect but are updated anyway; the `ffmpeg-n8.0` and
-  new `ffmpeg-n8.1.2` offer tags ride the renamed repository unchanged.
-- [ ] CI: workflow names, badge URLs, and the checksum-pinned companion-release fetch URLs
-  the consumer jobs use (redirects exist; pinned scripts update explicitly).
-- [ ] Owner acts: the GitHub repository rename itself, the push, and the `kiteffmpeg-core`
-  0.2.0 publish to Central.
-- [ ] Synkplay moves its plugin DSL and pin whenever it next bumps; nothing here blocks on it.
-- [ ] On completion, graduate to GOTCHAS: the public-vs-internal naming boundary (kc_ stays,
-  and why), the renamed `-P` property family, and the trademark line.
-- [ ] Gate: Tier 2 (build scripts and native strings move), then the three-flag
-  publishToMavenLocal and a full KitePlayer gate against the renamed artifacts.
-
----
+- [ ] **Package-level concern scoping inside the one module**: `...kiteffmpeg.demux`, `.decode`,
+  `.encode`, `.filter` and friends. This buys the clarity a module-per-concern split advertises
+  without the per-module publication tax. The split itself was considered and DECLINED
+  2026-08-29: payload weight lives in the native profile rather than in Kotlin modules, shared
+  types drag the mass into a base module anyway, and 13 targets times N modules multiplies the
+  config drift the SEAM item already documents. Revisit only if a real external consumer asks
+  for a playback-only artifact, and then additively.
+- [ ] **Synkplay** moves its pin to `kiteffmpeg-core` whenever it next bumps KitePlayer. Nothing
+  blocks on it, and its adapter needs no change beyond imports.
+- [ ] **[owner] The GitHub repository rename** (KiteCodec to KiteFFmpeg; GitHub redirects old
+  URLs, and the CI badge and the checksum-pinned companion-release fetch URLs already name the
+  new one, so they go live with the rename).
+- [ ] **[owner] Publish `kiteffmpeg-core` 0.1.0 to Central**, gated on item 0.1: cut it from a
+  clean build, and spot-check one published klib for `n8.1.2` before releasing. The old
+  `kitecodec-core` line stays on Central untouched and receives nothing further.
 
 # PHASE 1: DESKTOP NATIVE VIEW (owner-ordered 2026-08-29)
 
@@ -179,7 +136,7 @@ via the Compose interop blending flag, proven by a spike before any wiring; wher
 fails, coerce to ComposeCanvas and report through `onEffectivePath` (the existing honesty
 contract). `Auto` stays ComposeCanvas on JVM until the owner flips it on measurements.
 Module split mirrors the web renderer (because `:kiteplayer-output` must not depend on
-KiteCodec): geometry + painting in output jvmMain, frame conversion via a factory in
+KiteFFmpeg): geometry + painting in output jvmMain, frame conversion via a factory in
 `kiteplayer-mobile` jvmMain over `SoftwareConverter`, the view in `kiteplayer-view` jvmMain
 (module already declares `jvm()`), the Compose actual in `kiteplayer-compose-interop`.
 Tier 2 (JAWT + Metal/D3D/GL presenter, our own JNI shim) is a follow-up item, justified only
@@ -226,7 +183,7 @@ by tier 1's measured frame cost.
   cancels + joins the painter; geometry via the shared `frameLayout` law from commonMain.
 - [ ] RED first, headless: refusal closes frame; rapid presents drop + close older; close
   joins painter, present-after-close refuses; overlay after close does not retain.
-  Falsify the pending-frame close. Factory test: non-KiteCodec frame refuses
+  Falsify the pending-frame close. Factory test: non-KiteFFmpeg frame refuses
   `UnsupportedFrameType`; 2x2 synthetic yuv420p converts to known RGBA.
 - [ ] Tier 2, ABI dumps. Commit:
   `Paint desktop video on the canvas's own thread, off the Compose clock`
@@ -278,7 +235,7 @@ The seam is `FakeCodecModule` (wasmJsTest); it needs the packet/decoder entry po
 drives (~40 entry points consumed by that file: a fake demuxer, hence M).
 
 - [ ] Extend the fake (scripted packets, EOF, corrupt arm, fail-at-open arm); three RED tests,
-  each falsified by reverting its fix; `:kitecodec-core:wasmJsNodeTest` green.
+  each falsified by reverting its fix; `:kiteffmpeg-core:wasmJsNodeTest` green.
 - [ ] Commit: `Prove the three wasm fixes can fail`. Release-gate box 4 re-grades.
 
 ### 2.2 The test-debt row: ten owed regressions + one warning test. Size M-L total
@@ -337,7 +294,7 @@ Reduce the claim to the genuinely unreachable set.
 
 ---
 
-# PHASE 3: CORRECTNESS AND CONTRACTS (KiteCodec first, republish, then adoption)
+# PHASE 3: CORRECTNESS AND CONTRACTS (KiteFFmpeg first, republish, then adoption)
 
 ### 3.1 KC-POISON-SCOPE: the backends disagree about a poisoned sink. Size S + design line
 
@@ -430,7 +387,7 @@ mid-stream with buffered frames; leak ledger shows zero live after. Delete the K
 ### 3.10 KC-CAPS: enumeration + measured build inventory. Size S + S
 
 `FFmpeg.hasDecoder(name)` exists; ENUMERATION does not (`av_codec_iterate` unbound), and
-`kitecodecInfo` prints the dsl TOGGLES, not a measured inventory of the linked tree. Design
+`kiteffmpegInfo` prints the dsl TOGGLES, not a measured inventory of the linked tree. Design
 commit for `FFmpeg.decoders(): List<String>`; make the info task measure. RED: list contains
 h264 everywhere; wasm fake scripts its list.
 
@@ -446,7 +403,7 @@ until zero.
 
 An iOS-only public API change passes today (dumps re-based under the host-only flag).
 Fix: CI fetches the prebuilt static trees (the mechanism the consumer jobs already use) for
-ios/linux/mingw and dumps with `-Pkitecodec.requireAllTargets=true` on the macOS job. Prove
+ios/linux/mingw and dumps with `-Pkiteffmpeg.requireAllTargets=true` on the macOS job. Prove
 live with a throwaway iOS-only public function that must fail the widened check. Reduce to
 any genuinely unreachable targets instead of closing if some tree cannot exist in CI.
 
@@ -479,12 +436,12 @@ author; no new dependency), conversion via platform actuals (platform charset AP
 Nobody has to write a subtitle engine: `ff_pgssub_decoder`, `ff_dvbsub_decoder`,
 `ff_dvdsub_decoder`, `ff_xsub_decoder` and eight text-format decoders (SAMI, JACOsub,
 MicroDVD, MPL2, RealText, PJS, VPlayer, STL) already ship in the archives, unreachable. The
-work is a KiteCodec decode-subtitle surface (packet in, positioned rects out) plus a routing
+work is a KiteFFmpeg decode-subtitle surface (packet in, positioned rects out) plus a routing
 branch in the player's subtitle factory onto the EXISTING `OverlayImage` path. CEA-608/708
 ride VIDEO frame side data and stay a named remainder here (needs the per-frame side-data
-channel, its own KiteCodec API act; also the one structural blocker under timed metadata).
+channel, its own KiteFFmpeg API act; also the one structural blocker under timed metadata).
 
-- [ ] KiteCodec design commit, then RED: a PGS fixture decodes to positioned bitmaps on jvm +
+- [ ] KiteFFmpeg design commit, then RED: a PGS fixture decodes to positioned bitmaps on jvm +
   native. Player adoption: PGS MKV shows subtitles in the desktop sample (manual evidence,
   recorded). Republish, adopt.
 
@@ -534,7 +491,7 @@ red-first on the rasterizer geometry.
 - [ ] Public models mutable through arrays: defensive copies or immutable lists; identity
   equality documented where it stays.
 - [ ] Raw FFmpeg option strings and filter chains at the public edge: mark with an explicit
-  low-level opt-in annotation (mirror KiteCodec's `@KiteCodecLowLevelApi` seam).
+  low-level opt-in annotation (mirror KiteFFmpeg's `@KiteFFmpegLowLevelApi` seam).
 - [ ] The process-wide logger beside the per-player sink nothing reads: delete.
 - [ ] `Pts` prints garbage at `Long.MIN_VALUE`: `toString` names NOPTS.
 - [ ] `CapturedFrame` unchecked geometry: validate in the constructor.
@@ -669,7 +626,7 @@ TV-stick smoke (owner lane). x86-32 the day Synkplay ships it.
 
 ### 8.3 KitePlayer to Maven Central (closes the KP-PROD install phase). Size L, owner executes the publish
 
-Replay the KiteCodec playbook: publish/release workflow trio, staging first, artifacts for
+Replay the KiteFFmpeg playbook: publish/release workflow trio, staging first, artifacts for
 every advertised target or the target is not advertised. Exit: a machine that has never seen
 this checkout builds `implementation("io.github.yuroyami:kiteplayer-mobile:0.0.x")` green
 against Central, resolving `kiteffmpeg-core` 0.1.x (the rename lands first). Release-gate
@@ -718,7 +675,7 @@ it.
   filename-only validation of local trees, two plugin tests excluded with no CI running any,
   unescaped `-D` values, unconditional `dllexport` for a static build, cache keys hashing one
   file, a 1,286-line build script.
-- [ ] **9.9 SEAM** (L): mismatched target graphs across modules; an `api` leak of a KiteCodec
+- [ ] **9.9 SEAM** (L): mismatched target graphs across modules; an `api` leak of a KiteFFmpeg
   `Frame` pinned in both committed ABI dumps (breaking fix: owner sign-off on the dump move);
   non-transactional source close; 467 hand-written metadata mappings with one test (add a
   generated cross-check); four modules repeating one config block with one missing a flag;
@@ -732,7 +689,7 @@ it.
 - [ ] **9.12 PAR-WIN-HW + PAR-2, Windows/Linux hardware decode** (L, with desktop video output): Windows carries
   18 D3D11VA/DXVA2 hwaccels compiled and not plumbed (correct behaviour, stale prose fixed);
   Linux compiles zero (VAAPI is the candidate). Needs a hardware device context + frame
-  download path in KiteCodec; proof needs owner glass.
+  download path in KiteFFmpeg; proof needs owner glass.
 - [ ] **9.13 SOL-API7, renderer capability negotiation** (L, NEEDS-DESIGN): unsupported frame/renderer
   pairings refuse TYPED at first frame today; a sealed hardware-surface model plus attach-time
   negotiation moves the refusal to bind time. Coordinates with the renderer-event surface
@@ -859,7 +816,7 @@ Report per step: pass, fail, or not run, plus one line of what you saw; screensh
 
 ### Standing owner items
 
-- [ ] **Publishes**: every `git push`; KiteCodec 0.1.4 to Central; KitePlayer's first Central
+- [ ] **Publishes**: every `git push`; KiteFFmpeg 0.1.4 to Central; KitePlayer's first Central
   release (Phase 8.3); any toolchain bump an executor requests.
 - [ ] **PAR-5 decision**: native linux/mingw output targets declare no source sets;
   recommended close = record as decision (native desktop targets are engine-only; consumers

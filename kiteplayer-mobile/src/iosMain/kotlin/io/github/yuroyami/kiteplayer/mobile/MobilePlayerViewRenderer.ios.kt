@@ -2,7 +2,7 @@
 
 package io.github.yuroyami.kiteplayer.mobile
 
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
 import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
@@ -16,7 +16,7 @@ import io.github.yuroyami.kiteplayer.view.PlayerViewRenderer
 import platform.QuartzCore.CALayer
 import platform.QuartzCore.CAMetalLayer
 
-/** The default KiteCodec/output adapter for an iOS [KitePlayerUIView]. */
+/** The default KiteFFmpeg/output adapter for an iOS [KitePlayerUIView]. */
 public object MobileApplePlayerViewRendererFactory : ApplePlayerViewRendererFactory {
     override fun create(
         videoLayer: CALayer,
@@ -27,7 +27,7 @@ public object MobileApplePlayerViewRendererFactory : ApplePlayerViewRendererFact
             MetalVideoRenderer(
                 layer = metalLayer,
                 resolver = { frame ->
-                    val decoded = frame as KiteCodecVideoFrame
+                    val decoded = frame as KiteFFmpegVideoFrame
                     decoded.corePixelBufferOrNull()?.let { MetalPicture.CorePixelBuffer(it) }
                         ?: decoded.uploadPlanesOrNull()?.let { planes ->
                             MetalPicture.SoftwarePlanes(
@@ -43,7 +43,7 @@ public object MobileApplePlayerViewRendererFactory : ApplePlayerViewRendererFact
             )
         } else {
             UIKitVideoRenderer(videoLayer) { frame ->
-                SoftwareConverter.toRgba(frame as KiteCodecVideoFrame)
+                SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame)
             }
         }
         return MobileApplePlayerViewRenderer(renderer)

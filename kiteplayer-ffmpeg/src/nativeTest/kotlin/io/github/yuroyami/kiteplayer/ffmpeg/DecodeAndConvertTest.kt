@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalForeignApi::class, KiteCodecLowLevelApi::class)
+@file:OptIn(ExperimentalForeignApi::class, KiteFFmpegLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
@@ -11,10 +11,10 @@ import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
-import io.github.yuroyami.kitecodec.FilterGraph
-import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
-import io.github.yuroyami.kitecodec.PixelFormat
-import io.github.yuroyami.kitecodec.Rational
+import io.github.yuroyami.kiteffmpeg.FilterGraph
+import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
+import io.github.yuroyami.kiteffmpeg.PixelFormat
+import io.github.yuroyami.kiteffmpeg.Rational
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.toKString
@@ -70,8 +70,8 @@ class DecodeAndConvertTest {
      * Hwdec is OFF deliberately (S2.b): this suite's subject is the SOFTWARE pixel path, plane
      * layouts included, and Auto now selects VideoToolbox on Apple, whose frames are opaque.
      */
-    private suspend fun firstVideoFrame(file: String): Pair<KiteCodecSource, KiteCodecVideoFrame> {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteCodecSource
+    private suspend fun firstVideoFrame(file: String): Pair<KiteFFmpegSource, KiteFFmpegVideoFrame> {
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteFFmpegSource
         val stream = assertNotNull(source.firstVideo, "no video stream in $file")
         source.selectStreams(setOf(stream.index))
         val decoder = assertNotNull(
@@ -100,7 +100,7 @@ class DecodeAndConvertTest {
             packet.close()
             if (frame == null) frame = decoder.receive()
         }
-        return source to assertNotNull(frame, "no frame decoded from $file") as KiteCodecVideoFrame
+        return source to assertNotNull(frame, "no frame decoded from $file") as KiteFFmpegVideoFrame
     }
 
     @Test
@@ -119,7 +119,7 @@ class DecodeAndConvertTest {
 
     @Test
     fun `stream metadata a track menu needs is populated`() = runBlocking {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/subbed.mkv")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/subbed.mkv")) as KiteFFmpegSource
         try {
             val subtitle = source.streams.firstOrNull { it.kind == TrackKind.Subtitle }
             assertNotNull(subtitle, "the Matroska fixture has a subtitle track")
@@ -251,7 +251,7 @@ class DecodeAndConvertTest {
      * `feedInput` takes ownership of what it is given, so the receiver is spent afterwards. Its
      * `close` is idempotent, which is what lets the caller keep a plain `finally`.
      */
-    private fun KiteCodecVideoFrame.liftedTo(target: PixelFormat): KiteCodecVideoFrame? {
+    private fun KiteFFmpegVideoFrame.liftedTo(target: PixelFormat): KiteFFmpegVideoFrame? {
         val info = frame.info
         val graph = FilterGraph.buildVideo(
             description = "setparams=range=tv:colorspace=bt709,format=${target.name}",
@@ -262,13 +262,13 @@ class DecodeAndConvertTest {
             frameRate = Rational(25, 1),
             sampleAspectRatio = info.sampleAspectRatio,
         )
-        var lifted: KiteCodecVideoFrame? = null
+        var lifted: KiteFFmpegVideoFrame? = null
         try {
             graph.feedInput(0, frame) { filtered ->
                 // A frame handed to this callback is valid only for the call, so what is kept is a
                 // copy, which takes a reference rather than copying pixels.
                 if (lifted == null) {
-                    lifted = KiteCodecVideoFrame(filtered.copy(), pts, duration, generation, rotationDegrees)
+                    lifted = KiteFFmpegVideoFrame(filtered.copy(), pts, duration, generation, rotationDegrees)
                 }
             }
         } finally {
@@ -287,7 +287,7 @@ class DecodeAndConvertTest {
     private suspend fun assertMatchesReference(
         clip: String,
         reference: String,
-        check: (KiteCodecVideoFrame) -> Unit = {},
+        check: (KiteFFmpegVideoFrame) -> Unit = {},
     ) {
         val expected = readFile("$mediaDir/$reference")
         val (source, frame) = firstVideoFrame(clip)
@@ -334,7 +334,7 @@ class DecodeAndConvertTest {
 
     @Test
     fun `timestamps are monotonic across a whole clip and nothing leaks`() = runBlocking {
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/colors-bt709.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/colors-bt709.mp4")) as KiteFFmpegSource
         val stream = assertNotNull(source.firstVideo)
         source.selectStreams(setOf(stream.index))
         // Off for the same reason as firstVideoFrame: the subject is the software path.

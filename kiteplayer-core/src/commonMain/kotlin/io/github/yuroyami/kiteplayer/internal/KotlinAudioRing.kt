@@ -223,7 +223,7 @@ internal class KotlinAudioRing(
             val newest = ((appended - 1) % MAX_SEGMENTS).toInt()
             // Through framesToMicros and not `delta * 1_000_000L / sampleRate`: register item B1-18.
             // The naive product overflows a signed 64 bit intermediate at a large frame delta, which
-            // is the shape defect D9 records against KiteCodec's timestamp helpers.
+            // is the shape defect D9 records against KiteFFmpeg's timestamp helpers.
             val micros = framesToMicros(atFrame - segmentStartFrame[newest], format.sampleRate)
             if (driftWithinTolerance(segmentPtsUs[newest], micros, ptsUs)) return true
         }

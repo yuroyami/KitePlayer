@@ -5,7 +5,7 @@ package io.github.yuroyami.kiteplayer.compose
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.runtime.Composable
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
@@ -45,7 +45,7 @@ private object GpuFrameReader {
 }
 
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
-    val decoded = frame.asKiteCodecFrame()
+    val decoded = frame.asKiteFFmpegFrame()
     // SOL-P1: the Metal reader serves HARDWARE frames only, where a GPU readback is the only
     // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which
     // was upload plus readback plus Skia's re-upload for pixels the CPU converter produces in
@@ -78,8 +78,8 @@ internal actual fun rememberKiteVideoFrameCommitter(
 }
 
 /** The one place the backend pairing is checked, so all three actuals refuse the same way (W-13). */
-private fun VideoFrame.asKiteCodecFrame(): KiteCodecVideoFrame = this as? KiteCodecVideoFrame
+private fun VideoFrame.asKiteFFmpegFrame(): KiteFFmpegVideoFrame = this as? KiteFFmpegVideoFrame
     ?: throw UnsupportedFrameType(
         actual = this::class.simpleName ?: "an unnamed frame type",
-        expected = "KiteCodecVideoFrame",
+        expected = "KiteFFmpegVideoFrame",
     )

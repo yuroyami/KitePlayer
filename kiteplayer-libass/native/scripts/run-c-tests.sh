@@ -10,7 +10,7 @@
 # every time, which removes the stale hazard rather than guarding against it.
 #
 # WHY IT BORROWS kiteplayer-rt's harness. harness.h forbids sharing a harness across REPOSITORIES,
-# because KiteCodec is a public binding and KitePlayer is a private player. Inside this repository
+# because KiteFFmpeg is a public binding and KitePlayer is a private player. Inside this repository
 # there is no such boundary: this is the same build layer, the same compiler flags, and the same
 # `kt_` prefix, so a second copy would only be a second thing to keep in step.
 #

@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kitecodec.CodecId
+import io.github.yuroyami.kiteffmpeg.CodecId
 
 /**
  * Windows offers no hardware route here, so every codec decodes in software.
@@ -12,7 +12,7 @@ import io.github.yuroyami.kitecodec.CodecId
  * described a reduced profile and the binary quietly exceeded it.
  *
  * Refusing the route anyway is still correct, because COMPILED is not PLUMBED. A D3D11VA hwaccel
- * needs a hardware device context and a frame download path on the KiteCodec side, and neither
+ * needs a hardware device context and a frame download path on the KiteFFmpeg side, and neither
  * exists; offering the route would make every open pay an attach that always fails and would report
  * a hardware decoder in diagnostics that never ran.
  *

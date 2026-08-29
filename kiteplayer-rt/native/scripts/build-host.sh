@@ -24,7 +24,7 @@
 #          fields instead of C11 atomics is a real data race that TSan reports. That is the whole
 #          reason src/kite_rt_ring_internal.h makes every cross-thread field _Atomic.
 #
-# Unlike KiteCodec's equivalent script this one needs no FFmpeg, no pkg-config and no third party
+# Unlike KiteFFmpeg's equivalent script this one needs no FFmpeg, no pkg-config and no third party
 # anything: the ring includes <stdint.h>, <stdlib.h>, <string.h> and <stdatomic.h> and nothing
 # else, which is what lets it compile for every Kotlin/Native target KitePlayer declares.
 #

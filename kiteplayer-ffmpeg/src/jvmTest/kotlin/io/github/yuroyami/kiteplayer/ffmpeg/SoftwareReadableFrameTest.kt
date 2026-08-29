@@ -23,7 +23,7 @@ class SoftwareReadableFrameTest {
     @Test
     fun aDecodedSoftwareFrameExposesItsPlanes() = runBlocking {
         val mediaDir = formatMatrixMediaDir() ?: error("testmedia missing; run scripts/testmedia.sh")
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/baseline.mkv")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/baseline.mkv")) as KiteFFmpegSource
         try {
             val video = source.streams.first { it.kind == TrackKind.Video }
             source.selectStreams(setOf(video.index))

@@ -94,7 +94,7 @@ internal data class AudioAnchor(val pts: Pts, val audibleAtNanos: Long)
  *
  * Register item B1-18. Both places that dated a frame in the ring used to compute
  * `frames * 1_000_000L / sampleRate`, which overflows a signed 64 bit intermediate once the frame
- * delta passes about 9.2e12. It is the same shape KPKMP-PAST.md section 4 records against KiteCodec's
+ * delta passes about 9.2e12. It is the same shape KPKMP-PAST.md section 4 records against KiteFFmpeg's
  * timestamp helpers as defect D9: latent at ordinary session lengths and wrong at long ones. Writing
  * it once, correctly, is what stops the C ring being a faithful transliteration of a bug, and it is
  * what lets the differential oracle compare two correct implementations rather than two matching

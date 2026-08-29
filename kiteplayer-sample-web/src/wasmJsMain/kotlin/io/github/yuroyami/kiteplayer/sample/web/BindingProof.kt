@@ -1,14 +1,14 @@
 package io.github.yuroyami.kiteplayer.sample.web
 
-import io.github.yuroyami.kitecodec.FFmpeg
-import io.github.yuroyami.kitecodec.KiteCodecWeb
-import io.github.yuroyami.kitecodec.MediaByteSource
-import io.github.yuroyami.kitecodec.MediaSource
-import io.github.yuroyami.kitecodec.MediaType
+import io.github.yuroyami.kiteffmpeg.FFmpeg
+import io.github.yuroyami.kiteffmpeg.KiteFFmpegWeb
+import io.github.yuroyami.kiteffmpeg.MediaByteSource
+import io.github.yuroyami.kiteffmpeg.MediaSource
+import io.github.yuroyami.kiteffmpeg.MediaType
 import kotlin.js.JsAny
 
 /**
- * Drives the REAL `kitecodec-core` web backend from Kotlin (17.14 X-07).
+ * Drives the REAL `kiteffmpeg-core` web backend from Kotlin (17.14 X-07).
  *
  * Not the raw binding: this calls `MediaSource`, `StreamInfo` and `Frame`, which is the API every
  * other platform uses and the one `:kiteplayer-ffmpeg` is written against. If this works, the
@@ -27,7 +27,7 @@ internal suspend fun runBackendProof(clip: ByteArray, report: (String) -> Unit) 
         loaded = loadedCodecModule()
     }
     if (loaded == null) error("the page did not publish a codec module after ${waited}ms")
-    KiteCodecWeb.attach(loaded)
+    KiteFFmpegWeb.attach(loaded)
     report("codec loaded, identity ${if (FFmpeg.identity.isAcceptable) "acceptable" else "REJECTED"}")
     report("build ${FFmpeg.identity.buildFFmpegRef}, abi ${FFmpeg.identity.cAbiVersion}, ${FFmpeg.identity.libraries.size} libraries")
 
@@ -64,7 +64,7 @@ internal suspend fun runBackendProof(clip: ByteArray, report: (String) -> Unit) 
                 }
             }
         }
-        report(if (frames > 0) "DECODED $frames frames through kitecodec-core, first pts $firstPts" else "FAILED: no frames")
+        report(if (frames > 0) "DECODED $frames frames through kiteffmpeg-core, first pts $firstPts" else "FAILED: no frames")
     }
 
     // X-12: the engine's own entry point, which is what a consumer actually calls.

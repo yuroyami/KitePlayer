@@ -3,13 +3,13 @@
 package io.github.yuroyami.kiteplayer.network.dash
 
 import io.github.yuroyami.kiteplayer.TrackKind
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSourceFactory
-import io.github.yuroyami.kitecodec.CodecId
-import io.github.yuroyami.kitecodec.Frame
-import io.github.yuroyami.kitecodec.MediaSink
-import io.github.yuroyami.kitecodec.PixelFormat
-import io.github.yuroyami.kitecodec.Rational
-import io.github.yuroyami.kitecodec.VideoEncoderSpec
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSourceFactory
+import io.github.yuroyami.kiteffmpeg.CodecId
+import io.github.yuroyami.kiteffmpeg.Frame
+import io.github.yuroyami.kiteffmpeg.MediaSink
+import io.github.yuroyami.kiteffmpeg.PixelFormat
+import io.github.yuroyami.kiteffmpeg.Rational
+import io.github.yuroyami.kiteffmpeg.VideoEncoderSpec
 import io.ktor.client.HttpClient
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.EmbeddedServer
@@ -171,7 +171,7 @@ class DashEndToEndTest {
 
         val client = HttpClient()
         val item = Dash.mediaItemFor("http://127.0.0.1:$port/vod/movie.mpd", client)
-        val source = KiteCodecSourceFactory().open(item)
+        val source = KiteFFmpegSourceFactory().open(item)
         try {
             val video = source.streams.firstOrNull { it.kind == TrackKind.Video }
                 ?: error("no video stream demuxed from the DASH stream")

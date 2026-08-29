@@ -233,11 +233,11 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-arm64/lib",
+					"$(SRCROOT)/../../../KiteFFmpeg/native-libs/lgpl/ios-arm64/lib",
 				);
 				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-simulator-arm64/lib",
+					"$(SRCROOT)/../../../KiteFFmpeg/native-libs/lgpl/ios-simulator-arm64/lib",
 				);
 				MARKETING_VERSION = 1.0;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (
@@ -286,11 +286,11 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				"LIBRARY_SEARCH_PATHS[sdk=iphoneos*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-arm64/lib",
+					"$(SRCROOT)/../../../KiteFFmpeg/native-libs/lgpl/ios-arm64/lib",
 				);
 				"LIBRARY_SEARCH_PATHS[sdk=iphonesimulator*]" = (
 					"$(inherited)",
-					"$(SRCROOT)/../../../KiteCodec/native-libs/lgpl/ios-simulator-arm64/lib",
+					"$(SRCROOT)/../../../KiteFFmpeg/native-libs/lgpl/ios-simulator-arm64/lib",
 				);
 				MARKETING_VERSION = 1.0;
 				"OTHER_LDFLAGS[sdk=iphoneos*]" = (

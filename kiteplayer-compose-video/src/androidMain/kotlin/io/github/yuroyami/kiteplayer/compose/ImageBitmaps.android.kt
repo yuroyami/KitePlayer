@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalView
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
 import io.github.yuroyami.kiteplayer.output.AndroidGpuImageVideoRenderer
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
@@ -43,7 +43,7 @@ internal actual class FrameImagePool actual constructor() {
 }
 
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray =
-    SoftwareConverter.toRgba(frame.asKiteCodecFrame())
+    SoftwareConverter.toRgba(frame.asKiteFFmpegFrame())
 
 internal actual fun overlayImageBitmap(rgba: ByteArray, width: Int, height: Int): ImageBitmap {
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -552,8 +552,8 @@ private class AndroidGpuCompletionTracker(
 }
 
 /** The one place the backend pairing is checked, so all three actuals refuse the same way (W-13). */
-private fun VideoFrame.asKiteCodecFrame(): KiteCodecVideoFrame = this as? KiteCodecVideoFrame
+private fun VideoFrame.asKiteFFmpegFrame(): KiteFFmpegVideoFrame = this as? KiteFFmpegVideoFrame
     ?: throw UnsupportedFrameType(
         actual = this::class.simpleName ?: "an unnamed frame type",
-        expected = "KiteCodecVideoFrame",
+        expected = "KiteFFmpegVideoFrame",
     )

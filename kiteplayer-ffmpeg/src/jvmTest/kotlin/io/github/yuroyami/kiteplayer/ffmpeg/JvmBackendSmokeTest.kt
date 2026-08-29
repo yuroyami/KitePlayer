@@ -1,6 +1,6 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
-import io.github.yuroyami.kitecodec.FFmpeg
+import io.github.yuroyami.kiteffmpeg.FFmpeg
 import kotlin.test.Test
 import kotlin.test.assertTrue
 

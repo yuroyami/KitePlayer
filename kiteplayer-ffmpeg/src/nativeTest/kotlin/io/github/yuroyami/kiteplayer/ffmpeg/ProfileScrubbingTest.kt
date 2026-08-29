@@ -22,7 +22,7 @@ class ProfileScrubbingTest {
         ?: "testmedia"
 
     private suspend fun decodeCount(decoderOptions: Map<String, String>): Int {
-        val backend = KiteCodecMediaBackend(decoderOptions = decoderOptions)
+        val backend = KiteFFmpegMediaBackend(decoderOptions = decoderOptions)
         val session = backend.open(MediaItem("$mediaDir/sync1080p30.mp4"))
         var received = 0
         try {

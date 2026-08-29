@@ -31,7 +31,7 @@ internal class TrackSwitchDeviceTest {
         val player = KitePlayer.create(
             PlayerConfig(
                 backends = Backends(
-                    backend = KiteCodecMediaBackend(onWarning = { println("BACKEND WARN ${it.message}") }),
+                    backend = KiteFFmpegMediaBackend(onWarning = { println("BACKEND WARN ${it.message}") }),
                     output = AndroidOutputBackend,
                 ),
             ),

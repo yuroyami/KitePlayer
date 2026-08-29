@@ -1,14 +1,14 @@
 package io.github.yuroyami.kiteplayer
 
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecMediaBackend
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.output.DesktopOutputBackend
-import io.github.yuroyami.kitecodec.FFmpeg
+import io.github.yuroyami.kiteffmpeg.FFmpeg
 
 internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
     DesktopKitePlayerPlatformDefaults
 
 /**
- * The desktop JVM stack: the FFmpeg backend over KiteCodec's JNI adapter, paired with the
+ * The desktop JVM stack: the FFmpeg backend over KiteFFmpeg's JNI adapter, paired with the
  * SourceDataLine sink and the AWT subtitle rasterizer (phase W).
  *
  * Availability is answered by FFmpeg's own identity gate rather than by looking for a file. That
@@ -28,7 +28,7 @@ private object DesktopKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
                 },
                 onFailure = { failure ->
                     KitePlayerAvailability.Unavailable(
-                        failure.message ?: "the KiteCodec JNI library could not be loaded",
+                        failure.message ?: "the KiteFFmpeg JNI library could not be loaded",
                     )
                 },
             )
@@ -38,7 +38,7 @@ private object DesktopKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
     override val supportsPictureInPicture: Boolean = false
 
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
-        Backends(backend = KiteCodecMediaBackend(), output = DesktopOutputBackend)
+        Backends(backend = KiteFFmpegMediaBackend(), output = DesktopOutputBackend)
     } else {
         null
     }

@@ -23,7 +23,7 @@ class AssStreamDecodeTest {
 
     @Test
     fun `an embedded ass track decodes into styled cues`() = runBlocking {
-        val session = KiteCodecMediaBackend().open(MediaItem("$mediaDir/asssubbed.mkv"))
+        val session = KiteFFmpegMediaBackend().open(MediaItem("$mediaDir/asssubbed.mkv"))
         try {
             val source = session.source
             val assStream = source.streams.firstOrNull {

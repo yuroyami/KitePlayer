@@ -2,7 +2,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecKind
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kitecodec.CodecId
+import io.github.yuroyami.kiteffmpeg.CodecId
 
 internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy): DecoderSelection =
     decoderSelection(policy, route = codec.mediaCodecRoute())

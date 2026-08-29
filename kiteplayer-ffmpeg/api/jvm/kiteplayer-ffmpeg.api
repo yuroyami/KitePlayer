@@ -1,9 +1,9 @@
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecAudioDecoderFactory : io/github/yuroyami/kiteplayer/spi/AudioDecoderFactory {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegAudioDecoderFactory : io/github/yuroyami/kiteplayer/spi/AudioDecoderFactory {
 	public fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getName ()Ljava/lang/String;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecMediaBackend : io/github/yuroyami/kiteplayer/spi/MediaBackend {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegMediaBackend : io/github/yuroyami/kiteplayer/spi/MediaBackend {
 	public fun <init> ()V
 	public fun <init> (Lkotlin/jvm/functions/Function1;Ljava/util/Map;Z)V
 	public synthetic fun <init> (Lkotlin/jvm/functions/Function1;Ljava/util/Map;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -12,7 +12,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecMediaBackend : 
 	public fun subtitleFileParser ()Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource {
 	public final fun audioDecoderFactories ()Ljava/util/List;
 	public fun close ()V
 	public fun getChapters ()Ljava/util/List;
@@ -32,26 +32,26 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSource : io/git
 	public final fun videoDecoderFactories ()Ljava/util/List;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSourceFactory : io/github/yuroyami/kiteplayer/spi/MediaSourceFactory {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSourceFactory : io/github/yuroyami/kiteplayer/spi/MediaSourceFactory {
 	public fun <init> ()V
 	public fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecSourceKt {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSourceKt {
 	public static final fun interleavedFloat (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;)[F
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoDecoderFactory : io/github/yuroyami/kiteplayer/spi/VideoDecoderFactory {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoDecoderFactory : io/github/yuroyami/kiteplayer/spi/VideoDecoderFactory {
 	public fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lio/github/yuroyami/kiteplayer/HwdecPolicy;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getName ()Ljava/lang/String;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame, io/github/yuroyami/kiteplayer/spi/VideoFrame {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame, io/github/yuroyami/kiteplayer/spi/VideoFrame {
 	public fun close ()V
 	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
-	public final fun getFrame ()Lio/github/yuroyami/kitecodec/Frame;
+	public final fun getFrame ()Lio/github/yuroyami/kiteffmpeg/Frame;
 	public fun getGeneration-exH1Oj8 ()J
 	public fun getHardwareSurface ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
 	public final fun getHasPts ()Z
@@ -66,6 +66,6 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoFrame : io
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter;
-	public final fun toRgba (Lio/github/yuroyami/kiteplayer/ffmpeg/KiteCodecVideoFrame;)[B
+	public final fun toRgba (Lio/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame;)[B
 }
 

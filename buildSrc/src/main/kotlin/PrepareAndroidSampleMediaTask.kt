@@ -60,6 +60,6 @@ abstract class PrepareAndroidSampleMediaTask : DefaultTask() {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(destination.readBytes())
             .joinToString("") { "%02x".format(it) }
-        logger.lifecycle("[KiteCodec sample media] ${destination.name} sha256=$digest")
+        logger.lifecycle("[KiteFFmpeg sample media] ${destination.name} sha256=$digest")
     }
 }

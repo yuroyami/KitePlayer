@@ -3,14 +3,14 @@
 # Until today this repository had no `.github` directory at all, which meant every claim about its
 # health was a claim about ONE laptop: nine C suites that had never run anywhere else, a Linux
 # native target that only ever CROSS-LINKED, and a Windows target that had never executed a single
-# test. KiteCodec's ci.yml is the template and its lessons are carried over deliberately rather
+# test. KiteFFmpeg's ci.yml is the template and its lessons are carried over deliberately rather
 # than rediscovered:
 #
 #   - The Kotlin/Native toolchain is WARMED before anything reaches a C task. CompileKiteRtTask
 #     compiles the audio ring with konan's own clang, from
 #     `<konan data>/dependencies/<llvm package>/bin/clang`, and konan fetches that on demand when a
 #     Kotlin/Native task first runs. On a fresh runner the C task gets there first and dies with
-#     "no clang under ...". That single race was six of KiteCodec's ten failing jobs.
+#     "no clang under ...". That single race was six of KiteFFmpeg's ten failing jobs.
 #     `downloadKotlinNativeDistribution` is the provisioning task, so the warmup here asks for it
 #     by name instead of relying on a compile that happens to run early.
 #   - `~/.konan` is cached in every job that touches a native target, because it holds the LLVM and
@@ -151,7 +151,7 @@ jobs:
       # matrix row that stopped reading at its video quota stopped before the first cue and reported
       # a well-formed file as broken. The TEST was fixed to read until it has the cue it asked for,
       # which is the right fix, and the row for the unpinned generator is KP-FIXTURE-PIN.
-      # KiteCodec learned the same lesson from the other direction and its ci.yml says it in one
+      # KiteFFmpeg learned the same lesson from the other direction and its ci.yml says it in one
       # line: a pin against a moving formula is a calendar, not a gate.
       - name: Install libass and the ffmpeg CLI
         run: brew install libass ffmpeg
@@ -396,8 +396,8 @@ jobs:
             :kiteplayer-output:linuxX64Test \
             :kiteplayer-rt:linuxX64Test
 
-      # The player's FFmpeg backend links its embedded KiteCodec on Linux. This is the step that
-      # would catch kitecodec-core shipping a klib whose linuxX64 half does not resolve.
+      # The player's FFmpeg backend links its embedded KiteFFmpeg on Linux. This is the step that
+      # would catch kiteffmpeg-core shipping a klib whose linuxX64 half does not resolve.
       - name: Link the FFmpeg backend for linuxX64
         run: ./gradlew --stacktrace :kiteplayer-ffmpeg:linkDebugTestLinuxX64
 

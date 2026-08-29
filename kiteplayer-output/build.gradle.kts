@@ -49,7 +49,7 @@ kotlin {
     }
 
     /* S1.c.4 step 1. Output depends only on core and its existing portable libraries: no
-     * KiteCodec, no FFmpeg, no NDK, no Android media support library (the boundary scans of
+     * KiteFFmpeg, no FFmpeg, no NDK, no Android media support library (the boundary scans of
      * S1.c.5 step 10 enforce it). Host tests drive the fake AudioTrack/canvas seams; device
      * tests drive the real ones on the named emulator. */
     android {

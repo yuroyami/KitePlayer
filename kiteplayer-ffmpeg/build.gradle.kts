@@ -8,14 +8,14 @@ plugins {
 }
 
 /*
- * :kiteplayer-ffmpeg implements the engine's source and decoder interfaces on top of KiteCodec.
+ * :kiteplayer-ffmpeg implements the engine's source and decoder interfaces on top of KiteFFmpeg.
  *
  * It is the only module that knows FFmpeg exists. Everything above it works against the four
  * interfaces in :kiteplayer-core, which is what lets a completely different backend (WebCodecs on
  * the web, a platform decoder, a test fake) take its place without the engine noticing.
  *
- * Kotlin/Native links KiteCodec directly, while Android and the desktop JVM consume the JNI
- * adapter from KiteCodec's published artifacts. The JVM was a placeholder until phase W: it now
+ * Kotlin/Native links KiteFFmpeg directly, while Android and the desktop JVM consume the JNI
+ * adapter from KiteFFmpeg's published artifacts. The JVM was a placeholder until phase W: it now
  * carries a real FFmpeg backend and runs the same real-media suites the native targets run.
  */
 // The media fixtures live at the repo root and a native test's working directory is not something
@@ -61,13 +61,13 @@ kotlin {
     macosArm64()
     iosArm64()
     iosSimulatorArm64()
-    // The Kotlin/Native desktops (phase W). They link the cross-built FFmpeg that KiteCodec's
+    // The Kotlin/Native desktops (phase W). They link the cross-built FFmpeg that KiteFFmpeg's
     // W.5 tasks vendor and the desktop variants it publishes; without both, nothing here resolves.
     linuxX64()
     linuxArm64()
     mingwX64()
     jvm()
-    // The web (17.14 X-09). kitecodec-core carries a real wasmJs backend now, so this module can
+    // The web (17.14 X-09). kiteffmpeg-core carries a real wasmJs backend now, so this module can
     // implement the engine's SPI there the same way it does everywhere else.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
@@ -92,10 +92,10 @@ kotlin {
             // The text subtitle parsers (S4.c). Pure Kotlin; the decoder below is a thin shim
             // from packet payloads onto them.
             implementation(project(":kiteplayer-subtitles"))
-            // api, not implementation: KiteCodecVideoFrame publicly exposes kitecodec.Frame, and
+            // api, not implementation: KiteFFmpegVideoFrame publicly exposes kiteffmpeg.Frame, and
             // the phone/compose modules cast to it. Hiding the dependency made that public type
             // invisible to consumers compiling against this module's ABI (audit P1-25).
-            api(libs.kitecodec.core)
+            api(libs.kiteffmpeg.core)
             implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {
@@ -114,7 +114,7 @@ kotlin {
         getByName("androidMain").dependsOn(jvmAndAndroidMain)
 
         // Real-media and FFmpeg-runtime tests belong to every source set that reaches a REAL
-        // backend. That is direct-link native and, since phase W gave KiteCodec's jvm variant its
+        // backend. That is direct-link native and, since phase W gave KiteFFmpeg's jvm variant its
         // JNI adapter, the desktop JVM as well. Android host tests stay out: they use fake drivers
         // and never load a device JNI library.
         val commonTest = getByName("commonTest")

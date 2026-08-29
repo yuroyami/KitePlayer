@@ -1,12 +1,12 @@
-@file:OptIn(ExperimentalForeignApi::class, KiteCodecLowLevelApi::class)
+@file:OptIn(ExperimentalForeignApi::class, KiteFFmpegLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
-import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
-import io.github.yuroyami.kitecodec.hardwareSurface
-import io.github.yuroyami.kitecodec.withPlanes
+import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
+import io.github.yuroyami.kiteffmpeg.hardwareSurface
+import io.github.yuroyami.kiteffmpeg.withPlanes
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.readBytes
@@ -33,7 +33,7 @@ public class UploadPlanes(
 }
 
 /** The CVPixelBuffer of a VideoToolbox frame, or null when the frame is not that kind. */
-public fun KiteCodecVideoFrame.corePixelBufferOrNull(): COpaquePointer? =
+public fun KiteFFmpegVideoFrame.corePixelBufferOrNull(): COpaquePointer? =
     if (hardwareSurface == HwSurfaceKind.CoreVideoPixelBuffer) frame.hardwareSurface else null
 
 /**
@@ -41,7 +41,7 @@ public fun KiteCodecVideoFrame.corePixelBufferOrNull(): COpaquePointer? =
  * [corePixelBufferOrNull] there instead; downloading to feed a GPU that could wrap the surface
  * directly would be the exact copy this path exists to avoid).
  */
-public fun KiteCodecVideoFrame.uploadPlanesOrNull(): UploadPlanes? {
+public fun KiteFFmpegVideoFrame.uploadPlanesOrNull(): UploadPlanes? {
     if (hardwareSurface != null) return null
     val copied = frame.withPlanes { planes, strides, heights ->
         planes.mapIndexed { index, plane ->

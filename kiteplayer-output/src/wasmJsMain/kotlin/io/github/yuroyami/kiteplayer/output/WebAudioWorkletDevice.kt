@@ -33,7 +33,7 @@ internal class WebAudioWorkletDevice private constructor(
     /**
      * Copies one block across the JS line a sample at a time, because there is no bulk move.
      *
-     * Kotlin/Wasm has no typed-array bridge: `WebMemory.readBytes` in KiteCodec loops per byte for
+     * Kotlin/Wasm has no typed-array bridge: `WebMemory.readBytes` in KiteFFmpeg loops per byte for
      * the same reason, and `BindingProof.fetchClip` says so in its own KDoc. Per sample rather than
      * per byte is the cheap version of the same limit, and the cost is real but bounded: 2048 calls
      * per block is about 96,000 a second for 48 kHz stereo, each one a direct wasm-to-JS import.

@@ -16,7 +16,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Note: KitePlayer contains no FFmpeg code of its own; it uses KiteCodec, which binds
+Note: KitePlayer contains no FFmpeg code of its own; it uses KiteFFmpeg, which binds
 to FFmpeg. The FFmpeg you link against carries its own licence (LGPL-2.1+ minimum;
-GPL when --enable-gpl is set, effectively GPL-3.0 for KiteCodec's GPL build flavour,
+GPL when --enable-gpl is set, effectively GPL-3.0 for KiteFFmpeg's GPL build flavour,
 which also sets --enable-version3). Respect each of the licences involved.

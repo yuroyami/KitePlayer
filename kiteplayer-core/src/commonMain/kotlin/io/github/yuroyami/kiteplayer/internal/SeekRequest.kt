@@ -122,7 +122,7 @@ internal object SeekTiming {
      * A keyframe seek is documented to land at or before the target, but containers without an index
      * resolve it by byte position and can land after it. Aim at the target first, and only back off
      * when the first decoded frame proves the seek overshot. Almost every seek costs one attempt.
-     * KiteCodec's current answer is a flat 5 second backoff on every seek, which is right for a
+     * KiteFFmpeg's current answer is a flat 5 second backoff on every seek, which is right for a
      * thumbnail and five seconds of wasted decoding for a player.
      */
     val OVERSHOOT_BACKOFF_US: LongArray = longArrayOf(0, 500_000, 2_000_000, 8_000_000)

@@ -1,10 +1,10 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
-import io.github.yuroyami.kitecodec.MediaByteSource
+import io.github.yuroyami.kiteffmpeg.MediaByteSource
 
 /**
- * Adapts the engine's suspending [MediaIo] onto KiteCodec's blocking [MediaByteSource] (M1).
+ * Adapts the engine's suspending [MediaIo] onto KiteFFmpeg's blocking [MediaByteSource] (M1).
  *
  * Every target that HAS a blocking primitive bridges with `runBlocking`, which is real and
  * deliberate: FFmpeg's demuxer pulls bytes synchronously on the demux worker, the one thread

@@ -79,7 +79,7 @@ class RealTimeMediaSoakTest {
             // is a fresh source and decoder, which also means the run covers open and close hundreds of
             // times rather than once.
             while (AppleHostClock.nanos() < until) {
-                val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteCodecSource
+                val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteFFmpegSource
                 val stream = assertNotNull(source.firstAudio, "no audio stream in sync1080p30.mp4")
                 source.selectStreams(setOf(stream.index))
                 val decoder: AudioDecoder =

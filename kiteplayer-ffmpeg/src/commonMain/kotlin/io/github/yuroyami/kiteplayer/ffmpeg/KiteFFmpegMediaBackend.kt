@@ -1,4 +1,4 @@
-@file:OptIn(KiteCodecLowLevelApi::class)
+@file:OptIn(KiteFFmpegLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 
@@ -10,13 +10,13 @@ import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
-import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
-import io.github.yuroyami.kitecodec.MediaSource
+import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
+import io.github.yuroyami.kiteffmpeg.MediaSource
 
 /**
  * The FFmpeg backend, as one session-shaped object.
  *
- * This is what the engine is handed on a target where KiteCodec exists. It opens the container and
+ * This is what the engine is handed on a target where KiteFFmpeg exists. It opens the container and
  * returns the cursor over it together with the decoder factories that belong to that cursor, so nothing
  * above it ever has to know that the source and the decoders are the same implementation underneath.
  * The engine used to reach these factories by downcasting the source, which is the defect this removes.
@@ -25,7 +25,7 @@ import io.github.yuroyami.kitecodec.MediaSource
  *        software fallback are both reported here. The callback runs on the decoder's own worker, so
  *        it must be cheap and must not block. The default discards.
  */
-public class KiteCodecMediaBackend(
+public class KiteFFmpegMediaBackend(
     private val onWarning: (PlaybackWarning) -> Unit = {},
     /**
      * Decoder configuration as `av_opt_set` strings, applied to every video decoder this backend
@@ -39,7 +39,7 @@ public class KiteCodecMediaBackend(
 
     /** KD-7's echo: the option pairs exactly as configured, printed by the diagnostics dump. */
     override fun describeForDiagnostics(): String =
-        "KiteCodecMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
+        "KiteFFmpegMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
     /** External subtitle files (S4.e, ASS since 17.12 M2): the pure parsers this module ships. */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
@@ -54,9 +54,9 @@ public class KiteCodecMediaBackend(
         }
 
     override suspend fun open(media: MediaItem): BackendSession {
-        // MediaSource.open is where KiteCodec's FFmpeg identity gate runs, before its first allocation.
+        // MediaSource.open is where KiteFFmpeg's FFmpeg identity gate runs, before its first allocation.
         // A rejection there is not about this file and never will be: it means the linked FFmpeg does not
-        // match the headers KiteCodec was compiled against, so every open fails and retrying is pointless.
+        // match the headers KiteFFmpeg was compiled against, so every open fails and retrying is pointless.
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
         val options = preOpenOptions(media)
@@ -65,13 +65,13 @@ public class KiteCodecMediaBackend(
         // session and is closed with it (audit KP-P1-03).
         val io = media.io?.invoke()
         val source = mappingFFmpegRuntimeRejection {
-            KiteCodecSource(
+            KiteFFmpegSource(
                 when {
                     // M1, the custom AVIO bridge: the item's own byte reader carries the media,
                     // demuxed by FFmpeg with no path and no FFmpeg protocol involved.
                     io != null -> MediaSource.open(BlockingMediaIo(io), options)
                     options.isEmpty() -> MediaSource.open(media.uri)
-                    // KD-4's pre-open funnel. Unconsumed keys are reported by KiteCodec rather
+                    // KD-4's pre-open funnel. Unconsumed keys are reported by KiteFFmpeg rather
                     // than dropped, so a typo surfaces instead of quietly doing nothing.
                     else -> MediaSource.open(media.uri, options)
                 },
@@ -86,20 +86,20 @@ public class KiteCodecMediaBackend(
         }
         source.videoDecoderOptions = decoderOptions
         source.videoLowDelay = lowDelayDecode
-        return KiteCodecBackendSession(source)
+        return KiteFFmpegBackendSession(source)
     }
 }
 
 /**
  * One opened container and its decoders.
  *
- * The lists come from the source itself, because a KiteCodec decoder is opened against the very
+ * The lists come from the source itself, because a KiteFFmpeg decoder is opened against the very
  * container context the packets are read from. The subtitle factory decodes the TEXT formats
  * (SubRip, WebVTT, and ASS at the M2 dialogue tier) over the packet path with no C involved
  * (S4.c); bitmap formats still need a real engine, and a stream the factory refuses is
  * deselected by the engine rather than failing the open.
  */
-private class KiteCodecBackendSession(private val kiteCodec: KiteCodecSource) : BackendSession {
+private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) : BackendSession {
 
     override val source: PlayerMediaSource get() = kiteCodec
 
@@ -119,7 +119,7 @@ private class KiteCodecBackendSession(private val kiteCodec: KiteCodecSource) : 
     override val audioDecoders: List<AudioDecoderFactory> = kiteCodec.audioDecoderFactories()
 
     override val subtitleDecoders: List<SubtitleDecoderFactory> =
-        listOf(KiteCodecSubtitleDecoderFactory())
+        listOf(KiteFFmpegSubtitleDecoderFactory())
 
     override fun close(): Unit = kiteCodec.close()
 }

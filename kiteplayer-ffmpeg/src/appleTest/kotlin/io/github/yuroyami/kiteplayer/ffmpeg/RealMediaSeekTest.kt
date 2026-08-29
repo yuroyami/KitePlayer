@@ -58,7 +58,7 @@ class RealMediaSeekTest {
     private fun player(): KitePlayer = KitePlayer.create(
         PlayerConfig(
             backends = Backends(
-                backend = KiteCodecMediaBackend(),
+                backend = KiteFFmpegMediaBackend(),
                 output = AppleOutputBackend,
             ),
             progressInterval = 50.milliseconds,

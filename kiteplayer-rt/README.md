@@ -43,11 +43,11 @@ cd native
 ./scripts/source-discipline.sh          # add --prove-it-can-fail for the sixteen planted defects
 ```
 
-The harness and the interposer exist twice, here and in KiteCodec's `native/kitecodec-c/tests/`,
+The harness and the interposer exist twice, here and in KiteFFmpeg's `native/kitecodec-c/tests/`,
 and the two are a pair: the same mechanism under two prefixes (`KPRT_REQUIRE_ALLOC_ACCOUNTING`
 here, `KC_REQUIRE_ALLOC_ACCOUNTING` there), and a fix to either lands in both in the same change.
-The interlude (I-08) ported this tree's require mechanism to KiteCodec after measuring what the
-fork had already cost: a one-word blinding of KiteCodec's interposer left its whole ownership gate
+The interlude (I-08) ported this tree's require mechanism to KiteFFmpeg after measuring what the
+fork had already cost: a one-word blinding of KiteFFmpeg's interposer left its whole ownership gate
 green while observing nothing.
 
 From the repository root, the shipped per-target archives are built by Gradle, one directory per

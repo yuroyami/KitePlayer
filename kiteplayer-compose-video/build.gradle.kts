@@ -14,8 +14,8 @@ plugins {
  * clip, alpha, transforms and effects apply to the video pixels. It never wraps a native View;
  * that separate presentation mechanism belongs to :kiteplayer-compose-interop.
  *
- * Its frame adapters are KiteCodec implementations per platform: Android and iOS carry the
- * qualified mobile paths, and the JVM target carries the measured software path (KiteCodec's
+ * Its frame adapters are KiteFFmpeg implementations per platform: Android and iOS carry the
+ * qualified mobile paths, and the JVM target carries the measured software path (KiteFFmpeg's
  * CPU converter into Skia rasters) so the module resolves from a consumer's commonMain even
  * when that consumer also compiles a desktop target. A GPU desktop path is future work.
  */

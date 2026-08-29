@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 /**
  * Typed filter attachment on open (S4.e): a chain set on the source runs every decoded frame
- * through KiteCodec's graph, built lazily from the first frame's own geometry; hardware stands
+ * through KiteFFmpeg's graph, built lazily from the first frame's own geometry; hardware stands
  * down for it with a warning under Auto. Real media, so this runs where the matrix runs.
  */
 class FilterAttachmentTest {
@@ -21,7 +21,7 @@ class FilterAttachmentTest {
     @Test
     fun attachedFilterScalesEveryDecodedFrame() = runBlocking {
         val mediaDir = formatMatrixMediaDir() ?: return@runBlocking
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteFFmpegSource
         source.videoFilterDescription = "scale=160:90"
         try {
             val video = source.streams.first { it.kind == TrackKind.Video }
@@ -69,7 +69,7 @@ class FilterAttachmentTest {
     @Test
     fun hardwareStandsDownWithAWarningWhenAFilterIsAttached() = runBlocking {
         val mediaDir = formatMatrixMediaDir() ?: return@runBlocking
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteFFmpegSource
         source.videoFilterDescription = "eq=brightness=0.1"
         val warnings = mutableListOf<PlaybackWarning>()
         source.onWarning = { warnings += it }
@@ -102,7 +102,7 @@ class FilterAttachmentTest {
     @Test
     fun aFilteredDecoderThatNeverDecodedStillDrains() = runBlocking {
         val mediaDir = formatMatrixMediaDir() ?: return@runBlocking
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteFFmpegSource
         source.videoFilterDescription = "scale=160:90"
         try {
             val video = source.streams.first { it.kind == TrackKind.Video }

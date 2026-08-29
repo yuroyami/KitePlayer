@@ -2,10 +2,10 @@
 
 package io.github.yuroyami.kiteplayer.mobile
 
-import io.github.yuroyami.kitecodec.WebRgbaConverter
+import io.github.yuroyami.kiteffmpeg.WebRgbaConverter
 import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoTransform
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.output.WebCanvasVideoRenderer
 import io.github.yuroyami.kiteplayer.output.WebFramePainter
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
@@ -16,18 +16,18 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlin.js.JsAny
 
 /**
- * The default KiteCodec adapter for a web canvas (17.14 X-11).
+ * The default KiteFFmpeg adapter for a web canvas (17.14 X-11).
  *
  * The same job `MobileAndroidPlayerViewRendererFactory` does on Android and for the same reason:
- * `:kiteplayer-output` may not depend on KiteCodec, so the module that depends on BOTH is where the
+ * `:kiteplayer-output` may not depend on KiteFFmpeg, so the module that depends on BOTH is where the
  * two are introduced. On Android that seam hands back a `ByteArray`; here it fills a JS array,
  * because on the web a `ByteArray` of pixels is the twenty-times-slower path.
  *
  * @param canvas the `HTMLCanvasElement` or `OffscreenCanvas` to draw into.
  */
 public class WebCanvasRendererFactory(private val canvas: JsAny) : VideoRendererFactory {
-    override val name: String = "web-canvas-kitecodec"
-    override suspend fun create(): VideoRenderer = KiteCodecWebCanvasRenderer(canvas)
+    override val name: String = "web-canvas-kiteffmpeg"
+    override suspend fun create(): VideoRenderer = KiteFFmpegWebCanvasRenderer(canvas)
 }
 
 /**
@@ -37,7 +37,7 @@ public class WebCanvasRendererFactory(private val canvas: JsAny) : VideoRenderer
  * that memory belongs to the codec module rather than to any collector that could reclaim it. So it
  * is closed with the renderer, explicitly. Everything else is the plain renderer's behaviour.
  */
-private class KiteCodecWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
+private class KiteFFmpegWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
 
     private val converter = WebRgbaConverter()
 
@@ -52,7 +52,7 @@ private class KiteCodecWebCanvasRenderer(canvas: JsAny) : VideoRenderer {
      * whose message reads differently on every platform.
      */
     private fun paint(frame: VideoFrame, destination: JsAny): Boolean {
-        val kiteCodec = frame as? KiteCodecVideoFrame ?: return false
+        val kiteCodec = frame as? KiteFFmpegVideoFrame ?: return false
         return converter.copyInto(kiteCodec.frame, destination)
     }
 

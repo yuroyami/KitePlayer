@@ -57,12 +57,12 @@ export DOCKER_CONFIG
 JVM_ARGS=()
 MOUNTS=(-v "$ROOT:$ROOT:ro" -v "$HOME/.gradle:$HOME/.gradle:ro" -v "$HOME/.m2:$HOME/.m2:ro")
 if [ "$MODE" = "--falsify" ]; then
-  # A truncated library staged where -Dkitecodec.jni.path wins over the jar bundle. The run must
+  # A truncated library staged where -Dkiteffmpeg.jni.path wins over the jar bundle. The run must
   # FAIL, not skip: a suite that reports success without a working decoder proves nothing.
   FAKE=$(mktemp -d)
   trap 'rm -rf "$FAKE"' EXIT
   head -c 4096 /dev/zero > "$FAKE/libkitecodec_jni.so"
-  JVM_ARGS+=("-Dkitecodec.jni.path=$FAKE/libkitecodec_jni.so")
+  JVM_ARGS+=("-Dkiteffmpeg.jni.path=$FAKE/libkitecodec_jni.so")
   MOUNTS+=(-v "$FAKE:$FAKE:ro")
   echo "== FALSIFICATION arm: truncated JNI library at $FAKE"
 fi

@@ -7,17 +7,17 @@ import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.ColorTransfer
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
-import io.github.yuroyami.kitecodec.ChromaLocation as KiteChromaLocation
-import io.github.yuroyami.kitecodec.ColorInfo
-import io.github.yuroyami.kitecodec.ColorMatrix as KiteColorMatrix
-import io.github.yuroyami.kitecodec.ColorPrimaries as KiteColorPrimaries
-import io.github.yuroyami.kitecodec.ColorTransfer as KiteColorTransfer
-import io.github.yuroyami.kitecodec.FrameInfo
-import io.github.yuroyami.kitecodec.PixelFormat
-import io.github.yuroyami.kitecodec.SampleFormat as KiteSampleFormat
+import io.github.yuroyami.kiteffmpeg.ChromaLocation as KiteChromaLocation
+import io.github.yuroyami.kiteffmpeg.ColorInfo
+import io.github.yuroyami.kiteffmpeg.ColorMatrix as KiteColorMatrix
+import io.github.yuroyami.kiteffmpeg.ColorPrimaries as KiteColorPrimaries
+import io.github.yuroyami.kiteffmpeg.ColorTransfer as KiteColorTransfer
+import io.github.yuroyami.kiteffmpeg.FrameInfo
+import io.github.yuroyami.kiteffmpeg.PixelFormat
+import io.github.yuroyami.kiteffmpeg.SampleFormat as KiteSampleFormat
 
 /**
- * Translation between KiteCodec's vocabulary and the engine's.
+ * Translation between KiteFFmpeg's vocabulary and the engine's.
  *
  * Two vocabularies exist on purpose. The engine must not name FFmpeg types anywhere, or a second
  * backend becomes impossible. The cost is this file, and it is a small and honest cost.
@@ -109,7 +109,7 @@ internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pi
     else -> null
 }
 
-/** Converts the tightly packed plane layout returned by KiteCodec's copying API to RGBA. */
+/** Converts the tightly packed plane layout returned by KiteFFmpeg's copying API to RGBA. */
 /**
  * Runs a row range on every core there is (W-19), or on this one when that would cost more.
  *
@@ -403,7 +403,7 @@ private class PackedCoefficients(
  *
  * The layout depends on the sample format. A planar format holds every sample of channel 0, then
  * every sample of channel 1, and so on. A packed format interleaves them already. Both arrive
- * tightly packed with no padding, which is what KiteCodec's copy guarantees.
+ * tightly packed with no padding, which is what KiteFFmpeg's copy guarantees.
  *
  * Integer formats are scaled by their full-scale value rather than by the next power of two, so a
  * full-scale input reaches exactly 1.0 and does not clip on the way back out.

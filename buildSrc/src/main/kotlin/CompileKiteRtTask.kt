@@ -22,16 +22,16 @@ import javax.inject.Inject
  * picks it up through the `staticLibraries = libkiteplayerrt.a` line of `kitert.def` plus a
  * `-libraryPath` pointing here.
  *
- * **This is a deliberate copy of KiteCodec's `CompileKiteCodecCTask`, not a shared class.** Plan
- * section 15.2 B1.7 step 1 states the rule: "the same shape as KiteCodec's, and the two must not be
- * shared across repositories". KiteCodec is a public FFmpeg binding and KitePlayer is a private
+ * **This is a deliberate copy of KiteFFmpeg's `CompileKiteFFmpegCTask`, not a shared class.** Plan
+ * section 15.2 B1.7 step 1 states the rule: "the same shape as KiteFFmpeg's, and the two must not be
+ * shared across repositories". KiteFFmpeg is a public FFmpeg binding and KitePlayer is a private
  * player. Sharing the build task would make one a build dependency of the other, in the direction
  * that turns KitePlayer's real-time audio core into a transitive consequence of a codec dependency,
  * which is the same argument that put the ring in `kiteplayer-rt` rather than in `kitecodec-c`. The
  * two differ in substance as well: this one compiles a translation unit that includes no third party
  * header at all, so it has no FFmpeg include directories and no build-provenance defines, and it
- * knows six target triples KiteCodec's does not because `kiteplayer-core` declares tvOS and watchOS
- * and KiteCodec does not.
+ * knows six target triples KiteFFmpeg's does not because `kiteplayer-core` declares tvOS and watchOS
+ * and KiteFFmpeg does not.
  *
  * **Why the compiler is konan's and not Apple's.** The archive is embedded in a klib and is linked
  * into whatever the consumer builds by Kotlin/Native's own linker. Using the compiler Kotlin/Native

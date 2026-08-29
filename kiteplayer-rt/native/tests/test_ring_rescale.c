@@ -2,7 +2,7 @@
  *
  * The Kotlin ring computed `(atFrame - segmentStart) * 1_000_000L / sampleRate` at two places, and
  * that product overflows a signed 64 bit intermediate once the frame delta passes about 9.2e12.
- * It is the same shape KiteCodec defect D9 records against the FFmpeg timestamp helpers. Both
+ * It is the same shape KiteFFmpeg defect D9 records against the FFmpeg timestamp helpers. Both
  * rings were corrected in this sub-phase, so the differential oracle compares two correct
  * implementations rather than two matching bugs; this suite is what says the correction is real.
  *

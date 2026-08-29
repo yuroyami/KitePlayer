@@ -1,13 +1,13 @@
-@file:OptIn(KiteCodecLowLevelApi::class)
+@file:OptIn(KiteFFmpegLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.compose
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.TrackKind
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSource
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecSourceFactory
-import io.github.yuroyami.kitecodec.KiteCodecLowLevelApi
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSource
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegSourceFactory
+import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import kotlinx.coroutines.runBlocking
@@ -28,7 +28,7 @@ class KiteVideoGpuPathSimTest {
     @Test
     fun theCpuPathOnThisSimulatorForComparison() = runBlocking {
         val mediaDir = platform.posix.getenv("KITEPLAYER_TESTMEDIA")?.toKString() ?: "testmedia"
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteFFmpegSource
         try {
             val stream = assertNotNull(
                 source.streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt },
@@ -42,7 +42,7 @@ class KiteVideoGpuPathSimTest {
             val cpuRenderer = KiteVideoRenderer(
                 convert = { frame ->
                     io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter.toRgba(
-                        frame as io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame,
+                        frame as io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame,
                     )
                 },
                 makeImage = { rgba, w, h -> FrameImagePool().imageFor(rgba, w, h) },
@@ -89,7 +89,7 @@ class KiteVideoGpuPathSimTest {
     @Test
     fun kiteVideoPlaysRealMediaThroughTheGpuPathAndTheCostIsMeasured() = runBlocking {
         val mediaDir = platform.posix.getenv("KITEPLAYER_TESTMEDIA")?.toKString() ?: "testmedia"
-        val source = KiteCodecSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/sync1080p30.mp4")) as KiteFFmpegSource
         try {
             val stream = assertNotNull(
                 source.streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt },

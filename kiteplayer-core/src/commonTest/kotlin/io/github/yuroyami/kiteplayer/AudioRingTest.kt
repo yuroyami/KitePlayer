@@ -311,7 +311,7 @@ class AudioRingTest {
     fun `dating a frame delta divides before it multiplies`() {
         // Register item B1-18. Both places this ring dates a frame used to compute
         // `delta * 1_000_000L / sampleRate`, whose product overflows a signed 64 bit intermediate once
-        // the delta passes about 9.2e12: the same shape KPKMP-PAST.md section 4 records against KiteCodec's
+        // the delta passes about 9.2e12: the same shape KPKMP-PAST.md section 4 records against KiteFFmpeg's
         // timestamp helpers as defect D9.
         //
         // The table has to go through `framesToMicros` rather than through `write` and `render`,

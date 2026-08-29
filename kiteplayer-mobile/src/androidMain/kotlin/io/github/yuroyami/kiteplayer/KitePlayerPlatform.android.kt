@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import dalvik.system.BaseDexClassLoader
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecMediaBackend
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
 import io.github.yuroyami.kiteplayer.output.AndroidOutputBackend
 
 internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
@@ -20,7 +20,7 @@ private object AndroidKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
 
     override fun backendsOrNull(): Backends? = if (availability.isAvailable) {
         Backends(
-            backend = KiteCodecMediaBackend(),
+            backend = KiteFFmpegMediaBackend(),
             output = AndroidOutputBackend,
         )
     } else {
@@ -33,7 +33,7 @@ internal fun androidKitePlayerAvailability(jniPath: String?): KitePlayerAvailabi
         KitePlayerAvailability.Available
     } else {
         KitePlayerAvailability.Unavailable(
-            "KiteCodec JNI is not packaged for this Android process ABI",
+            "KiteFFmpeg JNI is not packaged for this Android process ABI",
         )
     }
 

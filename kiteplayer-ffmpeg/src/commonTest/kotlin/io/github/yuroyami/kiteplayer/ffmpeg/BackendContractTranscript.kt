@@ -6,7 +6,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
-import io.github.yuroyami.kitecodec.FFmpeg
+import io.github.yuroyami.kiteffmpeg.FFmpeg
 
 /** Produces the same sorted, path-free backend contract on JVM and macOS arm64. */
 internal suspend fun backendContractTranscript(mediaDirectory: String): String {
@@ -21,8 +21,8 @@ internal suspend fun backendContractTranscript(mediaDirectory: String): String {
         lines += "identity.${library.name}=${library.headerVersion}/${library.runtimeVersion}/${library.verdict}"
     }
 
-    val source = KiteCodecSourceFactory()
-        .open(MediaItem("${mediaDirectory.trimEnd('/')}/sync1080p30.mp4")) as KiteCodecSource
+    val source = KiteFFmpegSourceFactory()
+        .open(MediaItem("${mediaDirectory.trimEnd('/')}/sync1080p30.mp4")) as KiteFFmpegSource
     try {
         val stream = requireNotNull(source.firstVideo) { "sync fixture has no video stream" }
         val extradata = requireNotNull(stream.codecExtradata) { "sync fixture has no codec extradata" }
@@ -72,10 +72,10 @@ internal suspend fun backendContractTranscript(mediaDirectory: String): String {
     return lines.sorted().joinToString(separator = "\n", postfix = "\n")
 }
 
-/** Exercises the PlayerPacket boundary against a real KiteCodec-owned packet. */
+/** Exercises the PlayerPacket boundary against a real KiteFFmpeg-owned packet. */
 internal suspend fun assertOwnedPacketPayload(mediaDirectory: String) {
-    val source = KiteCodecSourceFactory()
-        .open(MediaItem("${mediaDirectory.trimEnd('/')}/sync1080p30.mp4")) as KiteCodecSource
+    val source = KiteFFmpegSourceFactory()
+        .open(MediaItem("${mediaDirectory.trimEnd('/')}/sync1080p30.mp4")) as KiteFFmpegSource
     try {
         val stream = requireNotNull(source.firstVideo) { "sync fixture has no video stream" }
         source.selectStreams(setOf(stream.index))
@@ -113,38 +113,38 @@ internal suspend fun assertOwnedPacketPayload(mediaDirectory: String) {
 }
 
 private suspend fun nextContractFrame(
-    source: KiteCodecSource,
+    source: KiteFFmpegSource,
     streamIndex: Int,
     decoder: VideoDecoder,
-): KiteCodecVideoFrame? {
-    val pendingFrames = ArrayDeque<KiteCodecVideoFrame>()
+): KiteFFmpegVideoFrame? {
+    val pendingFrames = ArrayDeque<KiteFFmpegVideoFrame>()
     try {
         while (true) {
             val packet = nextContractPacket(source, streamIndex)
             if (packet == null) {
                 while (!decoder.send(null)) {
                     val pending = decoder.receive() ?: error("decoder refused drain with no pending output")
-                    pendingFrames.addLast(pending as KiteCodecVideoFrame)
+                    pendingFrames.addLast(pending as KiteFFmpegVideoFrame)
                 }
-                return pendingFrames.removeFirstOrNull() ?: decoder.receive() as KiteCodecVideoFrame?
+                return pendingFrames.removeFirstOrNull() ?: decoder.receive() as KiteFFmpegVideoFrame?
             }
             try {
                 while (!decoder.send(packet)) {
                     val pending = decoder.receive() ?: error("decoder refused a packet with no pending output")
-                    pendingFrames.addLast(pending as KiteCodecVideoFrame)
+                    pendingFrames.addLast(pending as KiteFFmpegVideoFrame)
                 }
             } finally {
                 packet.close()
             }
             pendingFrames.removeFirstOrNull()?.let { return it }
-            (decoder.receive() as KiteCodecVideoFrame?)?.let { return it }
+            (decoder.receive() as KiteFFmpegVideoFrame?)?.let { return it }
         }
     } finally {
         pendingFrames.forEach { it.close() }
     }
 }
 
-private suspend fun nextContractPacket(source: KiteCodecSource, streamIndex: Int): PlayerPacket? {
+private suspend fun nextContractPacket(source: KiteFFmpegSource, streamIndex: Int): PlayerPacket? {
     while (true) {
         val packet = source.readPacket() ?: return null
         if (packet.streamIndex == streamIndex) return packet

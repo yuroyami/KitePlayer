@@ -288,7 +288,7 @@ public data class SubtitleConfig(
  *
  * [KitePlayer.create] resolves both and refuses to build a player without them, with
  * [PlaybackError.ConfigurationInvalid] naming what to pass. On macOS that pair is
- * `KiteCodecMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from `kiteplayer-output`.
+ * `KiteFFmpegMediaBackend()` from `kiteplayer-ffmpeg` and `AppleOutputBackend` from `kiteplayer-output`.
  */
 public data class Backends(
     val backend: MediaBackend? = null,

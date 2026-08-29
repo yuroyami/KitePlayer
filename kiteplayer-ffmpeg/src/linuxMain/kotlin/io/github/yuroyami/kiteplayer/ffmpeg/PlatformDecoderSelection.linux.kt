@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.HwdecPolicy
-import io.github.yuroyami.kitecodec.CodecId
+import io.github.yuroyami.kiteffmpeg.CodecId
 
 /**
  * Linux has no hardware route in this build, so every codec decodes in software.

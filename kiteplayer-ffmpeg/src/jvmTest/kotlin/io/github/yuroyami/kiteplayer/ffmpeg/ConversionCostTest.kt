@@ -72,7 +72,7 @@ class ConversionCostTest {
         val file = File(dir, "sync1080p30.mp4")
         if (!file.isFile) return@runBlocking println("SKIP: no ${file.path}")
 
-        val source = KiteCodecSourceFactory().open(MediaItem(file.absolutePath)) as KiteCodecSource
+        val source = KiteFFmpegSourceFactory().open(MediaItem(file.absolutePath)) as KiteFFmpegSource
         try {
             val stream = source.firstVideo ?: return@runBlocking println("SKIP: no video stream")
             source.selectStreams(setOf(stream.index))
@@ -89,7 +89,7 @@ class ConversionCostTest {
                 packet.close()
                 if (decoded == null) decoded = decoder.receive()
             }
-            val frame = decoded as? KiteCodecVideoFrame ?: return@runBlocking println("SKIP: no frame")
+            val frame = decoded as? KiteFFmpegVideoFrame ?: return@runBlocking println("SKIP: no frame")
             try {
                 fun timed(label: String, block: () -> Unit) {
                     repeat(20) { block() }

@@ -9,7 +9,7 @@ import kotlin.time.Duration.Companion.seconds
  * strings a backend passes to its decoders.
  *
  * The engine stays backend-agnostic, so [decoderOptions] are plain `av_opt_set` strings here;
- * the FFmpeg backend accepts them at construction (`KiteCodecMediaBackend(decoderOptions)`) and
+ * the FFmpeg backend accepts them at construction (`KiteFFmpegMediaBackend(decoderOptions)`) and
  * applies them through its typed layer. A profile is a VALUE: [toString] prints exactly what it
  * compiles to, which is what the diagnostics dump carries (law 4).
  *
@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.seconds
  * val profile = PlaybackProfile.Scrubbing
  * val player = KitePlayer.create(
  *     profile.applyTo(PlayerConfig(backends = Backends(
- *         backend = KiteCodecMediaBackend(decoderOptions = profile.decoderOptions),
+ *         backend = KiteFFmpegMediaBackend(decoderOptions = profile.decoderOptions),
  *         output = mobileBackends().output,
  *     ))),
  * )

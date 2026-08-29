@@ -20,7 +20,7 @@ class PhoneBackendsTest {
      * Compared by SHAPE, not by equality, and the reason is worth stating.
      *
      * `Backends` is a data class, but on an available JVM `backendsOrNull` builds a FRESH
-     * `KiteCodecMediaBackend()` on every call, so two correct calls are already unequal. Comparing
+     * `KiteFFmpegMediaBackend()` on every call, so two correct calls are already unequal. Comparing
      * the types answers the question actually being asked, which is whether the same stack was
      * assembled, and it is non-vacuous on both sides of the availability check: when no backend is
      * available both shapes are `null to null`, and when one is both name the same classes.

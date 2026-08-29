@@ -14,8 +14,8 @@ import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.TrackKind
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecMediaBackend
-import io.github.yuroyami.kiteplayer.ffmpeg.KiteCodecVideoFrame
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegMediaBackend
+import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.corePixelBufferOrNull
 import io.github.yuroyami.kiteplayer.ffmpeg.uploadPlanesOrNull
 import io.github.yuroyami.kiteplayer.output.AppKitWindow
@@ -109,7 +109,7 @@ fun main(args: Array<String>) {
     val player = KitePlayer.create(
         PlayerConfig(
             backends = Backends(
-                backend = KiteCodecMediaBackend(onWarning = { report.warn(it.message) }),
+                backend = KiteFFmpegMediaBackend(onWarning = { report.warn(it.message) }),
                 output = AppleOutputBackend,
             ),
             statsInterval = STATS_INTERVAL,
@@ -136,7 +136,7 @@ fun main(args: Array<String>) {
         val renderer = MetalVideoRenderer(
             layer = checkNotNull(window.metalLayer) { "the window was built with useMetalLayer" },
             resolver = { frame ->
-                val decoded = frame as KiteCodecVideoFrame
+                val decoded = frame as KiteFFmpegVideoFrame
                 decoded.corePixelBufferOrNull()?.let { MetalPicture.CorePixelBuffer(it) }
                     ?: decoded.uploadPlanesOrNull()?.let { planes ->
                         MetalPicture.SoftwarePlanes(

@@ -74,7 +74,7 @@ class WarningAuditTest {
                 "that actually rolled HDR off, latched once per open",
         )
         is PlaybackWarning.ColorApproximated -> listOf(
-            "KiteCodecSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
+            "KiteFFmpegSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
                 "BT.2020 constant luminance alone since 2026-08-25",
         )
         // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25 (KP-TONEMAP-WARN): it conflated a true
@@ -104,7 +104,7 @@ class WarningAuditTest {
             "PlaybackCore.watchRendererEvents, on RendererEvent.SurfaceLost from the attached renderer",
         )
         is PlaybackWarning.OptionsUnused -> listOf(
-            "KiteCodecMediaBackend.open, from MediaSource.unusedOpenOptions after the pre-open funnel ran",
+            "KiteFFmpegMediaBackend.open, from MediaSource.unusedOpenOptions after the pre-open funnel ran",
         )
         is PlaybackWarning.CommandRefused -> listOf(
             "PlaybackCore's SetSpeed and SetPreservePitch handlers, refusing a live change on an unseekable source",

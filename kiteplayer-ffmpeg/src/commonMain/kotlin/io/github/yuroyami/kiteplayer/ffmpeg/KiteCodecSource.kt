@@ -128,7 +128,7 @@ public class KiteCodecSource internal constructor(private val source: MediaSourc
     override val metadata: Map<String, String> = source.metadata
 
     /**
-     * Always empty, because the container reader has no chapter list to offer.
+     * The container's chapters, empty only when the file declares none.
      *
      * Mapped from the container's own table (S4.b, KD-5). KiteCodec reports ABSOLUTE microsecond
      * bounds; the engine's timeline starts at zero, so the same mapper every timestamp crosses

@@ -147,16 +147,15 @@ public fun interface MediaIoResolver {
  * LOCAL SubRip and WebVTT files load at open: each becomes a selectable synthetic subtitle
  * track (a negative [io.github.yuroyami.kiteplayer.TrackId], labelled by [title] or the file
  * name) whose cues run through the same engine timing path container cues use. A file that
- * cannot be read or parsed warns typed and is skipped rather than failing the open. Network
- * URLs stay parked with KPKMP 17.8, and [io] is not wired yet: both warn typed today.
+ * cannot be read or parsed warns typed and is skipped rather than failing the open. A network
+ * URL warns typed and is skipped: external subtitles read local paths, and the network side
+ * arrives with the streaming work.
  */
 public data class SubtitleSource(
     val uri: String,
     /** Shown in a track menu. Defaults to the file name. */
     val title: String? = null,
     val language: String? = null,
-    /** Read the subtitle bytes through your own code. A factory, exactly like [MediaItem.io]. */
-    val io: (suspend () -> MediaIo)? = null,
     /** Selected as soon as it is loaded. */
     val selectImmediately: Boolean = false,
 )

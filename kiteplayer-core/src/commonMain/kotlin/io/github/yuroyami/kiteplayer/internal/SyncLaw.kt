@@ -28,9 +28,6 @@ internal object SyncLaw {
      */
     const val FRAME_DUP_THRESHOLD_US: Long = 100_000
 
-    /** A difference larger than this is a broken stream or a discontinuity, not drift. */
-    const val NO_SYNC_THRESHOLD_US: Long = 10_000_000
-
     /**
      * How far the presentation schedule may fall behind wall time before it is abandoned and
      * re-anchored to now.
@@ -54,9 +51,9 @@ internal object SyncLaw {
      * @param videoClock the video clock, or null when it has no valid reading.
      * @param masterClock the master clock, or null when it has no valid reading. When the master
      *        *is* the video clock, pass null for both and no correction is applied.
-     * @param maxFrameDurationUs the container's sanity ceiling. Note that this, and not
-     *        [NO_SYNC_THRESHOLD_US], is what gates whether a correction happens at all. Using the
-     *        10 second constant here instead would disable correction on every ordinary file.
+     * @param maxFrameDurationUs the container's sanity ceiling, and the thing that gates whether a
+     *        correction happens at all. Pass the container's own ceiling: substituting the 10 second
+     *        discontinuous one would disable correction on every ordinary file.
      */
     fun targetDelayUs(
         nominalDelayUs: Long,

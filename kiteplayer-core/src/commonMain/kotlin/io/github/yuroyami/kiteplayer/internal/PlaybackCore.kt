@@ -250,11 +250,6 @@ internal class PlaybackCore(
 
     /** One external subtitle file to one synthetic track, or the sentence saying why not. */
     private fun parseExternalSubtitle(sourceFile: SubtitleSource, id: TrackId): ExternalSubtitleParse {
-        if (sourceFile.io != null) {
-            return ExternalSubtitleParse.Failed(
-                "custom subtitle IO is not wired; external subtitles read local paths (17.8 owns the rest)",
-            )
-        }
         val parser = backend.subtitleFileParser()
             ?: return ExternalSubtitleParse.Failed(
                 "this backend supplies no subtitle file parser, so external files cannot load",
@@ -2851,8 +2846,9 @@ internal class PlaybackCore(
         // KP-SUBSWAP (owner report 2026-08-26): a subtitle-only change must not ride the full
         // reopen below, which was built for video and audio switches and visibly interrupts
         // playback. Container subtitle tracks get the same in-place treatment external subtitles
-        // always had; a refusal (demux would not park, stale id, external target) falls through
-        // to the rebuild, which remains the correct answer for everything else.
+        // always had. A refusal (demux would not park, stale id, external target) discards the
+        // pending entry instead: the rebuild below runs for the kinds this branch does not take,
+        // which is video, and for an audio or subtitle change it never reached.
         if (TrackKind.Video !in pendingSelections) {
             val active = session
             if (active != null) {

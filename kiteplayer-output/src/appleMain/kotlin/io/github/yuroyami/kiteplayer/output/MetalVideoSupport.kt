@@ -474,15 +474,7 @@ internal val DISABLED_ADJUST_UNIFORMS: FloatArray = FloatArray(13)
 internal val DISABLED_TONE_UNIFORMS: FloatArray = FloatArray(4)
 
 /**
- * Packs the HDR-to-SDR law's uniforms from the frame's declared colour. SDR transfers return
- * the disabled block, which is what keeps every existing SDR pixel bit-exact.
- *
- * srcPeak is 1000 nits for both transfers: PQ mastering metadata (SMPTE ST 2086 / CTA-861.3)
- * is not plumbed through [ColorSpaceInfo] yet, and 1000 is both HLG's nominal peak and the
- * commonest PQ mastering level. Recorded as the honest limit of this first tone-mapping pass.
- */
-/**
- * QualityUniforms for [quality], targeting a write of [targetBits] bits per channel (17.21).
+ * QualityUniforms for [quality], targeting a write of [targetBits] bits per channel.
  *
  * The dither step is one output step, `1 / (2^bits - 1)`, because the pattern's job is to spread a
  * value across the two grid points it falls between. Reading it from the target rather than
@@ -531,6 +523,14 @@ internal val DISABLED_QUALITY_UNIFORMS: FloatArray = packQualityUniforms(
     io.github.yuroyami.kiteplayer.RenderQuality.Off,
 )
 
+/**
+ * Packs the HDR-to-SDR law's uniforms from the frame's declared colour. SDR transfers return
+ * the disabled block, which is what keeps every existing SDR pixel bit-exact.
+ *
+ * srcPeak is 1000 nits for both transfers: PQ mastering metadata (SMPTE ST 2086 / CTA-861.3)
+ * is not plumbed through [ColorSpaceInfo] yet, and 1000 is both HLG's nominal peak and the
+ * commonest PQ mastering level. Recorded as the honest limit of this first tone-mapping pass.
+ */
 internal fun packToneUniforms(colorSpace: ColorSpaceInfo): FloatArray {
     val mode = when (colorSpace.transfer) {
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq -> 1

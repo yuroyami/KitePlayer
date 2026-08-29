@@ -1972,10 +1972,8 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
 }
 
 final class io.github.yuroyami.kiteplayer/SubtitleSource { // io.github.yuroyami.kiteplayer/SubtitleSource|null[0]
-    constructor <init>(kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin.coroutines/SuspendFunction0<io.github.yuroyami.kiteplayer/MediaIo>? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/SubtitleSource.<init>|<init>(kotlin.String;kotlin.String?;kotlin.String?;kotlin.coroutines.SuspendFunction0<io.github.yuroyami.kiteplayer.MediaIo>?;kotlin.Boolean){}[0]
+    constructor <init>(kotlin/String, kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/SubtitleSource.<init>|<init>(kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean){}[0]
 
-    final val io // io.github.yuroyami.kiteplayer/SubtitleSource.io|{}io[0]
-        final fun <get-io>(): kotlin.coroutines/SuspendFunction0<io.github.yuroyami.kiteplayer/MediaIo>? // io.github.yuroyami.kiteplayer/SubtitleSource.io.<get-io>|<get-io>(){}[0]
     final val language // io.github.yuroyami.kiteplayer/SubtitleSource.language|{}language[0]
         final fun <get-language>(): kotlin/String? // io.github.yuroyami.kiteplayer/SubtitleSource.language.<get-language>|<get-language>(){}[0]
     final val selectImmediately // io.github.yuroyami.kiteplayer/SubtitleSource.selectImmediately|{}selectImmediately[0]
@@ -1988,9 +1986,8 @@ final class io.github.yuroyami.kiteplayer/SubtitleSource { // io.github.yuroyami
     final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/SubtitleSource.component1|component1(){}[0]
     final fun component2(): kotlin/String? // io.github.yuroyami.kiteplayer/SubtitleSource.component2|component2(){}[0]
     final fun component3(): kotlin/String? // io.github.yuroyami.kiteplayer/SubtitleSource.component3|component3(){}[0]
-    final fun component4(): kotlin.coroutines/SuspendFunction0<io.github.yuroyami.kiteplayer/MediaIo>? // io.github.yuroyami.kiteplayer/SubtitleSource.component4|component4(){}[0]
-    final fun component5(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleSource.component5|component5(){}[0]
-    final fun copy(kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin.coroutines/SuspendFunction0<io.github.yuroyami.kiteplayer/MediaIo>? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/SubtitleSource // io.github.yuroyami.kiteplayer/SubtitleSource.copy|copy(kotlin.String;kotlin.String?;kotlin.String?;kotlin.coroutines.SuspendFunction0<io.github.yuroyami.kiteplayer.MediaIo>?;kotlin.Boolean){}[0]
+    final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleSource.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/SubtitleSource // io.github.yuroyami.kiteplayer/SubtitleSource.copy|copy(kotlin.String;kotlin.String?;kotlin.String?;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleSource.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SubtitleSource.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SubtitleSource.toString|toString(){}[0]

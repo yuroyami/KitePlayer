@@ -251,11 +251,11 @@ public enum class LoopMode {
     One,
 
     /**
-     * Repeat the whole queue.
+     * Repeat the whole queue: reaching the end of the last item wraps round to the first.
      *
-     * Refused rather than ignored: there is no queue and no playlist, so asking for this throws instead of
-     * quietly behaving like [Off]. A caller can tell the difference between a mode it got and a mode it
-     * did not. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * With a queue of one item, or plain opened media, this repeats the current item exactly like
+     * [One], because a whole queue of one IS the current item. A source that cannot seek refuses
+     * the repeat with a typed warning and stays ended, rather than failing the session.
      */
     All,
 }

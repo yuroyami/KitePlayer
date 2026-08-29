@@ -102,6 +102,9 @@ internal class AssDocument(text: String) {
             val key = line.substring(0, colon).trim().lowercase()
             val value = line.substring(colon + 1).trim()
             when (section) {
+                // Only the script's own resolution is taken. `Collisions:` is deliberately not
+                // read: a script asking for Reverse stacking gets the one fixed order, because
+                // honouring it is a layout change in every rasterizer, not a parse change here.
                 "script info" -> when (key) {
                     "playresx" -> playResX = value.toIntOrNull() ?: playResX
                     "playresy" -> playResY = value.toIntOrNull() ?: playResY

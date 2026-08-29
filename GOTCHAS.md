@@ -181,6 +181,11 @@ Never move one silently.
 - `-Pkiteffmpeg.jni.linux=true` needs a running Docker daemon (it extracts JDK headers from a
   container). Without Docker, publish without that flag and accept that the jar carries no Linux
   JNI libraries, which also means `linux-jvm-tests.sh` cannot run.
+- **Moving or renaming a checkout directory breaks the prebuilt C test binaries.** They carry an
+  absolute rpath to their interpose dylib from link time, so after a move every suite aborts with
+  `Library not loaded: @rpath/libkc_interpose_alloc.dylib` naming the OLD path, which reads like
+  a broken test and is a stale binary. Re-run the variant's `build-host.sh` and they pass again.
+  Tier 1 says to rebuild the C suites only when a C file changed; a directory move counts too.
 - **`./gradlew ... | tail` hides the build's exit code**, because the pipeline reports the exit
   of `tail`. A background bake reported success while `BUILD FAILED` sat in its own log. Pipe to
   a file and echo `$?`, or check the log for BUILD FAILED; never read a piped gradle run's

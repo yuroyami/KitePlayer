@@ -25,8 +25,10 @@ law, seek machine), FFmpeg via KiteFFmpeg beneath it, audio with a windowed-sinc
 WSOLA tempo and pitch preservation, subtitles with libass built for seven target families,
 outputs on Android, Apple, desktop JVM, Linux (container-proven), and a web canvas path.
 About 880 Kotlin test functions in KitePlayer, about 260 in KiteFFmpeg, plus nineteen C
-suites. Both repos have CI (KitePlayer 7 jobs on 4 OSes). KiteFFmpeg 0.1.3 is on Maven
-Central; 0.1.4 is local-only. KitePlayer has never been published.
+suites. Both repos have CI (KitePlayer 7 jobs on 4 OSes). Maven Central serves only the
+sibling's OLD coordinates, `kitecodec-core` up to 0.1.3; the renamed `kiteffmpeg-core` 0.1.0 is
+mavenLocal-only, so KitePlayer builds need `-Pkiteplayer.useMavenLocal=true` until the owner
+publishes. KitePlayer itself has never been published.
 
 Honest support today: macOS arm64 is the proving ground (experimental full playback). Android
 and iOS play real media on real devices with named open items below. Desktop JVM plays the
@@ -67,38 +69,7 @@ done; distribution half is Phase 8.)
 
 # PHASE 0: WHAT THE BUMP AND THE RENAME LEFT BEHIND
 
-### 0.1 A rebaked FFmpeg tree does not invalidate anything downstream. Size M
-
-**Found 2026-08-29 while doing 0.2, and it is the more serious half of that day.** After all 12
-trees were rebuilt from n8.0 to n8.1.2, `:kiteffmpeg-core:macosArm64Test` and `jvmTest` reported
-UP-TO-DATE, and so did `linkDebugTestMacosArm64`. Gradle sees no input change because the
-installed `native-libs/**` archives are not declared as inputs of the cinterop, link, compile or
-test tasks that consume them. `--rerun` did not help either: it re-runs the named task, not the
-stale link beneath it. Only deleting the native build outputs by hand produced a real run.
-
-**Why it matters.** The whole point of a version bump is evidence that the suites still pass
-against the new binaries. Here every gate could go green while the test executable still linked
-the OLD archives: a green that means nothing, and silent rather than noisy.
-
-**What is PROVEN and what is only suspected, kept apart on purpose.** Proven: after the rebake,
-`linkDebugTestMacosArm64`, `macosArm64Test` and `jvmTest` all reported UP-TO-DATE, and only
-deleting the native outputs by hand produced a real run. Suspected but NOT demonstrated: that a
-publish can ship klibs built from archives the tree no longer holds. FFmpeg is embedded in the
-klibs, and Gradle's build cache is keyed on the same undeclared inputs, so the hazard is real in
-principle; the one artifact actually opened after a clean publish (`iosarm64`'s cinterop klib)
-did contain `n8.1.2`. Do not repeat the stronger claim without testing it.
-
-- [ ] Declare the per-target installed tree as a task input wherever it is consumed (cinterop,
-  the C compile tasks, the link tasks), so a rebake invalidates its own consumers.
-- [ ] Falsify it: rebake one target, confirm the link and test tasks go out of date on their
-  own, with no manual deletion.
-- [ ] Until it lands, GOTCHAS carries the manual step, and any bump must delete the native
-  build outputs before claiming a suite result.
-- [ ] **Blocks the rename publish**: the 0.1.0 release under the new name must be cut from a clean
-  build, or verified artifact by artifact, until this is fixed. A `clean` before publish is the
-  interim rule.
-
-### 0.1.a `test_ring_threads` case 5 fails under machine load, and it is in Tier 1. Size S
+### 0.1 `test_ring_threads` case 5 fails under machine load, and it is in Tier 1. Size S
 
 **Measured 2026-08-29**: eleven consecutive runs of `kiteplayer-rt`'s plain C suites produced
 two failures, both the same case, `a flush racing a live feeder is a defined interleaving`. The
@@ -139,9 +110,12 @@ left of it:
 - [ ] **[owner] The GitHub repository rename** (KiteCodec to KiteFFmpeg; GitHub redirects old
   URLs, and the CI badge and the checksum-pinned companion-release fetch URLs already name the
   new one, so they go live with the rename).
-- [ ] **[owner] Publish `kiteffmpeg-core` 0.1.0 to Central**, gated on item 0.1: cut it from a
-  clean build, and spot-check one published klib for `n8.1.2` before releasing. The old
+- [ ] **[owner] Publish `kiteffmpeg-core` 0.1.0 to Central**, spot-checking one published klib
+  for `n8.1.2` before releasing (see GOTCHAS section 4; the check reads the bytes rather than
+  the build's opinion of them, which is worth doing on a first release under a new name). The old
   `kitecodec-core` line stays on Central untouched and receives nothing further.
+
+---
 
 # PHASE 1: DESKTOP NATIVE VIEW (owner-ordered 2026-08-29)
 

@@ -161,16 +161,21 @@ Never move one silently.
   fails here with "Android NDK not found" unless you export it first:
   `export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865`. 29.0.14206865
   is the version CI uses, readable in any Android tree's own `ffmpeg-configure.txt`.
-- **A rebaked FFmpeg tree invalidates NOTHING downstream** (MASTER_PLAN 0.2.a). `native-libs/**`
-  is not a declared input of the cinterop, compile, link or test tasks, so after a rebake every
-  one of them reports UP-TO-DATE and the test binary keeps linking the OLD archives. `--rerun`
-  does not fix it, because the stale link underneath is a different task. Delete the native
-  build outputs (`kiteffmpeg-core/build/bin/<target>`, `build/test-results`, the target's test
-  classes) and run with `--rerun-tasks`, or your green proves nothing. Since FFmpeg is embedded
-  in the klibs and the build cache is keyed on those same undeclared inputs, `clean` before any
-  publish meant to carry new native bytes, then spot-check: `unzip` the published
-  `*-cinterop-ffmpeg.klib` and grep it for the expected `n8.x.y`. That check is cheap and it is
-  the only one that reads the bytes a consumer would get.
+- **A rebaked FFmpeg tree DOES invalidate its consumers, and an earlier edition of this file
+  said the opposite.** Measured three ways on 2026-08-29, each restored afterwards: changing a
+  byte in a version header re-ran the C compile, the cinterop AND the link; changing a byte in
+  `libavutil.a` re-ran the C compile and the cinterop; restoring it re-ran them again. The
+  wiring is deliberate and documented at length in `kiteffmpeg-core/build.gradle.kts` beside the
+  cinterop block, because cinterop's own up-to-date check covers headers and not the libraries
+  its def merely names, so the archives are declared with `inputs.files`. `CompileKiteFFmpegCTask`
+  additionally tracks the six version headers by CONTENT and carries the FFmpeg ref in its
+  build defines. **Do not "fix" this**; the claim it was broken came from reading a SECOND
+  invocation's UP-TO-DATE, which is simply the first invocation having already rebuilt
+  everything, and it briefly reached a commit message.
+- Publishing what a consumer actually gets is still worth one cheap check, on its own merits
+  rather than because the build is untrustworthy: `unzip` the published
+  `*-cinterop-ffmpeg.klib` and grep it for the expected `n8.x.y`. It is the only check that
+  reads the bytes rather than the build's opinion of them.
 - **mavenLocal accumulates per-target artifacts across publishes with DIFFERENT flags, and a
   narrower publish neither refreshes nor removes the others.** After a
   `-Pkiteffmpeg.phoneTargetsOnly=true -Pkiteffmpeg.withDesktopTargets=true` publish, the

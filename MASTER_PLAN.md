@@ -105,10 +105,13 @@ via the OS compositor; desktop needs the same shape.
 
 **Design, decided.** Tier 1 is pure JVM, zero native code: a heavyweight `java.awt.Canvas`
 hosted through Compose `SwingPanel`, painted by the renderer's OWN thread via AWT
-`BufferStrategy` (AWT heavyweights paint independently of the Compose/Skiko loop). Z-order
-via the Compose interop blending flag, proven by a spike before any wiring; where blending
-fails, coerce to ComposeCanvas and report through `onEffectivePath` (the existing honesty
-contract). `Auto` stays ComposeCanvas on JVM until the owner flips it on measurements.
+`BufferStrategy` (AWT heavyweights paint independently of the Compose/Skiko loop, which item
+1.1 confirms is still true with blending enabled). Z-order via the Compose interop blending
+flag, proven by the spike before any wiring; where it cannot work, coerce to ComposeCanvas and
+report through `onEffectivePath`, which is the honesty contract the SPI already has. Expect
+that fallback to be permanent on Linux rather than temporary: Compose documents blending as
+Metal, DirectX and offscreen only, and Skiko draws Linux with OpenGL. `Auto` stays
+ComposeCanvas on JVM until the owner flips it on measurements.
 Module split mirrors the web renderer (because `:kiteplayer-output` must not depend on
 KiteFFmpeg): geometry + painting in output jvmMain, frame conversion via a factory in
 `kiteplayer-mobile` jvmMain over `SoftwareConverter`, the view in `kiteplayer-view` jvmMain
@@ -118,17 +121,58 @@ by tier 1's measured frame cost.
 
 ### 1.1 The spike: blending and decoupling, measured. STOP GATE. Size S
 
+**Premises re-verified against the tree and the Compose sources 2026-08-29, before writing any
+spike code.** Still true: the JVM actuals coerce to `ComposeCanvas` and draw an empty box;
+`kiteplayer-view` declares `jvm()` and has NO jvmMain source set yet; the geometry law
+`frameLayout` is `internal` in `kiteplayer-output` commonMain, so an AWT renderer in that
+module's jvmMain can use it; `kiteplayer-sample-desktop` exists and opens a plain
+`application { Window(...) }`. Compose Multiplatform resolves to 1.12.0-rc01 and BOTH flags
+below exist in that exact artifact, checked in the jar rather than remembered.
+
+**What reading `ComposeFeatureFlags.desktop.kt` and `ComposeSceneMediator.desktop.kt` changed
+about this spike.** Four facts, each of which moves the test matrix:
+
+1. **The decoupling premise SURVIVES blending, which is the answer that mattered most.** With
+   blending on, Compose does not capture the component's pixels; `shouldPlaceInteropAbove`
+   simply becomes false and the heavyweight component is ordered BELOW Compose content inside
+   the `JLayeredPane`. So the canvas keeps painting itself on its own thread. Had blending
+   worked by rendering interop through Compose, the whole design would have been dead on
+   arrival, and that was not knowable without reading it.
+2. **On macOS there is a `metalOrderHack` that can cancel blending's z-order.** It reads
+   `renderApi == METAL && contentComponent !is SkiaSwingLayer`, and when true it forces interop
+   back ABOVE Compose even with blending enabled. A plain `application { Window {} }`, which is
+   what the sample uses, is exactly that case. The escape is the second system property,
+   `compose.swing.render.on.graphics=true`, which selects the `SkiaSwingLayer` path whose own
+   KDoc promises Swing z-ordering is respected, at a documented cost "proportional to the size".
+   So the spike tests THREE configurations, not two: neither flag, blending alone, and both.
+3. **Visible above is not the same as clickable, and the source says so.** The macOS limitation
+   is written down: "interop view might catch the mouse event even if visually it renders below
+   Compose content". Compose subscribes to the interop component's mouse events to work around
+   `JLayeredPane` not forwarding between layers. The spike must therefore CLICK the overlaid
+   controls, not merely look at them.
+4. **Blending is Metal, DirectX and offscreen only.** Linux, which Skiko renders with OpenGL, is
+   not in that list, so the desktop native view may be a macOS and Windows capability with Linux
+   falling back to `ComposeCanvas` through the existing `onEffectivePath` honesty contract. Also
+   recorded for later: on DirectX blending cannot overlay another DirectX component, which
+   constrains the tier-2 GPU presenter on Windows before it is designed.
+
 - [ ] `InteropSpike.kt` in `kiteplayer-sample-desktop`: Compose window, SwingPanel-hosted
-  Canvas painted at 60 Hz by a background thread (color cycle + frame counter via
-  BufferStrategy), Compose slider/buttons overlaid, a toggleable jank burner (~200 ms per
-  frame busywork in `withFrameNanos`), both FPS numbers on screen.
-- [ ] Run without and with `-Dcompose.interop.blending=true`; record z-order result each way.
-- [ ] With blending on and burner on 30 s: record canvas FPS mean/min vs Compose FPS.
-- [ ] Record everything in `kiteplayer-sample-desktop/MEASUREMENTS.md` with JVM + CMP
-  versions.
-- [ ] PASS = controls above video AND canvas holds >= 55 FPS while Compose drops under 15.
-  Z-order FAIL kills tier 1 on macOS: STOP, report, re-plan around the JAWT layer. Decoupling
-  FAIL kills the premise: STOP, report.
+  `java.awt.Canvas` painted at 60 Hz by a background thread (colour cycle plus frame counter
+  through `BufferStrategy`), Compose controls overlaid, a toggleable jank burner (about 200 ms
+  per frame inside `withFrameNanos`), and both frame rates on screen.
+- [ ] Run all three configurations: no flags, `-Dcompose.interop.blending=true`, and that plus
+  `-Dcompose.swing.render.on.graphics=true`. For each record whether the controls DRAW above
+  the canvas and whether they RECEIVE clicks, which are two separate observations per item 3.
+- [ ] In the best z-order configuration, with the burner on for 30 seconds, record canvas frame
+  rate mean and minimum against the Compose frame rate.
+- [ ] Record everything in `kiteplayer-sample-desktop/MEASUREMENTS.md`, naming the JVM, the CMP
+  version and the flags, since the numbers mean nothing without the configuration.
+- [ ] PASS = some configuration gives controls that both draw above and respond to clicks, AND
+  the canvas holds at least 55 fps while Compose is choked below 15. A z-order or input failure
+  in every configuration kills tier 1 on macOS: STOP, report, and re-plan around the JAWT layer.
+  A decoupling failure kills the premise itself: STOP and report.
+- [ ] If `compose.swing.render.on.graphics` turns out to be required, measure what its size
+  penalty costs the controls layer before the design adopts it, and say so on the item.
 - [ ] Commit: `Measure whether a heavyweight canvas escapes Compose jank on desktop`
 
 ### 1.2 `KitePlayerAwtView` in kiteplayer-view jvmMain. Size M

@@ -371,7 +371,9 @@ Never move one silently.
   `gradle/libs.versions.toml`; the adapter is `shared/src/commonMain/.../player/kite/KiteImpl.kt`;
   mpv is the Android default engine, KitePlayer is picked on the home-screen wheel.
 - KiteCodec 0.1.4 exists ONLY on this machine's mavenLocal (interrupt seam, disposition fix,
-  `PacketReader.reselect`); Central still serves 0.1.3. Publishing 0.1.4 is an owner act.
+  `PacketReader.reselect`); Central still serves 0.1.3. By decision (MASTER_PLAN 0.3), 0.1.4
+  never ships under that name: the next Central publish is `kiteffmpeg-core` 0.2.0, carrying
+  the rename, the 8.1.2 trees and the 0.1.4 work together.
 - `PacketReader.reselect` (KiteCodec) is a committed, tested primitive with NO KitePlayer SPI
   caller, on purpose: the engine's all-lanes subtitle cache made the SPI member unnecessary
   and it was deleted; the primitive stays for a future low-memory or network mode. Do not

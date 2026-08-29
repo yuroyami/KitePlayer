@@ -65,7 +65,7 @@ done; distribution half is Phase 8.)
 
 ---
 
-# PHASE 0: TRUTH ROWS AND THE FFMPEG BUMP
+# PHASE 0: TRUTH ROWS, THE FFMPEG BUMP, AND THE RENAME
 
 ### 0.1 KP-TRUTH-N: nine places where code and words disagree. Size S each, one commit
 
@@ -138,7 +138,9 @@ FFmpeg tag list 2026-08-29: n8.0 through n8.0.3, n8.1 through n8.1.2, n8.2-dev u
   in ways the format matrix would not notice.
 - [ ] NOTICE: the LGPL source offer gains an `ffmpeg-n8.1.2` tag. **The `ffmpeg-n8.0` offer
   stays forever** for the artifacts already on Central; offers are added, never replaced.
-- [ ] New 22-asset binary release and the KiteCodec publish that carries it: owner acts.
+- [ ] The binary release and Central publish DO NOT happen here: 0.3 renames the repository
+  first, and one publish under the new name carries the 8.1.2 trees, the interrupt-seam work
+  that has sat local as 0.1.4, and the rename together. Bake here, ship after 0.3.
 
 **Deliberately NOT in this item:** `scripts/testmedia.sh` keeps `EXPECTED_FFMPEG_SERIES=8.0`.
 That pin governs the HOST ffmpeg that generates test fixtures, which is a separate decision
@@ -146,6 +148,65 @@ from the library we vendor and link; the two do not have to match. Moving it mea
 regenerating every clip, and the incident that pin was written for (host 8.1.2 interleaving
 the first subtitle cue differently, a day lost on 2026-08-24) is already defused at the test
 level, since that row now reads until it actually has a cue. Move it on its own day.
+
+### 0.3 Rename KiteCodec to KiteFFmpeg. Size L, owner-decided 2026-08-29
+
+**Why.** Discoverability (this niche is searched as "ffmpeg kotlin", and every findable
+project carries the name: ffmpeg-kit, ffmpeg-python, ffmpeg.wasm, ffmpeg-kt) and honesty (the
+repository is solely an FFmpeg binding by standing decision and always will be; "KiteCodec"
+under-claims that). **Timing is the whole argument for doing it in Phase 0:** external
+consumers are approximately zero and KitePlayer has never been published. Phase 8 bakes the
+old coordinates into public POMs forever; after that the rename is permanently half-done.
+
+**The boundary, decided: public renames fully, internals stay.**
+
+- RENAMED: the GitHub repository (KiteCodec to KiteFFmpeg; GitHub redirects old URLs), the
+  Maven artifacts (`kitecodec-core` to `kiteffmpeg-core`, same `io.github.yuroyami` group,
+  same pattern for the gpl module), the Gradle module directories, the Kotlin packages
+  (`io.github.yuroyami.kitecodec` to `...kiteffmpeg`), the Gradle plugin id, its `kitecodec{}`
+  DSL block, the `kitecodecInfo` task, and the `-Pkitecodec.*` property family.
+- KEPT, deliberately, and this is not a half-rename because the line is public vs internal:
+  the C ABI prefixes (`kc_`, `ffkmp_`), the archive names (`libkitecodec.a`,
+  `libkitecodec_jni` and its `System.loadLibrary` string), and every symbol, signature and
+  metadata baseline that pins them. They are invisible to consumers, and moving them churns
+  every ratchet for zero user-facing gain. Old `KC-` item IDs in this file also stay, per the
+  header's stable-handles rule.
+- First version under the new name: **0.2.0**, one deliberate signal that coordinates moved.
+  It carries everything at once: the rename, the 8.1.2 trees from 0.2, and the interrupt-seam
+  and disposition work that has been sitting local as 0.1.4. The `kitecodec-core` 0.1.x line
+  on Central stays forever (Central is immutable) and the old README's last act is a pointer
+  to the new coordinates.
+
+**Order inside the item** (after 0.2's trees are baked, so one publish carries both):
+
+- [ ] Commit 1, the flat rename sweep: packages, module dirs, plugin id, DSL, task and
+  property names, repo-internal references. The JNI adapter's class-path strings in the C
+  (`kj_*.c` carry `io/github/yuroyami/kitecodec/...`) move with the packages, which forces
+  the JNI relink; the trees are already fresh from 0.2. ABI dumps fully regenerate (every
+  declaration moves package); the metadata baseline moves by its procedure.
+- [ ] Commit 2, package-level concern scoping INSIDE the one module: `...kiteffmpeg.demux`,
+  `.decode`, `.encode`, `.filter` and friends. This buys the clarity ffmpeg-kt's module split
+  advertises without the per-module publication tax; an actual module split was considered
+  and declined 2026-08-29 (payload weight lives in the native profile, not Kotlin modules;
+  shared types drag the mass into core; 13-targets-times-N-modules multiplies the config
+  drift the SEAM item already documents). Revisit only if a real external consumer asks for a
+  playback-only artifact, and then additively.
+- [ ] KitePlayer adoption commit: catalog coordinates, plugin id, the `-P` flags in gate
+  commands and CI, every `../KiteCodec` path in scripts and docs (decide the local directory
+  name in the same breath), GOTCHAS and this file swept for the old commands.
+- [ ] README gets the one-line non-affiliation notice: not affiliated with or endorsed by the
+  FFmpeg project ("FFmpeg" is Fabrice Bellard's trademark). NOTICE's source-offer URLs move
+  to the new repository name; old URLs redirect but are updated anyway; the `ffmpeg-n8.0` and
+  new `ffmpeg-n8.1.2` offer tags ride the renamed repository unchanged.
+- [ ] CI: workflow names, badge URLs, and the checksum-pinned companion-release fetch URLs
+  the consumer jobs use (redirects exist; pinned scripts update explicitly).
+- [ ] Owner acts: the GitHub repository rename itself, the push, and the `kiteffmpeg-core`
+  0.2.0 publish to Central.
+- [ ] Synkplay moves its plugin DSL and pin whenever it next bumps; nothing here blocks on it.
+- [ ] On completion, graduate to GOTCHAS: the public-vs-internal naming boundary (kc_ stays,
+  and why), the renamed `-P` property family, and the trademark line.
+- [ ] Gate: Tier 2 (build scripts and native strings move), then the three-flag
+  publishToMavenLocal and a full KitePlayer gate against the renamed artifacts.
 
 ---
 
@@ -656,9 +717,10 @@ TV-stick smoke (owner lane). x86-32 the day Synkplay ships it.
 Replay the KiteCodec playbook: publish/release workflow trio, staging first, artifacts for
 every advertised target or the target is not advertised. Exit: a machine that has never seen
 this checkout builds `implementation("io.github.yuroyami:kiteplayer-mobile:0.0.x")` green
-against Central, resolving KiteCodec 0.1.x. Release-gate boxes 11, 17, 18, 19, 20 re-grade
-here; 12/13/14 get their device/browser halves from DEVICE-DAY and Phase 6. Also here:
-publish KiteCodec 0.1.4 (owner act; it exists only on this machine's mavenLocal).
+against Central, resolving `kiteffmpeg-core` 0.2.x (the 0.3 rename lands first). Release-gate
+boxes 11, 17, 18, 19, 20 re-grade here; 12/13/14 get their device/browser halves from
+DEVICE-DAY and Phase 6. The codec-side publish already happened at 0.3; nothing else waits on
+it.
 
 ---
 

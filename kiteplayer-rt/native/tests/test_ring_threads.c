@@ -212,7 +212,10 @@ static int wait_for_anchor_reads(run_state *state, int64_t wanted, long max_mill
 typedef struct flush_race_state {
     kprt_ring *ring;
     atomic_int stop;
-    int64_t begins;
+    /* ATOMIC because the main thread reads it while the feeder runs, to know the feeder has
+     * actually started before the flush loop begins. A plain int64_t read across live threads
+     * would be the data race this suite exists to prove absent. */
+    atomic_llong begins;
 } flush_race_state;
 
 static void *flush_race_feeder(void *arg)
@@ -234,9 +237,26 @@ static void *flush_race_feeder(void *arg)
             (void)samples;
             (void)kprt_ring_commit_write(frs->ring, granted, 0, 0);
         }
-        frs->begins++;
+        atomic_fetch_add_explicit(&frs->begins, 1, memory_order_relaxed);
     }
     return NULL;
+}
+
+/* The same bounded-wait shape, for the flush race below: return once the feeder has begun at
+ * least once, or give up after max_millis so a genuinely stuck thread fails the suite instead of
+ * hanging it. */
+static int wait_for_feeder_start(flush_race_state *frs, long max_millis)
+{
+    long waited;
+    for (waited = 0; waited < max_millis; waited++) {
+        struct timespec request;
+        if (atomic_load_explicit(&frs->begins, memory_order_relaxed) > 0)
+            return 1;
+        request.tv_sec = 0;
+        request.tv_nsec = 1000000L;
+        (void)nanosleep(&request, NULL);
+    }
+    return atomic_load_explicit(&frs->begins, memory_order_relaxed) > 0;
 }
 
 int main(void)
@@ -344,15 +364,29 @@ int main(void)
         frs.ring = kprt_ring_create(SAMPLE_RATE, CHANNELS, 4096);
         KT_NOT_NULL(frs.ring);
         atomic_store(&frs.stop, 0);
+        atomic_store(&frs.begins, 0);
         kt_case("a flush racing a live feeder is a defined interleaving");
         KT_CHECKF(pthread_create(&feeder_thread, NULL, flush_race_feeder, &frs) == 0,
                   "pthread_create failed");
+        /* WAIT for the feeder to actually begin before racing it, rather than hoping the
+         * scheduler runs it inside the flush loop. Measured 2026-08-29: on a loaded machine the
+         * main thread finished all 20000 flushes and set stop before the feeder was ever
+         * scheduled, so it observed stop on its first look, exited with zero begins, and this
+         * case failed for a scheduling reason while the ring was fine. Two failures in eleven
+         * runs, and it sits in the gate that runs on every change. Once the feeder is confirmed
+         * running it only stops when told, so the overlap the case exists to exercise is
+         * guaranteed by construction instead of by luck. A feeder that never starts inside two
+         * seconds is a real defect and still fails here. */
+        KT_CHECKF(wait_for_feeder_start(&frs, 2000),
+                  "the feeder thread never began within two seconds, so it is stuck rather than "
+                  "merely unlucky");
         for (flushes = 0; flushes < 20000; flushes++)
             kprt_ring_flush(frs.ring);
         atomic_store(&frs.stop, 1);
         pthread_join(feeder_thread, NULL);
-        kt_detail("feeder made %lld begins against 20000 flushes", (long long)frs.begins);
-        KT_CHECKF(frs.begins > 0, "the feeder never ran, so nothing raced");
+        kt_detail("feeder made %lld begins against 20000 flushes",
+                  (long long)atomic_load(&frs.begins));
+        KT_CHECKF(atomic_load(&frs.begins) > 0, "the feeder never ran, so nothing raced");
         kprt_ring_destroy(frs.ring);
     }
 

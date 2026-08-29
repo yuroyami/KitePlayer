@@ -67,30 +67,9 @@ done; distribution half is Phase 8.)
 
 ---
 
-# PHASE 0: WHAT THE BUMP AND THE RENAME LEFT BEHIND
+# PHASE 0: THE RENAME REMAINDERS
 
-### 0.1 `test_ring_threads` case 5 fails under machine load, and it is in Tier 1. Size S
-
-**Measured 2026-08-29**: eleven consecutive runs of `kiteplayer-rt`'s plain C suites produced
-two failures, both the same case, `a flush racing a live feeder is a defined interleaving`. The
-failure text is exact about the cause: `[feeder made 0 begins against 20000 flushes]`, `the
-feeder never ran, so nothing raced`. The ring is fine; the feeder THREAD never got scheduled
-inside the flush loop on a machine that had been building FFmpeg trees all day.
-
-**The test is right to fail rather than pass**, which is why this is a fix and not a
-suppression: a race test whose race never happened has proved nothing, and passing it quietly
-would be the vacuous green this project keeps hunting. The problem is that it lives in Tier 1,
-which runs on EVERY change, so under load the cheapest gate goes red for a scheduling reason.
-A check that cries wolf gets disabled within a week.
-
-- [ ] Make the feeder's participation deterministic instead of hoped for: have the flush loop
-  wait for the feeder's first begin before it starts racing, and fail only if that first begin
-  never arrives within a generous bound. The assertion then tests the interleaving rather than
-  the scheduler.
-- [ ] Falsify it the usual way, and re-run the suite repeatedly under deliberate load to show
-  the flake is gone rather than rarer.
-
-### 0.2 The rename remainders. Size S each
+### 0.1 The rename remainders. Size S each
 
 The rename LANDED 2026-08-29 (KiteFFmpeg `d03c9c5`, KitePlayer adoption alongside it): modules,
 packages, artifacts, properties, class names, the shipped licence directory and the local

@@ -65,91 +65,40 @@ done; distribution half is Phase 8.)
 
 ---
 
-# PHASE 0: TRUTH ROWS, THE FFMPEG BUMP, AND THE RENAME
+# PHASE 0: THE RENAME, AND WHAT THE FFMPEG BUMP UNCOVERED
 
-### 0.1 KP-TRUTH-N: nine places where code and words disagree. Size S each, one commit
+### 0.1 A rebaked FFmpeg tree does not invalidate anything downstream. Size M
 
-Anchor by symbol; receipts from the 2026-08-27 verification pass.
+**Found 2026-08-29 while doing 0.2, and it is the more serious half of that day.** After all 12
+trees were rebuilt from n8.0 to n8.1.2, `:kitecodec-core:macosArm64Test` and `jvmTest` reported
+UP-TO-DATE, and so did `linkDebugTestMacosArm64`. Gradle sees no input change because the
+installed `native-libs/**` archives are not declared as inputs of the cinterop, link, compile or
+test tasks that consume them. `--rerun` did not help either: it re-runs the named task, not the
+stale link beneath it. Only deleting the native build outputs by hand produced a real run.
 
-- [ ] **N21**: `SyncLaw.NO_SYNC_THRESHOLD_US` is dead (declaration + own KDoc are its only
-  hits) while prose claims "a jump of 5 s or more is a stream reset", unbuilt. Delete the
-  constant; correct any doc sentence stating the rule as built.
-- [ ] **N23**: `MediaItem.SubtitleSource.io` is public and refused unconditionally at parse
-  time ("custom subtitle IO is not wired"). Delete the field (check Synkplay for usage first;
-  deprecate instead if used). ABI dumps move.
-- [ ] **N25**: `LoopMode.All` KDoc says "Refused ... Not implemented yet"; two call sites
-  implement it (`KitePlayer.kt`, `PlaybackCore.kt`). Rewrite the KDoc to the real behaviour.
-- [ ] **N26 + N27**: `SubtitleRasterizer` KDoc promises bitmap cues "scaled to the cue's
-  declared canvas" (no implementation scales; `OverlayImage` has no target rect) and calls
-  the viewport "the video's own display size" (it is the renderer's surface size since
-  2026-08-23). Rewrite both sentences. Re-shaping `OverlayImage` is SOL-API7-class design,
-  NOT taken here.
-- [ ] **N28**: stale comment near the in-place track-change refusal says it "falls through to
-  the rebuild"; `discardSelection` removes the pending entry so `handleTrackChanges` returns
-  at the empty check. Fix the comment.
-- [ ] **N29**: `KiteCodecSource` says chapters are "Always empty" three lines above the
-  ingest that fills them. Fix.
-- [ ] **N30**: the srcPeak 1000-nit rationale KDoc sits on `packQualityUniforms`; the
-  function that uses it is `packToneUniforms` (`MetalVideoSupport.kt`). Move it.
-- [ ] **N31**: ASS `Collisions:` is never read (`AssParser` takes only playresx/playresy);
-  scripts asking reverse stacking get the hard-coded order. State the limitation in
-  `AssParser` KDoc; the feature itself rides SOL-S7 (Phase 4).
-- [ ] Gate Tier 2 (platform sets touched). Commit:
-  `Make nine comments and one dead constant tell the truth`
+**Why it matters.** The whole point of a version bump is evidence that the suites still pass
+against the new binaries. Here every gate could go green while the test executable still linked
+the OLD archives: a green that means nothing, and silent rather than noisy.
 
-### 0.2 Move the vendored FFmpeg from n8.0 to n8.1.2, and rebake. Size M (wall-clock long)
+**What is PROVEN and what is only suspected, kept apart on purpose.** Proven: after the rebake,
+`linkDebugTestMacosArm64`, `macosArm64Test` and `jvmTest` all reported UP-TO-DATE, and only
+deleting the native outputs by hand produced a real run. Suspected but NOT demonstrated: that a
+publish can ship klibs built from archives the tree no longer holds. FFmpeg is embedded in the
+klibs, and Gradle's build cache is keyed on the same undeclared inputs, so the hazard is real in
+principle; the one artifact actually opened after a clean publish (`iosarm64`'s cinterop klib)
+did contain `n8.1.2`. Do not repeat the stronger claim without testing it.
 
-**Two reasons, one bake.** (a) We are pinned to `n8.0` exactly, and the 8.x line has moved
-four times since: 8.0.1, 8.0.2, 8.0.3 on that branch, then 8.1, 8.1.1, 8.1.2 on the current
-one. Those point releases are memory-safety work in decoders and demuxers (heap overflows,
-use-after-free, out-of-bounds reads and writes), which is precisely the surface a player
-feeding untrusted files exposes, and our own fuzzing programme (9.15) has not started, so
-upstream fixes are the only defence there today. (b) All 11 local trees are ALSO stale
-against the current recipe (`checkFFmpegRecipes` is red locally since 2026-08-29: they were
-baked before the recipe merged the aac encoder into one `--enable-encoder` line and added the
-macOS deployment-floor token). CI is unaffected either way, it fetches its own verified trees.
-One rebake answers both.
+- [ ] Declare the per-target installed tree as a task input wherever it is consumed (cinterop,
+  the C compile tasks, the link tasks), so a rebake invalidates its own consumers.
+- [ ] Falsify it: rebake one target, confirm the link and test tasks go out of date on their
+  own, with no manual deletion.
+- [ ] Until it lands, GOTCHAS carries the manual step, and any bump must delete the native
+  build outputs before claiming a suite result.
+- [ ] **Blocks the rename publish**: the 0.1.0 release under the new name must be cut from a clean
+  build, or verified artifact by artifact, until this is fixed. A `clean` before publish is the
+  interim rule.
 
-**Why 8.1.2 rather than 8.0.3.** 8.1.2 is the newest 8.x, carries the 8.0 branch's fixes plus
-its own, and is the line still receiving attention; 8.0.3 is only the top of an older branch.
-FFmpeg bumps library majors at MAJOR releases only, so 8.1.x keeps libavcodec 62 exactly like
-8.0: no soname change, no ABI break for consumers, no 9.x-class churn. (Verified against the
-FFmpeg tag list 2026-08-29: n8.0 through n8.0.3, n8.1 through n8.1.2, n8.2-dev unreleased.)
-
-- [ ] Move the ref at its bound sites: `BuildFFmpegTask.DEFAULT_SOURCE_REF`, the
-  `FFMPEG_VERSION:` line in `.github/workflows/publish.yml`, and the `vendor/ffmpeg` checkout.
-  The `FFmpegRefSite` check in KiteCodec's root build script enumerates them and fails when
-  they disagree, so let it name the set rather than trusting this list.
-- [ ] Rebake all 11 trees. `checkFFmpegRecipes` must go green afterwards, which is the proof
-  that (b) is answered too.
-- [ ] Verify the configure recipe still applies: 108 flag assertions in `BuildFFmpegTaskTest`
-  and 18 in `BuildFFmpegWasmTaskTest`. Expect most to stand; a flag renamed or dropped between
-  8.0 and 8.1 shows up here. Precedent for that class: `--disable-postproc` does not exist on
-  n8.0 (GOTCHAS section 4).
-- [ ] Update the hardcoded identity strings: `"n8.0"` in KiteCodec's `WebIdentityTest` (four
-  sites) and KitePlayer's `FFmpegRuntimeRejectionTest` (five). Nothing in the C needs
-  touching: the identity gate compares header major against runtime major dynamically, and the
-  one version guard in `helpers_codec.c` is a `>=` test.
-- [ ] Move the klib metadata baseline if it shifts: the cinterop metadata embeds
-  `LIBAVCODEC_VERSION_INT` and friends, so a version move is expected to touch it. Ratchet
-  procedure in GOTCHAS section 3: `klib-metadata-diff.sh --update`, SUMMARY block in the
-  commit message.
-- [ ] Re-run the colour and conversion suites specifically. A minor bump can move sws output
-  in ways the format matrix would not notice.
-- [ ] NOTICE: the LGPL source offer gains an `ffmpeg-n8.1.2` tag. **The `ffmpeg-n8.0` offer
-  stays forever** for the artifacts already on Central; offers are added, never replaced.
-- [ ] The binary release and Central publish DO NOT happen here: 0.3 renames the repository
-  first, and one publish under the new name carries the 8.1.2 trees, the interrupt-seam work
-  that has sat local as 0.1.4, and the rename together. Bake here, ship after 0.3.
-
-**Deliberately NOT in this item:** `scripts/testmedia.sh` keeps `EXPECTED_FFMPEG_SERIES=8.0`.
-That pin governs the HOST ffmpeg that generates test fixtures, which is a separate decision
-from the library we vendor and link; the two do not have to match. Moving it means
-regenerating every clip, and the incident that pin was written for (host 8.1.2 interleaving
-the first subtitle cue differently, a day lost on 2026-08-24) is already defused at the test
-level, since that row now reads until it actually has a cue. Move it on its own day.
-
-### 0.3 Rename KiteCodec to KiteFFmpeg. Size L, owner-decided 2026-08-29
+### 0.2 Rename KiteCodec to KiteFFmpeg. Size L, owner-decided 2026-08-29
 
 **Why.** Discoverability (this niche is searched as "ffmpeg kotlin", and every findable
 project carries the name: ffmpeg-kit, ffmpeg-python, ffmpeg.wasm, ffmpeg-kt) and honesty (the
@@ -163,19 +112,25 @@ old coordinates into public POMs forever; after that the rename is permanently h
 - RENAMED: the GitHub repository (KiteCodec to KiteFFmpeg; GitHub redirects old URLs), the
   Maven artifacts (`kitecodec-core` to `kiteffmpeg-core`, same `io.github.yuroyami` group,
   same pattern for the gpl module), the Gradle module directories, the Kotlin packages
-  (`io.github.yuroyami.kitecodec` to `...kiteffmpeg`), the Gradle plugin id, its `kitecodec{}`
-  DSL block, the `kitecodecInfo` task, and the `-Pkitecodec.*` property family.
+  (`io.github.yuroyami.kitecodec` to `...kiteffmpeg`), the buildSrc `kitecodec.buildtools`
+  package, and the `-Pkitecodec.*` property family. **There is no Gradle plugin to rename**:
+  it died with the FFmpeg embedding, so the plugin id, its DSL block and its info task are not
+  part of this work, and KitePlayer applies no such plugin (checked 2026-08-29).
 - KEPT, deliberately, and this is not a half-rename because the line is public vs internal:
   the C ABI prefixes (`kc_`, `ffkmp_`), the archive names (`libkitecodec.a`,
   `libkitecodec_jni` and its `System.loadLibrary` string), and every symbol, signature and
   metadata baseline that pins them. They are invisible to consumers, and moving them churns
   every ratchet for zero user-facing gain. Old `KC-` item IDs in this file also stay, per the
   header's stable-handles rule.
-- First version under the new name: **0.2.0**, one deliberate signal that coordinates moved.
-  It carries everything at once: the rename, the 8.1.2 trees from 0.2, and the interrupt-seam
-  and disposition work that has been sitting local as 0.1.4. The `kitecodec-core` 0.1.x line
-  on Central stays forever (Central is immutable) and the old README's last act is a pointer
-  to the new coordinates.
+- First version under the new name: **0.1.0**, owner-decided 2026-08-29. A new artifactId is a
+  new artifact as far as Central is concerned, so there is no collision with the
+  `kitecodec-core` 0.1.x line and no reason to inherit its numbering; the name change is the
+  clean break and the version starts over with it. That 0.1.0 carries everything at once: the
+  rename, the 8.1.2 trees from 0.2, and the interrupt-seam and disposition work that sat local
+  as `kitecodec-core` 0.1.4. **Consequence to write into the README, because a version number
+  going backwards looks like a regression:** `kiteffmpeg-core` 0.1.0 is strictly newer than
+  `kitecodec-core` 0.1.3, and the old line's last act is a pointer saying so. The old
+  coordinates stay on Central forever; Central is immutable.
 
 **Order inside the item** (after 0.2's trees are baked, so one publish carries both):
 
@@ -717,7 +672,7 @@ TV-stick smoke (owner lane). x86-32 the day Synkplay ships it.
 Replay the KiteCodec playbook: publish/release workflow trio, staging first, artifacts for
 every advertised target or the target is not advertised. Exit: a machine that has never seen
 this checkout builds `implementation("io.github.yuroyami:kiteplayer-mobile:0.0.x")` green
-against Central, resolving `kiteffmpeg-core` 0.2.x (the 0.3 rename lands first). Release-gate
+against Central, resolving `kiteffmpeg-core` 0.1.x (the rename lands first). Release-gate
 boxes 11, 17, 18, 19, 20 re-grade here; 12/13/14 get their device/browser halves from
 DEVICE-DAY and Phase 6. The codec-side publish already happened at 0.3; nothing else waits on
 it.

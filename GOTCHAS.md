@@ -154,6 +154,37 @@ Never move one silently.
   Gradle's `temporaryDir` is INSIDE the project; it fails.
 - FFmpeg n8.0: `--disable-postproc` does not exist (configure fails), and `--disable-asm`
   silently kills SIMD (a "simd" build carrying it is a base build and its measurement a lie).
+- **This machine's Android SDK is at `/Users/macbook/WORKSTATION/AndroidSDK`, not a standard
+  path**, and KiteCodec's native build only probes `ANDROID_NDK_HOME`/`ANDROID_NDK_ROOT`/
+  `ANDROID_NDK_LATEST_HOME` then `~/Library/Android/sdk/ndk` and `~/Android/Sdk/ndk`. It never
+  reads `sdk.dir` from `local.properties`, so any FFmpeg or dav1d build for an Android target
+  fails here with "Android NDK not found" unless you export it first:
+  `export ANDROID_NDK_HOME=/Users/macbook/WORKSTATION/AndroidSDK/ndk/29.0.14206865`. 29.0.14206865
+  is the version CI uses, readable in any Android tree's own `ffmpeg-configure.txt`.
+- **A rebaked FFmpeg tree invalidates NOTHING downstream** (MASTER_PLAN 0.2.a). `native-libs/**`
+  is not a declared input of the cinterop, compile, link or test tasks, so after a rebake every
+  one of them reports UP-TO-DATE and the test binary keeps linking the OLD archives. `--rerun`
+  does not fix it, because the stale link underneath is a different task. Delete the native
+  build outputs (`kitecodec-core/build/bin/<target>`, `build/test-results`, the target's test
+  classes) and run with `--rerun-tasks`, or your green proves nothing. Since FFmpeg is embedded
+  in the klibs and the build cache is keyed on those same undeclared inputs, `clean` before any
+  publish meant to carry new native bytes, then spot-check: `unzip` the published
+  `*-cinterop-ffmpeg.klib` and grep it for the expected `n8.x.y`. That check is cheap and it is
+  the only one that reads the bytes a consumer would get.
+- **mavenLocal accumulates per-target artifacts across publishes with DIFFERENT flags, and a
+  narrower publish neither refreshes nor removes the others.** After a
+  `-Pkitecodec.phoneTargetsOnly=true -Pkitecodec.withDesktopTargets=true` publish, the
+  `androidnative*` variants sitting in `~/.m2` were two days old, simply because that flag
+  combination does not publish them. Their age is not evidence of a stale build; judge freshness
+  only for the variants the run actually published, which the log names as
+  `publish<Target>PublicationToMavenLocal`.
+- `-Pkitecodec.jni.linux=true` needs a running Docker daemon (it extracts JDK headers from a
+  container). Without Docker, publish without that flag and accept that the jar carries no Linux
+  JNI libraries, which also means `linux-jvm-tests.sh` cannot run.
+- **`./gradlew ... | tail` hides the build's exit code**, because the pipeline reports the exit
+  of `tail`. A background bake reported success while `BUILD FAILED` sat in its own log. Pipe to
+  a file and echo `$?`, or check the log for BUILD FAILED; never read a piped gradle run's
+  status as the build's.
 - A clean clone needs `local.properties` (or `ANDROID_HOME`) before `assembleAndroidMain` has
   a task graph, and `./scripts/testmedia.sh` before any real-media suite (fixtures are
   gitignored). `testmedia.sh` REFUSES an ffmpeg outside its pinned major.minor; when Homebrew
@@ -372,8 +403,11 @@ Never move one silently.
   mpv is the Android default engine, KitePlayer is picked on the home-screen wheel.
 - KiteCodec 0.1.4 exists ONLY on this machine's mavenLocal (interrupt seam, disposition fix,
   `PacketReader.reselect`); Central still serves 0.1.3. By decision (MASTER_PLAN 0.3), 0.1.4
-  never ships under that name: the next Central publish is `kiteffmpeg-core` 0.2.0, carrying
-  the rename, the 8.1.2 trees and the 0.1.4 work together.
+  never ships under that name: the next Central publish is `kiteffmpeg-core` **0.1.0**, carrying
+  the rename, the 8.1.2 trees and the 0.1.4 work together. The version restarting is deliberate
+  (a new artifactId is a new artifact), so `kiteffmpeg-core` 0.1.0 is NEWER than
+  `kitecodec-core` 0.1.3 despite the smaller number. Never "fix" this by bumping past the old
+  line.
 - `PacketReader.reselect` (KiteCodec) is a committed, tested primitive with NO KitePlayer SPI
   caller, on purpose: the engine's all-lanes subtitle cache made the SPI member unnecessary
   and it was deleted; the primitive stays for a future low-memory or network mode. Do not

@@ -178,6 +178,13 @@ Never move one silently.
   other builds the REAL reduced LGPL profile users get (every other desktop job links the
   runner's full GPL brew FFmpeg). Chaining or merging them was refused: independent failure
   signal is the point.
+- FFmpeg bumps its library majors (the sonames) only at MAJOR releases, so moving along a
+  minor or point line (8.0 to 8.1.2) is ABI-safe while 8.x to 9.x breaks all seven at once.
+  Two pins exist and they are INDEPENDENT decisions: the vendored library we link
+  (`BuildFFmpegTask.DEFAULT_SOURCE_REF`, bound to two more sites by the `FFmpegRefSite` check)
+  and the host binary that generates test fixtures (`EXPECTED_FFMPEG_SERIES` in
+  `scripts/testmedia.sh`). They do not have to match, and conflating them once already
+  produced a wrong recommendation.
 - The macOS deployment floor is one constant, `BuildFFmpegTask.MACOS_DEPLOYMENT_TARGET = "12.0"`,
   read by both macOS FFmpeg branches and both macOS C targets. 12.0 because konan imposes it.
 - `recipeFingerprint` must stay IDEMPOTENT: `CheckFFmpegRecipesTask` fingerprints an

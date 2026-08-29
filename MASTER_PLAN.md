@@ -65,7 +65,7 @@ done; distribution half is Phase 8.)
 
 ---
 
-# PHASE 0: TRUTH ROWS (the words stop lying)
+# PHASE 0: TRUTH ROWS AND THE FFMPEG BUMP
 
 ### 0.1 KP-TRUTH-N: nine places where code and words disagree. Size S each, one commit
 
@@ -97,14 +97,55 @@ Anchor by symbol; receipts from the 2026-08-27 verification pass.
 - [ ] Gate Tier 2 (platform sets touched). Commit:
   `Make nine comments and one dead constant tell the truth`
 
-### 0.2 Machine chore: rebake the 11 local vendored FFmpeg trees. Size S (wall-clock long)
+### 0.2 Move the vendored FFmpeg from n8.0 to n8.1.2, and rebake. Size M (wall-clock long)
 
-Found 2026-08-29 by running the gate: `:kitecodec-core:checkFFmpegRecipes` reports all 11
-local trees baked before the recipe merged the aac encoder into one `--enable-encoder` line
-and added the macOS deployment-floor token. CI is unaffected (it fetches its own verified
-trees); only this machine's `native-libs` are stale. Fix: run the per-target
-`buildFFmpegFor...` commands the check itself prints. Until then this one Tier 1 step is red
-locally, and that red is understood, not ignored.
+**Two reasons, one bake.** (a) We are pinned to `n8.0` exactly, and the 8.x line has moved
+four times since: 8.0.1, 8.0.2, 8.0.3 on that branch, then 8.1, 8.1.1, 8.1.2 on the current
+one. Those point releases are memory-safety work in decoders and demuxers (heap overflows,
+use-after-free, out-of-bounds reads and writes), which is precisely the surface a player
+feeding untrusted files exposes, and our own fuzzing programme (9.15) has not started, so
+upstream fixes are the only defence there today. (b) All 11 local trees are ALSO stale
+against the current recipe (`checkFFmpegRecipes` is red locally since 2026-08-29: they were
+baked before the recipe merged the aac encoder into one `--enable-encoder` line and added the
+macOS deployment-floor token). CI is unaffected either way, it fetches its own verified trees.
+One rebake answers both.
+
+**Why 8.1.2 rather than 8.0.3.** 8.1.2 is the newest 8.x, carries the 8.0 branch's fixes plus
+its own, and is the line still receiving attention; 8.0.3 is only the top of an older branch.
+FFmpeg bumps library majors at MAJOR releases only, so 8.1.x keeps libavcodec 62 exactly like
+8.0: no soname change, no ABI break for consumers, no 9.x-class churn. (Verified against the
+FFmpeg tag list 2026-08-29: n8.0 through n8.0.3, n8.1 through n8.1.2, n8.2-dev unreleased.)
+
+- [ ] Move the ref at its bound sites: `BuildFFmpegTask.DEFAULT_SOURCE_REF`, the
+  `FFMPEG_VERSION:` line in `.github/workflows/publish.yml`, and the `vendor/ffmpeg` checkout.
+  The `FFmpegRefSite` check in KiteCodec's root build script enumerates them and fails when
+  they disagree, so let it name the set rather than trusting this list.
+- [ ] Rebake all 11 trees. `checkFFmpegRecipes` must go green afterwards, which is the proof
+  that (b) is answered too.
+- [ ] Verify the configure recipe still applies: 108 flag assertions in `BuildFFmpegTaskTest`
+  and 18 in `BuildFFmpegWasmTaskTest`. Expect most to stand; a flag renamed or dropped between
+  8.0 and 8.1 shows up here. Precedent for that class: `--disable-postproc` does not exist on
+  n8.0 (GOTCHAS section 4).
+- [ ] Update the hardcoded identity strings: `"n8.0"` in KiteCodec's `WebIdentityTest` (four
+  sites) and KitePlayer's `FFmpegRuntimeRejectionTest` (five). Nothing in the C needs
+  touching: the identity gate compares header major against runtime major dynamically, and the
+  one version guard in `helpers_codec.c` is a `>=` test.
+- [ ] Move the klib metadata baseline if it shifts: the cinterop metadata embeds
+  `LIBAVCODEC_VERSION_INT` and friends, so a version move is expected to touch it. Ratchet
+  procedure in GOTCHAS section 3: `klib-metadata-diff.sh --update`, SUMMARY block in the
+  commit message.
+- [ ] Re-run the colour and conversion suites specifically. A minor bump can move sws output
+  in ways the format matrix would not notice.
+- [ ] NOTICE: the LGPL source offer gains an `ffmpeg-n8.1.2` tag. **The `ffmpeg-n8.0` offer
+  stays forever** for the artifacts already on Central; offers are added, never replaced.
+- [ ] New 22-asset binary release and the KiteCodec publish that carries it: owner acts.
+
+**Deliberately NOT in this item:** `scripts/testmedia.sh` keeps `EXPECTED_FFMPEG_SERIES=8.0`.
+That pin governs the HOST ffmpeg that generates test fixtures, which is a separate decision
+from the library we vendor and link; the two do not have to match. Moving it means
+regenerating every clip, and the incident that pin was written for (host 8.1.2 interleaving
+the first subtitle cue differently, a day lost on 2026-08-24) is already defused at the test
+level, since that row now reads until it actually has a cue. Move it on its own day.
 
 ---
 
@@ -703,6 +744,46 @@ publish KiteCodec 0.1.4 (owner act; it exists only on this machine's mavenLocal)
   `check-deleted-surface.sh` failing on an empty prose set; the coverage-guided fuzzing
   program itself (harness, corpus and replay exist; true fuzzing runs in Linux CI; demuxer
   and decoder byte paths are the security gap).
+- [ ] **9.16 FFmpeg 9.x: DEFERRED INDEFINITELY, owner-decided 2026-08-29.** Not scheduled, not
+  refused. The research is written down here so nobody repeats it.
+
+  **What 9.0 is.** Released 2026, 9.0.1 on 2026-08-12, codename Lei. Over 2,200 commits. It
+  bumps the major of all seven libraries (libavutil 61, libavcodec 63, libavformat 63,
+  libavdevice 63, libavfilter 12, libswscale 10, libswresample 7), so it is an ABI break
+  across the board.
+
+  **What we would gain, and it is one thing:** swscale was rewritten with x86 SIMD, AArch64
+  NEON and Vulkan backends. That is the CPU conversion path, which is hot for the web tier,
+  the desktop JVM and AWT renderers, Android pre-31 KiteVideo and the Apple CPU fallbacks.
+  Treat it as a hypothesis to MEASURE, never a claim to inherit: a rewrite can move output as
+  easily as speed. Secondary and not urgent: Dolby Vision Profile 7, SMPTE 2094-50 HDR
+  metadata. Irrelevant to us: Vulkan filters, AMF and CUDA work, the ONNX DNN backend,
+  animated WebP.
+
+  **Why it is cheaper than an ABI break sounds, measured against our tree on 2026-08-29.**
+  Zero exposure to everything 9.0 removed (CELT, Sonic, OpenMAX, NPP filters, packed YUV
+  v308/v408/v410, old NVENC options): not one reference in the 11 C sources or the build.
+  The C layer is already on modern APIs: `ch_layout` across five files, send/receive decode,
+  no `av_init_packet`, no `avcodec_close`, no `avcodec_decode_*`. `avfilter_graph_parse_ptr`,
+  which `helpers_filter.c` depends on, still exists in release/9.0 and is NOT deprecated
+  (checked in the header itself; blog claims of a dictionary-based replacement are false).
+  TLS-verified-by-default does not reach us: our profiles build no TLS and pin protocols to
+  file/fd/pipe/data/http/tcp, with TLS terminated by Ktor and the OS.
+
+  **What it would still cost:** everything in item 0.2 plus a fixture regeneration, a host
+  ffmpeg series move, and re-verification of every colour golden against a rewritten
+  swscale.
+
+  **Why deferred rather than done.** 9.0.1 is weeks old and the ecosystem is still migrating
+  seven new sonames. Our evidence system is calibrated on the 8.x line, and this project's
+  measured failure mode is claims that stopped being true, which is exactly what a
+  simultaneous churn of goldens, baselines and fixtures invites.
+
+  **Revisit when all three hold:** the desktop work of Phase 1 has landed, so its CPU
+  conversion path can measure the swscale rewrite instead of assuming it; item 0.2 is done and
+  the gate is green, so the bump is one variable and not two; and 9.x has had a few more point
+  releases. Note when picking it up that 9.1 and 8.2 were both already in development on
+  2026-08-29, so check what the current lines are rather than trusting this paragraph.
 
 ---
 

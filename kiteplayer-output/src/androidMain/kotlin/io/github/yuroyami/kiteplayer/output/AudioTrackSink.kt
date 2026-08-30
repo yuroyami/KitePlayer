@@ -72,7 +72,7 @@ public class AudioTrackSink internal constructor(
     /** Frames handed to the device since the last stop, written only by the writer thread. */
     @Volatile private var submittedFrames = 0L
 
-    /** SOL-A2: set by the writer on device failure, cleared by the recovery arm of start. */
+    /** Set by the writer on device failure, cleared by the recovery arm of start. */
     private var writerFailed = false
 
     /* Timestamp acceptance state (S1.c.4 step 6), written only by the writer thread. */
@@ -432,7 +432,7 @@ public class AudioTrackSink internal constructor(
     }
 
     /**
-     * SOL-A3: the one place a driver timestamp is read. Legacy HALs feed AudioTimestamp from a
+     * The one place a driver timestamp is read. Legacy HALs feed AudioTimestamp from a
      * 32-bit counter, so the position wraps at about 24.85 hours at 48 kHz exactly like the
      * playback head; the same extension law covers it. A position already past 32 bits is a
      * genuine 64-bit counter and passes through untouched. The driver's holder is scratch by

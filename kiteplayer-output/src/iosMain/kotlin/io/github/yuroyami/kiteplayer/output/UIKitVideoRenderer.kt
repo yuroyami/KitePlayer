@@ -109,10 +109,10 @@ public class UIKitVideoRenderer internal constructor(
     /** The active subtitle overlay; replaced wholesale by [setOverlay]. */
     private val overlaySlot = atomic<SubtitleOverlay?>(null)
 
-    /** Overlay CGImages, rebuilt only when the cue changes (17.11 SOL-P7). Worker-owned. */
+    /** Overlay CGImages, rebuilt only when the cue changes. Worker-owned. */
     private val overlayImages = OverlayImageCache(::rgbaImage)
 
-    /** The picture controls, read by the worker on every draw (17.11 SOL-R14). */
+    /** The picture controls, read by the worker on every draw. */
     private val adjustSlot = atomic(io.github.yuroyami.kiteplayer.VideoAdjustments.Identity)
 
     /** The framing controls, under the same ownership as the picture controls. */
@@ -134,7 +134,7 @@ public class UIKitVideoRenderer internal constructor(
             while (!closed.value) {
                 signal.receive()
                 convertPending()
-                // SOL-R1: an overlay change during a pause re-composites the retained pixels.
+                // An overlay change during a pause re-composites the retained pixels.
                 // When a frame DID convert above, the new overlay is already baked into it and
                 // the flag clears without a second draw.
                 if (redrawWanted.getAndSet(false) && pendingFrame.value == null) redrawRetained()
@@ -178,7 +178,7 @@ public class UIKitVideoRenderer internal constructor(
     }
 
     private fun convertPending() {
-        // 17.11 SOL-R11: close() blocks its caller, which is the UI thread. It must not wait on a
+        // close() blocks its caller, which is the UI thread. It must not wait on a
         // conversion this worker had not started yet; close() drains the slot after the join.
         if (closed.value) return
         val frame = pendingFrame.getAndSet(null) ?: return
@@ -186,7 +186,7 @@ public class UIKitVideoRenderer internal constructor(
         val rotation = quarterTurn(frame.rotationDegrees)
         val image = try {
             val rgba = convert(frame)
-            // SOL-R1: the newest source pixels stay behind, worker-confined, so an overlay
+            // The newest source pixels stay behind, worker-confined, so an overlay
             // change during a pause can re-composite without a frame arriving. One RGBA frame
             // of memory, exactly the paused picture the viewer is looking at.
             retainedRgba = rgba
@@ -213,7 +213,7 @@ public class UIKitVideoRenderer internal constructor(
 
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
     private fun redrawRetained() {
-        // 17.11 SOL-R11: nobody will ever see a picture drawn after the close began.
+        // Nobody will ever see a picture drawn after the close began.
         if (closed.value) return
         val rgba = retainedRgba ?: return
         val size = retainedSize ?: return
@@ -297,7 +297,7 @@ public class UIKitVideoRenderer internal constructor(
         val requiredBytes = rowBytes * height.toLong()
         if (rgba.size.toLong() != requiredBytes) return null
 
-        // 17.11 SOL-R14: the engine's one colour-matrix law, applied to bytes here instead of in
+        // The engine's one colour-matrix law, applied to bytes here instead of in
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
         val pixels = adjustRgba(rgba, adjustSlot.value)
         val videoTransform = transformSlot.value
@@ -318,7 +318,7 @@ public class UIKitVideoRenderer internal constructor(
                     memcpy(destination, pinned.addressOf(0), requiredBytes.convert())
                 }
                 val stored = CGBitmapContextCreateImage(context) ?: return null
-                // 17.11 SOL-P7: with identity geometry and nothing to composite, the stored image
+                // With identity geometry and nothing to composite, the stored image
                 // IS the finished picture, so the second bitmap pass was pure waste.
                 if (
                     rotationDegrees == 0 &&
@@ -354,7 +354,7 @@ public class UIKitVideoRenderer internal constructor(
         val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
         val presentedWidth = if (quarterTurned) height else displayWidth
         val presentedHeight = if (quarterTurned) displayWidth else height
-        // 17.11 SOL-R14: an aspect override reshapes the picture AS PRESENTED. A CALayer sizes
+        // An aspect override reshapes the picture AS PRESENTED. A CALayer sizes
         // itself from the pixels it is given, so this path resamples rather than relabels.
         val outputWidth = framedPresentedWidth(presentedWidth, presentedHeight, videoTransform)
         val outputHeight = presentedHeight
@@ -376,7 +376,7 @@ public class UIKitVideoRenderer internal constructor(
         ) ?: return null
         try {
             CGContextSaveGState(context)
-            // 17.11 SOL-R14. Core Graphics applies the LAST concat to the point first, so the
+            // Core Graphics applies the LAST concat to the point first, so the
             // reading order here is the reverse of the drawing order: turn, then zoom and pan
             // about the presented centre, then stretch onto any forced aspect.
             if (outputWidth != presentedWidth) {
@@ -438,7 +438,7 @@ public class UIKitVideoRenderer internal constructor(
         if (active.images.isEmpty()) return
         val sx = outputWidth.toDouble() / active.viewportWidth.coerceAtLeast(1)
         val sy = outputHeight.toDouble() / active.viewportHeight.coerceAtLeast(1)
-        // 17.11 SOL-P7: the cache owns these; a held cue is built once, not once per frame.
+        // The cache owns these; a held cue is built once, not once per frame.
         val cached = overlayImages.imagesFor(active)
         active.images.forEachIndexed { index, image ->
             val cg = cached.getOrNull(index) ?: return@forEachIndexed
@@ -452,7 +452,7 @@ public class UIKitVideoRenderer internal constructor(
     /** An overlay bitmap as a CGImage. The pixels are premultiplied, which is what CG blends. */
     private fun rgbaImage(bitmap: io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap): CGImageRef? {
         val rowBytes = bitmap.width * 4
-        // 17.11 SOL-R13: RgbaBitmap promises AT LEAST this many bytes, never exactly this many.
+        // RgbaBitmap promises AT LEAST this many bytes, never exactly this many.
         // Core Graphics reads only the rows it is given, so slack past them is harmless.
         if (bitmap.pixels.size < rowBytes * bitmap.height) return null
         val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
@@ -482,7 +482,7 @@ public class UIKitVideoRenderer internal constructor(
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 
-    /** 17.11 SOL-R14. A paused picture shows the change too: the retained pixels re-draw. */
+    /** A paused picture shows the change too: the retained pixels re-draw. */
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustSlot.value = adjustments
         requestRedraw()
@@ -528,7 +528,7 @@ public class UIKitVideoRenderer internal constructor(
      */
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         overlaySlot.value = overlay
-        // SOL-R1: a paused picture shows the change too; the worker re-composites from the
+        // A paused picture shows the change too; the worker re-composites from the
         // retained pixels when no fresh frame is on its way.
         redrawWanted.value = true
         signal.trySend(Unit)
@@ -558,7 +558,7 @@ public class UIKitVideoRenderer internal constructor(
         }
         pending?.let(::CGImageRelease)
         delivered?.let(::CGImageRelease)
-        // The worker is out, so the overlay cache has no other owner left (17.11 SOL-P7).
+        // The worker is out, so the overlay cache has no other owner left.
         overlayImages.release()
         dispatcher.close()
     }

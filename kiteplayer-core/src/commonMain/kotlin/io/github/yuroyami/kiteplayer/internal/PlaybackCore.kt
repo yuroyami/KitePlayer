@@ -320,8 +320,7 @@ internal class PlaybackCore(
                     // ordinary selection path takes, so one selection owner survives. The caller
                     // is deliberately NOT answered here. It asked for a subtitle to be SHOWING,
                     // and handing it an id while the rebuild that makes that true has not run,
-                    // and can still fail the whole player, is the false success the audit named
-                    // (KP-P1-02).
+                    // and can still fail the whole player, is the false success the audit named.
                     pendingExternalSubtitle = id
                     val selection = CompletableDeferred<TrackChange>()
                     queueSelection(TrackKind.Subtitle, id, selection)
@@ -696,7 +695,7 @@ internal class PlaybackCore(
         } catch (cancellation: CancellationException) {
             // A cancelled capture withdraws ITS OWN arm and nothing else. Posting Stop here, the
             // way the session-owning commands do, meant abandoning a screenshot killed playback
-            // (audit KP-P1-04). A newer capture that already replaced this arm is left alone.
+            // A newer capture that already replaced this arm is left alone.
             if (!closedNow.value) commands.trySend(CoreCommand.WithdrawCapture(reply))
             throw cancellation
         }
@@ -930,8 +929,7 @@ internal class PlaybackCore(
      * [stopOnCancellation] belongs to the commands that OWN the session, which is open, openQueue
      * and the two queue jumps: cancelling one of those mid-flight can leave a half-built graph, so
      * the actor is told to stop. Every other request is cancellable on its own, and posting a
-     * global Stop for one of them is how abandoning a screenshot used to kill playback (audit
-     * KP-P1-04).
+     * global Stop for one of them is how abandoning a screenshot used to kill playback.
      */
     private suspend fun <T> awaitReply(reply: CompletableDeferred<T>, stopOnCancellation: Boolean = false): T {
         try {
@@ -1027,7 +1025,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * True when a NEWER seek is waiting in the mailbox (KP-SEEKPRE, owner report 2026-08-26).
+     * True when a NEWER seek is waiting in the mailbox (owner report 2026-08-26).
      *
      * The running seek asks this from its long waits for the same reason it asks [preempted]:
      * finishing a landing nobody wants any more is wall-clock the newest request pays for. A
@@ -1218,7 +1216,7 @@ internal class PlaybackCore(
                 // Idempotent in its own state, and queued rather than refused while opening or seeking:
                 // the restart handler applies it as soon as the pipeline can honour it.
                 playRequested = true
-                // mpv's law (owner report 2026-08-17, F-PLAY1): play at the end IS a restart.
+                // mpv's law (owner report 2026-08-17): play at the end IS a restart.
                 // The intent flag was already true after a natural end, so pressing play changed
                 // nothing and the player sat in Ended for ever. An unseekable source keeps
                 // today's honest no-op: there is no way back to the beginning.
@@ -1524,7 +1522,7 @@ internal class PlaybackCore(
     private var pendingRenderer: VideoRenderer? = null
 
     /**
-     * The renderer's event feed, finally collected (17.11 SOL-API5): surface loss and hard
+     * The renderer's event feed, finally collected: surface loss and hard
      * failure become typed warnings, so they reach the event flow, the bounded history and the
      * dump instead of being visible only as a frozen picture. One collector per attached
      * renderer; replacing or detaching cancels it, and the core's own scope ends it at close.
@@ -1953,7 +1951,7 @@ internal class PlaybackCore(
             if (audioStream != null && audioDecoder != null) {
                 val createdSink = output.audioSink.create()
                 sink = createdSink
-                // Interlude item I-03, generalized by the ledger: from AudioPlayback's
+                // Generalized from AudioPlayback's
                 // construction onward the playback owns the sink and its close covers both (it is
                 // idempotent). The window between the sink's creation and that construction is one
                 // non-suspending line, and the playback entry below covers everything after it,
@@ -1977,7 +1975,7 @@ internal class PlaybackCore(
             }
             openStage = OpenStage.Assembly
 
-            // SOL-AB-A: the demux frontier can run seconds ahead of the presentation clock. A
+            // The demux frontier can run seconds ahead of the presentation clock. A
             // stream enabled only at switch time would therefore begin at that frontier, not at
             // the picture the viewer is looking at. Keep bounded compressed caches for every
             // alternate audio/subtitle stream and decode only the selected lanes.
@@ -2456,7 +2454,7 @@ internal class PlaybackCore(
      * tracks were both told they had won.
      */
     /**
-     * SOL-AB-A subtitle transaction. Every container subtitle queue is already routed, so the
+     * The subtitle transaction. Every container subtitle queue is already routed, so the
      * actor can swap only the decoder/cue selector while video, audio and demux continue.
      */
     private suspend fun inPlaceContainerSubtitleChange(session: OpenSession): Boolean {
@@ -2683,7 +2681,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * SOL-AB-A audio transaction. Only audio decode/feed park; demux continues filling every
+     * The audio transaction. Only audio decode/feed park; demux continues filling every
      * alternate cache and video continues decoding/scheduling on the unchanged epoch.
      */
     private suspend fun inPlaceAudioChange(session: OpenSession): Boolean {
@@ -2843,7 +2841,7 @@ internal class PlaybackCore(
         // choices into its one replacement graph so nothing is lost and no second open happens.
         if (pendingVideoRecovery != null) return
         if (pendingSelections.isEmpty()) return
-        // KP-SUBSWAP (owner report 2026-08-26): a subtitle-only change must not ride the full
+        // Owner report 2026-08-26: a subtitle-only change must not ride the full
         // reopen below, which was built for video and audio switches and visibly interrupts
         // playback. Container subtitle tracks get the same in-place treatment external subtitles
         // always had. A refusal (demux would not park, stale id, external target) discards the
@@ -3314,7 +3312,7 @@ internal class PlaybackCore(
             }
         }
         if (!everySelectedStreamReady(session)) {
-            // KP-PLAYACK (owner report 2026-08-25, reverses the older "never declare Buffering
+            // Owner report 2026-08-25, reversing the older "never declare Buffering
             // here" rule): the wait this branch takes is real, so the status must say so. A play
             // against a pipeline that cannot supply it yet IS Buffering by that state's own
             // definition, and leaving Paused standing made every tap after a seek look dropped on
@@ -3619,7 +3617,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * SOL-P5's pruning cursor. Container cues far behind the position are dropped: a backward
+     * The pruning cursor. Container cues far behind the position are dropped: a backward
      * seek flushes and re-decodes them, so keeping the whole history only grew a list forever.
      * External cue tables (no decoder) are NEVER pruned; nothing re-supplies them.
      */
@@ -3668,7 +3666,7 @@ internal class PlaybackCore(
             )
             return
         }
-        // SOL-P5: rasterisation runs on its own serial lane, never on the actor. Only the
+        // Rasterisation runs on its own serial lane, never on the actor. Only the
         // NEWEST publication may land: a slow raster of superseded text checks the generation
         // after drawing and drops itself. The job rides a SINGLE slot rather than the session's
         // job list: one Job per cue edge appended for a whole film grew that list
@@ -3894,7 +3892,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * Steps a PAUSED player forward by exactly one decoded frame (S4.e, corrected by KP-P1-10).
+     * Steps a PAUSED player forward by exactly one decoded frame.
      *
      * This used to be a precise seek to the current position plus one NOMINAL frame period taken
      * from the container's declared rate. Every assumption in that sentence fails on real media:
@@ -4184,7 +4182,7 @@ internal class PlaybackCore(
 
         var attempt = 0
         var landed: Pts? = null
-        // KeyframeThenRefine runs this loop in two phases (SOL-API3, closed here): the first
+        // KeyframeThenRefine runs this loop in two phases: the first
         // lands and PRESENTS the keyframe at or before the target, which is the immediate
         // picture a seek-bar drag wants, and the second is an ordinary precise landing on the
         // exact frame. Every other mode has exactly one phase.
@@ -4204,7 +4202,7 @@ internal class PlaybackCore(
             flushDecoders(session, epoch)
             // 5
             clearBuffers(session, epoch)
-            // 6 (KC-CANCEL, SALANKE S05): the container seek is a blocking native call, and a
+            // The container seek is a blocking native call, and a
             // wedged one used to hold the actor for ever. It runs as a child on the demux lane;
             // when the deadline passes and the source can interrupt, the call is aborted and the
             // seek fails typed. A source that cannot interrupt keeps the old unbounded wait,
@@ -4262,7 +4260,7 @@ internal class PlaybackCore(
             val laddered = attempt < SeekTiming.OVERSHOOT_BACKOFF_US.lastIndex && aim.micros > 0L
             if (!overshot || !laddered || preempted() || seekSuperseded()) {
                 val keyframeShort = landed != null && landed.micros < target.micros
-                // KP-SEEKPRE: no refine when a newer request waits; the keyframe that already
+                // No refine when a newer request waits; the keyframe that already
                 // presented is this seek's whole answer, and the newer target takes the pipeline.
                 if (request.mode == SeekMode.KeyframeThenRefine && !refining && keyframeShort &&
                     !preempted() && !seekSuperseded()
@@ -4304,9 +4302,9 @@ internal class PlaybackCore(
         // exactly two shapes: the seek ran off the end of the stream (nothing left to decode), or
         // a later request preempted this one. Anything else means the pipeline produced nothing
         // within the deadline, and reporting SeekCompleted there was the fabricated success the
-        // audit called P1-4. The caller gets a rejection and the completion event is not emitted.
+        // audit named. The caller gets a rejection and the completion event is not emitted.
         val endOfStreamLanding = session.selectedQueues().all { it.isEndOfStream } && session.decodersDrained()
-        // KP-SEEKPRE: a landing abandoned for a newer request is superseded, not rejected. The
+        // A landing abandoned for a newer request is superseded, not rejected. The
         // newer seek runs on the next pass and its own landing is the position the caller wants.
         if (landed == null && seekSuperseded() && !preempted()) {
             resolveSeekReplies(SeekResult.Superseded(epoch))
@@ -4442,7 +4440,7 @@ internal class PlaybackCore(
             if (audio != null && (session.videoStream == null || clock.nanos() > videoGrace)) return audio
             if (session.selectedQueues().all { it.isEndOfStream } && session.decodersDrained()) return video ?: audio
             if (preempted()) return video ?: audio
-            // KP-SEEKPRE: a newer request ends this wait too; whatever landed is the answer.
+            // A newer request ends this wait too; whatever landed is the answer.
             if (seekSuperseded()) return video ?: audio
             delay(WORKER_POLL)
         }
@@ -4613,7 +4611,7 @@ internal class PlaybackCore(
             try {
                 // Never under a release that is still running: those threads ARE the dispatchers,
                 // and closing one out from under a wedged native call turns a leak into a crash
-                // (audit KP-P1-07). The compromised report already names the leak.
+                // The compromised report already names the leak.
                 if (closeDispatchers && !teardownWedged.value) dispatchers.close()
             } catch (failure: Throwable) {
                 reportedFailure = compromisedClose(
@@ -4654,8 +4652,7 @@ internal class PlaybackCore(
             statusHistory += PlaybackStatus.Idle
         }
         // Terminal close leaves nothing of the closed media behind: a snapshot still naming the
-        // media, its tracks or its position would describe a session that no longer exists
-        // (audit P1-18).
+        // media, its tracks or its position would describe a session that no longer exists.
         media = null
         tracks = Tracks.Empty
         maskedSeekTargetMicros.value = NO_SEEK_MASK
@@ -4753,7 +4750,7 @@ internal class PlaybackCore(
         // that is preferable to returning while a worker can still touch freed native state.
         withContext(NonCancellable) {
             session.schedulerMode.value = SCHEDULER_IDLE
-            // KP-SUBCLEAR (owner report 2026-08-26): the platform renderer is SHARED across
+            // Owner report 2026-08-26: the platform renderer is SHARED across
             // rebuilds while the "did I publish" key is per-session, so an overlay outlived the
             // session that published it: after a track change, the fresh session's empty key said
             // "nothing to clear" and the old text stayed on the glass for ever, which read as
@@ -4783,7 +4780,7 @@ internal class PlaybackCore(
                 }
             }
             release("audio device stop") { session.sink?.stop() }
-            // KC-CANCEL (SALANKE S17): a lane blocked inside an uncancellable native read would
+            // A lane blocked inside an uncancellable native read would
             // make the quiesce below burn its whole deadline and the joins after it wait for
             // ever. The session is ending and the source is about to close, so aborting whatever
             // it is doing costs nothing. Best effort: a source that cannot interrupt returns
@@ -4913,7 +4910,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * SOL-P6's dirty flag: the per-pass handler used to allocate a full snapshot EVERY pass,
+     * The dirty flag: the per-pass handler used to allocate a full snapshot EVERY pass,
      * quiet or not. Snapshot content only moves through commands, worker outcomes, status
      * transitions and the explicit publication sites, and every one of those marks or calls
      * directly; a quiet pass allocates nothing. Progress and stats keep their own intervals
@@ -4998,7 +4995,7 @@ internal class PlaybackCore(
                 0.0
             }
             lastStatsDecoded = decoded
-            // F-WRN1: the audit found these two documented warnings wired to nothing. Both read
+            // The audit found these two documented warnings wired to nothing. Both read
             // the player-level total now, so the rising edge is a real onset rather than the
             // silent re-baselining a per-session counter produced at every reopen.
             val underrunsNow = retiredUnderruns + (session?.audio?.underruns ?: 0)
@@ -5187,7 +5184,7 @@ internal class PlaybackCore(
         // The filter the media item actually carries. This line used to say "none attached"
         // unconditionally, so a support bundle from a session running a filter graph denied that
         // the graph existed, which is the one fact such a bundle is collected to establish
-        // (audit KP-P1-18). Typed filter plans are still roadmap work; a raw graph string is what
+        // Typed filter plans are still roadmap work; a raw graph string is what
         // can be attached today, and it is what is reported.
         val attachedFilter = snapshot.media?.videoFilter
         appendLine(
@@ -5310,7 +5307,7 @@ internal class PlaybackCore(
         session.videoScheduler?.let { worker ->
             session.jobs += launchWorker(session, worker, dispatchers.videoSchedule) { runVideoSchedule(session, worker) }
         }
-        // F-WRN1: the sink's device events finally reach a listener. warn() is fence-locked,
+        // The sink's device events finally reach a listener. warn() is fence-locked,
         // so collecting on the session lane is safe from wherever the sink emits.
         startAudioEventCollector(session)
     }
@@ -5328,7 +5325,7 @@ internal class PlaybackCore(
                     // SALANKE N11: the sink was already reporting these and the engine threw
                     // them away. An underrun warns once per session; a format request is a
                     // device condition the caller must hear about even though the engine cannot
-                    // renegotiate yet (SOL-A6 owns that).
+                    // renegotiate yet.
                     is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.Underrun -> {
                         if (!session.warnedAboutDeviceUnderrun) {
                             session.warnedAboutDeviceUnderrun = true
@@ -5828,7 +5825,7 @@ internal class PlaybackCore(
                 // One call, no external timeout, no retry. The old shape cancelled submitDecoded
                 // mid-buffer on a deadline and called it again with the same input, which replayed
                 // samples the ring had already accepted and ran the stateful conversion twice
-                // (audit P1-3). The abort callback bounds the wait instead: while the ring is full
+                // The abort callback bounds the wait instead: while the ring is full
                 // the submit polls it, and a quiesce request abandons the unaccepted remainder,
                 // which the seek's flush was about to discard anyway.
                 audio.submitDecoded(pts, interleaved, frames, buffer.format) { worker.quiesceRequested }
@@ -6088,7 +6085,7 @@ internal class PlaybackCore(
          * Monotonic overlay identity. A hash of the cue content is collision-prone; a counter
          * bumped on every real change can never claim two different overlays are the same.
          */
-        /** SOL-P5: bumped on the actor, read by the raster lane's stale-work guard. */
+        /** Bumped on the actor, read by the raster lane's stale-work guard. */
         val overlayGeneration = atomic(0L)
 
         var videoStatus: StreamStatus = StreamStatus.Syncing
@@ -6124,7 +6121,7 @@ internal class PlaybackCore(
     }
 
     private companion object {
-        /** SOL-P5: how far behind the position container cues survive before pruning. */
+        /** How far behind the position container cues survive before pruning. */
         const val CUE_PRUNE_BEHIND_MICROS = 30_000_000L
 
         /** Alternate packet caches follow playback at this cadence, never the demux frontier. */
@@ -6349,7 +6346,7 @@ internal sealed interface SeekResult {
      * The seek was aborted before mutating anything, because its precondition could not be
      * established: a worker did not reach a quiescent boundary within the deadline. Flushing
      * decoders and clearing queues under a live worker is the memory-safety fault the audit
-     * called P0-7, so the transaction refuses instead of proceeding on best effort.
+     * named, so the transaction refuses instead of proceeding on best effort.
      */
     data class Rejected(val reason: String) : SeekResult
 }

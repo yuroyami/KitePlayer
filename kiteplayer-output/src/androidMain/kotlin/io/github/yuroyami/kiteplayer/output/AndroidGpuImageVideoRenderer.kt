@@ -400,7 +400,7 @@ private class OesRgbaBridge(
     private val frameConfigurations = FrameConfigurationBook()
     private val requestedViewport = AtomicReference<GpuViewport?>()
 
-    /** SOL-R14: the packed colour law the blit reads per draw; null is bit-exact off. */
+    /** The packed colour law the blit reads per draw; null is bit-exact off. */
     val adjust = AtomicReference<FloatArray?>()
 
     /** One output step when dithering is on, zero when it is off. Read by the blit. */
@@ -590,7 +590,7 @@ internal class GlState private constructor(
     private val colorMatrixUniform: Int,
     private val colorOffsetUniform: Int,
     private val colorEnabledUniform: Int,
-    /** SOL-R14: the packed colour law, written by setAdjustments on any thread. */
+    /** The packed colour law, written by setAdjustments on any thread. */
     private val adjust: AtomicReference<FloatArray?>,
     private val ditherStep: java.util.concurrent.atomic.AtomicReference<Float>,
     private val ditherStepUniform: Int,
@@ -709,7 +709,7 @@ internal class GlState private constructor(
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
             GLES20.glUniform1i(sampler, 0)
             GLES20.glUniformMatrix4fv(texMatrixUniform, 1, false, transform, 0)
-            // SOL-R14: the picture controls at the one hook the direct-to-Surface tier has.
+            // The picture controls at the one hook the direct-to-Surface tier has.
             val packed = adjust.get()
             if (packed == null) {
                 GLES20.glUniform1f(colorEnabledUniform, 0f)

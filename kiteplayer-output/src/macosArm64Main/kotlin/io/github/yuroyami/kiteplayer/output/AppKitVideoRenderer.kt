@@ -150,10 +150,10 @@ public class AppKitVideoRenderer internal constructor(
     /** The active subtitle overlay; replaced wholesale by [setOverlay]. */
     private val overlaySlot = atomic<SubtitleOverlay?>(null)
 
-    /** Overlay CGImages, rebuilt only when the cue changes (17.11 SOL-P7). Worker-owned. */
+    /** Overlay CGImages, rebuilt only when the cue changes. Worker-owned. */
     private val overlayImages = OverlayImageCache(::rgbaImage)
 
-    /** The picture controls, read by the worker on every draw (17.11 SOL-R14). */
+    /** The picture controls, read by the worker on every draw. */
     private val adjustSlot = atomic(io.github.yuroyami.kiteplayer.VideoAdjustments.Identity)
 
     /** The framing controls, under the same ownership as the picture controls. */
@@ -182,7 +182,7 @@ public class AppKitVideoRenderer internal constructor(
             while (!closed.value) {
                 signal.receive()
                 convertPending()
-                // SOL-R1: an overlay change during a pause re-composites the retained pixels;
+                // An overlay change during a pause re-composites the retained pixels;
                 // a converted frame above already baked the new overlay in.
                 if (redrawWanted.getAndSet(false) && pending.value == null) redrawRetained()
                 // getAndSet(false) is the whole consumption: the old else-arm
@@ -251,7 +251,7 @@ public class AppKitVideoRenderer internal constructor(
 
     /** Converts whatever is waiting, if anything, and hands the image on. Worker thread only. */
     private fun convertPending() {
-        // 17.11 SOL-R11: close() blocks its caller, which is the UI thread. It must not wait on a
+        // close() blocks its caller, which is the UI thread. It must not wait on a
         // conversion this worker had not started yet; close() drains the slot after the join.
         if (closed.value) return
         val frame = pending.getAndSet(null) ?: return
@@ -264,7 +264,7 @@ public class AppKitVideoRenderer internal constructor(
                 null
             } else {
                 val rgba = convert(frame)
-                // SOL-R1: retained for paused-overlay re-composites, worker-confined.
+                // Retained for paused-overlay re-composites, worker-confined.
                 retainedRgba = rgba
                 retainedWidth = width
                 retainedHeight = height
@@ -352,7 +352,7 @@ public class AppKitVideoRenderer internal constructor(
         displayWidth: Int,
         rotationDegrees: Int,
     ): NSImage? {
-        // 17.11 SOL-R14: the engine's one colour-matrix law, applied to bytes here instead of in
+        // The engine's one colour-matrix law, applied to bytes here instead of in
         // a shader. Identity hands back the same array, so an untouched picture copies nothing.
         val pixels = adjustRgba(rgba, adjustSlot.value)
         val transform = transformSlot.value
@@ -380,7 +380,7 @@ public class AppKitVideoRenderer internal constructor(
                         val quarterTurned = rotationDegrees == 90 || rotationDegrees == 270
                         val presentedWidth = if (quarterTurned) height else displayWidth
                         val presentedHeight = if (quarterTurned) displayWidth else height
-                        // 17.11 SOL-R14: an aspect override reshapes the picture AS PRESENTED,
+                        // An aspect override reshapes the picture AS PRESENTED,
                         // which for this path is only a different declared size and costs nothing.
                         val size = CGSizeMake(
                             framedPresentedWidth(presentedWidth, presentedHeight, transform).toDouble(),
@@ -449,7 +449,7 @@ public class AppKitVideoRenderer internal constructor(
         ) ?: return null
         try {
             CGContextSaveGState(context)
-            // 17.11 SOL-R14: zoom and pan concatenated OUTSIDE the turn, so what is magnified and
+            // Zoom and pan concatenated OUTSIDE the turn, so what is magnified and
             // moved is the picture as presented. Core Graphics applies the last concat first.
             if (transform.needsDrawingPass()) {
                 val framing = framingConcat(outputWidth, outputHeight, transform)
@@ -491,7 +491,7 @@ public class AppKitVideoRenderer internal constructor(
         if (active.images.isEmpty()) return
         val sx = outputWidth.toDouble() / active.viewportWidth.coerceAtLeast(1)
         val sy = outputHeight.toDouble() / active.viewportHeight.coerceAtLeast(1)
-        // 17.11 SOL-P7: the cache owns these; a held cue is built once, not once per frame.
+        // The cache owns these; a held cue is built once, not once per frame.
         val cached = overlayImages.imagesFor(active)
         active.images.forEachIndexed { index, image ->
             val cg = cached.getOrNull(index) ?: return@forEachIndexed
@@ -505,7 +505,7 @@ public class AppKitVideoRenderer internal constructor(
     /** An overlay bitmap as a CGImage. The pixels are premultiplied, which is what CG blends. */
     private fun rgbaImage(bitmap: io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap): CGImageRef? {
         val rowBytes = bitmap.width * 4
-        // 17.11 SOL-R13: RgbaBitmap promises AT LEAST this many bytes, never exactly this many.
+        // RgbaBitmap promises AT LEAST this many bytes, never exactly this many.
         // Core Graphics reads only the rows it is given, so slack past them is harmless.
         if (bitmap.pixels.size < rowBytes * bitmap.height) return null
         val colorSpace = CGColorSpaceCreateDeviceRGB() ?: return null
@@ -535,7 +535,7 @@ public class AppKitVideoRenderer internal constructor(
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 
-    /** 17.11 SOL-R14. A paused picture shows the change too: the retained pixels re-draw. */
+    /** A paused picture shows the change too: the retained pixels re-draw. */
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
         adjustSlot.value = adjustments
         requestRedraw()
@@ -568,7 +568,7 @@ public class AppKitVideoRenderer internal constructor(
 
     /** Re-composites the retained pixels under the CURRENT overlay. Worker thread only. */
     private fun redrawRetained() {
-        // 17.11 SOL-R11: nobody will ever see a picture drawn after the close began.
+        // Nobody will ever see a picture drawn after the close began.
         if (closed.value) return
         val rgba = retainedRgba ?: return
         val image = try {
@@ -581,7 +581,7 @@ public class AppKitVideoRenderer internal constructor(
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         overlaySlot.value = overlay
-        // SOL-R1: a paused picture shows the change too.
+        // A paused picture shows the change too.
         redrawWanted.value = true
         signal.trySend(Unit)
     }
@@ -602,7 +602,7 @@ public class AppKitVideoRenderer internal constructor(
         runBlocking { workerJob.join() }
         drainPending()
         if (pendingImage.getAndSet(null) != null) failed.incrementAndGet()
-        // The worker is out, so the overlay cache has no other owner left (17.11 SOL-P7).
+        // The worker is out, so the overlay cache has no other owner left.
         overlayImages.release()
         dispatcher.close()
     }

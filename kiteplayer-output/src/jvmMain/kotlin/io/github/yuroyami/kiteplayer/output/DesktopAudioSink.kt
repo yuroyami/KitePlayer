@@ -75,7 +75,7 @@ public class DesktopAudioSink internal constructor(
     /** Frames handed to the line since the last stop, written only by the writer thread. */
     @Volatile private var submittedFrames = 0L
 
-    /** SOL-A2: set by the writer on device failure, cleared by the recovery arm of start. */
+    /** Set by the writer on device failure, cleared by the recovery arm of start. */
     private var writerFailed = false
 
     /**

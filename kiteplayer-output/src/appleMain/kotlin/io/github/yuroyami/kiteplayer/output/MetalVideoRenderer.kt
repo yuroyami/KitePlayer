@@ -121,7 +121,7 @@ public class MetalVideoRenderer public constructor(
             while (!closed.value) {
                 signal.receive()
                 drawPending()
-                // SOL-R1: overlay and picture-control changes reach a PAUSED frame by
+                // Overlay and picture-control changes reach a PAUSED frame by
                 // re-encoding the retained picture. A frame drawn above already carried them.
                 // getAndSet(false) is the whole consumption: the old else-arm
                 // blindly wrote false over a request that raced in after the read, and that
@@ -170,7 +170,7 @@ public class MetalVideoRenderer public constructor(
 
     /** Draws whatever is in the slot. Render thread only. */
     private fun drawPending() {
-        // 17.11 SOL-R11: close() blocks its caller, which is the UI thread. A drawable wait
+        // close() blocks its caller, which is the UI thread. A drawable wait
         // started after the close began is time that thread spends for nothing.
         if (closed.value) return
         val frame = pending.getAndSet(null) ?: return
@@ -268,7 +268,7 @@ public class MetalVideoRenderer public constructor(
 
     /** drawPending's shape over the retained picture; render thread only. */
     private fun drawRetained() {
-        // 17.11 SOL-R11: nobody will ever see a picture drawn after the close began.
+        // Nobody will ever see a picture drawn after the close began.
         if (closed.value) return
         val picture = retainedPicture ?: return
         val meta = retainedMeta ?: return
@@ -347,7 +347,7 @@ public class MetalVideoRenderer public constructor(
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         this.overlay.value = overlay
-        // SOL-R1: a paused picture shows the change too; the render worker re-encodes the
+        // A paused picture shows the change too; the render worker re-encodes the
         // retained picture when no fresh frame is on its way.
         requestRedraw()
     }
@@ -361,7 +361,7 @@ public class MetalVideoRenderer public constructor(
     override fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
         signal.close()
-        // 17.11 SOL-R11: cancel BEFORE the join, as both CPU fallbacks already do. A worker
+        // Cancel BEFORE the join, as both CPU fallbacks already do. A worker
         // parked on a signal that was buffered before the close would otherwise wake and spend
         // the closing thread's time on one more drawable wait.
         worker.cancel()
@@ -371,7 +371,7 @@ public class MetalVideoRenderer public constructor(
         // a redraw (SOL-R1's ownership half).
         releaseRetained()
         // After the join no draw is in flight from this renderer, so the composer can fence the
-        // GPU and give back its texture cache and native holder (17.11 SOL-R6).
+        // GPU and give back its texture cache and native holder.
         composer.close()
         dispatcher.close()
     }

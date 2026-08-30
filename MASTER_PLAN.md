@@ -362,25 +362,19 @@ h264 everywhere; wasm fake scripts its list.
 A stranger cannot resolve `F-WRN1` or `audit P1-05`. They stay in MASTER_PLAN, GOTCHAS and git
 history; the tree should read without them.
 
-Swept 2026-08-30: 349 removed across 143 files, every one a parenthetical sitting MID-sentence,
-where deleting it leaves the sentence intact. Compiled and tested green after. Counted honestly,
-**661 remain**, and they are the ones a script must not touch:
+Swept 2026-08-30 in two passes: 349 parentheticals sitting MID-sentence, then 92 more where the
+code OPENED the comment (`// SOL-R1: text` becomes `// Text`) plus `PlaybackCore.kt`'s 34 by hand.
+Compiled and tested green after each. Counted honestly, **569 remain**:
 
-| where | codes | files |
-|---|---|---|
-| main sources (shipped) | 305 | 108 |
-| test sources | 177 | 73 |
-| build scripts | 50 | 11 |
-| docs | 43 | 14 |
-| CI workflows | 36 | 5 |
-| shell scripts | 27 | 16 |
-| native C and headers | 23 | 17 |
+- [ ] Rewrite the remaining 569 across 243 files. The mechanical shapes are gone; what is left is
+  load-bearing prose ("the interlude ported this to KiteFFmpeg", "register row P0-14 says"), where
+  the code is the SUBJECT and the sentence has to be rewritten rather than trimmed. Largest are
+  KiteFFmpeg's `ci.yml` (18) and `build.gradle.kts` (11), whose header comments narrate the
+  register directly.
 
-- [ ] Rewrite the 661 by hand, largest file first (`PlaybackCore.kt` 34,
-  `kiteffmpeg-core/build.gradle.kts` 28, KiteFFmpeg's `ci.yml` 18, `UIKitVideoRenderer.kt` 17).
-  Each needs the sentence the code stood for, because the code either OPENS the comment
-  (`// (F-DRAW1): ...`, where deleting the parenthetical also eats the space after the marker and
-  the clause it introduced) or is load-bearing inside the prose.
+  A reusable two-pass sweeper is in the commit that did this: pass one takes mid-sentence
+  parentheticals, pass two takes codes that OPEN a comment and capitalizes what follows. Watch the
+  capitalization: it turned `close()` into `Close()` on three lines.
 
 **Two traps for whoever does the rest, both hit on 2026-08-30:**
 

@@ -11,7 +11,7 @@ import kotlin.math.sin
  *
  * ### Why this and not interpolation
  *
- * This replaced a two-tap linear interpolator (audit 15.3.1), whose own documentation said no
+ * This replaced a two-tap linear interpolator whose own documentation said no
  * document may present it as production rate conversion. Linear interpolation is a weak low-pass on
  * the way down and leaves images of the signal on the way up: on music it dulls the top end and adds
  * a haze of aliasing that a listener hears as "not quite right" without being able to name it.

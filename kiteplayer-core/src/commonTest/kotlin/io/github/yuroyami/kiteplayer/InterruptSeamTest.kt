@@ -42,7 +42,7 @@ class InterruptSeamTest {
 
     @Test
     fun aSourceThatCannotInterruptKeepsTheOldUnboundedWaitAndStillLands() = runTest(timeout = 20.seconds) {
-        // The pre-KC-CANCEL world: interrupt() answers false. The engine must keep waiting, and
+        // The world before interruptible opens: interrupt() answers false. The engine must keep waiting, and
         // when the call finally returns on its own the seek completes normally.
         val faults = FaultPlan().apply {
             seekWedges = true

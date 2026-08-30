@@ -83,10 +83,10 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
     /** `--hwdec-off` forces the software decoder, so a hardware route can be measured against it. */
     private val hwdecOff = NSProcessInfo.processInfo.arguments.contains(HWDEC_OFF_ARGUMENT)
 
-    /** `--dither` turns RQ-1 on, so its cost can be measured against the same run without it. */
+    /** `--dither` turns dithering on, so its cost can be measured against the same run without it. */
     private val ditherOn = NSProcessInfo.processInfo.arguments.contains(DITHER_ARGUMENT)
 
-    /** `--deband` turns RQ-2 on, so the taps it costs can be measured against a run without them. */
+    /** `--deband` turns debanding on, so the taps it costs can be measured against a run without them. */
     private val debandOn = NSProcessInfo.processInfo.arguments.contains(DEBAND_ARGUMENT)
     private var scenarioStarted = false
     private val controlButtons = mutableListOf<UIButton>()

@@ -21,7 +21,7 @@ internal actual class FrameImagePool actual constructor() {
     actual fun imageFor(rgba: ByteArray, width: Int, height: Int): FrameImage {
         val info = ImageInfo(width, height, ColorType.RGBA_8888, ColorAlphaType.OPAQUE)
         val image = Image.makeRaster(info, rgba, width * 4).toComposeImageBitmap()
-        // The far end of KV-5's measured window. Off, this is one volatile read.
+        // The far end of the measured upload window. Off, this is one volatile read.
         KiteVideoUploadProfiler.frameFinished()
         return FrameImage(image)
     }
@@ -37,7 +37,7 @@ internal actual class FrameImagePool actual constructor() {
  * backend is refused with UnsupportedFrameType, reported once and then not attempted again.
  */
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
-    // The near end of KV-5's measured window, before any pixel is read.
+    // The near end of the measured upload window, before any pixel is read.
     KiteVideoUploadProfiler.frameStarted()
     val rgba = SoftwareConverter.toRgba(frame.asKiteFFmpegFrame())
     KiteVideoUploadProfiler.frameConverted()
@@ -62,7 +62,7 @@ internal actual fun rememberKiteVideoFrameCommitter(
      * `Image.makeRaster` COPIES those bytes into Skia, so the decoded frame is free the instant the
      * image exists and there is nothing left for a fence to wait on. The Apple twin answers true
      * because it really can obtain a completion proof; this one answers true because the question
-     * does not arise. When KV-2's YUV image path lands and a frame's planes are uploaded rather
+     * does not arise. When the YUV image path lands and a frame's planes are uploaded rather
      * than copied, this has to be re-decided rather than inherited.
      */
     override val canDrawCommitFencedFrames: Boolean get() = true

@@ -339,7 +339,7 @@ class ReferencePcmTest {
     }
 
     /**
-     * The LFE policy, measured against FFmpeg instead of assumed (audit 15.3.2).
+     * The LFE policy, measured against FFmpeg instead of assumed.
      *
      * The other two fixtures keep their LFE silent on purpose, because the engine used to fold the
      * LFE into the stereo mix at -3 dB while FFmpeg's own downmix drops it, and a silent channel

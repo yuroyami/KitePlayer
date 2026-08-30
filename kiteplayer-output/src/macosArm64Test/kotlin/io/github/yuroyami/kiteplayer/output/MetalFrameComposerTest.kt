@@ -459,7 +459,7 @@ class MetalFrameComposerTest {
         // The band must SOFTEN. What that can mean in an 8-bit target is worth being exact about,
         // because the obvious assertion is wrong: an 8-bit write cannot hold a value between two
         // adjacent 8-bit levels, so debanding can never invent a third one here. What it does is
-        // break the hard step into a mixed transition, which is why this rung pairs with RQ-1.
+        // break the hard step into a mixed transition, which is why this rung pairs with dithering.
         //
         // So the property is ORDER, not value: undebanded, the row is a clean step, every low
         // sample before every high one. Debanded, that monotonicity is broken.

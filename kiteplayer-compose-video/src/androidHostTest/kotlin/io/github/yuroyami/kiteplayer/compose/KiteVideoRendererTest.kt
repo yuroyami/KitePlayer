@@ -161,7 +161,7 @@ private class Harness(
 class KiteVideoRendererTest {
 
     /**
-     * 17.21 RQ-3: the ladder splits in two here, and BOTH halves have to arrive.
+     * The ladder splits in two here, and BOTH halves have to arrive.
      *
      * The scaler is the drawing step's own business, so it leaves as a `filterQuality`. Dithering
      * and debanding are not something Compose can do, so the whole value has to go on to the

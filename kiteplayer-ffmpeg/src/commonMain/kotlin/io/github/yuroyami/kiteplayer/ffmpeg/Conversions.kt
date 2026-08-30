@@ -126,7 +126,7 @@ internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pi
  * read the wrong one. And below [PARALLEL_PIXEL_THRESHOLD] pixels of work the whole thing runs inline,
  * because dispatching costs more than a small frame's conversion saves.
  *
- * EXPECT/ACTUAL since 17.14 X-09, and the note this replaced is worth keeping visible because it
+ * EXPECT/ACTUAL since the web target arrived, and the note this replaced is worth keeping visible because it
  * was true when written and stopped being true: it said "no expect/actual: every target this module
  * compiles for has a multi-threaded `Dispatchers.Default`". Adding wasmJs falsified both halves at
  * once. The web has no `runBlocking` at all, and its `Dispatchers.Default` is one event loop, so the

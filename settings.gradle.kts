@@ -102,11 +102,11 @@ include(":kiteplayer-network")
 include(":kiteplayer-sample")
 // The Android assembly and XML-inflation proof for :kiteplayer-mobile and :kiteplayer-view.
 include(":kiteplayer-sample-android")
-// The Compose Desktop assembly and the KV-5 measurement harness (17.13 W-05). It is the only
+// The Compose Desktop assembly and the upload measurement harness. It is the only
 // place where the desktop JVM backend, the desktop output half and KiteVideo all run at once,
 // which is what makes the per-frame upload cost measurable instead of assumed.
 include(":kiteplayer-sample-desktop")
-// The KV-6 measurement harness (17.14 X-01), and nothing else. S6 is gated on one unmeasured
+// The web measurement harness, and nothing else. The web gate is one unmeasured
 // number, the per-frame cost of converting and drawing a 1080p frame on wasm with ONE thread, and
 // this module exists to produce it before any binding work is committed to.
 include(":kiteplayer-sample-web")

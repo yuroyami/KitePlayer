@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.coroutineContext
 
 /**
- * The audible web sink (17.14 X-10), replacing the silence [SilentPacedAudioSink] kept time with.
+ * The audible web sink, replacing the silence [SilentPacedAudioSink] kept time with.
  *
  * ### Why this is a feeder and not a device callback
  *

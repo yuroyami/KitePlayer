@@ -8,7 +8,7 @@ import io.github.yuroyami.kiteffmpeg.MediaType
 import kotlin.js.JsAny
 
 /**
- * Drives the REAL `kiteffmpeg-core` web backend from Kotlin (17.14 X-07).
+ * Drives the REAL `kiteffmpeg-core` web backend from Kotlin.
  *
  * Not the raw binding: this calls `MediaSource`, `StreamInfo` and `Frame`, which is the API every
  * other platform uses and the one `:kiteplayer-ffmpeg` is written against. If this works, the

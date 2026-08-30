@@ -64,7 +64,7 @@ class ColorPolicyTest {
     }
 
     /**
-     * KP-TONEMAP-WARN. This test used to assert the OPPOSITE and it was pinning a lie.
+     * This test used to assert the OPPOSITE and it was pinning a lie.
      *
      * It required a PQ clip to warn "tone mapping unavailable" once per stream, from the source's
      * metadata. The engine has tone mapped HDR since 2026-08-16 on every built-in display path, so

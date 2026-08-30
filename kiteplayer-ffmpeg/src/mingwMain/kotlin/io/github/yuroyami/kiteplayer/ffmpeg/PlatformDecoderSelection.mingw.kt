@@ -6,7 +6,7 @@ import io.github.yuroyami.kiteffmpeg.CodecId
 /**
  * Windows offers no hardware route here, so every codec decodes in software.
  *
- * **The build DOES carry D3D11VA, and this comment used to say it did not** (PAR-1, corrected
+ * **The build DOES carry D3D11VA, and this comment used to say it did not** (corrected
  * 2026-08-25). `libavcodec.a` for mingw-x64 contains eighteen d3d11va, d3d11va2 and dxva2 hwaccels,
  * compiled because the mingw configure profile never passed `--disable-autodetect`. Decision W-D4
  * described a reduced profile and the binary quietly exceeded it.

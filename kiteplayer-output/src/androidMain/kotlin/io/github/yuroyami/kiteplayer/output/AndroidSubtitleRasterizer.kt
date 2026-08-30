@@ -148,8 +148,8 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             if (w > widest) widest = w
         }
         val textWidth = kotlin.math.ceil(widest).toInt().coerceAtLeast(1)
-        // A POSITIONED cue's bitmap is its text extent, not the whole safe width (audit
-        // F-POS1): the layout keeps its wrap width so the lines break identically, but the
+        // A POSITIONED cue's bitmap is its text extent, not the whole safe width:
+        // the layout keeps its wrap width so the lines break identically, but the
         // draw below translates the glyphs to the bitmap's origin and the placement anchors
         // the extent on the authored point. An unpositioned cue keeps the full-width bitmap,
         // whose internal alignment IS its horizontal placement.

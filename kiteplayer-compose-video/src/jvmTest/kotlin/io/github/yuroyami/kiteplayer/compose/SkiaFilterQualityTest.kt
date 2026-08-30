@@ -14,7 +14,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * 17.21 RQ-3, the drawing step's half: what [FilterQuality] actually buys on a Skia target.
+ * The drawing step's half of the kernel rung: what [FilterQuality] actually buys on a Skia target.
  *
  * [KiteVideo] enlarges the published picture itself, so the kernel there is a `filterQuality` on
  * one `drawImage` call rather than a shader. Whether that is worth anything is a per-platform

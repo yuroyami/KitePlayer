@@ -1567,7 +1567,7 @@ internal class PlaybackCore(
                         // A hard renderer failure used to be a warning and nothing else, so the
                         // schedule went on handing frames to a renderer that had already said it
                         // could not draw: the sound played and the picture stayed black for the
-                        // rest of the session with nothing to be done about it (audit 15.4.3).
+                        // rest of the session with nothing to be done about it.
                         // Detaching is the recovery this engine can actually perform. Playback
                         // continues headless, which is a state it already supports completely, the
                         // frames are counted as headless instead of refused, and the application

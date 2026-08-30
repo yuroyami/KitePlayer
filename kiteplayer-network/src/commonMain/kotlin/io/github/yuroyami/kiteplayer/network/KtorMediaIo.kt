@@ -204,7 +204,7 @@ public class KtorMediaIoException(message: String) : Exception(message)
  *
  * The lazily created client lives for the resolver's lifetime, which is normally the process:
  * exactly how OkHttp and NSURLSession want to be held. A resolver with a shorter life closes
- * the client it created through [close] (audit F-NET1: it used to leak the engine's connection
+ * the client it created through [close] (it used to leak the engine's connection
  * and thread pools); a caller-supplied client stays the caller's to close, as everywhere else.
  */
 public class KtorMediaIoResolver(

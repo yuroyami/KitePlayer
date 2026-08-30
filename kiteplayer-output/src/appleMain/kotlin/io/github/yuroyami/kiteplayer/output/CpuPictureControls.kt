@@ -4,7 +4,7 @@ import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoTransform
 
 /**
- * The picture controls and framing law for the UIKit and AppKit CPU fallbacks (17.11 SOL-R14).
+ * The picture controls and framing law for the UIKit and AppKit CPU fallbacks.
  *
  * Both fallbacks draw with Core Graphics rather than a shader, so the same law the Metal path
  * packs into uniforms is written here once for bytes and Core Graphics rectangles. Gamma stays

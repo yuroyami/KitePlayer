@@ -190,7 +190,7 @@ public data class AudioConfig(
  * Both defaults follow the reference the rest of this project follows, which is FFmpeg's own
  * resampler, and both were previously neither implemented nor decided: the mixer applied the
  * standard coefficients raw, so a source loud in several channels at once summed past full scale
- * and clipped at the device (audit 15.3.2).
+ * and clipped at the device.
  */
 public data class DownmixConfig(
     /**
@@ -222,7 +222,7 @@ public data class DownmixConfig(
      * dialogue needs.
      *
      * The engine used to fold it in at -3 dB, and the surround fixtures kept their LFE silent so
-     * that the disagreement with FFmpeg never showed up in a test (audit 15.3.2).
+     * that the disagreement with FFmpeg never showed up in a test.
      *
      * True folds it in at the same -3 dB every other non-front channel gets, for a caller who
      * would rather keep the content than match the reference.

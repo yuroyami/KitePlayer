@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 /**
- * How much work a renderer spends on the picture beyond decoding it correctly (17.21, KP-RQ).
+ * How much work a renderer spends on the picture beyond decoding it correctly.
  *
  * These are the passes a viewer notices and that FFmpeg cannot do for us, because they belong on
  * the GPU next to the draw: removing the banding an 8-bit write creates, removing the banding the

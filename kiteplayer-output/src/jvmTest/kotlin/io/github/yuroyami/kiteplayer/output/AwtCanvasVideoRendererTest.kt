@@ -64,7 +64,7 @@ class AwtCanvasVideoRendererTest {
         },
     )
 
-    // ── KP-TONEMAP-WARN: the renderer that DID it is the one that says so ───────────────────
+    // ── The renderer that DID it is the one that says so ────────────────────────────────────
 
     @Test
     fun `a painter that tone maps makes the renderer say so, once`() = runTest {

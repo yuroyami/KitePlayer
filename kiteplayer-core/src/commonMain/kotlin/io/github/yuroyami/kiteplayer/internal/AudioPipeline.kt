@@ -91,7 +91,7 @@ internal class AudioPipeline(
      * [process] returned. The array is longer than that whenever an earlier buffer was longer.
      */
     /**
-     * The processed samples. SOL-P2: when every stage passes through, this ALIASES the last
+     * The processed samples. When every stage passes through, this ALIASES the last
      * [process] call's input rather than copying it; the caller's buffer is scratch by the
      * submit contract, consumed before the next decode reuses it.
      */

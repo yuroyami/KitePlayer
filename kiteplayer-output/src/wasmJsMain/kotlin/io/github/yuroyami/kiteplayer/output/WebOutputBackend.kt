@@ -162,7 +162,7 @@ internal class SilentPacedAudioSink(
     /**
      * One block, because there is no device buffer to describe. Sized as eight `AudioWorklet`
      * quanta (128 frames), so the engine's pacing decisions here resemble the ones it will make
-     * once X-10 lands a real sink.
+     * now that a real sink exists.
      */
     override val deviceBufferFrames: Int = 1024
 

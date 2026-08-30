@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * KP-TONEMAP-WARN (spec 17.22.A). Tone mapping announces itself where it ENGAGES.
+ * Tone mapping announces itself where it ENGAGES.
  *
  * The old warning was derived from the stream's metadata, so it fired on every HDR stream whatever
  * the display path did with it. That was false for every built-in path, because the engine has

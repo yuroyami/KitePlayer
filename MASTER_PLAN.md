@@ -397,11 +397,14 @@ than `(B1-17)`. Two capitalization traps, both caught in preview rather than in 
 camelCase identifier must not be capitalized (`mavenLocal`, `getLongFramePosition`) and neither
 must a one-letter name followed by `=` (`r="-1"`).
 
-- [ ] Rewrite the remaining 153 codes in KitePlayer plus KiteFFmpeg's own. The mechanical shapes are gone; what is left is
-  load-bearing prose ("the interlude ported this to KiteFFmpeg", "register row P0-14 says"), where
-  the code is the SUBJECT and the sentence has to be rewritten rather than trimmed. Largest are
-  KiteFFmpeg's `ci.yml` (18) and `build.gradle.kts` (11), whose header comments narrate the
-  register directly.
+- [ ] Rewrite the last 29 codes in KitePlayer's sources plus KiteFFmpeg's own. What is left is
+  the long tail: one or two per file, each its own sentence to rewrite. KiteFFmpeg's own sources
+  have not been swept at all yet; its `ci.yml` and `build.gradle.kts` narrate the register
+  directly and are the largest there.
+- [ ] DECIDE separately what to do about the 28 codes in `MEASUREMENTS.md` and the web spike note.
+  Those are dated records of what was measured on a day, and a measurement that says "this is
+  what W-05 asked for" is describing its own occasion rather than the tree. Rewriting them may be
+  falsifying history rather than clearing jargon.
 
   A reusable two-pass sweeper is in the commit that did this: pass one takes mid-sentence
   parentheticals, pass two takes codes that OPEN a comment and capitalizes what follows. Watch the

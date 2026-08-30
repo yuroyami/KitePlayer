@@ -9,7 +9,7 @@ import kotlin.math.roundToInt
 /*
  * The one geometry law, shared by every renderer that draws into a rectangle.
  *
- * It lived inside AndroidSurfaceVideoRenderer until X-11 needed the same arithmetic for the web
+ * It lived inside AndroidSurfaceVideoRenderer until the web canvas needed the same arithmetic
  * canvas. Copying it would have put a hundred lines of pixel-aspect, quarter-turn, zoom and pan
  * reasoning in two places that must agree forever and have no way to notice when they stop, and the
  * failure would be a picture subtly the wrong shape on one platform. Nothing here is Android: it is

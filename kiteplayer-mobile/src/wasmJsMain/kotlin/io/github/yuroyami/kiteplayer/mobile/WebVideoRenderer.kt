@@ -16,7 +16,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 import kotlin.js.JsAny
 
 /**
- * The default KiteFFmpeg adapter for a web canvas (17.14 X-11).
+ * The default KiteFFmpeg adapter for a web canvas.
  *
  * The same job `MobileAndroidPlayerViewRendererFactory` does on Android and for the same reason:
  * `:kiteplayer-output` may not depend on KiteFFmpeg, so the module that depends on BOTH is where the

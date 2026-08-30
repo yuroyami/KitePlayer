@@ -282,7 +282,7 @@ class DesktopSubtitleRasterizerTest {
         assertTrue(rasterize(cue("")).isEmpty())
     }
     /**
-     * SOL-S8. A cue the author PLACED must not consume space in the stack it never stood in.
+     * A cue the author PLACED must not consume space in the stack it never stood in.
      *
      * The implicit bottom stack is a running offset: each bottom cue rasterized pushes the next one
      * up by its own height plus the gap. A cue carrying an explicit `positionY` is laid out from

@@ -236,7 +236,7 @@ public object DashManifestParser {
                 entry.t?.let { time = it }
                 // r >= 0 is that many EXTRA segments. r = -1 is the spec's compact "repeat to
                 // the end": until the next entry's own start, or the period's end in timescale
-                // units (audit F-DASH1; 0..-1 used to expand this entry to nothing at all).
+                // units (0..-1 used to expand this entry to nothing at all).
                 val repeats: Long = if (entry.r >= 0) entry.r else {
                     require(entry.d > 0) { "degenerate segment duration" }
                     val untilTime = timeline.getOrNull(index + 1)?.t

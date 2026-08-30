@@ -1,4 +1,4 @@
-# libass, the full ASS/SSA renderer (KPKMP 17.12 phase L). Include and library paths are
+# libass, the full ASS/SSA renderer. Include and library paths are
 # supplied per target by the build script: Homebrew on the macOS host, the KiteFFmpeg
 # ass-chain deps tree for the phones.
 headers = ass/ass.h

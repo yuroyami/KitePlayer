@@ -82,8 +82,7 @@ kotlin {
         /*
          * The C audio ring, for `internal/NativeAudioRing.kt` and the differential oracle in
          * `nativeTest`. Native only: js and wasmJs can never contain C, which is exactly why
-         * `KotlinAudioRing` stays the portable implementation and cannot become an `expect class`
-         * (register item B1-20).
+         * `KotlinAudioRing` stays the portable implementation and cannot become an `expect class`.
          *
          * `api` and not `implementation`: what this dependency really carries is a cinterop klib, and
          * `nativeTest` is a different compilation from `nativeMain`, so the bindings have to be

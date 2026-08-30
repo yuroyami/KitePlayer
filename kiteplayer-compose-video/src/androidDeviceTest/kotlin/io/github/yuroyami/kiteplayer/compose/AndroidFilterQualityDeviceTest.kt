@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 import kotlin.test.assertContentEquals
 
 /**
- * 17.21 RQ-3: why the Android GPU tier enlarges in its own blit instead of at the draw.
+ * Why the Android GPU tier enlarges in its own blit instead of at the draw.
  *
  * The obvious way to put a kernel into [KiteVideo] is to raise the `filterQuality` of the one
  * `drawImage` it makes, and on Skia that works (`SkiaFilterQualityTest` measures it). On Android
@@ -69,7 +69,7 @@ class AndroidFilterQualityDeviceTest {
         assertContentEquals(
             low,
             enlarged(source, FilterQuality.High),
-            "High differs from Low, so Android has gained a cubic resampler and RQ-3's Android " +
+            "High differs from Low, so Android has gained a cubic resampler and the kernel rung's Android " +
                 "half could move to the draw instead of the blit",
         )
     }

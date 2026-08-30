@@ -305,7 +305,7 @@ class ExternalSubtitleTest {
     }
 
     /**
-     * KP-P1-02, the other half: a selection that never applies takes its track back out.
+     * The other half: a selection that never applies takes its track back out.
      *
      * Displacement rather than failure, because a failure rebuilds the track table from the
      * container anyway and would pass without any rollback at all. A displaced add is the case

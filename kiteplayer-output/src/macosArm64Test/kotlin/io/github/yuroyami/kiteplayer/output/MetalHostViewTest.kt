@@ -11,7 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * 17.11 SOL-R12: a CAMetalLayer does not resize its own drawable.
+ * A CAMetalLayer does not resize its own drawable.
  *
  * The window is not part of this: the host view is built directly and its own resize callback is
  * called the way AppKit calls it during a live drag, which is the whole mechanism. What a real

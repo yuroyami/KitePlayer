@@ -12,12 +12,12 @@ import platform.Metal.MTLRegionMake2D
 import platform.Metal.MTLTextureProtocol
 
 /**
- * Renders one picture offscreen through Metal and reads the RGBA bytes back (S2.d, KV-2 on
+ * Renders one picture offscreen through Metal and reads the RGBA bytes back (the hardware path on
  * Apple). This is what replaces the CPU colour conversion for a consumer that needs BYTES
  * rather than a layer, KiteVideo above all: the YUV-to-RGB arithmetic runs in the fragment
  * shader, a VideoToolbox frame is wrapped with no copy at all, and the CPU pays exactly one
  * readback memcpy, which is the no-CPU-RGBA law with the one copy its Android sibling
- * (KV-4) also pays.
+ * also pays.
  *
  * The picture comes back at its STORED size, unrotated and without the pixel-aspect stretch:
  * the caller's own geometry (KiteVideo's draw phase) applies those, exactly as it did for the

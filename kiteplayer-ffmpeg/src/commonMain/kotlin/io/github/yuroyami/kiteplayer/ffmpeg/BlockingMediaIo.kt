@@ -11,7 +11,7 @@ import io.github.yuroyami.kiteffmpeg.MediaByteSource
  * [MediaIo]'s contract already confines it to, so parking that worker parks nothing else.
  *
  * The web has no such primitive, which is why this is expect/actual rather than one shared file
- * (17.14 X-09). Blocking is forbidden on the browser's main thread, so the wasmJs actual stages
+ * Blocking is forbidden on the browser's main thread, so the wasmJs actual stages
  * the bytes instead and says so when it cannot.
  *
  * The members are declared here as well as in each actual. An `expect class` that names a

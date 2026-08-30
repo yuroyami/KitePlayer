@@ -9,7 +9,7 @@ import platform.CoreGraphics.CGImageRef
 import platform.CoreGraphics.CGImageRelease
 
 /**
- * Overlay bitmaps as CGImages, rebuilt only when the overlay's content hash moves (17.11 SOL-P7).
+ * Overlay bitmaps as CGImages, rebuilt only when the overlay's content hash moves.
  *
  * The CPU fallbacks used to build one CGImage per overlay image on EVERY draw, so a cue held for a
  * second was built sixty times over. The Metal composer already keys its overlay textures the same

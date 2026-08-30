@@ -8,7 +8,7 @@ import io.github.yuroyami.kiteffmpeg.CodecId
  *
  * The wasm decoder has no hardware route: it is FFmpeg compiled to WebAssembly. The browser DOES
  * have one, `VideoDecoder` from WebCodecs, measured at 715 fps on 1080p h264 against 182 fps in
- * software, and that is X-15's subject. When it lands it belongs HERE, because this function is
+ * software, and that is WebCodecs' subject. When it lands it belongs HERE, because this function is
  * where the engine asks what route a codec gets. Until then advertising no hardware is the honest
  * answer, and a route that claimed otherwise would make the fallback logic above choose wrongly.
  */

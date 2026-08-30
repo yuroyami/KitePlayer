@@ -32,7 +32,7 @@ public object WebVttParser {
         while (i < lines.size) {
             val line = lines[i]
             // Block skips first: NOTE/STYLE/REGION run to the next blank line. The keyword must
-            // stand alone or be followed by whitespace (17.11 SOL-S5): an identifier that merely
+            // stand alone or be followed by whitespace: an identifier that merely
             // BEGINS with one of these words is a cue's own name, not a block.
             if (isBlockKeyword(line)) {
                 i++
@@ -65,7 +65,7 @@ public object WebVttParser {
         }
 
         val sorted = cues.sortedBy { it.startMicros }
-        // The same open-end resolution SubRip applies (17.11 SOL-S4): a clamped backwards or
+        // The same open-end resolution SubRip applies: a clamped backwards or
         // zero-length cue closes at the next cue's start, or after the shared default.
         return sorted.mapIndexed { index, cue ->
             if (cue.endMicros > cue.startMicros) {

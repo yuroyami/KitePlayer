@@ -9,7 +9,7 @@ internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
     WebKitePlayerPlatformDefaults
 
 /**
- * The web stack (17.14 X-12): the FFmpeg backend over KiteFFmpeg's wasm build, paired with the web
+ * The web stack: the FFmpeg backend over KiteFFmpeg's wasm build, paired with the web
  * clock and the silent paced sink.
  *
  * Availability asks a question no other platform has to. Everywhere else the codec is linked into

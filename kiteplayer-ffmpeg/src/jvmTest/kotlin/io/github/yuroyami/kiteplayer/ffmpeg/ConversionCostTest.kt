@@ -10,7 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * The REAL baseline for the conversion cost, not the mirror W-14's benchmark used.
+ * The REAL baseline for the conversion cost, not the mirror the shader benchmark used.
  *
  * It lives here because `tightlyPackedToRgba` is internal to this module, and W.4's 9.4 ms was
  * measured through a whole draw phase under load. This times the function itself, so the next
@@ -125,7 +125,7 @@ class ConversionCostTest {
     }
 
     /**
-     * W-15 change 2's ceiling, measured BEFORE any parallel-for seam is designed.
+     * The row-parallelism ceiling, measured BEFORE any parallel-for seam is designed.
      *
      * The loop is load and store bound at roughly ten cycles per pixel, which is the argument that
      * more cores would help. That is an argument, not a number. This splits the frame into
@@ -199,7 +199,7 @@ class ConversionCostTest {
         val four = timeParts(4)
         val eight = timeParts(8)
         println(
-            "W-15 change 2 ceiling: 4 threads ${"%.2f".format(one / four)}x, " +
+            "row-parallelism ceiling: 4 threads ${"%.2f".format(one / four)}x, " +
                 "8 threads ${"%.2f".format(one / eight)}x over one",
         )
     }

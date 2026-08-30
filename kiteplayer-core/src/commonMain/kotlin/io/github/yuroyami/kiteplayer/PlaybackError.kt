@@ -252,7 +252,7 @@ public sealed class PlaybackWarning {
     }
 
     /**
-     * DEPRECATED 2026-08-25 and NEVER EMITTED (KP-TONEMAP-WARN, spec 17.22.A).
+     * DEPRECATED 2026-08-25 and NEVER EMITTED.
      *
      * It said two things at once and one of them was false. The engine has tone mapped HDR since
      * 2026-08-16, `HdrToneMap` on both software conversion paths and `kp_tone_map` in the Metal
@@ -320,7 +320,7 @@ public sealed class PlaybackWarning {
 
     /**
      * A control the engine could not honour, named so a fire-and-forget caller still finds out
-     * (2026-08-17 audit, F-API1). The suspending form of the same member throws instead; this
+     * The suspending form of the same member throws instead; this
      * warning is how the refusal reaches [KitePlayer.events] and the warning history when the
      * caller never awaited a reply: a refused loop repeat on an unseekable source, a speed or
      * pitch-law change such a source cannot anchor, or a renderer swap whose scheduler never

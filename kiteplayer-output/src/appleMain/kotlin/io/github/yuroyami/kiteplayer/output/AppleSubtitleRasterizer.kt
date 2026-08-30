@@ -151,7 +151,7 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             val spanColor = style.primaryColor.toCgColor()!!
             text.addAttribute(cfKey(kCTForegroundColorAttributeName), objcValue(spanColor), range)
             // The attributed string holds its own retains; every Create-rule reference this
-            // loop made dies here (audit F-CFL1: they used to leak, one set per span per cue).
+            // loop made dies here: they used to leak, one set per span per cue.
             if (font != baseFont) CFRelease(font)
             CFRelease(baseFont)
             CFRelease(spanColor)

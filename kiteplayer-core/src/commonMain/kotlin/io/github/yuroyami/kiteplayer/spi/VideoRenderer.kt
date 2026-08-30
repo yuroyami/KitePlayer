@@ -151,7 +151,7 @@ public sealed interface RendererEvent {
      * application gave it and only the application can supply another. Attaching a new one is
      * therefore the application's move, and it is legal at any time.
      *
-     * This used to say the engine falls back to software, and nothing did (audit 15.4.3): the
+     * This used to say the engine falls back to software, and nothing did: the
      * failed renderer stayed attached, kept refusing every frame, and the picture stayed black for
      * the rest of the session.
      */

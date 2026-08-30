@@ -37,7 +37,7 @@ import kotlinx.cinterop.set
  * because that was the shape the sink had. The sink no longer has that shape: its callback is a
  * `static` C function and the samples live in a C ring the sink itself owns. A
  * test that kept a Kotlin ring would be testing a path no Apple-backend user runs, which is the substitution
- * plan section 2 forbids and register item B1-20 is about. So the samples go in through the same three
+ * plan section 2 forbids. So the samples go in through the same three
  * C calls the engine's feeder uses, and what comes out is judged by what the device consumed.
  *
  * `NativeAudioRing` in `kiteplayer-core` is `internal`, so this module cannot use it and does not need

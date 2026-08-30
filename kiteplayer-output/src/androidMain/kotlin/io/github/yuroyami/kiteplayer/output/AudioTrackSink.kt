@@ -14,8 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.channels.BufferOverflow
 
 /**
- * The Android audio output: one `AudioTrack` in MODE_STREAM behind the engine's pull contract
- * (S1.c.4, register item S1C-04).
+ * The Android audio output: one `AudioTrack` in MODE_STREAM behind the engine's pull contract.
  *
  * `AudioTrack` is a push API while the engine and `KotlinAudioRing` expose a pull callback that
  * owns the audio clock anchor. The adaptation is the one wrapper the `AudioSink` KDoc names for

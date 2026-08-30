@@ -16,7 +16,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The S2.d measured exit on the iOS simulator (KV-1's exit through KV-2's path): real media,
+ * The measured exit on the iOS simulator, real media,
  * the platform decoder policy, the production convert and image seams, and the frame cost
  * instrument read at the end. The number lands in the log beside A3's Android software
  * baseline; simulator numbers are provisional by the standing rule.

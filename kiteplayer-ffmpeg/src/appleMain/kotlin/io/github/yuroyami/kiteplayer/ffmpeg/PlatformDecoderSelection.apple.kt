@@ -29,7 +29,7 @@ internal actual fun platformDecoderSelection(codec: String, policy: HwdecPolicy)
  * A device with no AV1 silicon (anything before A17 Pro / M3) refuses the attach instead, and that
  * refusal is one more cause the measured fallback already handles. On such a device the fallback
  * lands on FFmpeg's `av1` decoder, which is the same shell, so the open still fails: software AV1
- * needs vendored dav1d, which stays KC-AV1SW's business and is NOT closed by this route.
+ * needs vendored dav1d, which is its own job and is NOT closed by this route.
  *
  * vp9 stays out on purpose. The hwaccel symbol exists, but no Apple silicon carries a VP9 decode
  * block, so every attach would fail and pay for the attempt; FFmpeg's native VP9 decoder is real

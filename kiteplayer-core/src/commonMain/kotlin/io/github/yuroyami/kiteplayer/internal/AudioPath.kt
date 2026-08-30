@@ -24,7 +24,7 @@ internal class OpenedAudioPath(
  * portable arrangement the engine hands the sink an
  * [io.github.yuroyami.kiteplayer.spi.AudioRenderCallback] closure that reads a [KotlinAudioRing]. In
  * the native arrangement, from B1.8 onward, a sink may own its device callback in C, in which case it
- * owns the ring too and the engine only writes into it; that is register item B1-17, and the reason is
+ * owns the ring too and the engine only writes into it, and the reason is
  * that a Kotlin lambda on a real-time thread is a mutator the garbage collector has to stop.
  *
  * The branch cannot live in `commonMain` because the type it tests for, `NativeRingAudioSink`, names a
@@ -70,7 +70,7 @@ internal suspend fun openKotlinAudioPath(
         // The real-time path of this arrangement. Everything it touches is preallocated, and it never
         // waits. Before the ring is published this returns zero, which by the contract on
         // `AudioRenderCallback` means the whole buffer is silence and the sink is the one that writes
-        // it. That sentence is stated here because B1-19 collapsed the engine's own silence fill into
+        // it. That sentence is stated here because the engine's own silence fill collapsed into
         // `kprt_ring_render`, so on this path the obligation is the sink's and nowhere else, and an
         // earlier version of this comment described a duty no interface documented any more. The
         // window itself is only reachable for a sink that pulls before `start()`: `sink.open` does not

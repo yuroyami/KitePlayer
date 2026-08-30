@@ -1,4 +1,4 @@
-# KV-5: the desktop upload path, measured
+# The desktop upload path, measured
 
 Register item **W-05** in MASTER_PLAN.md.13, which is KV-5 in 17.9: *"desktop upload path:
 one upload per frame; desktop bandwidth makes this cheap; measured anyway."*

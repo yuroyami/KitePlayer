@@ -95,14 +95,14 @@ class WebVttParserTest {
         assertEquals(
             5_000_000L + SubRipParser.OPEN_CUE_DEFAULT_MICROS,
             backwards.single().endMicros,
-            "the open end resolves to the shared default when nothing follows (17.11 SOL-S4)",
+            "the open end resolves to the shared default when nothing follows",
         )
     }
 
     @Test
     fun `an identifier beginning with a keyword is a cue and not a block`() {
         // NOTEWORTHY is a cue identifier; the old startsWith read it as a NOTE block and ate the
-        // cue that followed (17.11 SOL-S5).
+        // cue that followed.
         val cues = WebVttParser.parse(
             """
             WEBVTT

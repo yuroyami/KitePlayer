@@ -48,7 +48,7 @@ class AudioSinkEventTest {
      * telling the engine these things and the engine threw them away with `else -> Unit`. A
      * device-reported underrun now warns once per session, typed; a format-change request is
      * surfaced as a device warning; and neither fails the player or tears the sink down, because
-     * the engine still cannot renegotiate a device (that remainder is SOL-A6).
+     * the engine still cannot renegotiate a device, which stays open in MASTER_PLAN.md.
      */
     @Test
     fun `underrun and format-change requests are surfaced rather than dropped`() = runTest {

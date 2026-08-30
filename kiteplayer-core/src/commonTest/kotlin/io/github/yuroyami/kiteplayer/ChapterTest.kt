@@ -25,7 +25,7 @@ class ChapterTest {
     )
 
     /**
-     * KP-P1-11. A chapter table may leave gaps, and a position inside one belongs to no chapter.
+     * A chapter table may leave gaps, and a position inside one belongs to no chapter.
      * Both readings used to ignore `end` and answer with the chapter that had already finished, so
      * a player sitting in a gap displayed the previous chapter's title as the one playing.
      */
@@ -55,7 +55,7 @@ class ChapterTest {
     }
 
     /**
-     * KP-P1-11 through the engine. A table with a real gap must announce leaving a chapter, not
+     * The same, through the engine. A table with a real gap must announce leaving a chapter, not
      * hold the expired one until the next begins.
      */
     @Test

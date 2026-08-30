@@ -210,7 +210,7 @@ class SubRipParserTest {
     fun `an end before its start resolves to the next cue or the documented default`() {
         // Some tools write the two timestamps the wrong way round. Throwing the text away loses
         // dialogue, and an end equal to its start never DISPLAYS either, because the selector
-        // requires the time strictly before the end (17.11 SOL-S4). The open end resolves.
+        // requires the time strictly before the end. The open end resolves.
         val followed = parse(
             """
             1

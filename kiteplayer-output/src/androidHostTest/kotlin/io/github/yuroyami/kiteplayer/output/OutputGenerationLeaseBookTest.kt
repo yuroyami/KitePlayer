@@ -256,7 +256,7 @@ class OutputGenerationLeaseBookTest {
     }
 
     /**
-     * 17.21 RQ-3: a requested kernel is the ONE thing that lets the blit enlarge.
+     * A requested kernel is the ONE thing that lets the blit enlarge.
      *
      * The buffer normally stops at the source's own size, because the drawing step can enlarge
      * just as well and for free. On Android it cannot, so when a kernel is asked for the

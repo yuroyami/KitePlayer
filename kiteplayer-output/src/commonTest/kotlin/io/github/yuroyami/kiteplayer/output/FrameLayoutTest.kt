@@ -10,7 +10,7 @@ import kotlin.test.assertNull
  * turn, and the draw-rectangle exchange that makes a turned picture land on its own letterbox.
  * All pure functions, no renderer instance and no platform anywhere.
  *
- * In commonTest since X-11, because the law it tests moved to commonMain when the web canvas
+ * In commonTest because the law it tests moved to commonMain when the web canvas
  * renderer needed the same arithmetic. It ran on Android alone while it was the Android renderer's
  * private law; now that two renderers share it, the tests run everywhere both do.
  *

@@ -118,7 +118,7 @@ private class FakeSourceDataLine(accepted: AudioFormat) : SourceDataLineDriver {
                 while (!interrupted) writeGate.wait()
             }
             /* The line returns what it wrote before the interrupt: zero is legal, and so is a
-             * short POSITIVE count, which is the audit F-AUD1 shape. */
+             * short POSITIVE count. */
             if (interruptWriteResult > 0) {
                 val take = interruptWriteResult.coerceAtMost(sizeBytes)
                 take(source, offsetBytes, take)

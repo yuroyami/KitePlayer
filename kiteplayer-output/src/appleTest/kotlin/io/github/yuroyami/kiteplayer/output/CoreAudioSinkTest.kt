@@ -38,7 +38,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Every case that used to hand the sink an [AudioRenderCallback] over a small Kotlin ring of its own now
  * feeds the C ring the sink owns, through the same three C calls the engine's feeder uses (see
  * `CRingSupport.kt`). The sink has no Kotlin callback to hand anything to any more: its render callback
- * is a `static` C function it installs itself, which is register item B1-17. Keeping a Kotlin ring here
+ * is a `static` C function it installs itself. Keeping a Kotlin ring here
  * would have left these tests exercising a path no Apple-backend user runs, which is exactly the substitution
  * plan section 2 forbids.
  *
@@ -185,7 +185,7 @@ class CoreAudioSinkTest {
                 "a device with nothing to play must be handed silence, and the underrun counted",
             )
             // And the silence came from the ring, not from a second fill in the sink: register item
-            // B1-19 collapsed those two into one, and a zero-filled callback would mean the ring was
+            // Those two collapsed into one, and a zero-filled callback would mean the ring was
             // gone rather than empty.
             assertEquals(0, sink.zeroFilledCallbacks, "an empty ring is not a missing ring")
         } finally {

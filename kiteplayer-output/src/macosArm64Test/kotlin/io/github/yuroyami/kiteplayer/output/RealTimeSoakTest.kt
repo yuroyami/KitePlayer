@@ -71,7 +71,7 @@ import kotlin.test.assertTrue
  * ### These cases do not run in the ordinary gate, on purpose
  *
  * Each one opens a real device, makes sound and takes minutes. They are gated on KPRT_DEVICE_SOAK being
- * set, and register item B1-24 records why that matters: KitePlayer has no CI, so this is a serial
+ * set, and the reason it matters is that this is a serial
  * human-supervised run on one machine, and a gate that silently spent twenty five minutes in the middle
  * of an ordinary test run would be turned off within a week. The gate command is in the report and in
  * the plan.
@@ -515,7 +515,7 @@ class RealTimeSoakTest {
 
                 val callback = alloc<AURenderCallbackStruct>().apply {
                     inputProc = staticCFunction { refCon, _, _, _, frames, data ->
-                        // The first instruction is the one register item B1-17 is about: a StableRef
+                        // The first instruction is the one that matters: a StableRef
                         // dereference, which makes this thread a Kotlin mutator the collector must stop.
                         val sink = refCon?.asStableRef<KotlinCallbackSink>()?.get()
                             ?: return@staticCFunction 0

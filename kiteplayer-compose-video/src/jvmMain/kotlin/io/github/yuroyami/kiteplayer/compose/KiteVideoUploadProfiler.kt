@@ -20,7 +20,7 @@ public class KiteVideoUploadSamples internal constructor(
 }
 
 /**
- * KV-5's measurement instrument (17.13 W-05): the desktop upload path's cost per published
+ * The measurement instrument: the desktop upload path's cost per published
  * frame, kept as raw samples so a percentile can be taken and split so the expensive half is
  * named rather than guessed.
  *

@@ -13,7 +13,7 @@ import kotlin.test.assertNotSame
 import kotlin.test.assertSame
 
 /**
- * 17.11 SOL-P7: pipeline states are immutable and device-owned, so compiling them once per
+ * Pipeline states are immutable and device-owned, so compiling them once per
  * renderer was work every renderer paid for the same objects.
  */
 class MetalPipelinesTest {

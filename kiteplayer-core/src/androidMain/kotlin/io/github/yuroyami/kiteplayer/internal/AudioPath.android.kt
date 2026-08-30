@@ -8,7 +8,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioSink
  *
  * There is no C here and there never will be on js and wasmJs, and there is no device sink on the JVM
  * or on Android yet either. The one target that has a second arrangement is native; see
- * `AudioPath.native.kt` and register item B1-17.
+ * `AudioPath.native.kt`.
  */
 internal actual suspend fun openAudioPath(
     sink: AudioSink,

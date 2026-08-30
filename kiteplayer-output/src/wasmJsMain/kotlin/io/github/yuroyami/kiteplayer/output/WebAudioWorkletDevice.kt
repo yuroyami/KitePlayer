@@ -39,7 +39,7 @@ internal class WebAudioWorkletDevice private constructor(
      * per block is about 96,000 a second for 48 kHz stereo, each one a direct wasm-to-JS import.
      *
      * The fix is not a smarter loop here. It is either a typed-array bridge in the language, or the
-     * Worker of X-08, where `SharedArrayBuffer` becomes legal and the ring stops being copied at all.
+     * Worker, where `SharedArrayBuffer` becomes legal and the ring stops being copied at all.
      */
     override fun enqueue(samples: FloatArray, frames: Int) {
         val count = frames * channels
@@ -111,7 +111,7 @@ internal object WebAudioSinkFactory : AudioSinkFactory {
  * The `AudioWorkletProcessor`, as source, delivered through a `Blob` URL.
  *
  * Inlined rather than shipped as a file on purpose. `addModule` needs a URL, a separate `.js`
- * artifact would need an artifact layout and a deployment story, and that is X-13 and still open.
+ * artifact would need an artifact layout and a deployment story, and that is still open.
  * A `Blob` URL needs neither and works from any embedder.
  *
  * It counts frames dropped by a flush as consumed, which is what lets the Kotlin side compute its

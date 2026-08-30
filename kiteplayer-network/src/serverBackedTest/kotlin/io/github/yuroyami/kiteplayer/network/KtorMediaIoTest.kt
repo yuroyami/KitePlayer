@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * The Ktor reader against a REAL local HTTP server: range probing decides seekability and
  * size, reads return the exact bytes, a seek costs one ranged request, and a server without
  * ranges yields an honest forward-only reader. https shares every line of this code path with
- * TLS handled by the platform engine beneath it, which is the design (KP-TLS's close-out).
+ * TLS handled by the platform engine beneath it, which is the design.
  */
 class KtorMediaIoTest {
 

@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
  *
  * ### It does not run in the ordinary gate
  *
- * Gated on KPRT_DEVICE_SOAK, for the reason register item B1-24 records: there is no CI, so this is a
+ * Gated on KPRT_DEVICE_SOAK, and the reason is that this is a
  * supervised run on one machine and it makes sound for ten minutes.
  *
  *     KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \

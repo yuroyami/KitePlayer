@@ -17,7 +17,7 @@ import org.jetbrains.skia.ImageInfo
 
 /**
  * One Skia raster per frame, unchanged behind the pool shape: Skia copies the bytes at
- * construction, so there is nothing to reuse at this seam. KV-2 (S2) owns replacing the whole
+ * construction, so there is nothing to reuse at this seam. The YUV image path owns replacing the whole
  * Apple path with YUV images and zero-copy, which is why no ring is built here.
  */
 internal actual class FrameImagePool actual constructor() {
@@ -33,7 +33,7 @@ internal actual class FrameImagePool actual constructor() {
 }
 
 /**
- * The KV-2 reader, one per worker thread (S2.d): the renderer's worker owns its converter the
+ * The reader, one per worker thread: the renderer's worker owns its converter the
  * same way it owns everything else, and the thread-local keeps two simultaneous KiteVideo
  * states from racing one Metal queue. Null means Metal failed to initialise; the CPU converter
  * remains the measured fallback then, stated rather than silent.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Runs :kiteplayer-ffmpeg's OWN jvm test suite on real Linux, from a macOS host (MASTER_PLAN.md W-20).
+# Runs :kiteplayer-ffmpeg's OWN jvm test suite on real Linux, from a macOS host.
 #
-# Why this and not a probe: W-16 proved the jar's Linux JNI library LOADS (identity acceptable,
+# Why this and not a probe: an earlier run proved the jar's Linux JNI library LOADS (identity acceptable,
 # h264 and hevc present). Nothing had DECODED on Linux through the JVM path, while macOS runs all
 # 27 rows of the 17.5 matrix. A hand-written decode probe would be a second, weaker definition of
 # "plays all formats", so this ships the real suite instead: same FormatMatrixTest, other kernel.

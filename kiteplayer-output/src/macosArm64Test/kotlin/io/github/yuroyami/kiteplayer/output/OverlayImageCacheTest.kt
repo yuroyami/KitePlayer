@@ -11,7 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * 17.11 SOL-P7: a cue held on screen for a second used to have its CGImages rebuilt on every
+ * A cue held on screen for a second used to have its CGImages rebuilt on every
  * single frame. The builder is counted rather than the pixels, because the pixels never changed:
  * that is the whole complaint.
  */

@@ -225,7 +225,7 @@ scan_forbidden() {
 # Audits one compiled real-time unit. Returns non-zero when anything was wrong, which is what the
 # negative control mode reads.
 audit_render_object() {
-    # W-17: the spelling of every symbol below follows the object, not the host. The object is the
+    # The spelling of every symbol below follows the object, not the host. The object is the
     # SECOND argument; these functions take the label first.
     detect_symbol_prefix "$2"
     local label="$1" object="$2"
@@ -283,7 +283,7 @@ audit_render_object() {
 # a callback which silently stopped rendering would otherwise pass because the empty set is a subset
 # of every allowlist.
 audit_callback_object() {
-    # W-17: the spelling of every symbol below follows the object, not the host. The object is the
+    # The spelling of every symbol below follows the object, not the host. The object is the
     # SECOND argument; these functions take the label first.
     detect_symbol_prefix "$2"
     local label="$1" object="$2"

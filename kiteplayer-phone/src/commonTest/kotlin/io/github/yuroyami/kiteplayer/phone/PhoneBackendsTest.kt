@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * KP-UNTESTED-MODULES. This module is PUBLISHED and had no test source set at all, so every one of
+ * This module is PUBLISHED and had no test source set at all, so every one of
  * its test tasks answered NO-SOURCE and it read as covered until CI named it.
  *
  * It owns no implementation. It owns exactly one contract: it is a deprecated umbrella for 0.0.2

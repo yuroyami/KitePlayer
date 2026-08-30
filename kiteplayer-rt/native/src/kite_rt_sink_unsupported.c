@@ -7,7 +7,7 @@
  * says which of the two possible things went wrong. Compiling on a target is level 7 evidence in the
  * terms of plan section 2 and this file makes no claim beyond it.
  *
- * WHY IT IS ITS OWN FILE (phase W, register item W-08). It used to be the `#else` arm of
+ * WHY IT IS ITS OWN FILE. It used to be the `#else` arm of
  * `kite_rt_coreaudio.c`, which meant every non-Apple target linked its device layer out of a file
  * named after CoreAudio, and a new backend would have arrived as another arm of that same `#if`.
  * A sink is per platform, so each platform gets a file. The guard below is the exact complement of

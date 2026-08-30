@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
  *
  * ### The question this settles, and why the answer is "no"
  *
- * KC-COLOR-PROV asked whether [PlaybackWarning.HdrToneMapped] should say WHICH of the two it
+ * The plan asked whether [PlaybackWarning.HdrToneMapped] should say WHICH of the two it
  * acted on: a transfer the container declared, or one this library guessed. The answer is that
  * it never needs to, because a guess can never be HDR. Every guess anywhere in the pair is the
  * standard-versus-high-definition rule, which answers BT.601 or BT.709 and nothing else, so a

@@ -95,7 +95,7 @@ internal class SubtitleOverlayView(context: Context) : View(context) {
         // Raw copy: the cue bytes are PREMULTIPLIED (the RgbaBitmap contract since the
         // 2026-08-17 audit) and ARGB_8888 stores premultiplied, so any conversion here is one
         // premultiply too many; the old straight-colour path darkened every antialiased edge
-        // (audit F-ALPHA1). Mutable but written exactly once, before HWUI ever samples it.
+        // Mutable but written exactly once, before HWUI ever samples it.
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         bitmap.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(rgba))
         return bitmap

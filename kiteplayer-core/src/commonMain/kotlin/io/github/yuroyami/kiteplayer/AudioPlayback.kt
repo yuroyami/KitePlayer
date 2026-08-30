@@ -73,7 +73,7 @@ public class AudioPlayback(
 
     /**
      * The ring, behind the interface, because there are two implementations of it and there always
-     * will be: see [AudioRingHandle] and register item B1-20.
+     * will be: see [AudioRingHandle].
      *
      * Which one this is depends on the sink and not on the platform, and this class does not know
      * which it got. A sink that owns its device callback in C owns a C ring and the engine writes into

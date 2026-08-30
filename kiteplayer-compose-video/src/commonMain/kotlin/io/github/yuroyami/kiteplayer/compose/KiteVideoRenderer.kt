@@ -84,7 +84,7 @@ internal class KiteVideoOverlay(
  * is closed and counted here because nothing else will ever see it.
  *
  * The S1 conversion is honest CPU work (17.9's stated last-resort): RGBA bytes, then one
- * ImageBitmap per published frame. KV-2 (S2) replaces that with the YUV image path and owns
+ * ImageBitmap per published frame. The YUV image path replaces that and owns
  * measuring both.
  */
 @OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
@@ -379,7 +379,7 @@ internal class KiteVideoRenderer(
                 },
             )
         }
-        /* SOL-R3, both halves. A failed image build must NOT advance the hash: recording the
+        /* Both halves. A failed image build must NOT advance the hash: recording the
          * content as published would skip the retry the next setOverlay call is, and the text
          * would simply never appear. And a close that raced this build must win: publishing
          * after close would hand a dead renderer's images to a live composition. */

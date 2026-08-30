@@ -17,7 +17,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
- * The feeder's policy, asserted as arithmetic (17.14 X-10).
+ * The feeder's policy, asserted as arithmetic.
  *
  * None of this needs a browser and none of it should: the sink's decisions are queue depth and
  * time, and a real `AudioContext` would add a user gesture and a stopwatch to every assertion for
@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  *
  * What is NOT covered here, stated so nobody reads this file as more than it is: that the worklet
  * source parses, that `addModule` resolves, and that a browser makes a sound. Those need a browser
- * and belong with X-14's matrix run.
+ * and belong with the conformance matrix run in a real browser.
  */
 class WebAudioSinkTest {
 

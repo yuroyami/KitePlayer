@@ -557,7 +557,7 @@ public class AppKitVideoRenderer internal constructor(
         requestRedraw()
     }
 
-    /** 17.11 SOL-R14, the framing half. Same delivery law as [setAdjustments]. */
+    /** The framing half. Same delivery law as [setAdjustments]. */
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
         transformSlot.value = transform
         requestRedraw()

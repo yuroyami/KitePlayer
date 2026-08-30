@@ -43,7 +43,7 @@ import kotlin.test.assertTrue
  * M1's exit sentence, executed: a REAL mp4 travels over a REAL local HTTP server through the
  * Ktor reader into REAL FFmpeg, which demuxes, seeks (a ranged request) and reads it whole.
  * https is this exact code path with the platform engine terminating TLS beneath it; the
- * transport is the only difference, which is the KP-TLS design. The M5 cache sits above this
+ * transport is the only difference, which is the design. The M5 cache sits above this
  * reader inside the engine and is proven by the core suites.
  */
 class HttpPlaybackEndToEndTest {
@@ -148,7 +148,7 @@ class HttpPlaybackEndToEndTest {
         val port = serveRanged(bytes)
         val url = "http://127.0.0.1:$port/movie.mp4"
 
-        // A factory, because MediaItem.io became one when KP-P1-03 landed. This file was never
+        // A factory, because MediaItem.io became one so every open gets its own reader. This file was never
         // compiled after that change, so it had been red on macosArm64 ever since.
         val source = KiteFFmpegSourceFactory().open(MediaItem(url, io = { KtorMediaIo.open(url) }))
         try {

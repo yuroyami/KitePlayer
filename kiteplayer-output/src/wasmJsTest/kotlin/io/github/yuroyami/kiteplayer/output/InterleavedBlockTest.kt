@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 /**
- * The block the web sink stages into (17.14 X-10).
+ * The block the web sink stages into.
  *
  * Worth its own file because it is the first web buffer that KEEPS what is written to it. Its
  * predecessor discarded every write, so its bounds checks were the only behaviour it had and

@@ -622,7 +622,7 @@ private class KiteFFmpegVideoDecoder(
     /**
      * Says once, out loud, that this stream's colour will be APPROXIMATED and shown anyway.
      *
-     * One cause now, not two (KP-TONEMAP-WARN, spec 17.22.A). BT.2020 constant luminance encodes
+     * One cause now, not two. BT.2020 constant luminance encodes
      * luma after the transfer function rather than before it, so the non-constant luminance matrix
      * every conversion path here runs is the wrong inverse for it and chroma-heavy areas shift.
      * That is not fixable with a matrix; it needs the transfer function in the loop, which is the

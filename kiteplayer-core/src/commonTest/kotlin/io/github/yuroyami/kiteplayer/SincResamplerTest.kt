@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
  * a buffer boundary must not be a signal boundary, because that is the defect this stage exists to
  * avoid.
  *
- * The fourth is what this class was rewritten for (audit 15.3.1). A tone above the target's Nyquist
+ * The fourth is what this class was rewritten for. A tone above the target's Nyquist
  * cannot be represented at the target rate. It has to be REMOVED, not folded down into the middle of
  * the music as a new tone that was never in the recording. Linear interpolation folds it; a windowed
  * sinc kernel removes it, and the last test here is the measurement that tells the two apart.

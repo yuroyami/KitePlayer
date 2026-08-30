@@ -28,7 +28,7 @@ import kotlin.time.TimeSource
  * That method is gone, and its absence is the point of the sub-phase. The body is now `kprt_render_into`
  * in `kiteplayer-rt/native/src/kite_rt_render.c`, reached from a `static` C function that
  * `include/kite_rt.h` does not name, so the cinterop bindings do not contain it and Kotlin has no way to
- * call it. Register item B1-17: a callback Kotlin can reach is a callback the garbage collector has to
+ * call it. A callback Kotlin can reach is a callback the garbage collector has to
  * stop.
  *
  * ### Where the three cases went, named rather than implied
@@ -100,7 +100,7 @@ class CoreAudioSinkRealTimeTest {
 
             // The published media time is the boundary after the last frame handed over, so it must equal
             // the duration of everything consumed, to the microsecond, through the same exact rescale the
-            // ring uses. This is the property register item B1-24's one-machine caveat cannot weaken: it
+            // ring uses. This is the property the one-machine caveat cannot weaken: it
             // is arithmetic, not timing.
             assertEquals(
                 framesToMicros(consumed, 48_000),

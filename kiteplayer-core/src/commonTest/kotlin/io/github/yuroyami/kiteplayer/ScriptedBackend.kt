@@ -330,7 +330,7 @@ internal class FaultPlan(
     /** Reads beyond this count wedge like an uncancellable native read. Null wedges nothing. */
     var readWedgesAfter: Int? = null
 
-    /** False models a source whose interrupt() cannot help, the pre-KC-CANCEL world. */
+    /** False models a source whose interrupt() cannot help. */
     var interruptSupported: Boolean = true
 
     /** True makes the sink's drain never finish, which the core must bound rather than wait out. */

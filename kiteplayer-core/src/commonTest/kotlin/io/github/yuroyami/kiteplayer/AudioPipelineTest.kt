@@ -115,7 +115,7 @@ class AudioPipelineTest {
 
         assertEquals(2, produced)
         assertEquals(input.toList(), pipeline.output.toList().take(4), "a pass through changes nothing")
-        /* SOL-P2 inverted the old never-hand-back pin: an all-pass-through pipeline now runs
+        /* The old never-hand-back pin is inverted: an all-pass-through pipeline now runs
          * ZERO copies, and the output deliberately ALIASES the caller's scratch, whose submit
          * contract consumes it before the next decode reuses it. */
         assertTrue(pipeline.output === input, "an identity pipeline must not copy the buffer")

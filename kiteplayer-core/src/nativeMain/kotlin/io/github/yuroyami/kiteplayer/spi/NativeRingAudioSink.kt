@@ -26,7 +26,7 @@ public annotation class RawRingApi
  *
  * ### Why this exists
  *
- * Register item B1-17. Until B1.8 every sink was handed an [AudioRenderCallback] and called it from
+ * Every sink used to be handed an [AudioRenderCallback] and called it from
  * whatever thread its device used. On macOS that made the device's real-time thread a Kotlin mutator
  * the garbage collector has to stop at a safepoint, and the measured worst stop-the-world pause on
  * the development machine was 63 to 256 microseconds against a 10.67 millisecond period. The fix is a

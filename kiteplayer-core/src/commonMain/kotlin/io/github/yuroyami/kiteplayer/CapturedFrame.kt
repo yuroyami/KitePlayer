@@ -22,7 +22,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoFrame
  *
  * This used to be announced as a `TonemappingUnavailable` warning during playback, which told
  * every viewer about a caveat that only concerns a caller doing its own conversion
- * (KP-TONEMAP-WARN, 2026-08-25). It lives here now, where that caller will meet it.
+ * It lives here now, where that caller will meet it.
  */
 public class CapturedFrame internal constructor(
     override val pts: Pts,

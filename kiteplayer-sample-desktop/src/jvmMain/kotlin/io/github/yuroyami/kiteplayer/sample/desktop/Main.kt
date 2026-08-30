@@ -56,7 +56,7 @@ internal data class SampleOptions(
 }
 
 /**
- * The Compose Desktop sample (17.13 W-05). Pass a media path, or nothing for the conformance
+ * The Compose Desktop sample. Pass a media path, or nothing for the conformance
  * clip; pass `--measure` to take KV-5's numbers and exit.
  */
 fun main(args: Array<String>) {

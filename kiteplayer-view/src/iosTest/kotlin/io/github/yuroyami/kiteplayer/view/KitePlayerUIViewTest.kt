@@ -30,7 +30,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * 17.11 SOL-R9, driven against real UIKit objects in the simulator.
+ * Driven against real UIKit objects in the simulator.
  *
  * The view hosts two layers, one for Metal and one for Core Graphics, and only one of them can be
  * the picture. The renderers are fakes because none of what is asked here is about drawing: it is

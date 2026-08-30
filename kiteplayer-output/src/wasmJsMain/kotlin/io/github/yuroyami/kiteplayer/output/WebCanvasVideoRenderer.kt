@@ -88,7 +88,7 @@ public class WebCanvasVideoRenderer(
     private val _events = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 8)
     override val events: Flow<RendererEvent> = _events
 
-    /** Software only. A browser's own hardware decoder is X-15's path and does not arrive here. */
+    /** Software only. A browser's own hardware decoder is WebCodecs' path and does not arrive here. */
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
     /**

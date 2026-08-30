@@ -147,6 +147,15 @@ Never move one silently.
   which names a stdlib function and looks like a compiler bug in your own code. It is neither: the
   cache is stale. `rm -rf <module>/build/kotlin` and build again. Hit on 2026-08-30 in
   `:kiteffmpeg-core` the moment `kotlinx-coroutines-test` was added to `commonTest`.
+- **The real-media suites fail under load with messages that read like correctness bugs.**
+  `RealMediaSeekTest` and its neighbours drive real files and wait on real time with
+  `withTimeoutOrNull`, so a busy machine samples the player before it has settled. What you get is
+  "seek 1 asked for 7.738s and landed at 7.566698s ... must arrive at the frame that was asked for
+  and not at the keyframe before it", or "Expected <Playing>, actual <Buffering>". Both look like a
+  seek defect and are not. The seed is fixed (`Random(23)`), so the giveaway is the ERROR CHANGING
+  between runs: 171 ms out, then 437 ms out, then green. Before chasing one, re-run that suite ALONE
+  on an idle machine. Chased on 2026-08-30, where it appeared to correlate with an unrelated new
+  test file and did not survive a controlled re-run.
 - **A browser test that runs longer than 2 seconds is KILLED, not failed.** Mocha's per-test default
   is 2000 ms and Kotlin does not raise it for `wasmJsBrowserTest`, so a `runTest` with a 60 second
   Kotlin timeout still dies at two with "Error: Timeout of 2000ms exceeded". It is load-dependent,

@@ -5,6 +5,7 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
+import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlinx.cinterop.COpaquePointer
@@ -19,13 +20,8 @@ import platform.CoreGraphics.CGColorCreateGenericRGB
 import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreFoundation.CFRelease
 import platform.CoreGraphics.CGContextRelease
-import platform.CoreGraphics.CGContextSetLineJoin
 import platform.CoreGraphics.CGContextSetShadowWithColor
-import platform.CoreGraphics.CGContextSetLineWidth
-import platform.CoreGraphics.CGContextSetStrokeColorWithColor
-import platform.CoreGraphics.CGContextSetTextDrawingMode
 import platform.CoreGraphics.CGImageAlphaInfo
-import platform.CoreGraphics.CGLineJoin
 import platform.CoreGraphics.CGPathCreateWithRect
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
@@ -39,6 +35,8 @@ import platform.CoreText.kCTFontAttributeName
 import platform.CoreText.kCTFontBoldTrait
 import platform.CoreText.kCTFontItalicTrait
 import platform.CoreText.kCTFontUIFontSystem
+import platform.CoreText.kCTStrokeColorAttributeName
+import platform.CoreText.kCTStrokeWidthAttributeName
 import platform.CoreText.kCTForegroundColorAttributeName
 import platform.CoreText.kCTUnderlineStyleAttributeName
 import platform.CoreText.kCTUnderlineStyleSingle
@@ -117,7 +115,8 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         val layoutSpec = cue.layout
         val firstStyle = cue.spans.first().style
         val authoredScale = layoutSpec.authoredHeight?.let { viewportHeight.toFloat() / it } ?: 1f
-        val sizePx = (firstStyle.fontSizePx?.times(authoredScale) ?: (viewportHeight / 20f)) * fontScale
+        fun sizeOf(style: CueStyle) =
+            (style.fontSizePx?.times(authoredScale) ?: (viewportHeight / 20f)) * fontScale
 
         val whole = cue.spans.joinToString("") { it.text }
         if (whole.isEmpty()) return null
@@ -129,6 +128,7 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             val range = NSMakeRange(cursor.toULong(), span.text.length.toULong())
             cursor += span.text.length
             val style = span.style
+            val sizePx = sizeOf(style)
             val baseFont = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, sizePx.toDouble(), null)
             var font = baseFont
             if (style.bold || style.italic) {
@@ -152,6 +152,17 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                     NSNumber(int = kCTUnderlineStyleSingle.toInt()),
                     range,
                 )
+            }
+            if (style.outlineWidthPx > 0f) {
+                // CoreText's own stroke attributes rather than one context-wide setting, which is
+                // what makes the outline PER SPAN. Its width is a percentage of the font size and
+                // a NEGATIVE value means fill and stroke, which is the same one-draw legibility
+                // trick kCGTextFillStroke used to do for the whole cue at once.
+                val percent = -(style.outlineWidthPx * fontScale / sizePx * 100.0)
+                text.addAttribute(cfKey(kCTStrokeWidthAttributeName), NSNumber(double = percent), range)
+                val outline = style.outlineColor.toCgColor()!!
+                text.addAttribute(cfKey(kCTStrokeColorAttributeName), objcValue(outline), range)
+                CFRelease(outline)
             }
         }
         val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
@@ -199,16 +210,6 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                 CFRelease(colorSpace)
                 if (context == null) return null
                 try {
-                    if (firstStyle.outlineWidthPx > 0f) {
-                        // Fill-stroke text mode: CG strokes each glyph in the outline colour and
-                        // fills it in the span colour in the same draw.
-                        CGContextSetTextDrawingMode(context, platform.CoreGraphics.CGTextDrawingMode.kCGTextFillStroke)
-                        CGContextSetLineWidth(context, (firstStyle.outlineWidthPx * fontScale).toDouble())
-                        CGContextSetLineJoin(context, CGLineJoin.kCGLineJoinRound)
-                        val outline = firstStyle.outlineColor.toCgColor()
-                        CGContextSetStrokeColorWithColor(context, interpretCPointer(outline!!.rawValue))
-                        CFRelease(outline)
-                    }
                     if (shadow.draws) {
                         // CG's own drop shadow: one call, applied to the fill and the stroke
                         // alike, which is exactly the silhouette a subtitle shadow is. Its y

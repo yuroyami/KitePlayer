@@ -53,17 +53,18 @@ public data class StyledSpan(
  * ## What the built-in rasterizers actually apply
  *
  * A parser fills every field it can read. The three built-in rasterizers do NOT all use every one,
- * so this is what a consumer can rely on. Measured against the tree 2026-08-25.
+ * so this is what a consumer can rely on. Measured against the tree 2026-08-30.
  *
  * | Field | Desktop | Apple | Android |
  * |---|---|---|---|
  * | [primaryColor], [bold], [italic], [underline], [strikeThrough] | per span | per span | per span |
+ * | [fontSizePx], [outlineColor], [outlineWidthPx] | per span | per span | per span |
  * | [fontFamily] | per span | ignored | ignored |
- * | [fontSizePx], [outlineColor], [outlineWidthPx] | first span, whole cue | first span, whole cue | first span, whole cue |
  * | [shadowColor], [shadowOffsetPx] | first span, whole cue | first span, whole cue | first span, whole cue |
  *
  * "First span, whole cue" means a cue whose spans disagree renders with the FIRST span's value
- * everywhere, so mixed sizes or mixed outlines in one cue are flattened.
+ * everywhere. Only the shadow works that way now: it changes the cue's bitmap SIZE, so two spans
+ * asking for different shadows would be asking for two different layouts of one cue.
  *
  * The optional libass renderer is not covered by this table: it does its own ASS styling and reads
  * the original script rather than this type.
@@ -71,14 +72,12 @@ public data class StyledSpan(
 public data class CueStyle(
     /** Honoured on desktop only; the Apple and Android rasterizers use the platform default face. */
     val fontFamily: String? = null,
-    /** Taken from the cue's FIRST span and applied to all of them. */
     val fontSizePx: Float? = null,
     val bold: Boolean = false,
     val italic: Boolean = false,
     val underline: Boolean = false,
     val strikeThrough: Boolean = false,
     val primaryColor: Int = 0xFFFFFFFF.toInt(),
-    /** Taken from the cue's FIRST span and applied to all of them. */
     val outlineColor: Int = 0xFF000000.toInt(),
     /**
      * The drop shadow's colour. A fully transparent one turns the shadow off, and costs nothing.
@@ -86,7 +85,6 @@ public data class CueStyle(
      * Taken from the cue's FIRST span and applied to all of them.
      */
     val shadowColor: Int = 0x80000000.toInt(),
-    /** Taken from the cue's FIRST span and applied to all of them. */
     val outlineWidthPx: Float = 2f,
     /**
      * How far down and right the shadow falls. Negative reaches up and left; zero turns it off.

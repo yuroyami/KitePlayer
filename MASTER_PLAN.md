@@ -486,9 +486,18 @@ the safe area to the viewport edge and no further. Proved red-first on desktop a
 Android is the named skip (no Robolectric, and android.jar is stubs on the host), so it rides
 DEVICE-DAY step 9b.
 
-Left, each red-first on all three rasterizers (or a named skip): per-span size and outline,
-`fontFamily` on Apple and Android (platform font lookup with fallback). N31's reverse stacking
-(`Collisions:`) lands here too.
+**Per-span size and outline landed 2026-08-30 on all three.** A cue whose spans disagree no
+longer flattens to the first one's size or outline. AWT sizes each run and clips the line's
+stroke to that run's own columns (a one-run line, which is nearly every line, skips the clip);
+CoreText moved from one context-wide `kCGTextFillStroke` to per-run `kCTStrokeWidth` and
+`kCTStrokeColor` attributes, so the outline is a property of the text rather than of the draw
+(its stroke joins are CoreText's miter now, not the round join the context used to set);
+Android sizes spans with `RelativeSizeSpan` and strokes them with a `CharacterStyle` that sets
+the paint per run. The SHADOW stays first-span-whole-cue on purpose: it changes the bitmap's
+SIZE, so two spans wanting different shadows would be two different layouts of one cue.
+
+Left: `fontFamily` on Apple and Android (platform font lookup with fallback). N31's reverse
+stacking (`Collisions:`) lands here too.
 
 ### 4.5 KP-P1-15: viewport subtitles. Size M, NEEDS-DESIGN
 
@@ -826,6 +835,8 @@ a failed build is itself the first finding.
 9c. Same cue with a big coloured shadow (`shadowOffsetPx` 8, red). PASS: the shadow falls
     down-right, is not clipped at the bitmap edge, and the text sits exactly where it sat
     with the shadow off. Same reason as 9b: Canvas and Bitmap are stubs off-device.
+9d. A two-span cue whose spans disagree on size and outline colour. PASS: both sizes show,
+    both outline colours show, and the taller span sets the line height.
 
 **Android phone, resume anchor (the S23 fix's device half):**
 10. Pause 30+ seconds mid-playback, resume. PASS: no position jump, sync holds (the fix

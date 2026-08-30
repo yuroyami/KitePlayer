@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
 import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
+import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import java.awt.BasicStroke
@@ -15,6 +16,7 @@ import java.awt.font.LineBreakMeasurer
 import java.awt.font.TextAttribute
 import java.awt.font.TextLayout
 import java.awt.geom.AffineTransform
+import java.awt.geom.Rectangle2D
 import java.awt.image.BufferedImage
 import java.awt.image.DataBufferInt
 import java.text.AttributedString
@@ -92,19 +94,22 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         // The classic subtitle size rule: about one twentieth of the picture height, scaled by the
         // user's preference and by the authoring resolution when the format declared one.
         val authoredScale = layoutSpec.authoredHeight?.let { viewportHeight.toFloat() / it } ?: 1f
-        val sizePx = (firstStyle.fontSizePx?.times(authoredScale) ?: (viewportHeight / 20f)) * fontScale
+        fun sizeOf(style: CueStyle) =
+            (style.fontSizePx?.times(authoredScale) ?: (viewportHeight / 20f)) * fontScale
         val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
         if (safeWidth <= 0) return null
 
         val styled = AttributedString(whole)
+        val runs = mutableListOf<StyleRun>()
         var cursor = 0
         for (span in cue.spans) {
             if (span.text.isEmpty()) continue
             val start = cursor
             cursor += span.text.length
             val style = span.style
+            runs += StyleRun(start, cursor, style)
             styled.addAttribute(TextAttribute.FAMILY, style.fontFamily ?: Font.SANS_SERIF, start, cursor)
-            styled.addAttribute(TextAttribute.SIZE, sizePx, start, cursor)
+            styled.addAttribute(TextAttribute.SIZE, sizeOf(style), start, cursor)
             styled.addAttribute(TextAttribute.FOREGROUND, Color(style.primaryColor, true), start, cursor)
             if (style.bold) styled.addAttribute(TextAttribute.WEIGHT, TextAttribute.WEIGHT_BOLD, start, cursor)
             if (style.italic) styled.addAttribute(TextAttribute.POSTURE, TextAttribute.POSTURE_OBLIQUE, start, cursor)
@@ -119,7 +124,7 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
 
         var height = 0
         var widest = 0f
-        for (line in lines) {
+        for ((line, _, _) in lines) {
             height += ceil((line.ascent + line.descent + line.leading).toDouble()).toInt()
             if (line.advance > widest) widest = line.advance
         }
@@ -143,7 +148,6 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         // The shadow lands outside the text box, so the bitmap grows for it and the placement
         // below subtracts the origin back off. See CueShadow.
         val shadow = cueShadow(firstStyle, fontScale)
-        val outlineWidth = firstStyle.outlineWidthPx * fontScale
 
         // ARGB_PRE, read straight out of the raster: this is the whole alpha contract.
         val image = BufferedImage(width + shadow.pad, height + shadow.pad, BufferedImage.TYPE_INT_ARGB_PRE)
@@ -152,10 +156,10 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             applyHints(g)
             if (shadow.draws) {
                 val at = shadow.origin + shadow.offset
-                drawLines(g, lines, width, layoutSpec.alignment, at, at, outlineWidth, firstStyle.outlineColor, Color(firstStyle.shadowColor, true))
+                drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, fontScale, Color(firstStyle.shadowColor, true))
             }
             val at = shadow.origin.toFloat()
-            drawLines(g, lines, width, layoutSpec.alignment, at, at, outlineWidth, firstStyle.outlineColor, silhouette = null)
+            drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, fontScale, silhouette = null)
         } finally {
             g.dispose()
         }
@@ -202,57 +206,96 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         )
     }
 
+    /** One span's character range and the style it carries, in the joined cue text. */
+    private data class StyleRun(val start: Int, val end: Int, val style: CueStyle)
+
+    /** One broken line and where it sits in that same text, so a span can be found inside it. */
+    private data class Line(val layout: TextLayout, val start: Int, val end: Int)
+
     /**
      * Draws the laid-out lines once, at [dx]/[dy] inside the bitmap.
      *
-     * [silhouette] is the shadow pass: the same glyphs and the same stroke, but flat in one colour
-     * so the copy reads as a shadow rather than as a second, offset subtitle. Null draws the real
-     * text: stroke in the outline colour, then the spans' own colours over it, which is the cheap
-     * universal legibility trick.
+     * [silhouette] is the shadow pass: the same glyphs and the same strokes, but flat in one
+     * colour so the copy reads as a shadow rather than as a second, offset subtitle. Null draws
+     * the real text: stroke in the outline colour, then the spans' own colours over it, which is
+     * the cheap universal legibility trick.
+     *
+     * The stroke is per SPAN. AWT has no per-run stroke attribute, so each run's stroke is drawn
+     * from the whole line's outline under a clip cut to that run's own columns. A line with one
+     * run skips the clip entirely, which is nearly every line.
      */
     private fun drawLines(
         g: Graphics2D,
-        lines: List<TextLayout>,
+        lines: List<Line>,
+        runs: List<StyleRun>,
         boxWidth: Int,
         alignment: CueAlignment,
         dx: Float,
         dy: Float,
-        outlineWidth: Float,
-        outlineColor: Int,
+        fontScale: Float,
         silhouette: Color?,
     ) {
         var baseline = dy
         for (line in lines) {
-            baseline += line.ascent
-            val x = alignedX(line.advance, boxWidth, alignment) + dx
-            if (outlineWidth > 0f || silhouette != null) {
-                val shape = line.getOutline(AffineTransform.getTranslateInstance(x.toDouble(), baseline.toDouble()))
-                if (outlineWidth > 0f) {
-                    g.color = silhouette ?: Color(outlineColor, true)
-                    g.stroke = BasicStroke(outlineWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
-                    g.draw(shape)
-                }
-                if (silhouette != null) {
-                    g.color = silhouette
-                    g.fill(shape)
-                }
+            baseline += line.layout.ascent
+            val x = alignedX(line.layout.advance, boxWidth, alignment) + dx
+            val shape = line.layout.getOutline(
+                AffineTransform.getTranslateInstance(x.toDouble(), baseline.toDouble()),
+            )
+            val onLine = runs.filter { it.start < line.end && it.end > line.start }
+            for (run in onLine) {
+                val stroke = run.style.outlineWidthPx * fontScale
+                if (stroke <= 0f) continue
+                val saved = g.clip
+                if (onLine.size > 1) g.clip(runClip(line, run, x, baseline, stroke))
+                g.color = silhouette ?: Color(run.style.outlineColor, true)
+                g.stroke = BasicStroke(stroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                g.draw(shape)
+                g.clip = saved
             }
-            if (silhouette == null) line.draw(g, x, baseline)
-            baseline += line.descent + line.leading
+            if (silhouette != null) {
+                g.color = silhouette
+                g.fill(shape)
+            } else {
+                line.layout.draw(g, x, baseline)
+            }
+            baseline += line.layout.descent + line.layout.leading
         }
+    }
+
+    /**
+     * The columns one span occupies on one line, tall enough that its stroke is not shaved off.
+     *
+     * Only the OUTER edges of the line grow sideways: between two spans the cut is exact, so
+     * neither one's stroke is painted twice over the other's.
+     */
+    private fun runClip(line: Line, run: StyleRun, x: Float, baseline: Float, stroke: Float): Rectangle2D {
+        val from = maxOf(run.start, line.start) - line.start
+        val to = minOf(run.end, line.end) - line.start
+        val span = line.layout.getLogicalHighlightShape(from, to).bounds2D
+        val left = if (from == 0) stroke else 0f
+        val right = if (to >= line.end - line.start) stroke else 0f
+        return Rectangle2D.Double(
+            x + span.minX - left,
+            (baseline - line.layout.ascent - stroke).toDouble(),
+            span.width + left + right,
+            (line.layout.ascent + line.layout.descent + 2 * stroke).toDouble(),
+        )
     }
 
     /**
      * AWT's own line breaker at [width], one measurer run per authored paragraph so an explicit
      * newline breaks exactly where the author put it and everything else breaks at the width.
      */
-    private fun breakInto(styled: AttributedString, whole: String, width: Int): List<TextLayout> {
-        val lines = mutableListOf<TextLayout>()
+    private fun breakInto(styled: AttributedString, whole: String, width: Int): List<Line> {
+        val lines = mutableListOf<Line>()
         val measurer = LineBreakMeasurer(styled.iterator, RENDER_CONTEXT)
         while (measurer.position < whole.length) {
             val newline = whole.indexOf('\n', measurer.position)
             val limit = if (newline < 0) whole.length else newline + 1
-            lines += measurer.nextLayout(width.toFloat(), limit, false) ?: break
+            val start = measurer.position
+            val layout = measurer.nextLayout(width.toFloat(), limit, false) ?: break
+            lines += Line(layout, start, measurer.position)
         }
         return lines
     }

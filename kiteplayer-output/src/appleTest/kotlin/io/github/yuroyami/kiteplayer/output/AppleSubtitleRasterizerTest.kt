@@ -135,6 +135,67 @@ class AppleSubtitleRasterizerTest {
         assertEquals(bottom.x, lifted.x, "and never touch the horizontal")
     }
 
+    // ── per-span size and outline, flattened to the first span until 2026-08-30 ─────────────
+
+    private fun spans(vararg parts: Pair<String, CueStyle>) = AppleSubtitleRasterizer().rasterize(
+        cues = listOf(
+            SubtitleCue.Text(
+                startMicros = 0,
+                endMicros = 1_000_000,
+                spans = parts.map { (text, style) -> StyledSpan(text, style) },
+                layout = CueLayout(alignment = CueAlignment.BottomCenter),
+            ),
+        ),
+        viewportWidth = 640,
+        viewportHeight = 360,
+        fontScale = 1f,
+    ).single()
+
+    @Test
+    fun eachSpanKeepsItsOwnSize() {
+        val mixed = spans("aa" to CueStyle(fontSizePx = 12f), "bb" to CueStyle(fontSizePx = 48f))
+        val bothSmall = spans("aa" to CueStyle(fontSizePx = 12f), "bb" to CueStyle(fontSizePx = 12f))
+        val bothBig = spans("aa" to CueStyle(fontSizePx = 48f), "bb" to CueStyle(fontSizePx = 48f))
+        assertEquals(bothBig.bitmap.height, mixed.bitmap.height, "the tallest span must set the line height")
+        assertTrue(
+            bothSmall.bitmap.height < mixed.bitmap.height,
+            "12px alone must be shorter (${bothSmall.bitmap.height} vs ${mixed.bitmap.height})",
+        )
+    }
+
+    @Test
+    fun twoSpansDrawTheirTwoOutlineColours() {
+        val image = spans(
+            "OO" to CueStyle(
+                fontSizePx = 96f,
+                primaryColor = 0xFF808080.toInt(),
+                outlineColor = 0xFF00FF00.toInt(),
+                outlineWidthPx = 4f,
+                shadowOffsetPx = 0f,
+            ),
+            "OO" to CueStyle(
+                fontSizePx = 96f,
+                primaryColor = 0xFF808080.toInt(),
+                outlineColor = 0xFF0000FF.toInt(),
+                outlineWidthPx = 4f,
+                shadowOffsetPx = 0f,
+            ),
+        )
+        var green = 0
+        var blue = 0
+        val pixels = image.bitmap.pixels
+        for (index in pixels.indices step 4) {
+            val r = pixels[index].toInt() and 0xFF
+            val g = pixels[index + 1].toInt() and 0xFF
+            val b = pixels[index + 2].toInt() and 0xFF
+            val a = pixels[index + 3].toInt() and 0xFF
+            if (a > 200 && g > 150 && r < 100 && b < 100) green++
+            if (a > 200 && b > 150 && r < 100 && g < 100) blue++
+        }
+        assertTrue(green > 20, "the first span's green outline is missing ($green pixels)")
+        assertTrue(blue > 20, "the second span's blue outline is missing ($blue pixels)")
+    }
+
     // ── the shadow pass, which this rasterizer ignored until 2026-08-30 ─────────────────────
 
     private fun shadowed(style: CueStyle) = AppleSubtitleRasterizer().rasterize(

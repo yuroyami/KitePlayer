@@ -346,10 +346,10 @@ class DesktopSubtitleRasterizerTest {
     }
 
     /*
-     * SOL-S7: the three arms below pin what CueStyle's KDoc now PROMISES, which is less than the
-     * type used to imply. They are contract tests, not aspiration tests. If one goes red because
-     * the feature was implemented, the KDoc table in SubtitleCue.kt is what needs updating; the
-     * assertion is only here so the documentation and the pixels cannot drift apart in silence.
+     * SOL-S7: the arms below pin what CueStyle's KDoc PROMISES per span. They are contract tests,
+     * not aspiration tests. If one goes red because the promise changed, the KDoc table in
+     * SubtitleCue.kt is what needs updating; the assertion is only here so the documentation and
+     * the pixels cannot drift apart in silence.
      */
 
     private fun spans(vararg parts: Pair<String, CueStyle>) = SubtitleCue.Text(
@@ -421,31 +421,73 @@ class DesktopSubtitleRasterizerTest {
     }
 
     @Test
-    fun `the first span's size wins for the whole cue`() {
-        val firstSmall = rasterize(
+    fun `each span keeps its own size`() {
+        val mixed = rasterize(
             spans("aa" to CueStyle(fontSizePx = 12f), "bb" to CueStyle(fontSizePx = 48f)),
         ).single()
         val bothSmall = rasterize(
             spans("aa" to CueStyle(fontSizePx = 12f), "bb" to CueStyle(fontSizePx = 12f)),
         ).single()
-        assertTrue(
-            firstSmall.bitmap.pixels.contentEquals(bothSmall.bitmap.pixels),
-            "the second span's 48px must be ignored, so these two cues must render identically",
+        val bothBig = rasterize(
+            spans("aa" to CueStyle(fontSizePx = 48f), "bb" to CueStyle(fontSizePx = 48f)),
+        ).single()
+        assertFalse(
+            mixed.bitmap.pixels.contentEquals(bothSmall.bitmap.pixels),
+            "the second span's 48px must not be flattened to the first span's 12px",
         )
+        // The tall span sets the line, so a cue holding one is as tall as a cue that is all
+        // that size; a cue of only small text is shorter.
+        assertEquals(bothBig.bitmap.height, mixed.bitmap.height, "the tallest span must set the line height")
+        assertTrue(bothSmall.bitmap.height < mixed.bitmap.height, "and 12px alone must be shorter")
     }
 
     @Test
-    fun `the first span's outline wins for the whole cue`() {
+    fun `each span keeps its own outline`() {
         val mixed = rasterize(
             spans("aa" to CueStyle(outlineWidthPx = 0f), "bb" to CueStyle(outlineWidthPx = 9f)),
         ).single()
         val uniform = rasterize(
             spans("aa" to CueStyle(outlineWidthPx = 0f), "bb" to CueStyle(outlineWidthPx = 0f)),
         ).single()
-        assertTrue(
+        assertFalse(
             mixed.bitmap.pixels.contentEquals(uniform.bitmap.pixels),
-            "the second span's outline must be ignored, so these two cues must render identically",
+            "the second span's 9px outline must draw, so these two cues must differ",
         )
+    }
+
+    @Test
+    fun `two spans draw their two outline colours`() {
+        val image = rasterize(
+            spans(
+                "OO" to CueStyle(
+                    fontSizePx = 96f,
+                    primaryColor = 0xFF808080.toInt(),
+                    outlineColor = 0xFF00FF00.toInt(),
+                    outlineWidthPx = 4f,
+                    shadowOffsetPx = 0f,
+                ),
+                "OO" to CueStyle(
+                    fontSizePx = 96f,
+                    primaryColor = 0xFF808080.toInt(),
+                    outlineColor = 0xFF0000FF.toInt(),
+                    outlineWidthPx = 4f,
+                    shadowOffsetPx = 0f,
+                ),
+            ),
+        ).single()
+        var green = 0
+        var blue = 0
+        val pixels = image.bitmap.pixels
+        for (index in pixels.indices step 4) {
+            val r = pixels[index].toInt() and 0xFF
+            val g = pixels[index + 1].toInt() and 0xFF
+            val b = pixels[index + 2].toInt() and 0xFF
+            val a = pixels[index + 3].toInt() and 0xFF
+            if (a > 200 && g > 150 && r < 100 && b < 100) green++
+            if (a > 200 && b > 150 && r < 100 && g < 100) blue++
+        }
+        assertTrue(green > 20, "the first span's green outline is missing ($green pixels)")
+        assertTrue(blue > 20, "the second span's blue outline is missing ($blue pixels)")
     }
 
     /** A cue that greedy-wraps onto two very uneven lines, which is what balancing is for. */

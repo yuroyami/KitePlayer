@@ -718,8 +718,15 @@ they drift.
   `kiteplayer.libass.root`, so `androidChainsReady` is false, no `buildLibassJni` task is even
   registered, and the NDK path cannot be exercised here at all. It wants a machine with the
   Android chains, like the C pass at the top of Phase 3.
-- [ ] The two unpublished optional modules (`kiteplayer-network`, `kiteplayer-libass`)
-  publish, or the README states their absence.
+The two unpublished optional modules are STATED rather than published (2026-08-30), which was
+the row's own second option and is the honest one for both. `kiteplayer-network` waits on the
+streaming work in Phase 7 settling its API; `kiteplayer-libass` needs a native chain a consumer
+cannot obtain, and it has no call sites outside its own tests yet. Both now have README rows
+saying so in as many words. Revisit `kiteplayer-network` when Phase 7 lands.
+
+Found while doing it: the README's `kiteplayer-subtitles` row still said "SubRip parsing and
+nothing else. No cue is timed, laid out or drawn, and it is not connected to playback", which
+had been wrong for a long time. Corrected in the same commit.
 - [ ] SOL-B8: the ordinary Android AAR publication, proven by a consumer smoke resolving it
   from a staging repo.
 

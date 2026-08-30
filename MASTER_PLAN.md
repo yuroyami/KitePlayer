@@ -225,6 +225,17 @@ the compose-ui and compose-interop JVM suites, the second of which only started 
 
 # PHASE 3: CORRECTNESS AND CONTRACTS (KiteFFmpeg first, republish, then adoption)
 
+> **Four rows below wait on ONE thing: new C entry points.** Checked 2026-08-30 rather than
+> assumed. `native/kitecodec-c` has no `swr_*` binding at all (so 3.4 cannot CONVERT audio), no
+> `av_codec_iterate` (3.10 cannot enumerate), no `ffkmp_stream_set_metadata`,
+> `ffkmp_stream_set_disposition` or any chapter WRITE (3.3 cannot carry identity through a remux),
+> and no `ffkmp_*vp9*` for wasm (3.7's last field). Each is a small C function; what makes them one
+> job is the tax around them: the signature baseline, the generated wasm binding and its CI mirror
+> check, the JNI wrapper, and a compile on all twelve target trees. A machine with one FFmpeg tree
+> can write them and cannot prove them, so they want one deliberate pass on a machine that can
+> build every target, not four separate half-verified ones.
+
+
 ### 3.2 KC-SPEC remainder: an encode still flattens colour, HDR and exact layout. Size L
 
 The collision half landed 2026-08-30: an option that duplicates a typed field is refused, naming

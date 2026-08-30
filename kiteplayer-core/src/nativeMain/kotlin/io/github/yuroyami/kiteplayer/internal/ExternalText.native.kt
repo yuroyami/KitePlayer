@@ -7,7 +7,7 @@ import platform.posix.fclose
 import platform.posix.fgetc
 import platform.posix.fopen
 
-internal actual fun readExternalTextOrNull(path: String): String? {
+internal actual fun readExternalBytesOrNull(path: String): ByteArray? {
     // fgetc and nothing else, deliberately. fseek, ftell and fread all speak platform-width
     // numbers (long, size_t), and this file compiles in the intermediate nativeMain source set,
     // which spans 32-bit watch targets beside the 64-bit world; the compiler rightly refuses
@@ -27,7 +27,7 @@ internal actual fun readExternalTextOrNull(path: String): String? {
             }
             buffer[length++] = value.toByte()
         }
-        return buffer.decodeToString(0, length)
+        return buffer.copyOf(length)
     } finally {
         fclose(file)
     }

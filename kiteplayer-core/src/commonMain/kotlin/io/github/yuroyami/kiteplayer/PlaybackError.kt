@@ -295,6 +295,30 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * An external subtitle file whose encoding had to be guessed, or could not be decoded properly.
+     *
+     * A byte-order mark or a file that validates as UTF-8 is a fact and says nothing. This fires
+     * when neither held: the text was read with [charset] on the balance of evidence, and it may be
+     * wrong. [detected] names an encoding the file appears to be in that this build cannot decode
+     * (the multi-byte East Asian ones), which is a different answer from "no idea" and worth
+     * telling apart.
+     *
+     * The track still loads. Imperfect subtitles beat absent ones, and an application that shows
+     * this can offer the viewer an override rather than leaving them with mojibake and no reason.
+     */
+    public data class SubtitleCharsetGuessed(
+        val uri: String,
+        val charset: String,
+        val detected: String? = null,
+    ) : PlaybackWarning() {
+        override val message: String get() = if (detected != null) {
+            "$uri looks like $detected, which this build cannot decode; read as $charset instead"
+        } else {
+            "$uri declares no encoding and is not UTF-8; read as $charset, which may be wrong"
+        }
+    }
+
+    /**
      * A control the engine could not honour, named so a fire-and-forget caller still finds out
      * (2026-08-17 audit, F-API1). The suspending form of the same member throws instead; this
      * warning is how the refusal reaches [KitePlayer.events] and the warning history when the

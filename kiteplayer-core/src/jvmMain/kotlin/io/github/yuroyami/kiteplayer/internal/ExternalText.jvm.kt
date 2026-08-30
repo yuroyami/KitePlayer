@@ -1,9 +1,9 @@
 package io.github.yuroyami.kiteplayer.internal
 
-internal actual fun readExternalTextOrNull(path: String): String? {
+internal actual fun readExternalBytesOrNull(path: String): ByteArray? {
     val file = java.io.File(path)
     if (!file.isFile || !file.canRead()) return null
-    return runCatching { file.readText() }.getOrNull()
+    return runCatching { file.readBytes() }.getOrNull()
 }
 
 internal actual val playerPlatformName: String = "jvm"

@@ -254,11 +254,24 @@ internal class PlaybackCore(
             ?: return ExternalSubtitleParse.Failed(
                 "this backend supplies no subtitle file parser, so external files cannot load",
             )
-        val text = readExternalTextOrNull(sourceFile.uri)
+        val bytes = readExternalBytesOrNull(sourceFile.uri)
             ?: return ExternalSubtitleParse.Failed(
                 "the external subtitle file could not be read: ${sourceFile.uri}",
             )
-        val trimmed = text.removePrefix("﻿")
+        // The encoding is decided from the bytes, not assumed. A file that needed a guess says so,
+        // because a viewer looking at mojibake can act on "I read this as windows-1252" and cannot
+        // act on silence.
+        val decoded = decodeSubtitleBytes(bytes, sourceFile.language)
+        if (!decoded.confident) {
+            warn(
+                PlaybackWarning.SubtitleCharsetGuessed(
+                    uri = sourceFile.uri,
+                    charset = decoded.charset,
+                    detected = decoded.unsupportedGuess,
+                ),
+            )
+        }
+        val trimmed = decoded.text.removePrefix("﻿")
         val isVtt = trimmed.startsWith("WEBVTT") || sourceFile.uri.endsWith(".vtt", ignoreCase = true)
         // The same self-announcement the backend's parser routes on: labelling every
         // non-VTT file SubRip told a track list that an ASS script was something it is not.

@@ -2819,6 +2819,27 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.StartupIncomplete.toString|toString(){}[0]
     }
 
+    final class SubtitleCharsetGuessed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed|null[0]
+        constructor <init>(kotlin/String, kotlin/String, kotlin/String? = ...) // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.<init>|<init>(kotlin.String;kotlin.String;kotlin.String?){}[0]
+
+        final val charset // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.charset|{}charset[0]
+            final fun <get-charset>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.charset.<get-charset>|<get-charset>(){}[0]
+        final val detected // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.detected|{}detected[0]
+            final fun <get-detected>(): kotlin/String? // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.detected.<get-detected>|<get-detected>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.message.<get-message>|<get-message>(){}[0]
+        final val uri // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.uri|{}uri[0]
+            final fun <get-uri>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.uri.<get-uri>|<get-uri>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.component2|component2(){}[0]
+        final fun component3(): kotlin/String? // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.component3|component3(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ..., kotlin/String? = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.copy|copy(kotlin.String;kotlin.String;kotlin.String?){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.SubtitleCharsetGuessed.toString|toString(){}[0]
+    }
+
     final class TonemappingUnavailable : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.TonemappingUnavailable.<init>|<init>(kotlin.String){}[0]
 

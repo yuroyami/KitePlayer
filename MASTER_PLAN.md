@@ -408,16 +408,24 @@ test arm pins that); interop tiers that never touch pixels emit nothing by const
 
 # PHASE 4: THE SUBTITLE PROGRAM
 
-### 4.1 Charset detection and conversion. Size M
+### 4.1 Charset remainder: the multi-byte East Asian encodings. Size M
 
-Every external subtitle is read as UTF-8 with only a BOM strip; Windows-1256, Shift-JIS,
-Big5, GBK, EUC-KR files render as replacement characters with no warning, on every platform.
-Decided: detection in common Kotlin (BOM, UTF-8 validation, small frequency heuristic we
-author; no new dependency), conversion via platform actuals (platform charset APIs;
-`TextDecoder` on wasm). Undetectable input warns typed and falls back.
+Landed 2026-08-30. Detection and the ten single-byte tables are pure common Kotlin, so the same
+file reads the same on all 21 targets. Arabic, Cyrillic, Greek, Hebrew, Turkish, Baltic and both
+Central and Western European subtitles decode; UTF-16 files decode at all for the first time.
 
-- [ ] RED: Windows-1256 / Shift-JIS / Big5 fixtures decode to their real text; garbage warns.
-  Commit: `Read the subtitle encodings the world actually uses`
+**The row's "conversion via platform actuals" was overturned, deliberately.** Kotlin/Native decodes
+UTF-8 and nothing else, and its actual here is ONE source set spanning `androidNativeArm32` (no
+iconv below API 28) through `mingwX64` (no iconv at all). The platforms that DO have decoders
+disagree with each other besides, Windows and Java differing on cp932 and cp950, so the row's own
+test (one fixture, every target) is unpassable with them. `TextDecoder` on wasm was moot from the
+start: that actual cannot read a local file and answers null.
+
+- [ ] Shift-JIS, Big5, GBK and EUC-KR. Detection already RECOGNIZES them from byte-pair shape and
+  names them in `SubtitleCharsetGuessed`, so a Japanese file is told what it is rather than called
+  undetectable; it just cannot decode one yet. When it lands it should land the same way, as
+  pure-Kotlin tables (about 155 KB together for all four), NOT as platform actuals. That size is
+  the decision to make, and it is a separate one from this row.
 
 ### 4.2 The FFmpeg subtitle-decoder bridge (bitmap subs). Size L, NEEDS-DESIGN
 

@@ -35,9 +35,14 @@ class WarningAuditTest {
         PlaybackWarning.OptionsUnused(listOf("x")),
         PlaybackWarning.CommandRefused("setSpeed", "x"),
         PlaybackWarning.ResourcesNotReleased("x"),
+        PlaybackWarning.SubtitleCharsetGuessed("subs.srt", "windows-1252"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.SubtitleCharsetGuessed -> listOf(
+            "PlaybackCore.parseExternalSubtitle, when an external subtitle file carries no " +
+                "byte-order mark and does not validate as UTF-8, so its encoding was inferred",
+        )
         is PlaybackWarning.RendererFailed -> listOf(
             "PlaybackCore.watchRendererEvents, on RendererEvent.Failed from the attached renderer",
         )

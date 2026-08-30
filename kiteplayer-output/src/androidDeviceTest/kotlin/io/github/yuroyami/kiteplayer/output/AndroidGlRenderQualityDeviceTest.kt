@@ -17,7 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * 17.21 RQ-1 to RQ-3 on the Android tier, in real pixels through a real GLES2 driver.
+ * The first three render-quality rungs on the Android tier, in real pixels through a real GLES2 driver.
  *
  * The Metal half of the ladder has had this from the start and the GLES2 half never did, which is
  * how two passes that compiled and did nothing survived review. Nothing here mocks GL: the driver
@@ -332,7 +332,7 @@ class AndroidGlRenderQualityDeviceTest {
     }
 
     /**
-     * RQ-2 and RQ-1 are one pass in practice, and this is the measurement that says so.
+     * Debanding and dithering are one pass in practice, and this is the measurement that says so.
      *
      * Debanding a one-step band produces values BETWEEN two 8-bit levels, and an 8-bit target
      * cannot hold one. Most of that smoothing is therefore thrown away at the write unless

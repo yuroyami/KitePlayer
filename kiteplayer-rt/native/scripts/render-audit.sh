@@ -55,7 +55,7 @@ SHIPPED_FLAGS="-O2 -std=c11 -fvisibility=hidden -fPIC -Wall -Wextra -Werror -Wer
 # this sub-phase: an allowlist without it would fail a correct build. The unit is deliberately built
 # WITHOUT -fno-builtin-memcpy and -fno-builtin-memset, exactly as the plan says, so that these calls
 # stay visible as calls instead of being expanded into something the audit cannot see.
-# W-17: the leading underscore is Mach-O's, not C's. ELF spells the same symbol without it, so the
+# The leading underscore is Mach-O's, not C's. ELF spells the same symbol without it, so the
 # lists below are written in the SOURCE spelling and given the format's prefix at use. On Mach-O
 # that reproduces exactly what this file said before, character for character.
 SYMBOL_PREFIX="_"

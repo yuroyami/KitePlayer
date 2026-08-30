@@ -17,7 +17,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * The renderer's OWNERSHIP contract, which is the half a browser cannot check for us (17.14 X-11).
+ * The renderer's OWNERSHIP contract, which is the half a browser cannot check for us.
  *
  * Rule 2 of `VideoRenderer` says the renderer owns the frame from the moment `present` is called,
  * INCLUDING when it fails, and closes it exactly once. That rule is why this file exists: `present`
@@ -31,7 +31,7 @@ import kotlin.test.assertTrue
  * path; in a browser those globals are real, so the same call draws. Refusal is where ownership
  * bugs hide, which is why most of this file lives there, but the ownership rule is the same on both
  * sides and is asserted on both. Nothing here claims a PIXEL was correct: that needs a real browser
- * comparison and belongs to X-14.
+ * comparison and belongs to the conformance run in a real browser.
  */
 class WebCanvasVideoRendererTest {
 
@@ -201,7 +201,7 @@ private external fun stageIsBuildable(): Boolean
  *
  * Enough for the renderer to build its state and reach the paths above. It deliberately does NOT
  * fake `OffscreenCanvas` or `document`: those are global, faking them would make this test claim a
- * drawing path it cannot actually verify, and the drawing itself is X-14's job in a real browser.
+ * drawing path it cannot actually verify, and the drawing itself belongs to a real browser.
  */
 @JsFun(
     """() => {

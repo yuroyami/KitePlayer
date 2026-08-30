@@ -35,7 +35,7 @@ class ExternalSubtitleTest {
     }
 
     /**
-     * KP-P1-20. `selectImmediately` promises selection unconditionally, and used to be honoured
+     * `selectImmediately` promises selection unconditionally, and used to be honoured
      * only when the container happened to carry no subtitle stream of its own: with one present the
      * flag was silently ignored and the viewer got the container's subtitles instead of the file
      * they asked for.
@@ -76,7 +76,7 @@ class ExternalSubtitleTest {
     }
 
     /**
-     * The other half of KP-P1-20, and the regression the fix could have introduced: deciding to
+     * The other half, and the regression the fix could have introduced: deciding to
      * skip the container's subtitle stream BEFORE knowing whether the flagged file loads would
      * leave a viewer with no subtitles at all when it does not.
      */
@@ -277,7 +277,7 @@ class ExternalSubtitleTest {
     )
 
     /**
-     * KP-P1-02. Red by completing the caller's reply in `addExternalSubtitle` at the moment the
+     * Red by completing the caller's reply in `addExternalSubtitle` at the moment the
      * file parses, instead of chaining it to the selection: the id then comes back while the
      * container's own subtitles are still the selected ones.
      */

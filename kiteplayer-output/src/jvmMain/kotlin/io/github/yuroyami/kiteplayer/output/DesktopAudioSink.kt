@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 
 /**
  * The desktop JVM audio output: one `javax.sound.sampled.SourceDataLine` behind the engine's pull
- * contract (register item W-04, decision W-D2).
+ * contract.
  *
  * `SourceDataLine` is a PUSH device while the engine exposes a PULL callback that owns the audio
  * clock anchor. The adaptation is the one wrapper the `AudioSink` KDoc names for push platforms:
@@ -79,7 +79,7 @@ public class DesktopAudioSink internal constructor(
     private var writerFailed = false
 
     /**
-     * SOL-A3, the desktop half. `getLongFramePosition()` is ALREADY 64 bit: at 48 kHz it needs
+     * The desktop half. `getLongFramePosition()` is ALREADY 64 bit: at 48 kHz it needs
      * about six million years to overflow, so the 32-bit wrap extension the Android sink carries
      * has nothing to extend here and copying it would be strictly harmful (it would fold a real
      * position past 2^32 back to a small one and invent a queue that is not there).
@@ -377,7 +377,7 @@ public class DesktopAudioSink internal constructor(
                 }
                 if (!writerRun) break /* stop, pause or close interrupted the blocking write */
                 /* Zero or negative with the writer still live is a device failure, never a busy
-                 * loop. SOL-A2: a dead line marks the machine FAILED and drops writerRun, so the
+                 * loop. A dead line marks the machine FAILED and drops writerRun, so the
                  * sink is startable again (start recovers) instead of wedged behind a true
                  * writerRun with no writer. State BEFORE the event: the event is what wakes a
                  * listener that immediately calls start, and start must see the failure. */

@@ -393,7 +393,7 @@ fragment float4 kp_picture(
          * a quarter of a chroma texel right, which shows as a coloured seam on hard vertical edges.
          * The shift is applied to the chroma coordinate only, and only when debanding is on: it is
          * part of the same correctness rung and must not move pixels in a build that asked for
-         * nothing (17.21 RQ-2). */
+         * nothing. */
         float2 chromaCoord = in.texcoord;
         if ((q.flags & 2) != 0) {
             chromaCoord.x -= q.lumaTexelX * 0.5;
@@ -616,8 +616,7 @@ internal class MetalColorUniforms private constructor(
 }
 
 /**
- * The compiled shader library and both pipeline states, shared per device and target format
- * (17.11 SOL-P7).
+ * The compiled shader library and both pipeline states, shared per device and target format.
  *
  * These are immutable and owned by the Metal device, so one set serves every composer on it. They
  * are never released: a device outlives every renderer built on it, and the old per-composer
@@ -678,7 +677,7 @@ private fun MTLDeviceProtocol.makePipeline(
         attachment.blendingEnabled = true
         // Overlay pixels arrive PREMULTIPLIED (the RgbaBitmap contract, unified 2026-08-17),
         // so the source RGB factor is One: multiplying by source alpha again darkened every
-        // antialiased edge and translucent cue (audit F-ALPHA1's Metal half).
+        // antialiased edge and translucent cue, which is the Metal half of the alpha contract.
         attachment.sourceRGBBlendFactor = MTLBlendFactorOne
         attachment.destinationRGBBlendFactor = MTLBlendFactorOneMinusSourceAlpha
         attachment.sourceAlphaBlendFactor = MTLBlendFactorOne

@@ -8,7 +8,7 @@ import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
 
 /**
- * The web cannot block, so this stages the source instead of parking a thread (17.14 X-09).
+ * The web cannot block, so this stages the source instead of parking a thread.
  *
  * Every other target bridges the engine's suspending [MediaIo] onto KiteFFmpeg's synchronous
  * [MediaByteSource] with `runBlocking`, which parks the demux worker and nothing else. A browser
@@ -21,7 +21,7 @@ import kotlin.coroutines.intrinsics.startCoroutineUninterceptedOrReturn
  * genuinely needs to await bytes is REFUSED here, loudly, rather than served by a busy-wait that
  * would freeze the page.
  *
- * The general fix is the Worker of X-08, where blocking IS legal, and at that point this class
+ * The general fix is a Worker, where blocking IS legal, and at that point this class
  * becomes the blocking bridge again.
  */
 internal actual class BlockingMediaIo actual constructor(
@@ -66,7 +66,7 @@ internal actual class BlockingMediaIo actual constructor(
  * immediately and a network-backed one does not. The continuation is only reached if the body
  * completes asynchronously, and that counts as suspended too, so its result is discarded.
  *
- * KNOWN LIMIT, and it belongs to whoever takes X-08. A suspended body is NOT cancelled: it keeps
+ * KNOWN LIMIT, and it belongs to whoever writes that Worker. A suspended body is NOT cancelled: it keeps
  * running after the caller has already thrown, and its eventual resume writes into the caller's
  * `ByteArray` or moves the source position. That is harmless for every source this backend accepts,
  * because those never suspend, and it is exactly the hazard a Worker implementation must not

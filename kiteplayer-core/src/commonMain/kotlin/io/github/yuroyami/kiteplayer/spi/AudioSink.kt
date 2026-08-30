@@ -30,7 +30,7 @@ public interface AudioSink : AutoCloseable {
      * handed would play correctly while the caller believed its callback was being called. Those
      * sinks say so by implementing `NativeRingAudioSink`, which exists only in the native source set
      * and hands back a C ring instead of taking a callback, and the engine calls that entry point
-     * instead. `CoreAudioSink` is one of them, since B1.8 and register item B1-17. Every other sink,
+     * instead. `CoreAudioSink` is one of them. Every other sink,
      * including every test fake and every push-model sink, is opened here and works exactly as before.
      *
      * @param request what the engine would like.
@@ -115,7 +115,7 @@ public interface AudioSinkFactory {
  *
  * An earlier version of this note said the ring is read "with a try-lock, and on contention writes
  * silence". That was never true of any ring in this library: `KotlinAudioRing` takes no lock at all.
- * What it does instead is worse in one specific place and is register item B1-16: while publishing the
+ * What it does instead is worse in one specific place: while publishing the
  * clock anchor, the real-time thread reads a sequence counter the feeder writes, and it retries with
  * no bound if it catches the feeder mid-update. That is a priority inversion on a real-time thread,
  * and it is why the shipped macOS path no longer goes through this interface at all: `CoreAudioSink`
@@ -128,7 +128,7 @@ public interface AudioSinkFactory {
  *
  * @return frames written, counted from the start of the buffer. Fewer than [frames] means the
  *         remainder is silence, and writing that silence is the sink's own obligation. That is
- *         stated rather than implied because B1-19 moved the engine's silence fill into
+ *         stated rather than implied because the engine's silence fill moved into
  *         `kprt_ring_render`, which is the C path and is not this one: on this path nothing above the
  *         sink zeroes the tail, and an unwritten device buffer plays whatever was left in it.
  *         [AudioSinkBuffer.writeSilence] is what a sink writes it with.

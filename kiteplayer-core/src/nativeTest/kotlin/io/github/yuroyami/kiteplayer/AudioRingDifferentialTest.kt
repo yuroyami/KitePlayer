@@ -1,5 +1,5 @@
 // The oracle calls one cinterop function directly, `kprt_frames_to_micros`, to compare the two
-// implementations of the B1-18 rescale across the seam.
+// implementations of the frame-to-microsecond rescale across the seam.
 @file:OptIn(ExperimentalForeignApi::class)
 
 package io.github.yuroyami.kiteplayer
@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
  * managed Kotlin on its first instruction and becomes a mutator the collector has to stop at a
  * safepoint. Neither can be deleted: `commonMain` targets js and wasmJs, which
  * can never contain C, and the Kotlin ring is the only oracle the C ring can be checked against. That
- * is register item B1-20, and the consequence is that two implementations of one contract exist
+ * is deliberate, and the consequence is that two implementations of one contract exist
  * permanently. This file is the only thing that stops them drifting apart.
  *
  * ### What "compared exactly" means here, clause by clause
@@ -49,7 +49,7 @@ import kotlin.test.assertTrue
  *
  * `segment_giveups` and `anchor_giveups` must both stay zero. The C ring is allowed to answer a torn
  * seqlock read with a stale reading rather than by spinning, which is how it fixes register item
- * B1-16, and that freedom is exercised on purpose by `kiteplayer-rt/native/tests/test_ring_bounded.c`
+ * deliberate, and that freedom is exercised on purpose by `kiteplayer-rt/native/tests/test_ring_bounded.c`
  * with a second thread. Here everything is single threaded, so a non-zero count would mean the C ring
  * agreed with the Kotlin ring by way of a degraded path, which is agreement that proves nothing.
  *
@@ -641,7 +641,7 @@ class AudioRingDifferentialTest {
 
     @Test
     fun `the rescale agrees between the two implementations at the overflow vectors`() {
-        // Register item B1-18, checked across the seam. Both rings date frames through the same split
+        // The rescale, checked across the seam. Both rings date frames through the same split
         // rescale, one written in Kotlin and one in C, and the whole reason both were corrected in the
         // same sub-phase is so this comparison is between two correct answers rather than two matching
         // wrong ones. A frame delta this large cannot be reached through either ring's own API, so it

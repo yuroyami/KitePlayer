@@ -35,14 +35,14 @@ struct kprt_sink {
     int32_t channels;
     /* The speaker order the device ACCEPTED, as a native-order mask, or 0 when it refused one.
      * Reported to the caller so a downmix keys on an order that is really in force rather than on
-     * one that was merely asked for (audit 15.3.3). */
+     * one that was merely asked for. */
     int64_t channel_layout_mask;
     _Atomic int32_t device_buffer_frames;
 
     /* The device clock's tick-to-nanosecond ratio, read once at create.
      *
      * A RATIO rather than a platform type, and that is what makes the field portable (phase W,
-     * register item W-08). Apple fills it from `mach_timebase_info`. A Linux backend would fill it
+     * a Linux backend). Apple fills it from `mach_timebase_info`. A Linux backend would fill it
      * 1 over 1, because `clock_gettime(CLOCK_MONOTONIC)` already counts nanoseconds. A Windows one
      * would fill it 1000000000 over `QueryPerformanceFrequency`. `kprt_sink_ticks_to_nanos` needs
      * nothing else from any of them, so a new backend brings its clock and no new arithmetic.
@@ -84,7 +84,7 @@ struct kprt_sink {
     /* ---- Owner-thread lifecycle, plus the two fields other threads may read. ----
      *
      * `running` is read by the stats path concurrently with start/stop, so it is
-     * atomic (relaxed: a boolean snapshot needs no ordering). SOL-A4: the device period is
+     * atomic (relaxed: a boolean snapshot needs no ordering). The device period is
      * re-queried on start and updated by the format-change listener on CoreAudio's own
      * notification thread, so it lives in `device_buffer_frames` above as an atomic too. */
     _Atomic int32_t running;

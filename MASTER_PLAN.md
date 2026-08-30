@@ -397,7 +397,7 @@ than `(B1-17)`. Two capitalization traps, both caught in preview rather than in 
 camelCase identifier must not be capitalized (`mavenLocal`, `getLongFramePosition`) and neither
 must a one-letter name followed by `=` (`r="-1"`).
 
-- [ ] Rewrite the remaining 222 codes in KitePlayer plus KiteFFmpeg's own. The mechanical shapes are gone; what is left is
+- [ ] Rewrite the remaining 153 codes in KitePlayer plus KiteFFmpeg's own. The mechanical shapes are gone; what is left is
   load-bearing prose ("the interlude ported this to KiteFFmpeg", "register row P0-14 says"), where
   the code is the SUBJECT and the sentence has to be rewritten rather than trimmed. Largest are
   KiteFFmpeg's `ci.yml` (18) and `build.gradle.kts` (11), whose header comments narrate the

@@ -166,7 +166,7 @@ class EngineAuditRegressionTest {
     }
 
     // A pass-through with UNEQUAL channel counts must still run the mixer's frame-wise
-    // restride. The SOL-P2 alias keyed on isPassThrough and handed a 3-channel interleave to a
+    // restride. The zero-copy alias keyed on isPassThrough and handed a 3-channel interleave to a
     // stereo consumer untouched: every sample on the wrong speaker at the wrong time.
     @Test
     fun `an unmodelled channel layout is restrided to the target count not aliased`() {
@@ -199,7 +199,7 @@ class EngineAuditRegressionTest {
         val pipeline = AudioPipeline(format, format, onWarning = {})
         val input = FloatArray(8) { 0.25f }
         pipeline.process(input, 4)
-        assertTrue(pipeline.output === input, "SOL-P2's zero-copy contract holds for the identity pair")
+        assertTrue(pipeline.output === input, "the zero-copy contract holds for the identity pair")
     }
 
     // A pipeline rebuilt mid-stream must inherit the applied gain, not restart at
@@ -247,7 +247,7 @@ class EngineAuditRegressionTest {
         )
         harness.close()
     }
-    // F-WRN1, the last of the four with no pin. FrameDropping was the same kind of defect as
+    // The last of the four with no pin. FrameDropping was the same kind of defect as
     // AudioUnderrun above: a documented public type that nothing could be shown to raise. The
     // condition is a display too slow for the media, so the renderer here takes five frame periods
     // to present one, which is what makes the schedule run late enough to start dropping.

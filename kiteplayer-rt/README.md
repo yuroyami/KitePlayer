@@ -3,7 +3,7 @@
 The real-time audio core, in C. One allocation at create, no lock anywhere, and no managed code on
 the device's thread.
 
-This module exists for one reason, and it is register item B1-17 in `MASTER_PLAN.md`. Until B1.8 the macOS
+This module exists for one reason. The macOS
 render callback was a Kotlin lambda whose first instruction was
 `refCon.asStableRef<CoreAudioSink>().get()`. That made the device's real-time thread a Kotlin mutator
 that the garbage collector has to stop at a safepoint. Thirteen long-lived objects, fourteen atomic
@@ -23,7 +23,7 @@ a pause nobody had bounded. So the callback, the AudioUnit and the sample ring m
 | `native/src/kite_rt_ring_internal.h`, `kite_rt_sink_internal.h` | The private layouts. Not in `include/`, so Kotlin gets opaque pointers with no field and no size. |
 | `native/tests/*.c` | Eight suites, 132 cases, table driven, one line per case. |
 | `native/tests/interpose_alloc.c` | The allocation interposer, through the Mach-O `__DATA,__interpose` section. |
-| `native/scripts/build-host.sh` | Builds the host test binaries for one variant. No make, no cmake, no ninja: register item B1-15. |
+| `native/scripts/build-host.sh` | Builds the host test binaries for one variant. No make, no cmake, no ninja. |
 | `native/scripts/run-c-tests.sh` | Runs the eight suites in one of four modes. |
 | `native/scripts/render-audit.sh` | The symbol and instruction audit of both real-time objects in the macOS and two gated iOS archives. Assertion 1 of B1.8. |
 | `native/scripts/source-discipline.sh` | The eighteen ordering decisions no runtime instrument fully covers. Level 4, and it says so. |
@@ -94,7 +94,7 @@ report may present a weaker instrument here as a stronger one.
 
 ## The two implementations of one ring, permanently
 
-`KotlinAudioRing` in `kiteplayer-core` is not going away, and this is register item B1-20.
+`KotlinAudioRing` in `kiteplayer-core` is not going away.
 `commonMain` targets js and wasmJs, which can never contain C, and the Kotlin ring is the only oracle
 the C ring can be checked against. So on macOS the eighteen `AudioRingTest` cases no longer cover the
 shipped path. What covers it is the eight C suites plus the differential oracle at

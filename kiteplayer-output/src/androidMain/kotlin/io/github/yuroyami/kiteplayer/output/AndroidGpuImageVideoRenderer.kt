@@ -1127,7 +1127,7 @@ internal class GlState private constructor(
                     c.rgb = clamp(uColorMatrix * c.rgb + uColorOffset, 0.0, 1.0);
                 }
                 /* Last, and only when asked: one output step of centred ordered noise, the same
-                 * amplitude and the same centring law as the Metal path (17.21 RQ-1). Zero is the
+                 * amplitude and the same centring law as the Metal path. Zero is the
                  * pre-17.21 write, bit for bit. */
                 if (uDitherStep > 0.0) {
                     float pattern = (kpBayer8(gl_FragCoord.xy) + 0.5) / 64.0 - 0.5;
@@ -1232,7 +1232,7 @@ internal class GlState private constructor(
                  * dithering stage: the driver may perturb the fragment on its way into the
                  * framebuffer with a pattern of its own. It shows on nothing here (the device
                  * test's Bayer readback is identical either way on the emulator's driver), and
-                 * that is exactly why it is turned off rather than left alone: RQ-1 writes values
+                 * that is exactly why it is turned off rather than left alone: dithering writes values
                  * that deliberately sit BETWEEN two levels, which is the one case a driver that
                  * does dither would land on top of. One ordered pattern in the picture, ours. */
                 GLES20.glDisable(GLES20.GL_DITHER)
@@ -1603,7 +1603,7 @@ internal fun physicalGpuViewport(width: Int, height: Int, scale: Float): GpuView
  * The buffer never grows past the source unless [allowUpscale] says otherwise, because enlarging
  * here would spend memory on pixels the drawing step can invent just as well. [allowUpscale] is
  * what a requested kernel sets, and only that: on Android the drawing step CANNOT invent them any
- * better, so the enlargement has to happen where the kernel is (17.21 RQ-3).
+ * better, so the enlargement has to happen where the kernel is.
  */
 internal fun fittedGpuOutputSize(
     sourceSize: VideoSize,

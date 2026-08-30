@@ -96,7 +96,7 @@ public class AppKitWindow(
         if (useMetalLayer) {
             // A layer-hosted view whose backing layer IS the CAMetalLayer. The drawable is sized
             // in physical pixels, so a Retina window is not half resolution, and the host view
-            // re-sizes it on every live resize and backing-scale change (17.11 SOL-R12).
+            // re-sizes it on every live resize and backing-scale change.
             val layer = platform.QuartzCore.CAMetalLayer()
             val scale = window.screen?.backingScaleFactor ?: 2.0
             layer.contentsScale = scale
@@ -156,7 +156,7 @@ public class AppKitWindow(
 }
 
 /**
- * The drawable size a Metal layer of [width] by [height] points needs at [scale] (17.11 SOL-R12).
+ * The drawable size a Metal layer of [width] by [height] points needs at [scale].
  *
  * A drawable is measured in physical pixels and never rounds to zero: a window dragged to nothing
  * would otherwise ask Metal for a texture it refuses to make.
@@ -170,7 +170,7 @@ internal fun metalDrawableSize(width: Double, height: Double, scale: Double): CV
  *
  * A [platform.QuartzCore.CAMetalLayer] does not resize its own drawable, so without these two
  * callbacks a resized window drew a stale-sized picture that AppKit then scaled, and a window
- * dragged onto a display with another backing scale stayed at the old one (17.11 SOL-R12).
+ * dragged onto a display with another backing scale stayed at the old one.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal class MetalHostView(

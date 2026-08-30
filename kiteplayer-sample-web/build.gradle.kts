@@ -5,7 +5,7 @@ plugins {
 }
 
 /*
- * The KV-6 stop gate for S6 (17.14 X-01). One page, no player, no codec: a synthetic 1080p
+ * The web stop gate. One page, no player, no codec: a synthetic 1080p
  * yuv420p frame converted to RGBA with the same arithmetic Conversions.kt uses, built into a Skia
  * image and drawn through Compose, timed per frame.
  *
@@ -19,9 +19,9 @@ kotlin {
 
     sourceSets {
         wasmJsMain.dependencies {
-            // The real web backend (17.14 X-07), not the placeholder.
+            // The real web backend, not the placeholder.
             implementation(libs.kiteffmpeg.core)
-            // The whole player stack, to prove the web defaults resolve (17.14 X-12).
+            // The whole player stack, to prove the web defaults resolve.
             implementation(project(":kiteplayer-mobile"))
             implementation(compose.runtime)
             implementation(compose.ui)

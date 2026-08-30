@@ -95,7 +95,7 @@ private class FakeAudioTrackDriver(
                 while (!interrupted) writeGate.wait()
             }
             /* The platform returns what it wrote before the interrupt: zero is legal, and so
-             * is a short POSITIVE count, which is the audit F-AUD1 shape. */
+             * is a short POSITIVE count. */
             if (interruptWriteResult > 0) {
                 val take = interruptWriteResult.coerceAtMost(sizeFloats)
                 synchronized(writtenFloats) {
@@ -167,7 +167,7 @@ class AudioTrackSinkTest {
         s.close()
         val s2 = sink(FakeAudioTrackDriver())
         val surround = s2.open(AudioFormat(44_100, 6, SampleFormat.F32)) { _, _, _ -> 0 }
-        assertEquals(6, surround.channels, "5.1 passes through since SOL-A6; only unmapped counts fall to stereo")
+        assertEquals(6, surround.channels, "5.1 passes through; only unmapped counts fall to stereo")
         s2.close()
     }
 
@@ -291,7 +291,7 @@ class AudioTrackSinkTest {
         s.start()
         withTimeout(5_000) { lost.await() }
 
-        s.start() /* SOL-A2's recovery arm */
+        s.start() /* the recovery arm */
         withTimeout(5_000) {
             while (drivers.size < 2 || synchronized(drivers[1].calls) { drivers[1].calls.none { it == "write" } }) {
                 Thread.sleep(1)

@@ -28,7 +28,7 @@ public object SubRipParser {
 
     /**
      * A cue whose end does not follow its start would otherwise never display: the selector
-     * requires the time to sit strictly before the end (17.11 SOL-S4). The parser resolves it
+     * requires the time to sit strictly before the end. The parser resolves it
      * against the next cue's start, or holds it for this documented default when no cue follows.
      */
     public const val OPEN_CUE_DEFAULT_MICROS: Long = 3_000_000
@@ -78,7 +78,7 @@ public object SubRipParser {
         }
 
         val sorted = cues.sortedBy { it.startMicros }
-        // The open-end resolution (17.11 SOL-S4): a clamped backwards or zero-length cue closes
+        // The open-end resolution: a clamped backwards or zero-length cue closes
         // at the NEXT cue's start, or after the documented default when nothing follows.
         return sorted.mapIndexed { index, cue ->
             if (cue.endMicros > cue.startMicros) {
@@ -102,7 +102,7 @@ public object SubRipParser {
 
 /**
  * The four entities every subtitle file in the wild actually uses, decoded on each span's TEXT
- * after markup parsing (17.11 SOL-S6): decoding first turns escaped markup into real tags. An author's
+ * after markup parsing: decoding first turns escaped markup into real tags. An author's
  * literal `&amp;lt;` would double-decode.
  */
 internal fun List<StyledSpan>.decodeSpanEntities(): List<StyledSpan> = map { span ->

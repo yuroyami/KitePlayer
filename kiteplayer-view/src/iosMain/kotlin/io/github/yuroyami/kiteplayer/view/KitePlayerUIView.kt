@@ -53,7 +53,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
 
     /**
      * Which of the two layers the NEWEST renderer generation drew into, or null before the first
-     * one (17.11 SOL-R9). Kept past that generation's close, because both layers hold their last
+     * one. Kept past that generation's close, because both layers hold their last
      * content on the glass; it is the visible layer, and the one [hasPicture] answers about.
      */
     private var showingMetal: Boolean? = null
@@ -76,7 +76,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         createRenderer = {
             val useMetal = preferMetal
             rendererFactory?.create(videoLayer, metalLayer, useMetal)?.also {
-                // 17.11 SOL-R9: exactly one layer is on the glass. Both stayed visible before,
+                // Exactly one layer is on the glass. Both stayed visible before,
                 // with the Metal layer on top, so its last drawable covered every CG frame a
                 // fallback generation delivered afterwards.
                 showingMetal = useMetal
@@ -139,7 +139,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
      * delivered contents; a CAMetalLayer keeps its last presented drawable on the glass the
      * same way. Presentation evidence, not playback state.
      *
-     * 17.11 SOL-R9: the answer is about the layer the newest generation chose, never about the
+     * The answer is about the layer the newest generation chose, never about the
      * cumulative frame count, which mixes generations that drew into the other layer entirely.
      */
     public val hasPicture: Boolean
@@ -157,7 +157,7 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         backgroundColor = UIColor.blackColor
         layer.addSublayer(videoLayer)
         layer.addSublayer(metalLayer)
-        // Neither layer shows anything until a renderer generation claims one (17.11 SOL-R9).
+        // Neither layer shows anything until a renderer generation claims one.
         videoLayer.hidden = true
         metalLayer.hidden = true
     }

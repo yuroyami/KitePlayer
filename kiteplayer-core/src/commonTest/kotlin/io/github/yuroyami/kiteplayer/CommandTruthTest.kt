@@ -17,7 +17,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The commands say what really happened (the 2026-08-18 audit's KP-P1-01 to KP-P1-09 and KP-P1-21).
+ * The commands say what really happened.
  *
  * Every case here is one shape of the same defect: a call that reported success for something that
  * did not happen, or a diagnostic that reported a number that was not true. They are grouped

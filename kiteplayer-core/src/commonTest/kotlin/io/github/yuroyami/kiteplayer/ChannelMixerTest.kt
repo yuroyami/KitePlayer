@@ -19,7 +19,7 @@ private const val TOLERANCE: Float = 1e-6f
  *
  * The impulse cases below are the ITU matrix written out by hand, so they are checked against the
  * matrix itself rather than against the matrix plus a policy. What the DEFAULT policy then does to
- * those coefficients has its own tests further down (audit 15.3.2).
+ * those coefficients has its own tests further down.
  */
 private val RAW = DownmixConfig(normalize = false, includeLfe = true)
 
@@ -57,7 +57,7 @@ private class LayoutCase(val layout: MixLayout, val expected: List<Pair<Float, F
  */
 class ChannelMixerTest {
 
-    // ── The fold to a smaller surround target (SOL-P8 remainder). ──────────────────
+    // ── The fold to a smaller surround target. ─────────────────────────────────────
 
     @Test
     fun `seven point one folds into five point one instead of truncating the sides away`() {
@@ -316,7 +316,7 @@ class ChannelMixerTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The policy the default applies to those coefficients (audit 15.3.2).
+    // The policy the default applies to those coefficients.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -391,7 +391,7 @@ class ChannelMixerTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // Equal counts, different speakers (audit 15.3.4).
+    // Equal counts, different speakers.
     // ---------------------------------------------------------------------------------------------
 
     /**

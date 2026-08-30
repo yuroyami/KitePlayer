@@ -10,12 +10,12 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
  *
  * There are two implementations of this contract and there always will be. [KotlinAudioRing] is the
  * portable one; `NativeAudioRing`, in `nativeMain`, is a thin wrapper over the C ring in
- * `kiteplayer-rt`. The reason for the second is register item B1-17: on macOS the device's real-time
+ * `kiteplayer-rt`. The reason for the second: on macOS the device's real-time
  * callback enters managed Kotlin on its first instruction and becomes a mutator the garbage
  * collector has to stop at a safepoint, and the only way out is a callback that never leaves C,
  * which needs a ring that lives in C.
  *
- * The reason the first cannot be deleted, ever, is register item B1-20. `kiteplayer-core`'s
+ * The reason the first cannot be deleted, ever, is targets. `kiteplayer-core`'s
  * `commonMain` targets js and wasmJs, which can never contain C. It cannot become an `expect class`
  * either, because that would remove the portable implementation from the native targets, and the
  * portable implementation is the only oracle the C ring can be checked against. So two
@@ -92,7 +92,7 @@ internal data class AudioAnchor(val pts: Pts, val audibleAtNanos: Long)
  *
  * ### Why this is a function and not an expression
  *
- * Register item B1-18. Both places that dated a frame in the ring used to compute
+ * Both places that dated a frame in the ring used to compute
  * `frames * 1_000_000L / sampleRate`, which overflows a signed 64 bit intermediate once the frame
  * delta passes about 9.2e12. It is the same shape MASTER_PLAN.md records against KiteFFmpeg's
  * timestamp helpers as defect D9: latent at ordinary session lengths and wrong at long ones. Writing

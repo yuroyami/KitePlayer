@@ -147,6 +147,10 @@ Never move one silently.
   its own and failed inside a full gate run, reporting that a publishing module depended on the
   SAMPLE, which no build file says. Only `api`, `implementation`, `compileOnly` and `runtimeOnly`,
   plain or source-set prefixed, can reach a POM; read those and nothing else.
+- **`run-c-tests.sh` never builds, so on its own it proves nothing about a source change.** It
+  says so in its own header and it is still easy to miss: change a C file, run the suites, watch
+  eight greens, and be looking at yesterday's binaries. `build-host.sh <variant>` first, every
+  time. Nearly reported a clean run over a change that had not been compiled, 2026-08-30.
 - **A no-replay SharedFlow drops what it emits before anyone subscribes.** Every renderer's
   `events` is `MutableSharedFlow(replay = 0)`, so a test that launches a collector and then makes
   the renderer emit is racing its own subscription. It passes on a quiet machine and times out

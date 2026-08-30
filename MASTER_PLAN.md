@@ -862,8 +862,8 @@ it.
   ratchet (surface grows, claims 1.0 forever); the fuzz rule (every new string-parsing entry
   point gets a target; two public-reachable ones have none: `ffkmp_fmt_alloc_output2`'s
   format and the three raw `*_by_name` lookups); split `test_convert.c` contract vs baseline
-  counts; derive C suite lists from files on disk (six hardcoded literals; a suite added to
-  build and not to run is compiled and never run, green); the ring write asymmetry + two
+  counts; (the C suite lists are DONE: both KiteFFmpeg scripts read `tests/*.c` since
+  2026-08-30, so adding a suite is adding the file); the ring write asymmetry + two
   dead accessors + the misattached ring KDoc; the four early returns in the device callback
   that skip zeroing and the OutputIsSilence flag; teardown defence with a mock AudioUnit;
   the two forked C harnesses (decide source-of-truth vs vendored copy); the opaque-migration

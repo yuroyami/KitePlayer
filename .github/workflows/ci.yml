@@ -32,9 +32,6 @@
 #     sources at all, only jvmTest and androidHostTest, so its wasmJs test task is NO-SOURCE and
 #     naming it here would widen the job on paper and not in fact. Row KP-UNTESTED-MODULES covers
 #     it with the other source-less modules. Its wasmJs MAIN code is compiled by the build job.
-#   - `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with
-#     "RangeError: Invalid array length" while it timestamps a context directory. Deterministic on
-#     the proving Mac across a cleaned build. The NODE half runs here. Row KP-WEBPACK-CONTEXT.
 #   - Android DEVICE tests (`connectedAndroidTest`) and the physical-device rows. Those need
 #     hardware and stay owner-gated exactly as the register says.
 #   - `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone`, which have test
@@ -499,11 +496,15 @@ jobs:
             :kiteplayer-output:wasmJsTest \
             :kiteplayer-ffmpeg:wasmJsTest
 
-      # NODE ONLY, and the reason is in the file header: the browser half aborts inside webpack
-      # while it timestamps a context directory. That is a row, not a skip, and the node half is
-      # real coverage in the meantime.
-      - name: wasmJs tests, network (node half only)
-        run: ./gradlew --stacktrace :kiteplayer-network:wasmJsNodeTest
+      # This was NODE ONLY until 2026-08-30, because the browser half used to abort inside webpack
+      # with "RangeError: Invalid array length" while it timestamped a context directory. It no
+      # longer does. Four attempts on the proving Mac that day all passed 25 browser tests: a plain
+      # run, a run after deleting the module and wasm build directories, a run of all five wasm
+      # modules together, and a --rerun-tasks with the wasm node_modules deleted. Nothing was
+      # changed to fix it, so what actually cured it is not known. It is wired in rather than left
+      # skipped precisely because of that: if it comes back, this job is what says so.
+      - name: wasmJs tests, network (node and browser)
+        run: ./gradlew --stacktrace :kiteplayer-network:wasmJsTest
 
       - name: Upload test reports
         if: failure()

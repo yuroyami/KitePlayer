@@ -183,14 +183,7 @@ Each RED first against a revert or scripted fault; cluster commits.
 - [ ] `FrameDropping` warning: force five late drops in one stats interval under the virtual
   clock (the one warning of the F-WRN1 four with no pin)
 
-### 2.3 The last red wasm build row. Size M
-
-- [ ] **KP-WEBPACK-CONTEXT**: `:kiteplayer-network:wasmJsBrowserTest` dies in webpack
-  (`RangeError: Invalid array length` timestamping a context directory; deterministic; node
-  half fine). Bisect the webpack context scope. If the fix is a toolchain bump, STOP: owner
-  decision.
-
-### 2.4 F-COV1 recounted 2026-08-30. What is left is what cannot run here
+### 2.3 F-COV1 recounted 2026-08-30. What is left is what cannot run here
 
 **The old "six of twenty" claim predated CI and is retired.** Counted off the workflow rather
 than remembered, NINE surfaces execute tests on every push: JVM on macOS and again on Linux,

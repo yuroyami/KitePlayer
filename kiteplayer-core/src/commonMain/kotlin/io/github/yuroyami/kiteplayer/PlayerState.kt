@@ -211,9 +211,10 @@ public data class PlaybackStats(
     /**
      * What the audio sink reports as handed over but not yet audible.
      *
-     * Always zero. The audio clock is anchored to the instant the device says a specific frame becomes
-     * audible, so no latency figure is needed to keep time, and `AudioSink.latencyNanos` has no reader.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Diagnostic, not a correction. The clock is anchored to the instant the device says a specific
+     * frame became audible, so nothing needs this to keep time; it is here because it is the number
+     * that explains a device holding an enormous buffer. Read [audioLatencyQuality] beside it: a
+     * sink that cannot measure honestly says so rather than reporting a plausible zero.
      */
     val audioLatency: Duration = ZERO,
     val audioLatencyQuality: LatencyQuality = LatencyQuality.Unreliable,
@@ -221,8 +222,9 @@ public data class PlaybackStats(
     /**
      * The container's overall bitrate.
      *
-     * Always null: a source reports a bitrate per stream and none reports one for the container.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Always null. A source reports a bitrate per stream and none reports one for the container,
+     * because no backend binds an entry point for it; adding one is C surface across every target
+     * and is grouped with the others waiting on that.
      */
     val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,

@@ -5037,6 +5037,7 @@ internal class PlaybackCore(
                 videoDecodeFps = fps,
                 videoQueueDepth = session?.video?.buffered ?: Duration.ZERO,
                 audioQueueDepth = session?.audio?.buffered ?: Duration.ZERO,
+                audioLatency = (session?.audio?.latencyNanos ?: 0L).nanoseconds,
                 audioLatencyQuality = session?.audio?.latencyQuality ?: LatencyQuality.Unreliable,
                 hardwareDecode = session?.videoDecoder?.hardware ?: HwdecStatus.Software,
                 syncMode = config.syncMode,

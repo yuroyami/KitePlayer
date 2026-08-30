@@ -496,11 +496,18 @@ red-first on the rasterizer geometry.
 
 ### 5.2 SOL-API4: the five stats features. Size M-L
 
-Declared, honestly KDoc'd unbuilt, and they are features, not cleanup: `droppedFramesDecode`
-(decoder-side counter through the stats pass), `audioLatency` (sink already measures;
-surface it), `containerBitrate` (format context), `SyncMode.ExternalMaster` and
-`LateAndDecode` (sync-law modes; the SyncLaw seam exists). Virtual-clock test each;
-ExternalMaster drives a scripted external clock.
+Declared, honestly KDoc'd unbuilt, and they are features, not cleanup.
+
+`audioLatency` is DONE (2026-08-30): every sink implemented `latencyNanos` and nobody read it, so
+the field was documented "always zero" with the number one field access away. It travels beside
+`audioLatencyQuality`, because a figure without its confidence reads like a measured zero.
+
+- [ ] `droppedFramesDecode`. Not a wiring job: nothing anywhere drops a packet before decoding it,
+  so the counter has nothing to count until packet-level dropping under pressure exists.
+- [ ] `containerBitrate`. Blocked on the C surface, grouped with the others at the top of Phase 3:
+  no backend binds an entry point for a container-level bitrate.
+- [ ] `SyncMode.ExternalMaster` and `LateAndDecode` (sync-law modes; the SyncLaw seam exists).
+  Virtual-clock test each; ExternalMaster drives a scripted external clock.
 
 ### 5.3 The audio program (SOL-A6 split honestly). Size M + M, rest re-filed
 

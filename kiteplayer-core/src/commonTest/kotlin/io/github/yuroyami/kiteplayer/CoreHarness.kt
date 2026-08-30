@@ -44,6 +44,8 @@ internal class CoreHarness(
     parent: Job? = scope.backgroundScope.coroutineContext[Job],
     /** Turns on [ScriptedSink.publish]. Off by default; see that parameter for why. */
     publishesSinkEvents: Boolean = false,
+    /** What the scripted device claims it is holding, for the stats that report it. */
+    sinkLatencyNanos: Long = 0L,
 ) {
     val scheduler: TestCoroutineScheduler = scope.testScheduler
     val clock: VirtualClock = VirtualClock(scheduler)
@@ -51,7 +53,12 @@ internal class CoreHarness(
     /** One trace shared by the device, the decoders and the cursor, so the seek order is observable. */
     val trace: ScriptTrace = ScriptTrace()
     val backend: ScriptedBackend = ScriptedBackend(script, ledger, faults, trace)
-    val sink: ScriptedSink = ScriptedSink(faults = faults, trace = trace, publishesEvents = publishesSinkEvents)
+    val sink: ScriptedSink = ScriptedSink(
+        faults = faults,
+        trace = trace,
+        publishesEvents = publishesSinkEvents,
+        latencyNanosAnswer = sinkLatencyNanos,
+    )
     val output: ScriptedOutput = ScriptedOutput(clock, sink)
 
     val core: PlaybackCore = PlaybackCore(

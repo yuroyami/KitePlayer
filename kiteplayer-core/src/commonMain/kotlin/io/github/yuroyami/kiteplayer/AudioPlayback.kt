@@ -160,6 +160,16 @@ public class AudioPlayback(
 
     public val latencyQuality: LatencyQuality get() = sink.latencyQuality
 
+    /**
+     * What the device says it is holding: handed over, not yet audible.
+     *
+     * Diagnostic only. The clock is anchored to the instant the device reports a specific frame
+     * became audible, so nothing here needs this figure to keep time. It is worth reporting because
+     * it is the number that explains a device whose buffer is enormous, and reading it costs a
+     * field access per stats interval.
+     */
+    public val latencyNanos: Long get() = sink.latencyNanos()
+
     /** The sink's own event feed, surfaced so the engine can warn on device loss. */
     public val events: kotlinx.coroutines.flow.Flow<io.github.yuroyami.kiteplayer.spi.AudioSinkEvent>
         get() = sink.events

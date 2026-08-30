@@ -1096,6 +1096,8 @@ internal fun epochSign(generation: Generation): Int = if (generation.value % 2L 
 internal class ScriptedSink(
     private val accepts: AudioFormat? = null,
     override val deviceBufferFrames: Int = 512,
+    /** What the device claims it is holding, so a test can prove the figure travels. */
+    private val latencyNanosAnswer: Long = 0L,
     private val faults: FaultPlan = FaultPlan.None,
     private val trace: ScriptTrace = ScriptTrace(),
     /**
@@ -1181,7 +1183,7 @@ internal class ScriptedSink(
         return true
     }
 
-    override fun latencyNanos(): Long = 0
+    override fun latencyNanos(): Long = latencyNanosAnswer
 
     override val latencyQuality: LatencyQuality = LatencyQuality.Estimated
 

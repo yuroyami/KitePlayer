@@ -552,7 +552,11 @@ class KitePlayerTest {
         )
         assertEquals(MasterClock.Audio, stats.masterClock, "audio drives the clock when there is audio")
         assertEquals(0, stats.droppedFramesDecode, "nothing drops a packet before decoding it")
-        assertEquals(Duration.ZERO, stats.audioLatency, "and no latency figure is read from the sink")
+        // The scripted sink reports zero and says its measurement is unreliable, which is a real
+        // answer rather than an unread field: a sink that cannot measure must not look like one
+        // that measured zero.
+        assertEquals(Duration.ZERO, stats.audioLatency)
+        assertEquals(LatencyQuality.Estimated, stats.audioLatencyQuality)
 
         // Detached, the schedule keeps its pacing and counts the frames nothing drew, which is the whole
         // reason the two counters are separate numbers.

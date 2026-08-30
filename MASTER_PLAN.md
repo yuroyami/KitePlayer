@@ -119,61 +119,48 @@ KiteFFmpeg): geometry + painting in output jvmMain, frame conversion via a facto
 Tier 2 (JAWT + Metal/D3D/GL presenter, our own JNI shim) is a follow-up item, justified only
 by tier 1's measured frame cost.
 
-### 1.1 The spike: blending and decoupling, measured. STOP GATE. Size S
+### 1.1 The spike RAN. Result: half pass, and the phase is BLOCKED on input. [owner]
 
-**Premises re-verified against the tree and the Compose sources 2026-08-29, before writing any
-spike code.** Still true: the JVM actuals coerce to `ComposeCanvas` and draw an empty box;
-`kiteplayer-view` declares `jvm()` and has NO jvmMain source set yet; the geometry law
-`frameLayout` is `internal` in `kiteplayer-output` commonMain, so an AWT renderer in that
-module's jvmMain can use it; `kiteplayer-sample-desktop` exists and opens a plain
-`application { Window(...) }`. Compose Multiplatform resolves to 1.12.0-rc01 and BOTH flags
-below exist in that exact artifact, checked in the jar rather than remembered.
+**Done 2026-08-30. Full table and method in `kiteplayer-sample-desktop/INTEROP-SPIKE.md`;
+`InteropSpike.kt`, `InteropSpikeSwingLayer.kt` and `SpikeShared.kt` are the harness and stay in
+the tree so any of this can be re-measured rather than re-argued.**
 
-**What reading `ComposeFeatureFlags.desktop.kt` and `ComposeSceneMediator.desktop.kt` changed
-about this spike.** Four facts, each of which moves the test matrix:
+**The load-bearing half PASSED, decisively.** Choking the Compose frame clock with 200 ms of work
+per frame left the heavyweight canvas at 100 to 102 percent of its own idle rate while Compose
+fell to 4 to 8 percent of its. Six configurations, same answer every time. Video painted by an
+AWT canvas genuinely does not care what the Compose UI is doing, which is the exact complaint
+that opened this phase.
 
-1. **The decoupling premise SURVIVES blending, which is the answer that mattered most.** With
-   blending on, Compose does not capture the component's pixels; `shouldPlaceInteropAbove`
-   simply becomes false and the heavyweight component is ordered BELOW Compose content inside
-   the `JLayeredPane`. So the canvas keeps painting itself on its own thread. Had blending
-   worked by rendering interop through Compose, the whole design would have been dead on
-   arrival, and that was not knowable without reading it.
-2. **On macOS there is a `metalOrderHack` that can cancel blending's z-order.** It reads
-   `renderApi == METAL && contentComponent !is SkiaSwingLayer`, and when true it forces interop
-   back ABOVE Compose even with blending enabled. A plain `application { Window {} }`, which is
-   what the sample uses, is exactly that case. The escape is the second system property,
-   `compose.swing.render.on.graphics=true`, which selects the `SkiaSwingLayer` path whose own
-   KDoc promises Swing z-ordering is respected, at a documented cost "proportional to the size".
-   So the spike tests THREE configurations, not two: neither flag, blending alone, and both.
-3. **Visible above is not the same as clickable, and the source says so.** The macOS limitation
-   is written down: "interop view might catch the mouse event even if visually it renders below
-   Compose content". Compose subscribes to the interop component's mouse events to work around
-   `JLayeredPane` not forwarding between layers. The spike must therefore CLICK the overlaid
-   controls, not merely look at them.
-4. **Blending is Metal, DirectX and offscreen only.** Linux, which Skiko renders with OpenGL, is
-   not in that list, so the desktop native view may be a macOS and Windows capability with Linux
-   falling back to `ComposeCanvas` through the existing `onEffectivePath` honesty contract. Also
-   recorded for later: on DirectX blending cannot overlay another DirectX component, which
-   constrains the tier-2 GPU presenter on Windows before it is designed.
+**Compose CAN draw above the canvas**, contrary to a first reading of the same spike: with
+`compose.interop.blending=true` on a Compose `Window`, and also with a Swing `JLayeredPane`
+hosting a `ComposePanel`, the overlay demonstrably owns the pixel.
 
-- [ ] `InteropSpike.kt` in `kiteplayer-sample-desktop`: Compose window, SwingPanel-hosted
-  `java.awt.Canvas` painted at 60 Hz by a background thread (colour cycle plus frame counter
-  through `BufferStrategy`), Compose controls overlaid, a toggleable jank burner (about 200 ms
-  per frame inside `withFrameNanos`), and both frame rates on screen.
-- [ ] Run all three configurations: no flags, `-Dcompose.interop.blending=true`, and that plus
-  `-Dcompose.swing.render.on.graphics=true`. For each record whether the controls DRAW above
-  the canvas and whether they RECEIVE clicks, which are two separate observations per item 3.
-- [ ] In the best z-order configuration, with the burner on for 30 seconds, record canvas frame
-  rate mean and minimum against the Compose frame rate.
-- [ ] Record everything in `kiteplayer-sample-desktop/MEASUREMENTS.md`, naming the JVM, the CMP
-  version and the flags, since the numbers mean nothing without the configuration.
-- [ ] PASS = some configuration gives controls that both draw above and respond to clicks, AND
-  the canvas holds at least 55 fps while Compose is choked below 15. A z-order or input failure
-  in every configuration kills tier 1 on macOS: STOP, report, and re-plan around the JAWT layer.
-  A decoupling failure kills the premise itself: STOP and report.
-- [ ] If `compose.swing.render.on.graphics` turns out to be required, measure what its size
-  penalty costs the controls layer before the design adopts it, and say so on the item.
-- [ ] Commit: `Measure whether a heavyweight canvas escapes Compose jank on desktop`
+**What blocks the phase: Compose never RECEIVED a click on that overlay, in any of the six
+configurations**, including one where the canvas forwarded its own mouse events to the
+`ComposePanel` by hand. This is the macOS behaviour Compose documents in its own source, that an
+interop view can catch the mouse even when it renders below Compose content. A video player whose
+overlaid controls cannot be clicked is not shippable, so tier 1 stops here rather than being
+built and discovered later.
+
+**One honest bound on that verdict, and it is why this is [owner] rather than closed.** Every
+click in the spike is synthetic, from `java.awt.Robot`. The positive control proves synthetic
+clicks DO reach the same Compose box when no canvas is present, so the canvas is the cause; but
+it does not rule out something specific to synthetic events over heavyweight components.
+
+- [ ] **[owner], half a minute:** run configuration B and click the green square with a real
+  mouse. `./gradlew -q :kiteplayer-sample-desktop:printRunClasspath` gives the classpath, then
+  `java -Dcompose.interop.blending=true -cp "<that>" io.github.yuroyami.kiteplayer.sample.desktop.InteropSpikeKt`.
+  The window prints `clicks=N` in its bottom-left corner. If that number goes up when you click
+  the green square, the blocker is a robot artefact and tier 1 is alive exactly as designed. If
+  it stays at zero, input is genuinely lost to the canvas and the choice below is real.
+- [ ] **[owner] decision if the click really is lost.** Three ways out, in rising cost: keep the
+  controls OFF the video (a bar beside or below it) so nothing needs to overlay, which is a
+  product taste call as much as a technical one; drive the whole UI from Swing and use Compose
+  only where nothing overlaps; or go to tier 2, the JAWT presenter, which owns its surface and
+  can composite the controls itself, and is the expensive option this phase deliberately deferred.
+
+**Do not start 1.2 until that click is tried.** Everything below assumes overlaid Compose
+controls work.
 
 ### 1.2 `KitePlayerAwtView` in kiteplayer-view jvmMain. Size M
 

@@ -117,6 +117,12 @@ cross-compile spot checks (js, wasmJs, android), and the sample runs over
 loaded machine that passes on two quiet reruns is recorded as a load observation, not rerun
 until green.
 
+**Run the aggregate task, not a hand-written list of modules.** `./gradlew macosArm64Test` and
+`./gradlew jvmTest` with no module prefix cover every module, including ones added since this
+list was written. A named subset went green on 2026-08-30 while `kiteplayer-ffmpeg`'s native
+test source set did not even COMPILE, because an opt-in annotation added the same day reached a
+file only that source set builds. Naming modules is how a module gets forgotten.
+
 **Tier 3, about 50 minutes, supervised.** Selected by: any change to
 `kiteplayer-rt/native/src/kite_rt_render.c`, to `kprt_render_cb` or the ring handoff and
 teardown ordering in `kite_rt_coreaudio.c`, to the ordering of AudioPlayback submit/flush/close

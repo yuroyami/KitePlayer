@@ -141,6 +141,12 @@ Never move one silently.
 
 ## 4. Build and toolchain traps, each one paid for
 
+- **A no-replay SharedFlow drops what it emits before anyone subscribes.** Every renderer's
+  `events` is `MutableSharedFlow(replay = 0)`, so a test that launches a collector and then makes
+  the renderer emit is racing its own subscription. It passes on a quiet machine and times out
+  under a full suite, which is how the AppKit tone-map arm failed on 2026-08-30. Wait for the
+  subscription (`onSubscription` completing a `CompletableDeferred`) before triggering the emit,
+  and collect into a `Channel` rather than a list two threads share.
 - **A Gradle compile task with no sources reports BUILD SUCCESSFUL.** It prints `NO-SOURCE` and
   exits zero, so "the wasm target compiles now" can mean "there was never anything there to
   compile". This produced a false green on 2026-08-30: `:kiteplayer-mobile:compileTestKotlinWasmJs`

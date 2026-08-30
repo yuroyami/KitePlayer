@@ -623,29 +623,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         append(core.diagnosticsDump(redactPaths = true))
     }
 
-    /**
-     * The container's edition table (S4.e): typed-rejected, never silently empty, because the
-     * container reader exposes no edition table yet. When KiteFFmpeg reads Matroska editions this
-     * member returns them; the truth-ledger rule is that an unimplemented member throws rather
-     * than answering with a lie-shaped default.
-     *
-     * @throws UnsupportedOperationException always, naming the missing reader.
-     */
-    public fun editions(): List<Nothing> = throw UnsupportedOperationException(
-        "the container reader exposes no edition table; when KiteFFmpeg reads Matroska editions " +
-            "this member returns them",
-    )
 
-    /**
-     * The container's program table (S4.e): typed-rejected for the same truth-ledger reason as
-     * [editions]. MPEG-TS programs live in the container reader, which does not expose them yet.
-     *
-     * @throws UnsupportedOperationException always, naming the missing reader.
-     */
-    public fun programs(): List<Nothing> = throw UnsupportedOperationException(
-        "the container reader exposes no program table; when KiteFFmpeg reads MPEG-TS programs " +
-            "this member returns them",
-    )
 
     private fun validPosition(to: Duration, name: String): Duration {
         require(to.isFinite() && to >= Duration.ZERO) {

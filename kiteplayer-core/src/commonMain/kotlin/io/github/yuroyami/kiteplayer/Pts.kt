@@ -34,6 +34,13 @@ public value class Pts(public val micros: Long) : Comparable<Pts> {
     public val asDuration: Duration get() = micros.microseconds
 
     override fun toString(): String {
+        // This type has no sentinel, as the KDoc above says: an absent timestamp is a Pts?. So a
+        // Pts holding AV_NOPTS_VALUE means one LEAKED through a backend boundary, and the reader
+        // most needs to see that. Formatting it produced garbage rather than anything you could
+        // spot: negating Long.MIN_VALUE overflows back to itself, so every field below came out
+        // negative and it printed as a plausible-looking "-2562047:-47:-16.-854", which reads as a
+        // timestamp rather than as the absence of one.
+        if (micros == Long.MIN_VALUE) return "unset"
         if (micros == 0L) return "0s"
         val negative = micros < 0
         val total = if (negative) -micros else micros

@@ -487,17 +487,21 @@ red-first on the rasterizer geometry.
 
 ### 5.1 KP-API remainder. Size M total, cluster commits
 
-- [ ] `editions()`/`programs()` throw unconditionally (a test pins it): delete from the
-  surface (subtraction precedent; deprecate if Synkplay references them). ABI dumps.
+Done 2026-08-30: `editions()`/`programs()` deleted (they threw unconditionally and only a test
+referenced them), `Pts.toString` names the absent-timestamp value instead of printing
+"-2562047:-47:-16.-854", and `CapturedFrame` validates its plane geometry.
+
+**One item was WRONG and is dropped rather than done: "the process-wide logger beside the
+per-player sink nothing reads: delete".** `KiteLog` is read (`PlaybackCore` sends every warning
+through it), tested (`DiagnosticsTest`), and used by the iOS sample. There is no second per-player
+sink; `PlayerConfig` has no logging field. Nothing to delete.
+
 - [ ] The default factory that compiles then throws: `create()` refuses at CONFIG time with
   the typed configuration error the facade contract already demands.
 - [ ] Public models mutable through arrays: defensive copies or immutable lists; identity
   equality documented where it stays.
 - [ ] Raw FFmpeg option strings and filter chains at the public edge: mark with an explicit
   low-level opt-in annotation (mirror KiteFFmpeg's `@KiteFFmpegLowLevelApi` seam).
-- [ ] The process-wide logger beside the per-player sink nothing reads: delete.
-- [ ] `Pts` prints garbage at `Long.MIN_VALUE`: `toString` names NOPTS.
-- [ ] `CapturedFrame` unchecked geometry: validate in the constructor.
 - [ ] Java/Swift adaptation: NOT built here; stays on this list as a feature item
   (KP-INTEROP-SURFACE, unscheduled).
 

@@ -36,6 +36,28 @@ public class CapturedFrame internal constructor(
     private val planes: Array<ByteArray>,
 ) : SoftwareReadableFrame {
 
+    init {
+        // The geometry comes from a BACKEND, not from a caller, so these are checks on the
+        // decoder rather than on the application. A stride or height that is zero or negative
+        // reached ByteArray() as a size and died there with NegativeArraySizeException, naming
+        // nothing; a plane shorter than its own geometry claims would have been read past its end
+        // by any consumer that trusted planeStride and planeHeight, which is what they are for.
+        require(strides.size == planes.size && heights.size == planes.size) {
+            "plane geometry disagrees: ${strides.size} strides, ${heights.size} heights, " +
+                "${planes.size} planes"
+        }
+        for (index in planes.indices) {
+            require(strides[index] > 0 && heights[index] > 0) {
+                "plane $index has non-positive geometry ${strides[index]}x${heights[index]}"
+            }
+            val needed = strides[index].toLong() * heights[index].toLong()
+            require(planes[index].size >= needed) {
+                "plane $index holds ${planes[index].size} bytes but its geometry " +
+                    "${strides[index]}x${heights[index]} needs $needed"
+            }
+        }
+    }
+
     override val duration: Pts? = null
     override val hardwareSurface: HwSurfaceKind? = null
     override val planeCount: Int get() = planes.size
@@ -44,7 +66,14 @@ public class CapturedFrame internal constructor(
     override fun planeHeight(index: Int): Int = heights[index]
 
     override fun copyPlane(index: Int, into: ByteArray, offset: Int) {
-        planes[index].copyInto(into, destinationOffset = offset)
+        val plane = planes[index]
+        // Named rather than an IndexOutOfBounds from inside copyInto: the caller sized a buffer
+        // and this says by how much it was wrong.
+        require(offset >= 0 && into.size - offset >= plane.size) {
+            "plane $index needs ${plane.size} bytes at offset $offset, but the destination holds " +
+                "${into.size}"
+        }
+        plane.copyInto(into, destinationOffset = offset)
     }
 
     /** The copies are plain arrays; there is nothing to release. */
@@ -62,10 +91,22 @@ public class CapturedFrame internal constructor(
                     "which the software and download decode paths produce",
             )
             val count = readable.planeCount
+            require(count > 0) { "a readable frame reported $count planes" }
             val strides = IntArray(count) { readable.planeStride(it) }
             val heights = IntArray(count) { readable.planeHeight(it) }
             val planes = Array(count) { index ->
-                ByteArray(strides[index] * heights[index]).also { readable.copyPlane(index, it) }
+                // Checked BEFORE the allocation, so a backend reporting nonsense is named here
+                // rather than dying inside ByteArray() with a size it will not print.
+                val stride = strides[index]
+                val height = heights[index]
+                require(stride > 0 && height > 0) {
+                    "the frame reports plane $index as ${stride}x$height, which cannot be copied"
+                }
+                val bytes = stride.toLong() * height.toLong()
+                require(bytes <= Int.MAX_VALUE) {
+                    "plane $index would need $bytes bytes, which no array can hold"
+                }
+                ByteArray(bytes.toInt()).also { readable.copyPlane(index, it) }
             }
             return CapturedFrame(
                 pts = frame.pts,

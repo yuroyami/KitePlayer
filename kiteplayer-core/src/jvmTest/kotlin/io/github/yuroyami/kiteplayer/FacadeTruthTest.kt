@@ -73,15 +73,4 @@ class FacadeTruthTest {
         assertTrue("queue       1 of 2" in dump, "the queue and its cursor echo")
         harness.close()
     }
-
-    @Test
-    fun `editions and programs refuse typed with the ledger sentence`() = runTest {
-        val harness = CoreHarness(this)
-        val player = player(harness)
-        val editions = assertFailsWith<UnsupportedOperationException> { player.editions() }
-        assertTrue("edition table" in (editions.message ?: ""), editions.message ?: "")
-        val programs = assertFailsWith<UnsupportedOperationException> { player.programs() }
-        assertTrue("program table" in (programs.message ?: ""), programs.message ?: "")
-        harness.close()
-    }
 }

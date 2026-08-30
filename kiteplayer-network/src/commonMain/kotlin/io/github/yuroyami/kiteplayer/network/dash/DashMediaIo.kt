@@ -97,7 +97,7 @@ public const val MAX_MANIFEST_BYTES: Long = 8L shl 20
 public const val MAX_SEGMENT_BYTES: Long = 64L shl 20
 
 /**
- * At most [limit] bytes of [response], refused typed the moment it passes (SEC-6).
+ * At most [limit] bytes of [response], refused typed the moment it passes.
  *
  * `bodyAsBytes()` and `bodyAsText()` buffer whatever the server sends, with no ceiling at all, so
  * a hostile or broken endpoint could take the process out with a response nobody asked to be that
@@ -150,7 +150,7 @@ public object Dash {
     ): DashManifest =
         withContext(Dispatchers.Default) {
             // Checked BEFORE the fetch, not after: the point of the policy is that a URL this
-            // player will not accept is also a URL it never sends the caller's cookies to (SEC-2).
+            // player will not accept is also a URL it never sends the caller's cookies to.
             DashManifestParser.requireAllowedScheme(mpdUrl, policy)
             val response = client.get(mpdUrl)
             require(response.status.isSuccess()) { "cannot fetch $mpdUrl: ${response.status}" }
@@ -170,7 +170,7 @@ public object Dash {
         maxSegmentBytes: Long = MAX_SEGMENT_BYTES,
     ): MediaItem {
         val manifest = manifest(mpdUrl, client, policy, maxManifestBytes)
-        // Refused, not truncated (audit F-DASH3): this tier byte-concatenates ONE period's
+        // Refused, not truncated: this tier byte-concatenates ONE period's
         // segments, and silently playing period one of an ad-stitched presentation looked like
         // a player that stops after the pre-roll. Period joining is the adaptive engine's next
         // tier; until it exists the refusal is typed.
@@ -188,7 +188,7 @@ public object Dash {
         val plan = DashManifestParser.segmentPlan(manifest, period, representation, policy)
         // A factory, so every open of this item gets its own segment stream. One live reader here
         // meant the second open of the same item -- a track switch, a loop, a queue coming back
-        // round -- was handed the one the previous session had already closed (audit KP-P1-03).
+        // round -- was handed the one the previous session had already closed.
         // The plan itself is immutable and shared by every reader the factory makes.
         return MediaItem(
             uri = mpdUrl,

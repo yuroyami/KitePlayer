@@ -113,7 +113,7 @@ internal data class AudioAnchor(val pts: Pts, val audibleAtNanos: Long)
  * translation unit with the rest of the render path, and that move is what makes the unit's undefined
  * symbol list auditable.
  *
- * ### Saturating at the ends of the range, since the interlude (I-05)
+ * ### Saturating at the ends of the range, since the interlude
  *
  * `whole * 1_000_000L` overflows a Long once `whole` passes about 9.2e12. In Kotlin that wrap is
  * DEFINED behaviour and in the C twin it was UNDEFINED, so at the top of the range the oracle was

@@ -156,7 +156,7 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         val safeWidth = (viewportWidth * (1f - layoutSpec.marginLeft - layoutSpec.marginRight)).toInt()
         if (safeWidth <= 0) return null
 
-        // Every Create-rule object below is released on every exit (audit F-CFL1): a two hour
+        // Every Create-rule object below is released on every exit: a two hour
         // film's cue edges used to leak the framesetter, the frame with its laid-out glyph
         // runs, the path, the colour space and one colour per styled cue, for ever.
         val framesetter = CTFramesetterCreateWithAttributedString(

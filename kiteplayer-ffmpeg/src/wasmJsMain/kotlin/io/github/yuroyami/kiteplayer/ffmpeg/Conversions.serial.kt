@@ -10,7 +10,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
  *
  * The measured consequence, so nobody has to rediscover it: X-01 timed this loop at 50 to 87 ms per
  * 1080p frame here against about 2.1 ms on four desktop cores. That is why the web draw path does
- * the conversion in C beside the decoder instead (X-11), and why this exists mainly so the module
+ * the conversion in C beside the decoder instead, and why this exists mainly so the module
  * COMPILES for wasm rather than to be the path a web player takes.
  */
 internal actual inline fun parallelRowSlices(

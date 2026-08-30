@@ -192,7 +192,7 @@ public sealed interface AudioSinkEvent {
      * The device wants a different format than the one negotiated.
      *
      * The engine warns (`AudioDeviceChanged`, naming the request) and keeps the sink: it cannot
-     * renegotiate a device yet (SOL-A6). When it does act it will recreate the sink rather than
+     * renegotiate a device yet. When it does act it will recreate the sink rather than
      * reconfigure in place, because in-place reconfiguration is where every player's device-change
      * bugs live.
      */

@@ -28,7 +28,7 @@ internal expect class FrameImagePool() {
 }
 
 /**
- * A converter was handed a frame from a backend it cannot read (W-13).
+ * A converter was handed a frame from a backend it cannot read.
  *
  * Thrown instead of letting an implicit cast fail, for two reasons. A `ClassCastException`'s
  * message is a compiler implementation detail that reads differently on Kotlin/Native and the JVM,

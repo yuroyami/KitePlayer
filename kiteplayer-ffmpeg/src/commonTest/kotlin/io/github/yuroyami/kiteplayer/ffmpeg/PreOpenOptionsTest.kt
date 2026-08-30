@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The typed-field respelling (SOL-API1), tested pure: what reaches KD-4's pre-open funnel for
+ * The typed-field respelling, tested pure: what reaches KD-4's pre-open funnel for
  * each combination of [MediaItem.headers], [MediaItem.formatHint] and a raw [MediaItem.openOptions]
  * that collides with them. FFmpeg consumes the result; producing it is plain string work and is
  * proven here without a single native call.

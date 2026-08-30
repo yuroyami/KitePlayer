@@ -26,7 +26,7 @@ import kotlinx.coroutines.withTimeout
  *   hang fails the row. Only the torture rows sit here now, by construction. AV1 used to, because
  *   the phone profile enabled FFmpeg's av1 decoder while vendoring no software AV1 codec, and its
  *   honest outcome was a typed refusal; dav1d is vendored for every target that runs this matrix
- *   now (KC-AV1SW), so AV1 owes a real decode like every other format.
+ *   now, so AV1 owes a real decode like every other format.
  */
 internal enum class MatrixVerdict { MustPlay, MustSurvive }
 

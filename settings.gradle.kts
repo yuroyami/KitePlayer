@@ -2,7 +2,7 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
     repositories {
-        // mavenLocal is GONE from here, not made optional (SOL-B6). No plugin in this build comes
+        // mavenLocal is GONE from here, not made optional. No plugin in this build comes
         // from the sibling repository: every id in the version catalog is JetBrains, Android or
         // vanniktech. It sat FIRST anyway, so any locally published artifact matching a plugin
         // coordinate would have quietly won over the real one, for no benefit at all.

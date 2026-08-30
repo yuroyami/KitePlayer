@@ -111,7 +111,7 @@ static int64_t sub_saturating(int64_t a, int64_t b)
  * Every counter this touches has exactly one writer: the device's render thread, in this
  * translation unit. An `atomic_fetch_add` is therefore strength beyond the requirement, and on
  * arm64 without LSE it compiles to an ldxr/stxr conditional retry loop, which breaks the
- * bounded-work guarantee this hard-real-time object promises (audit P0-9). A relaxed load plus a
+ * bounded-work guarantee this hard-real-time object promises. A relaxed load plus a
  * relaxed store is wait-free, and readers on other threads still see a monotonic counter because
  * no second writer exists to interleave with. */
 static void kprt_counter_bump(_Atomic int64_t *counter)

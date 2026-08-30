@@ -62,7 +62,7 @@ internal class GainStage(
         private set
 
     /**
-     * Continues [from]'s ramp instead of starting at unity (audit F-GAIN1): a pipeline rebuilt
+     * Continues [from]'s ramp instead of starting at unity: a pipeline rebuilt
      * mid-stream while muted used to play up to one whole ramp of near-full-scale samples,
      * because its fresh gain stage began at 1 and only then walked down.
      */

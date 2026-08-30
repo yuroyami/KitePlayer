@@ -47,7 +47,7 @@ internal interface PlaybackDispatchers : AutoCloseable {
      * Where a session's release runs at terminal close, so the actor can BOUND its wait for it.
      *
      * A lane of its own and not the session's, because the point is that a release which wedges
-     * must not take the coroutine that is timing it with it (audit KP-P1-07). The default answers
+     * must not take the coroutine that is timing it with it. The default answers
      * with the session lane, which is right for the single-threaded runtimes and for tests, where
      * every lane is one cooperative dispatcher and there is no second thread to escape to.
      */
@@ -130,7 +130,7 @@ internal class Worker(val name: String) {
         if (!pauseRequested.value) return
         try {
             while (true) {
-                // parkedNow drops BEFORE the flag's deciding re-read (audit F-QSC1). The old
+                // parkedNow drops BEFORE the flag's deciding re-read. The old
                 // shape read the flag first and dropped the park in a finally, so a quiesce that
                 // landed in that gap saw a parked worker whose decision to run was already made.
                 // With this order, a quiesce that observes parkedNow true wrote pauseRequested

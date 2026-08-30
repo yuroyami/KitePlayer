@@ -160,7 +160,7 @@ internal class KiteVideoRenderer(
     /** Set once when a converter refuses the backend's frame type; see [UnsupportedFrameType]. */
     private val unsupportedPairing = atomic(false)
 
-    /** Orders the overlay publications against close's final null (audit F-CLS1). */
+    /** Orders the overlay publications against close's final null. */
     private val overlayPublishLock = kotlinx.atomicfu.locks.SynchronizedObject()
 
     /** The single frame waiting to be converted. Newest wins; the displaced one is closed here. */
@@ -252,7 +252,7 @@ internal class KiteVideoRenderer(
         // The cost clock starts before the conversion and stops after the image build, because
         // that pair is exactly the CPU work this software path pays per published frame.
         val started = kotlin.time.TimeSource.Monotonic.markNow()
-        // A refused PAIRING is refused for this renderer's whole life (W-13). Retrying it per
+        // A refused PAIRING is refused for this renderer's whole life. Retrying it per
         // frame pays the same doomed conversion thirty times a second and republishes the same
         // sentence; the frame is still closed and still counted, because silence would be worse.
         if (unsupportedPairing.value) {
@@ -384,7 +384,7 @@ internal class KiteVideoRenderer(
          * would simply never appear. And a close that raced this build must win: publishing
          * after close would hand a dead renderer's images to a live composition. */
         kotlinx.atomicfu.locks.synchronized(overlayPublishLock) {
-            // Checked and published under one lock (audit F-CLS1): the plain check let a close
+            // Checked and published under one lock: the plain check let a close
             // land between it and the publish, pinning a dead renderer's cues on screen for ever.
             if (closed.value) return
             if (!anyFailed) overlayHash = overlay.contentHash

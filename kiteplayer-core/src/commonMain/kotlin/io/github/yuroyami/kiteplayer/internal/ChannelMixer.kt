@@ -183,7 +183,7 @@ internal class ChannelMixer(
 
     /**
      * True when the output would be byte-for-byte the input, so a caller may alias instead of
-     * calling [mix] (audit F-MIX1). This is NOT [isPassThrough]: a pass-through with unequal
+     * calling [mix]. This is NOT [isPassThrough]: a pass-through with unequal
      * counts must still run [mix] for its frame-wise restride, and aliasing it handed a
      * three-channel interleave to a stereo consumer with every sample on the wrong speaker.
      */

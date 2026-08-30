@@ -139,7 +139,7 @@ public class VideoPlayback(
      * A renderer refusal is [refusedFrames] and is deliberately not counted here. The two are
      * different diagnoses with different fixes: a late drop means the pipeline could not keep up,
      * a refusal means the output could not draw, and folding them together made a dead surface
-     * look like a slow decoder (audit KP-P1-06, KP-P1-21).
+     * look like a slow decoder.
      */
     public val droppedFrames: Long get() = droppedLate
 
@@ -156,7 +156,7 @@ public class VideoPlayback(
      * Every frame that left the schedule, whatever became of it: submitted, headless or refused.
      *
      * What the engine's one-frame push waits for. Waiting on submissions alone means a refusing
-     * renderer never satisfies the wait and burns the whole budget instead (audit KP-P1-06).
+     * renderer never satisfies the wait and burns the whole budget instead.
      */
     public val releasedFrames: Long get() = submitted + headless + refused
 

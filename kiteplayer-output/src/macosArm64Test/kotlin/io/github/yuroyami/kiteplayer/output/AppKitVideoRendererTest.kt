@@ -681,7 +681,7 @@ class AppKitVideoRendererTest {
         }
     }
 
-    // The M4 surge's headline (SOL-R1) finally pinned (audit F-RDWT1): a cue arriving while
+    // The M4 surge's headline finally pinned: a cue arriving while
     // the picture is paused must redraw the retained frame with no new present() at all.
     @Test
     fun `an overlay set after the last frame redraws the retained picture`() = runBlocking {

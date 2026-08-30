@@ -375,7 +375,7 @@ enough to call any platform supported.
   render-quality ladder in MASTER_PLAN.md says what a shader tier can and cannot reach).
   Gamma is absent by design: it is not affine, so it cannot ride the one colour-matrix law, and a
   control honoured by some renderers and ignored by others would be worse than none. The same
-  paused-picture limit as overlays applies on the platform renderers (SOL-R1): a control changed
+  paused-picture limit as overlays applies on the platform renderers: a control changed
   while paused shows at the next drawn frame, while KiteVideo repaints its held frame at once.
 - **Rotation is four turns and no more.** The three quarter turns and no rotation are drawn. A display
   matrix that mirrors the picture or skews it by an arbitrary angle is drawn as stored, which keeps the

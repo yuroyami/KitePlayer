@@ -228,7 +228,7 @@ class CompileKiteRtTaskTest {
         }
     }
 
-    // ---- The three guard cases the interlude added (I-10), mirroring CompileKiteFFmpegCTaskTest
+    // ---- The three guard cases the interlude added, mirroring CompileKiteFFmpegCTaskTest
     // so the two near-twin tasks are covered identically. These run the REAL compile() with the
     // real konan clang over a trivial fixture source, because the review measured that a suite
     // which only exercises the predicates stays green when a guard's call site is deleted.

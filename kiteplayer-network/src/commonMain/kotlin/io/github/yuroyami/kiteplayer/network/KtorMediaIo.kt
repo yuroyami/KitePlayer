@@ -56,7 +56,7 @@ public class KtorMediaIo private constructor(
     private var bodyPosition = 0L
 
     /**
-     * Set by [close] and checked by every entry point (SEC-6).
+     * Set by [close] and checked by every entry point.
      *
      * [close] cancels the scope. A read after that reached [openAt], whose `scope.launch` body
      * therefore never ran, so nothing ever wrote to the pipe and `readAvailable` suspended FOR

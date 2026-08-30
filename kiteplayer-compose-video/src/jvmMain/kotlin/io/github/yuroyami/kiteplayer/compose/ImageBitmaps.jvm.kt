@@ -56,7 +56,7 @@ internal actual fun rememberKiteVideoFrameCommitter(
     private val owner = Any()
 
     /**
-     * True, and on desktop the reason is not the one the name suggests (W-05).
+     * True, and on desktop the reason is not the one the name suggests.
      *
      * There is no hardware image on this path: `kiteCodecFrameToRgba` converts on the CPU and
      * `Image.makeRaster` COPIES those bytes into Skia, so the decoded frame is free the instant the
@@ -70,7 +70,7 @@ internal actual fun rememberKiteVideoFrameCommitter(
     override fun frameRecorded(frame: KiteVideoFrame?) = state.frameCommitted(owner, frame)
 }
 
-/** The one place the backend pairing is checked, so all three actuals refuse the same way (W-13). */
+/** The one place the backend pairing is checked, so all three actuals refuse the same way. */
 private fun VideoFrame.asKiteFFmpegFrame(): KiteFFmpegVideoFrame = this as? KiteFFmpegVideoFrame
     ?: throw UnsupportedFrameType(
         actual = this::class.simpleName ?: "an unnamed frame type",

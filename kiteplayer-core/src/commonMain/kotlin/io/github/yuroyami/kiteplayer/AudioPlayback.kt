@@ -160,7 +160,7 @@ public class AudioPlayback(
 
     public val latencyQuality: LatencyQuality get() = sink.latencyQuality
 
-    /** The sink's own event feed, surfaced so the engine can warn on device loss (F-WRN1). */
+    /** The sink's own event feed, surfaced so the engine can warn on device loss. */
     public val events: kotlinx.coroutines.flow.Flow<io.github.yuroyami.kiteplayer.spi.AudioSinkEvent>
         get() = sink.events
 
@@ -219,7 +219,7 @@ public class AudioPlayback(
      *        expected to flush (a seek's quiescence is the intended trigger). This exists so an
      *        incremental commit is NEVER retried from the outside: cancelling this function
      *        mid-buffer and calling it again would replay samples the ring already took and run
-     *        the conversion state twice (audit P1-3).
+     *        the conversion state twice.
      */
     public suspend fun submit(
         pts: Pts?,
@@ -294,7 +294,7 @@ public class AudioPlayback(
         }
         if (stage !== existing && existing != null) {
             // A fresh stage counts its emitted frames from zero, so the scaled axis must drop
-            // its base and re-anchor on the next timestamped buffer (audit F-TS1). Keeping the
+            // its base and re-anchor on the next timestamped buffer. Keeping the
             // old base dated every post-rebuild buffer back at the start of the epoch.
             synchronized(lock) { scaledBaseUs = null }
         }
@@ -310,7 +310,7 @@ public class AudioPlayback(
 
         val emittedBefore = stage.tempoEmittedFrames
         // Converted exactly once: the mixer, resampler and gain ramp all carry state, so running
-        // process twice over the same input is audible, not just wasteful (audit P1-3).
+        // process twice over the same input is audible, not just wasteful.
         val produced = stage.process(interleaved, frames)
 
         if (speedNow == 1.0) {
@@ -396,7 +396,7 @@ public class AudioPlayback(
      */
     public suspend fun flush(newGeneration: Generation) {
         sink.stop()
-        // Under the lock since the interlude (I-06): the C ring's flush clears the anchor and both
+        // Under the lock since the interlude: the C ring's flush clears the anchor and both
         // caches, and [position] and [anchorClock] read them under this same lock, so without it
         // nothing excluded a progress report from interleaving with the clearing. The C contract
         // now names the anchor reader in its quiescence sentence; this lock is how this class
@@ -426,7 +426,7 @@ public class AudioPlayback(
      * The tempo stage holds up to two pitch periods it cannot splice without the audio that comes
      * after them, and at the end of a stream nothing comes after them. Until this call existed they
      * were discarded by the next reset, so every clip played at a non-1x speed lost its final
-     * fragment and short clips lost an audible share of themselves (audit P0-20).
+     * fragment and short clips lost an audible share of themselves.
      *
      * Call it once, after the decoder is drained and every decoded buffer has been submitted, and
      * before [drain]. Belongs to the feeder, like [submitDecoded]: it runs the same pipeline and

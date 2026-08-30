@@ -313,13 +313,41 @@ mid-stream with buffered frames; leak ledger shows zero live after. Delete the K
 commit for `FFmpeg.decoders(): List<String>`; make the info task measure. RED: list contains
 h264 everywhere; wasm fake scripts its list.
 
-### 3.11 KC-DOCTRUTH remainder: register codes in shipped sources. Size M, mechanical
+### 3.11 KC-DOCTRUTH remainder: register codes in shipped sources. Size M
 
-128 mentions of 35 internal codes across 40 shipped files (counted 08-24). A stranger cannot
-resolve them. Replace each with the sentence it stood for; codes stay only in MASTER_PLAN,
-GOTCHAS and git history. Sweep with
-`rg -n "SOL-|KC-[A-Z]|KP-[A-Z]|F-[A-Z]+\d|PAR-|X-\d|AGW-"` over shipped sources, both repos,
-until zero.
+A stranger cannot resolve `F-WRN1` or `audit P1-05`. They stay in MASTER_PLAN, GOTCHAS and git
+history; the tree should read without them.
+
+Swept 2026-08-30: 349 removed across 143 files, every one a parenthetical sitting MID-sentence,
+where deleting it leaves the sentence intact. Compiled and tested green after. Counted honestly,
+**661 remain**, and they are the ones a script must not touch:
+
+| where | codes | files |
+|---|---|---|
+| main sources (shipped) | 305 | 108 |
+| test sources | 177 | 73 |
+| build scripts | 50 | 11 |
+| docs | 43 | 14 |
+| CI workflows | 36 | 5 |
+| shell scripts | 27 | 16 |
+| native C and headers | 23 | 17 |
+
+- [ ] Rewrite the 661 by hand, largest file first (`PlaybackCore.kt` 34,
+  `kiteffmpeg-core/build.gradle.kts` 28, KiteFFmpeg's `ci.yml` 18, `UIKitVideoRenderer.kt` 17).
+  Each needs the sentence the code stood for, because the code either OPENS the comment
+  (`// (F-DRAW1): ...`, where deleting the parenthetical also eats the space after the marker and
+  the clause it introduced) or is load-bearing inside the prose.
+
+**Two traps for whoever does the rest, both hit on 2026-08-30:**
+
+- The naive regex ate the space after `//` and left `//.` and `//:` on 30-odd lines. Removing a
+  parenthetical is only safe when a non-space, non-comment-marker character precedes it.
+- `vendor/` and `native-libs/` are third-party FFmpeg, VLC and fribidi sources and BUILT headers.
+  They match the pattern by coincidence (`W-...`, `I-12`) and must never be swept. `native-libs`
+  is gitignored, so damage there would not even show in `git status`.
+
+Not every match is a code: `X-Ignored`, `X-Raw` and `X-Session` are HTTP headers and `X-macro` is
+the C idiom. Requiring digits after `X-` excludes all four.
 
 ### 3.12 KC-ABI-SCOPE: the API ratchet watches 3 of 13 targets. Size M
 

@@ -234,7 +234,7 @@ KPRT_API int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_rin
  *         published and the reservation stays outstanding, so the caller may simply retry the
  *         commit after the device has consumed something. A caller that gives up instead MUST
  *         release the reservation with a zero-frame commit (`frames == 0` publishes nothing and
- *         clears it): since the interlude (I-04) `kprt_ring_begin_write` refuses while a
+ *         clears it): since the interlude `kprt_ring_begin_write` refuses while a
  *         reservation is outstanding, so abandoning without releasing wedges the producer. */
 KPRT_API int32_t kprt_ring_commit_write(kprt_ring *ring, int32_t frames, int32_t has_pts, int64_t pts_us);
 
@@ -435,7 +435,7 @@ typedef struct {
     int32_t running;
     int32_t has_ring;
     /* The device's CURRENT period in sample frames, re-queried at every start and updated by
-     * the format listener (SOL-A4). Read it here rather than caching the open-time value: a
+     * the format listener. Read it here rather than caching the open-time value: a
      * route change moves it, and before this field existed nothing could observe the move
      * (2026-08-17 audit). */
     int32_t device_buffer_frames;

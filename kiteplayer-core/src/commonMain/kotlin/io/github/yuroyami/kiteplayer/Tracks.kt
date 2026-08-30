@@ -106,7 +106,7 @@ public data class Tracks(
  * always success. Only one selection of a kind can be pending at a time, so two callers asking for
  * two different audio tracks at once means one of them does not get what it asked for, and the
  * engine used to complete BOTH of them normally: the loser was told its track was selected while a
- * different one was playing (audit KP-P1-01). A stop, a close and a call made against no open
+ * different one was playing. A stop, a close and a call made against no open
  * media did the same. Each of those now has its own answer.
  *
  * A selection that fails because the media or the device failed still throws [PlaybackException],

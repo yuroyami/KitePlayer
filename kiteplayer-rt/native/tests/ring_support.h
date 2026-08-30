@@ -60,7 +60,7 @@ static inline int32_t kprt_test_feed(kprt_ring *ring, int32_t frames, int64_t fr
     status = kprt_ring_commit_write(ring, granted, has_pts, pts_us);
     if (status == KPRT_COMMIT_NEEDS_SEGMENT) {
         /* Give up rather than wait: release the reservation with a zero-frame commit, so the
-         * next feed's begin is granted. Mandatory since the interlude (I-04): begin refuses
+         * next feed's begin is granted. Mandatory since the interlude: begin refuses
          * while a reservation is outstanding, so a caller that abandons without releasing
          * wedges itself, which is exactly what this helper did to case 18 the moment the
          * refusal landed. The shipped NativeAudioRing.write releases the same way. */

@@ -111,7 +111,7 @@ internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pi
 
 /** Converts the tightly packed plane layout returned by KiteFFmpeg's copying API to RGBA. */
 /**
- * Runs a row range on every core there is (W-19), or on this one when that would cost more.
+ * Runs a row range on every core there is, or on this one when that would cost more.
  *
  * The conversion loop is load and store bound, so it scales with cores: measured on a 1080p frame,
  * one task takes 6.36 ms and four take 1.89 ms. Each slice writes a DISJOINT range of output rows

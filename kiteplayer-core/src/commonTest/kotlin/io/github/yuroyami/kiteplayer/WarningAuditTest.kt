@@ -77,7 +77,7 @@ class WarningAuditTest {
             "KiteFFmpegSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
                 "BT.2020 constant luminance alone since 2026-08-25",
         )
-        // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25 (KP-TONEMAP-WARN): it conflated a true
+        // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25: it conflated a true
         // BT.2020 CL claim with an HDR claim that was false on every built-in display path. Kept
         // for 0.x source compatibility; both emission sites are gone.
         is PlaybackWarning.TonemappingUnavailable -> emptyList()
@@ -123,7 +123,7 @@ class WarningAuditTest {
      */
     private val deliberatelyNeverEmitted: Map<String, String> = mapOf(
         "TonemappingUnavailable" to
-            "deprecated 2026-08-25 (KP-TONEMAP-WARN): it conflated a true BT.2020 CL claim with " +
+            "deprecated 2026-08-25: it conflated a true BT.2020 CL claim with " +
             "an HDR claim false on every built-in display path. Split into ColorApproximated and " +
             "HdrToneMapped; kept for 0.x source compatibility, both emission sites deleted",
     )

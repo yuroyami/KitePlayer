@@ -1,5 +1,5 @@
 // The seam between a Kotlin engine and a C real-time core is a ring the C side owns, and this file
-// names its ADDRESS rather than its type (W-18). No cinterop name appears here, so no consumer of
+// names its ADDRESS rather than its type. No cinterop name appears here, so no consumer of
 // this SPI reads one in the API dump; the two places that really need the pointer convert at their
 // own end, and both are modules the kitert coupling baseline already accounts for.
 @file:OptIn(RawRingApi::class)
@@ -92,7 +92,7 @@ public class NativeRingHandoff(
 )
 
 /**
- * The address of a `kprt_ring` the sink owns, as an opaque number (W-18).
+ * The address of a `kprt_ring` the sink owns, as an opaque number.
  *
  * An address rather than a typed pointer so that no cinterop type reaches this module's public API.
  * That is an ABI decision and NOT a safety one: this was never made safe by its type. It is made

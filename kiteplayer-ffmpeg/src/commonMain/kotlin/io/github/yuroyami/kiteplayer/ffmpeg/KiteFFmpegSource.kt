@@ -60,14 +60,14 @@ import kotlin.math.roundToLong
  */
 public class KiteFFmpegSourceFactory : MediaSourceFactory {
     override suspend fun open(media: MediaItem): PlayerMediaSource {
-        // The same funnel KiteFFmpegMediaBackend.open runs (audit F-FACT1): this factory used to
+        // The same funnel KiteFFmpegMediaBackend.open runs: this factory used to
         // drop headers, openOptions, formatHint and videoFilter on the floor and skip the
         // FFmpeg identity mapping, so the documented SPI door behaved differently from the
         // backend door for the same MediaItem.
         val options = preOpenOptions(media)
         rewindFdOption(options)
         // Once per open, like the backend door: what the factory answers with is this source's
-        // reader and is closed with it (audit KP-P1-03).
+        // reader and is closed with it.
         val io = media.io?.invoke()
         val source = mappingFFmpegRuntimeRejection {
             KiteFFmpegSource(
@@ -535,7 +535,7 @@ private class KiteFFmpegVideoDecoder(
 
     /** KiteFFmpeg's own flag, set when its `receive` saw the end of the stream and cleared by flush. */
     override val isDrained: Boolean
-        // A graph that was never built has nothing to flush (audit F-FLT1): the lazy build waits
+        // A graph that was never built has nothing to flush: the lazy build waits
         // for the first decoded frame, and a stream that never produced one used to hold the
         // whole end of stream off for ever through the filterFlushed flag it could never set.
         get() = decoder.isDrained &&
@@ -768,7 +768,7 @@ private class KiteFFmpegAudioDecoder(
             if (candidate != outputFormat) {
                 // Re-anchor before adopting the new format: the sample counter is denominated in
                 // the OLD rate, and applying the new rate to samples accumulated at the old one
-                // would misdate every synthetic timestamp after the transition (audit P1-17).
+                // would misdate every synthetic timestamp after the transition.
                 val oldRate = outputFormat.sampleRate
                 if (oldRate > 0 && samplesSinceAnchor > 0) {
                     anchorMicros += samplesSinceAnchor * 1_000_000L / oldRate
@@ -956,7 +956,7 @@ internal class KiteFFmpegAudioBuffer(
     /**
      * Decoded straight into the MODELLED layout. The stride has to be [format].channels, because
      * every consumer indexes with it: a 16-channel source decoded at its own stride but read at
-     * the truncated stride interleaved wrong-channel samples into every frame (audit P1-16).
+     * the truncated stride interleaved wrong-channel samples into every frame.
      * decodeToFloat itself maps source channels onto the requested count.
      */
     private val samples: FloatArray by lazy {

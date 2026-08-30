@@ -27,7 +27,7 @@
 #
 # EIGHTEEN ordering decisions are pinned below, and eighteen is the total the design took, so the
 # check count can be read as coverage of the ordering front for the first time: five checks landed
-# at B1.9 and thirteen more at the interlude (I-11), after the whole-B1 review planted three
+# at B1.9 and thirteen more at the interlude, after the whole-B1 review planted three
 # mutants on then-unpinned decisions and every one passed the full gate, including TSan, which
 # grades atomicity and not ordering strength. Two of those three were worse than untested: the
 # `consumed` release/acquire pair is the only happens-before edge that stops the feeder
@@ -334,12 +334,12 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     plant_and_check "written-load-relaxed" publication kite_rt_render.c \
         's|written = atomic_load_explicit(&ring->written, memory_order_acquire)|written = atomic_load_explicit(\&ring->written, memory_order_relaxed)|'
 
-    # 4 to 16. One planted mutant per interlude-pinned decision (I-11), line-targeted so the
+    # 4 to 16. One planted mutant per interlude-pinned decision, line-targeted so the
     # identical fence text in another function is not touched. The three mutants the review
     # planted are among them: begin_write's consumed acquire, render's consumed release, and
     # attach's sink->ring release, each of which passed the WHOLE gate including TSan before
     # these checks existed.
-    # Re-anchored 2026-08-17 (audit F-CTRL1): the absolute line numbers these once carried had
+    # Re-anchored 2026-08-17: the absolute line numbers these once carried had
     # drifted with every edit above them, and the runner's own --prove-it-can-fail reported 13
     # controls planting nothing or planting a no-op. Each mutant now anchors on the UNIQUE text
     # of its target, scoped to its owning function where the same fence text exists elsewhere,

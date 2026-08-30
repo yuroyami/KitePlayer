@@ -233,7 +233,7 @@ audit_render_object() {
     local undefined symbol
 
     # Mach-O's `nm -u` prints the bare name; ELF's prints "                 U name". Taking the
-    # last field reads both, and an empty line yields nothing rather than a phantom symbol (W-17).
+    # last field reads both, and an empty line yields nothing rather than a phantom symbol.
     undefined="$("$NM" -u "$object" | awk 'NF { print $NF }' | sort -u)"
     local outside=""
     for symbol in $undefined; do
@@ -320,7 +320,7 @@ audit_callback_object() {
 # absence matter: checking only for RemoteIO would accept an object which selected both branches.
 # Mach-O only, and CoreAudio only: the four-character subtype lives in __TEXT,__literal8, a section
 # ELF does not have, and the value it pins is an AudioComponentDescription's. A non-Apple sink has
-# no equivalent to check, so this is skipped rather than failed (W-17).
+# no equivalent to check, so this is skipped rather than failed.
 audit_device_subtype() {
     local label="$1" object="$2" expected="$3" forbidden="$4"
     local before="$FAILURES"
@@ -518,7 +518,7 @@ else
         "$REMOTE_IO_FOURCC" "$DEFAULT_OUTPUT_FOURCC"
 fi
 
-# ---- 5b. The ELF arm (W-17) ----
+# ---- 5b. The ELF arm ----
 #
 # The same real-time scan, on the cross-compiled linux_arm64 archive, to prove the instrument reads
 # the object format it is given rather than the one this machine happens to use. Only the render

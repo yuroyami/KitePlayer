@@ -185,7 +185,7 @@ public class AppKitVideoRenderer internal constructor(
                 // SOL-R1: an overlay change during a pause re-composites the retained pixels;
                 // a converted frame above already baked the new overlay in.
                 if (redrawWanted.getAndSet(false) && pending.value == null) redrawRetained()
-                // getAndSet(false) is the whole consumption (audit F-RDW1): the old else-arm
+                // getAndSet(false) is the whole consumption: the old else-arm
                 // blindly wrote false over a request that raced in after the read.
             }
         } catch (_: ClosedReceiveChannelException) {

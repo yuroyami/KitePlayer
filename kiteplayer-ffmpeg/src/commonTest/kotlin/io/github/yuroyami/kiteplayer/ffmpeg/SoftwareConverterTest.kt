@@ -79,7 +79,7 @@ class SoftwareConverterTest {
         val mapped = convert(bytes, 1, 1, PlayerPixelFormat.Yuv444p, pq)
 
         // The law written out in ST 2084 and BT.2390 CONSTANTS, never through the production
-        // functions (audit F-TSTL1): an expected value recomputed by the code under test could
+        // functions: an expected value recomputed by the code under test could
         // not fail however wrong that code became. Same style as MetalFrameComposerTest.
         val expected = independentToneMappedGrey(160.0 / 255.0)
         for (channel in 0..2) {

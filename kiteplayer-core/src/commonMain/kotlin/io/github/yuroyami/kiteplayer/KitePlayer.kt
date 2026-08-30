@@ -396,7 +396,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * When a container subtitle stream is already timing cues, the swap needs the same reopen
      * [selectTrack] needs, and this call waits for it. It used to return the id as soon as the file
      * parsed, so a caller held an id for a track whose selection had not run and might still fail
-     * the player (audit KP-P1-02). A selection that does not apply takes the appended track back
+     * the player. A selection that does not apply takes the appended track back
      * out of [PlayerSnapshot.tracks] rather than leaving a row nothing can show.
      *
      * @throws IllegalStateException when nothing is open, or when the selection was replaced or
@@ -451,7 +451,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * ahead of the paused picture, so the schedule releases the next frame of the media whatever
      * its timestamp. That is what makes it exact on variable frame rate, on B-frames, on repeated
      * timestamps and on a container whose declared frame rate is simply wrong, all of which the old
-     * seek-by-average-period step got wrong (audit KP-P1-10). It needs no seek, so it works on a
+     * seek-by-average-period step got wrong. It needs no seek, so it works on a
      * source that cannot seek, and it repeats no decoding, so holding the key down is cheap.
      *
      * @throws IllegalStateException when nothing is open, while playing (a playing player is
@@ -514,7 +514,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * Selections of DIFFERENT kinds made close together are merged into one reopen, so setting the
      * audio track and then the subtitle track costs one rebuild and both are applied. Two requests
      * for the SAME kind cannot both be honoured, and the earlier one returns
-     * [TrackChange.Superseded] rather than the success it used to report (audit KP-P1-01). Read the
+     * [TrackChange.Superseded] rather than the success it used to report. Read the
      * result when it matters; ignore it when your application only ever selects from one place.
      *
      * @return [TrackChange.Applied] when this request is the live selection,

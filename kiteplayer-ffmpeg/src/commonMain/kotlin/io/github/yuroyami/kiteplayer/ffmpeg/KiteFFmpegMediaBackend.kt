@@ -62,7 +62,7 @@ public class KiteFFmpegMediaBackend(
         val options = preOpenOptions(media)
         rewindFdOption(options)
         // Invoked exactly once: the item carries a factory, and the reader it makes belongs to this
-        // session and is closed with it (audit KP-P1-03).
+        // session and is closed with it.
         val io = media.io?.invoke()
         val source = mappingFFmpegRuntimeRejection {
             KiteFFmpegSource(
@@ -105,7 +105,7 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
 
     override fun setWarningSink(sink: (PlaybackWarning) -> Unit) {
         // The engine's reporter joins whatever listener the application installed at construction,
-        // so a hardware fallback is never silent again (audit P1-21) and an app listener keeps
+        // so a hardware fallback is never silent again and an app listener keeps
         // seeing what it saw before.
         val existing = kiteCodec.onWarning
         kiteCodec.onWarning = { warning ->
@@ -125,7 +125,7 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
 }
 
 /**
- * The item's typed fields respelled as the pre-open options they are (SOL-API1): `headers` is
+ * The item's typed fields respelled as the pre-open options they are: `headers` is
  * the http protocol's own option, one CRLF-joined block exactly as the protocol documents it,
  * and `formatHint` is a format whitelist of one, which is what forcing a demuxer means to
  * libavformat. An explicit [MediaItem.openOptions] key wins over the typed field, because the

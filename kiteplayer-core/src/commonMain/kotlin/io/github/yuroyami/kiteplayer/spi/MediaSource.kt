@@ -45,7 +45,7 @@ public interface PlayerMediaSource : AutoCloseable {
 
     /**
      * Requests that a blocking call another lane is stuck inside return promptly with a typed
-     * failure, and that every later blocking call on this source fail fast (KC-CANCEL).
+     * failure, and that every later blocking call on this source fail fast.
      *
      * One-way: an interrupted source is being abandoned, and the session that owns it is on its
      * way down. The engine calls this from the actor while the demux lane is wedged inside a

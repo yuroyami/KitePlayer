@@ -125,7 +125,7 @@ public sealed interface RendererEvent {
     public data class VsyncChanged(val intervalNanos: Long) : RendererEvent
 
     /**
-     * This renderer rolled HDR off to standard dynamic range to show it (KP-TONEMAP-WARN).
+     * This renderer rolled HDR off to standard dynamic range to show it.
      *
      * Published by the renderer that DID it, at the moment it did, and by no one else. A renderer
      * that hands HDR to a display able to present it publishes NOTHING, which is why this is an

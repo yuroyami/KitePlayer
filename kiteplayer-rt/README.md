@@ -46,7 +46,7 @@ cd native
 The harness and the interposer exist twice, here and in KiteFFmpeg's `native/kitecodec-c/tests/`,
 and the two are a pair: the same mechanism under two prefixes (`KPRT_REQUIRE_ALLOC_ACCOUNTING`
 here, `KC_REQUIRE_ALLOC_ACCOUNTING` there), and a fix to either lands in both in the same change.
-The interlude (I-08) ported this tree's require mechanism to KiteFFmpeg after measuring what the
+The interlude ported this tree's require mechanism to KiteFFmpeg after measuring what the
 fork had already cost: a one-word blinding of KiteFFmpeg's interposer left its whole ownership gate
 green while observing nothing.
 

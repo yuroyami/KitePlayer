@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.internal
 
 /**
- * The one redaction law the support bundle uses (SEC-3).
+ * The one redaction law the support bundle uses.
  *
  * The bundle used `substringAfterLast('/')`, which keeps everything after the last slash. That is
  * exactly where credentials live: `https://host/video.mp4?token=SECRET` came out as

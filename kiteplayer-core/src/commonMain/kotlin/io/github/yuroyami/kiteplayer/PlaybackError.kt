@@ -321,7 +321,7 @@ public sealed class PlaybackWarning {
      * Teardown runs every close in its own `runCatching` so that one failure cannot strand the
      * resources after it, which is right. What was wrong is that the failures then vanished: a
      * decoder or device that refused to close left no trace anywhere, and the next open met a
-     * machine in a state nothing had reported (audit KP-P1-08). The session is gone either way,
+     * machine in a state nothing had reported. The session is gone either way,
      * which is why this is a warning and not a failure, but it is now a warning that exists.
      */
     public data class ResourcesNotReleased(val detail: String) : PlaybackWarning() {

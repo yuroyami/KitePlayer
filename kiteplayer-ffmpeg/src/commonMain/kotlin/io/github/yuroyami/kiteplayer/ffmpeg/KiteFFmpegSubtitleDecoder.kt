@@ -30,7 +30,7 @@ internal class KiteFFmpegSubtitleDecoderFactory : SubtitleDecoderFactory {
         "subrip", "srt", "text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCueBody)
         // MP4 timed text is NOT raw UTF-8: a tx3g sample is a 2-byte big-endian text length,
         // that many bytes of UTF-8, then optional style boxes. Decoding the whole payload put
-        // the binary length prefix and box bytes into the cue (audit P1-15). The styles are
+        // the binary length prefix and box bytes into the cue. The styles are
         // dropped for now; the text is exact.
         "mov_text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCueBody, extractBody = ::tx3gText)
         "webvtt" -> KiteFFmpegTextSubtitleDecoder(WebVttParser::parseCueBody)

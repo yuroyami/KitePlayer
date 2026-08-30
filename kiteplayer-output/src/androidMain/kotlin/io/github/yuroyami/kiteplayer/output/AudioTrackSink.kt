@@ -59,7 +59,7 @@ public class AudioTrackSink internal constructor(
 
     private var writer: Thread? = null
 
-    /* The interrupted block held across a pause (F-AUD2). Writer-confined: the pause path's
+    /* The interrupted block held across a pause. Writer-confined: the pause path's
      * join and the resume path's thread start are the only handovers. Cleared by stop's flush
      * and by open, because a flush discards exactly what this holds. */
     private var heldBlockFloats = 0
@@ -220,7 +220,7 @@ public class AudioTrackSink internal constructor(
             submittedFrames = 0L
             resetTimestampState()
         }
-        /* The flush discarded exactly what the held block was (F-AUD2); after the join the
+        /* The flush discarded exactly what the held block was; after the join the
          * writer is gone, so this clear races nothing. */
         heldBlockFloats = 0
         heldBlockOffset = 0
@@ -251,7 +251,7 @@ public class AudioTrackSink internal constructor(
             draining = false
             writerRun = false
             d.stop() /* without flush: this is the end-of-media path */
-            /* Mirror stop's accounting reset (audit F-AUD3): everything submitted has been
+            /* Mirror stop's accounting reset: everything submitted has been
              * heard, and a later latencyNanos against a fresh head read minutes of pending
              * audio out of the stale counter. */
             submittedFrames = 0L
@@ -440,7 +440,7 @@ public class AudioTrackSink internal constructor(
      */
     private fun readTimestamp(d: AudioTrackDriver): DriverTimestamp? {
         val ts = d.timestamp() ?: return null
-        /* Under headLock like the head's own wrap state (audit F-AUD4): the writer reads this
+        /* Under headLock like the head's own wrap state: the writer reads this
          * per block and the public latencyNanos may read it from any thread. */
         synchronized(headLock) {
             ts.framePosition = extendTimestampFrames(ts.framePosition, tsState)

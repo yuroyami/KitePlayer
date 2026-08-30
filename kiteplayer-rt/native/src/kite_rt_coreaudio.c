@@ -64,13 +64,13 @@
  * surface than the number is worth. */
 #define KPRT_DEFAULT_DEVICE_BUFFER_FRAMES 512
 
-/* Channels this sink will accept (SOL-A6). Both Apple output units take interleaved 32 bit
+/* Channels this sink will accept. Both Apple output units take interleaved 32 bit
  * float, and above stereo the layout is DECLARED rather than assumed: each count from one to six
  * carries the tag whose speaker order matches FFmpeg's own for that count, so the engine's
  * interleave reaches the right speakers without a remap. See `kprt_layout_tag_for`, which replaced
  * the old rule of tagging EVERY count above two as MPEG 5.1 A (audit 15.3.3). Counts above 6 clamp
  * to 2 rather than 6, because the pipeline's mixer downmixes to stereo but cannot yet fold 8 into
- * 6 (SOL-P8); stereo is the honest fallback that always sounds right.
+ * 6; stereo is the honest fallback that always sounds right.
  *
  * This is the CEILING, not the answer. The DEVICE's own channel count bounds it further at create
  * time, because the input scope accepts a width the hardware does not have and reports success, so
@@ -369,7 +369,7 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     if (accepted_channels < KPRT_MIN_CHANNELS)
         accepted_channels = KPRT_MIN_CHANNELS;
     if (accepted_channels > KPRT_MAX_CHANNELS)
-        accepted_channels = 2; /* not 6: see the KPRT_MAX_CHANNELS note (SOL-A6, SOL-P8) */
+        accepted_channels = 2; /* not 6: see the KPRT_MAX_CHANNELS note */
 
     /* The sample rate is deliberately NOT validated here. A rate the device refuses must be refused
      * BY THE DEVICE, after the instance exists, because that is the window in which a half open used

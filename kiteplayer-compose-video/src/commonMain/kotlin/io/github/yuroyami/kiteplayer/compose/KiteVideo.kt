@@ -117,7 +117,7 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
     )
 }
 
-/** The overlay pass, shared by the with-picture and no-picture draws (SOL-R2). */
+/** The overlay pass, shared by the with-picture and no-picture draws. */
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawOverlayItems(state: KiteVideoState) {
     val overlay = state.overlay.value ?: return
     val scaleX = size.width / overlay.viewportWidth.coerceAtLeast(1)

@@ -40,7 +40,7 @@ class DesktopSubtitleRasterizerTest {
         position: Float = 1f,
     ) = DesktopSubtitleRasterizer().rasterize(cues.toList(), width, height, fontScale, position)
 
-    // ── the alpha contract (SOL-S1, audit F-ALPHA1) ─────────────────────────────────────────
+    // ── the alpha contract ─────────────────────────────────────────
 
     /**
      * [RgbaBitmap] says PREMULTIPLIED, and both shipped rasterizers produce exactly that (Android

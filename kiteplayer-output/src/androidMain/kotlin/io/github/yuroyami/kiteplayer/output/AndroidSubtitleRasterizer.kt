@@ -168,7 +168,7 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
 
         val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
         val marginYPx = (viewportHeight * layoutSpec.marginVertical).toInt()
-        // An authored position is the cue's ANCHOR point, oriented by the alignment (F-POS1):
+        // An authored position is the cue's ANCHOR point, oriented by the alignment:
         // \pos with \an2 puts the bottom-centre of the text on the point, not its top-left.
         val x = layoutSpec.positionX?.let { fraction ->
             val anchor = (fraction * viewportWidth).toInt()

@@ -132,7 +132,7 @@ internal fun ringAnchor(ring: CPointer<kprt_ring>): RingAnchor = memScoped {
 internal fun framesToMicros(frames: Long, sampleRate: Int): Long = kprt_frames_to_micros(frames, sampleRate)
 
 /**
- * The handoff's ring as a pointer (W-18).
+ * The handoff's ring as a pointer.
  *
  * The SPI carries an ADDRESS so that no cinterop type reaches kiteplayer-core's public API. This
  * module owns the C sink pointer and the kitert coupling baseline excludes it by design, so the

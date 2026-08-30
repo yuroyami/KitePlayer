@@ -159,14 +159,14 @@ public data class BufferPolicy(
     init {
         // A budget of zero or less never admits a packet and wedges the demuxer before the first
         // read; an empty frame queue can never present. Refused here, before any native resource
-        // is acquired (audit P1-19).
+        // is acquired.
         require(readyDuration >= Duration.ZERO) { "readyDuration must not be negative, was $readyDuration" }
         require(readyPackets > 0) { "readyPackets must be positive, was $readyPackets" }
         require(softTarget > Duration.ZERO) { "softTarget must be positive, was $softTarget" }
         require(totalBytes > 0) { "totalBytes must be positive, was $totalBytes" }
         require(totalDuration > Duration.ZERO) { "totalDuration must be positive, was $totalDuration" }
         // Two, not one: timing a frame needs the NEXT frame's timestamp, which is FrameQueue's
-        // own bound. One slot passed here and crashed the first open instead (audit F-CFG1).
+        // own bound. One slot passed here and crashed the first open instead.
         require(videoFrameQueue >= 2) { "videoFrameQueue must hold at least two frames, was $videoFrameQueue" }
     }
 }

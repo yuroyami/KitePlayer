@@ -50,7 +50,7 @@ public data class MediaItem(
      * once by perfectly ordinary playback: a track switch reopens the container, so does a hardware
      * decoder recovery, so does a loop, and so does a queue coming back round. Holding one live
      * reader here meant the second open was handed the one the first session had already closed,
-     * and the media simply stopped (audit KP-P1-03).
+     * and the media simply stopped.
      *
      * Wired through the custom AVIO bridge (KPKMP 17.12 M1): when set, [uri] is a label only and
      * every byte the demuxer touches comes from the reader this makes. This is how an application
@@ -178,7 +178,7 @@ public enum class SeekMode {
      * Shows the keyframe at once and then refines to the exact frame, which is what a seek bar
      * drag wants: the picture responds immediately and settles a moment later.
      *
-     * Real since the S4.g surge (SOL-API3): the seek machine lands and PRESENTS the keyframe at
+     * Real since the S4.g surge: the seek machine lands and PRESENTS the keyframe at
      * or before the target first, then runs an ordinary precise landing on the exact frame. The
      * reported position and [io.github.yuroyami.kiteplayer.PlayerEvent.SeekCompleted] carry the
      * exact landing, never the intermediate keyframe, and a keyframe that already sits on the

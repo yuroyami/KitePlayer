@@ -62,7 +62,7 @@ public class DesktopAudioSink internal constructor(
 
     private var writer: Thread? = null
 
-    /* The interrupted block held across a pause (audit F-AUD2). Writer-confined: the pause path's
+    /* The interrupted block held across a pause. Writer-confined: the pause path's
      * join and the resume path's thread start are the only handovers. Cleared by stop's flush and
      * by open, because a flush discards exactly what this holds. */
     private var heldBlockBytes = 0
@@ -88,7 +88,7 @@ public class DesktopAudioSink internal constructor(
      * that stops and starts again resets [submittedFrames] while the line's counter keeps going,
      * so the two must be re-zeroed together. This is that one base, held for the line's life and
      * re-taken wherever the submitted count is. Guarded by [positionLock] because the writer
-     * reads it per block and public [latencyNanos] may read it from any thread (audit F-AUD4).
+     * reads it per block and public [latencyNanos] may read it from any thread.
      */
     private var positionBase = 0L
 
@@ -223,7 +223,7 @@ public class DesktopAudioSink internal constructor(
             submittedFrames = 0L
             rebasePosition(d)
         }
-        /* The flush discarded exactly what the held block was (F-AUD2); after the join the writer
+        /* The flush discarded exactly what the held block was; after the join the writer
          * is gone, so this clear races nothing. */
         clearHeldBlock()
     }

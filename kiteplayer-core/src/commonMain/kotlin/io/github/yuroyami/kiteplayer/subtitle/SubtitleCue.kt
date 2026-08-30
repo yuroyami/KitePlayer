@@ -53,7 +53,7 @@ public data class StyledSpan(
  * ## What the built-in rasterizers actually apply
  *
  * A parser fills every field it can read. The three built-in rasterizers do NOT all use every one,
- * so this is what a consumer can rely on. Measured against the tree 2026-08-25 (SOL-S7).
+ * so this is what a consumer can rely on. Measured against the tree 2026-08-25.
  *
  * | Field | Desktop | Apple | Android |
  * |---|---|---|---|
@@ -81,7 +81,7 @@ public data class CueStyle(
     /** Taken from the cue's FIRST span and applied to all of them. */
     val outlineColor: Int = 0xFF000000.toInt(),
     /**
-     * Not drawn by any built-in rasterizer, so the default below is inert (SOL-S7).
+     * Not drawn by any built-in rasterizer, so the default below is inert.
      *
      * Kept because the parsers read it from the source and libass renders its own shadow. Drawing
      * one here means growing each cue's bitmap by the offset and moving its placement with it,
@@ -116,7 +116,7 @@ public data class CueLayout(
      */
     val authoredHeight: Int? = null,
     /**
-     * Not applied by any built-in rasterizer (SOL-S7).
+     * Not applied by any built-in rasterizer.
      *
      * All three break at the safe width with their platform's own line breaker, so every cue wraps
      * that way whatever this says. It is parsed and carried because libass and any custom

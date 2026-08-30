@@ -180,7 +180,7 @@ internal class TempoStage(
      * of the one it writes. At the end of a stream that lookahead never arrives, so up to two
      * periods of real audio sit here with nothing to trigger them, and [reset] used to be the only
      * way out: it dropped them. On a short clip that is the last audible fraction of a second going
-     * missing (audit P0-20).
+     * missing.
      *
      * The remainder is emitted straight through rather than spliced. A splice needs the period
      * after the one it cuts, and at the end of a stream there is no such period; stretching the

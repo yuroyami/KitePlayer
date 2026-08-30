@@ -27,7 +27,7 @@ public class XmlException(message: String, public val offset: Int) : Exception("
 public object XmlMini {
 
     /**
-     * How deep a document may nest before the parser refuses (SEC-6).
+     * How deep a document may nest before the parser refuses.
      *
      * `parseElement` recurses once per level, so a manifest of ten thousand opening tags raised
      * `StackOverflowError`. That is an `Error`, not an `Exception`, so every `catch (Exception)`
@@ -185,7 +185,7 @@ public object XmlMini {
         }
 
         /**
-         * One code point as a string, surrogate pairs included (audit F-XML1): `toChar()` used
+         * One code point as a string, surrogate pairs included: `toChar()` used
          * to truncate everything above the basic plane to a wrong character. Surrogate and
          * out-of-range references answer null, which leaves the reference literal in the text.
          */

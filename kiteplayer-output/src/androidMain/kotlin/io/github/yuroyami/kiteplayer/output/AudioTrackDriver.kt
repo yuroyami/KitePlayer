@@ -60,7 +60,7 @@ internal interface AudioTrackDriver {
 }
 
 /**
- * SCRATCH holder by contract (SOL-A3): a driver may reuse one instance across polls, so the
+ * SCRATCH holder by contract: a driver may reuse one instance across polls, so the
  * caller reads the fields before its next driver call and never retains the object. Mutable
  * for the same reason; the sink's wrap extension writes framePosition in place.
  */

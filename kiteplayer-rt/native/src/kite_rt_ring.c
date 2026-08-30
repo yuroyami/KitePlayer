@@ -65,7 +65,7 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
         return NULL;
     /* Cheap sanity bounds on the factors. 1 << 27 frames is over 46 minutes of 48 kHz audio, so
      * neither bound costs anything real. What these do NOT do, and were wrongly documented as
-     * doing until the interlude (I-01), is remove the overflow of the byte-count multiply: that
+     * doing until the interlude, is remove the overflow of the byte-count multiply: that
      * reasoning held only for a 64 bit size_t, and four of the seventeen shipped targets have a
      * 32 bit one, where an admitted pair like (1 << 27 frames, 32 channels) wraps the byte count
      * and the first ordinary fill writes past the allocation. The PRODUCT bound below is the

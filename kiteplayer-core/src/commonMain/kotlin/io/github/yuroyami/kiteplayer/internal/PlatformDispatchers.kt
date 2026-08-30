@@ -26,7 +26,7 @@ internal expect fun platformPlaybackDispatchers(): PlaybackDispatchers
  * players costing thirty-six. The split is by BEHAVIOUR: lanes that only suspend (the video
  * scheduler, the raster lane) ride [calm], the pool for computation; lanes that can BLOCK ride
  * [blocking], the pool built for exactly that, so a stall parks an elastic IO thread and never
- * starves computation. The session actor rides [blocking] too (audit F-LANE1): its teardown
+ * starves computation. The session actor rides [blocking] too: its teardown
  * and seek paths call `sink.stop()`, and on Android that joins the writer thread, a real block
  * that on a two-core Default pool could sit on half the computation budget.
  *
@@ -62,7 +62,7 @@ internal class SharedLaneDispatchers(
     override val raster: CoroutineContext = calm.limitedParallelism(1)
 
     // Blocking, because a session release is nothing but blocking native closes, and its OWN lane
-    // so that a close which wedges cannot also park the actor that is timing it (audit KP-P1-07).
+    // so that a close which wedges cannot also park the actor that is timing it.
     @kotlinx.coroutines.ExperimentalCoroutinesApi
     override val release: CoroutineContext = blocking.limitedParallelism(1)
 

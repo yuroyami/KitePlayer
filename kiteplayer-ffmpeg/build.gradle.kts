@@ -94,7 +94,7 @@ kotlin {
             implementation(project(":kiteplayer-subtitles"))
             // api, not implementation: KiteFFmpegVideoFrame publicly exposes kiteffmpeg.Frame, and
             // the phone/compose modules cast to it. Hiding the dependency made that public type
-            // invisible to consumers compiling against this module's ABI (audit P1-25).
+            // invisible to consumers compiling against this module's ABI.
             api(libs.kiteffmpeg.core)
             implementation(libs.kotlinx.atomicfu)
         }
@@ -148,7 +148,7 @@ kotlin {
 }
 
 // The jvm TEST runtime classpath, printed for the same reason :kiteplayer-sample-desktop prints its
-// run classpath: the Linux container that runs this suite (W-20) has no Gradle to ask.
+// run classpath: the Linux container that runs this suite has no Gradle to ask.
 val jvmTestFiles = kotlin.jvm().compilations.getByName("test")
     .let { test -> test.output.allOutputs + test.runtimeDependencyFiles }
 

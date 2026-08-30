@@ -35,7 +35,7 @@ import kotlin.math.ceil
  * outline stroked in the outline colour first, then the text filled on top.
  *
  * **Alpha.** The pixels come out PREMULTIPLIED, which is what [RgbaBitmap] says and what the
- * other two rasterizers already produce (audit F-ALPHA1). `TYPE_INT_ARGB_PRE` is the AWT image
+ * other two rasterizers already produce. `TYPE_INT_ARGB_PRE` is the AWT image
  * that stores exactly that, and the raster is read directly rather than through `getRGB`, because
  * `getRGB` UN-premultiplies on the way out and would hand three downstream consumers straight
  * alpha they would premultiply a second time.
@@ -131,7 +131,7 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         }
         height = height.coerceAtLeast(1)
 
-        // A POSITIONED cue's bitmap is its text extent, not the whole safe width (audit F-POS1):
+        // A POSITIONED cue's bitmap is its text extent, not the whole safe width:
         // the lines still break at the safe width so they read identically, but the bitmap hugs
         // the glyphs and the placement anchors that extent on the authored point. An unpositioned
         // cue keeps the full-width bitmap, whose internal alignment IS its horizontal placement.
@@ -163,7 +163,7 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
 
         val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
         val marginYPx = (viewportHeight * layoutSpec.marginVertical).toInt()
-        // An authored position is the cue's ANCHOR point, oriented by the alignment (F-POS1):
+        // An authored position is the cue's ANCHOR point, oriented by the alignment:
         // \pos with \an2 puts the bottom-centre of the text on the point, not its top-left.
         val x = layoutSpec.positionX?.let { fraction ->
             val anchor = (fraction * viewportWidth).toInt()
@@ -208,7 +208,7 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
 
     /**
      * The raster's own premultiplied ARGB ints, repacked to the RGBA byte order every consumer
-     * reads. `getRGB` is deliberately not used: it un-premultiplies (audit F-ALPHA1).
+     * reads. `getRGB` is deliberately not used: it un-premultiplies.
      */
     private fun premultipliedRgba(image: BufferedImage): ByteArray {
         val argb = (image.raster.dataBuffer as DataBufferInt).data

@@ -499,7 +499,7 @@ private class AndroidGpuCompletionTracker(
         if (!batches.hasPending) return
         // Invalidating the Android View alone can replay Compose's existing display list without
         // executing drawBehind. Tick draw state so a new VSYNC-keyed batch is definitely recorded.
-        // POSTED, never written inline (audit F-DRAW1): record() runs inside the Compose draw
+        // POSTED, never written inline: record() runs inside the Compose draw
         // phase, and writing a draw-observed snapshot state from inside the draw that reads it
         // is the reentrant-invalidation shape Compose forbids. The post also keeps the tick on
         // the main thread whichever thread asked for the proof.
@@ -551,7 +551,7 @@ private class AndroidGpuCompletionTracker(
     )
 }
 
-/** The one place the backend pairing is checked, so all three actuals refuse the same way (W-13). */
+/** The one place the backend pairing is checked, so all three actuals refuse the same way. */
 private fun VideoFrame.asKiteFFmpegFrame(): KiteFFmpegVideoFrame = this as? KiteFFmpegVideoFrame
     ?: throw UnsupportedFrameType(
         actual = this::class.simpleName ?: "an unnamed frame type",

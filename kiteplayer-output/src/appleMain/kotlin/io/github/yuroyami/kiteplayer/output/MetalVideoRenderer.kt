@@ -123,7 +123,7 @@ public class MetalVideoRenderer public constructor(
                 drawPending()
                 // SOL-R1: overlay and picture-control changes reach a PAUSED frame by
                 // re-encoding the retained picture. A frame drawn above already carried them.
-                // getAndSet(false) is the whole consumption (audit F-RDW1): the old else-arm
+                // getAndSet(false) is the whole consumption: the old else-arm
                 // blindly wrote false over a request that raced in after the read, and that
                 // request's queued token then found the flag already spent.
                 if (redrawWanted.getAndSet(false) && pending.value == null) drawRetained()
@@ -180,7 +180,7 @@ public class MetalVideoRenderer public constructor(
                 failed.incrementAndGet()
                 return
             }
-            // The format gate runs BEFORE a drawable is acquired (audit F-DRW1): refusing after
+            // The format gate runs BEFORE a drawable is acquired: refusing after
             // nextDrawable left that drawable unpresented and its buffer uncommitted, and a
             // layer holds only about three, so a stream of unwrappable frames starved the pool.
             if (!composer.canEncode(picture)) {

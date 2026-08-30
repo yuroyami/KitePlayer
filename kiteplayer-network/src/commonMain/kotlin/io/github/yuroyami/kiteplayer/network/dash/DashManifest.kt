@@ -71,7 +71,7 @@ public data class DashSegmentPlan(
 )
 
 /**
- * What a manifest is allowed to point this player at (SEC-2).
+ * What a manifest is allowed to point this player at.
  *
  * An MPD is attacker-supplied input: the player fetches whatever it names, using the CALLER'S
  * `HttpClient`, which carries that client's default headers and its cookie jar. Before this policy
@@ -113,7 +113,7 @@ public object DashManifestParser {
 
     /**
      * Parses [xml] fetched from [manifestUrl]; the URL anchors every relative BaseURL, and
-     * [policy] decides what the manifest is allowed to point at (SEC-2).
+     * [policy] decides what the manifest is allowed to point at.
      */
     public fun parse(
         xml: String,
@@ -180,7 +180,7 @@ public object DashManifestParser {
         media = template.attr("media"),
         startNumber = template.attr("startNumber")?.toLongOrNull() ?: 1L,
         // Refused here rather than at the division that uses it: `timescale="0"` used to reach
-        // `duration * 1_000_000 / timescale` and raise an untyped ArithmeticException (SEC-6).
+        // `duration * 1_000_000 / timescale` and raise an untyped ArithmeticException.
         timescale = (template.attr("timescale")?.toLongOrNull() ?: 1L).also {
             require(it > 0) { "SegmentTemplate timescale must be positive, not $it" }
         },
@@ -329,7 +329,7 @@ public object DashManifestParser {
     }
 
     /**
-     * RFC-3986-lite resolution, then [policy] (SEC-2).
+     * RFC-3986-lite resolution, then [policy].
      *
      * A scheme is detected by its grammar rather than by looking for `://`, which is what let
      * `file:/etc/passwd` through as a relative path and would have accepted a relative segment

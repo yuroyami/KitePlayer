@@ -314,7 +314,7 @@ internal class FaultPlan(
     /** True makes opening the sink fail. */
     var sinkOpenFails: Boolean = false
 
-    /** True wedges the next container seek like an uncancellable native scan (KC-CANCEL). */
+    /** True wedges the next container seek like an uncancellable native scan. */
     var seekWedges: Boolean = false
 
     /** Reads beyond this count wedge like an uncancellable native read. Null wedges nothing. */
@@ -334,7 +334,7 @@ internal class FaultPlan(
      *
      * Armable and disarmable, and the parked call rechecks it, so a test can wedge the terminal
      * release, prove the close reports a compromised runtime rather than hanging, and then let the
-     * release finish so nothing is left parked on the scheduler (audit KP-P1-07).
+     * release finish so nothing is left parked on the scheduler.
      */
     var stopHangs: Boolean = false
 

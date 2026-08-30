@@ -264,7 +264,7 @@ internal class MetalFrameComposer(
 
     /**
      * True when [encode] can draw [picture]: the cheap format gate run BEFORE a drawable is
-     * acquired (audit F-DRW1). Refusing after nextDrawable left the drawable unpresented and
+     * acquired. Refusing after nextDrawable left the drawable unpresented and
      * the command buffer uncommitted, and a layer only has about three drawables to starve.
      */
     fun canEncode(picture: MetalPicture): Boolean = when (picture) {
@@ -332,7 +332,7 @@ internal class MetalFrameComposer(
                 }
             }
         } catch (failure: Throwable) {
-            // A failure halfway through wrapping owns whatever it already wrapped (SOL-R7).
+            // A failure halfway through wrapping owns whatever it already wrapped.
             wrapped.forEach { (cv, _) -> if (cv != null) CFRelease(cv) }
             throw failure
         }

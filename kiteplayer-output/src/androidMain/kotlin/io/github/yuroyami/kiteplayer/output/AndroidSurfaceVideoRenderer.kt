@@ -469,7 +469,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         if (active.viewportWidth <= 0 || active.viewportHeight <= 0) return
         // Overlay coordinates live in UNROTATED video-display space, so they map into the
         // PRE-turn draw rectangle and the canvas turn in drawOverlayImage glues them to the
-        // picture (audit F-ROT1). The post-turn rectangle put them at the wrong place with the
+        // picture. The post-turn rectangle put them at the wrong place with the
         // wrong scale on both axes whenever the video carried a quarter turn.
         val scaleX = layout.drawWidth / active.viewportWidth
         val scaleY = layout.drawHeight / active.viewportHeight
@@ -563,7 +563,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {
         val external = overlayConsumer
         if (external != null) {
-            // A delegated overlay is the external layer's alone (audit F-DDRW1): storing it
+            // A delegated overlay is the external layer's alone: storing it
             // here too made the software path burn every cue into the video AND hand it to the
             // view, so each subtitle drew twice, once without the view's rotation mapping.
             this.overlay.value = null
@@ -812,7 +812,7 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
      * Cue pixels arrive PREMULTIPLIED (the RgbaBitmap contract since the 2026-08-17 audit) and
      * an ARGB_8888 bitmap stores premultiplied, so the upload is a raw copy. The old path here
      * premultiplied by hand and then let setPixels premultiply AGAIN, which turned every
-     * antialiased edge and translucent cue darker with each pass (audit F-ALPHA1).
+     * antialiased edge and translucent cue darker with each pass.
      * Done once per contentHash and image index.
      */
     private fun overlayBitmapFor(
@@ -908,7 +908,7 @@ internal class SurfaceCanvasTarget(private val surface: Surface) : CanvasTarget 
             destination.set(left, top, left + drawWidth, top + drawHeight)
             val saved = canvas.save()
             try {
-                /* The same turn the picture made (audit F-ROT1): overlay coordinates are mapped
+                /* The same turn the picture made: overlay coordinates are mapped
                  * into the PRE-turn draw rectangle and the canvas turn glues them to the video,
                  * exactly as drawFrame does. Unrotated they sat on the post-turn rectangle with
                  * the wrong scale on both axes. */

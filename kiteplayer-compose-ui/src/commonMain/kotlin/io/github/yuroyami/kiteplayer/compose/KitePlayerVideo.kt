@@ -18,7 +18,9 @@ import io.github.yuroyami.kiteplayer.KitePlayer
  * identity-checked, then the new one attaches to the same running [player]; the engine keeps
  * playing through the swap and rebuilds a coupled decoder by itself (see
  * KitePlayer.attachRenderer). [onEffectivePath] reports what actually runs, which differs from
- * [path] where a platform cannot honour it (JVM has no native video view). The player is never
+ * [path] where a platform cannot honour it. On desktop both paths are real, but a native view
+ * cannot have clickable Compose content drawn over it, because macOS routes a click to the
+ * topmost native view; put such controls in an owned overlay window. The player is never
  * owned here: opening media, playing, seeking and closing stay the caller's, exactly like
  * [KitePlayerSurface].
  *

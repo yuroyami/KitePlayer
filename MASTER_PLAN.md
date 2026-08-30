@@ -300,11 +300,21 @@ field against the fake; one real-browser integration run recorded as manual evid
   defect: midstream change identical on both backends; blocking callback cannot deadlock;
   second collection refuses at the type.
 
-### 3.9 KC-FRAME-FLOW: a buffered frame Flow strands native frames. Size M
+### 3.9 `FilterGraph.process` handles a cancelled emit differently per backend. Size S, NEEDS-DESIGN
 
-The defect is stated in public KDoc (known, still a leak). Close-on-cancel wrapper: a
-`Flow<Frame>` variant that closes undelivered frames when the collector cancels. RED: cancel
-mid-stream with buffered frames; leak ledger shows zero live after. Delete the KDoc caveat.
+Found while closing the buffered-flow leak, 2026-08-30, and NOT fixed with it because the two
+backends are wrong in opposite directions and the right answer is a contract choice.
+
+- JVM (`FilterGraph.jvm.kt`, the `emit(out)` site) wraps the emit in `catch (Throwable) {
+  out.close(); throw error }`. But `take` and `first` end a flow by throwing out of `emit` AFTER
+  the value reached the collector, so `process(input).first()` hands back a frame the library then
+  closed. Every read on it refuses.
+- Native (`FilterGraph.native.kt`, same site) has no catch, so an emit cancelled from OUTSIDE
+  strands the clone instead.
+
+Both failure modes look identical at the emit site: nothing there can tell "the collector took it
+and stopped" from "the scope died before delivery". Decide which loss is preferred, or give the
+frame a reclamation path that makes the question moot, then align both.
 
 ### 3.10 KC-CAPS: enumeration + measured build inventory. Size S + S
 

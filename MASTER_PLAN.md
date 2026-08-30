@@ -225,18 +225,20 @@ the compose-ui and compose-interop JVM suites, the second of which only started 
 
 # PHASE 3: CORRECTNESS AND CONTRACTS (KiteFFmpeg first, republish, then adoption)
 
-### 3.2 KC-SPEC: output specs carry no colour, HDR, pixel aspect or exact layout. Size L
+### 3.2 KC-SPEC remainder: an encode still flattens colour, HDR and exact layout. Size L
 
-`MediaSink` specs carry codec/size/pixfmt/rate/bitrate/keyint plus an untyped map; nothing
-propagates from the source, so an encode silently flattens HDR and 5.1(side) becomes
-5.1(back). Also: the untyped map beats the typed field beside it (`options["b"]` wins over
-`bitrateBps`, video and audio both).
+The collision half landed 2026-08-30: an option that duplicates a typed field is refused, naming
+both, on both backends. `ch_layout` is deliberately NOT refused, because it says something a
+channel count cannot.
 
-- [ ] Typed colour (primaries/transfer/matrix/range), mastering metadata, SAR, exact layout
-  on the specs; propagate from `StreamInfo` when not overridden; colliding option keys refuse
-  typed (silent precedence in either direction is the defect). RED: scripted HDR source
-  carries its colour into the sink untouched; collision refuses. Both backends; wasm records
-  its bound. apiDump.
+- [ ] The propagation half. `MediaSink` specs still carry only codec, size, pixel format, rate,
+  bitrate and keyframe interval, so nothing about the SOURCE reaches the output: an HDR encode is
+  flattened, 5.1(side) becomes 5.1(back), and pixel aspect is dropped. Add typed colour
+  (primaries/transfer/matrix/range), mastering metadata, SAR and exact layout to the specs, and
+  propagate from `StreamInfo` when the caller did not override. RED: a scripted HDR source carries
+  its colour into the sink untouched. Both backends, wasm records its bound, apiDump.
+  **Newly cheap:** `ColorInfo` now carries per-field provenance (3.5), so propagation can copy what
+  the source DECLARED and leave what this library guessed, rather than declaring a guess as fact.
 
 ### 3.3 KC-REMUX: a "lossless" remux drops identity. Size M
 

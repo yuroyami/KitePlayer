@@ -249,12 +249,20 @@ never written; no program or attachment path.
   out is named here as remainder, not skipped silently. Fix the README "bit-exact" wording in
   the same commit.
 
-### 3.4 KC-AENC: the audio encoder validates and converts nothing. Size M
+### 3.4 KC-AENC remainder: the audio encoder still cannot CONVERT. Size M
 
-Both backends read `if (audio) 0L else conversionFor(...)`: video gets validation and pixel
-conversion, audio gets neither, so rate/format/layout/frame-size mismatches fail late and
-cryptic. Mirror the video shape: validate against the encoder, convert through the existing
-resample machinery, refuse typed when impossible. RED: float-planar into an s16-only encoder.
+The validation half landed 2026-08-30, and the row understated the defect: a channel-count or
+sample-format mismatch did not "fail late and cryptic", it **segfaulted the process**, because
+FFmpeg reads the frame using the ENCODER's channel count and format. A rate mismatch was accepted
+silently and encoded at the wrong speed. All three are refused typed now, on both backends, from
+one rule in commonMain.
+
+- [ ] What is left is the conversion the video side has and audio does not: a caller holding
+  fltp when the encoder wants s16 is told to route through `FilterGraph.buildAudio` rather than
+  being converted on the way in. Doing it properly needs **swresample bound through the C ABI**,
+  which nothing reaches today (it is linked and version-reported, but no `swr_*` entry point
+  exists). That is a new C surface across 12 targets plus JNI plus the wasm binding mirror, so it
+  wants a machine that can build every tree, not a one-target check.
 
 ### 3.5 KC-COLOR-PROV: a guessed colour cannot be told from a declared one. Size M
 

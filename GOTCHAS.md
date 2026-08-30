@@ -312,6 +312,15 @@ Never move one silently.
 
 ## 6. Engine invariants that bite (violating any of these caused a real bug)
 
+- **FFmpeg's audio encoder SEGFAULTS on a frame whose channels or sample format do not match it.**
+  Not an error return, not a cryptic failure: the process dies. `avcodec_send_frame` reads
+  `nb_samples * channels * bytes_per_sample` using the ENCODER's idea of channels and format, so a
+  mono frame or an s16 frame handed to a stereo fltp encoder is read past the end of its buffers.
+  Measured on 2026-08-30 against the aac encoder; both mismatches crashed at the same address. A
+  sample-RATE mismatch is the quiet half of the same hole: accepted silently and encoded at the
+  wrong rate. KiteFFmpeg refuses all three in `requireEncodableAudio` before FFmpeg sees the frame.
+  Any new path that reaches an audio encoder owes the same check.
+
 - **What stops a paused player aging is the freeze in `MediaClock.pause`, NOT the re-anchor in
   `MediaClock.resume`.** The obvious guess is wrong and was checked by mutation on 2026-08-30:
   deleting the resume re-anchor changes nothing, because the audio ring publishes its own anchor as

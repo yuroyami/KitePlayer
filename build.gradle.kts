@@ -60,6 +60,22 @@ tasks.register<CheckKitertCouplingTask>("checkKitertCoupling") {
  */
 val hasSigningKey: Boolean = !providers.gradleProperty("signingInMemoryKey").orNull.isNullOrBlank()
 
+/**
+ * Whether a configuration's name is one a build file declares dependencies into.
+ *
+ * Gradle and the Kotlin plugin create many configurations per project; most are derived,
+ * resolvable or pure bookkeeping, and a project dependency found in one of those says nothing
+ * about what a consumer receives. The declarable scopes are `api`, `implementation`,
+ * `compileOnly` and `runtimeOnly`, plain or prefixed by a source-set name.
+ */
+fun isPomBearingScope(name: String): Boolean {
+    if (name.contains("test", ignoreCase = true)) return false
+    val scopes = listOf("api", "implementation", "compileOnly", "runtimeOnly")
+    return scopes.any { scope ->
+        name == scope || (name.endsWith(scope.replaceFirstChar(Char::uppercase)) && name.length > scope.length)
+    }
+}
+
 val publicationReadiness = tasks.register<CheckPublicationReadinessTask>("checkPublicationReadiness") {
     repositoryRoot.set(layout.projectDirectory)
     signingConfigured.set(hasSigningKey)
@@ -126,6 +142,13 @@ subprojects {
             generatedPoms.builtBy(pomTasks)
         }
         publishingProject.configurations.configureEach {
+            // Only the scopes a build file DECLARES into, which are the only ones a POM can come
+            // from. Scraping every configuration made this answer depend on which other tasks
+            // happened to be in the graph: a full gate run realised three configurations named
+            // after other projects and reported :kiteplayer-compose depending on the SAMPLE, which
+            // no build file says and no POM contains. Test scopes are excluded for the same
+            // reason: a test dependency never reaches a consumer.
+            if (!isPomBearingScope(name)) return@configureEach
             dependencies.withType(ProjectDependency::class.java).configureEach {
                 val siblingPath = path
                 if (siblingPath != publishingPath) {

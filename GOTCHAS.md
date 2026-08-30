@@ -141,6 +141,12 @@ Never move one silently.
 
 ## 4. Build and toolchain traps, each one paid for
 
+- **Scraping every Gradle configuration gives a load-dependent answer.** A project has many
+  configurations beyond the ones a build file writes into, and which of them are REALISED depends
+  on what else is in the task graph. `checkPublicationReadiness` read them all, so it passed on
+  its own and failed inside a full gate run, reporting that a publishing module depended on the
+  SAMPLE, which no build file says. Only `api`, `implementation`, `compileOnly` and `runtimeOnly`,
+  plain or source-set prefixed, can reach a POM; read those and nothing else.
 - **A no-replay SharedFlow drops what it emits before anyone subscribes.** Every renderer's
   `events` is `MutableSharedFlow(replay = 0)`, so a test that launches a collector and then makes
   the renderer emit is racing its own subscription. It passes on a quiet machine and times out

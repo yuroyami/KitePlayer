@@ -696,7 +696,12 @@ was deleted after. A correction found while doing it: the old comment claimed R8
 keyless build, and AGP says on every run that optimisation and obfuscation are DISABLED for a
 debuggable build, so it never did. Only the keyed build is shrunk.
 
-**`checkPublicationReadiness` grew its real checks.** It already covered licence and SCM (the row
+**`checkPublicationReadiness` grew its real checks, and one of its old ones was fixed.** The
+sibling-publishability check read EVERY Gradle configuration, so its answer depended on which
+ones the task graph happened to realise: alone it saw 21 edges and passed, inside a full gate run
+it saw 24 and reported `:kiteplayer-compose` depending on `:kiteplayer-sample`, which no build
+file says. It now reads only the scopes a POM can come from and answers 22 either way. A real
+violation is still caught, proved by adding one and watching it fail. It already covered licence and SCM (the row
 understated it); it now also refuses a POM with no developers entry, which Maven Central requires
 and this project did not have at all, and refuses an `io.github.<user>` group that disagrees with
 the GitHub account in the SCM URL, because Central grants that namespace on proof of owning the

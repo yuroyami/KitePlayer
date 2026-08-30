@@ -20,6 +20,9 @@ kotlin {
         jvmMain.dependencies {
             implementation(project(":kiteplayer-mobile"))
             implementation(project(":kiteplayer-compose-video"))
+            // The path comparison needs the one composable that hosts BOTH rendering products,
+            // which is what item 1.5 measures against each other.
+            implementation(project(":kiteplayer-compose-ui"))
             implementation(compose.desktop.currentOs)
             implementation(compose.foundation)
         }

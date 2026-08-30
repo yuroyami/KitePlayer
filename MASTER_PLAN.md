@@ -96,129 +96,61 @@ left of it:
 
 ---
 
-# PHASE 1: DESKTOP NATIVE VIEW (owner-ordered 2026-08-29)
+# PHASE 1: DESKTOP NATIVE VIEW (owner-ordered 2026-08-29, BUILT 2026-08-30)
 
-**Problem.** Desktop JVM has only the Compose-canvas path: `KitePlayerVideo.jvm.kt` coerces
-every request to `ComposeCanvas`; `KitePlayerSurface.jvm.kt` is an empty box. The whole
-window is one Skia surface on one loop, so Synkplay UI jank delays video. Android/iOS escape
-via the OS compositor; desktop needs the same shape.
+**What exists now.** Desktop has a real platform video view: `KitePlayerAwtView`, an AWT canvas
+driven by the same `PlayerViewBinding` Android and iOS use, painted by `AwtCanvasVideoRenderer`
+through a `BufferStrategy` on the thread that presents rather than on the Compose frame clock.
+`kiteplayer-mobile` supplies the adapter, since it is the one module allowed to depend on both a
+codec and an output, and `KitePlayerVideo(path = NativeView)` now honours the request on JVM
+instead of coercing it.
 
-**Design, decided.** Tier 1 is pure JVM, zero native code: a heavyweight `java.awt.Canvas`
-hosted through Compose `SwingPanel`, painted by the renderer's OWN thread via AWT
-`BufferStrategy` (AWT heavyweights paint independently of the Compose/Skiko loop, which item
-1.1 confirms is still true with blending enabled). Z-order via the Compose interop blending
-flag, proven by the spike before any wiring; where it cannot work, coerce to ComposeCanvas and
-report through `onEffectivePath`, which is the honesty contract the SPI already has. Expect
-that fallback to be permanent on Linux rather than temporary: Compose documents blending as
-Metal, DirectX and offscreen only, and Skiko draws Linux with OpenGL. `Auto` stays
-ComposeCanvas on JVM until the owner flips it on measurements.
-Module split mirrors the web renderer (because `:kiteplayer-output` must not depend on
-KiteFFmpeg): geometry + painting in output jvmMain, frame conversion via a factory in
-`kiteplayer-mobile` jvmMain over `SoftwareConverter`, the view in `kiteplayer-view` jvmMain
-(module already declares `jvm()`), the Compose actual in `kiteplayer-compose-interop`.
-Tier 2 (JAWT + Metal/D3D/GL presenter, our own JNI shim) is a follow-up item, justified only
-by tier 1's measured frame cost.
+**Why it was worth building, measured rather than argued.** With the UI choked to 4.7 frames a
+second, the native view kept painting about 29 frames a second of real 1080p30 while the Compose
+canvas path drew the picture at the UI's own rate. That is the complaint that opened this phase,
+answered.
 
-### 1.1 The spike RAN and the phase is UNBLOCKED, with the design changed. DONE
+**The constraint it carries, which shaped the design.** Compose content drawn over the native
+view cannot receive mouse input, because macOS routes a click to the topmost NATIVE view and
+painting over it afterwards does not change that. Controls that must be clickable over video
+belong in a borderless window owned by the video window, which is the one arrangement measured to
+work; controls beside the video need nothing special. That sentence lives in the KDoc of the view,
+the Compose surface and `KiteRenderPath`, because a consumer who has not read it ships a dead play
+button. The full method and all seven arrangements are in
+`kiteplayer-sample-desktop/INTEROP-SPIKE.md`.
 
-**Measured 2026-08-30, seven configurations plus a positive control; full table and method in
-`kiteplayer-sample-desktop/INTEROP-SPIKE.md`. The harness stays in the tree so this is
-re-measurable rather than re-arguable.**
+### 1.1 What the desktop native view still owes. [owner] and small
 
-**Decoupling PASSED everywhere and is not close.** With the Compose frame clock choked by 200 ms
-per frame, the heavyweight canvas held 100 to 102 percent of its own idle rate while Compose fell
-to 4 to 8 percent. Video painted this way genuinely stops caring what the UI does, which is the
-complaint that opened the phase.
+**Items 1.2 to 1.5 LANDED 2026-08-30** (KitePlayerAwtView `7e3457b`, the AWT renderer and its
+adapter `d0a6a91`, the Compose seam `4d13404`, the end-to-end comparison in this commit). The
+path exists end to end: an AWT canvas painted off the Compose clock, a renderer that owns frame
+lifetime, an adapter in the one module that may depend on both a codec and an output, and a
+Compose seam that honours an explicit `NativeView` request.
 
-**Input forced a design change.** Compose can be made to DRAW over the canvas (blending, or a
-Swing layered pane), but in every layered configuration the click went to the canvas instead, and
-the owner confirmed that by hand. The cause is not Compose: macOS asks which NATIVE view is
-topmost under the cursor, and painting over it afterwards does not enter into that. Forwarding
-the events by hand does not help, because they were delivered to the wrong place before our code
-saw them.
+**Measured end to end on real video**, one arm per process, in
+`kiteplayer-sample-desktop/INTEROP-SPIKE.md`: with the UI choked to 4.7 frames a second, the
+native view kept painting about 29 frames a second of 1080p30 while the Compose canvas path drew
+the picture at the UI's own 4.7. The engine submitted about 445 frames and dropped none in every
+arm, which is correct and is why engine counters alone cannot separate the paths.
 
-**The answer is an owned overlay window.** Controls in a borderless `JWindow` owned by the video
-window are the topmost native thing where they sit, so the click reaches them because the window
-server agrees. That configuration passes all three properties at once, three robot runs and then
-three human clicks confirmed in the process log.
+What is left:
 
-**So the design is: video is a heavyweight canvas; Compose controls that must be clickable ON TOP
-of video live in an owned overlay window; Compose content that does not overlap the video is
-ordinary Compose content and needs nothing special.** That constraint belongs in the KDoc of
-whatever the library exposes, because a consumer will otherwise put a play button over the video
-and find it dead.
-
-### 1.2 `KitePlayerAwtView` in kiteplayer-view jvmMain. Size M
-
-- [ ] Read the Android twin (`KitePlayerView`), `KitePlayerUIView`, `PlayerViewBinding` (+ its
-  test) first; mirror the binding contract exactly (attach fence, synchronous
-  identity-checked detach, factory-null tolerance).
-- [ ] RED first (new jvmTest source set, headless, binding's scripted fakes): player-set
-  attaches exactly one renderer; null detaches identity-checked; factory failure leaves the
-  view usable; no factory = no crash.
-- [ ] Implement `KitePlayerAwtView : java.awt.Canvas` over `PlayerViewBinding`; surface
-  lifecycle on `addNotify`/`removeNotify`; renderer attach is headless-capable (same contract
-  the Compose KDoc documents for the Android view).
-- [ ] Falsify the detach identity check. `updateKotlinAbi`. Tier 2.
-- [ ] Commit: `Give desktop the platform video view Android and iOS already have`
-
-### 1.3 The AWT canvas renderer + conversion factory. Size M-L
-
-- [ ] `AwtCanvasVideoRenderer` + `AwtFramePainter` seam in output jvmMain;
-  `DesktopCanvasRendererFactory` in kiteplayer-mobile jvmMain over `SoftwareConverter.toRgba`,
-  installed by `KitePlayerPlatform.jvm.kt` defaults (the web factory pattern).
-- [ ] Laws: `present` never blocks the scheduler (hand off to a single-thread painter,
-  newest-wins, dropped pending frame closed); every path closes the frame exactly once; no
-  BufferStrategy without a displayable peer (headless presents refuse cheaply, submitted
-  counted, drawn untouched); retained-picture re-blit on overlay/adjustment change; close
-  cancels + joins the painter; geometry via the shared `frameLayout` law from commonMain.
-- [ ] RED first, headless: refusal closes frame; rapid presents drop + close older; close
-  joins painter, present-after-close refuses; overlay after close does not retain.
-  Falsify the pending-frame close. Factory test: non-KiteFFmpeg frame refuses
-  `UnsupportedFrameType`; 2x2 synthetic yuv420p converts to known RGBA.
-- [ ] Tier 2, ABI dumps. Commit:
-  `Paint desktop video on the canvas's own thread, off the Compose clock`
-
-### 1.4 Wire the Compose seam, and say what it cannot do. Size S
-
-- [ ] RED: extend `RenderPathResolutionTest`: JVM `NativeView` resolves to `NativeView`
-  (today coerced), `Auto` stays `ComposeCanvas`.
-- [ ] jvm actuals: `platformKitePlayerSurface` = `SwingPanel { KitePlayerAwtView() }` with
-  `update` mirroring the Android actual's ordering; `resolveRenderPath` honours NativeView.
-- [ ] KDoc: `KiteRenderPath` and `KitePlayerVideo` sentences saying "JVM has no native video
-  view" are rewritten (name the AWT view and the pending Auto decision).
-- [ ] KDoc must ALSO state the input constraint item 1.1 measured, in the place a consumer will
-  meet it: Compose content drawn over the desktop native view cannot receive mouse input,
-  because macOS routes clicks by native view order. Controls that overlap the video belong in an
-  owned overlay window; controls beside it are ordinary Compose. Without that sentence a
-  consumer ships a dead play button.
-- [ ] Tier 2. Commit: `Honour the native-view request on desktop instead of coercing it`
-
-### 1.5 Demo + the decoupling numbers. Size S-M
-
-- [ ] Sample desktop app: path toggle (NativeView/ComposeCanvas) + jank burner; play
-  `testmedia/sync1080p30.mp4`.
-- [ ] Measure 30 s x4 arms (each path, burner off/on) from `PlaybackStats`
-  (submitted/drawn/dropped); record in MEASUREMENTS.md. Exit: NativeView with burner drops no
-  more than without (within noise) while ComposeCanvas with burner visibly degrades. If
-  NativeView degrades too, the phase is NOT done; investigate.
-- [ ] 20 resizes during playback; transient edge artifacts acceptable, persistent
-  misplacement not.
-- [ ] Tier 2 + all desktop suites. Commit:
-  `Prove desktop video ignores Compose jank, with numbers`
-- [ ] Then reduce this phase to its remainder items below.
-
-### 1.6 Remainders opened by this phase
-
-- [ ] **KP-DESK-NV-GPU** (M-L, later): JAWT + GPU presenter (CAMetalLayer via surface layers
-  on macOS, D3D11 on Windows, EGL/X11 on Linux), our own small JNI shim. Justified only if
-  1.5's frame cost demands it. Packaging shares the host-library loading infra the libass JVM
-  bridge needs (Phase 4.3).
-- [ ] **KP-DESK-NV-AUTO** [owner]: flip desktop `Auto` to NativeView, or not, on 1.5's table.
-- [ ] **Windows + Linux glass runs** of the demo: owner lane (no glass here). Blending flag
-  behaviour on those OSes recorded there.
-
----
+- [ ] **[owner] Flip `Auto` on desktop, or leave it.** `Auto` still resolves to the Compose
+  canvas. The native view wins on jank and loses on input, since Compose content over it cannot
+  be clicked, so this is a product decision on the numbers above rather than an implementer's.
+  The test that pins the current default says so in its own name.
+- [ ] **A clickable overlay helper, if consumers keep needing it.** The measured answer for
+  controls over video is a borderless window owned by the video window. Today each consumer
+  writes that themselves. Wait for a second consumer to need it before turning it into API.
+- [ ] **[owner] Windows and Linux runs.** Both spikes and the comparison have only run on macOS.
+  Compose documents blending as Metal, DirectX and offscreen only, so Linux is expected to fall
+  back to the Compose canvas through `onEffectivePath`; that expectation is unverified.
+- [ ] **Resize behaviour under playback** was not measured; the harness never resized a window.
+- [ ] **KP-DESK-NV-GPU**, later and only if wanted: a JAWT presenter owning a CAMetalLayer on
+  macOS, D3D on Windows, EGL on Linux, replacing the CPU blit. Nothing measured so far demands
+  it, and note before starting that it does NOT fix the input constraint, which belongs to native
+  view ordering rather than to how the surface is painted. Compose also documents that DirectX
+  blending cannot overlay another DirectX component, which constrains the Windows half.
 
 # PHASE 2: EVIDENCE BUY-BACK (make the unprovable provable)
 

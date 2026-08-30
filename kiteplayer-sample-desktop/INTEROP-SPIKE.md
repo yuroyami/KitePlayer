@@ -109,3 +109,43 @@ tree. Controls that never overlap the video are unaffected and can stay ordinary
 One cosmetic item found while confirming G and fixed in the harness: the overlay window must have
 BOTH a transparent window background and a non-opaque `ComposePanel`, or it paints a grey slab
 over the video. Setting only the window is not enough.
+
+# End to end, on real video, 2026-08-30
+
+The spike above measures a coloured rectangle. This measures the thing the phase is for: a real
+player, a real 1080p30 clip on loop, the engine's own counters, one arm per process so the two
+paths never share a window or a warmed decoder. Run it with `PathComparisonKt` and
+`-Dcompare.path=native|compose -Dcompare.burn=true|false`.
+
+| arm | engine submitted (15 s) | dropped late | compose fps |
+|---|---|---|---|
+| compose canvas, idle | 445 | 0 | 60.0 |
+| compose canvas, UI choked | 442 | 0 | 4.7 |
+| native view, idle | 445 | 0 | 60.1 |
+| native view, UI choked | 439 | 0 | 4.7 |
+
+## Reading it, including the part that surprised me
+
+**The engine is untouched in every arm.** It submits about 445 frames in 15 seconds, which is the
+clip's 30 fps, and drops none. That is correct rather than disappointing: the video scheduler runs
+on its own dispatcher and keeps submitting whatever the UI does, so these counters CANNOT separate
+the two paths and were never going to. A first run of this harness compared them and found nothing,
+which is exactly what it should have found.
+
+**The separation is at the draw step**, and that is why compose fps is in the table. On the
+Compose canvas the picture is drawn BY Compose, so when Compose falls to 4.7 fps the picture falls
+with it: about 70 draws in the window instead of 445. On the native view `present` paints
+synchronously through the BufferStrategy, so its 439 submissions are 439 actual paints, about
+29 frames a second of real video on screen, while the very same process was running its UI at
+4.7 fps.
+
+**So the phase's premise holds end to end**: a UI running at 4.7 fps and a picture running at 29.
+
+## Two corrections this harness needed before it could say anything
+
+The first version measured a 10 second clip over a 15 second window and reported both paths as
+identical, because most of the window was not playing at all. It loops now.
+
+The second version reported only engine counters, which cannot see the difference by
+construction. Reporting the Compose frame rate beside them is what makes the arms comparable, and
+the KDoc now says what the numbers mean so they are not read as saying more than they do.

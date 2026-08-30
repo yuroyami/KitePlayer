@@ -157,8 +157,6 @@ What is left:
 
 Each RED first against a revert or scripted fault; cluster commits.
 
-- [ ] cached `Frame.info` after close refuses (KC)
-- [ ] filter-callback frame retention detected or documented refused (KC)
 - [ ] failed quiescence during renderer replacement falls back without leaking (KP core)
 - [ ] cancellation after partial audio submission keeps ring/counters consistent (KP)
 - [ ] device-sleep clock epochs: no pre-sleep timestamp re-anchors after a long pause (KP,
@@ -168,6 +166,18 @@ Each RED first against a revert or scripted fault; cluster commits.
 - [ ] decoder output diverging from codecpar is surfaced (KC)
 - [ ] empty-output `MediaSink` finalization is clean or typed (KC)
 - [ ] midstream audio format change reaches renegotiation or typed warning (KP)
+
+**Found while writing the `Frame.info` pin, 2026-08-30. NEEDS-DESIGN, size S.** A closed frame
+refuses on every target, but not with the same exception. JVM, Android and native throw
+`IllegalStateException("Frame is closed, its native buffers are gone")`; the web throws
+`FFmpegException(Internal("this frame is closed"))`, from `alive()` in `Frame.wasmJs.kt`, which
+every closed-frame read on that target goes through. `FFmpegException` extends
+`RuntimeException`, not `IllegalStateException`, so a caller cannot catch both with one clause.
+Two of the three agree, the shared contract suite already asserts `IllegalStateException`, and
+commonMain documents nothing either way. Making the web agree is a five-line change and cheap to
+land: the only `catch (FFmpegException)` anywhere near this is the identity gate in
+`FFmpegRuntimeCheck.kt`, not a frame path. It is listed rather than done because it changes which
+exception a published public method throws, which is the owner's call, not the executor's.
 
 ### 2.2 F-COV1 recounted 2026-08-30. What is left is what cannot run here
 

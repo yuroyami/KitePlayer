@@ -32,6 +32,20 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
     @get:Input
     abstract val publishingProjectDirectories: MapProperty<String, String>
 
+    /**
+     * True when this build has a signing key, so publications will actually be signed.
+     *
+     * Not a POM fact, which is why it is passed in. Maven Central rejects unsigned artifacts, and
+     * an ordinary local run has no key, so an unsigned build is only a FINDING when
+     * [requireSigning] says this run is heading for Central.
+     */
+    @get:Input
+    abstract val signingConfigured: org.gradle.api.provider.Property<Boolean>
+
+    /** True on a run that must be publishable to Central, so unsigned becomes a failure. */
+    @get:Input
+    abstract val requireSigning: org.gradle.api.provider.Property<Boolean>
+
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val generatedPoms: ConfigurableFileCollection
@@ -45,6 +59,8 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
         publishingModules.convention(emptySet())
         projectDependencyEdges.convention(emptySet())
         publishingProjectDirectories.convention(emptyMap())
+        signingConfigured.convention(false)
+        requireSigning.convention(false)
     }
 
     @TaskAction
@@ -62,6 +78,8 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
             publishingModules = publishingModules.get(),
             publications = snapshots,
             edges = projectDependencyEdges.get().map(::decodeEdge).toSet(),
+            signingConfigured = signingConfigured.get(),
+            requireSigning = requireSigning.get(),
         )
         logger.lifecycle(render(report))
         requireReady(report)
@@ -76,7 +94,10 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
         val description: String?,
         val licences: List<Licence>,
         val scm: Scm?,
+        val developers: List<Developer> = emptyList(),
     )
+
+    data class Developer(val id: String?, val name: String?, val url: String?)
 
     data class Licence(val name: String?, val url: String?)
 
@@ -102,6 +123,7 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
         val dependencyEdges: List<ProjectEdge>,
         val pomFindings: List<Finding>,
         val siblingFindings: List<Finding>,
+        val signingFindings: List<Finding> = emptyList(),
     ) {
         val dependencyEdgeCount: Int get() = dependencyEdges.size
     }
@@ -123,6 +145,8 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
             publishingModules: Set<String>,
             publications: List<PomSnapshot>,
             edges: Set<ProjectEdge>,
+            signingConfigured: Boolean = true,
+            requireSigning: Boolean = false,
         ): ReadinessReport {
             val pomFindings = buildList {
                 for (modulePath in publishingModules.sorted()) {
@@ -193,6 +217,28 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
                         "POM scm needs nonblank connection, developerConnection and URL.",
                         "Configure MavenPom.scm or POM_SCM_CONNECTION, POM_SCM_DEV_CONNECTION and POM_SCM_URL.",
                     )
+                    // Maven Central REQUIRES this and rejects the bundle without it. The check is
+                    // here rather than at upload because a rejected bundle is found at the end of
+                    // a release, and this is found in seconds.
+                    addMissingField(
+                        modulePath,
+                        "developers",
+                        modulePoms.filter { publication ->
+                            publication.developers.none { developer ->
+                                !developer.id.isBlankValue() || !developer.name.isBlankValue()
+                            }
+                        },
+                        "POM developers needs at least one entry with an id or a name.",
+                        "Configure MavenPom.developers with id, name and url.",
+                    )
+                    addMissingField(
+                        modulePath,
+                        "namespace",
+                        modulePoms.filter { publication -> !namespaceMatchesScm(publication) },
+                        "the io.github.<user> group does not match the GitHub account in the scm URL.",
+                        "Central grants io.github.<user> on proof of owning that account, so the " +
+                            "group and the repository owner have to be the same user.",
+                    )
                 }
             }
 
@@ -209,12 +255,27 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
                     )
                 }
 
+            val signingFindings = if (requireSigning && !signingConfigured) {
+                listOf(
+                    Finding(
+                        modulePath = "<build>",
+                        field = "signing",
+                        publications = emptyList(),
+                        detail = "this run must be publishable and has no signing key, so every artifact would be unsigned.",
+                        fix = "Export ORG_GRADLE_PROJECT_signingInMemoryKey (and its password) before publishing.",
+                    ),
+                )
+            } else {
+                emptyList()
+            }
+
             return ReadinessReport(
                 publishingModuleCount = publishingModules.size,
                 generatedPomCount = publications.size,
                 dependencyEdges = edges.sortedWith(compareBy(ProjectEdge::from, ProjectEdge::to)),
                 pomFindings = pomFindings,
                 siblingFindings = siblingFindings,
+                signingFindings = signingFindings,
             )
         }
 
@@ -240,6 +301,16 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
                 .orEmpty()
                 .map { licence -> Licence(licence.directText("name"), licence.directText("url")) }
             val scmElement = project.directElement("scm")
+            val developers = project.directElement("developers")
+                ?.directElements("developer")
+                .orEmpty()
+                .map { developer ->
+                    Developer(
+                        id = developer.directText("id"),
+                        name = developer.directText("name"),
+                        url = developer.directText("url"),
+                    )
+                }
             return PomSnapshot(
                 modulePath = modulePath,
                 publicationName = publicationName,
@@ -255,6 +326,7 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
                         url = scm.directText("url"),
                     )
                 },
+                developers = developers,
             )
         }
 
@@ -275,12 +347,34 @@ abstract class CheckPublicationReadinessTask : DefaultTask() {
             appendFindings("POM findings", report.pomFindings)
             append('\n')
             appendFindings("Sibling-publishability findings", report.siblingFindings)
+            append('\n')
+            appendFindings("Signing findings", report.signingFindings)
         }
 
         fun requireReady(report: ReadinessReport) {
-            if (report.pomFindings.isNotEmpty() || report.siblingFindings.isNotEmpty()) {
+            if (report.pomFindings.isNotEmpty() ||
+                report.siblingFindings.isNotEmpty() ||
+                report.signingFindings.isNotEmpty()
+            ) {
                 throw GradleException("Publication readiness failed.\n${render(report)}")
             }
+        }
+
+        /**
+         * Whether an `io.github.<user>` group agrees with the GitHub account owning the repository.
+         *
+         * Central grants that namespace on proof of owning the account, so the two disagreeing
+         * means the coordinates cannot be published at all. Any other group shape is somebody
+         * else's namespace rule and is left alone.
+         */
+        private fun namespaceMatchesScm(publication: PomSnapshot): Boolean {
+            val group = publication.groupId ?: return true
+            val user = group.removePrefix("io.github.").takeIf { group.startsWith("io.github.") } ?: return true
+            val owner = user.substringBefore('.')
+            // No scm URL at all is already a finding of its own; saying it twice helps nobody.
+            val url = publication.scm?.url ?: return true
+            val path = url.substringAfter("github.com", missingDelimiterValue = "").trim('/', ':')
+            return path.substringBefore('/').equals(owner, ignoreCase = true)
         }
 
         private fun StringBuilder.appendFindings(label: String, findings: List<Finding>) {

@@ -5,9 +5,15 @@ import io.github.yuroyami.kiteplayer.buildtools.PrepareAndroidSampleMediaTask
  * lifecycle differences: an XML-inflated native view, that same native view hosted by Compose,
  * and true Compose video. The original XML Activity remains the measured smoke component.
  *
- * Release is deliberately debug-signed and debuggable: the smoke oracle reads the app's private
- * files through run-as, which needs both, and R8 still runs, which is the half that matters.
- * No distributed release consumes either local-only choice.
+ * Release has two shapes and the keys decide which. With no release keystore configured it is
+ * debug-signed and debuggable ON PURPOSE: the smoke oracle reads the app's private files through
+ * run-as, which needs both. Give it a keystore through the four properties below and the same
+ * build type becomes what a distributed release has to be, not debuggable and signed with the real
+ * key. Nothing is conditional except the two lines that have to be.
+ *
+ * A correction to what this comment used to claim: the keyless build does NOT exercise R8. AGP
+ * says so on every run, "All code optimizations and obfuscation are disabled for debuggable
+ * builds", so `isMinifyEnabled = true` buys nothing there and the shrunk build is the keyed one.
  */
 plugins {
     /* AGP 9 carries built-in Kotlin support; a separate Kotlin Android plugin is refused. */
@@ -35,11 +41,42 @@ android {
         jniLibs.useLegacyPackaging = false
     }
 
+    /*
+     * The real release keystore, when this machine has one. All four properties are required
+     * together: a half-configured keystore is a build that fails at signing time with a message
+     * about the wrong thing.
+     */
+    val keystorePath: String? = providers.gradleProperty("kiteplayer.release.storeFile").orNull
+    val keystorePassword: String? = providers.gradleProperty("kiteplayer.release.storePassword").orNull
+    val keyAlias: String? = providers.gradleProperty("kiteplayer.release.keyAlias").orNull
+    val keyPassword: String? = providers.gradleProperty("kiteplayer.release.keyPassword").orNull
+    val releaseKeystore: File? = keystorePath
+        ?.let(::file)
+        ?.takeIf { it.isFile && !keystorePassword.isNullOrBlank() && !keyAlias.isNullOrBlank() && !keyPassword.isNullOrBlank() }
+
+    if (releaseKeystore != null) {
+        signingConfigs.create("release") {
+            storeFile = releaseKeystore
+            storePassword = keystorePassword
+            this.keyAlias = keyAlias
+            this.keyPassword = keyPassword
+        }
+    } else {
+        logger.lifecycle(
+            "[KitePlayer sample] no release keystore: the release build stays debug-signed and " +
+                "debuggable, which is what the smoke oracle needs. Set " +
+                "kiteplayer.release.storeFile, storePassword, keyAlias and keyPassword for a " +
+                "distributable one.",
+        )
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
-            isDebuggable = true
-            signingConfig = signingConfigs.getByName("debug")
+            // Both follow the keystore together. A release that is signed for distribution and
+            // still debuggable is the worst of the two, because anything can read its data.
+            isDebuggable = releaseKeystore == null
+            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

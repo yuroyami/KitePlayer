@@ -686,11 +686,29 @@ network machinery; keep reduced until then.
 
 ### 8.1 KP-B1..B13 release half: the hygiene cluster. Size M-L
 
-- [ ] Release build not debuggable, release-signed (executor wires config, owner holds keys).
+Two of these landed 2026-08-30.
+
+**The release build is wired** (executor half done; owner supplies keys). The sample's release
+type follows the keystore: with the four `kiteplayer.release.*` properties it is signed with the
+real key and NOT debuggable, without them it stays debug-signed and debuggable, which is what the
+run-as smoke oracle needs. Proved both ways here, the keyed one against a throwaway keystore that
+was deleted after. A correction found while doing it: the old comment claimed R8 still ran on the
+keyless build, and AGP says on every run that optimisation and obfuscation are DISABLED for a
+debuggable build, so it never did. Only the keyed build is shrunk.
+
+**`checkPublicationReadiness` grew its real checks.** It already covered licence and SCM (the row
+understated it); it now also refuses a POM with no developers entry, which Maven Central requires
+and this project did not have at all, and refuses an `io.github.<user>` group that disagrees with
+the GitHub account in the SCM URL, because Central grants that namespace on proof of owning the
+account. Signing is checked too, but only on a run that says it must publish
+(`-Pkiteplayer.requireSigning=true`): an ordinary local build has no key and has to stay green.
+The developers block itself was added to the shared POM config, identity only and no address.
+
 - [ ] Wrapper checksum, dependency lockfiles or verification metadata, NDK pinned by exact
-  version (today: chosen by string sort).
-- [ ] `checkPublicationReadiness` grows real checks: developers block, licence, SCM, signing,
-  Sonatype coordinates (today it reads generated POM XML and nothing else).
+  version (today: chosen by string sort, in five places across the two repos: three KiteFFmpeg
+  build tasks, KitePlayer's `BuildLibassJniTask` and `kiteplayer-libass/build.gradle.kts`).
+  String sort happens to be right for the three NDKs installed here and breaks on a two-digit
+  minor (`29.10` sorts below `29.2`).
 - [ ] The two unpublished optional modules (`kiteplayer-network`, `kiteplayer-libass`)
   publish, or the README states their absence.
 - [ ] SOL-B8: the ordinary Android AAR publication, proven by a consumer smoke resolving it

@@ -21,7 +21,8 @@ class CheckPublicationReadinessTaskTest {
         assertEquals(
             "Publication readiness inputs: 2 publishing modules, 2 generated POMs, 1 project dependency edge.\n" +
                 "Project dependency edges: :core -> :rt\n" +
-                "POM findings (0): none\nSibling-publishability findings (0): none",
+                "POM findings (0): none\nSibling-publishability findings (0): none\n" +
+                "Signing findings (0): none",
             CheckPublicationReadinessTask.render(report),
         )
     }
@@ -222,6 +223,133 @@ class CheckPublicationReadinessTaskTest {
         assertTrue(report.siblingFindings.isEmpty())
     }
 
+    // ── the three checks Central actually enforces ─────────────────────────────────────────
+
+    @Test
+    fun `a publication with no developer is refused`() {
+        val report = CheckPublicationReadinessTask.evaluate(
+            publishingModules = setOf(":core"),
+            publications = listOf(completePom(":core").copy(developers = emptyList())),
+            edges = emptySet(),
+        )
+
+        val failure = assertFailsWith<GradleException> { CheckPublicationReadinessTask.requireReady(report) }
+        assertContains(failure.message.orEmpty(), "developers")
+        assertContains(failure.message.orEmpty(), "MavenPom.developers")
+    }
+
+    @Test
+    fun `a developer entry with only a name is enough`() {
+        val report = CheckPublicationReadinessTask.evaluate(
+            publishingModules = setOf(":core"),
+            publications = listOf(
+                completePom(":core").copy(
+                    developers = listOf(CheckPublicationReadinessTask.Developer(id = null, name = "yuroyami", url = null)),
+                ),
+            ),
+            edges = emptySet(),
+        )
+
+        CheckPublicationReadinessTask.requireReady(report)
+    }
+
+    @Test
+    fun `an empty developer entry does not count`() {
+        val report = CheckPublicationReadinessTask.evaluate(
+            publishingModules = setOf(":core"),
+            publications = listOf(
+                completePom(":core").copy(
+                    developers = listOf(CheckPublicationReadinessTask.Developer(id = " ", name = "", url = "https://example.invalid")),
+                ),
+            ),
+            edges = emptySet(),
+        )
+
+        assertFailsWith<GradleException> { CheckPublicationReadinessTask.requireReady(report) }
+    }
+
+    @Test
+    fun `an io github namespace has to match the repository owner`() {
+        // Central grants io.github.<user> on proof of owning that account, so publishing
+        // io.github.yuroyami out of somebody else's repository cannot work.
+        val mismatched = CheckPublicationReadinessTask.evaluate(
+            publishingModules = setOf(":core"),
+            publications = listOf(
+                completePom(":core").copy(
+                    groupId = "io.github.yuroyami",
+                    scm = CheckPublicationReadinessTask.Scm(
+                        connection = "scm:git:https://github.com/someoneelse/KitePlayer.git",
+                        developerConnection = "scm:git:ssh://git@github.com/someoneelse/KitePlayer.git",
+                        url = "https://github.com/someoneelse/KitePlayer",
+                    ),
+                ),
+            ),
+            edges = emptySet(),
+        )
+        val failure = assertFailsWith<GradleException> { CheckPublicationReadinessTask.requireReady(mismatched) }
+        assertContains(failure.message.orEmpty(), "does not match the GitHub account")
+
+        val matched = CheckPublicationReadinessTask.evaluate(
+            publishingModules = setOf(":core"),
+            publications = listOf(
+                completePom(":core").copy(
+                    groupId = "io.github.yuroyami",
+                    scm = CheckPublicationReadinessTask.Scm(
+                        connection = "scm:git:https://github.com/yuroyami/KitePlayer.git",
+                        developerConnection = "scm:git:ssh://git@github.com/yuroyami/KitePlayer.git",
+                        url = "https://github.com/yuroyami/KitePlayer",
+                    ),
+                ),
+            ),
+            edges = emptySet(),
+        )
+        CheckPublicationReadinessTask.requireReady(matched)
+    }
+
+    @Test
+    fun `a publication with no scm URL is not also reported as a namespace mismatch`() {
+        // One root cause, one finding. The missing scm is already its own line.
+        val report = CheckPublicationReadinessTask.evaluate(
+            publishingModules = setOf(":core"),
+            publications = listOf(completePom(":core").copy(scm = null)),
+            edges = emptySet(),
+        )
+        assertEquals(listOf("scm"), report.pomFindings.map { it.field })
+    }
+
+    @Test
+    fun `a group outside the io github namespace is left alone`() {
+        // Somebody else's namespace rule is somebody else's business; this check knows one rule.
+        val report = CheckPublicationReadinessTask.evaluate(
+            publishingModules = setOf(":core"),
+            publications = listOf(completePom(":core").copy(groupId = "com.example.kite")),
+            edges = emptySet(),
+        )
+        CheckPublicationReadinessTask.requireReady(report)
+    }
+
+    @Test
+    fun `an unsigned build is only a failure on a run that must publish`() {
+        fun report(signingConfigured: Boolean, requireSigning: Boolean) =
+            CheckPublicationReadinessTask.evaluate(
+                publishingModules = setOf(":core"),
+                publications = listOf(completePom(":core")),
+                edges = emptySet(),
+                signingConfigured = signingConfigured,
+                requireSigning = requireSigning,
+            )
+
+        // The ordinary local run: no key, and that is fine.
+        CheckPublicationReadinessTask.requireReady(report(signingConfigured = false, requireSigning = false))
+        CheckPublicationReadinessTask.requireReady(report(signingConfigured = true, requireSigning = true))
+
+        val failure = assertFailsWith<GradleException> {
+            CheckPublicationReadinessTask.requireReady(report(signingConfigured = false, requireSigning = true))
+        }
+        assertContains(failure.message.orEmpty(), "unsigned")
+        assertContains(failure.message.orEmpty(), "signingInMemoryKey")
+    }
+
     private fun completePom(modulePath: String): CheckPublicationReadinessTask.PomSnapshot =
         CheckPublicationReadinessTask.PomSnapshot(
             modulePath = modulePath,
@@ -232,9 +360,12 @@ class CheckPublicationReadinessTaskTest {
             description = "A player.",
             licences = listOf(CheckPublicationReadinessTask.Licence("Apache-2.0", "https://www.apache.org/licenses/LICENSE-2.0")),
             scm = CheckPublicationReadinessTask.Scm(
-                connection = "scm:git:https://example.invalid/kite.git",
-                developerConnection = "scm:git:ssh://git@example.invalid/kite.git",
-                url = "https://example.invalid/kite",
+                connection = "scm:git:https://github.com/yuroyami/KitePlayer.git",
+                developerConnection = "scm:git:ssh://git@github.com/yuroyami/KitePlayer.git",
+                url = "https://github.com/yuroyami/KitePlayer",
+            ),
+            developers = listOf(
+                CheckPublicationReadinessTask.Developer("yuroyami", "yuroyami", "https://github.com/yuroyami"),
             ),
         )
 }

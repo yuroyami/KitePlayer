@@ -52,8 +52,22 @@ tasks.register<CheckKitertCouplingTask>("checkKitertCoupling") {
     )
 }
 
+/**
+ * True when this build actually holds a signing key.
+ *
+ * Blank counts as absent: a CI runner that exports the variable from an unset secret gets an
+ * empty string, and treating that as a key fails later at signing time instead of here.
+ */
+val hasSigningKey: Boolean = !providers.gradleProperty("signingInMemoryKey").orNull.isNullOrBlank()
+
 val publicationReadiness = tasks.register<CheckPublicationReadinessTask>("checkPublicationReadiness") {
     repositoryRoot.set(layout.projectDirectory)
+    signingConfigured.set(hasSigningKey)
+    // Off by default: an ordinary local run has no key and must still pass. The release run
+    // turns it on, and then an unsigned build is a failure rather than a note.
+    requireSigning.set(
+        providers.gradleProperty("kiteplayer.requireSigning").map { it.toBoolean() }.orElse(false),
+    )
 }
 
 subprojects {
@@ -63,6 +77,19 @@ subprojects {
 
     pluginManager.withPlugin("com.vanniktech.maven.publish") {
         extensions.configure<MavenPublishBaseExtension> {
+            publishToMavenCentral()
+            // Only when a key actually exists. An unconditional signAllPublications() makes a
+            // keyless publishToMavenLocal fail with "Cannot perform signing task ... because it
+            // has no configured signatory", which is how the sibling's consumer smoke job died
+            // once. The release run supplies the key and everything is signed then.
+            if (hasSigningKey) {
+                signAllPublications()
+            } else {
+                logger.lifecycle(
+                    "[KitePlayer] no signingInMemoryKey: publications are UNSIGNED. Fine for " +
+                        "mavenLocal and CI smoke tests; Maven Central rejects unsigned artifacts.",
+                )
+            }
             pom {
                 name.set(publishingProject.name)
                 description.set(rootProject.providers.gradleProperty("DESCRIPTION"))
@@ -72,6 +99,15 @@ subprojects {
                         name.set("Apache License 2.0")
                         url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
                         distribution.set("repo")
+                    }
+                }
+                // Maven Central rejects a bundle with no developer. Identity only, no address:
+                // a published POM is public for ever.
+                developers {
+                    developer {
+                        id.set("yuroyami")
+                        name.set("yuroyami")
+                        url.set("https://github.com/yuroyami")
                     }
                 }
                 scm {

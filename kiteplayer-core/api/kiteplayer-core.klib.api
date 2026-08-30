@@ -7,6 +7,10 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-core>
+open annotation class io.github.yuroyami.kiteplayer/KitePlayerLowLevelApi : kotlin/Annotation { // io.github.yuroyami.kiteplayer/KitePlayerLowLevelApi|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer/KitePlayerLowLevelApi.<init>|<init>(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.spi/ChannelLayout : kotlin/Enum<io.github.yuroyami.kiteplayer.spi/ChannelLayout> { // io.github.yuroyami.kiteplayer.spi/ChannelLayout|null[0]
     enum entry Mono // io.github.yuroyami.kiteplayer.spi/ChannelLayout.Mono|null[0]
     enum entry Quad // io.github.yuroyami.kiteplayer.spi/ChannelLayout.Quad|null[0]

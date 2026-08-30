@@ -1,4 +1,7 @@
-@file:OptIn(KiteFFmpegLowLevelApi::class)
+// This module IS the one that speaks FFmpeg, so the raw-syntax opt-in belongs here: the annotation
+// exists to name that coupling, not to forbid it. MediaItem.videoFilter is an FFmpeg filter chain
+// and only this backend can act on one.
+@file:OptIn(KiteFFmpegLowLevelApi::class, io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 

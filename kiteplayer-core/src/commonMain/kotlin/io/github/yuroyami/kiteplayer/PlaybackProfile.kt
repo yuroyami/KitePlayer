@@ -26,6 +26,7 @@ import kotlin.time.Duration.Companion.seconds
 public class PlaybackProfile internal constructor(
     public val name: String,
     /** Decoder configuration as `av_opt_set` strings, for the backend's constructor. */
+    @property:KitePlayerLowLevelApi
     public val decoderOptions: Map<String, String>,
     /** True when the backend should open its decoders in low-delay shape. */
     public val lowDelayDecode: Boolean,
@@ -34,6 +35,9 @@ public class PlaybackProfile internal constructor(
     /** Returns [config] with this profile's player-side choices applied. */
     public fun applyTo(config: PlayerConfig): PlayerConfig = transform(config)
 
+    // The library printing its own field. A profile that hid its decoder options from toString
+    // would be less useful in exactly the situation someone prints one.
+    @OptIn(KitePlayerLowLevelApi::class)
     override fun toString(): String =
         "PlaybackProfile($name, decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 

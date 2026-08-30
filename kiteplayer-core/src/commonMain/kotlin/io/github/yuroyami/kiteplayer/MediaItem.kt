@@ -31,6 +31,7 @@ public data class MediaItem(
      * refused, because both demands cannot hold at once. Timebase-preserving chains only
      * (scale, crop, eq, format and friends); runtime hot-swap is a documented non-goal.
      */
+    @property:KitePlayerLowLevelApi
     val videoFilter: String? = null,
     /**
      * Where to start. Null means the beginning, or the container's own start time.

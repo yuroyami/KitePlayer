@@ -330,6 +330,9 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer$Companion {
 	public static synthetic fun create$default (Lio/github/yuroyami/kiteplayer/KitePlayer$Companion;Lio/github/yuroyami/kiteplayer/PlayerConfig;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/KitePlayer;
 }
 
+public abstract interface annotation class io/github/yuroyami/kiteplayer/KitePlayerLowLevelApi : java/lang/annotation/Annotation {
+}
+
 public final class io/github/yuroyami/kiteplayer/LatencyQuality : java/lang/Enum {
 	public static final field Estimated Lio/github/yuroyami/kiteplayer/LatencyQuality;
 	public static final field Exact Lio/github/yuroyami/kiteplayer/LatencyQuality;

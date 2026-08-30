@@ -5201,6 +5201,7 @@ internal class PlaybackCore(
         // the graph existed, which is the one fact such a bundle is collected to establish
         // Typed filter plans are still roadmap work; a raw graph string is what
         // can be attached today, and it is what is reported.
+        @OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
         val attachedFilter = snapshot.media?.videoFilter
         appendLine(
             if (attachedFilter == null) {

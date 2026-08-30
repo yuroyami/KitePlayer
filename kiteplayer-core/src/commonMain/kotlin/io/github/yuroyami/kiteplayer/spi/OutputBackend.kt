@@ -42,7 +42,6 @@ public interface OutputBackend {
      * every renderer in this build is built by the application and passed to
      * `KitePlayer.attachRenderer`. This is the hook for a platform that can decide on its own, for
      * example a surfaceless offscreen target.
-     * Not implemented yet; see MASTER_PLAN.md.
      */
     public val videoRenderer: VideoRendererFactory?
 }
@@ -50,8 +49,10 @@ public interface OutputBackend {
 /**
  * Creates a [VideoRenderer]. The engine closes what it creates.
  *
- * Nothing implements this and nothing calls it. See [OutputBackend.videoRenderer].
- * Not implemented yet; see MASTER_PLAN.md.
+ * Nothing CALLS it. One class implements it, `WebCanvasVideoRendererFactory`, and nothing
+ * instantiates that either, so the interface is a declared shape rather than a live path. The
+ * engine reaches a renderer through `KitePlayer.attachRenderer` instead. See
+ * [OutputBackend.videoRenderer] for why.
  */
 public interface VideoRendererFactory {
     public suspend fun create(): VideoRenderer

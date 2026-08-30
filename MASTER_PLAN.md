@@ -496,12 +496,19 @@ per-player sink nothing reads: delete".** `KiteLog` is read (`PlaybackCore` send
 through it), tested (`DiagnosticsTest`), and used by the iOS sample. There is no second per-player
 sink; `PlayerConfig` has no logging field. Nothing to delete.
 
-- [ ] The default factory that compiles then throws: `create()` refuses at CONFIG time with
-  the typed configuration error the facade contract already demands.
-- [ ] Public models mutable through arrays: defensive copies or immutable lists; identity
-  equality documented where it stays.
-- [ ] Raw FFmpeg option strings and filter chains at the public edge: mark with an explicit
-  low-level opt-in annotation (mirror KiteFFmpeg's `@KiteFFmpegLowLevelApi` seam).
+Also done 2026-08-30: `PlayerStreamInfo` compares its extradata by CONTENT (a data class holding a
+`ByteArray` compared it by reference, so a `Set` of tracks held duplicates), and
+`@KitePlayerLowLevelApi` now marks the two members carrying raw FFmpeg syntax,
+`MediaItem.videoFilter` and `PlaybackProfile.decoderOptions`.
+
+**A second row item was already DONE and is dropped: "the default factory that compiles then
+throws".** `KitePlayer.create` has been refusing at config time with
+`PlaybackException(ConfigurationInvalid)` for both a missing backend and a missing output, and
+`KitePlayerTest` pins both. Nothing to fix.
+
+- [ ] The array remainder: `RgbaBitmap.pixels` stays a shared array by design, because copying a
+  bitmap per frame to protect against a caller who mutates it is the wrong trade. It validates its
+  geometry already; what it does NOT do is say in its KDoc that the array is shared. One sentence.
 - [ ] Java/Swift adaptation: NOT built here; stays on this list as a feature item
   (KP-INTEROP-SURFACE, unscheduled).
 

@@ -1,3 +1,5 @@
+@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+
 package io.github.yuroyami.kiteplayer
 
 import kotlin.test.Test

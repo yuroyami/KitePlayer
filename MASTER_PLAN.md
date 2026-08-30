@@ -47,7 +47,7 @@ done; distribution half is Phase 8.)
 | 1 | Invalid C pixel formats cannot abort | GREEN |
 | 2 | Native FFI calls hold lifetime leases | GREEN |
 | 3 | Sink close is a terminal atomic state machine | GREEN |
-| 4 | Wasm MediaSource behaviour matches the shared suite | code written, tests are Phase 2 (KC-EVIDENCE-WASM) |
+| 4 | Wasm MediaSource behaviour matches the shared suite | AMBER: the three fixes that had no test now have three, each proven to fail when reverted (2026-08-30). Full parity still waits on an FFmpeg wasm build, since the shared codec-contract suite decodes real media and the fake cannot stand in for that |
 | 5 | Web input worker-backed or explicitly small | GREEN since KC-WEB-IO closed; streaming remainder rides X-08 |
 | 6 | Custom I/O failures preserve cause, close once | GREEN on JVM/Native; wasm close half landed with KC-WEB-IO |
 | 7 | Player EOF waits for every lane | AMBER: subtitle lane still outside the EOF gate (a trailing cue can be cut) |
@@ -153,19 +153,7 @@ What is left:
 
 # PHASE 2: EVIDENCE BUY-BACK (make the unprovable provable)
 
-### 2.1 KC-EVIDENCE-WASM: the three wasm fixes get their tests. Size M
-
-Three fixes in `MediaSource.wasmJs` have no test that could fail if reverted: live
-`corruptDataSkipped` accumulation in `decodeStreams`; the decoder leak where
-`openPacketReader` sat outside the owning `try`; the reader/decoder leak in `extractFrame`.
-The seam is `FakeCodecModule` (wasmJsTest); it needs the packet/decoder entry points a decode
-drives (~40 entry points consumed by that file: a fake demuxer, hence M).
-
-- [ ] Extend the fake (scripted packets, EOF, corrupt arm, fail-at-open arm); three RED tests,
-  each falsified by reverting its fix; `:kiteffmpeg-core:wasmJsNodeTest` green.
-- [ ] Commit: `Prove the three wasm fixes can fail`. Release-gate box 4 re-grades.
-
-### 2.2 The test-debt row: ten owed regressions + one warning test. Size M-L total
+### 2.1 The test-debt row: ten owed regressions + one warning test. Size M-L total
 
 Each RED first against a revert or scripted fault; cluster commits.
 
@@ -183,7 +171,7 @@ Each RED first against a revert or scripted fault; cluster commits.
 - [ ] `FrameDropping` warning: force five late drops in one stats interval under the virtual
   clock (the one warning of the F-WRN1 four with no pin)
 
-### 2.3 F-COV1 recounted 2026-08-30. What is left is what cannot run here
+### 2.2 F-COV1 recounted 2026-08-30. What is left is what cannot run here
 
 **The old "six of twenty" claim predated CI and is retired.** Counted off the workflow rather
 than remembered, NINE surfaces execute tests on every push: JVM on macOS and again on Linux,

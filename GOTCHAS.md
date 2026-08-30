@@ -142,6 +142,17 @@ Never move one silently.
   and `androidHostTest`. Before believing a green compile of a target that used to be red, grep
   the log for `NO-SOURCE` against the exact task name, or check that the test run reports a test
   COUNT rather than a build result.
+- **Adding a dependency can poison Kotlin's incremental-compilation cache.** The build fails with
+  `e: java.util.NoSuchElementException: Key ic#69:kotlin.text/replace|... is missing in the map`,
+  which names a stdlib function and looks like a compiler bug in your own code. It is neither: the
+  cache is stale. `rm -rf <module>/build/kotlin` and build again. Hit on 2026-08-30 in
+  `:kiteffmpeg-core` the moment `kotlinx-coroutines-test` was added to `commonTest`.
+- **A browser test that runs longer than 2 seconds is KILLED, not failed.** Mocha's per-test default
+  is 2000 ms and Kotlin does not raise it for `wasmJsBrowserTest`, so a `runTest` with a 60 second
+  Kotlin timeout still dies at two with "Error: Timeout of 2000ms exceeded". It is load-dependent,
+  so it passes locally and flakes in CI. Every module that runs browser tests needs a
+  `karma.config.d/timeouts.js`; copy the one in `kiteplayer-core`. Wiring a module's browser half
+  into CI without it is how a green suite becomes an intermittent red.
 - **The atomicfu Gradle plugin is BANNED in every module.** Its bytecode transform registers a
   task depending on `androidMainClasses`, which AGP 9's KMP library plugin does not create, so
   applying it breaks the Android target. The library dependency is fine. This is the single

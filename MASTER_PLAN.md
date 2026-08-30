@@ -264,12 +264,18 @@ one rule in commonMain.
   exists). That is a new C surface across 12 targets plus JNI plus the wasm binding mirror, so it
   wants a machine that can build every tree, not a one-target check.
 
-### 3.5 KC-COLOR-PROV: a guessed colour cannot be told from a declared one. Size M
+### 3.5 KC-COLOR-PROV remainder: carry the provenance into KitePlayer. Size S
 
-All four write sites overwrite Unspecified with a guess; only RANGE carries a provenance flag
-(`rangeSpecified`); wasm preserves Unspecified so backends disagree. Extend provenance to
-primaries/transfer/matrix; align backends. RED: Unspecified-everything reports
-specified=false per field everywhere; declared BT.709 reports true. apiDump.
+KiteFFmpeg side landed 2026-08-30: `ColorInfo` carries `matrixSpecified`, `primariesSpecified`
+and `transferSpecified` beside the existing `rangeSpecified`, all five guess sites go through one
+`resolveDeclaredColor`, and the web frame reader stopped ignoring matrix, primaries and transfer
+entirely. Both directions tested against the web fake.
+
+- [ ] KitePlayer's own `ColorSpaceInfo` (`spi/VideoFrame.kt`) still carries only `rangeSpecified`,
+  and `Conversions.kt` maps the KiteFFmpeg value across without the three new flags, so the
+  distinction stops at the boundary. Widen it and map them, then decide whether the tone-map
+  warning should say WHICH of the two it acted on. Rides the next KiteFFmpeg republish, since
+  KitePlayer builds against the published artifact rather than the sibling's sources.
 
 ### 3.6 KC-TRACKSEL + the disposition widening. Size M, NEEDS-DESIGN
 

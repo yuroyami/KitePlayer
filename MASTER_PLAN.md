@@ -920,8 +920,11 @@ it.
 - [ ] **9.15 The C-layer backlog, the old B-horizon** (harvested; each S-M):
   gate call inside the C library's constructor helpers (today only Kotlin call sites enforce
   the identity gate, a pure C/JNI consumer reaches FFmpeg ungated); an entry-point audit for
-  `requireCompatibleFFmpeg` (15 call sites, nothing keeps them complete); a C ABI version
-  ratchet (surface grows, claims 1.0 forever); the fuzz rule (every new string-parsing entry
+  `requireCompatibleFFmpeg` (15 call sites, nothing keeps them complete); (the C ABI version
+  ratchet is DONE: both baselines now carry the version they were written at, `symbol-audit.sh`
+  check 8 holds the stamps equal to the header, and a rewrite that changes records refuses
+  unless the version rose. The row said the surface "claims 1.0 forever"; it actually claimed
+  2.6, but the point stood, because nothing made 2.6 true.); the fuzz rule (every new string-parsing entry
   point gets a target; two public-reachable ones have none: `ffkmp_fmt_alloc_output2`'s
   format and the three raw `*_by_name` lookups); split `test_convert.c` contract vs baseline
   counts; (the C suite lists are DONE: both KiteFFmpeg scripts read `tests/*.c` since

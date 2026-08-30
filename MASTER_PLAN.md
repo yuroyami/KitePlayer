@@ -930,7 +930,11 @@ it.
   that skip zeroing and the OutputIsSilence flag; teardown defence with a mock AudioUnit;
   the two forked C harnesses (decide source-of-truth vs vendored copy); the opaque-migration
   prototype (one family early, before more C work depends on the assumption);
-  `check-deleted-surface.sh` failing on an empty prose set; the coverage-guided fuzzing
+  (`check-deleted-surface.sh` is DONE, and the row had it backwards: it did not FAIL on an
+  empty set, it PASSED. Three greens over zero work when no name is marked deleted, and a
+  note-not-a-failure when an allowlisted path no longer exists, which the KitePlayer
+  `PLANNING.md` entry had been doing since the 2026-08-29 docs reset. Both fail now.);
+  the coverage-guided fuzzing
   program itself (harness, corpus and replay exist; true fuzzing runs in Linux CI; demuxer
   and decoder byte paths are the security gap).
 - [ ] **9.16 FFmpeg 9.x: DEFERRED INDEFINITELY, owner-decided 2026-08-29.** Not scheduled, not

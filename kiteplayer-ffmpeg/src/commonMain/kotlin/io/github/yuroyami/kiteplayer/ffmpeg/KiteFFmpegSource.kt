@@ -390,6 +390,9 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
         isForced = disposition.forced,
         isAccessibility = disposition.hearingImpaired || disposition.visualImpaired,
         bitrate = bitrateBps,
+        // Verbatim. `language` and `title` above are parsed readings of two of these keys; an
+        // application that wants the rest, or wants the raw form, had no way to reach them.
+        metadata = metadata,
         // A stream's own start is a point on the timeline, so it is normalised like every other one.
         // It is already in microseconds, so the mapper only has to move the origin.
         startTime = mapper.mapTimestamp(startTimeMicros),

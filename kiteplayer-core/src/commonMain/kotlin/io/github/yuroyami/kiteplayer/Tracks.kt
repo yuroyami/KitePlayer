@@ -47,6 +47,14 @@ public data class TrackInfo(
      * file. Such a track is never the sync master and never carries the timeline.
      */
     val isCoverArt: Boolean = false,
+    /**
+     * The track's own container tags, verbatim.
+     *
+     * `language` and `title` above are the parsed, normalized readings of two of these; this is
+     * everything the container wrote, including the keys this type has no field for. Empty when
+     * the container carried none, which is common.
+     */
+    val metadata: Map<String, String> = emptyMap(),
 ) {
     /** A label suitable for a track menu, built from whatever the container actually provided. */
     public val label: String

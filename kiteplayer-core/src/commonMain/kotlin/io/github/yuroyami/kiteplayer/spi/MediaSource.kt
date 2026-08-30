@@ -116,6 +116,11 @@ public data class PlayerStreamInfo(
      * when the stream has no separate configuration record.
      */
     val codecExtradata: ByteArray? = null,
+    /**
+     * The stream's own tags, as the container wrote them: `language`, `title`, `handler_name` and
+     * whatever else it carried. Reported, never repaired.
+     */
+    val metadata: Map<String, String> = emptyMap(),
 )
 
 public data class Vp9CodecConfiguration(

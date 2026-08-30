@@ -4937,6 +4937,7 @@ internal class PlaybackCore(
             videoSize = session?.videoStream?.videoSize,
             tracks = tracks,
             chapters = session?.source?.chapters ?: emptyList(),
+            metadata = session?.source?.metadata ?: emptyMap(),
             speed = speed,
             volume = volume,
             muted = muted,
@@ -6545,6 +6546,7 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
             sampleRate = stream.sampleRate,
             channels = stream.channels,
             isCoverArt = stream.isCoverArt,
+            metadata = stream.metadata,
         )
     },
 )

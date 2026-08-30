@@ -571,6 +571,9 @@ internal class ScriptedSource(
                     videoSize = VideoSize(1920, 1080),
                     frameRate = 1_000_000.0 / script.videoFrameDurationUs,
                     isCoverArt = script.videoIsCoverArt,
+                    // A key with no TrackInfo field of its own, so a test can prove the raw tags
+                    // travel and not just the two the type happens to parse.
+                    metadata = mapOf("handler_name" to "scripted video handler"),
                 ),
             )
         }
@@ -584,6 +587,10 @@ internal class ScriptedSource(
                     title = track.title,
                     isDefault = track.isDefault,
                     isForced = track.isForced,
+                    metadata = buildMap {
+                        track.language?.let { put("language", it) }
+                        track.title?.let { put("title", it) }
+                    },
                 ),
             )
         }
@@ -608,7 +615,8 @@ internal class ScriptedSource(
 
     override val duration: Pts = Pts(script.durationUs)
     override val seekable: Boolean = script.seekable
-    override val metadata: Map<String, String> = mapOf("title" to "scripted")
+    override val metadata: Map<String, String> =
+        mapOf("title" to "scripted", "artist" to "the harness", "encoder" to "none")
     override val chapters: List<Chapter> = script.chapters
     override val timestampsMayJump: Boolean = false
 

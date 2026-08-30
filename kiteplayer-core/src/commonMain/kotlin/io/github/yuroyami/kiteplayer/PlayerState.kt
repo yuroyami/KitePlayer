@@ -24,6 +24,14 @@ public data class PlayerSnapshot(
      * them). Empty for media with no chapter table.
      */
     val chapters: List<Chapter> = emptyList(),
+    /**
+     * The container's own tags: `title`, `artist`, `encoder` and whatever else it wrote.
+     *
+     * These were read on open and reachable only from inside the engine until now, so an
+     * application that wanted to show a file's title had to parse the filename. Empty for a
+     * container that carries none.
+     */
+    val metadata: Map<String, String> = emptyMap(),
     val speed: Double = 1.0,
     val volume: Float = 1.0f,
     val muted: Boolean = false,

@@ -515,11 +515,6 @@ when the mixer supports 6/8; fold only when it does not. RED: 5.1 fixture on a s
 6-channel line keeps 6 channels. Upmix (mono/stereo to 5.1) is a policy feature: re-filed
 (KP-AUDIO-UPMIX, unscheduled, owner taste).
 
-### 5.5 Container tags reach the public surface. Size S
-
-`PlayerMediaSource.metadata` has zero consumers; title/artist are in memory and no
-application can reach them. Expose read-only container + per-stream tag maps through the
-snapshot/track surface. RED: tagged fixture surfaces title/artist via the facade. ABI dumps.
 
 ---
 

@@ -27,13 +27,13 @@ import kotlin.time.Duration.Companion.seconds
 class BufferPolicyValidationTest {
 
     @Test
-    fun `a readiness duration larger than the whole budget is legal, because packets can answer it`() {
+    fun `a readiness duration larger than the whole budget is legal because packets can answer it`() {
         val policy = BufferPolicy(readyDuration = 40.seconds, totalDuration = 30.seconds)
         assertTrue(policy.readyDuration > policy.totalDuration)
     }
 
     @Test
-    fun `a queue is ready on packet count alone, which is what makes that policy survivable`() {
+    fun `a queue is ready on packet count alone which is what makes that policy survivable`() {
         val queue = PacketQueue(streamIndex = 0, softLimitUs = 1_000_000)
         assertTrue(
             queue.isReady(readyUs = Long.MAX_VALUE, readyPackets = 0),

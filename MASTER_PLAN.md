@@ -195,12 +195,27 @@ Each RED first against a revert or scripted fault; cluster commits.
   half fine). Bisect the webpack context scope. If the fix is a toolchain bump, STOP: owner
   decision.
 
-### 2.4 F-COV1: test-surface recount. Size S
+### 2.4 F-COV1 recounted 2026-08-30. What is left is what cannot run here
 
-The six-of-twenty coverage claim predates KitePlayer CI (which now EXECUTES linuxX64 on
-Linux, mingw on Windows, wasm in node + browser). Recount from CI logs, attempt
-`watchosSimulatorArm64Test` once on this Mac, record tvos as blocked (missing runtime).
-Reduce the claim to the genuinely unreachable set.
+**The old "six of twenty" claim predated CI and is retired.** Counted off the workflow rather
+than remembered, NINE surfaces execute tests on every push: JVM on macOS and again on Linux,
+macosArm64, iosSimulatorArm64, Android host tests on Linux, linuxX64 executed on a real Linux
+kernel, mingwX64 executed on Windows, and wasmJs in both node and a headless browser. The C
+suites run in four variants beside them. Two more surfaces execute locally and not yet in CI:
+the compose-ui and compose-interop JVM suites, the second of which only started existing today.
+
+**What genuinely cannot run, and why, so nobody re-attempts it blind:**
+
+- [ ] `watchosSimulatorArm64` and `tvosSimulatorArm64`: attempted here on 2026-08-30 and refused
+  with "Xcode does not support simulator tests for watchos_simulator_arm64. Check that requested
+  SDK is installed". `xcrun simctl list runtimes` offers iOS only on this machine, so both are a
+  missing SDK rather than a broken target. They would need the SDKs installed, on a machine or a
+  runner, before the claim can move.
+- [ ] `iosArm64`, `androidNative*`, `macosX64`, `iosX64`, `linuxArm64`: compile-only, since each
+  needs hardware or an emulator nobody has wired. Compilation is not support and the README says
+  so.
+- [ ] `js`: a deliberate placeholder, not a gap.
+- [ ] Android device tests: hardware, and they ride DEVICE-DAY.
 
 ---
 

@@ -191,6 +191,11 @@ Never move one silently.
   `Library not loaded: @rpath/libkc_interpose_alloc.dylib` naming the OLD path, which reads like
   a broken test and is a stale binary. Re-run the variant's `build-host.sh` and they pass again.
   Tier 1 says to rebuild the C suites only when a C file changed; a directory move counts too.
+- **A backtick test name containing a COMMA compiles on JVM and breaks every Kotlin/Native
+  target**, with `Name contains illegal characters: ","`. It has bitten twice: once in
+  `AudioSinkEventTest`, where it had been red since the test landed, and again the same week in a
+  new file, because a `jvmTest` run is green and says nothing. Any commonTest addition needs one
+  native compile before it is believed.
 - **`./gradlew ... | tail` hides the build's exit code**, because the pipeline reports the exit
   of `tail`. A background bake reported success while `BUILD FAILED` sat in its own log. Pipe to
   a file and echo `$?`, or check the log for BUILD FAILED; never read a piped gradle run's

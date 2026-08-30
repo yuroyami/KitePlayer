@@ -152,10 +152,11 @@ Never move one silently.
   `withTimeoutOrNull`, so a busy machine samples the player before it has settled. What you get is
   "seek 1 asked for 7.738s and landed at 7.566698s ... must arrive at the frame that was asked for
   and not at the keyframe before it", or "Expected <Playing>, actual <Buffering>". Both look like a
-  seek defect and are not. The seed is fixed (`Random(23)`), so the giveaway is the ERROR CHANGING
-  between runs: 171 ms out, then 437 ms out, then green. Before chasing one, re-run that suite ALONE
-  on an idle machine. Chased on 2026-08-30, where it appeared to correlate with an unrelated new
-  test file and did not survive a controlled re-run.
+  seek defect and are not. The seed is fixed (`Random(23)`), so there are two giveaways: the ERROR
+  CHANGES between runs (171 ms out, then 437 ms out, then green), and a DIFFERENT TEST in the class
+  fails each time. Before chasing one, re-run that suite ALONE on an idle machine; it has come back
+  green every time. Seen twice on 2026-08-30, once appearing to correlate with an unrelated new test
+  file, which is the trap: running the whole module at once is itself the load.
 - **A browser test that runs longer than 2 seconds is KILLED, not failed.** Mocha's per-test default
   is 2000 ms and Kotlin does not raise it for `wasmJsBrowserTest`, so a `runTest` with a 60 second
   Kotlin timeout still dies at two with "Error: Timeout of 2000ms exceeded". It is load-dependent,

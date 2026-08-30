@@ -6,6 +6,33 @@ public final class io/github/yuroyami/kiteplayer/output/AnnexB {
 	public final fun toAnnexB ([BI)[B
 }
 
+public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
+	public final fun getFailedFrames ()J
+	public fun getOutputSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
+	public final fun getPresentedFrames ()J
+	public final fun getSupersededFrames ()J
+	public fun present (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setAdjustments (Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
+	public final fun setCanvas (Ljava/awt/Canvas;)V
+	public fun setOverlay (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun setRenderQuality (Lio/github/yuroyami/kiteplayer/RenderQuality;)V
+	public fun setScaleMode (Lio/github/yuroyami/kiteplayer/VideoScale;)V
+	public fun setTransform (Lio/github/yuroyami/kiteplayer/VideoTransform;)V
+	public fun setViewport (IIF)V
+	public fun supportedHardwareSurfaces ()Ljava/util/Set;
+	public fun supports (Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;)Z
+	public fun videoDecoderFactories ()Ljava/util/List;
+	public fun vsyncIntervalNanos ()Ljava/lang/Long;
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/output/AwtFramePainter {
+	public abstract fun paintArgb (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;[III)Z
+}
+
 public final class io/github/yuroyami/kiteplayer/output/CodecSpecificData {
 	public fun <init> ([B[BI)V
 	public final fun getCsd0 ()[B

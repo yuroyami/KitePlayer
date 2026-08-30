@@ -68,11 +68,14 @@ kotlin {
         }
         // The desktop JVM stopped being a placeholder in phase W: KiteFFmpeg's jvm variant carries
         // the JNI adapter, and :kiteplayer-output has a SourceDataLine sink and an AWT rasterizer.
-        // No view module here: a desktop consumer draws through Compose (KiteVideo), which is the
-        // only rendering path a windowing toolkit without an interop view can use.
+        // The view module joined them on 2026-08-30: desktop now has a real platform video view,
+        // an AWT canvas painted off the Compose clock, so this module supplies its renderer
+        // adapter exactly as it does for Android and iOS. The comment that used to sit here said
+        // a desktop consumer can only draw through Compose, which is no longer true.
         jvmMain.dependencies {
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))
+            api(project(":kiteplayer-view"))
         }
         // The web carries the same two, now that both have a wasmJs target (17.14 X-12).
         wasmJsMain.dependencies {

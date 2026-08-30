@@ -80,6 +80,10 @@ kotlin {
         getByName("wasmJsTest").dependencies {
             implementation(libs.kotlinx.coroutines.test)
         }
+        // The desktop renderer's present is suspend, so its ownership tests need the same.
+        getByName("jvmTest").dependencies {
+            implementation(libs.kotlinx.coroutines.test)
+        }
         getByName("androidDeviceTest").dependencies {
             implementation(kotlin("test"))
             implementation(libs.androidx.test.core)

@@ -31,6 +31,15 @@ public final class io/github/yuroyami/kiteplayer/KitePlayerPlatform {
 	public final fun isAvailable ()Z
 }
 
+public final class io/github/yuroyami/kiteplayer/mobile/DesktopAwtPlayerViewRendererFactory : io/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/mobile/DesktopAwtPlayerViewRendererFactory;
+	public fun create (Lkotlin/jvm/functions/Function2;)Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;
+}
+
+public final class io/github/yuroyami/kiteplayer/mobile/DesktopPlayerViewRendererKt {
+	public static final fun installDesktopRenderer (Lio/github/yuroyami/kiteplayer/view/KitePlayerAwtView;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {
 	public static final fun mobileBackends ()Lio/github/yuroyami/kiteplayer/Backends;
 }

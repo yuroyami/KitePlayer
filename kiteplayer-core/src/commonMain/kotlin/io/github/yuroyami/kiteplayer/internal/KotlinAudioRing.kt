@@ -26,7 +26,7 @@ import kotlin.math.min
  * only oracle the C ring can be checked against. Register item B1-20 says this must be stated
  * plainly rather than left for a reader to discover, and it is stated again in
  * `AudioRingTest`'s KDoc and in the README, because a green total quietly covering a ring the shipped
- * path does not use is exactly the substitution KPKMP-PAST.md section 2 forbids. The total is deliberately
+ * path does not use is exactly the substitution MASTER_PLAN.md forbids. The total is deliberately
  * not quoted here: a number in a comment is one more thing that can go stale, and the point does not
  * depend on which number it is.
  *

@@ -23,7 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Media bytes over http and https through Ktor (KPKMP 17.12 M1, the Ktor half): the engine's
+ * Media bytes over http and https through Ktor (the Ktor half): the engine's
  * FFmpeg profile deliberately vendors no TLS backend, so THIS is how https plays, with the OS
  * supplying TLS through the platform engine (OkHttp on Android and the JVM, NSURLSession on
  * Apple).

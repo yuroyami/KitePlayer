@@ -16,7 +16,7 @@ import platform.Metal.MTLTextureProtocol
  * Apple). This is what replaces the CPU colour conversion for a consumer that needs BYTES
  * rather than a layer, KiteVideo above all: the YUV-to-RGB arithmetic runs in the fragment
  * shader, a VideoToolbox frame is wrapped with no copy at all, and the CPU pays exactly one
- * readback memcpy, which is law 2 of KPKMP 17.9 with the one copy the law's Android sibling
+ * readback memcpy, which is the no-CPU-RGBA law with the one copy its Android sibling
  * (KV-4) also pays.
  *
  * The picture comes back at its STORED size, unrotated and without the pixel-aspect stretch:

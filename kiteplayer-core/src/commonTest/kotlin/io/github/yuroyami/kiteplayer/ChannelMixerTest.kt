@@ -57,7 +57,7 @@ private class LayoutCase(val layout: MixLayout, val expected: List<Pair<Float, F
  */
 class ChannelMixerTest {
 
-    // ── The fold to a smaller surround target (SALANKE, SOL-P8 remainder). ──────────────────
+    // ── The fold to a smaller surround target (SOL-P8 remainder). ──────────────────
 
     @Test
     fun `seven point one folds into five point one instead of truncating the sides away`() {

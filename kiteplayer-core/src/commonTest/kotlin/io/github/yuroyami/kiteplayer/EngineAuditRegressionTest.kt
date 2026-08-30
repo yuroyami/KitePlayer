@@ -16,13 +16,13 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Regressions from the 2026-08-17 code audit (KPKMP 17.11.b). Each test was proven RED against
+ * Regressions from the 2026-08-17 code audit. Each test was proven RED against
  * the defect it pins before the fix landed, which is what makes it a pin and not a description.
  */
 class EngineAuditRegressionTest {
 
     /**
-     * P0-20. At a pitch-preserving speed the tempo stage holds up to two pitch periods it cannot
+     * At a pitch-preserving speed the tempo stage holds up to two pitch periods it cannot
      * splice, because a splice needs the audio that comes after them and at the end of a stream
      * nothing does. The terminal state used to be decided without asking, so those frames met the
      * next reset instead of the device.
@@ -59,7 +59,7 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
-    // F-LOOP1: LoopMode.One at the end of an unseekable source must not issue a seek. The A-B
+    // LoopMode.One at the end of an unseekable source must not issue a seek. The A-B
     // branch already refuses; the plain repeat branch was the one seek path with no guard.
     @Test
     fun `looping an unseekable source never seeks it and leaves the player Ended`() = runTest {
@@ -82,7 +82,7 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
-    // F-SEEK1: a seek queued against the previous media must not run against the newly opened
+    // A seek queued against the previous media must not run against the newly opened
     // one. runOpen resets the whole seek machine except the request itself.
     @Test
     fun `a seek queued before an open never runs against the new media`() = runTest {
@@ -107,7 +107,7 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
-    // F-EOS1: the wait for the audio ring to empty at end of stream must be bounded. A device
+    // The wait for the audio ring to empty at end of stream must be bounded. A device
     // that stopped pulling used to park the player one poll before Ended for ever.
     @Test
     fun `a device that stops pulling cannot hold off Ended for ever`() = runTest {
@@ -139,7 +139,7 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
-    // F-SP1: a refused speed change must leave no trace. The old order wrote the rate into both
+    // A refused speed change must leave no trace. The old order wrote the rate into both
     // pipelines first and decided to refuse afterwards, so a paused video clock kept the rate.
     @Test
     fun `a refused speed change leaves the video clock at the old rate`() = runTest {
@@ -158,14 +158,14 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
-    // F-CFG1: the config must refuse what the pipeline it configures refuses. FrameQueue needs
+    // The config must refuse what the pipeline it configures refuses. FrameQueue needs
     // two slots to time a frame, so a policy of one slot was an open() crash wearing a valid coat.
     @Test
     fun `a one slot video frame queue is refused at configuration`() {
         assertFailsWith<IllegalArgumentException> { BufferPolicy(videoFrameQueue = 1) }
     }
 
-    // F-MIX1: a pass-through with UNEQUAL channel counts must still run the mixer's frame-wise
+    // A pass-through with UNEQUAL channel counts must still run the mixer's frame-wise
     // restride. The SOL-P2 alias keyed on isPassThrough and handed a 3-channel interleave to a
     // stereo consumer untouched: every sample on the wrong speaker at the wrong time.
     @Test
@@ -202,7 +202,7 @@ class EngineAuditRegressionTest {
         assertTrue(pipeline.output === input, "SOL-P2's zero-copy contract holds for the identity pair")
     }
 
-    // F-GAIN1: a pipeline rebuilt mid-stream must inherit the applied gain, not restart at
+    // A pipeline rebuilt mid-stream must inherit the applied gain, not restart at
     // unity. Rebuilding while muted used to play up to one ramp of near-full-scale samples.
     @Test
     fun `a rebuild while muted stays silent through the swap`() {
@@ -228,7 +228,7 @@ class EngineAuditRegressionTest {
             "a muted pipeline rebuilt mid-stream must stay silent, but the first buffer peaked at $peak",
         )
     }
-    // F-WRN1: AudioUnderrun was a documented public type wired to nothing. A demuxer slower
+    // AudioUnderrun was a documented public type wired to nothing. A demuxer slower
     // than real time starves the ring, and the starvation must reach the warning history.
     @Test
     fun `a starved ring says AudioUnderrun out loud`() = runTest {
@@ -336,7 +336,7 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
-    // F-PLAY1 (owner report 2026-08-17): play at the end IS a restart, mpv's law. The intent
+    // Play at the end IS a restart, mpv's law. The intent
     // flag was already true after a natural end, so pressing play changed nothing and the
     // player sat in Ended for ever.
     @Test

@@ -55,11 +55,11 @@ class WarningAuditTest {
         )
         is PlaybackWarning.AudioDeviceChanged -> listOf(
             "PlaybackCore's sink-event collection, on AudioSinkEvent.DeviceLost and DeviceChanged, " +
-                "and on FormatChangeRequested naming the request (SALANKE N11)",
+                "and on FormatChangeRequested naming the request",
         )
         is PlaybackWarning.AudioDeviceUnderrun -> listOf(
             "PlaybackCore's sink-event collection, on AudioSinkEvent.Underrun, once per session " +
-                "(SALANKE N11; the feed used to be read and dropped)",
+                "(the feed used to be read and dropped)",
         )
         is PlaybackWarning.AudioUnderrun -> listOf(
             "PlaybackCore's stats pass, when the sink's underrun total moves",

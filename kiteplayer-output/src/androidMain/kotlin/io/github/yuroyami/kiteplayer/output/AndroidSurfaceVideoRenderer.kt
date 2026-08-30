@@ -547,7 +547,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         }
         // Applied when the next frame draws. A PAUSED picture keeps its old colours until then:
         // this renderer holds no drawn-frame copy to repaint, the same recorded limit as its
-        // paused-overlay behaviour (KPKMP 17.11, SOL-R1 family). KiteVideo repaints immediately.
+        // paused-overlay behaviour (SOL-R1 family). KiteVideo repaints immediately.
     }
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {

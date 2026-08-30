@@ -7,7 +7,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 /**
- * The software half of the HDR-to-SDR law (KPKMP 17.12 M3): the same arithmetic as the Metal
+ * The software half of the HDR-to-SDR law: the same arithmetic as the Metal
  * shader's kp_tone_map, LUT-accelerated for the CPU tier. PQ or HLG electricals are linearized
  * per channel, BT.2020 primaries fold to BT.709, luminance rolls off through the BT.2390 EETF
  * anchored at 203 nits (BT.2408 reference white), and the result encodes as gamma 2.2.

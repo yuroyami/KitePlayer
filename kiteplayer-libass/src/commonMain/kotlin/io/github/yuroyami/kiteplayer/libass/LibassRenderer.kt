@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer.libass
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 
 /**
- * Typesetting-grade ASS rendering through libass (KPKMP 17.12 phase L), emitting the engine's
+ * Typesetting-grade ASS rendering through libass, emitting the engine's
  * EXISTING bitmap-cue vocabulary: each rendered event becomes [SubtitleCue.Bitmap] regions in the
  * frame's own coordinate space, exactly what the rasterizers already draw for bitmap subtitle
  * formats. Nothing engine-side had to learn a new type, which is the whole point of that path.

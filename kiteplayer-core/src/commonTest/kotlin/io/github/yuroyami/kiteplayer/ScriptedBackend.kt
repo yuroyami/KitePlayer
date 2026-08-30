@@ -55,7 +55,7 @@ internal data class ScriptedAudioTrack(
     val isDefault: Boolean = false,
     /** False makes the scripted decoder factory refuse this specific track. */
     val decoderAccepted: Boolean = true,
-    /** True marks the track as descriptive/accessibility audio (SALANKE S11). */
+    /** True marks the track as descriptive/accessibility audio. */
     val isAccessibility: Boolean = false,
     /** Optional early packet cutoff, used to model an alternate cache that stops growing. */
     val packetEndUs: Long? = null,
@@ -84,7 +84,7 @@ internal data class ScriptedSubtitleTrack(
     val language: String = "und",
     val title: String? = null,
     val isDefault: Boolean = false,
-    /** True marks the track as forced subtitles (SALANKE S02). */
+    /** True marks the track as forced subtitles. */
     val isForced: Boolean = false,
     /** False makes the scripted decoder factory refuse this specific track. */
     val decoderAccepted: Boolean = true,
@@ -294,11 +294,11 @@ internal class FaultPlan(
     var audioDecodersRefuse: Boolean = false
 
     /** True makes [ScriptedSource.selectStreams] throw, which is buildSession's reachable thrower
-     * AFTER the audio path has gone live (interlude item I-03). */
+     * AFTER the audio path has gone live. */
     var failSelectStreams: Boolean = false
 
     /** True parks every audio decoder's receive until cancellation, a worker that refuses to reach
-     * a quiescent boundary (interlude item I-02). */
+     * a quiescent boundary. */
     var stallAudioDecodeReceive: Boolean = false
 
     /** True makes the video decoder accept every packet and never produce a frame. */
@@ -675,7 +675,7 @@ internal class ScriptedSource(
         private set
 
     override fun selectStreams(indices: Set<Int>) {
-        if (faults.failSelectStreams) error("scripted selectStreams failure (interlude item I-03)")
+        if (faults.failSelectStreams) error("scripted selectStreams failure")
         check(selectCalls == 0) { "streams must be selected before the first read" }
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         require(indices.all { wanted -> streams.any { it.index == wanted } }) {
@@ -700,7 +700,7 @@ internal class ScriptedSource(
             val seekFloor = subtitleSeekFloorsUs.getValue(track.index)
             // File order, like the real source: a packet interleaved before the seek landing is
             // behind the demux cursor and is NOT redelivered, even when its cue still spans the
-            // landing. That missing cue is SALANKE S16, and this model must not paper over it.
+            // landing. That missing cue is a known open defect, and this model must not paper over it.
             while (
                 cursor < track.packets.size &&
                 track.packets[cursor].startMicros < seekFloor
@@ -818,7 +818,7 @@ internal class ScriptedSource(
             subtitleSeekFloorsUs[track.index] = landing
             // Redelivery starts at the landing in FILE order, exactly like a backward
             // avformat_seek_file: a packet whose start sits before the landing is never re-read,
-            // however long its cue lasts (SALANKE S16).
+            // however long its cue lasts.
             subtitleCursors[track.index] = track.packets.indexOfFirst {
                 it.startMicros >= landing
             }.takeIf { it >= 0 } ?: track.packets.size
@@ -1011,7 +1011,7 @@ internal class ScriptedAudioDecoder(
 
     override suspend fun receive(): AudioBuffer? {
         // A worker that never reaches a quiescent boundary: parked on a cancellable suspension,
-        // so quiesce fails while cancellation still works (interlude item I-02).
+        // so quiesce fails while cancellation still works.
         if (faults.stallAudioDecodeReceive) awaitCancellation()
         val buffer = pending.removeFirstOrNull()
         if (buffer == null && ending) drained = true

@@ -18,7 +18,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
 
 /**
- * One representation's segments read as a single forward stream (KPKMP 17.12, the adaptive
+ * One representation's segments read as a single forward stream (the adaptive
  * layer's first tier): the initialization segment when one exists, then every media segment
  * in plan order, byte-concatenated. FFmpeg demuxes the join exactly as it demuxes a file,
  * which is the media3 shape the un-parked D-4 chose: Kotlin segment logic FEEDING the

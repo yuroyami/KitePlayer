@@ -42,7 +42,7 @@ public interface OutputBackend {
      * every renderer in this build is built by the application and passed to
      * `KitePlayer.attachRenderer`. This is the hook for a platform that can decide on its own, for
      * example a surfaceless offscreen target.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Not implemented yet; see MASTER_PLAN.md.
      */
     public val videoRenderer: VideoRendererFactory?
 }
@@ -51,7 +51,7 @@ public interface OutputBackend {
  * Creates a [VideoRenderer]. The engine closes what it creates.
  *
  * Nothing implements this and nothing calls it. See [OutputBackend.videoRenderer].
- * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+ * Not implemented yet; see MASTER_PLAN.md.
  */
 public interface VideoRendererFactory {
     public suspend fun create(): VideoRenderer

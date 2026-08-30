@@ -301,7 +301,7 @@ internal class ChannelMixer(
             }
             if (layout == null) return null
             if (targetChannels == 2) return downmix(layout, sourceChannels, policy)
-            // The fold to a smaller surround target (SALANKE, SOL-P8 remainder): 7.1 into a 5.1
+            // The fold to a smaller surround target (SOL-P8 remainder): 7.1 into a 5.1
             // device used to truncate the side surrounds away. A device that named no mask gets
             // the conventional layout for its count, which is what Android reports by count.
             if (targetChannels < sourceChannels) {

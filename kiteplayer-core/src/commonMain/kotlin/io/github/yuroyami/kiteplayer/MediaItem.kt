@@ -52,7 +52,7 @@ public data class MediaItem(
      * reader here meant the second open was handed the one the first session had already closed,
      * and the media simply stopped.
      *
-     * Wired through the custom AVIO bridge (KPKMP 17.12 M1): when set, [uri] is a label only and
+     * Wired through the custom AVIO bridge: when set, [uri] is a label only and
      * every byte the demuxer touches comes from the reader this makes. This is how an application
      * plays through its own HTTP client with its own TLS and auth, from an encrypted store, a
      * torrent, a cache, or bytes it already holds.
@@ -93,7 +93,7 @@ public data class MediaItem(
  * Threading: called from the demux worker only, one call at a time, never concurrently.
  * Implementations do not need to be thread safe. They may suspend.
  *
- * Implemented by the FFmpeg backend since the custom AVIO bridge (KPKMP 17.12 M1): a
+ * Implemented by the FFmpeg backend since the custom AVIO bridge: a
  * [MediaItem.io] carries the media's bytes; a [SubtitleSource.io] is still unwired and warns
  * typed. The demux worker blocks on [read], so a source that never produces a byte and never
  * returns -1 stalls playback; that is the contract, not a defect.
@@ -126,7 +126,7 @@ public interface MediaIo : AutoCloseable {
 }
 
 /**
- * Turns a URI into a [MediaIo] when it knows how, at open time (KPKMP 17.12 M1, the Ktor
+ * Turns a URI into a [MediaIo] when it knows how, at open time (the Ktor
  * half). Installed through [PlayerConfig.network]; the engine consults it exactly when a
  * [MediaItem] carries a URI and no [MediaItem.io] of its own. Returning null passes the URI
  * through to the backend untouched, which is what keeps local files on FFmpeg's own fast

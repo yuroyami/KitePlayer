@@ -14,7 +14,7 @@ import kotlin.math.sin
  * that transform is written down, so no two renderers can disagree about what saturation means.
  *
  * Gamma is deliberately absent: it is not affine, so it cannot ride this matrix, and a control
- * honoured by some renderers and ignored by others would be worse than none (KPKMP 17.11).
+ * honoured by some renderers and ignored by others would be worse than none.
  */
 public data class VideoAdjustments(
     /** Additive lift, -1 to 1. 0 is neutral; positive lightens. */

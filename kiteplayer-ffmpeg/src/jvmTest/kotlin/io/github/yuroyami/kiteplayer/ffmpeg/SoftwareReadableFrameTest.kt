@@ -13,7 +13,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * SALANKE N01: no production frame type implemented [SoftwareReadableFrame], so
+ * No production frame type implemented [SoftwareReadableFrame], so
  * `CapturedFrame.of` took its refusal branch for every real decoded frame on every platform and
  * the public captureFrame() feature was dead. This decodes a real frame and proves the planes
  * can be read through the SPI the capture path uses.

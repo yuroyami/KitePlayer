@@ -80,7 +80,7 @@ public class AudioTrackSink internal constructor(
     @Volatile private var lastAcceptedTimestampNanos = Long.MIN_VALUE
 
     /**
-     * No device timestamp sampled BEFORE this instant may anchor the clock (SALANKE S23).
+     * No device timestamp sampled BEFORE this instant may anchor the clock.
      * Legacy HALs answer the first post-resume getTimestamp with the cached pre-pause reading,
      * and every monotone admission check accepts an unchanged reading, so a pause of N seconds
      * mis-anchored the master clock by up to N. Set at resume from the sink's own monotonic
@@ -130,7 +130,7 @@ public class AudioTrackSink internal constructor(
                 },
                 sampleFormat = SampleFormat.F32,
             ).let { chosen ->
-                /* SALANKE R1: name the layout the device is being opened with, in the native
+                /* Name the layout the device is being opened with, in the native
                  * order the mixer keys on, or its targetLayout is null and neither the
                  * equal-count reorder nor the surround fold can ever engage on Android. These
                  * are the layouts behind AudioTrack's CHANNEL_OUT masks for the counts above. */
@@ -457,7 +457,7 @@ public class AudioTrackSink internal constructor(
         if (ts.framePosition < lastAcceptedTimestampFrames) return false
         if (ts.nanoTime < lastAcceptedTimestampNanos) return false
         /* A reading sampled before the resume instant is the cached pre-pause value, however
-         * plausible its numbers look (SALANKE S23). The head fallback answers until the HAL
+         * plausible its numbers look. The head fallback answers until the HAL
          * produces a post-resume reading. */
         if (ts.nanoTime < timestampFloorNanos) return false
         lastAcceptedTimestampFrames = ts.framePosition

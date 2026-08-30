@@ -159,7 +159,7 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
     }
 
     override fun interrupt(): Boolean {
-        // KC-CANCEL: a single volatile write on the format context; KiteFFmpeg documents this as
+        // A single volatile write on the format context; KiteFFmpeg documents this as
         // the one member callable while another thread is blocked in a read or seek.
         source.interrupt()
         return true
@@ -879,7 +879,7 @@ public class KiteFFmpegVideoFrame internal constructor(
     }
 
     /**
-     * Tightly packed planes, copied out of native memory ONCE on first plane read (SALANKE N01).
+     * Tightly packed planes, copied out of native memory ONCE on first plane read.
      * [KiteFrame.copyPlanesToByteArray] documents the layout: plane after plane, no padding, so
      * every stride below is exactly the plane's width in bytes.
      */

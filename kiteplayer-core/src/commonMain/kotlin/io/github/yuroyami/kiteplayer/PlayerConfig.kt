@@ -51,7 +51,7 @@ public data class PlayerConfig(
     /** The backends to build the pipeline from. Replace them for a test or a new platform. */
     val backends: Backends = Backends(),
     /**
-     * Network byte supply and the engine's byte cache (KPKMP 17.12 M1 and M5). The resolver
+     * Network byte supply and the engine's byte cache. The resolver
      * turns URIs into [MediaIoResolver]-supplied readers at open; the cache wraps every
      * [MediaIo]-fed open with a forward window and a RAM seek-back window.
      */

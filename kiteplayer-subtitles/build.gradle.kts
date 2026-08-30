@@ -14,7 +14,7 @@ plugins {
  *
  * It will not rasterise glyphs when it does more. Font matching, complex script shaping and
  * bidirectional text are decades of work that every platform already ships, so layout will measure
- * and position text and let the platform draw it. That work is in KPKMP-PAST.md section 11.
+ * and position text and let the platform draw it. That work is in MASTER_PLAN.md.
  */
 kotlin {
     explicitApi()

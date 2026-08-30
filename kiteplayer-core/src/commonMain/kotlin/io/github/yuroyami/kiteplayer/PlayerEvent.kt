@@ -44,7 +44,7 @@ public sealed interface PlayerEvent {
      * frame, or, with nothing attached, the schedule presented and released it. It is not a report that
      * a pixel reached a display. A renderer that accepts a frame may still supersede it with a newer one
      * or fail to draw it, and it counts those outcomes itself. Per-submission terminal feedback, which
-     * is what would make this event mean scanout, needs the renderer protocol in KPKMP-PAST.md section 11
+     * is what would make this event mean scanout, needs the renderer protocol in MASTER_PLAN.md
      * (B5).
      */
     public data class FirstFrameRendered(val latency: Duration) : PlayerEvent

@@ -5,7 +5,7 @@ plugins {
 }
 
 /*
- * :kiteplayer-network is the Ktor half of the custom AVIO bridge (KPKMP 17.12 M1) plus the
+ * :kiteplayer-network is the Ktor half of the custom AVIO bridge plus the
  * Kotlin adaptive layer's manifest parsing (the un-parked D-4 work): a MediaIoResolver that
  * makes http and https play with the OS supplying TLS (OkHttp on Android and the JVM,
  * NSURLSession on Apple, the browser itself on the web), and a zero-dependency DASH manifest

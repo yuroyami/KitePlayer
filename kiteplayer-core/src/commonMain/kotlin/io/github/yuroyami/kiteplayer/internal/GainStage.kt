@@ -98,7 +98,7 @@ internal class GainStage(
         /**
          * Long enough that no click is left, short enough that a mute feels immediate.
          *
-         * See KPKMP-PAST.md section 7: it is one of the project's tuned constants and it lives here.
+         * See MASTER_PLAN.md: it is one of the project's tuned constants and it lives here.
          */
         val DEFAULT_RAMP_DURATION: Duration = 5.milliseconds
     }

@@ -42,7 +42,7 @@ import platform.Metal.MTLTextureUsageShaderRead
  * CG renderers take their `convert` lambda. The two shapes are the two truths a frame can have:
  * a CVPixelBuffer straight from VideoToolbox (zero copies), or software planes read out of the
  * decoder's buffers (one memcpy per plane, no colour conversion on the CPU, which is law 2 of
- * KPKMP 17.9: YUV until the GPU).
+ * YUV until the GPU).
  */
 public fun interface MetalPictureResolver {
     /** Null refuses the frame; the renderer counts it failed rather than guessing. */
@@ -849,7 +849,7 @@ internal fun quadUniformsFor(
 /**
  * Container rotation reduced to one of 0, 90, 180, 270. The same law KiteVideo's geometry
  * applies: normalize modulo 360 first (so -90 means 270 and 450 means 90), and read anything
- * that is not a quarter turn as unrotated (17.11 SOL-R8).
+ * that is not a quarter turn as unrotated.
  */
 internal fun normalizedQuarterTurn(rotationDegrees: Int): Int {
     val normalised = ((rotationDegrees % 360) + 360) % 360

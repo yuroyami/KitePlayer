@@ -10,7 +10,7 @@ plugins {
 }
 
 /*
- * :kiteplayer-libass is the OPTIONAL full ASS renderer (KPKMP 17.12 phase L, pulled forward by
+ * :kiteplayer-libass is the OPTIONAL full ASS renderer (pulled forward by
  * owner order 2026-08-16, decision D-7): libass and its chain rendering typesetting-grade
  * subtitles through the engine's existing bitmap-cue path. An app that skips this module ships
  * not one extra native byte; the Kotlin dialogue tier in :kiteplayer-subtitles remains the

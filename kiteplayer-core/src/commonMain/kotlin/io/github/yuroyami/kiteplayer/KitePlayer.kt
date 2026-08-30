@@ -47,7 +47,7 @@ import kotlin.time.Duration
  *
  * External subtitles, filter chains, an advanced option escape hatch, chapters, a playlist or queue,
  * frame stepping and stereo balance are all absent rather than stubbed. The configuration members that
- * describe them carry a marker in their own documentation pointing at the roadmap in KPKMP-PAST.md section 11.
+ * describe them carry a marker in their own documentation pointing at the roadmap in MASTER_PLAN.md.
  */
 public class KitePlayer internal constructor(private val core: PlaybackCore) : AutoCloseable {
 
@@ -509,7 +509,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * that path needs a seekable source. Selecting an EXTERNAL subtitle track (S4.e, a negative
      * [TrackId] from [MediaItem.externalSubtitles]) while no container subtitle stream is
      * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
-     * switching is on the roadmap in KPKMP-PAST.md section 11.
+     * switching is on the roadmap in MASTER_PLAN.md.
      *
      * Selections of DIFFERENT kinds made close together are merged into one reopen, so setting the
      * audio track and then the subtitle track costs one rebuild and both are applied. Two requests
@@ -633,7 +633,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     public fun editions(): List<Nothing> = throw UnsupportedOperationException(
         "the container reader exposes no edition table; when KiteFFmpeg reads Matroska editions " +
-            "this member returns them (KPKMP 17.11)",
+            "this member returns them",
     )
 
     /**
@@ -644,7 +644,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     public fun programs(): List<Nothing> = throw UnsupportedOperationException(
         "the container reader exposes no program table; when KiteFFmpeg reads MPEG-TS programs " +
-            "this member returns them (KPKMP 17.11)",
+            "this member returns them",
     )
 
     private fun validPosition(to: Duration, name: String): Duration {

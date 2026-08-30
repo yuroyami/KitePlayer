@@ -104,7 +104,7 @@ public data class Progress(
     /** How far ahead of [position] the demuxer has read, as a duration of media. */
     val bufferedAhead: Duration = ZERO,
     /**
-     * Contiguous ranges held by the engine's byte cache (KPKMP 17.12 M5). One entry today: the
+     * Contiguous ranges held by the engine's byte cache. One entry today: the
      * cache keeps a single window over the bytes, so one range covers the free seek-back span
      * plus what has been read ahead. Byte positions map to time PROPORTIONALLY (byte fraction
      * times duration), which is exact for constant bitrate and approximate for variable.
@@ -138,7 +138,7 @@ public data class Progress(
  * of numbers side by side: submitted against drawn is the difference between the engine keeping up
  * and the output keeping up, and copying the second group into this class would only invent a figure
  * the engine cannot know, because no member of the renderer interface reports one. Per-submission
- * terminal feedback is the roadmap item that would change that; see KPKMP-PAST.md section 11 (B5).
+ * terminal feedback is the roadmap item that would change that; see MASTER_PLAN.md (B5).
  */
 public data class PlaybackStats(
     val decodedVideoFrames: Long = 0,
@@ -175,7 +175,7 @@ public data class PlaybackStats(
      * Packets dropped before they were decoded.
      *
      * Always zero: nothing drops a packet before decoding it, which is what [FrameDropPolicy.LateAndDecode]
-     * would need. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * would need. Not implemented yet; see MASTER_PLAN.md.
      */
     val droppedFramesDecode: Long = 0,
     /** Frames the schedule showed for longer than their own duration, counted once each. */
@@ -280,7 +280,7 @@ public enum class SyncMode {
      * A wall clock drives playback and audio is resampled to follow it.
      *
      * Nothing drives playback from an external clock, and nothing resamples audio to follow one.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Not implemented yet; see MASTER_PLAN.md.
      */
     ExternalMaster,
 }
@@ -289,7 +289,7 @@ public enum class SyncMode {
  * Which clock is actually in charge right now, as opposed to which was requested.
  *
  * [External] is never reported, because [SyncMode.ExternalMaster] is not implemented.
- * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+ * Not implemented yet; see MASTER_PLAN.md.
  */
 public enum class MasterClock { None, Audio, Video, External }
 
@@ -298,7 +298,7 @@ public enum class MasterClock { None, Audio, Video, External }
  *
  * A sink reports one of these and the engine's tolerances do not change. The only response today is
  * a single warning when a sink says [Unreliable], and the one sink that exists says [Estimated].
- * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+ * Not implemented yet; see MASTER_PLAN.md.
  */
 public enum class LatencyQuality {
     /** The platform reports a real measured figure. */
@@ -356,7 +356,7 @@ public enum class FrameDropPolicy {
      * Also drop before decoding, when the decoder cannot keep up. Needed for 4K on weak hardware.
      *
      * Nothing drops a packet before decoding it, so this behaves like [LateOnly].
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Not implemented yet; see MASTER_PLAN.md.
      */
     LateAndDecode,
 }

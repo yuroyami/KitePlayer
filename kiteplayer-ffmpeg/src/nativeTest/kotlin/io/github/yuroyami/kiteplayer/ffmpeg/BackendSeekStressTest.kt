@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
  * from one thread while decoders confined to two others are flushed to a new epoch, over and over, then
  * closed while frames are still in flight.
  *
- * The order below is the engine's own, from KPKMP-PAST.md digest 8.1: flush each decoder on the thread that
+ * The order below is the engine's own, from MASTER_PLAN.md digest 8.1: flush each decoder on the thread that
  * owns it, with the new generation, then move the cursor, then read again. Doing it in any other order
  * against real libavcodec state is how a player ends up decoding a frame from before the seek and showing
  * it after.

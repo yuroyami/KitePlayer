@@ -4,7 +4,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * A playback preset as data (KPKMP 17.10, KD-6): one named intent compiled into the two places
+ * A playback preset as data (KD-6): one named intent compiled into the two places
  * configuration actually goes, the [PlayerConfig] this player reads and the decoder option
  * strings a backend passes to its decoders.
  *

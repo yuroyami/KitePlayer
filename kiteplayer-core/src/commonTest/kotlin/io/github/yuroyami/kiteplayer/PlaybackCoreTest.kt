@@ -1637,7 +1637,7 @@ class PlaybackCoreTest {
         // Audio B is cached for instant switching but never selected. Its packets are large and
         // carry no duration, FFmpeg's routine shape, so its retained history alone can hold the
         // whole byte cap. Relief must be able to sacrifice the inactive lane, or the demuxer
-        // waits forever on a drain that cannot fire (SALANKE S26).
+        // waits forever on a drain that cannot fire.
         val harness = CoreHarness(
             this,
             script = MediaScript(

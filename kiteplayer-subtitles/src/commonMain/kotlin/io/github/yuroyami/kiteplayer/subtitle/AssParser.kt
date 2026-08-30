@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.subtitle
 
 /**
- * The Kotlin ASS dialogue tier (KPKMP 17.12 M2): SubStation Alpha (.ssa) and Advanced
+ * The Kotlin ASS dialogue tier: SubStation Alpha (.ssa) and Advanced
  * SubStation Alpha (.ass) parsed in pure commonMain onto the engine's own cue model.
  *
  * What it maps, per the register: styles and the dialogue-grade override subset. Fonts,

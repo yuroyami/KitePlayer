@@ -366,7 +366,14 @@ Swept 2026-08-30 in two passes: 349 parentheticals sitting MID-sentence, then 92
 code OPENED the comment (`// SOL-R1: text` becomes `// Text`) plus `PlaybackCore.kt`'s 34 by hand.
 Compiled and tested green after each. Counted honestly, **569 remain**:
 
-- [ ] Rewrite the remaining 569 across 243 files. The mechanical shapes are gone; what is left is
+**Dead pointers are gone entirely (2026-08-30).** 96 references to `KPKMP.md`, `KPKMP-PAST.md`,
+`KPKMP-FUTURE.md`, `HANDOFF.md` and `SUPREME.md` pointed at files deleted on 2026-08-29, plus 82
+bare `KPKMP`/`SALANKE` program names. Every one now points at `MASTER_PLAN.md`, at KiteFFmpeg's
+`PLANNING.md`, or at nothing because the sentence stood alone. That count is zero and should stay
+zero. `KiteFFmpeg/PLANNING.md` still names them, deliberately: it is the note explaining what they
+were and where they went.
+
+- [ ] Rewrite the remaining 520 codes across 229 files. The mechanical shapes are gone; what is left is
   load-bearing prose ("the interlude ported this to KiteFFmpeg", "register row P0-14 says"), where
   the code is the SUBJECT and the sentence has to be rewritten rather than trimmed. Largest are
   KiteFFmpeg's `ci.yml` (18) and `build.gradle.kts` (11), whose header comments narrate the

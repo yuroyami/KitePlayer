@@ -351,7 +351,7 @@ class AudioTrackSinkTest {
 
     @Test
     fun `the accepted format names the channel layout the device was opened with`() = runBlocking {
-        // SALANKE R1 (register 17.19): the accepted format carried no channelLayoutMask, so the
+        // The accepted format carried no channelLayoutMask, so the
         // ChannelMixer's targetLayout was always null on Android and neither the equal-count
         // reorder nor the surround fold could ever engage on the one platform with real 5.1 and
         // 7.1 devices. The driver mapping for these counts existed all along.
@@ -370,7 +370,7 @@ class AudioTrackSinkTest {
 
     @Test
     fun `a pre-pause device timestamp cannot anchor the clock after resume`() = runBlocking {
-        // SALANKE S23. Legacy HALs answer the first post-resume getTimestamp with the CACHED
+        // Legacy HALs answer the first post-resume getTimestamp with the CACHED
         // pre-pause reading. Every admission check passes it (the monotone comparisons accept an
         // unchanged reading), so a pause of N seconds mis-anchored the master clock by up to N.
         val driver = FakeAudioTrackDriver()

@@ -2278,7 +2278,7 @@ internal class PlaybackCore(
             }
             // A forced track is authored for the viewers of this audio: foreign lines inside
             // audio they otherwise understand. That pairing holds with no language preference
-            // configured at all, so it must not hide behind preferredLanguages (SALANKE S02).
+            // configured at all, so it must not hide behind preferredLanguages.
             if (audioLanguage != null) {
                 subtitles.firstOrNull { it.isForced && it.language?.lowercase() == audioLanguage }
                     ?.let { return it }
@@ -2298,7 +2298,7 @@ internal class PlaybackCore(
         val audio = streams.filter { it.kind == TrackKind.Audio }
         if (audio.isEmpty()) return null
         // Ordinary tracks outrank descriptive/accessibility ones at every tier: a described track
-        // is opt-in listening, not the default face of the media (SALANKE S11). The sort is
+        // is opt-in listening, not the default face of the media. The sort is
         // stable, so container order still decides inside each rank, and an accessibility track
         // remains reachable when it is the only candidate. A language preference still outranks
         // everything, ordinary-first within the language.
@@ -5337,7 +5337,7 @@ internal class PlaybackCore(
                         warn(PlaybackWarning.AudioDeviceChanged("device lost: " + event.detail))
                     is io.github.yuroyami.kiteplayer.spi.AudioSinkEvent.DeviceChanged ->
                         warn(PlaybackWarning.AudioDeviceChanged(event.detail))
-                    // SALANKE N11: the sink was already reporting these and the engine threw
+                    // The sink was already reporting these and the engine threw
                     // them away. An underrun warns once per session; a format request is a
                     // device condition the caller must hear about even though the engine cannot
                     // renegotiate yet.
@@ -5506,7 +5506,7 @@ internal class PlaybackCore(
         if (queues.none { !it.isReady(readyUs, config.buffer.readyPackets) }) return false
         // An inactive switch cache is sacrificed first. It counts against the same byte cap, and a
         // lane whose packets carry no timestamps cannot be pruned by position, so it can hold the
-        // whole cap on its own (SALANKE S26). Cutting it cannot gap what is on screen; the only
+        // whole cap on its own. Cutting it cannot gap what is on screen; the only
         // cost is a later track switch refusing for insufficient coverage, and that refusal is
         // typed and told, so this needs no warning of its own.
         val inactiveHoarder = session.allPacketQueues
@@ -6158,7 +6158,7 @@ internal class PlaybackCore(
         /**
          * Stand-in end for an audio packet whose duration FFmpeg left at zero. A compressed audio
          * packet spans tens of milliseconds, so one second over-retains by an order of magnitude
-         * and still keeps a duration-less lane trimmable (SALANKE S26).
+         * and still keeps a duration-less lane trimmable.
          */
         const val AUDIO_PRUNE_ASSUMED_PACKET_DURATION_US = 1_000_000L
 

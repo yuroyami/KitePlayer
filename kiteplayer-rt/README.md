@@ -3,7 +3,7 @@
 The real-time audio core, in C. One allocation at create, no lock anywhere, and no managed code on
 the device's thread.
 
-This module exists for one reason, and it is register item B1-17 in `KPKMP-PAST.md`. Until B1.8 the macOS
+This module exists for one reason, and it is register item B1-17 in `MASTER_PLAN.md`. Until B1.8 the macOS
 render callback was a Kotlin lambda whose first instruction was
 `refCon.asStableRef<CoreAudioSink>().get()`. That made the device's real-time thread a Kotlin mutator
 that the garbage collector has to stop at a safepoint. Thirteen long-lived objects, fourteen atomic

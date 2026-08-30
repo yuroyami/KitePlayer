@@ -67,7 +67,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
-            // The library only, never the Gradle plugin: KPKMP-PAST.md contract item 6. Used by
+            // The library only, never the Gradle plugin: MASTER_PLAN.md. Used by
             // CoreAudioSink for one lock, which orders its own teardown against a diagnostic read
             // from another thread. Nothing on the real-time path takes it; the device callback is a
             // C function that never enters this module.

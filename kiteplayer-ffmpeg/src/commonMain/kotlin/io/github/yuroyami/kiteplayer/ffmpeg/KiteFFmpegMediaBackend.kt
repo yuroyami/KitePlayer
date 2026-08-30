@@ -29,7 +29,7 @@ public class KiteFFmpegMediaBackend(
     private val onWarning: (PlaybackWarning) -> Unit = {},
     /**
      * Decoder configuration as `av_opt_set` strings, applied to every video decoder this backend
-     * opens (KPKMP 17.10, KD-6). `PlaybackProfile.decoderOptions` is the intended producer; a
+     * opens (KD-6). `PlaybackProfile.decoderOptions` is the intended producer; a
      * wrong key fails the decoder open with the funnel's own typed error.
      */
     private val decoderOptions: Map<String, String> = emptyMap(),

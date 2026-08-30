@@ -44,7 +44,7 @@ class AudioSinkEventTest {
     }
 
     /**
-     * The other half of the contract, closed on 2026-08-27 (SALANKE N11): the sink was already
+     * The other half of the contract, closed on 2026-08-27: the sink was already
      * telling the engine these things and the engine threw them away with `else -> Unit`. A
      * device-reported underrun now warns once per session, typed; a format-change request is
      * surfaced as a device warning; and neither fails the player or tears the sink down, because

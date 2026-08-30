@@ -5,7 +5,7 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 
 /**
  * A DASH MPD parsed in pure commonMain Kotlin (the un-parked D-4 work; libxml2's verdict was
- * NEVER, KPKMP 17.12 D-7). The model keeps what segment resolution needs and nothing else:
+ * NEVER). The model keeps what segment resolution needs and nothing else:
  * periods, adaptation sets, representations, the three segment addressing forms (template
  * with number or timeline, and an explicit list), and BaseURL chains.
  *

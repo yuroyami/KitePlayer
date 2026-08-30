@@ -1,6 +1,6 @@
 # KV-6: what a 1080p frame costs on wasm
 
-Register item X-01 (KPKMP-FUTURE.md 17.14), the stop gate S6 is entered through. Measured 2026-08-17 in
+Register item X-01 (MASTER_PLAN.md), the stop gate S6 is entered through. Measured 2026-08-17 in
 Chromium via the in-app browser pane, on the same Apple silicon laptop as every other number in
 this project.
 

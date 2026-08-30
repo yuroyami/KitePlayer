@@ -17,7 +17,7 @@ import kotlinx.cinterop.readBytes
  * two answers onto it in a handful of lines. The memcpy discipline lives HERE, once: a hardware
  * frame crosses as its CVPixelBuffer with no copy at all, and a software frame crosses as its
  * planes copied out whole (stride times rows, one memcpy each) still in their native pixel
- * format, which is law 2 of KPKMP 17.9: YUV until the GPU, never RGBA on the CPU.
+ * format, which is the law: YUV until the GPU, never RGBA on the CPU.
  */
 public class UploadPlanes(
     public val width: Int,

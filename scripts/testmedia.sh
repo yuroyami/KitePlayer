@@ -369,7 +369,7 @@ META
 ffmpeg -v error -y -i sync1080p30.mp4 -i chapters.ffmeta -map_metadata 1 -map 0 -c copy -t 9 chapters.mkv
 rm -f chapters.ffmeta
 
-# The wide-profile rows (KPKMP 17.4.9 W.b). Every clip below is a format the NARROW profile
+# The wide-profile rows. Every clip below is a format the NARROW profile
 # could not open or could not decode; each one ran RED against the narrow trees before the wide
 # trees existed, which is the whole evidentiary point. All are synthesizable with a stock
 # ffmpeg CLI; VC-1 and RealVideo have no FFmpeg encoders, so those two wait for real sample

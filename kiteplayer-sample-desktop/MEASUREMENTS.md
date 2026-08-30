@@ -1,6 +1,6 @@
 # KV-5: the desktop upload path, measured
 
-Register item **W-05** in KPKMP-PAST.md section 17.13, which is KV-5 in 17.9: *"desktop upload path:
+Register item **W-05** in MASTER_PLAN.md.13, which is KV-5 in 17.9: *"desktop upload path:
 one upload per frame; desktop bandwidth makes this cheap; measured anyway."*
 
 This file replaces that assumption with numbers. Short version: the upload is **not** cheap. It
@@ -178,7 +178,7 @@ the ones with GC and load spikes.
 Verbatim stdout of the run the tables above come from.
 
 ```
-=== KV-5 desktop upload measurement (KPKMP 17.13 W-05) ===
+=== KV-5 desktop upload measurement ===
 host          Mac OS X 26.6.1 aarch64, 8 cpus
 jdk           Java HotSpot(TM) 64-Bit Server VM 21.0.9 (Oracle Corporation)
 heap          max=4096 MiB

@@ -40,7 +40,7 @@ public sealed class PlaybackError {
      * Never produced. A track whose every candidate refuses is deselected with a warning, and an open
      * fails only when nothing playable is left, which reports [NoPlayableStream] and names every stream.
      * This is the shape for a caller that asks for one specific track and must be told why it cannot have
-     * it. Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * it. Not implemented yet; see MASTER_PLAN.md.
      */
     public data class DecoderUnavailable(val codec: String, val kind: TrackKind) : PlaybackError() {
         override val message: String get() = "no decoder for $kind stream in $codec"
@@ -62,7 +62,7 @@ public sealed class PlaybackError {
      * as [SourceUnavailable] with the device's own message inside it, because nothing distinguishes the
      * two at the point the open unwinds. Telling them apart, and falling back to a silent picture when
      * there is a picture, needs the device-loss handling in the roadmap.
-     * Not implemented yet; see the roadmap in KPKMP-PAST.md section 11.
+     * Not implemented yet; see MASTER_PLAN.md.
      */
     public data class AudioDeviceUnavailable(val detail: String) : PlaybackError() {
         override val message: String get() = "no audio device: $detail"
@@ -187,7 +187,7 @@ public sealed class PlaybackWarning {
      * The DEVICE reported that it ran dry, through the sink's own event feed.
      *
      * A different path from [AudioUnderrun]: that one is the engine's ring arithmetic on its
-     * stats tick, this one is the platform speaking for itself (SALANKE N11; the feed used to be
+     * stats tick, this one is the platform speaking for itself (the feed used to be
      * read and dropped). Warned once per session, because a stuttering device would otherwise
      * bury every other warning a caller is listening for.
      */

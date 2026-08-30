@@ -56,7 +56,7 @@ class MissionBSubtitleRegressionTest {
     fun aSeekIntoASpanningCueLosesItUntilASeekBeforeItsStart() = runTest {
         // PINS A KNOWN LIMITATION, NOT A DESIRED OUTCOME. The real source redelivers packets from
         // the seek landing forward in file order only, so a cue that STARTED before the landing
-        // and still spans it is not reconstructed (SALANKE S16, open). The scripted source used to
+        // and still spans it is not reconstructed (open). The scripted source used to
         // be more generous than the real one here, which made S16 unprovable; this test holds the
         // honest contract in place. If S16 is ever fixed with a bounded replay or a retained cue
         // cache, flip the first assertion.

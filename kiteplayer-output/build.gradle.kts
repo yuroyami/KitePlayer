@@ -18,7 +18,7 @@ plugins {
  * came next in phase W: SourceDataLine for audio and the JDK's own text engine for subtitles, which
  * is decision W-D2, Kotlin first under D-7. The Kotlin/Native desktops publish the common surface
  * only for now, so a consumer that compiles them still resolves; their C device sinks are register
- * items W-08 and W-09.
+ * MASTER_PLAN.md.
  */
 kotlin {
     explicitApi()
@@ -34,14 +34,14 @@ kotlin {
     iosSimulatorArm64()
     // The Kotlin/Native desktops (phase W). They publish the common surface plus whatever backend
     // exists for them, which today is none: a Kotlin/Native desktop consumer has the engine and
-    // the FFmpeg backend but no device sink yet, and register items W-08 and W-09 are where that
+    // the FFmpeg backend but no device sink yet, and MASTER_PLAN.md is where that
     // lands. Declaring the targets is what lets :kiteplayer-ffmpeg's real-media tests resolve this
     // module on Linux at all.
     linuxX64()
     linuxArm64()
     mingwX64()
     jvm()
-    // The web (17.14 X-12): a clock and a sink, no renderer, exactly like the desktop backend.
+    // The web: a clock and a sink, no renderer, exactly like the desktop backend.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
         browser()

@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlin.js.JsAny
 
 /**
- * Fills a JS byte array with one frame's RGBA, tightly packed, no row padding (17.14 X-11).
+ * Fills a JS byte array with one frame's RGBA, tightly packed, no row padding.
  *
  * This seam exists because of a hard boundary and a hard measurement, and it is the only shape that
  * satisfies both.
@@ -27,7 +27,7 @@ import kotlin.js.JsAny
  *
  * The measurement: the Android seam hands back a Kotlin `ByteArray`, and on the web that is the
  * slow path by a factor of twenty. Kotlin/Wasm has no bulk typed-array bridge, so pixels in a
- * `ByteArray` cross one byte per JS call, which X-01 measured at 160 to 240 ms per 1080p frame
+ * `ByteArray` cross one byte per JS call, which the web spike measured at 160 to 240 ms per 1080p frame
  * against a 33.3 ms budget. Converting in C and writing straight into the array a canvas is about
  * to draw measured 8.5 to 9.7 ms.
  *
@@ -43,7 +43,7 @@ public fun interface WebFramePainter {
 }
 
 /**
- * Draws frames onto an HTML canvas (17.14 X-11).
+ * Draws frames onto an HTML canvas.
  *
  * ### The two canvases, and why there are two
  *
@@ -266,7 +266,7 @@ private external fun webCanvasHeight(canvas: JsAny): Int
  * The offscreen canvas the frame is written into, rebuilt only when the frame size changes.
  *
  * `OffscreenCanvas` where it exists and a detached element otherwise, so this works in a worker as
- * well as a page, which X-08 will need.
+ * well as a page, which the Worker work in MASTER_PLAN.md will need.
  */
 @JsFun(
     """(s, w, h) => {

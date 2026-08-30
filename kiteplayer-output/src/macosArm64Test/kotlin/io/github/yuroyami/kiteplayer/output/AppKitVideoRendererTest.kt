@@ -446,7 +446,7 @@ class AppKitVideoRendererTest {
     }
 
     /**
-     * 17.11 SOL-R11: [close] blocks the caller, which on both platforms is the UI thread, so it
+     * [close] blocks the caller, which on both platforms is the UI thread, so it
      * must never wait on work it could have refused to start.
      *
      * The window driven here is the real one: a conversion is already running, a cue edge has
@@ -514,7 +514,7 @@ class AppKitVideoRendererTest {
         )
     }
 
-    // 17.11 SOL-R14: the CPU fallback owed the one colour-matrix law. Saturation 0 is the
+    // The CPU fallback owed the one colour-matrix law. Saturation 0 is the
     // cheapest unambiguous probe: pure red becomes its own BT.709 luma in all three channels.
     @Test
     fun `the CPU fallback applies the picture controls`() = runBlocking {
@@ -550,7 +550,7 @@ class AppKitVideoRendererTest {
         }
     }
 
-    // 17.11 SOL-R14, the framing half: an aspect override reshapes the PRESENTED picture.
+    // The framing half: an aspect override reshapes the PRESENTED picture.
     @Test
     fun `the CPU fallback honours an aspect override`() = runBlocking {
         val drawn = atomic<NSImage?>(null)
@@ -585,7 +585,7 @@ class AppKitVideoRendererTest {
         }
     }
 
-    // 17.11 SOL-R14, the framing half: pan moves the drawn picture and the canvas keeps the rest.
+    // The framing half: pan moves the drawn picture and the canvas keeps the rest.
     @Test
     fun `the CPU fallback honours zoom and pan`() = runBlocking {
         val drawn = atomic<NSImage?>(null)
@@ -631,7 +631,7 @@ class AppKitVideoRendererTest {
         return bytes
     }
 
-    // 17.11 SOL-R13: RgbaBitmap's own contract admits storage LARGER than width*height*4, so a
+    // RgbaBitmap's own contract admits storage LARGER than width*height*4, so a
     // fallback that demands exact equality drops a legal overlay without a word.
     @Test
     fun `an overlay bitmap with slack storage is still drawn`() = runBlocking {
@@ -794,7 +794,7 @@ class AppKitVideoRendererTest {
         return DrawnPixels(pixelWidth, pixelHeight, bytes)
     }
 
-    // ── KP-TONEMAP-WARN: the renderer that DID it is the one that says so ───────────────────
+    // ── The renderer that DID it is the one that says so ────────────────────────────────────
 
     /**
      * Collects this renderer's events into a channel, and does not return until the collector is

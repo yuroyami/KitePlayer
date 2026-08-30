@@ -53,7 +53,7 @@
  *
  * WHO WAITS FOR WHOM. The Kotlin ring publishes its segment ring under one sequence counter
  * whose writer is the feeder and whose reader is the real-time thread, so the real-time thread
- * spins with no bound whenever the feeder is preempted mid-update. That is register item B1-16,
+ * spins with no bound whenever the feeder is preempted mid-update. That is
  * a priority inversion on a real-time thread, and it has nothing to do with the language: a
  * transliteration would reproduce it. This implementation inverts every such relationship:
  *
@@ -76,7 +76,7 @@
  *
  * ARITHMETIC. Frame counts become microseconds through `kprt_frames_to_micros`, which divides
  * before it multiplies. The obvious form, `frames * 1000000 / rate`, overflows a 64 bit
- * intermediate at large frame deltas; that is register item B1-18, the same shape recorded
+ * intermediate at large frame deltas, the same shape recorded
  * against KiteFFmpeg's timestamp helpers as defect D9. The Kotlin ring had it too and was
  * corrected in the same sub-phase, so the differential oracle compares two correct
  * implementations rather than two matching bugs.
@@ -312,7 +312,7 @@ KPRT_API int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate);
  *
  * Everything below is implemented in `src/kite_rt_coreaudio.c` and exists so that the render
  * callback can be a `static` C function this header does not name, that Kotlin cannot reach and
- * does not install. Register item B1-17: the callback used to be a Kotlin lambda whose first
+ * does not install. The callback used to be a Kotlin lambda whose first
  * instruction dereferenced a `StableRef`, which made the device's real-time thread a mutator the
  * garbage collector has to stop at a safepoint. Worst stop-the-world pauses measured on the
  * development machine were 63 to 256 microseconds against a 10.67 millisecond period at 512 frames
@@ -410,7 +410,7 @@ typedef struct {
      * of on an order nothing agreed to. This used to be unreported, and above stereo the sink
      * declared MPEG 5.1 A for EVERY count from three to six and discarded the verdict, so a
      * three channel stream was announced as a six channel layout and the refusal was invisible
-     * (audit 15.3.3). */
+     */
     int64_t channel_layout_mask;
 } kprt_sink_format;
 

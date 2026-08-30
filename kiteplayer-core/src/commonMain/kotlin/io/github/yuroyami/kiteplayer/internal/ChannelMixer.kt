@@ -102,7 +102,7 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  * ### What happens to those coefficients before they are used
  *
  * Both corrections come from `DownmixConfig`, and both defaults are FFmpeg's, measured rather than
- * assumed (audit 15.3.2). The LFE column is ZEROED: `ffmpeg -ac 2` turns a 5.1 clip whose only
+ * assumed. The LFE column is ZEROED: `ffmpeg -ac 2` turns a 5.1 clip whose only
  * content is an LFE tone into exact silence, which `ReferencePcmTest` now pins, and the engine used
  * to fold it in at -3 dB instead. Normalisation is OFF, also matching FFmpeg for float output, so
  * the coefficients above are what is applied and a passage loud in several channels at once can
@@ -116,7 +116,7 @@ internal enum class MixLayout(val mask: Long, val channels: Int, val label: Stri
  * When the source and the device both name a layout and those layouts differ, the channels are
  * PERMUTED into the device's order. Six channels are 5.1 with side surrounds or 5.1 with back
  * surrounds, and copying one into the other puts the surround content in speakers the mix never
- * meant (audit 15.3.4). A speaker the source does not carry is left silent rather than filled,
+ * meant. A speaker the source does not carry is left silent rather than filled,
  * because inventing content for it would be upmixing and this stage does not upmix. When either
  * side names no layout, or both name the same one, the copy is still right and is still what runs.
  *
@@ -284,8 +284,8 @@ internal class ChannelMixer(
          * when the source and the device both name a layout and those layouts are DIFFERENT, the
          * channels are permuted into the device's order, because 5.1 with side surrounds and 5.1
          * with back surrounds have the same six channels in different speakers and copying one into
-         * the other puts the surround content in the wrong place (audit 15.3.4). And a downmix is
-         * scaled so it cannot clip (audit 15.3.2).
+         * the other puts the surround content in the wrong place. And a downmix is
+         * scaled so it cannot clip.
          */
         private fun matrixFor(
             layout: MixLayout?,
@@ -301,7 +301,7 @@ internal class ChannelMixer(
             }
             if (layout == null) return null
             if (targetChannels == 2) return downmix(layout, sourceChannels, policy)
-            // The fold to a smaller surround target (SOL-P8 remainder): 7.1 into a 5.1
+            // The fold to a smaller surround target: 7.1 into a 5.1
             // device used to truncate the side surrounds away. A device that named no mask gets
             // the conventional layout for its count, which is what Android reports by count.
             if (targetChannels < sourceChannels) {

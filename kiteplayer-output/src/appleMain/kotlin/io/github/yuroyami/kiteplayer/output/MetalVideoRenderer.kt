@@ -237,7 +237,7 @@ public class MetalVideoRenderer public constructor(
         }
     }
 
-    /* ── SOL-R1: the retained last picture, render-thread confined. ─────────────────────── */
+    /* ── The retained last picture, render-thread confined. ─────────────────────────────── */
 
     private var retainedPicture: MetalPicture? = null
     private var retainedMeta: RetainedFrameMeta? = null
@@ -317,7 +317,7 @@ public class MetalVideoRenderer public constructor(
 
     override fun setTransform(transform: io.github.yuroyami.kiteplayer.VideoTransform) {
         videoTransform.value = transform
-        // SOL-R1 retired the old paused-picture limit: the retained picture re-encodes now.
+        // The old paused-picture limit is gone: the retained picture re-encodes now.
         requestRedraw()
     }
 
@@ -332,7 +332,7 @@ public class MetalVideoRenderer public constructor(
      */
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {
         this.quality.value = quality
-        // SOL-R1 retired the old paused-picture limit: the retained picture re-encodes now.
+        // The old paused-picture limit is gone: the retained picture re-encodes now.
         requestRedraw()
     }
 
@@ -379,7 +379,7 @@ public class MetalVideoRenderer public constructor(
         drainPending()
         runBlocking { workerJob.join() }
         // After the join the render thread is out; the retained picture's release cannot race
-        // a redraw (SOL-R1's ownership half).
+        // a redraw, which is the ownership half.
         releaseRetained()
         // After the join no draw is in flight from this renderer, so the composer can fence the
         // GPU and give back its texture cache and native holder.

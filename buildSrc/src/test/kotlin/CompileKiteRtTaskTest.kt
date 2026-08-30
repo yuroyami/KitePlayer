@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 /**
  * Unit tests over the pure parts of [CompileKiteRtTask].
  *
- * The architecture assertion is the one that matters. Register item B1-11 says a
+ * The architecture assertion is the one that matters. Reconnaissance measured that a
  * wrong-architecture archive is embedded by cinterop without complaint and fails only at the
  * consumer's final link, so the producer has to catch it, and a guard nobody tests is a guard
  * nobody can rely on. These cases hand [CompileKiteRtTask.verifyObjectArchitecture] real `file -b`
@@ -110,8 +110,8 @@ class CompileKiteRtTaskTest {
 
     @Test
     fun `a Windows slot still refuses an object that is not COFF at all`() {
-        // Widening the accepted set must not widen it to everything: an ELF in the mingw slot is the
-        // B1-11 mix and stays refused.
+        // Widening the accepted set must not widen it to everything: an ELF in the mingw slot is
+        // the wrong-architecture mix and stays refused.
         val failure = assertFailsWith<GradleException> {
             CompileKiteRtTask.verifyObjectArchitecture(
                 "mingw_x64",
@@ -120,11 +120,11 @@ class CompileKiteRtTaskTest {
             )
         }
         assertContains(failure.message.orEmpty(), "mingw_x64")
-        assertContains(failure.message.orEmpty(), "B1-11")
+        assertContains(failure.message.orEmpty(), "Wrong object architecture")
     }
 
     @Test
-    fun `the exact mix register item B1-11 records is refused`() {
+    fun `the exact mix reconnaissance recorded is refused`() {
         // A linuxX64 ELF object where the macosArm64 one belongs. Measured during reconnaissance to
         // be embedded by cinterop without complaint and to fail only at the consumer's final link.
         val failure = assertFailsWith<GradleException> {
@@ -138,7 +138,7 @@ class CompileKiteRtTaskTest {
         assertContains(message, "macos_arm64")
         assertContains(message, "ELF 64-bit LSB relocatable, x86-64")
         assertContains(message, "Mach-O 64-bit object arm64")
-        assertContains(message, "B1-11")
+        assertContains(message, "not a mach-o file", ignoreCase = true)
     }
 
     @Test
@@ -284,7 +284,7 @@ class CompileKiteRtTaskTest {
         task.outputDir.set(fixture.outputRoot.resolve("shared"))
 
         val message = kotlin.test.assertFails { task.compile() }.message ?: ""
-        assertContains(message, "B1-11")
+        assertContains(message, "named after its konan target")
         assertContains(message, "macos_arm64")
         assertContains(message, "shared")
     }

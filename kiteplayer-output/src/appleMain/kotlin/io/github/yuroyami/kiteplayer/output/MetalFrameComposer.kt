@@ -63,7 +63,7 @@ internal class MetalFrameComposer(
     /** The render target's pixel format: BGRA for a CAMetalLayer, RGBA for an offscreen read. */
     private val targetFormat: ULong = MTLPixelFormatBGRA8Unorm,
 ) {
-    // 17.11 SOL-P7: shared per device and target format. Compiling the library and both pipelines
+    // Shared per device and target format. Compiling the library and both pipelines
     // per composer made every renderer pay for the same immutable, device-owned objects again.
     private val pipelines = MetalPipelines.of(device, targetFormat)
     private val picturePipeline = pipelines.picture
@@ -144,7 +144,7 @@ internal class MetalFrameComposer(
         }
         // Until the completed handler owns it, this function owns the wrapped textures' release:
         // a throw anywhere between wrapping and commit (an encoder refusal, a bad overlay bitmap)
-        // must not orphan CVMetalTextureRefs the GPU will never read (17.11 SOL-R7).
+        // must not orphan CVMetalTextureRefs the GPU will never read.
         var releaseHandedOff = false
         try {
             try {
@@ -211,7 +211,7 @@ internal class MetalFrameComposer(
 
     /**
      * Releases what the composer owns natively: the CVMetalTextureCache and its nativeHeap
-     * holder (17.11 SOL-R6). The GPU is fenced first by waiting on the last committed buffer,
+     * holder. The GPU is fenced first by waiting on the last committed buffer,
      * which on this serial queue proves every earlier buffer, and therefore every wrapped
      * texture's completed handler, has run. Idempotent; encode after close is a caller bug the
      * texture-cache check will surface.
@@ -306,7 +306,7 @@ internal class MetalFrameComposer(
                 formats.forEachIndexed { index, format ->
                     val planeIndex = if (planes == 0) 0 else index
                     // A non-planar buffer (packed BGRA) answers zero to the per-plane size
-                    // functions, which sized its texture at nothing (17.11 SOL-R4). The
+                    // functions, which sized its texture at nothing. The
                     // buffer-level functions are the documented non-planar reading.
                     val width = if (planes == 0) CVPixelBufferGetWidth(buffer)
                         else CVPixelBufferGetWidthOfPlane(buffer, planeIndex.toULong())
@@ -341,7 +341,7 @@ internal class MetalFrameComposer(
             textures = wrapped.map { it.second },
             uniforms = frameColor.packWith(sampleScale, mode),
             // No cache flush here: flushing after every frame defeated the cache's whole point
-            // (17.11 SOL-R5). The cache is flushed once, at close, or by CoreVideo itself on
+            // The cache is flushed once, at close, or by CoreVideo itself on
             // real invalidation.
             release = {
                 wrapped.forEach { (cv, _) -> if (cv != null) CFRelease(cv) }

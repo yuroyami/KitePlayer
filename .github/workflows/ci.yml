@@ -1,4 +1,4 @@
-# KitePlayer's first continuous integration, 2026-08-24 (register row KP-B1..B13).
+# KitePlayer's first continuous integration, 2026-08-24.
 #
 # Until today this repository had no `.github` directory at all, which meant every claim about its
 # health was a claim about ONE laptop: nine C suites that had never run anywhere else, a Linux
@@ -30,16 +30,16 @@
 #     simulator does not have. Four failures, all environment.
 #   - `:kiteplayer-mobile` on wasmJs. Not a gap in the runner: that module has NO shared test
 #     sources at all, only jvmTest and androidHostTest, so its wasmJs test task is NO-SOURCE and
-#     naming it here would widen the job on paper and not in fact. Row KP-UNTESTED-MODULES covers
+#     naming it here would widen the job on paper and not in fact. MASTER_PLAN.md covers
 #     it with the other source-less modules. Its wasmJs MAIN code is compiled by the build job.
 #   - Android DEVICE tests (`connectedAndroidTest`) and the physical-device rows. Those need
 #     hardware and stay owner-gated exactly as the register says.
 #   - `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone`, which have test
 #     TASKS and no test SOURCES. They were named here on the first run and came back NO-SOURCE.
 #     Naming a task that cannot run is how a job looks broader than it is, so they are gone from
-#     the lists and the gap is a register row instead. Row KP-UNTESTED-MODULES.
+#     the lists and the gap is a plan row instead.
 #   - A PINNED fixture generator. The clips are made by whatever ffmpeg Homebrew ships that week,
-#     which is 8.1.2 today and 8.0 on the proving Mac. Row KP-FIXTURE-PIN.
+#     which is 8.1.2 today and 8.0 on the proving Mac. See MASTER_PLAN.md.
 #   - `:kiteplayer-output`'s CoreAudio ANCHOR assertion, on macOS too. See the macos-host job: this
 #     runner's audio device lags where real hardware leads, so the one assertion that depends on
 #     that is filtered out by name and reported as not run. The other 94 tests in the module,
@@ -148,7 +148,7 @@ jobs:
       # keeping: 8.1.2 interleaves the subtitle packet in multitrack.mkv later than 8.0 does, so a
       # matrix row that stopped reading at its video quota stopped before the first cue and reported
       # a well-formed file as broken. The TEST was fixed to read until it has the cue it asked for,
-      # which is the right fix, and the row for the unpinned generator is KP-FIXTURE-PIN.
+      # which is the right fix, and the unpinned generator has its own plan row.
       # KiteFFmpeg learned the same lesson from the other direction and its ci.yml says it in one
       # line: a pin against a moving formula is a calendar, not a gate.
       - name: Install libass and the ffmpeg CLI
@@ -156,7 +156,7 @@ jobs:
 
       # One line in the log so the next fixture divergence is diagnosable by reading rather than by
       # bisecting. This is what turned "multitrack.mkv decoded no subtitle cue" into an answer.
-      # KP-FIXTURE-PIN: the version is CHECKED here, not just printed, and it costs a second.
+      # The version is CHECKED here, not just printed, and it costs a second.
       # The same check runs inside testmedia.sh below, but that is after the Kotlin/Native warmup
       # and 27 seconds of encoding, and a toolchain move should not be paid for twice.
       - name: Check the ffmpeg the clips are pinned to
@@ -171,7 +171,7 @@ jobs:
       - name: Generate the test clips
         run: ./scripts/testmedia.sh
 
-      # KP-FIXTURE-PIN. The script writes testmedia/MANIFEST.txt: the ffmpeg that made the clips,
+      # The script writes testmedia/MANIFEST.txt: the ffmpeg that made the clips,
       # and every clip's size and SHA-256. Printed rather than verified, deliberately. A checksum
       # GATE would turn every legitimate ffmpeg upgrade into a red build; a printed manifest turns
       # "why did that matrix row behave differently on the runner" into a diff between two logs.

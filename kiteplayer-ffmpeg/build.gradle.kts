@@ -67,7 +67,7 @@ kotlin {
     linuxArm64()
     mingwX64()
     jvm()
-    // The web (17.14 X-09). kiteffmpeg-core carries a real wasmJs backend now, so this module can
+    // The web. kiteffmpeg-core carries a real wasmJs backend now, so this module can
     // implement the engine's SPI there the same way it does everywhere else.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
@@ -105,7 +105,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
         }
         val commonMain = getByName("commonMain")
-        // Everything that can block, which is everything except the web (17.14 X-09).
+        // Everything that can block, which is everything except the web.
         val jvmAndNativeMain = maybeCreate("jvmAndNativeMain").apply { dependsOn(commonMain) }
         getByName("jvmMain").dependsOn(jvmAndNativeMain)
         getByName("nativeMain").dependsOn(jvmAndNativeMain)
@@ -131,7 +131,7 @@ kotlin {
         // backend to have a clock and an audio device, and this module is the one place where real
         // media, the real FFmpeg backend and a real device can all be reached at once. APPLE only,
         // because the backend they name is CoreAudio's: phase W added the Kotlin/Native desktop
-        // targets, where no device sink exists yet (register items W-08 and W-09), and a
+        // targets, where no device sink exists yet, and a
         // nativeTest-wide dependency made those targets fail to compile on an Apple type name.
         getByName("appleTest").dependencies {
             implementation(project(":kiteplayer-output"))

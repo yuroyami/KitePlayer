@@ -40,7 +40,7 @@ import javax.inject.Inject
  * is the right choice for the host test binaries of `native/scripts/build-host.sh` and the wrong one
  * here.
  *
- * **Why no make, no cmake and no ninja** (register item B1-15): cmake is not installed on the
+ * **Why no make, no cmake and no ninja**: cmake is not installed on the
  * proving machine, and GNU make starts a comment at an unescaped `#` while both repositories live
  * under `/Users/macbook/StudioProjects/#Kite/`. Driving clang and `llvm-ar` directly is the only
  * form that is both available and safe under this path.
@@ -100,7 +100,7 @@ abstract class CompileKiteRtTask @Inject constructor(
 
     /**
      * Where `libkiteplayerrt.a` and the objects behind it land. Its last path segment must be
-     * [konanTargetName]; see the class note on register item B1-11.
+     * [konanTargetName]; see the class note on wrong-architecture archives.
      */
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -119,7 +119,7 @@ abstract class CompileKiteRtTask @Inject constructor(
         if (out.name != target) {
             throw GradleException(
                 "The C archive output directory must be named after its konan target and shared " +
-                    "with no other target (register item B1-11): target '$target' was handed " +
+                    "with no other target: target '$target' was handed " +
                     "'${out.absolutePath}', whose name is '${out.name}'.",
             )
         }
@@ -378,7 +378,7 @@ abstract class CompileKiteRtTask @Inject constructor(
          *
          * `file` reads the architecture and not the platform, so macos_arm64, ios_arm64,
          * tvos_arm64 and the two arm64 watchOS targets share a string. That is the right scope:
-         * register item B1-11 is about an archive of the wrong ARCHITECTURE reaching a target,
+         * The check is about an archive of the wrong ARCHITECTURE reaching a target,
          * which is what was measured to pass silently through cinterop and fail at the consumer's
          * link. The platform is fixed by the triple and the sysroot, and cross-target mixing is
          * prevented by keying [outputDir] on the target name.
@@ -397,7 +397,7 @@ abstract class CompileKiteRtTask @Inject constructor(
          * file". Same format, same architecture, two spellings. Pinning only the one this machine
          * says turned the first real Windows CI run red on a perfectly good object.
          *
-         * Widening this list is not the same as weakening the check. B1-11 is about an object of the
+         * Widening this list is not the same as weakening the check. It is about an object of the
          * wrong ARCHITECTURE reaching a target, which cinterop embeds without complaint and which
          * fails only at a consumer's final link. An ELF in the mingw slot is still refused, and a
          * test pins that.
@@ -435,8 +435,8 @@ abstract class CompileKiteRtTask @Inject constructor(
                     "${objectFile.absolutePath} is '$fileOutput', expected '$expected'.\n" +
                     "Archiving it would embed a wrong-architecture library in the klib, which " +
                     "cinterop accepts without complaint and which then fails at the consumer's " +
-                    "final link with `ld: archive member '/' not a mach-o file` (register item " +
-                    "B1-11). Check the triple and the sysroot in CompileKiteRtTask.specFor.",
+                    "final link with `ld: archive member '/' not a mach-o file`. " +
+                    "Check the triple and the sysroot in CompileKiteRtTask.specFor.",
             )
         }
 

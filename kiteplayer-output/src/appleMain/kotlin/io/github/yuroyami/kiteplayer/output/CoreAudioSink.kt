@@ -78,7 +78,7 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  *
  * ### What changed, and why it had to
  *
- * Register item B1-17. This class used to install a Kotlin lambda as the render callback, whose first
+ * This class used to install a Kotlin lambda as the render callback, whose first
  * instruction was `refCon.asStableRef<CoreAudioSink>().get()`. That made the device's real-time thread
  * a Kotlin mutator the garbage collector has to stop at a safepoint. Thirteen long-lived objects,
  * fourteen atomic wrappers, two virtual interface calls, a scalar copy loop and up to five transient
@@ -109,7 +109,7 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  *
  * ### Silence, which is now owned entirely in C
  *
- * Register item B1-19. This class used to fill the tail of a short read with silence and count an
+ * This class used to fill the tail of a short read with silence and count an
  * underrun, and the ring did the same thing one level down; the old comment called that duplication
  * deliberate, on the grounds that the render callback could be absent. There is no absent callback now:
  * the callback is a C function installed for the life of the sink. Normal starvation and end-of-stream
@@ -251,7 +251,7 @@ public class CoreAudioSink private constructor(
         throw UnsupportedOperationException(
             "CoreAudioSink renders in C and cannot call a Kotlin AudioRenderCallback: its device " +
                 "callback is a static C function that never enters managed code, which is the whole " +
-                "point of it (register item B1-17). Open it through openWithRing, which is what " +
+                "point of it. Open it through openWithRing, which is what " +
                 "AudioPlayback does for any sink implementing NativeRingAudioSink. A sink that does " +
                 "want a Kotlin callback is a different sink.",
         )
@@ -302,7 +302,7 @@ public class CoreAudioSink private constructor(
                         // The order the unit ACCEPTED, not the one that was asked for. Zero means
                         // it refused the layout and resolves the order itself, in which case the
                         // engine's mixer must key on the channel count rather than on an order
-                        // nothing agreed to (audit 15.3.3).
+                        // nothing agreed to.
                         channelLayoutMask = accepted.channel_layout_mask.takeIf { it != 0L },
                     ),
                     deviceBufferFrames = accepted.device_buffer_frames,
@@ -458,7 +458,7 @@ public class CoreAudioSink private constructor(
     /**
      * Callbacks that found no ring and zeroed the whole buffer.
      *
-     * After B1.8 that is teardown and nothing else, which is what makes register item B1-19's collapse
+     * That is teardown and nothing else now, which is what makes the collapse
      * checkable from outside: a run where this is not zero while the sink was open is a run where the
      * ring went away underneath the device.
      */

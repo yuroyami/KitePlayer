@@ -23,13 +23,13 @@ import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.launch
 
 /**
- * The web output side (17.14 X-12): a clock and a sink, and no renderer.
+ * The web output side: a clock and a sink, and no renderer.
  *
  * No renderer is not a gap, it is the same shape `DesktopOutputBackend` has. Compose draws the
  * frames through KiteVideo on both, so the backend supplies only what the platform alone can
  * answer. On the web that is the page's clock and its audio device.
  *
- * The sink became audible in X-10. [WebAudioSinkFactory] gives an `AudioWorklet` in a browser and
+ * The sink is audible now. [WebAudioSinkFactory] gives an `AudioWorklet` in a browser and
  * falls back to [SilentPacedAudioSinkFactory] where Web Audio does not exist, so `nodejs` and any
  * embedder without it still get a player whose clock runs.
  */
@@ -60,7 +60,7 @@ public object WebMonotonicClock : MonotonicClock {
 private external fun performanceNow(): Double
 
 /**
- * A sink that keeps time correctly and makes no sound (17.14 X-12).
+ * A sink that keeps time correctly and makes no sound.
  *
  * NOT the web audio sink, and the name says so. This engine is audio-mastered: the clock the video
  * path synchronises against comes from how many audio frames the sink has consumed. Without
@@ -73,7 +73,7 @@ private external fun performanceNow(): Double
  * in the first version of this class. So a coroutine calls [AudioRenderCallback.onRender] for one
  * [deviceBufferFrames] block at a time, on a wall-clock schedule, and throws the samples away.
  *
- * The real audible sink is [WebAudioSinkFactory]'s `AudioWorklet`, landed in X-10. This one is no
+ * The real audible sink is [WebAudioSinkFactory]'s `AudioWorklet`. This one is no
  * longer the web's sink: it is the fallback where Web Audio does not exist, which is `nodejs` and
  * any embedder without an `AudioContext`, and it is still what makes the engine's own pacing
  * testable without a browser.

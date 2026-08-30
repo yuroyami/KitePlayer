@@ -23,7 +23,7 @@ import kotlin.math.min
  * This is the implementation for every target, and on macOS arm64 from B1.8 onward it is no longer
  * the one the device path uses; there the C ring in `kiteplayer-rt` is. It is not dead code and it
  * cannot be deleted: `commonMain` targets js and wasmJs, which can never contain C, and it is the
- * only oracle the C ring can be checked against. Register item B1-20 says this must be stated
+ * only oracle the C ring can be checked against. This must be stated
  * plainly rather than left for a reader to discover, and it is stated again in
  * `AudioRingTest`'s KDoc and in the README, because a green total quietly covering a ring the shipped
  * path does not use is exactly the substitution MASTER_PLAN.md forbids. The total is deliberately
@@ -34,7 +34,7 @@ import kotlin.math.min
  *
  * [publishAnchor] below makes the real-time thread the READER of [segmentSeq], whose writer is the
  * feeder, so it spins with no bound whenever the feeder is preempted between its two increments.
- * That is register item B1-16, a priority inversion on a real-time thread. It is not fixed here: on
+ * That is a priority inversion on a real-time thread. It is not fixed here: on
  * js and wasmJs there is no second thread for it to matter on, and changing the publication protocol
  * of the oracle would have meant changing the thing the C ring is measured against in the same
  * sub-phase that introduced the C ring. The C implementation inverts every such relationship and
@@ -221,7 +221,7 @@ internal class KotlinAudioRing(
         val appended = segmentsAppended.value
         if (appended > segmentsRetired.value) {
             val newest = ((appended - 1) % MAX_SEGMENTS).toInt()
-            // Through framesToMicros and not `delta * 1_000_000L / sampleRate`: register item B1-18.
+            // Through framesToMicros and not `delta * 1_000_000L / sampleRate`, which overflows.
             // The naive product overflows a signed 64 bit intermediate at a large frame delta, which
             // is the shape defect D9 records against KiteFFmpeg's timestamp helpers.
             val micros = framesToMicros(atFrame - segmentStartFrame[newest], format.sampleRate)
@@ -392,7 +392,7 @@ internal class KotlinAudioRing(
             val basePtsUs = segmentPtsUs[slot]
             if (segmentSeq.value != seq) continue
 
-            // Register item B1-18 again, and this is the site that matters most: it dates every
+            // The same overflow again, and this is the site that matters most: it dates every
             // anchor the audio clock is built from.
             val boundaryPtsUs =
                 addSaturating(basePtsUs, framesToMicros(lastRealFrame + 1 - baseFrame, format.sampleRate))

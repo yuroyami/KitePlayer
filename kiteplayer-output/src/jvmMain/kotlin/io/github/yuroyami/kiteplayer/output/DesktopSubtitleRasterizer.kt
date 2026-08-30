@@ -112,15 +112,9 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             if (style.strikeThrough) styled.addAttribute(TextAttribute.STRIKETHROUGH, TextAttribute.STRIKETHROUGH_ON, start, cursor)
         }
 
-        // AWT's own line breaker, one measurer run per authored paragraph so an explicit newline
-        // breaks exactly where the author put it and everything else breaks at the safe width.
-        val lines = mutableListOf<TextLayout>()
-        val measurer = LineBreakMeasurer(styled.iterator, RENDER_CONTEXT)
-        while (measurer.position < whole.length) {
-            val newline = whole.indexOf('\n', measurer.position)
-            val limit = if (newline < 0) whole.length else newline + 1
-            lines += measurer.nextLayout(safeWidth.toFloat(), limit, false) ?: break
-        }
+        // The cue's own wrap mode decides the width AWT breaks at; see wrapWidthFor.
+        val wrapWidth = wrapWidthFor(layoutSpec.wrap, safeWidth) { breakInto(styled, whole, it).size }
+        val lines = breakInto(styled, whole, wrapWidth)
         if (lines.isEmpty()) return null
 
         var height = 0
@@ -132,11 +126,19 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         height = height.coerceAtLeast(1)
 
         // A POSITIONED cue's bitmap is its text extent, not the whole safe width:
-        // the lines still break at the safe width so they read identically, but the bitmap hugs
+        // the lines still break at their own width so they read identically, but the bitmap hugs
         // the glyphs and the placement anchors that extent on the authored point. An unpositioned
         // cue keeps the full-width bitmap, whose internal alignment IS its horizontal placement.
         val positioned = layoutSpec.positionX != null || layoutSpec.positionY != null
-        val width = if (positioned) ceil(widest.toDouble()).toInt().coerceIn(1, safeWidth) else safeWidth
+        val textWidth = ceil(widest.toDouble()).toInt()
+        // An unwrapped cue may be wider than the safe area, and the viewport is where that stops:
+        // a bitmap grown past the screen is pixels nobody can see, and a centred line wider than
+        // its box hangs off both ends evenly, which is what an overlong unbroken cue looks like.
+        val width = if (positioned) {
+            textWidth.coerceIn(1, safeWidth)
+        } else {
+            textWidth.coerceIn(safeWidth, maxOf(safeWidth, viewportWidth))
+        }
 
         // ARGB_PRE, read straight out of the raster: this is the whole alpha contract.
         val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB_PRE)
@@ -196,6 +198,21 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
         }
         return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, premultipliedRgba(image)))
+    }
+
+    /**
+     * AWT's own line breaker at [width], one measurer run per authored paragraph so an explicit
+     * newline breaks exactly where the author put it and everything else breaks at the width.
+     */
+    private fun breakInto(styled: AttributedString, whole: String, width: Int): List<TextLayout> {
+        val lines = mutableListOf<TextLayout>()
+        val measurer = LineBreakMeasurer(styled.iterator, RENDER_CONTEXT)
+        while (measurer.position < whole.length) {
+            val newline = whole.indexOf('\n', measurer.position)
+            val limit = if (newline < 0) whole.length else newline + 1
+            lines += measurer.nextLayout(width.toFloat(), limit, false) ?: break
+        }
+        return lines
     }
 
     /** Where one laid-out line starts inside a [boxWidth]-wide bitmap. */

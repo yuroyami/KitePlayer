@@ -116,11 +116,10 @@ public data class CueLayout(
      */
     val authoredHeight: Int? = null,
     /**
-     * Not applied by any built-in rasterizer.
+     * How lines break. All three built-in rasterizers honour it.
      *
-     * All three break at the safe width with their platform's own line breaker, so every cue wraps
-     * that way whatever this says. It is parsed and carried because libass and any custom
-     * [io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer] can honour it.
+     * Each of them still uses its own platform line breaker, so shaping and bidi stay the
+     * platform's; this only decides the WIDTH that breaker is given. See [CueWrap].
      */
     val wrap: CueWrap = CueWrap.Balanced,
     /**
@@ -138,13 +137,26 @@ public enum class CueAlignment {
 }
 
 public enum class CueWrap {
-    /** Break at the width limit only. */
+    /**
+     * Break at the safe width, greedily.
+     *
+     * Every line is filled before the next one starts, so a cue that spills by one word reads as
+     * a full line and a lonely word under it.
+     */
     None,
 
-    /** Break at the width limit, preferring even line lengths. What viewers expect. */
+    /**
+     * Break at the narrowest width that still uses the same number of lines, so they come out
+     * near-equal. The default, and what viewers expect.
+     */
     Balanced,
 
-    /** Never break automatically. Only explicit line breaks apply. */
+    /**
+     * Never break automatically. Only the author's own line breaks apply.
+     *
+     * A cue wider than the picture is drawn centred and clipped at both edges rather than
+     * shrunk: not breaking is what was asked for.
+     */
     Never,
 }
 

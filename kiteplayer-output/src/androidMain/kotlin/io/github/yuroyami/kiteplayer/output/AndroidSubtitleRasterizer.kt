@@ -114,35 +114,41 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             CueAlignment.BottomRight, CueAlignment.MiddleRight, CueAlignment.TopRight -> Layout.Alignment.ALIGN_OPPOSITE
             else -> Layout.Alignment.ALIGN_CENTER
         }
-        val layout = StaticLayout.Builder.obtain(text, 0, text.length, paint, safeWidth)
-            .setAlignment(alignment)
-            .build()
+        fun layoutAt(width: Int, forPaint: TextPaint = paint): StaticLayout =
+            StaticLayout.Builder.obtain(text, 0, text.length, forPaint, width)
+                .setAlignment(alignment)
+                .build()
+
+        // The cue's own wrap mode decides the width StaticLayout breaks at; see wrapWidthFor.
+        val wrapWidth = wrapWidthFor(layoutSpec.wrap, safeWidth) { layoutAt(it).lineCount }
+        val layout = layoutAt(wrapWidth)
+        var widest = 0f
+        for (line in 0 until layout.lineCount) {
+            val w = layout.getLineWidth(line)
+            if (w > widest) widest = w
+        }
+        val textWidth = kotlin.math.ceil(widest).toInt().coerceAtLeast(1)
         // A POSITIONED cue's bitmap is its text extent, not the whole safe width (audit
         // F-POS1): the layout keeps its wrap width so the lines break identically, but the
         // draw below translates the glyphs to the bitmap's origin and the placement anchors
         // the extent on the authored point. An unpositioned cue keeps the full-width bitmap,
         // whose internal alignment IS its horizontal placement.
         val positioned = layoutSpec.positionX != null || layoutSpec.positionY != null
-        val textWidth = if (positioned) {
-            var widest = 0f
-            for (line in 0 until layout.lineCount) {
-                val w = layout.getLineWidth(line)
-                if (w > widest) widest = w
-            }
-            kotlin.math.ceil(widest).toInt().coerceIn(1, safeWidth)
+        // An UNWRAPPED cue may be wider than the safe area, and the viewport is where that stops:
+        // a bitmap grown past the screen is pixels nobody can see.
+        val ceiling = maxOf(safeWidth, viewportWidth)
+        val width = if (positioned) {
+            textWidth.coerceAtMost(ceiling)
         } else {
-            layout.width
+            textWidth.coerceIn(safeWidth, ceiling)
         }
-        val glyphShift = if (positioned) {
-            when (alignment) {
-                Layout.Alignment.ALIGN_OPPOSITE -> (safeWidth - textWidth).toFloat()
-                Layout.Alignment.ALIGN_CENTER -> (safeWidth - textWidth) / 2f
-                else -> 0f
-            }
-        } else {
-            0f
+        // The layout centres and right-aligns inside its own WRAP width, so whenever the bitmap
+        // is narrower than that, the glyphs have to slide back onto it.
+        val glyphShift = when (alignment) {
+            Layout.Alignment.ALIGN_OPPOSITE -> (layout.width - width).toFloat()
+            Layout.Alignment.ALIGN_CENTER -> (layout.width - width) / 2f
+            else -> 0f
         }
-        val width = textWidth.coerceAtLeast(1)
         val height = layout.height.coerceAtLeast(1)
 
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
@@ -156,10 +162,7 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
                 strokeWidth = style.outlineWidthPx * fontScale
                 color = style.outlineColor
             }
-            StaticLayout.Builder.obtain(text, 0, text.length, outline, safeWidth)
-                .setAlignment(alignment)
-                .build()
-                .draw(canvas)
+            layoutAt(wrapWidth, outline).draw(canvas)
         }
         layout.draw(canvas)
 

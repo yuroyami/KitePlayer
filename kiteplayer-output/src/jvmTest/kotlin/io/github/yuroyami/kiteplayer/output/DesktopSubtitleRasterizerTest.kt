@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -370,25 +371,65 @@ class DesktopSubtitleRasterizerTest {
         )
     }
 
-    @Test
-    fun `the wrap mode changes nothing, which is what the docs now say`() {
-        val long = "a subtitle long enough that the safe width forces it onto more than one line"
-        fun withWrap(mode: CueWrap) = rasterize(
-            SubtitleCue.Text(
-                startMicros = 0,
-                endMicros = 1_000_000,
-                spans = listOf(StyledSpan(long, CueStyle())),
-                layout = CueLayout(alignment = CueAlignment.BottomCenter, wrap = mode),
-            ),
-        ).single()
+    /** A cue that greedy-wraps onto two very uneven lines, which is what balancing is for. */
+    private val LOPSIDED = "a subtitle long enough that the safe width forces it onto more than one line"
 
+    private fun withWrap(mode: CueWrap, text: String = LOPSIDED, width: Int = 640) = rasterize(
+        SubtitleCue.Text(
+            startMicros = 0,
+            endMicros = 1_000_000,
+            spans = listOf(StyledSpan(text, CueStyle())),
+            layout = CueLayout(alignment = CueAlignment.BottomCenter, wrap = mode),
+        ),
+        width = width,
+    ).single()
+
+    @Test
+    fun `Never keeps a long cue on one line`() {
+        val never = withWrap(CueWrap.Never)
+        val greedy = withWrap(CueWrap.None)
+        assertTrue(
+            never.bitmap.height < greedy.bitmap.height,
+            "Never must not break, so it must be shorter than the wrapped cue: " +
+                "${never.bitmap.height} vs ${greedy.bitmap.height}",
+        )
+    }
+
+    @Test
+    fun `Never widens the bitmap to the viewport rather than clipping at the safe width`() {
+        val never = withWrap(CueWrap.Never)
+        assertTrue(
+            never.bitmap.width > (640 * 0.9).toInt(),
+            "the one long line is wider than the safe area, so the bitmap must grow past it, " +
+                "was ${never.bitmap.width}",
+        )
+        assertTrue(never.bitmap.width <= 640, "and must stop at the viewport, was ${never.bitmap.width}")
+    }
+
+    @Test
+    fun `Balanced keeps the line count and evens the lines out`() {
+        val greedy = withWrap(CueWrap.None)
         val balanced = withWrap(CueWrap.Balanced)
+        assertEquals(
+            greedy.bitmap.height,
+            balanced.bitmap.height,
+            "balancing must not add or remove a line, only move the break",
+        )
+        assertFalse(
+            greedy.bitmap.pixels.contentEquals(balanced.bitmap.pixels),
+            "and it must actually move it: these two cues rendered identically",
+        )
+    }
+
+    @Test
+    fun `a cue that fits on one line renders the same whatever the wrap mode says`() {
+        val short = "short"
+        val balanced = withWrap(CueWrap.Balanced, short)
         for (mode in listOf(CueWrap.None, CueWrap.Never)) {
             assertTrue(
-                balanced.bitmap.pixels.contentEquals(withWrap(mode).bitmap.pixels),
-                "no built-in rasterizer reads CueWrap, so $mode must render like Balanced",
+                balanced.bitmap.pixels.contentEquals(withWrap(mode, short).bitmap.pixels),
+                "nothing to break, so $mode must render like Balanced",
             )
         }
     }
-
 }

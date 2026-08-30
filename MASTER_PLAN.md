@@ -468,11 +468,21 @@ Bullets, in order; reduce this item bullet by bullet:
 
 Measured truth table (2026-08-25): per-span colour/bold/italic/underline/strike work
 everywhere; `fontSizePx`/`outline*` apply first-span-whole-cue; `shadowColor/Offset` drawn
-NOWHERE (default was inert); `CueLayout.wrap` ignored; `fontFamily` desktop-only. Features,
-each red-first on all three rasterizers (or a named skip): per-span size and outline, the
-shadow pass (bitmap grown by the offset, placement moved with it), `CueWrap`, `fontFamily`
-on Apple and Android (platform font lookup with fallback). N31's reverse stacking
-(`Collisions:`) lands here too.
+NOWHERE (default was inert); `CueLayout.wrap` ignored; `fontFamily` desktop-only.
+
+**`CueWrap` landed 2026-08-30 on all three.** The rule is one shared function
+(`wrapWidthFor`): the three modes differ only in the width handed to the platform line
+breaker, so shaping and bidi stay AWT's, CoreText's and StaticLayout's. `Balanced` binary
+searches for the narrowest width that still fits the same vertical extent, and skips the
+search entirely when nothing wrapped, which is most cues. `Never` lets the bitmap grow past
+the safe area to the viewport edge and no further. Proved red-first on desktop and Apple;
+Android is the named skip (no Robolectric, and android.jar is stubs on the host), so it rides
+DEVICE-DAY step 9b.
+
+Left, each red-first on all three rasterizers (or a named skip): per-span size and outline,
+the shadow pass (bitmap grown by the offset, placement moved with it), `fontFamily` on Apple
+and Android (platform font lookup with fallback). N31's reverse stacking (`Collisions:`)
+lands here too.
 
 ### 4.5 KP-P1-15: viewport subtitles. Size M, NEEDS-DESIGN
 
@@ -803,6 +813,10 @@ a failed build is itself the first finding.
 8. A portrait-rotation clip. PASS: picture AND subtitles upright together.
 9. A positioned cue plus ordinary bottom cues. PASS: placed one sits where authored,
    ordinary ones stay at the bottom.
+9b. A long one-line cue, once per wrap mode (the sample can set it). PASS: `Balanced` splits
+    into near-equal lines, `None` fills the first line and leaves a short second, `Never`
+    stays on one line and runs off both edges. Nothing here can test StaticLayout: the host
+    JVM's android.jar is stubs, and there is no Robolectric.
 
 **Android phone, resume anchor (the S23 fix's device half):**
 10. Pause 30+ seconds mid-playback, resume. PASS: no position jump, sync holds (the fix

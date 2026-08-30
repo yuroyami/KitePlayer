@@ -164,15 +164,17 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             interpretCPointer(text.objcPtr())!!,
         )
         try {
-            val fitted = CTFramesetterSuggestFrameSizeWithConstraints(
-                framesetter,
-                CFRangeMake(0, 0),
-                null,
-                CGSizeMake(safeWidth.toDouble(), viewportHeight.toDouble()),
-                null,
-            )
-            val width = fitted.useContents { ceil(width).toInt() }.coerceIn(1, safeWidth)
-            val height = fitted.useContents { ceil(height).toInt() }.coerceAtLeast(1)
+            // The cue's own wrap mode decides the width CoreText breaks at; see wrapWidthFor. The
+            // fitted HEIGHT is the extent it searches on, because CoreText answers with a size
+            // rather than a line count and the height only falls as the width grows.
+            val wrapWidth = wrapWidthFor(layoutSpec.wrap, safeWidth) { probe ->
+                fittedSize(framesetter, probe, viewportHeight).second
+            }
+            val fitted = fittedSize(framesetter, wrapWidth, viewportHeight)
+            // An unwrapped cue may be wider than the safe area, and the viewport is where that
+            // stops: a bitmap grown past the screen is pixels nobody can see.
+            val width = fitted.first.coerceIn(1, maxOf(safeWidth, viewportWidth))
+            val height = fitted.second.coerceAtLeast(1)
 
             val pixels = ByteArray(width * height * 4)
             pixels.usePinned { pinned ->
@@ -237,6 +239,24 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         } finally {
             CFRelease(framesetter)
         }
+    }
+
+    /** The whole-pixel size CoreText lays this text out in, given a break width. */
+    private fun fittedSize(
+        framesetter: platform.CoreText.CTFramesetterRef?,
+        width: Int,
+        viewportHeight: Int,
+    ): Pair<Int, Int> {
+        val size = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRangeMake(0, 0),
+            null,
+            // The height constraint is the picture, never the wrap width: a cue taller than the
+            // screen is already broken, and CoreText would silently drop the overflow.
+            CGSizeMake(width.toDouble(), viewportHeight.toDouble()),
+            null,
+        )
+        return size.useContents { ceil(this.width).toInt() to ceil(this.height).toInt() }
     }
 
     /** A CoreText CFString attribute key as the Kotlin string NSAttributedString wants. */

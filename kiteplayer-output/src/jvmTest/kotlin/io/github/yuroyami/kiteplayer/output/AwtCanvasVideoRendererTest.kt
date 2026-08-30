@@ -229,4 +229,67 @@ class AwtCanvasVideoRendererTest {
         assertEquals(Color.BLACK.rgb, target.getRGB(5, 200))
         assertEquals(Color.WHITE.rgb, target.getRGB(200, 200))
     }
+
+    // ── resize under playback ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a canvas the size of its strategy is left alone and a resized one is rebuilt`() {
+        // AWT never reports a stale BufferStrategy: it draws the new frame into the old buffers
+        // and the picture is clipped or stretched until something rebuilds it.
+        assertTrue(
+            AwtCanvasPresenter.strategyIsStale(hasStrategy = false, 0, 0, 640, 360),
+            "no strategy at all always needs one",
+        )
+        assertFalse(
+            AwtCanvasPresenter.strategyIsStale(hasStrategy = true, 640, 360, 640, 360),
+            "an unchanged canvas must not rebuild on every frame",
+        )
+        assertTrue(AwtCanvasPresenter.strategyIsStale(hasStrategy = true, 640, 360, 800, 360))
+        assertTrue(AwtCanvasPresenter.strategyIsStale(hasStrategy = true, 640, 360, 640, 480))
+    }
+
+    @Test
+    fun `the renderer listens to its canvas for resizes and lets go of it`() {
+        // A resize while PAUSED has no frame arriving to trigger a repaint, so the renderer has
+        // to hear about it. The other half matters more: a listener left behind keeps this
+        // renderer alive for as long as the canvas the view already threw away.
+        val r = renderer()
+        val first = java.awt.Canvas()
+        val second = java.awt.Canvas()
+
+        r.setCanvas(first)
+        assertEquals(1, first.componentListeners.size, "the renderer must hear its canvas resize")
+
+        r.setCanvas(second)
+        assertEquals(0, first.componentListeners.size, "and must let go of the previous one")
+        assertEquals(1, second.componentListeners.size)
+
+        r.close()
+        assertEquals(0, second.componentListeners.size, "close releases the canvas entirely")
+    }
+
+    @Test
+    fun `setting the same canvas twice does not stack listeners`() {
+        val r = renderer()
+        val canvas = java.awt.Canvas()
+        r.setCanvas(canvas)
+        r.setCanvas(canvas)
+        assertEquals(1, canvas.componentListeners.size)
+        r.close()
+    }
+
+    @Test
+    fun `a resize repaints the retained picture rather than waiting for a frame`() {
+        // Nothing is displayable here, so the paint itself stops at the peer check; what this
+        // pins is that the resize REACHES the renderer at all, which is the wiring that was
+        // missing. The paint path itself is covered by the compose arms above.
+        val r = renderer()
+        val canvas = java.awt.Canvas()
+        r.setCanvas(canvas)
+        canvas.setSize(320, 180)
+        canvas.dispatchEvent(
+            java.awt.event.ComponentEvent(canvas, java.awt.event.ComponentEvent.COMPONENT_RESIZED),
+        )
+        r.close()
+    }
 }

@@ -98,6 +98,23 @@ public class AwtCanvasVideoRenderer(
     private var canvas: Canvas? = null
     private var closed = false
 
+    /** Holds the BufferStrategy's own size, which is why it is per renderer and not a singleton. */
+    private val presenter = AwtCanvasPresenter()
+
+    /**
+     * Repaints the retained picture when the canvas changes size.
+     *
+     * Without it a resize while PAUSED leaves the old geometry on screen until something else
+     * happens to repaint: no frame is arriving to trigger one. Attached in [setCanvas] and removed
+     * there and in [close], because a listener left on a canvas the view has thrown away keeps
+     * this renderer alive with it.
+     */
+    private val resizeListener = object : java.awt.event.ComponentAdapter() {
+        override fun componentResized(event: java.awt.event.ComponentEvent) {
+            repaintRetained()
+        }
+    }
+
     /** The last frame converted, kept so an overlay or control change can redraw without a frame. */
     private var lastImage: BufferedImage? = null
     private var lastSize: VideoSize? = null
@@ -139,7 +156,15 @@ public class AwtCanvasVideoRenderer(
      * calls it while AWT is about to destroy the peer.
      */
     public fun setCanvas(canvas: Canvas?) {
-        synchronized(lock) { this.canvas = canvas }
+        val previous = synchronized(lock) {
+            val old = this.canvas
+            this.canvas = canvas
+            old
+        }
+        if (previous !== canvas) {
+            previous?.removeComponentListener(resizeListener)
+            canvas?.addComponentListener(resizeListener)
+        }
     }
 
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
@@ -233,19 +258,22 @@ public class AwtCanvasVideoRenderer(
             mode = mode,
             transform = currentTransform,
         ) ?: return
-        AwtCanvasPresenter.present(target, image, layout, overlaySnapshot())
+        presenter.present(target, image, layout, overlaySnapshot())
     }
 
     private fun overlaySnapshot(): SubtitleOverlay? = synchronized(lock) { overlay }
 
     override fun close() {
-        synchronized(lock) {
+        val released = synchronized(lock) {
             if (closed) return
             closed = true
+            val old = canvas
             canvas = null
             lastImage = null
             lastSize = null
             overlay = null
+            old
         }
+        released?.removeComponentListener(resizeListener)
     }
 }

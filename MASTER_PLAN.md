@@ -144,7 +144,18 @@ What is left:
 - [ ] **[owner] Windows and Linux runs.** Both spikes and the comparison have only run on macOS.
   Compose documents blending as Metal, DirectX and offscreen only, so Linux is expected to fall
   back to the Compose canvas through `onEffectivePath`; that expectation is unverified.
-- [ ] **Resize behaviour under playback** was not measured; the harness never resized a window.
+**Resize was fixed rather than measured (2026-08-30)**, because looking at it found two real
+defects and neither needed a window to prove. A `BufferStrategy` owns buffers of a FIXED size and
+AWT never reports one as stale: after a resize the renderer drew the new frame into the old
+buffers, so the picture stayed clipped or stretched until something else happened to rebuild it.
+The presenter now tracks the size its strategy was built for and rebuilds when the canvas
+disagrees. Separately, a resize while PAUSED had no frame arriving to trigger a repaint at all,
+so the renderer now listens to its canvas, and lets go of that listener when the canvas changes
+and at close: one left behind keeps the renderer alive with a canvas the view already discarded.
+
+- [ ] The remaining half is a real window: what these arms cannot see is the picture. A run that
+  drags a window edge during playback and watches for tearing, a blank frame or a wrong aspect
+  belongs on the desktop half of DEVICE-DAY, with the Windows and Linux runs above.
 - [ ] **KP-DESK-NV-GPU**, later and only if wanted: a JAWT presenter owning a CAMetalLayer on
   macOS, D3D on Windows, EGL on Linux, replacing the CPU blit. Nothing measured so far demands
   it, and note before starting that it does NOT fix the input constraint, which belongs to native
@@ -936,6 +947,10 @@ a failed build is itself the first finding.
     is handy.
 
 **Desktop, the W riders (from Phase 1):**
+18b. macOS, drag the window edge during playback for ten seconds, then again while paused.
+    PASS: the picture follows the window with no tearing, no blank frame and no wrong aspect,
+    and the paused picture redraws at the new size. The code fix is in and unit tested; what no
+    test here can see is the picture itself.
 18. Run the desktop sample's native-view demo on a Windows machine and a Linux desktop:
     z-order (controls above video) and the jank-decoupling toggle, same pass rules as the Mac
     run. Also the full format matrix once on real Windows (it has only ever been a link

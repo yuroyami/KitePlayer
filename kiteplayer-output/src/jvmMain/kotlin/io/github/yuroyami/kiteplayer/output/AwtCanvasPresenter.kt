@@ -19,7 +19,11 @@ import java.awt.image.BufferedImage
  * the strategy's own loop is what makes a present safe against a buffer being restored or lost
  * underneath it.
  */
-internal object AwtCanvasPresenter {
+internal class AwtCanvasPresenter {
+
+    /** The canvas size the current BufferStrategy was built for. See [strategyIsStale]. */
+    private var builtWidth: Int = 0
+    private var builtHeight: Int = 0
 
     fun present(
         canvas: Canvas,
@@ -28,10 +32,12 @@ internal object AwtCanvasPresenter {
         overlay: SubtitleOverlay?,
     ) {
         if (canvas.width <= 0 || canvas.height <= 0) return
-        if (canvas.bufferStrategy == null) {
+        if (strategyIsStale(canvas.bufferStrategy != null, builtWidth, builtHeight, canvas.width, canvas.height)) {
             // Creating a strategy needs a peer, and the caller has already checked for one; a
             // race with the peer going away still throws, and losing a frame to that is correct.
             runCatching { canvas.createBufferStrategy(2) }
+            builtWidth = canvas.width
+            builtHeight = canvas.height
         }
         val strategy = canvas.bufferStrategy ?: return
         do {
@@ -46,6 +52,25 @@ internal object AwtCanvasPresenter {
             runCatching { strategy.show() }
         } while (strategy.contentsLost())
     }
+
+    companion object {
+
+    /**
+     * Whether the canvas needs a fresh BufferStrategy before this paint.
+     *
+     * A strategy owns real buffers of a fixed size. Resizing the canvas does not resize them, so
+     * a strategy built for the old size draws the new frame into the old buffers: the picture is
+     * clipped or stretched and stays that way until something else rebuilds it. AWT does not
+     * report that as an error, which is why this is a size comparison rather than a check of the
+     * strategy's own state.
+     */
+    fun strategyIsStale(
+        hasStrategy: Boolean,
+        builtWidth: Int,
+        builtHeight: Int,
+        canvasWidth: Int,
+        canvasHeight: Int,
+    ): Boolean = !hasStrategy || builtWidth != canvasWidth || builtHeight != canvasHeight
 
     /**
      * Draws one composed frame: the letterbox, the picture, then the cues on top.
@@ -105,5 +130,6 @@ internal object AwtCanvasPresenter {
             }
             g.drawImage(premultiplied, cue.x, cue.y, null)
         }
+    }
     }
 }

@@ -59,5 +59,13 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        // The one composable this module publishes had no test at all, because testing a
+        // composable needs a composition to put it in. Compose's own desktop UI test harness is a
+        // TEST-scope dependency and adds nothing to the published artifact.
+        jvmTest.dependencies {
+            implementation(compose.desktop.currentOs)
+            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+            implementation(compose.uiTest)
+        }
     }
 }

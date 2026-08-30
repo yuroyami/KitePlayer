@@ -195,15 +195,7 @@ Each RED first against a revert or scripted fault; cluster commits.
   half fine). Bisect the webpack context scope. If the fix is a toolchain bump, STOP: owner
   decision.
 
-### 2.4 KP-UNTESTED-MODULES: compose-interop's first real test. Size S
-
-The one module left with zero tests: one public `@Composable` with five platform actuals.
-
-- [ ] Desktop Compose UI test (test-scope dependency only): null player composes and fills
-  constraints (`EmptyKitePlayerSurface` sizing law); with Phase 1 landed, a set player puts
-  the SwingPanel in the hierarchy. Commit: `Test the one composable five platforms share`
-
-### 2.5 F-COV1: test-surface recount. Size S
+### 2.4 F-COV1: test-surface recount. Size S
 
 The six-of-twenty coverage claim predates KitePlayer CI (which now EXECUTES linuxX64 on
 Linux, mingw on Windows, wasm in node + browser). Recount from CI logs, attempt

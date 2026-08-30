@@ -126,6 +126,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes { // io.github.yur
 // Targets: [native]
 final object io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter { // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter|null[0]
     final fun toRgba(io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter.toRgba|toRgba(io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame){}[0]
+    final fun toneMapsHdr(io.github.yuroyami.kiteplayer.spi/ColorSpaceInfo): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/SoftwareConverter.toneMapsHdr|toneMapsHdr(io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo){}[0]
 }
 
 // Targets: [native]

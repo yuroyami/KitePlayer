@@ -4,6 +4,8 @@ import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.ffmpeg.KiteFFmpegVideoFrame
 import io.github.yuroyami.kiteplayer.ffmpeg.SoftwareConverter
 import io.github.yuroyami.kiteplayer.output.AwtCanvasVideoRenderer
+import io.github.yuroyami.kiteplayer.output.AwtFramePainter
+import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import io.github.yuroyami.kiteplayer.view.AwtPlayerViewRenderer
 import io.github.yuroyami.kiteplayer.view.AwtPlayerViewRendererFactory
@@ -22,8 +24,18 @@ public object DesktopAwtPlayerViewRendererFactory : AwtPlayerViewRendererFactory
         onVideoGeometry: (VideoSize, Int) -> Unit,
     ): AwtPlayerViewRenderer = DesktopAwtPlayerViewRenderer(
         AwtCanvasVideoRenderer(
-            painter = { frame, destination, width, height ->
-                packRgbInto(frame as KiteFFmpegVideoFrame, destination, width, height)
+            painter = object : AwtFramePainter {
+                override fun paintArgb(
+                    frame: VideoFrame,
+                    destination: IntArray,
+                    width: Int,
+                    height: Int,
+                ): Boolean = packRgbInto(frame as KiteFFmpegVideoFrame, destination, width, height)
+
+                // Only the converter knows whether it rolled HDR off or handed it through, and
+                // this is what turns PlaybackWarning.HdrToneMapped from silent into truthful.
+                override fun toneMapped(frame: VideoFrame): Boolean =
+                    SoftwareConverter.toneMapsHdr(frame.colorSpace)
             },
             onVideoGeometry = onVideoGeometry,
         ),

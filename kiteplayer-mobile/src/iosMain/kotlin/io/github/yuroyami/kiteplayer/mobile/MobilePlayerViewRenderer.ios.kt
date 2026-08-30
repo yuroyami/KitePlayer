@@ -42,9 +42,13 @@ public object MobileApplePlayerViewRendererFactory : ApplePlayerViewRendererFact
                 },
             )
         } else {
-            UIKitVideoRenderer(videoLayer) { frame ->
-                SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame)
-            }
+            UIKitVideoRenderer(
+                layer = videoLayer,
+                convert = { frame -> SoftwareConverter.toRgba(frame as KiteFFmpegVideoFrame) },
+                // Only the converter knows whether it rolled HDR off or handed it through, and
+                // this is what turns PlaybackWarning.HdrToneMapped from silent into truthful.
+                toneMapped = { frame -> SoftwareConverter.toneMapsHdr(frame.colorSpace) },
+            )
         }
         return MobileApplePlayerViewRenderer(renderer)
     }

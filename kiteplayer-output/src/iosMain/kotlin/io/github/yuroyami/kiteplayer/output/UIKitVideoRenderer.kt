@@ -8,6 +8,8 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -26,7 +28,6 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
@@ -66,6 +67,13 @@ import kotlin.math.PI
 @OptIn(ExperimentalForeignApi::class, DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
 public class UIKitVideoRenderer internal constructor(
     private val convert: (VideoFrame) -> ByteArray,
+    /**
+     * Whether [convert] rolls HDR off to standard dynamic range for this frame.
+     *
+     * This renderer publishes `RendererEvent.ToneMapEngaged` on the strength of this and nothing
+     * else. The default is false, the truthful answer for a converter that leaves colour alone.
+     */
+    private val toneMapped: (VideoFrame) -> Boolean = { false },
     private val enqueueOnMain: (block: () -> Unit) -> Unit,
     private val deliverImage: (CGImageRef?) -> Unit,
 ) : VideoRenderer {
@@ -73,8 +81,10 @@ public class UIKitVideoRenderer internal constructor(
     public constructor(
         layer: CALayer,
         convert: (VideoFrame) -> ByteArray,
+        toneMapped: (VideoFrame) -> Boolean = { false },
     ) : this(
         convert = convert,
+        toneMapped = toneMapped,
         enqueueOnMain = { block -> dispatch_async(dispatch_get_main_queue()) { block() } },
         deliverImage = { image ->
             if (image != null) {
@@ -152,7 +162,21 @@ public class UIKitVideoRenderer internal constructor(
 
     public val failedFrames: Long get() = failed.value
 
-    override val events: Flow<RendererEvent> = emptyFlow()
+    private val eventFlow = MutableSharedFlow<RendererEvent>(
+        replay = 0,
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /**
+     * This renderer used to publish nothing at all, which was true when it had nothing to say.
+     * It converts colour, so it can now say the one thing only a converter knows: that HDR was
+     * rolled off to be shown. Everything else here is still silent by construction.
+     */
+    override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
+
+    /** Published once, not once per frame: the engine latches it anyway, and a flood is noise. */
+    private val toneMapAnnounced = atomic(false)
 
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
@@ -185,6 +209,9 @@ public class UIKitVideoRenderer internal constructor(
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         val image = try {
+            if (toneMapped(frame) && toneMapAnnounced.compareAndSet(false, true)) {
+                eventFlow.tryEmit(RendererEvent.ToneMapEngaged(transfer = frame.colorSpace.transfer.name))
+            }
             val rgba = convert(frame)
             // The newest source pixels stay behind, worker-confined, so an overlay
             // change during a pause can re-composite without a frame arriving. One RGBA frame

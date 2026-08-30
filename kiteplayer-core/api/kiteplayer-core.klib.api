@@ -766,7 +766,7 @@ sealed interface io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.
     }
 
     final class ToneMapEngaged : io.github.yuroyami.kiteplayer.spi/RendererEvent { // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged|null[0]
-        constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.<init>|<init>(kotlin.String;kotlin.Int){}[0]
+        constructor <init>(kotlin/String, kotlin/Int = ...) // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.<init>|<init>(kotlin.String;kotlin.Int){}[0]
 
         final val streamIndex // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.streamIndex|{}streamIndex[0]
             final fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/RendererEvent.ToneMapEngaged.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]

@@ -402,14 +402,22 @@ ios/linux/mingw and dumps with `-Pkiteffmpeg.requireAllTargets=true` on the macO
 live with a throwaway iOS-only public function that must fail the widened check. Reduce to
 any genuinely unreachable targets instead of closing if some tree cannot exist in CI.
 
-### 3.13 KP-TONEMAP-WARN remainder: renderers publish engagement. Size M
+### 3.13 KP-TONEMAP-WARN remainder: the Android GL tier. Size S
 
-The split shipped: `HdrToneMapped` maps from `RendererEvent.ToneMapEngaged`, latched once per
-open; `ColorApproximated` carries the BT.2020-CL truth; the old lying warning is deprecated
-and sited nowhere. Remainder: NO built-in renderer publishes the event yet, so the notice is
-silent. Wire the Metal composer path, the software-converter consumers (jvm + native), and
-the Android GL tier; emission where tone mapping ENGAGES, never from metadata (the no-convert
-test arm pins that); interop tiers that never touch pixels emit nothing by construction.
+The split shipped, and the renderers now publish (2026-08-30): Metal, the AWT desktop
+renderer, AppKit and UIKit all raise `RendererEvent.ToneMapEngaged` once per renderer, so
+`PlaybackWarning.HdrToneMapped` can finally fire. `SoftwareConverter.toneMapsHdr(colorSpace)`
+is the CPU tier's answer, the same decision `toRgba` makes, and `willToneMap()` is the Metal
+tier's, pinned against the shader's own uniforms by a test. Emission is never from metadata: a
+converter that hands HDR through untouched answers false and its renderer stays silent, which
+is its own test arm. The engine fills in the stream index, because a renderer is handed frames
+and has no index to quote.
+
+- [ ] The Android GL tier. Its tone mapping is MediaCodec's, requested through the output
+  contract (`COLOR_TRANSFER_SDR_VIDEO`) and confirmed by reading the codec's output colour
+  back, so engagement is "the codec accepted the request and its output really is BT.709",
+  not a converter's answer. That is a different signal from the other four and it can only be
+  read on a device.
 
 ---
 

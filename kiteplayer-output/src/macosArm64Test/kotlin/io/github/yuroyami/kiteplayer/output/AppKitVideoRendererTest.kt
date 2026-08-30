@@ -3,7 +3,10 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.VideoSize
+import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.ColorTransfer
+import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import kotlinx.atomicfu.atomic
@@ -22,7 +25,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import platform.AppKit.NSImage
 import platform.CoreGraphics.CGBitmapContextCreate
@@ -779,6 +784,64 @@ class AppKitVideoRendererTest {
             CGColorSpaceRelease(colorSpace)
         }
         return DrawnPixels(pixelWidth, pixelHeight, bytes)
+    }
+
+    // ── KP-TONEMAP-WARN: the renderer that DID it is the one that says so ───────────────────
+
+    @Test
+    fun `a converter that tone maps makes the renderer say so exactly once`() = runBlocking {
+        val ledger = LeakLedger()
+        val seen = mutableListOf<RendererEvent>()
+        val renderer = AppKitVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            toneMapped = { true },
+            enqueueOnMain = { block -> block() },
+            showImage = { },
+        )
+        val collector = launch(Dispatchers.Default) { renderer.events.toList(seen) }
+        try {
+            val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
+            repeat(3) { index ->
+                renderer.present(FakeVideoFrame(Pts(index.toLong()), colorSpace = hdr, ledger = ledger), 0L)
+            }
+            withTimeout(5_000) {
+                while (seen.filterIsInstance<RendererEvent.ToneMapEngaged>().isEmpty()) yield()
+            }
+            // Two more, to prove the latch: the engine latches too, but a renderer that shouts on
+            // every frame is a renderer nobody can read a log from.
+            repeat(20) { yield() }
+            val announced = seen.filterIsInstance<RendererEvent.ToneMapEngaged>()
+            assertEquals(1, announced.size, "once per renderer, not once per frame: got $announced")
+            assertEquals("Pq", announced.single().transfer, "the SOURCE transfer travels with the event")
+            assertEquals(-1, announced.single().streamIndex, "a renderer is handed frames, not streams")
+        } finally {
+            collector.cancel()
+            renderer.close()
+        }
+    }
+
+    @Test
+    fun `a converter that does not tone map stays silent even on an HDR frame`() = runBlocking {
+        val ledger = LeakLedger()
+        val seen = mutableListOf<RendererEvent>()
+        val renderer = AppKitVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            enqueueOnMain = { block -> block() },
+            showImage = { },
+        )
+        val collector = launch(Dispatchers.Default) { renderer.events.toList(seen) }
+        try {
+            val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
+            renderer.present(FakeVideoFrame(Pts(0), colorSpace = hdr, ledger = ledger), 0L)
+            repeat(50) { yield() }
+            assertTrue(
+                seen.filterIsInstance<RendererEvent.ToneMapEngaged>().isEmpty(),
+                "HDR metadata is not the trigger; only a renderer that ROLLED IT OFF may speak",
+            )
+        } finally {
+            collector.cancel()
+            renderer.close()
+        }
     }
 
     private class DrawnPixels(val width: Int, val height: Int, private val rgba: ByteArray) {

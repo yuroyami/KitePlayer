@@ -165,7 +165,7 @@ final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github
 
 // Targets: [ios]
 final class io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer|null[0]
-    constructor <init>(platform.QuartzCore/CALayer, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.<init>|<init>(platform.QuartzCore.CALayer;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>){}[0]
+    constructor <init>(platform.QuartzCore/CALayer, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Boolean> = ...) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.<init>|<init>(platform.QuartzCore.CALayer;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.Boolean>){}[0]
 
     final val events // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.events|{}events[0]
         final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.events.<get-events>|<get-events>(){}[0]
@@ -190,7 +190,7 @@ final class io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer : io.github.
 
 // Targets: [macosArm64]
 final class io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer.output/AppKitWindow, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppKitWindow;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.output/AppKitWindow, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Boolean> = ...) // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.<init>|<init>(io.github.yuroyami.kiteplayer.output.AppKitWindow;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.Boolean>){}[0]
 
     final val events // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.events|{}events[0]
         final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer.events.<get-events>|<get-events>(){}[0]

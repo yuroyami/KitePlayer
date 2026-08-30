@@ -1545,6 +1545,15 @@ internal class PlaybackCore(
     /** Latches [PlaybackWarning.HdrToneMapped] to once per open. Reset with the session. */
     private var toneMapWarned: Boolean = false
 
+    /**
+     * The video stream currently being fed to the renderer, or -1.
+     *
+     * Atomic because the renderer's event collector reads it and the actor writes it: a renderer
+     * knows nothing about streams, so the engine is the one that can name the stream a tone map
+     * happened on, and `session` itself is actor-confined and must not be read from that lane.
+     */
+    private val renderedStreamIndex = atomic(-1)
+
     private fun watchRendererEvents(renderer: VideoRenderer?) {
         rendererEventsJob?.cancel()
         rendererEventsJob = renderer?.let { attached ->
@@ -1581,7 +1590,10 @@ internal class PlaybackCore(
                                 warn(
                                     PlaybackWarning.HdrToneMapped(
                                         transfer = event.transfer,
-                                        streamIndex = event.streamIndex,
+                                        // A renderer is handed frames, not streams, so most of
+                                        // them answer -1 and the engine names the one it feeds.
+                                        streamIndex = event.streamIndex.takeIf { it >= 0 }
+                                            ?: renderedStreamIndex.value,
                                     ),
                                 )
                             }
@@ -4941,6 +4953,8 @@ internal class PlaybackCore(
     private fun publishSnapshot() {
         snapshotDirty = false
         val session = session
+        // Published from the actor for the renderer's event lane to read; see renderedStreamIndex.
+        renderedStreamIndex.value = session?.videoStream?.index ?: -1
         val now = clock.nanos()
         snapshotState.value = PlayerSnapshot(
             status = status,

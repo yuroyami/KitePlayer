@@ -531,6 +531,18 @@ internal val DISABLED_QUALITY_UNIFORMS: FloatArray = packQualityUniforms(
  * is not plumbed through [ColorSpaceInfo] yet, and 1000 is both HLG's nominal peak and the
  * commonest PQ mastering level. Recorded as the honest limit of this first tone-mapping pass.
  */
+/**
+ * Whether the shader will actually roll this colour off, as opposed to leaving it alone.
+ *
+ * The SAME question [packToneUniforms] answers by returning DISABLED, asked separately so the
+ * renderer can publish `RendererEvent.ToneMapEngaged` for a frame it really did tone map and stay
+ * quiet for an SDR one. Reading the uniforms back would work too and would be a decoding of bit
+ * patterns; this is the rule itself.
+ */
+internal fun ColorSpaceInfo.willToneMap(): Boolean =
+    transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq ||
+        transfer == io.github.yuroyami.kiteplayer.spi.ColorTransfer.Hlg
+
 internal fun packToneUniforms(colorSpace: ColorSpaceInfo): FloatArray {
     val mode = when (colorSpace.transfer) {
         io.github.yuroyami.kiteplayer.spi.ColorTransfer.Pq -> 1

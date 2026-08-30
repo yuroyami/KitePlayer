@@ -1,9 +1,15 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.VideoSize
+import io.github.yuroyami.kiteplayer.spi.ColorPrimaries
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
+import io.github.yuroyami.kiteplayer.spi.ColorTransfer
+import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import java.awt.Color
 import java.awt.image.BufferedImage
@@ -26,13 +32,14 @@ class AwtCanvasVideoRendererTest {
     private class CountingFrame(
         override val size: VideoSize = VideoSize(64, 32),
         override val rotationDegrees: Int = 0,
+        private val color: ColorSpaceInfo = ColorSpaceInfo(),
     ) : VideoFrame {
         var closes = 0
             private set
         override val pts: io.github.yuroyami.kiteplayer.Pts = io.github.yuroyami.kiteplayer.Pts(0)
         override val duration: io.github.yuroyami.kiteplayer.Pts? = null
         override val pixelFormat: PlayerPixelFormat = PlayerPixelFormat.Yuv420p
-        override val colorSpace: ColorSpaceInfo = ColorSpaceInfo()
+        override val colorSpace: ColorSpaceInfo = color
         override val hardwareSurface: io.github.yuroyami.kiteplayer.spi.HwSurfaceKind? = null
         override val generation: io.github.yuroyami.kiteplayer.Generation =
             io.github.yuroyami.kiteplayer.Generation(0)
@@ -42,10 +49,68 @@ class AwtCanvasVideoRendererTest {
     }
 
     private fun renderer(
+        toneMaps: Boolean = false,
         paint: (IntArray, Int, Int) -> Boolean = { _, _, _ -> true },
     ) = AwtCanvasVideoRenderer(
-        painter = { _, destination, width, height -> paint(destination, width, height) },
+        painter = object : AwtFramePainter {
+            override fun paintArgb(
+                frame: VideoFrame,
+                destination: IntArray,
+                width: Int,
+                height: Int,
+            ): Boolean = paint(destination, width, height)
+
+            override fun toneMapped(frame: VideoFrame): Boolean = toneMaps
+        },
     )
+
+    // ── KP-TONEMAP-WARN: the renderer that DID it is the one that says so ───────────────────
+
+    @Test
+    fun `a painter that tone maps makes the renderer say so, once`() = runTest {
+        val r = renderer(toneMaps = true)
+        r.setCanvas(java.awt.Canvas())
+        val seen = mutableListOf<RendererEvent>()
+        val collector = launch(UnconfinedTestDispatcher(testScheduler)) { r.events.toList(seen) }
+        val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
+        repeat(3) { r.present(CountingFrame(color = hdr), 0L) }
+        collector.cancel()
+
+        val announced = seen.filterIsInstance<RendererEvent.ToneMapEngaged>()
+        assertEquals(1, announced.size, "once per renderer, not once per frame: got $announced")
+        assertEquals("Pq", announced.single().transfer, "the SOURCE transfer travels with the event")
+        assertEquals(-1, announced.single().streamIndex, "a renderer is handed frames, not streams")
+    }
+
+    @Test
+    fun `a painter that does not tone map says nothing, HDR frame or not`() = runTest {
+        val r = renderer(toneMaps = false)
+        r.setCanvas(java.awt.Canvas())
+        val seen = mutableListOf<RendererEvent>()
+        val collector = launch(UnconfinedTestDispatcher(testScheduler)) { r.events.toList(seen) }
+        val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
+        r.present(CountingFrame(color = hdr), 0L)
+        collector.cancel()
+        assertTrue(
+            seen.filterIsInstance<RendererEvent.ToneMapEngaged>().isEmpty(),
+            "HDR metadata is not the trigger; only a renderer that ROLLED IT OFF may speak",
+        )
+    }
+
+    @Test
+    fun `a frame the painter refused announces nothing`() = runTest {
+        val r = renderer(paint = { _, _, _ -> false }, toneMaps = true)
+        r.setCanvas(java.awt.Canvas())
+        val seen = mutableListOf<RendererEvent>()
+        val collector = launch(UnconfinedTestDispatcher(testScheduler)) { r.events.toList(seen) }
+        val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
+        r.present(CountingFrame(color = hdr), 0L)
+        collector.cancel()
+        assertTrue(
+            seen.filterIsInstance<RendererEvent.ToneMapEngaged>().isEmpty(),
+            "nothing was shown, so nothing was tone mapped for the viewer",
+        )
+    }
 
     @Test
     fun `a frame presented with no canvas is closed exactly once and counted failed`() = runTest {

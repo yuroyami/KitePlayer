@@ -93,6 +93,16 @@ public object SoftwareConverter {
         return out
     }
 
+    /**
+     * Whether [toRgba] will roll a frame with this colour off to SDR.
+     *
+     * A renderer publishes `RendererEvent.ToneMapEngaged` on the strength of THIS, never on the
+     * strength of the stream's metadata: a renderer that shows HDR as HDR must stay quiet, and
+     * asking the converter is the only way to tell the two apart.
+     */
+    public fun toneMapsHdr(colorSpace: ColorSpaceInfo): Boolean = toneMapsHdrColor(colorSpace)
+
+
     private fun KiteFFmpegVideoFrame.convertPlanarYuv(
         out: ByteArray,
         subsampleX: Int,

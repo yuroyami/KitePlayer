@@ -58,6 +58,34 @@ class HdrToneMapWarningTest {
     }
 
     /**
+     * A renderer is handed frames, not streams, so it answers -1 and the engine names the stream.
+     *
+     * Without this the warning would say "stream -1" for every renderer that ships, because none
+     * of them has an index to quote: the SPI hands them a `VideoFrame` and nothing else.
+     */
+    @Test
+    fun `the engine names the stream when the renderer cannot`() = runTest {
+        val renderer = ScriptedRenderer()
+        val harness = CoreHarness(this, renderer = null)
+        harness.core.attachRenderer(renderer)
+        harness.open()
+        harness.run(100.milliseconds)
+
+        renderer.published.emit(RendererEvent.ToneMapEngaged(transfer = "HLG"))
+        harness.run(200.milliseconds)
+
+        val warning = harness.core.warningHistory().map { it.warning }
+            .filterIsInstance<PlaybackWarning.HdrToneMapped>()
+            .single()
+        assertEquals("HLG", warning.transfer)
+        assertTrue(
+            warning.streamIndex >= 0,
+            "the engine knows which video stream it is feeding; it must fill the gap in, got ${warning.streamIndex}",
+        )
+        harness.close()
+    }
+
+    /**
      * A renderer publishing on every tone mapped frame is behaving correctly. The engine latches.
      *
      * Without this the warning feed would carry one entry per frame for the whole file, which is

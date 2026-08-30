@@ -135,8 +135,12 @@ public sealed interface RendererEvent {
      *
      * [transfer] is the SOURCE transfer that was rolled off, `PQ` or `HLG`, carried rather than
      * re-derived so a mid-stream transfer change cannot be misreported.
+     *
+     * [streamIndex] defaults to -1, meaning "this renderer does not track streams": it is handed
+     * frames and has no index to quote. The engine fills in the video stream it is feeding. A
+     * renderer that genuinely knows may say so, and its answer is used as given.
      */
-    public data class ToneMapEngaged(val transfer: String, val streamIndex: Int) : RendererEvent
+    public data class ToneMapEngaged(val transfer: String, val streamIndex: Int = -1) : RendererEvent
 
     /**
      * The renderer failed in a way it cannot recover from.

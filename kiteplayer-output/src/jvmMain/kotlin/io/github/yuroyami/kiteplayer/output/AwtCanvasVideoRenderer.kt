@@ -33,6 +33,16 @@ public fun interface AwtFramePainter {
      * @return false when this frame cannot be painted; the renderer counts it failed and carries on.
      */
     public fun paintArgb(frame: VideoFrame, destination: IntArray, width: Int, height: Int): Boolean
+
+    /**
+     * Whether painting [frame] rolls HDR off to standard dynamic range.
+     *
+     * The renderer publishes `RendererEvent.ToneMapEngaged` on the strength of this and nothing
+     * else. The default is false, which is the truthful answer for a painter that does not
+     * convert colour: a painter that DOES must say so, because only it can tell tone mapping
+     * apart from handing HDR through untouched.
+     */
+    public fun toneMapped(frame: VideoFrame): Boolean = false
 }
 
 /**
@@ -81,6 +91,9 @@ public class AwtCanvasVideoRenderer(
     private val eventFlow = MutableSharedFlow<RendererEvent>(extraBufferCapacity = 8)
     override val events: Flow<RendererEvent> get() = eventFlow
 
+    /** Published once, not once per frame: the engine latches it anyway, and a flood is noise. */
+    private val toneMapAnnounced = java.util.concurrent.atomic.AtomicBoolean(false)
+
     private val lock = Any()
     private var canvas: Canvas? = null
     private var closed = false
@@ -92,6 +105,13 @@ public class AwtCanvasVideoRenderer(
     private var overlay: SubtitleOverlay? = null
     private var scaleMode: VideoScale = VideoScale.Fit
     private var transform: VideoTransform = VideoTransform.Identity
+
+    /** Says once, per renderer, that this painter rolled HDR off to SDR while painting. */
+    private fun announceToneMap(frame: VideoFrame) {
+        if (!painter.toneMapped(frame)) return
+        if (!toneMapAnnounced.compareAndSet(false, true)) return
+        eventFlow.tryEmit(RendererEvent.ToneMapEngaged(transfer = frame.colorSpace.transfer.name))
+    }
 
     override fun supports(format: PlayerPixelFormat): Boolean = true
 
@@ -147,6 +167,7 @@ public class AwtCanvasVideoRenderer(
         }
         val size = frame.size
         val rotation = frame.rotationDegrees
+        if (painted) announceToneMap(frame)
         frame.close()
         if (!painted) {
             failed.incrementAndGet()

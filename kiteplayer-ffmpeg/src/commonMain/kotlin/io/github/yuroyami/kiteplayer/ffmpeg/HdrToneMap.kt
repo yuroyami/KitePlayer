@@ -144,3 +144,13 @@ internal class HdrToneMap private constructor(
         }
     }
 }
+
+/**
+ * Whether the software converter will roll this colour off to SDR.
+ *
+ * The SAME decision `toRgba` makes, exposed so a renderer can PUBLISH what happened rather than
+ * guess it from the stream's metadata. A renderer that hands HDR to a display able to show it
+ * must stay quiet, and only the converter knows which of the two occurred.
+ */
+internal fun toneMapsHdrColor(colorSpace: ColorSpaceInfo): Boolean =
+    HdrToneMap.forColorSpaceOrNull(colorSpace) != null

@@ -108,6 +108,14 @@ import kotlin.math.PI
 public class AppKitVideoRenderer internal constructor(
     /** Converts a frame to tightly packed RGBA, one byte per component, no row padding. */
     private val convert: (VideoFrame) -> ByteArray,
+    /**
+     * Whether [convert] rolls HDR off to standard dynamic range for this frame.
+     *
+     * This renderer publishes `RendererEvent.ToneMapEngaged` on the strength of this and nothing
+     * else. The default is false, the truthful answer for a converter that leaves colour alone:
+     * only the converter can tell tone mapping apart from handing HDR through untouched.
+     */
+    private val toneMapped: (VideoFrame) -> Boolean = { false },
     /** Puts one block on the main queue. A test supplies a queue it drains by hand instead. */
     private val enqueueOnMain: (block: () -> Unit) -> Unit,
     /** Shows a finished image. Called from [enqueueOnMain]'s thread, which in production is the main one. */
@@ -123,8 +131,10 @@ public class AppKitVideoRenderer internal constructor(
     public constructor(
         window: AppKitWindow,
         convert: (VideoFrame) -> ByteArray,
+        toneMapped: (VideoFrame) -> Boolean = { false },
     ) : this(
         convert = convert,
+        toneMapped = toneMapped,
         enqueueOnMain = { block -> dispatch_async(dispatch_get_main_queue()) { block() } },
         showImage = { image -> window.imageView.image = image },
     )
@@ -165,6 +175,9 @@ public class AppKitVideoRenderer internal constructor(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     override val events: Flow<RendererEvent> = eventFlow.asSharedFlow()
+
+    /** Published once, not once per frame: the engine latches it anyway, and a flood is noise. */
+    private val toneMapAnnounced = atomic(false)
 
     /**
      * The conversion thread, held so [close] can end it.
@@ -263,6 +276,9 @@ public class AppKitVideoRenderer internal constructor(
             if (width <= 0 || height <= 0) {
                 null
             } else {
+                if (toneMapped(frame) && toneMapAnnounced.compareAndSet(false, true)) {
+                    eventFlow.tryEmit(RendererEvent.ToneMapEngaged(transfer = frame.colorSpace.transfer.name))
+                }
                 val rgba = convert(frame)
                 // Retained for paused-overlay re-composites, worker-confined.
                 retainedRgba = rgba

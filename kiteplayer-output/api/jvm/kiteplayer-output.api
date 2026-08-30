@@ -31,6 +31,11 @@ public final class io/github/yuroyami/kiteplayer/output/AwtCanvasVideoRenderer :
 
 public abstract interface class io/github/yuroyami/kiteplayer/output/AwtFramePainter {
 	public abstract fun paintArgb (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;[III)Z
+	public fun toneMapped (Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Z
+}
+
+public final class io/github/yuroyami/kiteplayer/output/AwtFramePainter$DefaultImpls {
+	public static fun toneMapped (Lio/github/yuroyami/kiteplayer/output/AwtFramePainter;Lio/github/yuroyami/kiteplayer/spi/VideoFrame;)Z
 }
 
 public final class io/github/yuroyami/kiteplayer/output/CodecSpecificData {

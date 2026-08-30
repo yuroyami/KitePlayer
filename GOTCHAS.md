@@ -157,6 +157,11 @@ Never move one silently.
   fails each time. Before chasing one, re-run that suite ALONE on an idle machine; it has come back
   green every time. Seen twice on 2026-08-30, once appearing to correlate with an unrelated new test
   file, which is the trap: running the whole module at once is itself the load.
+- **The wasm BROWSER half dies under concurrent load, and reports "Unknown".** Not a timeout and
+  not an assertion: the headless Chrome process exits and the run says "Test running process exited
+  unexpectedly", naming whichever test was in flight, which reads like that test crashed. Seen
+  2026-08-30 running `wasmJsTest` alongside three other test tasks; the same suite alone passed all
+  385. Same rule as the real-media suites: re-run it ALONE before believing it.
 - **A browser test that runs longer than 2 seconds is KILLED, not failed.** Mocha's per-test default
   is 2000 ms and Kotlin does not raise it for `wasmJsBrowserTest`, so a `runTest` with a 60 second
   Kotlin timeout still dies at two with "Error: Timeout of 2000ms exceeded". It is load-dependent,

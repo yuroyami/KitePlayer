@@ -121,7 +121,66 @@ public data class PlayerStreamInfo(
      * whatever else it carried. Reported, never repaired.
      */
     val metadata: Map<String, String> = emptyMap(),
-)
+) {
+    /**
+     * By CONTENT, including [codecExtradata].
+     *
+     * A data class holding a `ByteArray` gets an `equals` that compares that field by REFERENCE,
+     * so two descriptions of the same stream came out unequal and a `Set` of them held duplicates.
+     * The sibling's own `StreamInfo` has compared extradata by content from the start; this is the
+     * same rule on this side of the boundary.
+     */
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is PlayerStreamInfo) return false
+        return index == other.index &&
+            kind == other.kind &&
+            codec == other.codec &&
+            language == other.language &&
+            title == other.title &&
+            isDefault == other.isDefault &&
+            isForced == other.isForced &&
+            isAccessibility == other.isAccessibility &&
+            bitrate == other.bitrate &&
+            startTime == other.startTime &&
+            videoSize == other.videoSize &&
+            rotationDegrees == other.rotationDegrees &&
+            frameRate == other.frameRate &&
+            colorSpace == other.colorSpace &&
+            isCoverArt == other.isCoverArt &&
+            isSparse == other.isSparse &&
+            sampleRate == other.sampleRate &&
+            channels == other.channels &&
+            vp9 == other.vp9 &&
+            metadata == other.metadata &&
+            (codecExtradata?.contentEquals(other.codecExtradata) ?: (other.codecExtradata == null))
+    }
+
+    override fun hashCode(): Int {
+        var result = index
+        result = 31 * result + kind.hashCode()
+        result = 31 * result + codec.hashCode()
+        result = 31 * result + (language?.hashCode() ?: 0)
+        result = 31 * result + (title?.hashCode() ?: 0)
+        result = 31 * result + isDefault.hashCode()
+        result = 31 * result + isForced.hashCode()
+        result = 31 * result + isAccessibility.hashCode()
+        result = 31 * result + (bitrate?.hashCode() ?: 0)
+        result = 31 * result + (startTime?.hashCode() ?: 0)
+        result = 31 * result + (videoSize?.hashCode() ?: 0)
+        result = 31 * result + rotationDegrees
+        result = 31 * result + (frameRate?.hashCode() ?: 0)
+        result = 31 * result + (colorSpace?.hashCode() ?: 0)
+        result = 31 * result + isCoverArt.hashCode()
+        result = 31 * result + isSparse.hashCode()
+        result = 31 * result + (sampleRate ?: 0)
+        result = 31 * result + (channels ?: 0)
+        result = 31 * result + (vp9?.hashCode() ?: 0)
+        result = 31 * result + metadata.hashCode()
+        result = 31 * result + (codecExtradata?.contentHashCode() ?: 0)
+        return result
+    }
+}
 
 public data class Vp9CodecConfiguration(
     val profile: Vp9Profile?,

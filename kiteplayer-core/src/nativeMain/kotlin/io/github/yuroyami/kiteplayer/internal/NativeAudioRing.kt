@@ -55,7 +55,7 @@ import platform.posix.memcpy
  * (`NativeRingAudioSink`) the job of creating both the device and the ring, and wraps the result in
  * this class through [adopting]. Everywhere else, and for every sink that does not own a C callback,
  * the engine still uses [KotlinAudioRing]; that implementation is not going away, cannot go away, and
- * must never be presented as covering the macOS path (register item B1-20).
+ * must never be presented as covering the macOS path.
  *
  * ### Two ownership modes, and the reason they both exist
  *
@@ -133,7 +133,7 @@ internal class NativeAudioRing private constructor(
      * cache instead.
      *
      * Zero on a healthy system, and it has no counterpart in [KotlinAudioRing] because the Kotlin
-     * ring answers the same situation by spinning without a bound (register item B1-16). The oracle
+     * ring answers the same situation by spinning without a bound. The oracle
      * asserts it stays zero, which is what says the C ring's extra freedom was never needed in a
      * single-threaded comparison and therefore cannot explain any agreement between the two.
      */
@@ -275,7 +275,7 @@ internal class NativeAudioRing private constructor(
         // This IS the native audio handoff boundary the marker names, so the opt-in belongs here.
         @OptIn(io.github.yuroyami.kiteplayer.spi.RawRingApi::class)
         fun adopting(address: NativeRingAddress, format: AudioFormat): NativeAudioRing {
-            // W-18: the SPI carries the ring as an address so no cinterop type reaches core's
+            // The SPI carries the ring as an address so no cinterop type reaches core's
             // public API. This file is one of the two the coupling baseline already allows to name
             // the C type, so the conversion belongs here and nowhere else.
             val handle = requireNotNull(address.rawAddress.toCPointer<kprt_ring>()) {

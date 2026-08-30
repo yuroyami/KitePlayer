@@ -13,7 +13,7 @@ pluginManagement {
 }
 
 /*
- * SOL-B6: mavenLocal is OPT-IN for dependencies, because when it is on it wins SILENTLY.
+ * mavenLocal is OPT-IN for dependencies, because when it is on it wins SILENTLY.
  *
  * RIGHT NOW mavenLocal is REQUIRED to build, and that is temporary. The sibling renamed itself to
  * KiteFFmpeg on 2026-08-29 and restarted its version line at 0.1.0, which Maven Central has never

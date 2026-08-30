@@ -156,7 +156,7 @@ class DashManifestParserTest {
             DashManifestParser.segmentPlan(manifest, period, period.adaptationSets.single().representations.single())
         }
     }
-    // Audit F-DASH1: r="-1" is DASH's compact "repeat to the end of the period", and the plan
+    // r="-1" is DASH's compact "repeat to the end of the period", and the plan
     // used to expand it to ZERO segments because 0..-1 is an empty range.
     @Test
     fun aNegativeRepeatExpandsToThePeriodEnd() {
@@ -186,7 +186,7 @@ class DashManifestParserTest {
         assertEquals("http://cdn/vod/seg-30.ts", plan.mediaUrls.last())
     }
 
-    // Audit F-DASH2: P0Y0M0DT0H9M56.46S is a legal xs:duration several packagers emit, and the
+    // P0Y0M0DT0H9M56.46S is a legal xs:duration several packagers emit, and the
     // year, month and week components used to fail the whole manifest.
     @Test
     fun verboseIsoDurationsParse() {
@@ -200,7 +200,7 @@ class DashManifestParserTest {
         )
     }
 
-    // Audit F-XML1: numeric character references above the basic plane must decode to a
+    // Numeric character references above the basic plane must decode to a
     // surrogate pair, not to a truncated toChar().
     @Test
     fun supplementaryCharacterReferencesDecodeWhole() {

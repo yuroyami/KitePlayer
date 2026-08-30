@@ -189,7 +189,7 @@ public class DesktopAudioSink internal constructor(
     }
 
     /**
-     * SOL-A2's recovery arm: after a write failure the line is dead, so the next start closes it
+     * The recovery arm: after a write failure the line is dead, so the next start closes it
      * and opens a fresh one for the accepted format. The submitted count and the position base
      * restart with the new line; the DeviceLost event already told the application WHY. Outside
      * [lifecycle] for the join, like every writer join here.
@@ -257,7 +257,7 @@ public class DesktopAudioSink internal constructor(
             draining = false
             writerRun = false
             d.stop() /* without flush: this is the end-of-media path */
-            /* Audit F-AUD3: everything submitted has been heard, so the counters reset with it.
+            /* Everything submitted has been heard, so the counters reset with it.
              * A stale count read minutes of pending audio out of a later latencyNanos. */
             submittedFrames = 0L
             rebasePosition(d)
@@ -316,7 +316,7 @@ public class DesktopAudioSink internal constructor(
     /* ── The writer ─────────────────────────────────────────────────────────────────────────── */
 
     private fun startWriterLocked() {
-        /* SOL-A2: one writer, ever. A duplicate resume used to start a second thread over the
+        /* One writer, ever. A duplicate resume used to start a second thread over the
          * same driver and the same block buffer. */
         if (writer?.isAlive == true && writerRun) return
         writerRun = true
@@ -340,7 +340,7 @@ public class DesktopAudioSink internal constructor(
         val channels = format.channels
         var wasDry = false
         while (writerRun) {
-            /* Audit F-AUD2: an interrupted block's unwritten tail was already pulled from the
+            /* An interrupted block's unwritten tail was already pulled from the
              * ring, so a resumed writer submits the REMAINDER first instead of dropping up to a
              * block of decoded audio at every pause. The held state is writer-confined: the join
              * in pause and the thread start in resume are its happens-before edges. */
@@ -369,7 +369,7 @@ public class DesktopAudioSink internal constructor(
                 val n = d.write(wireBuffer, offsetBytes, totalBytes - offsetBytes)
                 if (n > 0) {
                     offsetBytes += n
-                    /* Audit F-AUD1: a short POSITIVE count is also how a line hands a write back
+                    /* A short POSITIVE count is also how a line hands a write back
                      * at an interrupt. Re-entering the blocking write here on a stopped, full
                      * line was a writer nothing could join. */
                     if (!writerRun) break
@@ -391,7 +391,7 @@ public class DesktopAudioSink internal constructor(
                 failed = true
                 break
             }
-            /* SOL-A1: count what the line actually took. A stop or pause that interrupts the
+            /* Count what the line actually took. A stop or pause that interrupts the
              * blocking write mid-block, and a device failure partway, both leave a partial count;
              * claiming the whole block made latency and every deadline lie by up to one block.
              * Full blocks land on exactly the old arithmetic; a resumed remainder counts only its

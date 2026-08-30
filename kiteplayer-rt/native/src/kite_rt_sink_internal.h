@@ -83,7 +83,7 @@ struct kprt_sink {
 
     /* ---- Owner-thread lifecycle, plus the two fields other threads may read. ----
      *
-     * SOL-A5: `running` is read by the stats path concurrently with start/stop, so it is
+     * `running` is read by the stats path concurrently with start/stop, so it is
      * atomic (relaxed: a boolean snapshot needs no ordering). SOL-A4: the device period is
      * re-queried on start and updated by the format-change listener on CoreAudio's own
      * notification thread, so it lives in `device_buffer_frames` above as an atomic too. */

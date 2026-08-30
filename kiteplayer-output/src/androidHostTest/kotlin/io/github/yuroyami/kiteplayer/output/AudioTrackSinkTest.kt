@@ -537,7 +537,7 @@ class AudioTrackSinkTest {
         assertEquals(1, synchronized(driver.calls) { driver.calls.count { it == "release" } })
     }
 
-    // Audit F-AUD1: a short POSITIVE return is also how the platform hands a write back at an
+    // a short POSITIVE return is also how the platform hands a write back at an
     // interrupt, and the loop used to re-enter the blocking write without re-reading the signal.
     @Test
     fun `a short positive return at the pause signal stops the loop instead of re-entering write`() = runBlocking {
@@ -561,7 +561,7 @@ class AudioTrackSinkTest {
         s.close()
     }
 
-    // Audit F-AUD2: the interrupted block's unwritten tail was already pulled from the ring, so
+    // The interrupted block's unwritten tail was already pulled from the ring, so
     // dropping it on resume lost up to a block of decoded audio at every pause.
     @Test
     fun `resume submits the interrupted block's remainder before pulling a new one`() = runBlocking {

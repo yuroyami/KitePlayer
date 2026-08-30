@@ -265,7 +265,7 @@ class AndroidGlRenderQualityDeviceTest {
     }
 
     /**
-     * RQ-1: the ordered pattern is present, and it is the Bayer matrix rather than noise.
+     * The ordered pattern is present, and it is the Bayer matrix rather than noise.
      *
      * The value under test comes from the colour offset, not from the texture, and that is the
      * whole point. An 8-bit texel is already exactly representable in an 8-bit target, so a
@@ -309,7 +309,7 @@ class AndroidGlRenderQualityDeviceTest {
         )
     }
 
-    /** RQ-2: a flat field has nothing to smooth, so the pass must leave every pixel alone. */
+    /** A flat field has nothing to smooth, so the pass must leave every pixel alone. */
     @Test
     fun debandLeavesAFlatFieldAlone() = harness { gl ->
         val source = IntArray(32 * 32) { grey(100) }
@@ -320,7 +320,7 @@ class AndroidGlRenderQualityDeviceTest {
         )
     }
 
-    /** RQ-2's other half: a real edge is not a band, and the same threshold must keep it. */
+    /** The other half: a real edge is not a band, and the same threshold must keep it. */
     @Test
     fun debandRefusesAHardEdge() = harness { gl ->
         val edge = IntArray(32 * 32) { grey(if (it % 32 < 16) 0 else 255) }
@@ -390,7 +390,7 @@ class AndroidGlRenderQualityDeviceTest {
     }
 
     /**
-     * RQ-3: the kernel is an interpolating cubic, proven by the two things that separate one from
+     * The kernel is an interpolating cubic, proven by the two things that separate one from
      * bilinear rather than by counting samples, which does not.
      *
      * A step edge enlarged eight times is spread over four pixels by BOTH kernels, so the count of

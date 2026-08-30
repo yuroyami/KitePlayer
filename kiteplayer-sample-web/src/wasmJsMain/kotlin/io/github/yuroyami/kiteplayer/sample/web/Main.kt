@@ -161,7 +161,7 @@ private fun Probe() {
         val rgba = ByteArray(WIDTH * HEIGHT * 4)
         val report = Report()
         report.add("KV-6 probe, ${WIDTH}x$HEIGHT yuv420p, one thread")
-        // X-07: the real kiteffmpeg-core web backend, driven through the API every platform uses.
+        // The real kiteffmpeg-core web backend, driven through the API every platform uses.
         val clip = fetchClip("./clip.mp4")
         if (clip == null) {
             report.add("backend: no ./clip.mp4 beside the page, skipping the decode proof")

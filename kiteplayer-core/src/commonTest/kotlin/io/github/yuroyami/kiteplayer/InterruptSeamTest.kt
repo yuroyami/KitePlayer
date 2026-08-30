@@ -11,7 +11,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * KC-CANCEL's engine half: a source call wedged inside an uncancellable
+ * The engine half: a source call wedged inside an uncancellable
  * native boundary must never hold the actor or a teardown for ever. The scripted source models
  * the wedge with a NonCancellable gate only interrupt() opens, which is exactly the shape of a
  * blocking FFmpeg call behind the interrupt seam.

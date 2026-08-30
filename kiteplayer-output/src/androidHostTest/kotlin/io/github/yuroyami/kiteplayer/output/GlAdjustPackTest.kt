@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** SOL-R14's pack law: identity is null (bit-exact off), and the 3x3 lands COLUMN-major. */
+/** The pack law: identity is null (bit-exact off), and the 3x3 lands COLUMN-major. */
 class GlAdjustPackTest {
 
     @Test

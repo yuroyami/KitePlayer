@@ -84,7 +84,7 @@ internal class PlatformAudioTrackDriver(accepted: AudioFormat) : AudioTrackDrive
     private val timestamp = AudioTimestamp()
 
     init {
-        /* SOL-A6: the four masks this sink speaks. 5.1 and 7.1-surround use the platform
+        /* The four masks this sink speaks. 5.1 and 7.1-surround use the platform
          * orders that MATCH FFmpeg's native interleave (FL FR FC LFE BL BR [SL SR]), so the
          * engine's samples reach the right speakers without a remap. */
         val channelMask = when (accepted.channels) {
@@ -136,7 +136,7 @@ internal class PlatformAudioTrackDriver(accepted: AudioFormat) : AudioTrackDrive
     override fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int =
         track.write(source, offsetFloats, sizeFloats, AudioTrack.WRITE_BLOCKING)
 
-    /* SOL-A3: one holder for the life of the driver; the ~94-per-second poll allocated two
+    /* One holder for the life of the driver; the ~94-per-second poll allocated two
      * objects per call before (the AudioTimestamp was already reused, this one was not). */
     private val out = DriverTimestamp()
 

@@ -7,7 +7,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.IO
 
 /**
- * SOL-P4: serial lanes over the shared pools. Suspend-only lanes ride Default; the lanes that
+ * Serial lanes over the shared pools. Suspend-only lanes ride Default; the lanes that
  * enter blocking C or a blocking bridge ride IO, whose whole purpose is parked threads. The
  * confinement contract is [SharedLaneDispatchers]'s, identical on every threaded target.
  */

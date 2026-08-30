@@ -232,7 +232,7 @@ public class UIKitVideoRenderer internal constructor(
         deliver(image)
     }
 
-    /* SOL-R1: worker-thread confined, like every conversion input. */
+    /* Worker-thread confined, like every conversion input. */
     private var retainedRgba: ByteArray? = null
     private var retainedSize: VideoSize? = null
     private var retainedRotation: Int = 0

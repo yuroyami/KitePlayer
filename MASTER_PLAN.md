@@ -389,7 +389,15 @@ bare `KPKMP`/`SALANKE` program names. Every one now points at `MASTER_PLAN.md`, 
 zero. `KiteFFmpeg/PLANNING.md` still names them, deliberately: it is the note explaining what they
 were and where they went.
 
-- [ ] Rewrite the remaining 520 codes across 229 files. The mechanical shapes are gone; what is left is
+**Counted again 2026-08-30 with a tighter pattern, and three more mechanical shapes swept.**
+KitePlayer went from 362 to 291. What the earlier passes missed: a code opening a BLOCK comment
+(`/* SOL-A2: text` and `/** RQ-2: text`, not just `//`), a possessive opener (`SOL-A2's recovery
+arm:` becomes `The recovery arm:`), and parentheticals spelled `(register item B1-17)` rather
+than `(B1-17)`. Two capitalization traps, both caught in preview rather than in the tree: a
+camelCase identifier must not be capitalized (`mavenLocal`, `getLongFramePosition`) and neither
+must a one-letter name followed by `=` (`r="-1"`).
+
+- [ ] Rewrite the remaining 291 codes in KitePlayer plus KiteFFmpeg's own. The mechanical shapes are gone; what is left is
   load-bearing prose ("the interlude ported this to KiteFFmpeg", "register row P0-14 says"), where
   the code is the SUBJECT and the sentence has to be rewritten rather than trimmed. Largest are
   KiteFFmpeg's `ci.yml` (18) and `build.gradle.kts` (11), whose header comments narrate the

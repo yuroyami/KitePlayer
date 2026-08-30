@@ -13,7 +13,7 @@
  * WHY THIS EXISTS AT ALL. `kiteplayer-core` already has a correct ring, in Kotlin, at
  * `internal/KotlinAudioRing.kt`. The problem it cannot solve is that on macOS the device's
  * real-time thread entered managed Kotlin on its first instruction, so it became a mutator the
- * garbage collector had to stop at a safepoint (register item B1-17). The fix is a callback that
+ * garbage collector had to stop at a safepoint. The fix is a callback that
  * never leaves C on either supported Apple target, and that callback needs a ring that lives in C. In B1.7 this
  * library was built, tested and proved against the Kotlin ring while deliberately NOT on the
  * device path. B1.8 moved the shipped macOS path onto it; S1.b.3 carries that same C callback and
@@ -22,7 +22,7 @@
  * WHAT REPLACES THE KOTLIN RING, AND WHAT NEVER WILL. Nothing deletes `KotlinAudioRing`.
  * `kiteplayer-core`'s `commonMain` targets js and wasmJs, which can never contain C, and the
  * Kotlin ring is the only oracle this code can be checked against. Two implementations of one
- * contract therefore exist forever (register item B1-20), and the differential oracle at
+ * contract therefore exist forever, and the differential oracle at
  * `kiteplayer-core/src/nativeTest/kotlin/.../AudioRingDifferentialTest.kt` is the only thing that
  * keeps them from drifting apart.
  *

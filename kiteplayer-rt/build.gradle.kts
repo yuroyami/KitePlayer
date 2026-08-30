@@ -91,7 +91,7 @@ kotlin {
                 compilerOpts("-I${cIncludeDir.asFile.absolutePath}")
                 // The archive directory, per target, as a -libraryPath rather than a def line: a
                 // def-relative library path resolves against the project directory, and each target
-                // has its own directory (register item B1-11).
+                // has its own directory.
                 extraOpts("-libraryPath", archiveDir.get().asFile.absolutePath)
             }
         }

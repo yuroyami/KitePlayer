@@ -123,7 +123,7 @@ public interface AudioSinkFactory {
  *
  * This interface remains the contract for every other sink, and `KotlinAudioRing` remains its
  * implementation, permanently: js and wasmJs can never contain C, and the Kotlin ring is the only
- * oracle the C one can be checked against (register item B1-20). What it must not be presented as is
+ * oracle the C one can be checked against. What it must not be presented as is
  * coverage of the macOS device path.
  *
  * @return frames written, counted from the start of the buffer. Fewer than [frames] means the

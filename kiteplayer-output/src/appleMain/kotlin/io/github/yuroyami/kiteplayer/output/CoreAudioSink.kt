@@ -328,7 +328,7 @@ public class CoreAudioSink private constructor(
             }
             val attachedRing = kprt_sink_ring(created.sink)
                 ?: error("kprt_sink_attach_ring reported success and produced no ring")
-            // W-18: the SPI carries an address, so the pointer is converted here, in the module that
+            // The SPI carries an address, so the pointer is converted here, in the module that
             // owns the C sink pointer and that the coupling baseline excludes by design.
             val handoff = NativeRingHandoff(
                 format = created.format,

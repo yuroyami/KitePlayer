@@ -121,7 +121,7 @@ public class AudioTrackSink internal constructor(
             require(request.channels >= 1) { "a request with no channels cannot be opened" }
             val format = AudioFormat(
                 sampleRate = request.sampleRate,
-                /* SOL-A6: the counts AudioTrack has masks for pass through unchanged, so a 5.1
+                /* The counts AudioTrack has masks for pass through unchanged, so a 5.1
                  * or 7.1 source plays every channel instead of a forced downmix; anything else
                  * falls to stereo, which the pipeline's mixer can always produce. */
                 channels = when (request.channels) {
@@ -181,7 +181,7 @@ public class AudioTrackSink internal constructor(
     }
 
     /**
-     * SOL-A2's recovery arm: after a device failure the old AudioTrack is dead, so the next
+     * The recovery arm: after a device failure the old AudioTrack is dead, so the next
      * start releases it and opens a fresh one for the accepted format. The submitted count and
      * timestamp state restart with the new device; the DeviceLost event already told the
      * application WHY. Outside [lifecycle] for the join, like every writer join here.
@@ -313,7 +313,7 @@ public class AudioTrackSink internal constructor(
     /* ── The writer (step 5) ────────────────────────────────────────────────────────────── */
 
     private fun startWriterLocked() {
-        /* SOL-A2: one writer, ever. A duplicate resume used to start a second thread over the
+        /* One writer, ever. A duplicate resume used to start a second thread over the
          * same driver and block buffer. */
         if (writer?.isAlive == true && writerRun) return
         writerRun = true
@@ -336,7 +336,7 @@ public class AudioTrackSink internal constructor(
         val adapter = blockAdapter ?: return
         val channels = format.channels
         while (writerRun) {
-            /* Audit F-AUD2: an interrupted block's unwritten tail was already pulled from the
+            /* An interrupted block's unwritten tail was already pulled from the
              * ring, so a resumed writer submits the REMAINDER first instead of dropping up to a
              * block of decoded audio at every pause. The held state is writer-confined: the
              * join in pause and the thread start in resume are its happens-before edges. */
@@ -365,7 +365,7 @@ public class AudioTrackSink internal constructor(
                 val n = d.write(blockBuffer, offsetFloats, totalFloats - offsetFloats)
                 if (n > 0) {
                     offsetFloats += n
-                    /* Audit F-AUD1: a short POSITIVE count is also how the platform hands a
+                    /* A short POSITIVE count is also how the platform hands a
                      * write back at an interrupt. Re-entering the blocking write here on a
                      * paused, full track was a writer nothing could join. */
                     if (!writerRun) break
@@ -374,7 +374,7 @@ public class AudioTrackSink internal constructor(
                 if (!writerRun) break /* pause or stop interrupted the blocking write */
                 /* Zero or negative with the writer still live is a device failure, never a
                  * busy loop (step 5). */
-                /* SOL-A2: a dead device marks the machine FAILED and drops writerRun, so the
+                /* A dead device marks the machine FAILED and drops writerRun, so the
                  * sink is startable again (start recovers) instead of wedged behind a true
                  * writerRun with no writer. State BEFORE the event: the event is what wakes a
                  * listener that immediately calls start, and start must see the failure. */
@@ -388,7 +388,7 @@ public class AudioTrackSink internal constructor(
                 failed = true
                 break
             }
-            /* SOL-A1: count what the device actually took. A pause or stop that interrupts
+            /* Count what the device actually took. A pause or stop that interrupts
              * the blocking write mid-block, and a device failure partway, both leave a partial
              * count; claiming the whole block made latency and the head fallback lie by up to
              * one block. Full blocks land on exactly the old arithmetic; a resumed remainder
@@ -514,7 +514,7 @@ public class AudioTrackSink internal constructor(
         internal fun framesToNanos(frames: Long, sampleRate: Int): Long =
             if (sampleRate <= 0) 0 else frames * 1_000_000_000L / sampleRate
 
-        /** SOL-A3's wrap law, pure for the host suite: same shape as the head extension. */
+        /** The wrap law, pure for the host suite: same shape as the head extension. */
         internal fun extendTimestampFrames(raw: Long, state: WrapState): Long {
             if (raw > 0xFFFF_FFFFL || raw < 0) return raw
             if (raw < state.lastRaw && state.lastRaw - raw > 0x8000_0000L) {

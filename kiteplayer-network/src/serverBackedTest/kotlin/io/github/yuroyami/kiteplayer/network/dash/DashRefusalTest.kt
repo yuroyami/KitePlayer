@@ -34,7 +34,7 @@ class DashRefusalTest {
         return runBlocking { server.engine.resolvedConnectors().first().port }
     }
 
-    // Audit F-DASH3: a two-period presentation used to play period one and stop, silently.
+    // a two-period presentation used to play period one and stop, silently.
     @Test
     fun aMultiPeriodManifestIsRefusedTypedNotTruncated() = runBlocking {
         val port = serveMpd(
@@ -70,7 +70,7 @@ class DashRefusalTest {
         }
     }
 
-    // Audit F-NET1: the resolver owns the client it lazily created, so it must be closeable.
+    // The resolver owns the client it lazily created, so it must be closeable.
     @Test
     fun theResolverClosesItsOwnClientAndOnlyItsOwn() {
         val own = KtorMediaIoResolver()

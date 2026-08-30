@@ -146,7 +146,7 @@ class ColorPolicyTest {
             frames.forEach { it.close() }
         }
     }
-    // Audit F-HDR1: the native converter must run the same HDR-to-SDR law the packed common
+    // The native converter must run the same HDR-to-SDR law the packed common
     // path runs. It used to skip the hook entirely, so the same public API returned washed-out
     // pixels on Apple and tone-mapped ones on the JVM.
     @Test

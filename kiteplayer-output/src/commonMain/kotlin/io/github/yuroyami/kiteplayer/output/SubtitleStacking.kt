@@ -8,7 +8,7 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 /**
  * Whether a cue takes its place FROM the implicit bottom stack, and so takes space IN it.
  *
- * SOL-S8: those were one question and had to be two. Every rasterizer grew the running stack offset
+ * Those were one question and had to be two. Every rasterizer grew the running stack offset
  * for any bottom-aligned cue, including one carrying an authored `positionY`. Such a cue is laid
  * out from its own fraction and never reads the offset, so it was reserving room in a stack it does
  * not stand in, and every later ordinary subtitle rose by its height.

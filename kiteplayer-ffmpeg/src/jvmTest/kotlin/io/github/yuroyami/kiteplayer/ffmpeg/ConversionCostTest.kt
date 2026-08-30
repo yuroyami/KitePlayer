@@ -205,7 +205,7 @@ class ConversionCostTest {
     }
 
     /**
-     * W-19's threshold, measured rather than guessed: what does a SMALL frame cost?
+     * The threshold, measured rather than guessed: what does a SMALL frame cost?
      *
      * Dispatching four coroutines is tens of microseconds. A 1080p frame repays that many times
      * over; a thumbnail does not. This times frames on both sides of PARALLEL_ROW_THRESHOLD so the

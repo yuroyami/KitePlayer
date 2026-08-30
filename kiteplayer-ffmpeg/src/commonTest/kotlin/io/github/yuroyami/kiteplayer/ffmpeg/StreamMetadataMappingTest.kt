@@ -83,7 +83,7 @@ class StreamMetadataMappingTest {
         assertEquals(PlayerColorPrimaries.Bt2020, color.primaries)
         assertEquals(PlayerColorTransfer.Bt2020Ten, color.transfer)
         assertFalse(color.rangeSpecified)
-        // KC-COLOR-PROV: the provenance crosses the boundary too. Without this the engine cannot
+        // The provenance crosses the boundary too. Without this the engine cannot
         // tell a container's own word from this library's standard-definition guess.
         assertTrue(color.matrixSpecified)
         assertTrue(color.primariesSpecified)

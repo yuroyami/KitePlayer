@@ -97,7 +97,7 @@ class FilterAttachmentTest {
             source.close()
         }
     }
-    // Audit F-FLT1: a filtered decoder that never decoded a frame has no graph to flush, and
+    // a filtered decoder that never decoded a frame has no graph to flush, and
     // isDrained must say so instead of holding the whole end of stream off for ever.
     @Test
     fun aFilteredDecoderThatNeverDecodedStillDrains() = runBlocking {

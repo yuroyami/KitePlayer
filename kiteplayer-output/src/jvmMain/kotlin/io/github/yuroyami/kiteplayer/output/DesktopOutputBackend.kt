@@ -7,7 +7,7 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleRasterizer
 import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 
 /**
- * The desktop JVM output half (register item W-04): [DesktopMonotonicClock] paired with
+ * The desktop JVM output half: [DesktopMonotonicClock] paired with
  * [DesktopAudioSinkFactory], and null for video. One object lights up macOS, Linux and Windows,
  * because `javax.sound.sampled` and `java.awt` are in the JDK on all three.
  *

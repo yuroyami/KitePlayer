@@ -200,7 +200,7 @@ class DesktopSubtitleRasterizerTest {
         assertEquals((640 * 0.05f).toInt(), left.x)
     }
 
-    // Audit F-POS1: an authored \pos is an ANCHOR oriented by the alignment, and the bitmap of a
+    // An authored \pos is an ANCHOR oriented by the alignment, and the bitmap of a
     // positioned cue is its own text extent, not the whole safe width.
     @Test
     fun `a positioned cue's bitmap is its text extent, anchored on the authored point`() {
@@ -384,7 +384,7 @@ class DesktopSubtitleRasterizerTest {
     }
 
     /*
-     * SOL-S7: the arms below pin what CueStyle's KDoc PROMISES per span. They are contract tests,
+     * The arms below pin what CueStyle's KDoc PROMISES per span. They are contract tests,
      * not aspiration tests. If one goes red because the promise changed, the KDoc table in
      * SubtitleCue.kt is what needs updating; the assertion is only here so the documentation and
      * the pixels cannot drift apart in silence.

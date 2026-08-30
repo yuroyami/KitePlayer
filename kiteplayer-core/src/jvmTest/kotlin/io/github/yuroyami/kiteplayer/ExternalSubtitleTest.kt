@@ -201,7 +201,7 @@ class ExternalSubtitleTest {
         )
         harness.close()
     }
-    // F-EXT1: an id minted by addExternalSubtitle must never collide with a track the open
+    // An id minted by addExternalSubtitle must never collide with a track the open
     // already created. Deriving the id from the LOADED count collided as soon as one declared
     // file had failed, because the open derives ids from the DECLARED index.
     @Test
@@ -234,7 +234,7 @@ class ExternalSubtitleTest {
         harness.close()
     }
 
-    // F-EXT2: an external ASS file is labelled as what it is. The label used to be derived from
+    // An external ASS file is labelled as what it is. The label used to be derived from
     // the vtt hint alone, so every ASS file reported itself as SubRip.
     @Test
     fun `an external ass file is labelled ass not subrip`() = runTest {

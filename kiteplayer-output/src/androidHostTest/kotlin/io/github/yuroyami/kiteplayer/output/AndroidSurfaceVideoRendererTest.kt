@@ -72,7 +72,7 @@ class AndroidSurfaceOverlayTest {
         }
     }
 
-    // Audit F-ROT1: overlay coordinates map into the PRE-turn draw rectangle and turn with the
+    // Overlay coordinates map into the PRE-turn draw rectangle and turn with the
     // picture; unrotated they sat on the post-turn rectangle with the wrong scale on both axes.
     @Test
     fun aRotatedFrameCarriesItsOverlayThroughTheSameTurn() {

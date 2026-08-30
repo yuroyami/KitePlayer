@@ -26,7 +26,7 @@ import kotlin.test.assertTrue
  * [KotlinAudioRing] is portable and is what js, wasmJs, jvm and Android use. [NativeAudioRing] wraps
  * the C ring in `kiteplayer-rt`, which exists because on macOS the device's real-time callback enters
  * managed Kotlin on its first instruction and becomes a mutator the collector has to stop at a
- * safepoint (register item B1-17). Neither can be deleted: `commonMain` targets js and wasmJs, which
+ * safepoint. Neither can be deleted: `commonMain` targets js and wasmJs, which
  * can never contain C, and the Kotlin ring is the only oracle the C ring can be checked against. That
  * is register item B1-20, and the consequence is that two implementations of one contract exist
  * permanently. This file is the only thing that stops them drifting apart.

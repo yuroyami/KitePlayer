@@ -49,7 +49,7 @@ import javax.inject.Inject
  *
  *  - [outputDir] is keyed by the konan target name and is never shared between targets, and the
  *    task refuses to run when the directory it was handed is not named after its own target. That is
- *    register item B1-11: cinterop embeds a wrong-architecture archive without a word of complaint
+ *    Cinterop embeds a wrong-architecture archive without a word of complaint
  *    and it fails only at the consumer's final link, with
  *    `ld: archive member '/' not a mach-o file`. The producer must catch it, so every object is run
  *    past [verifyObjectArchitecture] before it is archived.

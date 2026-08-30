@@ -38,7 +38,7 @@ import kotlin.time.TimeSource
  *
  *  - "a device buffer with no callback to fill it comes back silent" is now "a callback that finds no
  *    ring zeroes the whole buffer and counts it". The state is reachable in production only during
- *    teardown, and it is the only silence case left outside `kprt_ring_render` (register item B1-19).
+ *    teardown, and it is the only silence case left outside `kprt_ring_render`.
  *  - "a short render has its remainder zero filled" is now "a short read is exact zeroes after the real
  *    frames and counts one underrun", asserted on the exact bytes.
  *  - "an invalid host time falls back to the engine clock" is now "a host time the device did not flag

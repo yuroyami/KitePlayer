@@ -35,7 +35,7 @@ import kotlinx.cinterop.set
  *
  * Before B1.8 these suites drove a naive Kotlin ring of their own through an `AudioRenderCallback`,
  * because that was the shape the sink had. The sink no longer has that shape: its callback is a
- * `static` C function and the samples live in a C ring the sink itself owns (register item B1-17). A
+ * `static` C function and the samples live in a C ring the sink itself owns. A
  * test that kept a Kotlin ring would be testing a path no Apple-backend user runs, which is the substitution
  * plan section 2 forbids and register item B1-20 is about. So the samples go in through the same three
  * C calls the engine's feeder uses, and what comes out is judged by what the device consumed.
@@ -109,7 +109,7 @@ internal fun ringFree(ring: CPointer<kprt_ring>): Int = kprt_ring_free_frames(ri
 
 internal fun ringUnderruns(ring: CPointer<kprt_ring>): Long = kprt_ring_underruns(ring)
 
-/** Torn reads of a timestamp slot by the real-time walk. Zero on a healthy system (register item B1-16). */
+/** Torn reads of a timestamp slot by the real-time walk. Zero on a healthy system. */
 internal fun ringSegmentGiveups(ring: CPointer<kprt_ring>): Long = kprt_ring_segment_giveups(ring)
 
 internal fun ringSampleRate(ring: CPointer<kprt_ring>): Int = kprt_ring_sample_rate(ring)

@@ -752,7 +752,7 @@ class KiteVideoRendererTest {
 }
 
 /**
- * W-13: a foreign frame is refused ONCE, in words a consumer can read, and the renderer stops
+ * a foreign frame is refused ONCE, in words a consumer can read, and the renderer stops
  * paying for the attempt.
  *
  * Before this, the pairing failed on every frame forever and carried a ClassCastException message,

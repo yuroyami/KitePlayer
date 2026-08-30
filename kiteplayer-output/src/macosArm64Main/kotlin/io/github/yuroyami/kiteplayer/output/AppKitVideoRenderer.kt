@@ -574,7 +574,7 @@ public class AppKitVideoRenderer internal constructor(
      * the next frame, the same honest note as the Metal renderer; cue edges republish during
      * playback at most one frame away.
      */
-    /* SOL-R1: worker-thread confined. */
+    /* Worker-thread confined. */
     private var retainedRgba: ByteArray? = null
     private var retainedWidth: Int = 0
     private var retainedHeight: Int = 0

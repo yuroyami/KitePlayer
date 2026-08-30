@@ -30,7 +30,7 @@ import kotlin.time.Duration.Companion.seconds
 class CommandTruthTest {
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-04: a request that is not the session's owner may not stop the session.
+    // a request that is not the session's owner may not stop the session.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -67,7 +67,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-06: the first frame is reported as what it was, not as a success by default.
+    // The first frame is reported as what it was, not as a success by default.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -124,7 +124,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-21: the totals are totals.
+    // The totals are totals.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -188,7 +188,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-09: a dropped event is counted.
+    // a dropped event is counted.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -233,7 +233,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-01: one selection wins, and the other one is told.
+    // One selection wins, and the other one is told.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -324,7 +324,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-03: every open of an item gets its own reader.
+    // Every open of an item gets its own reader.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -369,7 +369,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-07: a wedged release is reported, not waited on.
+    // a wedged release is reported, not waited on.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -421,7 +421,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-05: a stop that arrives during an open really preempts it.
+    // a stop that arrives during an open really preempts it.
     // ---------------------------------------------------------------------------------------------
 
     /**
@@ -546,7 +546,7 @@ class CommandTruthTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // KP-P1-10: a step is one frame of the media, not one average frame period.
+    // a step is one frame of the media, not one average frame period.
     // ---------------------------------------------------------------------------------------------
 
     /**

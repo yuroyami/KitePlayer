@@ -46,7 +46,7 @@ private object GpuFrameReader {
 
 internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
     val decoded = frame.asKiteFFmpegFrame()
-    // SOL-P1: the Metal reader serves HARDWARE frames only, where a GPU readback is the only
+    // The Metal reader serves HARDWARE frames only, where a GPU readback is the only
     // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which
     // was upload plus readback plus Skia's re-upload for pixels the CPU converter produces in
     // ONE pass with the same arithmetic (the shader is written to match it), tone mapping

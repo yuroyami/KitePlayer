@@ -130,7 +130,7 @@ static AudioChannelLayoutTag kprt_layout_tag_for(int32_t channels, int64_t *out_
     }
 }
 
-/* SOL-A4: the REAL render granularity, asked of the unit instead of assumed. On both Apple
+/* The REAL render granularity, asked of the unit instead of assumed. On both Apple
  * platforms MaximumFramesPerSlice is the upper bound of one render callback, which is exactly
  * what the engine sizes its ring against; the hardcoded 512 was only ever the common answer.
  * The default remains the fallback when the query refuses, keeping the old behaviour as the
@@ -147,7 +147,7 @@ static int32_t kprt_query_device_frames(AudioComponentInstance instance)
     return KPRT_DEFAULT_DEVICE_BUFFER_FRAMES;
 }
 
-/* SOL-A4's tracking half: a stream-format or slice-size change (a route change lands as one)
+/* The tracking half: a stream-format or slice-size change (a route change lands as one)
  * re-queries the period on CoreAudio's notification thread. Relaxed atomic store; readers take
  * snapshots and nothing orders against it. */
 static void kprt_format_listener(void *ref_con, AudioUnit unit, AudioUnitPropertyID property,
@@ -427,7 +427,7 @@ int32_t kprt_sink_create(int32_t sample_rate, int32_t channels, kprt_sink **out_
     status = AudioUnitSetProperty(instance, kAudioUnitProperty_StreamFormat,
                                   kAudioUnitScope_Input, KPRT_OUTPUT_BUS,
                                   &asbd, (UInt32)sizeof(asbd));
-    /* SOL-A6: above stereo the speaker order is a CONTRACT, not a guess. The tag is chosen BY THE
+    /* Above stereo the speaker order is a CONTRACT, not a guess. The tag is chosen BY THE
      * CHANNEL COUNT now: declaring MPEG 5.1 A for three, four and five channels as well described
      * six speakers to a unit that had been given three, and the unit's refusal was thrown away
      * with a cast to void, so nothing anywhere knew which order was really in force (audit
@@ -556,7 +556,7 @@ int32_t kprt_sink_start(kprt_sink *sink, int32_t *out_os_status)
     if (atomic_load_explicit(&sink->running, memory_order_relaxed))
         return KPRT_SINK_OK;
 
-    /* SOL-A4: the period can have moved while stopped (a route change with no format
+    /* The period can have moved while stopped (a route change with no format
      * notification delivered); one relaxed re-query at every start keeps it honest. */
     atomic_store_explicit(&sink->device_buffer_frames,
                           kprt_query_device_frames((AudioComponentInstance)sink->unit),

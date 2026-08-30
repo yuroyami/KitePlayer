@@ -1,4 +1,4 @@
-/* Register item B1-18: the ring's microsecond dating must not multiply before it divides.
+/* The ring's microsecond dating must not multiply before it divides.
  *
  * The Kotlin ring computed `(atFrame - segmentStart) * 1_000_000L / sampleRate` at two places, and
  * that product overflows a signed 64 bit intermediate once the frame delta passes about 9.2e12.

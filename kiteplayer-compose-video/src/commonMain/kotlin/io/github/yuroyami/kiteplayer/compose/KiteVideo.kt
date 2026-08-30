@@ -51,7 +51,7 @@ public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {
                 val frame = state.acquireFrameForDraw(frameCommitter.canDrawCommitFencedFrames)
                 if (frame == null) {
                     frameCommitter.frameRecorded(null)
-                    // SOL-R2: audio-only media and the moment before the first frame still show
+                    // Audio-only media and the moment before the first frame still show
                     // their subtitles; the picture's absence is not the text's.
                     drawOverlayItems(state)
                     return@drawBehind

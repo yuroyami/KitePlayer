@@ -1,4 +1,4 @@
-/* Register item B1-19: silence fill and underrun counting collapse into `kprt_ring_render`.
+/* Silence fill and underrun counting collapse into `kprt_ring_render`.
  *
  * When this suite was written the same two things happened at two levels: `CoreAudioSink` filled the
  * buffer when the render callback was absent, and the Kotlin ring filled it when the ring ran dry,

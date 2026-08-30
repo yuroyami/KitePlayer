@@ -328,7 +328,7 @@ int32_t kprt_render_into(kprt_sink *sink, float *destination, int32_t frames,
 
     if (ring == NULL) {
         /* Teardown, and the only case left in which the device buffer is zeroed from outside
-         * `kprt_ring_render` (register item B1-19). An unwritten device buffer plays whatever was
+         * `kprt_ring_render`. An unwritten device buffer plays whatever was
          * left in it, which is a burst of noise, so the whole thing goes to exact zeroes. */
         memset(destination, 0, (size_t)frames * (size_t)sink->channels * sizeof(float));
         kprt_counter_bump(&sink->zero_filled_callbacks);
@@ -345,7 +345,7 @@ int32_t kprt_render_into(kprt_sink *sink, float *destination, int32_t frames,
     deadline = kprt_sink_ticks_to_nanos(sink, host_ticks) +
         frames_to_nanos(frames, sink->sample_rate);
 
-    /* SOL-A5: the deadline publishes BEFORE the render consumes the ring, with release. A
+    /* The deadline publishes BEFORE the render consumes the ring, with release. A
      * drain polls "ring empty?" and then reads this deadline; with the old order (store after
      * the consume, relaxed) it could pair an empty ring with the PREVIOUS callback's deadline
      * and declare the audio finished one buffer early. Store-first plus release means any

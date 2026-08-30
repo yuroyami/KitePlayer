@@ -334,7 +334,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // SOL-A1: the submitted count is what the line ACTUALLY took, never what was offered.
+    // The submitted count is what the line ACTUALLY took, never what was offered.
     @Test
     fun `an interrupted block counts only the frames the line actually took`() = runBlocking {
         val s = sink()
@@ -356,7 +356,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // SOL-A2: one writer, ever.
+    // One writer, ever.
     @Test
     fun `a duplicate resume never starts a second writer thread`() = runBlocking {
         val s = sink()
@@ -370,7 +370,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // SOL-A2: a dead line marks the machine FAILED, publishes the state BEFORE the event, and
+    // a dead line marks the machine FAILED, publishes the state BEFORE the event, and
     // the writer exits instead of spinning.
     @Test
     fun `a zero write with the writer live is a device failure, not a busy loop`() = runBlocking {
@@ -387,7 +387,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // SOL-A2's recovery arm.
+    // The recovery arm.
     @Test
     fun `after a device failure the next start opens a fresh line and plays again`() = runBlocking {
         val s = sink()
@@ -512,7 +512,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // Audit F-AUD1: a short POSITIVE return is also how the line hands a write back at an
+    // a short POSITIVE return is also how the line hands a write back at an
     // interrupt, and the loop must not re-enter the blocking write past the signal.
     @Test
     fun `a short positive return at the pause signal stops the loop instead of re-entering write`() = runBlocking {
@@ -530,7 +530,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // Audit F-AUD2: the interrupted block's unwritten tail was already pulled from the ring, so
+    // The interrupted block's unwritten tail was already pulled from the ring, so
     // dropping it on resume loses up to a block of decoded audio at every pause.
     @Test
     fun `resume submits the interrupted block's remainder before pulling a new one`() = runBlocking {
@@ -599,7 +599,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // SOL-A3: getLongFramePosition is already 64 bit, so a position past 2^32 is a REAL position
+    // getLongFramePosition is already 64 bit, so a position past 2^32 is a REAL position
     // and no wrap extension may touch it. A 32-bit fold would read this line as barely started
     // and report a queue that is not there.
     @Test
@@ -619,7 +619,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // SOL-A3's desktop half: the JDK counts the position from open(), so a run that stops and
+    // The desktop half: the JDK counts the position from open(), so a run that stops and
     // starts again zeroes the submitted count while the line's counter keeps going. The two are
     // re-zeroed together through ONE base, or every deadline after a seek under-reports the queue
     // by the whole device buffer.
@@ -687,7 +687,7 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
-    // Audit F-AUD3: drain used to leave the submitted counter stale, so a later latency read
+    // Drain used to leave the submitted counter stale, so a later latency read
     // invented minutes of pending audio.
     @Test
     fun `drain exits on the first short return, plays the line out and never flushes`() = runBlocking {

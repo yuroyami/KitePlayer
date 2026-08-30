@@ -14,7 +14,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * W-14's decisive experiment: is Skia's SkSL actually faster than the scalar Kotlin loop?
+ * The decisive experiment: is Skia's SkSL actually faster than the scalar Kotlin loop?
  *
  * The register item assumed it is, and the amendment already showed one assumption in this area
  * was wrong. This settles the second one BEFORE the shared frame pipeline is touched, because a
@@ -163,7 +163,7 @@ fun main() {
 
     println("verdict: skia is ${"%.2f".format(cpu / gpu)}x the scalar loop")
 
-    // W-14's re-decision after W-19. The upload path is two costs: the YUV to RGBA conversion,
+    // The re-decision after W-19. The upload path is two costs: the YUV to RGBA conversion,
     // which row parallelism cut from 6.3 ms to about 2.1, and the Skia raster build that turns
     // those bytes into an image. This times the second half, so the verdict rests on both.
     val rgba = ByteArray(WIDTH * HEIGHT * 4) { (it and 0xFF).toByte() }

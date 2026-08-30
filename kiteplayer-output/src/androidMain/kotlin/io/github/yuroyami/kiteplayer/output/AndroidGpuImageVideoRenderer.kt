@@ -116,7 +116,7 @@ public class AndroidGpuImageVideoRenderer(
     }
 
     override fun setAdjustments(adjustments: io.github.yuroyami.kiteplayer.VideoAdjustments) {
-        // SOL-R14's Android half: the OES-to-RGBA blit is the ONE hook this tier has, and it
+        // The Android half: the OES-to-RGBA blit is the ONE hook this tier has, and it
         // now applies the same unit-domain law every other renderer does. A paused picture
         // keeps its old colours until the next latch; that narrower limit stays recorded.
         bridge.adjust.set(GlState.packGlAdjust(adjustments))
@@ -1143,7 +1143,7 @@ internal class GlState private constructor(
         const val TEST_FRAGMENT_SHADER = PLAIN_SAMPLER_HEADER + FRAGMENT_BODY
 
         /**
-         * SOL-R14's Android half: the engine's ONE colour-matrix law, packed for the blit.
+         * The Android half: the engine's ONE colour-matrix law, packed for the blit.
          * Nine COLUMN-major 3x3 values plus three unit-domain offsets, exactly the Metal
          * pack transposed, because GLES2 refuses transpose=true. Null means disabled, which
          * keeps the untouched path bit-exact.

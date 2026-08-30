@@ -18,7 +18,7 @@ import kotlin.coroutines.CoroutineContext
 internal expect fun platformPlaybackDispatchers(): PlaybackDispatchers
 
 /**
- * SOL-P4: six SERIAL LANES over the runtime's shared pools instead of six owned OS threads.
+ * Six SERIAL LANES over the runtime's shared pools instead of six owned OS threads.
  *
  * The engine's contracts are about CONFINEMENT, and `limitedParallelism(1)` is confinement:
  * one task at a time per lane, happens-before between consecutive tasks, exactly the mutual

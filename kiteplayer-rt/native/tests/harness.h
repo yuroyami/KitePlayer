@@ -128,7 +128,7 @@ _Noreturn void kt_fail_at(const char *file, int line, const char *fmt, ...)
     } while (0)
 
 /* Every float in [start, start + count) must be exactly +0.0f. The exact-silence assertion of
- * register item B1-19: "exact zeroes" and not "small values". */
+ * "exact zeroes" and not "small values". */
 #define KT_ALL_ZERO_F32(start, count) \
     do { \
         const float *kt_s_ = (start); \
@@ -175,7 +175,7 @@ typedef struct {
  * Measured on this machine: 1 in the `plain` variant, 0 under `asan` and `tsan`, because both
  * sanitizer runtimes replace the allocator before dyld reaches the interpose section. So the
  * allocation evidence comes from the plain run and the sanitizer runs contribute their own
- * findings instead. LeakSanitizer is not an option here at all (register item B1-14). */
+ * findings instead. LeakSanitizer is not an option here at all. */
 int kt_alloc_active(void);
 
 void kt_alloc_snapshot(kt_alloc_counts *out);

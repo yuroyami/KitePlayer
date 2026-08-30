@@ -171,7 +171,7 @@ internal class AudioPipeline(
     fun process(input: FloatArray, frames: Int): Int {
         if (frames <= 0) return 0
 
-        /* SOL-P2: an identity mixer used to copy the whole buffer anyway. Skipping it means
+        /* An identity mixer used to copy the whole buffer anyway. Skipping it means
          * plain stereo-to-stereo playback runs zero pipeline copies until the ring write: the
          * mixer, the resampler at equal rates and the tempo stage at 1.0 all stand aside, and
          * the gain multiplies in place only when the volume is not unity. The alias keys on

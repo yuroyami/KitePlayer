@@ -1,4 +1,4 @@
-/* Register item B1-16: the real-time thread must never wait for the feeder, and a give-up must be
+/* The real-time thread must never wait for the feeder, and a give-up must be
  * visible rather than silent.
  *
  * WHAT THE KOTLIN RING DOES. `KotlinAudioRing.publishAnchor` loads `segmentSeq` and

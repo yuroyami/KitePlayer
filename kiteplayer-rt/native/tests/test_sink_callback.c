@@ -326,7 +326,7 @@ int main(void)
         kprt_ring_flush(ring);
     }
 
-    /* ---- teardown: the one silence case left outside the ring (register item B1-19) ---- */
+    /* ---- teardown: the one silence case left outside the ring ---- */
     kt_case("a callback that finds no ring zeroes the whole buffer and counts it");
     {
         reset_sink(NULL);

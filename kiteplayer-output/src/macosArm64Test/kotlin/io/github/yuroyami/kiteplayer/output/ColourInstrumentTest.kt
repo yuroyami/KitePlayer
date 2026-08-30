@@ -286,7 +286,7 @@ class ColourInstrumentTest {
     }
 
     /**
-     * SOL-R4: a packed BGRA CVPixelBuffer has no planes, and the per-plane size functions answer
+     * a packed BGRA CVPixelBuffer has no planes, and the per-plane size functions answer
      * zero for it. The wrap must size the texture from the buffer itself and pass the pixels
      * through untouched (shader mode 2 applies no matrix).
      */
@@ -352,7 +352,7 @@ class ColourInstrumentTest {
         composer.close()
     }
 
-    /** SOL-R8: rotation is normalized modulo 360 before the quarter-turn reading. */
+    /** Rotation is normalized modulo 360 before the quarter-turn reading. */
     @Test
     fun `rotation normalizes modulo 360 and non quarter turns read as zero`() {
         assertEquals(270, normalizedQuarterTurn(-90))
@@ -365,7 +365,7 @@ class ColourInstrumentTest {
         assertEquals(plus270.toList(), minus90.toList(), "-90 and 270 must produce one identical quad")
     }
 
-    /** SOL-R6: close fences the GPU, releases the cache, and stays idempotent. */
+    /** Close fences the GPU, releases the cache, and stays idempotent. */
     @Test
     fun `close is idempotent after hardware and software renders`() {
         val composer = MetalFrameComposer(device())

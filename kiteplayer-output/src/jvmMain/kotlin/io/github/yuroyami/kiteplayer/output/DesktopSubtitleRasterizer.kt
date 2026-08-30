@@ -23,7 +23,7 @@ import java.text.AttributedString
 import kotlin.math.ceil
 
 /**
- * The desktop text raster engine (register item W-04): each active text cue becomes one image
+ * The desktop text raster engine: each active text cue becomes one image
  * through `java.awt`, the JVM's own text engine, so wrapping, bidi and shaping are AWT's and not
  * this project's. That is the same division of labour StaticLayout gets on Android and CoreText
  * gets on Apple. Bitmap cues pass their pixels through untouched.

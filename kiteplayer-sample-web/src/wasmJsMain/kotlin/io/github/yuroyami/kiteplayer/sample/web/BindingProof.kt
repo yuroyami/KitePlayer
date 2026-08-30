@@ -67,7 +67,7 @@ internal suspend fun runBackendProof(clip: ByteArray, report: (String) -> Unit) 
         report(if (frames > 0) "DECODED $frames frames through kiteffmpeg-core, first pts $firstPts" else "FAILED: no frames")
     }
 
-    // X-12: the engine's own entry point, which is what a consumer actually calls.
+    // The engine's own entry point, which is what a consumer actually calls.
     reportPlayerWiring(report)
 }
 

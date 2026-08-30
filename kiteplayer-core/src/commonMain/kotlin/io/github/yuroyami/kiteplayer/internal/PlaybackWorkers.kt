@@ -40,7 +40,7 @@ internal interface PlaybackDispatchers : AutoCloseable {
     val audioFeed: CoroutineContext
     val videoSchedule: CoroutineContext
 
-    /** SOL-P5: subtitle rasterisation, off the actor. Serial like every lane. */
+    /** Subtitle rasterisation, off the actor. Serial like every lane. */
     val raster: CoroutineContext
 
     /**

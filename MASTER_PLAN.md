@@ -816,11 +816,20 @@ it.
   pairs is not a test. Seven cases, falsified by restoring the truncation. Because the table is the
   SHARED one, the web binding was carrying the same defect and is fixed by the same commit.
 
-  Left: no lease on resolved handles, O(n) close scan over a table that never shrinks with
-  caller-controlled recursion, kind bits never validated, a pending JNI exception during mint
-  leaking the context, modified-UTF-8 on two paths with the correct decoder unused, callback
-  exceptions collapsed to generic IO, an attached thread never detached, registration erasing
-  every C signature.
+  **Two more fixed the same day, also in the shared table.** The close path RECURSED once per
+  level of borrowing, and that depth is the caller's: nothing stops an application borrowing from
+  a borrowed handle. It iterates to a fixed point now, with a constant frame, and the sweep is
+  skipped entirely when no live handle records a parent, which is most closes; an ordinary close
+  went from scanning the whole table to scanning nothing. And the token's own kind field was
+  written at mint and never read, so two tokens differing only in those bits resolved the same
+  object; resolve checks it now, which is what makes a token name one handle rather than one slot.
+
+  Left, and every one of them needs a JVM this machine does not have in the build: no lease on
+  resolved handles, a pending JNI exception during mint leaking the context, modified-UTF-8 on two
+  paths with the correct decoder unused, callback exceptions collapsed to generic IO, an attached
+  thread never detached, registration erasing every C signature. The table-level defects are done;
+  what remains is the JNI layer proper, and `test_append.c` plus `test_handles.c` are the only two
+  things in this build that can reach any of it.
 - [ ] **9.6 KC-CFILTER** (M): `[out]` found by substring; sources published progressively
   then freed on failure leaving earlier entries dangling; four unchecked `av_strdup`; a plane
   index never bounded (and the test asserts the wrong answer; fix both); an eight-channel cap

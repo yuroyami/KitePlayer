@@ -61,6 +61,18 @@ internal interface SourceDataLineDriver {
 internal fun interface SourceDataLineDriverFactory {
     /** Builds a driver for [accepted]. The sink calls [SourceDataLineDriver.open] itself. */
     fun create(accepted: AudioFormat): SourceDataLineDriver
+
+    /**
+     * Whether a line of this shape can be opened at all, asked BEFORE one is created.
+     *
+     * The sink used to fold everything above stereo without asking, so a 5.1 track played as a
+     * downmix even on a machine whose mixer would have taken all six channels. Asking is the whole
+     * feature; the fold stays for the machines that answer no.
+     *
+     * Conservative by default: mono and stereo only, which is what every desktop mixer measured
+     * here lists. A factory that can genuinely answer overrides this.
+     */
+    fun supports(format: AudioFormat): Boolean = format.channels <= 2
 }
 
 /**
@@ -81,17 +93,33 @@ internal const val WIRE_BYTES_PER_SAMPLE: Int = 2
  * `SourceDataLine` has no presentation-timestamp API at all, which is why [DesktopMonotonicClock]
  * is the sink's only "now" and why the sink declares `LatencyQuality.Estimated`.
  */
+/** The wire shape one engine format takes on a `SourceDataLine`. One spelling, two readers. */
+internal fun wireFormatFor(accepted: AudioFormat): WireFormat = WireFormat(
+    WireFormat.Encoding.PCM_SIGNED,
+    accepted.sampleRate.toFloat(),
+    WIRE_BYTES_PER_SAMPLE * 8,
+    accepted.channels,
+    accepted.channels * WIRE_BYTES_PER_SAMPLE,
+    accepted.sampleRate.toFloat(),
+    false,
+)
+
+/**
+ * The production factory. It answers [supports] by ASKING the mixer rather than assuming, which is
+ * what lets a 5.1 track reach a 5.1 device.
+ */
+internal object PlatformSourceDataLineDriverFactory : SourceDataLineDriverFactory {
+    override fun create(accepted: AudioFormat): SourceDataLineDriver =
+        PlatformSourceDataLineDriver(accepted)
+
+    override fun supports(format: AudioFormat): Boolean = runCatching {
+        AudioSystem.isLineSupported(DataLine.Info(SourceDataLine::class.java, wireFormatFor(format)))
+    }.getOrDefault(false)
+}
+
 internal class PlatformSourceDataLineDriver(accepted: AudioFormat) : SourceDataLineDriver {
 
-    private val wire = WireFormat(
-        WireFormat.Encoding.PCM_SIGNED,
-        accepted.sampleRate.toFloat(),
-        WIRE_BYTES_PER_SAMPLE * 8,
-        accepted.channels,
-        accepted.channels * WIRE_BYTES_PER_SAMPLE,
-        accepted.sampleRate.toFloat(),
-        false,
-    )
+    private val wire = wireFormatFor(accepted)
 
     private val line: SourceDataLine =
         AudioSystem.getLine(DataLine.Info(SourceDataLine::class.java, wire)) as SourceDataLine

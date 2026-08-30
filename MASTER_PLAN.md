@@ -538,12 +538,19 @@ the field was documented "always zero" with the number one field access away. It
 - [ ] Passthrough + offload: re-filed as a feature item (KP-AUDIO-PASSTHROUGH, unscheduled,
   needs hardware evidence + owner scope), not pretended to be a bug.
 
-### 5.4 SOL-P8 remainder: desktop multichannel. Size S-M
+### 5.4 SOL-P8 remainder: one unproven claim about desktop multichannel. Size S, [owner]
 
-JVM desktop output is stereo-only. Open the `SourceDataLine` with the source's channel count
-when the mixer supports 6/8; fold only when it does not. RED: 5.1 fixture on a scripted
-6-channel line keeps 6 channels. Upmix (mono/stereo to 5.1) is a policy feature: re-filed
-(KP-AUDIO-UPMIX, unscheduled, owner taste).
+Done 2026-08-30: the desktop sink ASKS the mixer whether it takes the source's channel count and
+opens that many when it does, folding to stereo only when it does not. Three tests: six channels
+open six, a mixer that refuses six still folds, and mono and stereo never reach the probe at all.
+
+- [ ] **[owner] One run on real surround hardware.** Every test above drives a scripted mixer, so
+  what is proven is that the sink asks and honours the answer. Whether a real
+  `AudioSystem.isLineSupported` says yes to 5.1 on a machine with a surround device attached is
+  not something this laptop can answer: its own mixers list mono and stereo only, which is the
+  measurement the old unconditional fold was built on.
+
+Upmix (mono/stereo to 5.1) stays re-filed as KP-AUDIO-UPMIX, unscheduled, owner taste.
 
 
 ---

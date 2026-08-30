@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -448,6 +449,66 @@ class DesktopAudioSinkTest {
             synchronized(drivers) { drivers.size } >= 3 && drivers[2].countOf("write") > 0
         }
         assertTrue(drivers[0].lineClosed, "the original dead line stays closed")
+        s.close()
+    }
+
+    /**
+     * A 5.1 track reaches a 5.1 device instead of being downmixed on principle.
+     *
+     * The sink folded everything above stereo unconditionally, on a measurement of the mixers
+     * present on one machine. That is the right answer for most desktops and the wrong one for any
+     * machine with a surround device attached, and nothing asked.
+     */
+    @Test
+    fun `six channels are opened when the mixer takes them`() = runBlocking {
+        var asked: Int? = null
+        val s = DesktopAudioSink(
+            object : SourceDataLineDriverFactory {
+                override fun create(accepted: AudioFormat): SourceDataLineDriver =
+                    FakeSourceDataLine(accepted).also { synchronized(drivers) { drivers += it } }
+                override fun supports(format: AudioFormat): Boolean {
+                    asked = format.channels
+                    return format.channels <= 6
+                }
+            },
+            FixedClock(),
+        )
+        val accepted = s.open(AudioFormat(48_000, 6, SampleFormat.F32), FullBlockCallback())
+        assertEquals(6, accepted.channels, "a mixer that takes six channels must be given six")
+        assertEquals(6, asked, "and it must have been ASKED about six, not about the fold")
+        s.close()
+    }
+
+    @Test
+    fun `a mixer that refuses six still gets the stereo fold`() = runBlocking {
+        val s = DesktopAudioSink(
+            object : SourceDataLineDriverFactory {
+                override fun create(accepted: AudioFormat): SourceDataLineDriver =
+                    FakeSourceDataLine(accepted).also { synchronized(drivers) { drivers += it } }
+                override fun supports(format: AudioFormat): Boolean = format.channels <= 2
+            },
+            FixedClock(),
+        )
+        val accepted = s.open(AudioFormat(48_000, 6, SampleFormat.F32), FullBlockCallback())
+        assertEquals(2, accepted.channels, "the fold is still the answer when the mixer says no")
+        s.close()
+    }
+
+    @Test
+    fun `mono and stereo never reach the probe at all`() = runBlocking {
+        // Every mixer takes these, so asking would be a device call for a foregone answer, and a
+        // factory that answered wrongly could break the one path that always worked.
+        var probed = false
+        val s = DesktopAudioSink(
+            object : SourceDataLineDriverFactory {
+                override fun create(accepted: AudioFormat): SourceDataLineDriver =
+                    FakeSourceDataLine(accepted).also { synchronized(drivers) { drivers += it } }
+                override fun supports(format: AudioFormat): Boolean { probed = true; return false }
+            },
+            FixedClock(),
+        )
+        assertEquals(2, s.open(stereo48k, FullBlockCallback()).channels)
+        assertFalse(probed, "stereo must not be probed")
         s.close()
     }
 

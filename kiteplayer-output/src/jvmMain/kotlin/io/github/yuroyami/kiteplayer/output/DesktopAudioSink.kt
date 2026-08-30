@@ -40,7 +40,7 @@ public class DesktopAudioSink internal constructor(
 ) : AudioSink {
 
     public constructor() : this(
-        SourceDataLineDriverFactory { accepted -> PlatformSourceDataLineDriver(accepted) },
+        PlatformSourceDataLineDriverFactory,
         DesktopMonotonicClock,
     )
 
@@ -127,12 +127,19 @@ public class DesktopAudioSink internal constructor(
              * satisfy honestly must be refused here rather than negotiated dishonestly. */
             require(request.sampleRate > 0) { "invalid sample rate ${request.sampleRate}" }
             require(request.channels >= 1) { "a request with no channels cannot be opened" }
+            /* ASKED, not assumed. This used to fold everything above stereo unconditionally, on
+             * a measurement of the mixers present on ONE machine, so a 5.1 track was downmixed
+             * even on hardware that would have taken all six channels. The fold is still the
+             * answer when the mixer says no, which is most of them. */
+            val wanted = request.channels
+            val channels = if (wanted <= 2 || driverFactory.supports(request.copy(sampleFormat = SampleFormat.F32))) {
+                wanted
+            } else {
+                2
+            }
             val format = AudioFormat(
                 sampleRate = request.sampleRate,
-                /* Measured on this machine: the JDK's mixers list mono and stereo source lines
-                 * and nothing wider, so anything else falls to stereo, which the engine's mixer
-                 * can always produce. Multichannel desktop output is SOL-A6's business. */
-                channels = if (request.channels == 1) 1 else 2,
+                channels = channels,
                 /* F32 is what the ENGINE writes through AudioSinkBuffer. The 16-bit wire below
                  * is this sink's own packing and is not the engine's concern. */
                 sampleFormat = SampleFormat.F32,

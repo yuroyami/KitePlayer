@@ -2,7 +2,7 @@
 #
 # Build the host test binaries for the kiteplayer-rt real-time audio ring.
 #
-# There is no make, no cmake and no ninja here, and that is deliberate. Register item B1-15:
+# There is no make, no cmake and no ninja here, and that is deliberate:
 # cmake is not installed on the proving machine, and GNU make starts a comment at an unescaped
 # '#' while both repositories live under a path containing '#Kite'. Driving clang directly is the
 # only form that is both available and safe under this path, and it is proven to work here.
@@ -15,8 +15,7 @@
 #
 #   plain  -O2, no runtime instrumentation. The compile-fidelity and correctness variant. It is
 #          also the ONLY variant in which the allocation interposer works, so it is the variant
-#          that carries the allocation evidence (LeakSanitizer is not supported on macOS arm64,
-#          register item B1-14).
+#          that carries the allocation evidence (LeakSanitizer is not supported on macOS arm64).
 #   asan   -fsanitize=address,undefined -fno-omit-frame-pointer -O1. Catches an out-of-bounds ring
 #          index or a wrap arithmetic mistake at the byte where it happens.
 #   tsan   -fsanitize=thread -O1. This is the variant that earns its keep: the ring is two

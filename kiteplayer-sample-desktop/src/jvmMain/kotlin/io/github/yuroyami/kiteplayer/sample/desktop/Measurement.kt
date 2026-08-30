@@ -89,7 +89,7 @@ private fun gcTotals(): Pair<Long, Long> {
 private const val WARMUP_FRAMES = 60L
 
 /**
- * KV-5's measurement. Alternates a plain phase and a modifier phase for as many
+ * The upload measurement. Alternates a plain phase and a modifier phase for as many
  * rounds as asked, warming up before each, then renders every phase into one report.
  */
 internal suspend fun runMeasurement(
@@ -260,7 +260,7 @@ private fun renderReport(
 ): String = buildString {
     val cost = video.frameCost
     appendLine()
-    appendLine("=== KV-5 desktop upload measurement ===")
+    appendLine("=== desktop upload measurement ===")
     appendLine("host          ${System.getProperty("os.name")} ${System.getProperty("os.version")} " +
         "${System.getProperty("os.arch")}, ${Runtime.getRuntime().availableProcessors()} cpus")
     appendLine("jdk           ${System.getProperty("java.vm.name")} ${System.getProperty("java.version")} " +

@@ -363,7 +363,7 @@ int main(void)
         KT_EQ_INT(anchor.valid, 1);
         KT_EQ_I64(anchor.audible_at_nanos, expected_deadline(host, frames));
         /* 256 frames at 48 kHz is 5333.33 microseconds, truncated toward zero by the exact split
-         * rescale of register item B1-18. */
+         * rescale. */
         KT_EQ_I64(anchor.pts_us, kprt_frames_to_micros(frames, SAMPLE_RATE));
         KT_EQ_I64(atomic_load(&sink.last_deadline_nanos), expected_deadline(host, frames));
         KT_EQ_I64(atomic_load(&sink.estimated_anchors), 0);
@@ -392,7 +392,7 @@ int main(void)
                         (size_t)(frames - supplied) * CHANNELS);
         KT_EQ_I64(kprt_ring_underruns(ring) - underruns_before, 1);
         /* And the buffer was NOT zero filled by the callback: the ring did it, which is the whole of
-         * register item B1-19. One counter moved, not two. */
+         * One counter moved, not two. */
         KT_EQ_I64(atomic_load(&sink.zero_filled_callbacks), 0);
         kt_detail("real=%d silence=%d underruns=+1", supplied, frames - supplied);
     }

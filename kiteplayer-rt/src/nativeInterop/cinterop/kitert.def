@@ -25,7 +25,7 @@
 # `AudioConvertHostTimeToNanos` and `AudioGetCurrentHostTime` are used is
 # `native/tests/test_sink_timebase.c`, which is a host test binary and links its own frameworks.
 #
-# The lesson of register item B1-12, which was iOS flags missing from KiteFFmpeg's def, is not "declare
+# The lesson of the iOS flags that went missing from KiteFFmpeg's def is not "declare
 # every platform": it is "declare exactly what the code on that platform needs". These two flags map
 # exactly to the two active implementation arms.
 package = io.github.yuroyami.kiteplayer.rt.cinterop

@@ -14,7 +14,7 @@
  *
  *  1. Who waits. The Kotlin ring makes the real-time thread the reader of a global segment
  *     sequence counter, so it spins with no bound while the feeder is preempted mid-update
- *     (register item B1-16). Here the segment ring carries one sequence per slot and the
+ *     Here the segment ring carries one sequence per slot and the
  *     real-time walk never retries: a torn slot ends the walk, the anchor is dated from a
  *     consumer-private cache, and `segment_giveups` records it. The anchor seqlock's writer is
  *     the real-time thread and its reader gives up after a bounded 64 attempts.

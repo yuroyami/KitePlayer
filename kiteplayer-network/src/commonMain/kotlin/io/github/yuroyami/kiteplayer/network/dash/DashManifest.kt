@@ -415,8 +415,8 @@ public object DashManifestParser {
     }
 
     /**
-     * ISO 8601 duration to microseconds, every component xs:duration allows plus weeks (audit
-     * F-DASH2): P0Y0M0DT0H9M56.46S is what several packagers emit, and rejecting the year and
+     * ISO 8601 duration to microseconds, every component xs:duration allows plus weeks.
+     * P0Y0M0DT0H9M56.46S is what several packagers emit, and rejecting the year and
      * month zeros killed the whole manifest. Years and months use the 365 and 30 day
      * conventions, which is what every player does with a calendar-free duration.
      */

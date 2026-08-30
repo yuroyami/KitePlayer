@@ -105,7 +105,7 @@ int main(void)
          * uptime. So on this timebase the split form removes a class rather than fixes a bug that was
          * about to happen. It is still the right form, for two reasons that do not depend on that
          * number: the file already rescales frames the same way for a hazard that IS reachable
-         * (register item B1-18), so there is one rule here instead of two; and a timebase whose numer
+         * so there is one rule here instead of two; and a timebase whose numer
          * is large, which some Apple hardware has reported, reaches the same overflow in seconds. */
         static const uint64_t vectors[] = {
             0ULL, 1ULL, 2ULL, 3ULL, 24000000ULL, 86400ULL * 24000000ULL,

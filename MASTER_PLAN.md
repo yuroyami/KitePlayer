@@ -397,10 +397,15 @@ than `(B1-17)`. Two capitalization traps, both caught in preview rather than in 
 camelCase identifier must not be capitalized (`mavenLocal`, `getLongFramePosition`) and neither
 must a one-letter name followed by `=` (`r="-1"`).
 
-- [ ] Rewrite the last 29 codes in KitePlayer's sources plus KiteFFmpeg's own. What is left is
-  the long tail: one or two per file, each its own sentence to rewrite. KiteFFmpeg's own sources
-  have not been swept at all yet; its `ci.yml` and `build.gradle.kts` narrate the register
-  directly and are the largest there.
+**KitePlayer's sources are at ZERO (2026-08-30), counted rather than estimated.** Every register
+code is gone from every Kotlin, C, header, shell, Gradle and workflow file in this repository.
+Three that were user-visible went with them: a browser tab reading "KV-6 probe", a measurement
+report headed "=== KV-5 desktop upload measurement ===" and a CoreAudio exception quoting
+"register item B1-17" at somebody who cannot look it up.
+
+- [ ] KiteFFmpeg's own sources, which have not been swept at all. Its `ci.yml` and
+  `build.gradle.kts` narrate the register directly and are the largest there. The four sweepers
+  that did KitePlayer are in this repository's git history and apply unchanged.
 - [ ] DECIDE separately what to do about the 28 codes in `MEASUREMENTS.md` and the web spike note.
   Those are dated records of what was measured on a day, and a measurement that says "this is
   what W-05 asked for" is describing its own occasion rather than the tree. Rewriting them may be

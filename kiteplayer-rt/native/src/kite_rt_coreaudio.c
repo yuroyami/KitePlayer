@@ -1,6 +1,6 @@
 /* The audio device, in C, so that nothing managed is on its real-time thread.
  *
- * WHAT THIS FILE IS FOR. Register item B1-17. Until B1.8 the render callback was a Kotlin lambda
+ * WHAT THIS FILE IS FOR. The render callback used to be a Kotlin lambda
  * whose first instruction was `refCon?.asStableRef<CoreAudioSink>()?.get()`, which made the device's
  * real-time thread a Kotlin mutator: the garbage collector had to stop it at a safepoint, thirteen
  * long-lived objects and up to five transient cinterop views were on that path, and worst measured
@@ -68,7 +68,7 @@
  * float, and above stereo the layout is DECLARED rather than assumed: each count from one to six
  * carries the tag whose speaker order matches FFmpeg's own for that count, so the engine's
  * interleave reaches the right speakers without a remap. See `kprt_layout_tag_for`, which replaced
- * the old rule of tagging EVERY count above two as MPEG 5.1 A (audit 15.3.3). Counts above 6 clamp
+ * the old rule of tagging EVERY count above two as MPEG 5.1 A. Counts above 6 clamp
  * to 2 rather than 6, because the pipeline's mixer downmixes to stereo but cannot yet fold 8 into
  * 6; stereo is the honest fallback that always sounds right.
  *

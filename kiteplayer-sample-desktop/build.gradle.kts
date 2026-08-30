@@ -5,7 +5,7 @@ plugins {
 }
 
 /*
- * The Compose Desktop proof for KV-5. One window, one player built by
+ * The Compose Desktop proof for the upload measurement. One window, one player built by
  * KitePlayerPlatform.createOrNull(), and KiteVideo drawing its frames as ordinary Compose
  * content. The modifier toggle is the whole point of D-6: clip, alpha, rotation and scale apply
  * to the video pixels, which a platform-view player cannot do.

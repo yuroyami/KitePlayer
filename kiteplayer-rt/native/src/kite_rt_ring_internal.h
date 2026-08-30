@@ -5,7 +5,7 @@
  *
  * Two kinds of code include this file. The implementation, `kite_rt_ring.c`. And the tests that
  * have to reach inside on purpose: `test_ring_bounded.c` holds one segment slot's sequence
- * number odd from a second thread, which is how register item B1-16's claim ("the render path
+ * number odd from a second thread, which is how the old claim ("the render path
  * never blocks and counts a give-up") is turned into an experiment rather than an argument.
  * Giving the tests the struct is better than adding a test-only hook to the shipped header,
  * because a hook would be a promise to every future consumer.

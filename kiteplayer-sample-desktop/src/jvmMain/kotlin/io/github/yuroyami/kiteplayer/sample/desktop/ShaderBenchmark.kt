@@ -163,7 +163,7 @@ fun main() {
 
     println("verdict: skia is ${"%.2f".format(cpu / gpu)}x the scalar loop")
 
-    // The re-decision after W-19. The upload path is two costs: the YUV to RGBA conversion,
+    // The re-decision after row parallelism landed. The upload path is two costs: the YUV to RGBA conversion,
     // which row parallelism cut from 6.3 ms to about 2.1, and the Skia raster build that turns
     // those bytes into an image. This times the second half, so the verdict rests on both.
     val rgba = ByteArray(WIDTH * HEIGHT * 4) { (it and 0xFF).toByte() }

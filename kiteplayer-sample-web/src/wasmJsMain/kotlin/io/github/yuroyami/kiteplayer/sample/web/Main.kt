@@ -25,7 +25,7 @@ import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Surface
 
 /**
- * KV-6, the S6 stop gate (MASTER_PLAN.md).
+ * The web stop gate. See MASTER_PLAN.md.
  *
  * Answers one question with a number: what does a 1080p frame cost on wasm, with ONE thread,
  * from planar YUV to pixels on the glass. Nothing here decodes; a synthetic frame is honest for
@@ -53,7 +53,7 @@ private external fun crossOriginIsolated(): Boolean
  * A faithful mirror of `Conversions.kt`'s packed path for yuv420p, BT.709 limited range.
  *
  * A mirror rather than the real function because that one is internal to `:kiteplayer-ffmpeg`,
- * which has no web target yet (that is X-09). The arithmetic is copied line for line from
+ * which had no web target when this was written. The arithmetic is copied line for line from
  * `writePackedRgba` and `PackedCoefficients`: same offsets, same scales, same rounding, same
  * nearest-neighbour chroma lookup. SERIAL on purpose, per 17.14 S6-D2: `parallelRowSlices` cannot
  * follow the engine here, so measuring the parallel path would flatter the number.
@@ -122,7 +122,7 @@ private class Report {
  * Frame intervals over [count] frames, with [perFrame] run inside each frame callback.
  *
  * Intervals rather than a stopwatch around the work, because the compositor finishes after the
- * callback returns and a span timer would under-count it. KV-5's graphicsLayer arm is the reason
+ * callback returns and a span timer would under-count it. The desktop graphicsLayer arm is the reason
  * this project measures frame loops this way.
  */
 private suspend fun measureFrames(count: Int, perFrame: (Int) -> Unit): DoubleArray {
@@ -160,7 +160,7 @@ private fun Probe() {
         }
         val rgba = ByteArray(WIDTH * HEIGHT * 4)
         val report = Report()
-        report.add("KV-6 probe, ${WIDTH}x$HEIGHT yuv420p, one thread")
+        report.add("web draw-cost probe, ${WIDTH}x$HEIGHT yuv420p, one thread")
         // The real kiteffmpeg-core web backend, driven through the API every platform uses.
         val clip = fetchClip("./clip.mp4")
         if (clip == null) {

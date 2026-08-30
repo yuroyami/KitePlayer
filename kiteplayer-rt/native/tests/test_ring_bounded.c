@@ -2,7 +2,7 @@
  * visible rather than silent.
  *
  * WHAT THE KOTLIN RING DOES. `KotlinAudioRing.publishAnchor` loads `segmentSeq` and
- * `continue`s while it is odd. The class was called `AudioRing` when register item B1-16 was written
+ * `continue`s while it is odd. The class was called `AudioRing` when that was first written
  * and B1.7 renamed it; no line numbers are quoted here on purpose, because they moved with the rename
  * and a stale line number reads as a fact. The writer of that counter is the feeder coroutine. If the feeder is
  * preempted between its two increments, the device thread spins with no bound. The class comment

@@ -44,7 +44,7 @@ int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate)
         return 0;
 
     /* Divide first. The naive `frames * 1000000 / rate` overflows a signed 64 bit intermediate
-     * once frames exceeds about 9.2e12, which is register item B1-18 and the same shape as
+     * once frames exceeds about 9.2e12, the same shape as
      * KiteFFmpeg defect D9. This form only overflows once `frames / rate` alone exceeds 9.2e12,
      * which at 48 kHz is a frame count no clock in this universe reaches.
      *
@@ -246,7 +246,7 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
 
     if (to_read < frames) {
         /* Exact zeroes, and the counter moves only when the feeder has not said the stream is
-         * ending. Register item B1-19: from B1.8 onward this is the ONLY place in the whole player
+         * ending. This is the ONLY place in the whole player
          * where audio silence is written or an underrun is counted. The sink used to do both again
          * as a last line, over a callback that could be absent; there is no absent callback now. */
         memset(destination + (size_t)to_read * (size_t)channels,

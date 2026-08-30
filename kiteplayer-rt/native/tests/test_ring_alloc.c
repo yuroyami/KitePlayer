@@ -2,7 +2,7 @@
  * between.
  *
  * WHY THIS INSTRUMENT AND NOT A LEAK CHECKER. LeakSanitizer is not supported on macOS arm64
- * (register item B1-14), and it would answer the wrong question anyway. A leak checker asks whether
+ * on this platform, and it would answer the wrong question anyway. A leak checker asks whether
  * every allocation was freed. A real-time audio path needs the stronger property that there was no
  * allocation at all: a malloc paired with a free is still a malloc, and it can still take the
  * allocator's lock while the device is waiting for samples. So the instrument is the interposer in

@@ -48,8 +48,8 @@ SUITES="${*:-$ALL_SUITES}"
 
 # Sanitizer options, per variant.
 #
-# detect_leaks=0 is set explicitly rather than left to the default, because it is the fact register
-# item B1-14 turns on: LeakSanitizer is not supported on macOS arm64, and asking for it gets
+# detect_leaks=0 is set explicitly rather than left to the default, because of one fact:
+# LeakSanitizer is not supported on macOS arm64, and asking for it gets
 # "detect_leaks is not supported on this platform" instead of leak evidence. The local instrument
 # is the allocation interposer in the plain variant.
 export ASAN_OPTIONS="detect_leaks=0:abort_on_error=1:print_stacktrace=1:strict_string_checks=1"

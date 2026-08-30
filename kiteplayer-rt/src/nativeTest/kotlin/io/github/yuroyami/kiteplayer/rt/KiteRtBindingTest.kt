@@ -236,7 +236,7 @@ class KiteRtBindingTest {
 
     @Test
     fun `the exported rescale divides before it multiplies`() {
-        // Register item B1-18, checked through the binding as well as in C, because this is the one
+        // The rescale, checked through the binding as well as in C, because this is the one
         // exported function `KotlinAudioRing` has a twin of and the two must answer identically.
         assertEquals(10_000L, kprt_frames_to_micros(480L, 48_000))
         assertEquals(10_884L, kprt_frames_to_micros(480L, 44_100))

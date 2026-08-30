@@ -2,7 +2,7 @@
  *
  * WHY THIS FILE EXISTS. LeakSanitizer is not supported on macOS arm64: an ASan and UBSan binary
  * built by Apple clang 17 answers ASAN_OPTIONS=detect_leaks=1 with "AddressSanitizer:
- * detect_leaks is not supported on this platform". That is register item B1-14. The ring's claim
+ * detect_leaks is not supported on this platform". The ring's claim
  * is stronger than "no leak" anyway: it is "one malloc at create, one free at destroy, and
  * nothing in between", which no leak checker can express. This file is the instrument for it.
  *

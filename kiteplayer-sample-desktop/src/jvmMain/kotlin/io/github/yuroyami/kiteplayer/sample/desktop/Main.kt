@@ -18,7 +18,7 @@ import java.io.File
 internal data class SampleOptions(
     /** The media to open. */
     val media: String,
-    /** True runs the KV-5 measurement and exits when it is written. */
+    /** True runs the upload measurement and exits when it is written. */
     val measure: Boolean,
     /** Published frames to collect per measurement phase. */
     val frames: Int,
@@ -57,7 +57,7 @@ internal data class SampleOptions(
 
 /**
  * The Compose Desktop sample. Pass a media path, or nothing for the conformance
- * clip; pass `--measure` to take KV-5's numbers and exit.
+ * clip; pass `--measure` to take the upload numbers and exit.
  */
 fun main(args: Array<String>) {
     val options = SampleOptions.from(args)

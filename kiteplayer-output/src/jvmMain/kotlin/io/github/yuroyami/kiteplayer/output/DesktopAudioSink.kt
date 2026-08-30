@@ -197,8 +197,18 @@ public class DesktopAudioSink internal constructor(
             if (!writerFailed) return
             val format = accepted ?: return
             dead?.close()
+            driver = null
             val fresh = driverFactory.create(format)
-            fresh.open()
+            // The same law open() applies: whatever went wrong, nothing half-built survives. This
+            // arm called open() bare, so a refused reopen leaked the fresh line AND left `driver`
+            // pointing at the dead one closed just above, which the next start would have used.
+            // Null and still-failed is the honest state: the next start retries recovery cleanly.
+            try {
+                fresh.open()
+            } catch (failure: Throwable) {
+                fresh.close()
+                throw failure
+            }
             driver = fresh
             clearHeldBlock()
             submittedFrames = 0L

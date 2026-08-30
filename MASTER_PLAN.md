@@ -501,10 +501,10 @@ ExternalMaster drives a scripted external clock.
   whichever runs first). Android routes stay OS-owned, documented.
 - [ ] Route recovery (M): CoreAudio default-device-change listener (today `AudioDeviceChanged`
   is dead code on Apple: no listener exists); rebuild the sink through the recovery shape
-  `DesktopAudioSink` has. In the same commit, guard that desktop recovery path itself: its
-  reopen is currently unguarded, so a failed open leaks the fresh driver and points at a
-  closed one (the open() path guards; recovery forgot). RED with a scripted fail-on-reopen
-  driver. Tier 3 if teardown ordering is touched.
+  `DesktopAudioSink` has. Tier 3 if teardown ordering is touched.
+  The desktop half of this is DONE (2026-08-30): the recovery reopen was unguarded, so a refused
+  reopen leaked the fresh line and left `driver` pointing at the dead one it had just closed. It
+  now applies open()'s law and leaves itself honestly unopened, so the next start retries.
 - [ ] Passthrough + offload: re-filed as a feature item (KP-AUDIO-PASSTHROUGH, unscheduled,
   needs hardware evidence + owner scope), not pretended to be a bug.
 

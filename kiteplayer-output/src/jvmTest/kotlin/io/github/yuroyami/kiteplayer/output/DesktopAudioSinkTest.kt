@@ -407,6 +407,50 @@ class DesktopAudioSinkTest {
         s.close()
     }
 
+    /**
+     * The recovery arm's own failure. A device that went away can still be unavailable when the
+     * sink reaches for a replacement, and that reopen used to run unguarded: the fresh line leaked
+     * and `driver` was left pointing at the dead one this arm had just closed.
+     */
+    @Test
+    fun `a recovery whose reopen is refused leaks nothing and leaves no closed line behind`() = runBlocking {
+        var failNextOpen = false
+        val s = DesktopAudioSink(
+            { accepted ->
+                opens++
+                FakeSourceDataLine(accepted).also {
+                    it.openThrows = failNextOpen
+                    synchronized(drivers) { drivers += it }
+                }
+            },
+            FixedClock(),
+        )
+        s.open(stereo48k, FullBlockCallback())
+        driver.writeResults.add(0)
+        val lost = async { s.events.first { it is AudioSinkEvent.DeviceLost } }
+        yield()
+        s.start()
+        withTimeout(5_000) { lost.await() }
+
+        failNextOpen = true
+        assertFailsWith<IllegalStateException> { s.start() }
+
+        val refused = synchronized(drivers) { drivers[1] }
+        assertTrue(
+            refused.countOf("close") >= 1,
+            "the line whose open was refused must be closed, or it leaks a device handle",
+        )
+        // And the sink did not keep the corpse: recovery is still owed, so a start with a working
+        // device gets a THIRD line rather than reusing the one it closed before the failed reopen.
+        failNextOpen = false
+        s.start()
+        awaitUntil("the second recovery to write") {
+            synchronized(drivers) { drivers.size } >= 3 && drivers[2].countOf("write") > 0
+        }
+        assertTrue(drivers[0].lineClosed, "the original dead line stays closed")
+        s.close()
+    }
+
     // Audit F-AUD1: a short POSITIVE return is also how the line hands a write back at an
     // interrupt, and the loop must not re-enter the blocking write past the signal.
     @Test

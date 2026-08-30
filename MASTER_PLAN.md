@@ -880,10 +880,16 @@ it.
     `-export:ffkmp_exported -exclude-symbols:ffkmp_unmarked`. Without it, `-fvisibility=hidden`
     emits `-exclude-symbols:` for BOTH, so the whole helper surface drops out of the export table.
     It is the COFF spelling of what `visibility("default")` does on the ELF side.
-  - OPEN, and smaller than the row claimed: target truth lives in the `TargetTriple` enum AND in
-    three CI matrices, `kiteffmpeg-core/build.gradle.kts` and `scripts/linux-tests.sh`, with
-    nothing comparing them (`checkWasmBindingMirror` is the shape a fix would take). And
-    `BuildFFmpegTask.kt` is 1,185 lines, down from 1,286 but still the largest file in `buildSrc`.
+  - DONE, the half of target-truth drift that had teeth. `checkReleaseTargetMirror` compares
+    `release-binaries.yml` to the `TargetTriple` enum in both directions, pairing `triple:` with
+    `task:` so a job wired to a task that does not exist fails too. It is in the CI gate. This was
+    the drift that could actually ship: a release is one prebuilt per triple per flavour, so a
+    forgotten triple is a binary nobody builds and no gate reports.
+  - OPEN, what is left of target truth: `kiteffmpeg-core/build.gradle.kts` builds its own target
+    map per scope, and `scripts/linux-tests.sh` and `ci.yml` name targets in prose. None of those
+    can ship a wrong artifact on their own, so they are worth a check only if one bites.
+  - OPEN: `BuildFFmpegTask.kt` is 1,185 lines, down from 1,286 but still the largest file in
+    `buildSrc`. Splitting it cannot be proven here without a full cross-build per target.
 - [ ] **9.9 SEAM** (L): mismatched target graphs across modules; an `api` leak of a KiteFFmpeg
   `Frame` pinned in both committed ABI dumps (breaking fix: owner sign-off on the dump move);
   non-transactional source close; 467 hand-written metadata mappings with one test (add a

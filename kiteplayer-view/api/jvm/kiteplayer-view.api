@@ -1,3 +1,36 @@
+public abstract interface class io/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer : io/github/yuroyami/kiteplayer/view/PlayerViewRenderer {
+	public abstract fun setCanvas (Ljava/awt/Canvas;)V
+}
+
+public final class io/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer$DefaultImpls {
+	public static fun getOutputSize (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;)Lio/github/yuroyami/kiteplayer/VideoSize;
+	public static fun setAdjustments (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoAdjustments;)V
+	public static fun setRenderQuality (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/RenderQuality;)V
+	public static fun setScaleMode (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoScale;)V
+	public static fun setTransform (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;Lio/github/yuroyami/kiteplayer/VideoTransform;)V
+	public static fun videoDecoderFactories (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;)Ljava/util/List;
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory {
+	public abstract fun create (Lkotlin/jvm/functions/Function2;)Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer;
+}
+
+public class io/github/yuroyami/kiteplayer/view/KitePlayerAwtView : java/awt/Canvas {
+	public fun <init> ()V
+	public fun addNotify ()V
+	public final fun getFailedFrames ()J
+	public final fun getPlayer ()Lio/github/yuroyami/kiteplayer/KitePlayer;
+	public final fun getPresentedFrames ()J
+	public final fun getRendererFactory ()Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory;
+	public final fun getSupersededFrames ()J
+	public final fun getVideoDisplayAspect ()F
+	public final fun getVideoRotation ()I
+	public final fun release ()V
+	public fun removeNotify ()V
+	public final fun setPlayer (Lio/github/yuroyami/kiteplayer/KitePlayer;)V
+	public final fun setRendererFactory (Lio/github/yuroyami/kiteplayer/view/AwtPlayerViewRendererFactory;)V
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/view/PlayerViewRenderer : io/github/yuroyami/kiteplayer/spi/VideoRenderer {
 	public abstract fun getFailedFrames ()J
 	public abstract fun getPresentedFrames ()J

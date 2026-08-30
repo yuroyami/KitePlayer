@@ -21,6 +21,7 @@ Kotlin 2.4.10. Each frame-rate arm runs 12 seconds.
 | D | Swing `JLayeredPane` + `ComposePanel` | none | **Compose above** | no | PASS |
 | E | Swing `JLayeredPane` + `ComposePanel` | `swing.render.on.graphics` | canvas above | no | PASS |
 | F | as D, plus canvas mouse events forwarded to the `ComposePanel` | none | **Compose above** | no | PASS |
+| **G** | **`JFrame` canvas + owned borderless `JWindow` of Compose** | none | **Compose above** | **YES** | **PASS** |
 | control | Compose `Window`, NO interop component at all | none | **Compose above** | **yes** | n/a |
 
 ## What passed, and it is the load-bearing half
@@ -50,17 +51,41 @@ render and event dispatching order differs. It means that interop view might cat
 event even if visually it renders below Compose content." The spike measures exactly that split:
 in B, C, D and F the green box is demonstrably ON TOP, and the click still does not reach it.
 
-## The bound on the input result, stated because it decides a phase
+## G is the answer, and it says what the cause really was
+
+Configurations A to F lose the click for one reason, and it is not Compose's fault. On macOS the
+heavyweight canvas is a native view, and the window server decides where a click goes by asking
+which NATIVE view is topmost under the cursor. What Compose painted over it afterwards never
+enters that decision. That is why blending fixes the picture and cannot fix the input, and why
+forwarding events by hand (F) did not help either: the event was already delivered to the wrong
+place by the time our code saw it.
+
+A separate window is not subject to that at all. In G the controls live in a borderless `JWindow`
+owned by the video window, so where they sit they ARE the topmost native thing, and the mouse
+goes to them because the window server agrees rather than because Compose drew last.
+
+**G passes all three properties at once**: the canvas keeps 100 percent of its idle rate while
+Compose is choked to 8, Compose draws above, and the click lands. Reproduced three times by the
+robot, then CONFIRMED BY A HUMAN clicking the square: the owner reported the counter rising and
+the process log recorded three separate human clicks reaching Compose.
+
+**Why the human confirmation was worth insisting on.** The first attempt to confirm G by hand
+used a sticky boolean printed once a second, which reported a click at second one, before anyone
+had touched the mouse. A flag that is true cannot say who set it or when. It was replaced with a
+counter that resets when the window opens and prints only changes, and that is what produced the
+three confirmed clicks.
+
+## The bound on the input result for A to F, stated because it decided the design
 
 Every click here is synthetic, from `java.awt.Robot`. The positive control proves the mechanism
 works: with no interop component in the window, the same synthetic click reaches the same Compose
 box and the handler fires. So the failure is caused by the presence of the heavyweight canvas,
 not by the robot being unable to click Compose.
 
-What that does NOT rule out is an interaction specific to synthetic events and heavyweight
-components on macOS. A human clicking the green box in configuration B would settle it in half a
-minute, and until someone does, the input verdict is "failed under synthetic input" rather than
-"impossible".
+That bound is now closed rather than open: the owner clicked configuration B by hand and the
+counter did not move, which matches the robot exactly. So the robot's verdict was trustworthy in
+both directions, failing where a human fails and succeeding where a human succeeds, and the
+layered architectures are genuinely unusable for overlaid controls on macOS.
 
 ## A correction worth keeping, because it nearly produced a false verdict
 
@@ -73,3 +98,14 @@ window background.
 The positive control is what caught it: with no canvas at all the probe still failed to find
 green, which cannot be a z-order problem. Without that arm the spike would have reported a
 stop-gate failure that was purely an artefact of its own ruler.
+
+## What this means for the design
+
+The desktop native view survives, with no JAWT and no platform GPU code, but the shape changes:
+the video is a heavyweight canvas in the window, and any Compose control that must be CLICKED
+while sitting over the video belongs in an owned overlay window rather than in the same Compose
+tree. Controls that never overlap the video are unaffected and can stay ordinary Compose content.
+
+One cosmetic item found while confirming G and fixed in the harness: the overlay window must have
+BOTH a transparent window background and a non-opaque `ComposePanel`, or it paints a grey slab
+over the video. Setting only the window is not enough.

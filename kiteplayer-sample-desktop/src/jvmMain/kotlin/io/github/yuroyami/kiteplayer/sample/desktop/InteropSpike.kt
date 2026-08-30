@@ -116,7 +116,8 @@ fun main() {
     val swingGraphics = System.getProperty("compose.swing.render.on.graphics") ?: "unset"
     val canvas = SpikeCanvasShared()
 
-    Thread({
+    val hold = System.getProperty("spike.hold") == "true"
+    if (!hold) Thread({
         // WAIT for the window to exist rather than guessing how long Compose takes to start. A
         // fixed sleep here read NO_OVERLAY_POSITION on the first run for no reason but a cold JVM,
         // which is the same mistake this repository just fixed in test_ring_threads.
@@ -241,6 +242,7 @@ fun main() {
                             clicks++
                             sharedOverlayClicked.set(true)
                         }
+                        .let { it }
                         .onGloballyPositioned { coords ->
                             // Compose reports PIXELS; AWT's locationOnScreen is in logical
                             // points. On a Retina display those differ by the density, and
@@ -255,10 +257,19 @@ fun main() {
                         },
                 )
                 // Kept so a human watching sees the same thing the probe measures.
-                Box(Modifier.align(Alignment.BottomStart).padding(8.dp)) {
+                Box(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
                     androidx.compose.material.Text(
                         "clicks=$clicks",
                         color = Color.White,
+                        fontSize = androidx.compose.ui.unit.TextUnit(28f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    )
+                }
+                // A label INSIDE the green square, so a human knows what to hit.
+                Box(Modifier.align(Alignment.TopStart).padding(56.dp)) {
+                    androidx.compose.material.Text(
+                        "CLICK HERE",
+                        color = Color.Black,
+                        fontSize = androidx.compose.ui.unit.TextUnit(22f, androidx.compose.ui.unit.TextUnitType.Sp),
                     )
                 }
             }

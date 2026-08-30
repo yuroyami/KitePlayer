@@ -119,48 +119,34 @@ KiteFFmpeg): geometry + painting in output jvmMain, frame conversion via a facto
 Tier 2 (JAWT + Metal/D3D/GL presenter, our own JNI shim) is a follow-up item, justified only
 by tier 1's measured frame cost.
 
-### 1.1 The spike RAN. Result: half pass, and the phase is BLOCKED on input. [owner]
+### 1.1 The spike RAN and the phase is UNBLOCKED, with the design changed. DONE
 
-**Done 2026-08-30. Full table and method in `kiteplayer-sample-desktop/INTEROP-SPIKE.md`;
-`InteropSpike.kt`, `InteropSpikeSwingLayer.kt` and `SpikeShared.kt` are the harness and stay in
-the tree so any of this can be re-measured rather than re-argued.**
+**Measured 2026-08-30, seven configurations plus a positive control; full table and method in
+`kiteplayer-sample-desktop/INTEROP-SPIKE.md`. The harness stays in the tree so this is
+re-measurable rather than re-arguable.**
 
-**The load-bearing half PASSED, decisively.** Choking the Compose frame clock with 200 ms of work
-per frame left the heavyweight canvas at 100 to 102 percent of its own idle rate while Compose
-fell to 4 to 8 percent of its. Six configurations, same answer every time. Video painted by an
-AWT canvas genuinely does not care what the Compose UI is doing, which is the exact complaint
-that opened this phase.
+**Decoupling PASSED everywhere and is not close.** With the Compose frame clock choked by 200 ms
+per frame, the heavyweight canvas held 100 to 102 percent of its own idle rate while Compose fell
+to 4 to 8 percent. Video painted this way genuinely stops caring what the UI does, which is the
+complaint that opened the phase.
 
-**Compose CAN draw above the canvas**, contrary to a first reading of the same spike: with
-`compose.interop.blending=true` on a Compose `Window`, and also with a Swing `JLayeredPane`
-hosting a `ComposePanel`, the overlay demonstrably owns the pixel.
+**Input forced a design change.** Compose can be made to DRAW over the canvas (blending, or a
+Swing layered pane), but in every layered configuration the click went to the canvas instead, and
+the owner confirmed that by hand. The cause is not Compose: macOS asks which NATIVE view is
+topmost under the cursor, and painting over it afterwards does not enter into that. Forwarding
+the events by hand does not help, because they were delivered to the wrong place before our code
+saw them.
 
-**What blocks the phase: Compose never RECEIVED a click on that overlay, in any of the six
-configurations**, including one where the canvas forwarded its own mouse events to the
-`ComposePanel` by hand. This is the macOS behaviour Compose documents in its own source, that an
-interop view can catch the mouse even when it renders below Compose content. A video player whose
-overlaid controls cannot be clicked is not shippable, so tier 1 stops here rather than being
-built and discovered later.
+**The answer is an owned overlay window.** Controls in a borderless `JWindow` owned by the video
+window are the topmost native thing where they sit, so the click reaches them because the window
+server agrees. That configuration passes all three properties at once, three robot runs and then
+three human clicks confirmed in the process log.
 
-**One honest bound on that verdict, and it is why this is [owner] rather than closed.** Every
-click in the spike is synthetic, from `java.awt.Robot`. The positive control proves synthetic
-clicks DO reach the same Compose box when no canvas is present, so the canvas is the cause; but
-it does not rule out something specific to synthetic events over heavyweight components.
-
-- [ ] **[owner], half a minute:** run configuration B and click the green square with a real
-  mouse. `./gradlew -q :kiteplayer-sample-desktop:printRunClasspath` gives the classpath, then
-  `java -Dcompose.interop.blending=true -cp "<that>" io.github.yuroyami.kiteplayer.sample.desktop.InteropSpikeKt`.
-  The window prints `clicks=N` in its bottom-left corner. If that number goes up when you click
-  the green square, the blocker is a robot artefact and tier 1 is alive exactly as designed. If
-  it stays at zero, input is genuinely lost to the canvas and the choice below is real.
-- [ ] **[owner] decision if the click really is lost.** Three ways out, in rising cost: keep the
-  controls OFF the video (a bar beside or below it) so nothing needs to overlay, which is a
-  product taste call as much as a technical one; drive the whole UI from Swing and use Compose
-  only where nothing overlaps; or go to tier 2, the JAWT presenter, which owns its surface and
-  can composite the controls itself, and is the expensive option this phase deliberately deferred.
-
-**Do not start 1.2 until that click is tried.** Everything below assumes overlaid Compose
-controls work.
+**So the design is: video is a heavyweight canvas; Compose controls that must be clickable ON TOP
+of video live in an owned overlay window; Compose content that does not overlap the video is
+ordinary Compose content and needs nothing special.** That constraint belongs in the KDoc of
+whatever the library exposes, because a consumer will otherwise put a play button over the video
+and find it dead.
 
 ### 1.2 `KitePlayerAwtView` in kiteplayer-view jvmMain. Size M
 
@@ -193,7 +179,7 @@ controls work.
 - [ ] Tier 2, ABI dumps. Commit:
   `Paint desktop video on the canvas's own thread, off the Compose clock`
 
-### 1.4 Wire the Compose seam. Size S
+### 1.4 Wire the Compose seam, and say what it cannot do. Size S
 
 - [ ] RED: extend `RenderPathResolutionTest`: JVM `NativeView` resolves to `NativeView`
   (today coerced), `Auto` stays `ComposeCanvas`.
@@ -201,6 +187,11 @@ controls work.
   `update` mirroring the Android actual's ordering; `resolveRenderPath` honours NativeView.
 - [ ] KDoc: `KiteRenderPath` and `KitePlayerVideo` sentences saying "JVM has no native video
   view" are rewritten (name the AWT view and the pending Auto decision).
+- [ ] KDoc must ALSO state the input constraint item 1.1 measured, in the place a consumer will
+  meet it: Compose content drawn over the desktop native view cannot receive mouse input,
+  because macOS routes clicks by native view order. Controls that overlap the video belong in an
+  owned overlay window; controls beside it are ordinary Compose. Without that sentence a
+  consumer ships a dead play button.
 - [ ] Tier 2. Commit: `Honour the native-view request on desktop instead of coercing it`
 
 ### 1.5 Demo + the decoupling numbers. Size S-M

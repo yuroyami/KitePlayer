@@ -859,12 +859,31 @@ it.
   `libx264` and `h264_videotoolbox` are one type today, which is why a knob check has to read a
   name at all. `kiteffmpeg-core` ABI moved with the compile signature: klib and jvm both stay at
   1910 and 1529 lines, one declaration changed in place.
-- [ ] **9.8 KC-BUILD** (L): 23 defects, led by `/usr/lib/include` on Linux (simply wrong),
-  target truth duplicated across five hand-synced representations, a cache key recording a
-  URL it never compares, redirects auto-followed inside the loop validating them manually,
-  filename-only validation of local trees, two plugin tests excluded with no CI running any,
-  unescaped `-D` values, unconditional `dllexport` for a static build, cache keys hashing one
-  file, a 1,286-line build script.
+- [ ] **9.8 KC-BUILD** (S, was L): most of this row was written against a module that no longer
+  exists. Each item was checked against the tree rather than against the prose.
+  - DONE, filename-only validation of local trees. `verifyInstall` asked only whether six files
+    named `lib*.a` exist. Every way a cross build goes wrong leaves that answer yes: an install
+    prefix the make ignored, a directory left over from another target, a truncated copy. It now
+    reads the first object out of each archive and refuses a tree whose machine is not the
+    target's. Proven against real archives from three toolchains, in both the BSD layout macOS
+    `ar` writes and the GNU layout `llvm-ar` writes.
+  - STALE, `/usr/lib/include`. Absent from every `.kt`, `.kts` and `.sh` in the repo.
+  - STALE, the URL cache key, the redirect-validating loop, and the two excluded plugin tests.
+    All three belonged to the Gradle plugin that KC-EMBED deleted on 2026-08-22. Neither repo has
+    a downloader now, so there is no URL to compare and no redirect to follow.
+  - FALSE, unescaped `-D` values. Every `-D` is a list element handed to a process builder, so no
+    shell ever sees it. The one built into a string is the literal `-D__USE_MINGW_ANSI_STDIO=1`.
+  - FALSE, cache keys hashing one file. The only digest in the build hashes EVERY patch, and it
+    writes an evidence file rather than a cache key.
+  - FALSE, and removing it would be the bug: `dllexport` for a static build. Measured here with
+    the konan mingw toolchain. With it, the object carries
+    `-export:ffkmp_exported -exclude-symbols:ffkmp_unmarked`. Without it, `-fvisibility=hidden`
+    emits `-exclude-symbols:` for BOTH, so the whole helper surface drops out of the export table.
+    It is the COFF spelling of what `visibility("default")` does on the ELF side.
+  - OPEN, and smaller than the row claimed: target truth lives in the `TargetTriple` enum AND in
+    three CI matrices, `kiteffmpeg-core/build.gradle.kts` and `scripts/linux-tests.sh`, with
+    nothing comparing them (`checkWasmBindingMirror` is the shape a fix would take). And
+    `BuildFFmpegTask.kt` is 1,185 lines, down from 1,286 but still the largest file in `buildSrc`.
 - [ ] **9.9 SEAM** (L): mismatched target graphs across modules; an `api` leak of a KiteFFmpeg
   `Frame` pinned in both committed ABI dumps (breaking fix: owner sign-off on the dump move);
   non-transactional source close; 467 hand-written metadata mappings with one test (add a

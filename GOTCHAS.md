@@ -141,6 +141,14 @@ Never move one silently.
 
 ## 4. Build and toolchain traps, each one paid for
 
+- **KiteFFmpeg's `apiCheck` needs `-Pkiteffmpeg.hostTargetsOnly=true`, on this machine especially.**
+  The committed klib dump lists three targets (`js, macosArm64, wasmJs`) because CI builds one
+  FFmpeg tree and can present no more. A developer machine that HAS all twelve trees compiles all
+  thirteen targets, so a bare `./gradlew apiCheck` fails on the target header alone and guards
+  nothing. The failure looks exactly like a real ABI break. Worse, the obvious reaction is to run
+  `apiDump`, which writes a thirteen-target baseline and turns CI red; ci.yml says this already
+  came apart that way once, in August 2026. Run the check the way CI runs it, and if you re-dump,
+  re-dump with the flag.
 - **Scraping every Gradle configuration gives a load-dependent answer.** A project has many
   configurations beyond the ones a build file writes into, and which of them are REALISED depends
   on what else is in the task graph. `checkPublicationReadiness` read them all, so it passed on

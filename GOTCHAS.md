@@ -302,6 +302,13 @@ Never move one silently.
 
 ## 6. Engine invariants that bite (violating any of these caused a real bug)
 
+- **What stops a paused player aging is the freeze in `MediaClock.pause`, NOT the re-anchor in
+  `MediaClock.resume`.** The obvious guess is wrong and was checked by mutation on 2026-08-30:
+  deleting the resume re-anchor changes nothing, because the audio ring publishes its own anchor as
+  the device comes back up and `anchorLocked` overwrites the clock from it on the next pass. Neuter
+  the freeze instead and a one minute pause moves the position from 1.3 s to 1m 1.3s. So the ring's
+  anchor is the authority whenever the device is running, and the frozen clock is the authority
+  when it is not. Do not "simplify" either one on the reasoning that the other covers it.
 - ALL session mutation happens on the actor (command execute or a pass handler). Never mutate
   session fields from another coroutine.
 - A decoder belongs to its worker's dispatcher. Park the worker (`quiesce(deadline)`), mutate,

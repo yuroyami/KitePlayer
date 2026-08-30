@@ -159,8 +159,6 @@ Each RED first against a revert or scripted fault; cluster commits.
 
 - [ ] failed quiescence during renderer replacement falls back without leaking (KP core)
 - [ ] cancellation after partial audio submission keeps ring/counters consistent (KP)
-- [ ] device-sleep clock epochs: no pre-sleep timestamp re-anchors after a long pause (KP,
-  reuses the resume-floor machinery)
 - [ ] negative start times normalize exactly once (KP ffmpeg)
 - [ ] foreign `StreamInfo` from a backend refuses typed (KP core)
 - [ ] decoder output diverging from codecpar is surfaced (KC)

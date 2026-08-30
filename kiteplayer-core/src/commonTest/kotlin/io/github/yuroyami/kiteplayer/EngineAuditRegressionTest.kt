@@ -282,6 +282,60 @@ class EngineAuditRegressionTest {
         harness.close()
     }
 
+    // A device asleep for a minute must not age the media. The clock is anchored to a system
+    // timestamp, so anything that lets a paused interval count as elapsed media time makes the
+    // position leap forward by however long the device was away, which past the end of the file
+    // also means a spurious Ended.
+    //
+    // Measured 2026-08-30 rather than assumed: the behaviour is already correct, and what keeps it
+    // correct is the freeze in MediaClock.pause. Worth stating because the obvious guess is wrong:
+    // MediaClock.resume's re-anchor looks like the load-bearing part and is not. Deleting it
+    // changes nothing here, because the audio ring's own anchor is refreshed by the device on the
+    // way back up and overwrites it. Neutering the freeze instead moves this reading from 1.3
+    // seconds to 1m 1.3s, which is the failure the pin is for.
+    @Test
+    fun `a minute of device sleep does not age the media`() = runTest {
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000))
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(500.milliseconds)
+
+        harness.core.pause()
+        // Let the pause SETTLE before reading the baseline. A pause is not instantaneous: the ring
+        // still holds a couple of hundred milliseconds of audio the device drains on its way down,
+        // so the position keeps creeping for about that long and then stops. Reading the baseline
+        // before it settles measures the drain, not the sleep.
+        harness.run(1.seconds)
+        val atPause = harness.core.progress.value.position
+
+        harness.run(60.seconds)
+        assertEquals(
+            atPause,
+            harness.core.progress.value.position,
+            "a paused player must not advance while it is paused",
+        )
+
+        harness.core.play()
+        harness.run(1.milliseconds)
+        assertEquals(
+            atPause,
+            harness.core.progress.value.position,
+            "the first reading after a resume must not have absorbed the sleep as elapsed media",
+        )
+
+        // And it really is playing afterwards, not merely frozen at a plausible number: a test that
+        // only checked the position could pass on a player that never resumed at all.
+        harness.run(1.seconds)
+        val resumed = harness.core.progress.value.position
+        assertTrue(
+            resumed > atPause && resumed < atPause + 2.seconds,
+            "after a second of play the position must have advanced about a second, was $resumed " +
+                "against a pause at $atPause",
+        )
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status)
+        harness.close()
+    }
+
     // F-PLAY1 (owner report 2026-08-17): play at the end IS a restart, mpv's law. The intent
     // flag was already true after a natural end, so pressing play changed nothing and the
     // player sat in Ended for ever.

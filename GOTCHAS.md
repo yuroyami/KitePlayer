@@ -319,7 +319,12 @@ Never move one silently.
   Measured on 2026-08-30 against the aac encoder; both mismatches crashed at the same address. A
   sample-RATE mismatch is the quiet half of the same hole: accepted silently and encoded at the
   wrong rate. KiteFFmpeg refuses all three in `requireEncodableAudio` before FFmpeg sees the frame.
-  Any new path that reaches an audio encoder owes the same check.
+  Any new path that reaches an audio encoder owes the same check. The neighbouring surfaces were
+  probed the same day and are CLEAN, so do not re-audit them on a hunch: `Frame.ofVideo` and
+  `Frame.ofAudio` refuse an undersized buffer with a typed error naming the geometry they wanted,
+  the video encoder already refuses a size mismatch and converts a format one, and
+  `FilterGraph.feedInput` refuses a frame that does not match the graph. The encode path was the
+  one hole.
 
 - **What stops a paused player aging is the freeze in `MediaClock.pause`, NOT the re-anchor in
   `MediaClock.resume`.** The obvious guess is wrong and was checked by mutation on 2026-08-30:

@@ -282,12 +282,19 @@ commentary are indistinguishable at every layer.
   widened `Disposition` flags. Then: cover-art-first fixture picks real video on wasm too;
   descriptive audio never auto-picked over an ordinary sibling. apiDump.
 
-### 3.7 KC-WASM-MODEL: the wasm probe answers plausible emptiness. Size M
+### 3.7 KC-WASM-MODEL remainder: VP9, and a run against a real wasm build. Size S
 
-Container metadata and chapters hardcoded empty; stream read omits metadata, disposition
-extras, start time, extradata, colour, VP9 profile, layout mask; non-AV types collapse to
-`Data` (erasing Attachment/Unknown). Populate via the dictionary walk + struct reads; RED per
-field against the fake; one real-browser integration run recorded as manual evidence.
+Landed 2026-08-30: container, stream and chapter metadata, the chapter table, start time
+(rescaled from stream ticks, which the first attempt got wrong), extradata, declared colour,
+channel layout mask, and Attachment/Unknown as themselves rather than collapsed to `Data`. One
+test per field against the fake, two falsified.
+
+- [ ] **VP9 codec info** is the one field still absent, and unlike the rest it is not a matter of
+  calling something that already exists: no `ffkmp_*vp9*` entry point is bound for wasm at all.
+  That is new C surface, so it rides whatever pass adds the others.
+- [ ] **[owner] One run against a REAL FFmpeg wasm build in a browser**, recorded as manual
+  evidence. Everything above is proven against the fake, which is the right tool for "does the
+  Kotlin read the right fields" and no tool at all for "does the built artifact agree".
 
 ### 3.8 The filter trio. Size L, NEEDS-DESIGN
 

@@ -126,12 +126,39 @@ public data class CueLayout(
      */
     val wrap: CueWrap = CueWrap.Balanced,
     /**
+     * Which cue sits at the bottom when several show at once. See [CueStacking].
+     *
+     * A script-wide property carried on every cue, the same way [authoredHeight] is. When cues
+     * on screen together disagree, the FIRST stacking cue decides for all of them.
+     */
+    val stacking: CueStacking = CueStacking.FirstAtBottom,
+    /**
      * Linear fade lengths from an ASS `\fad` tag, in microseconds from the cue's edges.
      * Renderers that cannot animate ignore them; the cue still shows and hides on time.
      */
     val fadeInMicros: Long = 0,
     val fadeOutMicros: Long = 0,
 )
+
+/**
+ * The order cues pile up in when more than one is on screen.
+ *
+ * This only touches the implicit bottom stack. A cue the author PLACED with `\pos` sits where
+ * it was placed and neither takes part in nor moves with the pile.
+ */
+public enum class CueStacking {
+    /**
+     * The cue that came FIRST keeps the bottom and later ones pile above it. ASS
+     * `Collisions: Normal`, and what every plain SRT or WebVTT file gets.
+     */
+    FirstAtBottom,
+
+    /**
+     * The cue that came LAST takes the bottom and pushes the earlier ones up, so a block of
+     * overlapping cues reads top down. ASS `Collisions: Reverse`.
+     */
+    LastAtBottom,
+}
 
 public enum class CueAlignment {
     BottomLeft, BottomCenter, BottomRight,

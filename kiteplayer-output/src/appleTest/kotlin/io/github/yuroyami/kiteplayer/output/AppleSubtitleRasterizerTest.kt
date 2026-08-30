@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
+import io.github.yuroyami.kiteplayer.subtitle.CueStacking
 import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.CueWrap
 import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
@@ -134,6 +135,40 @@ class AppleSubtitleRasterizerTest {
         // Anchoring at half the height moves the cue up by exactly half the viewport.
         assertEquals(bottom.y - 180, lifted.y, "sub-pos 0.5 must lift the stack by half the height")
         assertEquals(bottom.x, lifted.x, "and never touch the horizontal")
+    }
+
+    /**
+     * ASS `Collisions: Reverse`: the LAST cue takes the bottom and the earlier ones move up, so
+     * a block of overlapping cues reads top down.
+     */
+    @Test
+    fun reverseStackingPutsTheLastCueAtTheBottom() {
+        fun stacked(mode: CueStacking) = AppleSubtitleRasterizer().rasterize(
+            cues = listOf("first", "second").map { text ->
+                SubtitleCue.Text(
+                    startMicros = 0,
+                    endMicros = 1_000_000,
+                    spans = listOf(StyledSpan(text, CueStyle())),
+                    layout = CueLayout(alignment = CueAlignment.BottomCenter, stacking = mode),
+                )
+            },
+            viewportWidth = 640,
+            viewportHeight = 360,
+            fontScale = 1f,
+        )
+
+        val normal = stacked(CueStacking.FirstAtBottom)
+        assertEquals(2, normal.size)
+        assertTrue(normal[1].y < normal[0].y, "normally the first cue keeps the bottom")
+
+        val reverse = stacked(CueStacking.LastAtBottom)
+        assertEquals(2, reverse.size, "the images must still come back in the caller's order")
+        assertTrue(
+            reverse[0].y < reverse[1].y,
+            "reversed, the LAST cue takes the bottom: got y=${reverse[0].y} and y=${reverse[1].y}",
+        )
+        assertEquals(normal[0].y, reverse[1].y, "the bottom slot must be the same slot")
+        assertEquals(normal[1].y, reverse[0].y, "and so must the one above it")
     }
 
     // ── per-span size and outline, flattened to the first span until 2026-08-30 ─────────────

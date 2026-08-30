@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.output
 import io.github.yuroyami.kiteplayer.subtitle.BitmapRegion
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
+import io.github.yuroyami.kiteplayer.subtitle.CueStacking
 import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.CueWrap
 import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
@@ -309,6 +310,43 @@ class DesktopSubtitleRasterizerTest {
             images[1].y,
             "the ordinary cue must sit where it would have sat with no placed cue present",
         )
+    }
+
+    /**
+     * ASS `Collisions: Reverse`: the LAST cue takes the bottom and the earlier ones move up, so
+     * a block of overlapping cues reads top down.
+     */
+    @Test
+    fun `reverse stacking puts the last cue at the bottom`() {
+        fun stacked(mode: CueStacking) = rasterize(
+            SubtitleCue.Text(
+                startMicros = 0,
+                endMicros = 1_000_000,
+                spans = listOf(StyledSpan("first", CueStyle())),
+                layout = CueLayout(alignment = CueAlignment.BottomCenter, stacking = mode),
+            ),
+            SubtitleCue.Text(
+                startMicros = 0,
+                endMicros = 1_000_000,
+                spans = listOf(StyledSpan("second", CueStyle())),
+                layout = CueLayout(alignment = CueAlignment.BottomCenter, stacking = mode),
+            ),
+        )
+
+        val normal = stacked(CueStacking.FirstAtBottom)
+        assertEquals(2, normal.size)
+        assertTrue(normal[1].y < normal[0].y, "normally the first cue keeps the bottom")
+
+        val reverse = stacked(CueStacking.LastAtBottom)
+        assertEquals(2, reverse.size, "the images must still come back in the caller's order")
+        assertTrue(
+            reverse[0].y < reverse[1].y,
+            "reversed, the LAST cue takes the bottom: got y=${reverse[0].y} and y=${reverse[1].y}",
+        )
+        // The two cues swap places and nothing else moves: the bottom one lands where the
+        // bottom one landed before.
+        assertEquals(normal[0].y, reverse[1].y, "the bottom slot must be the same slot")
+        assertEquals(normal[1].y, reverse[0].y, "and so must the one above it")
     }
 
     /** The stack itself still works: two ordinary bottom cues DO stack. */

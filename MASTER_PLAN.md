@@ -503,7 +503,14 @@ back to the system face deliberately. Android needs no such check: `TypefaceSpan
 resolves an unknown family to the default. Apple proved red-first (Helvetica changes the
 pixels, a nonsense family does not); Android rides DEVICE-DAY.
 
-The one thing left in this row is N31's reverse stacking (ASS `Collisions:`).
+**N31's reverse stacking landed 2026-08-30**, which closes this row. `CueLayout.stacking`
+carries the script-wide `Collisions:` field the same way `authoredHeight` carries PlayResY; the
+ASS parser reads it, and all three rasterizers build the pile from the end of the list and turn
+the images back the right way round, so only the stack offsets move and the draw order does
+not. Desktop and Apple proved red-first, and the parse has its own arm. `kiteplayer-core`'s ABI
+baselines moved with it: klib 2924 to 2938 lines, jvm 2362 to 2372.
+
+ROW CLOSED. Delete it once the DEVICE-DAY steps 9b to 9e are run.
 
 ### 4.5 KP-P1-15: viewport subtitles. Size M, NEEDS-DESIGN
 

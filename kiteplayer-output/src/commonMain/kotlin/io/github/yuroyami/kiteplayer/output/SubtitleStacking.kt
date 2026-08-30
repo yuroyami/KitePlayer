@@ -2,6 +2,8 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.subtitle.CueAlignment
 import io.github.yuroyami.kiteplayer.subtitle.CueLayout
+import io.github.yuroyami.kiteplayer.subtitle.CueStacking
+import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 
 /**
  * Whether a cue takes its place FROM the implicit bottom stack, and so takes space IN it.
@@ -21,3 +23,15 @@ internal val CueLayout.usesImplicitBottomStack: Boolean
                 alignment == CueAlignment.BottomCenter ||
                 alignment == CueAlignment.BottomRight
             )
+
+/**
+ * Whether this set of cues wants the LAST one at the bottom of the implicit stack.
+ *
+ * The FIRST cue that actually stands in the stack decides for all of them. Cues on screen
+ * together come from one track and one script, so they agree in practice; when they do not,
+ * one answer beats a pile whose halves grow in opposite directions.
+ */
+internal val List<SubtitleCue>.stacksLastAtBottom: Boolean
+    get() = firstNotNullOfOrNull { cue ->
+        (cue as? SubtitleCue.Text)?.layout?.takeIf { it.usesImplicitBottomStack }
+    }?.stacking == CueStacking.LastAtBottom

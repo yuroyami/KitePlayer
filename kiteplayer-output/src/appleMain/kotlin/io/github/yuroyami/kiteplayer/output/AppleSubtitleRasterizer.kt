@@ -84,7 +84,11 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
         if (viewportWidth <= 0 || viewportHeight <= 0) return emptyList()
         val images = mutableListOf<OverlayImage>()
         var stackedBottom = 0
-        for (cue in cues) {
+        // ASS `Collisions: Reverse` puts the NEWEST cue at the bottom, so the pile is built from
+        // the end of the list and turned back the right way round: the images keep the caller's
+        // order, which is the draw order, and only the stack offsets change.
+        val reversed = cues.stacksLastAtBottom
+        for (cue in if (reversed) cues.asReversed() else cues) {
             when (cue) {
                 is SubtitleCue.Text -> rasterizeText(cue, viewportWidth, viewportHeight, fontScale, stackedBottom, position)
                     ?.let { image ->
@@ -104,7 +108,7 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                 }
             }
         }
-        return images
+        return if (reversed) images.asReversed() else images
     }
 
     private fun rasterizeText(

@@ -77,6 +77,8 @@ internal class AssDocument(text: String) {
         private set
     var playResY: Int = 0
         private set
+    var stacking: CueStacking = CueStacking.FirstAtBottom
+        private set
     private val styles = mutableMapOf<String, AssStyle>()
     val dialogueLines = mutableListOf<Map<String, String>>()
 
@@ -102,12 +104,16 @@ internal class AssDocument(text: String) {
             val key = line.substring(0, colon).trim().lowercase()
             val value = line.substring(colon + 1).trim()
             when (section) {
-                // Only the script's own resolution is taken. `Collisions:` is deliberately not
-                // read: a script asking for Reverse stacking gets the one fixed order, because
-                // honouring it is a layout change in every rasterizer, not a parse change here.
                 "script info" -> when (key) {
                     "playresx" -> playResX = value.toIntOrNull() ?: playResX
                     "playresy" -> playResY = value.toIntOrNull() ?: playResY
+                    // Anything that is not "reverse" means Normal, including a typo: ASS's own
+                    // readers treat the field as a switch with one interesting value.
+                    "collisions" -> stacking = if (value.equals("reverse", ignoreCase = true)) {
+                        CueStacking.LastAtBottom
+                    } else {
+                        CueStacking.FirstAtBottom
+                    }
                 }
                 "v4+ styles", "v4 styles", "v4++ styles" -> when (key) {
                     "format" -> styleFormat = value.split(',').map { it.trim().lowercase() }
@@ -179,6 +185,7 @@ internal class AssDocument(text: String) {
             positionY = parsed.posY?.let { it / playResY },
             authoredHeight = playResY,
             wrap = parsed.wrap,
+            stacking = stacking,
             fadeInMicros = parsed.fadeInMillis * 1000L,
             fadeOutMicros = parsed.fadeOutMillis * 1000L,
         )

@@ -26,6 +26,32 @@ class AssParserTest {
             events.joinToString("\n")
 
     @Test
+    fun collisionsReverseReachesTheCue() {
+        fun stackingOf(scriptInfo: String): CueStacking {
+            val text = scriptInfo + "\n\n[Events]\n" +
+                "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n" +
+                "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hi"
+            return (AssParser.parse(text).single() as SubtitleCue.Text).layout.stacking
+        }
+        // The field is script-wide, so every cue carries the answer.
+        assertEquals(CueStacking.FirstAtBottom, stackingOf(header), "no Collisions line means Normal")
+        assertEquals(
+            CueStacking.LastAtBottom,
+            stackingOf(header.replace("Title: Test", "Title: Test\nCollisions: Reverse")),
+            "Collisions: Reverse must reach the cue",
+        )
+        assertEquals(
+            CueStacking.FirstAtBottom,
+            stackingOf(header.replace("Title: Test", "Title: Test\nCollisions: Normal")),
+        )
+        assertEquals(
+            CueStacking.FirstAtBottom,
+            stackingOf(header.replace("Title: Test", "Title: Test\nCollisions: nonsense")),
+            "anything that is not Reverse is Normal, a typo included",
+        )
+    }
+
+    @Test
     fun stylesTimingAndPlainTextComeThroughADocument() {
         val cues = AssParser.parse(
             document("""Dialogue: 0,0:00:01.50,0:00:04.00,Default,,0,0,0,,Hello there"""),

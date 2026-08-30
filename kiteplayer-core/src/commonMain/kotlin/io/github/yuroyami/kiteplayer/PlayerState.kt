@@ -172,10 +172,11 @@ public data class PlaybackStats(
      */
     val refusedFrames: Long = 0,
     /**
-     * Packets dropped before they were decoded.
+     * Packets thrown away before the decoder ever saw them.
      *
-     * Always zero: nothing drops a packet before decoding it, which is what [FrameDropPolicy.LateAndDecode]
-     * would need. Not implemented yet; see MASTER_PLAN.md.
+     * Zero unless [PlayerConfig.frameDrop] is [FrameDropPolicy.LateAndDecode], and zero under that
+     * policy too while the decoder keeps up. It rises in groups rather than one at a time, because
+     * a drop runs to the next keyframe: see [FrameDropPolicy.LateAndDecode].
      */
     val droppedFramesDecode: Long = 0,
     /** Frames the schedule showed for longer than their own duration, counted once each. */
@@ -353,10 +354,21 @@ public enum class FrameDropPolicy {
     LateOnly,
 
     /**
-     * Also drop before decoding, when the decoder cannot keep up. Needed for 4K on weak hardware.
+     * Also throw packets away before decoding them, when the decoder cannot keep up.
      *
-     * Nothing drops a packet before decoding it, so this behaves like [LateOnly].
-     * Not implemented yet; see MASTER_PLAN.md.
+     * Everything [LateOnly] does, plus this: when a packet's timestamp is already half a second
+     * behind the clock, it and every packet after it are dropped UNDECODED until the next
+     * keyframe. That is the only drop with a clean edge, because every other frame in a group of
+     * pictures references its neighbours: dropping one alone would leave the decoder producing
+     * garbage rather than saving work.
+     *
+     * The cost is visible and is the reason this is not the default: the picture holds on its
+     * last decoded frame until that keyframe arrives, which on a file with distant keyframes can
+     * be a second or more. The gain is that a decoder losing the race stops losing it. Worth it
+     * for 4K on weak hardware, not worth it otherwise.
+     *
+     * A keyframe is never dropped, and neither is a packet a precise seek still needs.
+     * [PlaybackStats.droppedFramesDecode] counts what went.
      */
     LateAndDecode,
 }

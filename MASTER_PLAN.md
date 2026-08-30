@@ -563,12 +563,20 @@ Declared, honestly KDoc'd unbuilt, and they are features, not cleanup.
 the field was documented "always zero" with the number one field access away. It travels beside
 `audioLatencyQuality`, because a figure without its confidence reads like a measured zero.
 
-- [ ] `droppedFramesDecode`. Not a wiring job: nothing anywhere drops a packet before decoding it,
-  so the counter has nothing to count until packet-level dropping under pressure exists.
+`droppedFramesDecode` and `FrameDropPolicy.LateAndDecode` are DONE (2026-08-30), and they were
+one job: the counter had nothing to count because nothing dropped a packet before decoding it.
+The rule is `skipVideoPacketBeforeDecode`, a pure function beside `SyncLaw`: a packet already
+half a second behind the published position starts a skip, and the skip runs to the next
+keyframe, because dropping one packet out of a group of pictures makes garbage rather than
+saving work. Keyframes and packets a precise seek still needs are never dropped. Proved twice,
+the rule exhaustively and the wiring through a session whose scripted decoder is four times too
+slow, and falsified both ways.
+
 - [ ] `containerBitrate`. Blocked on the C surface, grouped with the others at the top of Phase 3:
   no backend binds an entry point for a container-level bitrate.
-- [ ] `SyncMode.ExternalMaster` and `LateAndDecode` (sync-law modes; the SyncLaw seam exists).
-  Virtual-clock test each; ExternalMaster drives a scripted external clock.
+- [ ] `SyncMode.ExternalMaster` (a wall clock drives playback and audio resamples to follow).
+  NEEDS-DESIGN before execution: nothing in the public API can hand the engine an external clock,
+  so the seam is the decision. Virtual-clock test driving a scripted external clock.
 
 ### 5.3 The audio program (SOL-A6 split honestly). Size M + M, rest re-filed
 

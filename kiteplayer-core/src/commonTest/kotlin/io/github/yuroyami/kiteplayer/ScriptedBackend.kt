@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
+import kotlin.time.Duration
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.random.Random
@@ -303,6 +304,15 @@ internal class FaultPlan(
 
     /** True makes the video decoder accept every packet and never produce a frame. */
     var videoDecodeProducesNothing: Boolean = false
+
+    /**
+     * How long every video `send` takes: a decoder that cannot keep up with real time.
+     *
+     * Zero is the ordinary instant decoder. Anything above one frame's duration makes the video
+     * lane fall behind the audio clock, which is the only way to exercise a policy that fires on
+     * lateness rather than on a fault.
+     */
+    var videoDecodeSendDelay: Duration = Duration.ZERO
 
     /**
      * Receive throws after this many delivered frames, but only while the decoder reports a
@@ -901,6 +911,7 @@ internal class ScriptedVideoDecoder(
             return true
         }
         if (faults.refuseSend()) return false
+        if (faults.videoDecodeSendDelay > Duration.ZERO) delay(faults.videoDecodeSendDelay)
         if (faults.emptyDecode() || faults.videoDecodeProducesNothing) return true
         val pts = packet.pts ?: Pts.Zero
         pending.addLast(

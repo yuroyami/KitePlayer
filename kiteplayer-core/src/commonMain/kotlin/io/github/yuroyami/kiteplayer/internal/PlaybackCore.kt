@@ -28,6 +28,7 @@ import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
+import io.github.yuroyami.kiteplayer.FrameDropPolicy
 import io.github.yuroyami.kiteplayer.SyncMode
 import io.github.yuroyami.kiteplayer.TrackChange
 import io.github.yuroyami.kiteplayer.TrackId
@@ -519,6 +520,7 @@ internal class PlaybackCore(
     private var retiredSubmitted = 0L
     private var retiredHeadless = 0L
     private var retiredDroppedLate = 0L
+    private var retiredDroppedDecode = 0L
     private var retiredRefused = 0L
     private var retiredRepeated = 0L
     private var retiredUnderruns = 0L
@@ -4692,6 +4694,7 @@ internal class PlaybackCore(
             submittedFrames = retiredSubmitted,
             headlessFrames = retiredHeadless,
             droppedFramesLate = retiredDroppedLate,
+            droppedFramesDecode = retiredDroppedDecode,
             refusedFrames = retiredRefused,
             repeatedFrames = retiredRepeated,
             audioUnderruns = retiredUnderruns,
@@ -4763,6 +4766,7 @@ internal class PlaybackCore(
         retiredSubmitted += session.renderer.submittedFrames
         retiredHeadless += session.renderer.headlessFrames
         retiredDroppedLate += session.video?.droppedFrames ?: 0
+        retiredDroppedDecode += session.droppedVideoBeforeDecode.value
         retiredRefused += session.video?.refusedFrames ?: 0
         retiredRepeated += session.video?.repeatedFrames ?: 0
         retiredUnderruns += session.audio?.underruns ?: 0
@@ -5042,6 +5046,8 @@ internal class PlaybackCore(
                 submittedFrames = retiredSubmitted + (session?.renderer?.submittedFrames ?: 0),
                 headlessFrames = retiredHeadless + (session?.renderer?.headlessFrames ?: 0),
                 droppedFramesLate = droppedLateNow,
+                droppedFramesDecode = retiredDroppedDecode +
+                    (session?.droppedVideoBeforeDecode?.value ?: 0),
                 refusedFrames = retiredRefused + (session?.video?.refusedFrames ?: 0),
                 repeatedFrames = retiredRepeated + (session?.video?.repeatedFrames ?: 0),
                 audioUnderruns = underrunsNow,
@@ -5557,6 +5563,8 @@ internal class PlaybackCore(
         var epoch = worker.epoch
         var restarts = worker.releases
         var ending = false
+        // Set when a late packet was thrown away and cleared by the next keyframe; see skipToKeyframe.
+        var skippingToKeyframe = false
         while (true) {
             worker.checkpoint()
             if (worker.releases != restarts) {
@@ -5564,6 +5572,9 @@ internal class PlaybackCore(
                 epoch = worker.epoch
                 // The flush cleared the decoder, so its drain signal has to be sent again.
                 ending = false
+                // A flush re-anchors on a keyframe by construction, so an unfinished skip from
+                // the old epoch must not eat the first packets of the new one.
+                skippingToKeyframe = false
             }
             if (drainFrames(session, worker, decoder, video, epoch)) continue
             if (queue.isEndOfStream && queue.count == 0) {
@@ -5585,6 +5596,13 @@ internal class PlaybackCore(
                 withTimeoutOrNull(WORKER_POLL) { queue.awaitData() }
                 continue
             }
+            if (skipToKeyframe(session, packet, skippingToKeyframe)) {
+                skippingToKeyframe = true
+                session.droppedVideoBeforeDecode.incrementAndGet()
+                packet.close()
+                continue
+            }
+            skippingToKeyframe = false
             try {
                 while (!videoDecoderSend(decoder, packet)) {
                     // False means the decoder did NOT take this packet. A synchronous codec usually
@@ -5606,6 +5624,21 @@ internal class PlaybackCore(
             }
         }
     }
+
+    /** The pre-decode drop rule, with this session's numbers. See [skipVideoPacketBeforeDecode]. */
+    private fun skipToKeyframe(
+        session: OpenSession,
+        packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket,
+        skipping: Boolean,
+    ): Boolean = skipVideoPacketBeforeDecode(
+        policy = config.frameDrop,
+        isKeyframe = packet.isKeyframe,
+        packetPtsUs = packet.pts?.micros,
+        positionUs = publishedPositionMicros.value,
+        discardBeforeUs = session.discardBeforeUs.value,
+        alreadySkipping = skipping,
+        lateThresholdUs = LATE_BEFORE_DECODE_US,
+    )
 
     /** Pulls whatever the decoder has ready. True when something came out. */
     private suspend fun drainFrames(
@@ -6047,6 +6080,9 @@ internal class PlaybackCore(
         val audioTailFlushed = atomic(false)
 
         val decodedVideoFrames = atomic(0L)
+
+        /** Packets thrown away before the decoder ever saw them. See FrameDropPolicy.LateAndDecode. */
+        val droppedVideoBeforeDecode = atomic(0L)
         val lastVideoPtsUs = atomic(NO_POSITION)
         val driftUs = atomic(0L)
         val discardBeforeUs = atomic(Long.MIN_VALUE)
@@ -6209,6 +6245,17 @@ internal class PlaybackCore(
 
         /** The ceiling on any wait inside a worker, which is what makes quiescence bounded. */
         val WORKER_POLL: Duration = 50.milliseconds
+
+        /**
+         * How far behind the clock a packet has to be before FrameDropPolicy.LateAndDecode throws
+         * it away undecoded.
+         *
+         * Half a second, which is many frames rather than one. The schedule already drops a frame
+         * that is late by a fraction of its own duration, and that costs one picture; this costs
+         * everything up to the next keyframe, so it only fires when the decoder is losing the race
+         * rather than merely wobbling.
+         */
+        const val LATE_BEFORE_DECODE_US: Long = 500_000L
 
         /** Overlay canvas for subtitles on audio-only media, where no video size exists. */
         const val DEFAULT_SUBTITLE_CANVAS_WIDTH: Int = 1280

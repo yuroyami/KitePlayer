@@ -506,9 +506,6 @@ throws".** `KitePlayer.create` has been refusing at config time with
 `PlaybackException(ConfigurationInvalid)` for both a missing backend and a missing output, and
 `KitePlayerTest` pins both. Nothing to fix.
 
-- [ ] The array remainder: `RgbaBitmap.pixels` stays a shared array by design, because copying a
-  bitmap per frame to protect against a caller who mutates it is the wrong trade. It validates its
-  geometry already; what it does NOT do is say in its KDoc that the array is shared. One sentence.
 - [ ] Java/Swift adaptation: NOT built here; stays on this list as a feature item
   (KP-INTEROP-SURFACE, unscheduled).
 

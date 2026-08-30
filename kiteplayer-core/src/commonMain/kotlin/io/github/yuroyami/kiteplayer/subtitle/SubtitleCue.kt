@@ -173,6 +173,11 @@ public data class BitmapRegion(
 public class RgbaBitmap(
     public val width: Int,
     public val height: Int,
+    /**
+     * SHARED, not copied. A renderer reads these bytes once per frame, and copying a bitmap that
+     * often to protect against a caller who mutates it is the wrong trade. Treat it as read-only:
+     * writing to it changes what every other consumer of the same cue draws.
+     */
     public val pixels: ByteArray,
 ) {
     init {

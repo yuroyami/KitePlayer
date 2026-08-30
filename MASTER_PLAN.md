@@ -225,13 +225,6 @@ the compose-ui and compose-interop JVM suites, the second of which only started 
 
 # PHASE 3: CORRECTNESS AND CONTRACTS (KiteFFmpeg first, republish, then adoption)
 
-### 3.1 KC-POISON-SCOPE: the backends disagree about a poisoned sink. Size S + design line
-
-JVM `setMetadata` goes through `checkOpen` and refuses after poison; native checks only
-`headerWritten`/`closed` and accepts, and takes no `muxLock` there. Decide the contract
-(recommended: JVM behaviour wins; refusing after poison is the conservative reading), align
-native, RED via the `MuxFaults` seam, falsify.
-
 ### 3.2 KC-SPEC: output specs carry no colour, HDR, pixel aspect or exact layout. Size L
 
 `MediaSink` specs carry codec/size/pixfmt/rate/bitrate/keyint plus an untyped map; nothing

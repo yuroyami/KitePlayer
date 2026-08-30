@@ -11,11 +11,12 @@ class RenderPathResolutionTest {
     }
 
     @Test
-    fun `auto stays on the compose canvas until the owner moves the default`() {
-        // Deliberate: the native view wins on jank and loses on input, since Compose content over
-        // it cannot be clicked. Which of those a consumer should get by default is an owner
-        // decision taken on measurements, not a default to drift into.
-        assertEquals(KiteRenderPath.ComposeCanvas, resolveRenderPath(KiteRenderPath.Auto))
+    fun `auto is the native view on desktop, owner-decided 2026-08-30`() {
+        // The trade was taken deliberately and on measurements: with the UI choked to 4.7 frames
+        // a second the native view kept painting about 29, where the Compose canvas draws the
+        // picture at the UI's own rate. The cost is that Compose content over the video cannot be
+        // clicked, so a consumer wanting overlaid controls asks for ComposeCanvas explicitly.
+        assertEquals(KiteRenderPath.NativeView, resolveRenderPath(KiteRenderPath.Auto))
     }
 
     @Test

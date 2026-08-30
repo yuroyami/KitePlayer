@@ -3,21 +3,27 @@ package io.github.yuroyami.kiteplayer.compose
 import androidx.compose.runtime.Composable
 
 /**
- * Desktop honours an explicit native-view request and still defaults to the Compose canvas.
+ * Desktop resolves every request to a real path, and [KiteRenderPath.Auto] is the native view.
  *
- * Both paths are real here since 2026-08-30. The native view is an AWT canvas painted off the
- * Compose frame clock, which is what keeps video steady while the UI is busy; the Compose canvas
- * is video as ordinary Compose content, which is what lets clip, alpha and rotation apply to the
- * pixels and what lets controls sit on top of it and be clicked.
+ * Both products are real here. The native view is an AWT canvas painted off the Compose frame
+ * clock; the Compose canvas is video as ordinary Compose content, where clip, alpha and rotation
+ * apply to the pixels and where controls can sit on top and be clicked.
  *
- * [KiteRenderPath.Auto] stays on the Compose canvas deliberately rather than by omission. The
- * native view wins on jank and loses on input, because macOS routes a click to the topmost native
- * view and Compose content painted over it never receives one. Which of those a consumer should
- * get without asking is an owner decision to take on measurements, not a default to drift into.
+ * **Auto is the native view, owner-decided 2026-08-30, and it is a trade rather than a free
+ * upgrade.** It was taken on measurements: with the UI choked to 4.7 frames a second the native
+ * view kept painting about 29 frames a second of 1080p30, while the Compose canvas draws the
+ * picture at whatever rate the UI is managing. What it costs is input. macOS routes a click to
+ * the topmost NATIVE view, so Compose content drawn over the video never receives one, and a
+ * consumer who wants controls ON the picture either puts them in a borderless window owned by the
+ * video window or asks for [KiteRenderPath.ComposeCanvas] explicitly. Controls beside the video
+ * are unaffected.
+ *
+ * The full method and every arrangement measured are in
+ * `kiteplayer-sample-desktop/INTEROP-SPIKE.md`.
  */
 internal actual fun resolveRenderPath(requested: KiteRenderPath): KiteRenderPath = when (requested) {
-    KiteRenderPath.NativeView -> KiteRenderPath.NativeView
-    KiteRenderPath.ComposeCanvas, KiteRenderPath.Auto -> KiteRenderPath.ComposeCanvas
+    KiteRenderPath.NativeView, KiteRenderPath.Auto -> KiteRenderPath.NativeView
+    KiteRenderPath.ComposeCanvas -> KiteRenderPath.ComposeCanvas
 }
 
 @Composable

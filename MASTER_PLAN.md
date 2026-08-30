@@ -85,7 +85,10 @@ left of it:
   config drift the SEAM item already documents. Revisit only if a real external consumer asks
   for a playback-only artifact, and then additively.
 - [ ] **Synkplay** moves its pin to `kiteffmpeg-core` whenever it next bumps KitePlayer. Nothing
-  blocks on it, and its adapter needs no change beyond imports.
+  blocks on it, and its adapter needs no change beyond imports. **One thing to check on that bump
+  if Synkplay has a desktop build:** desktop `Auto` now resolves to the native view, so Compose
+  controls drawn over the video stop receiving clicks. Either move them into an owned overlay
+  window or pass `KiteRenderPath.ComposeCanvas` explicitly. Mobile is unaffected.
 - [ ] **[owner] The GitHub repository rename** (KiteCodec to KiteFFmpeg; GitHub redirects old
   URLs, and the CI badge and the checksum-pinned companion-release fetch URLs already name the
   new one, so they go live with the rename).
@@ -102,15 +105,15 @@ left of it:
 driven by the same `PlayerViewBinding` Android and iOS use, painted by `AwtCanvasVideoRenderer`
 through a `BufferStrategy` on the thread that presents rather than on the Compose frame clock.
 `kiteplayer-mobile` supplies the adapter, since it is the one module allowed to depend on both a
-codec and an output, and `KitePlayerVideo(path = NativeView)` now honours the request on JVM
-instead of coercing it.
+codec and an output, and `KitePlayerVideo` resolves `Auto` to it on JVM as of
+2026-08-30, owner-decided, so a desktop consumer gets the steady picture without asking.
 
 **Why it was worth building, measured rather than argued.** With the UI choked to 4.7 frames a
 second, the native view kept painting about 29 frames a second of real 1080p30 while the Compose
 canvas path drew the picture at the UI's own rate. That is the complaint that opened this phase,
 answered.
 
-**The constraint it carries, which shaped the design.** Compose content drawn over the native
+**The constraint the default now carries.** Compose content drawn over the native
 view cannot receive mouse input, because macOS routes a click to the topmost NATIVE view and
 painting over it afterwards does not change that. Controls that must be clickable over video
 belong in a borderless window owned by the video window, which is the one arrangement measured to
@@ -135,10 +138,6 @@ arm, which is correct and is why engine counters alone cannot separate the paths
 
 What is left:
 
-- [ ] **[owner] Flip `Auto` on desktop, or leave it.** `Auto` still resolves to the Compose
-  canvas. The native view wins on jank and loses on input, since Compose content over it cannot
-  be clicked, so this is a product decision on the numbers above rather than an implementer's.
-  The test that pins the current default says so in its own name.
 - [ ] **A clickable overlay helper, if consumers keep needing it.** The measured answer for
   controls over video is a borderless window owned by the video window. Today each consumer
   writes that themselves. Wait for a second consumer to need it before turning it into API.

@@ -37,7 +37,13 @@ import kotlin.system.exitProcess
 private val composeFrames = AtomicLong(0)
 
 fun main() {
-    val useNative = (System.getProperty("compare.path") ?: "compose") == "native"
+    // Defaults to Auto so the harness can check what a consumer who asks for nothing gets,
+    // which is the thing that changed on 2026-08-30.
+    val requested = when (System.getProperty("compare.path") ?: "auto") {
+        "native" -> KiteRenderPath.NativeView
+        "compose" -> KiteRenderPath.ComposeCanvas
+        else -> KiteRenderPath.Auto
+    }
     val burn = System.getProperty("compare.burn") == "true"
     val seconds = (System.getProperty("compare.seconds") ?: "20").toInt()
     val media = System.getProperty("kiteplayer.sample.media.default")
@@ -63,7 +69,7 @@ fun main() {
                 KitePlayerVideo(
                     player = player,
                     modifier = Modifier.fillMaxSize(),
-                    path = if (useNative) KiteRenderPath.NativeView else KiteRenderPath.ComposeCanvas,
+                    path = requested,
                     onEffectivePath = { println("effective path = $it") },
                 )
             }
@@ -109,7 +115,7 @@ fun main() {
                 val presented = after.submittedFrames - before.submittedFrames
                 val droppedLate = after.droppedFramesLate - before.droppedFramesLate
                 println("=== PATH COMPARISON ===")
-                println("path            = ${if (useNative) "native view" else "compose canvas"}")
+                println("path requested  = $requested")
                 println("compose burner  = $burn")
                 println("window          = $seconds s")
                 println("frames submitted= $presented")

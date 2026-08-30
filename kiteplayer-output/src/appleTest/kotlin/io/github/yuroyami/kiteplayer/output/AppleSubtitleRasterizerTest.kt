@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.subtitle.StyledSpan
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -194,6 +195,25 @@ class AppleSubtitleRasterizerTest {
         }
         assertTrue(green > 20, "the first span's green outline is missing ($green pixels)")
         assertTrue(blue > 20, "the second span's blue outline is missing ($blue pixels)")
+    }
+
+    @Test
+    fun aNamedFontFamilyIsUsedAndAnUnknownOneFallsBack() {
+        val system = spans("Handgloves" to CueStyle(fontSizePx = 64f))
+        // Helvetica ships on every Apple system and is not the UI face, so asking for it has to
+        // change the pixels.
+        val named = spans("Handgloves" to CueStyle(fontSizePx = 64f, fontFamily = "Helvetica"))
+        assertFalse(
+            system.bitmap.pixels.contentEquals(named.bitmap.pixels),
+            "a named family must actually be used",
+        )
+        val missing = spans(
+            "Handgloves" to CueStyle(fontSizePx = 64f, fontFamily = "NoSuchFamilyOnThisSystem"),
+        )
+        assertTrue(
+            system.bitmap.pixels.contentEquals(missing.bitmap.pixels),
+            "a family this system does not have must fall back to the system face, not to a lookalike",
+        )
     }
 
     // ── the shadow pass, which this rasterizer ignored until 2026-08-30 ─────────────────────

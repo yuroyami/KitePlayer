@@ -59,7 +59,7 @@ public data class StyledSpan(
  * |---|---|---|---|
  * | [primaryColor], [bold], [italic], [underline], [strikeThrough] | per span | per span | per span |
  * | [fontSizePx], [outlineColor], [outlineWidthPx] | per span | per span | per span |
- * | [fontFamily] | per span | ignored | ignored |
+ * | [fontFamily] | per span | per span | per span |
  * | [shadowColor], [shadowOffsetPx] | first span, whole cue | first span, whole cue | first span, whole cue |
  *
  * "First span, whole cue" means a cue whose spans disagree renders with the FIRST span's value
@@ -70,7 +70,10 @@ public data class StyledSpan(
  * the original script rather than this type.
  */
 public data class CueStyle(
-    /** Honoured on desktop only; the Apple and Android rasterizers use the platform default face. */
+    /**
+     * The face to use. A family this system does not have falls back to the platform default,
+     * so a script naming a font only its author had still reads.
+     */
     val fontFamily: String? = null,
     val fontSizePx: Float? = null,
     val bold: Boolean = false,

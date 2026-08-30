@@ -25,7 +25,11 @@ import platform.CoreGraphics.CGImageAlphaInfo
 import platform.CoreGraphics.CGPathCreateWithRect
 import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGSizeMake
+import platform.CoreText.CTFontCopyFamilyName
 import platform.CoreText.CTFontCreateCopyWithSymbolicTraits
+import platform.CoreText.CTFontCreateWithNameAndOptions
+import platform.CoreText.CTFontRef
+import platform.CoreText.kCTFontOptionsPreventAutoActivation
 import platform.CoreText.CTFontCreateUIFontForLanguage
 import platform.CoreText.CTFramesetterCreateFrame
 import platform.CoreText.CTFramesetterCreateWithAttributedString
@@ -129,7 +133,8 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             cursor += span.text.length
             val style = span.style
             val sizePx = sizeOf(style)
-            val baseFont = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, sizePx.toDouble(), null)
+            val baseFont = namedFont(style.fontFamily, sizePx)
+                ?: CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, sizePx.toDouble(), null)
             var font = baseFont
             if (style.bold || style.italic) {
                 val traits = (if (style.bold) kCTFontBoldTrait else 0u) or
@@ -293,6 +298,33 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             null,
         )
         return size.useContents { ceil(this.width).toInt() to ceil(this.height).toInt() }
+    }
+
+    /**
+     * The face a cue ASKED for, or null when this system has no such family.
+     *
+     * Null rather than a substitute on purpose: CoreText would happily hand back a default face
+     * for a name it does not know, and the caller's own fallback is the honest place for that
+     * decision. An ASS script naming a Windows-only font gets the system face, not a surprise.
+     */
+    private fun namedFont(family: String?, sizePx: Float): CTFontRef? {
+        if (family.isNullOrBlank()) return null
+        val name = NSString.create(string = family)
+        val font = CTFontCreateWithNameAndOptions(
+            interpretCPointer(name.objcPtr()),
+            sizePx.toDouble(),
+            null,
+            // Do NOT substitute: this returns null instead of a lookalike when the family is
+            // missing, which is what lets the caller fall back deliberately.
+            kCTFontOptionsPreventAutoActivation,
+        )
+        val resolved = CTFontCopyFamilyName(font)
+        val matched = interpretObjCPointer<NSString>(resolved!!.rawValue).toString()
+            .equals(family, ignoreCase = true)
+        CFRelease(resolved)
+        if (matched) return font
+        CFRelease(font)
+        return null
     }
 
     /** A CoreText CFString attribute key as the Kotlin string NSAttributedString wants. */

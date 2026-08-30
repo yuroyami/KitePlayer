@@ -496,8 +496,14 @@ Android sizes spans with `RelativeSizeSpan` and strokes them with a `CharacterSt
 the paint per run. The SHADOW stays first-span-whole-cue on purpose: it changes the bitmap's
 SIZE, so two spans wanting different shadows would be two different layouts of one cue.
 
-Left: `fontFamily` on Apple and Android (platform font lookup with fallback). N31's reverse
-stacking (`Collisions:`) lands here too.
+**`fontFamily` landed 2026-08-30 on Apple and Android**, so all three honour it per span.
+CoreText looks the family up with auto-activation OFF and then CHECKS the family name it got
+back, because it will otherwise hand out a lookalike for a name it does not know; a miss falls
+back to the system face deliberately. Android needs no such check: `TypefaceSpan` already
+resolves an unknown family to the default. Apple proved red-first (Helvetica changes the
+pixels, a nonsense family does not); Android rides DEVICE-DAY.
+
+The one thing left in this row is N31's reverse stacking (ASS `Collisions:`).
 
 ### 4.5 KP-P1-15: viewport subtitles. Size M, NEEDS-DESIGN
 
@@ -837,6 +843,8 @@ a failed build is itself the first finding.
     with the shadow off. Same reason as 9b: Canvas and Bitmap are stubs off-device.
 9d. A two-span cue whose spans disagree on size and outline colour. PASS: both sizes show,
     both outline colours show, and the taller span sets the line height.
+9e. A cue with `fontFamily` set to a font the device HAS (say "serif") and one it does not.
+    PASS: the first changes the face, the second reads normally in the default face.
 
 **Android phone, resume anchor (the S23 fix's device half):**
 10. Pause 30+ seconds mid-playback, resume. PASS: no position jump, sync holds (the fix

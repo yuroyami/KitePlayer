@@ -12,6 +12,7 @@ import android.text.style.CharacterStyle
 import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.StrikethroughSpan
+import android.text.style.TypefaceSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
@@ -109,6 +110,11 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             // so as a ratio of it, which is what keeps mixed sizes in one cue from flattening.
             val ratio = sizeOf(style) / baseSize
             if (ratio != 1f) text.setSpan(RelativeSizeSpan(ratio), start, end, 0)
+            // Typeface.create never fails: a family this device does not have comes back as the
+            // default face, which IS the fallback and is why no lookup check is needed here.
+            style.fontFamily?.takeIf { it.isNotBlank() }?.let { family ->
+                text.setSpan(TypefaceSpan(family), start, end, 0)
+            }
         }
         if (text.isEmpty()) return null
 

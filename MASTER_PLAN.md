@@ -403,9 +403,17 @@ Three that were user-visible went with them: a browser tab reading "KV-6 probe",
 report headed "=== KV-5 desktop upload measurement ===" and a CoreAudio exception quoting
 "register item B1-17" at somebody who cannot look it up.
 
-- [ ] KiteFFmpeg's own sources, which have not been swept at all. Its `ci.yml` and
-  `build.gradle.kts` narrate the register directly and are the largest there. The four sweepers
-  that did KitePlayer are in this repository's git history and apply unchanged.
+**KiteFFmpeg went 222 to 23 on the same day.** The four sweepers applied unchanged, plus one
+rule for its own commonest code: `KC-EMBED` was 40 of the 222 and is not a defect row at all but
+a NAMED EVENT used as a date marker, so those became the date.
+
+What is left there is 23, and each is somewhere it belongs or somewhere not to touch:
+`native/kitecodec-c/README.md` has 12 in a table keyed BY row identifier (rewriting a lookup key
+deletes the table); an FFmpeg patch file has 3 in header metadata git reads; the four ratchet
+baselines have 5; and 3 sit elsewhere where no reader has to resolve them. Treat that as done
+unless the owner wants the README table re-keyed.
+
+This row is CLOSED for both repositories except the measurement notes below.
 - [ ] DECIDE separately what to do about the 28 codes in `MEASUREMENTS.md` and the web spike note.
   Those are dated records of what was measured on a day, and a measurement that says "this is
   what W-05 asked for" is describing its own occasion rather than the tree. Rewriting them may be

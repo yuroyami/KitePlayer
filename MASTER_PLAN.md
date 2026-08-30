@@ -284,11 +284,16 @@ and `transferSpecified` beside the existing `rangeSpecified`, all five guess sit
 `resolveDeclaredColor`, and the web frame reader stopped ignoring matrix, primaries and transfer
 entirely. Both directions tested against the web fake.
 
-- [ ] KitePlayer's own `ColorSpaceInfo` (`spi/VideoFrame.kt`) still carries only `rangeSpecified`,
-  and `Conversions.kt` maps the KiteFFmpeg value across without the three new flags, so the
-  distinction stops at the boundary. Widen it and map them, then decide whether the tone-map
-  warning should say WHICH of the two it acted on. Rides the next KiteFFmpeg republish, since
-  KitePlayer builds against the published artifact rather than the sibling's sources.
+KitePlayer side landed 2026-08-30 and this row is CLOSED. `ColorSpaceInfo` carries all four
+flags plus `allSpecified`, `Conversions.kt` maps the three new ones across, and `guessFor` and
+`Unspecified` admit they are guesses.
+
+**The open question is answered NO: the tone-map warning does not need to say which of the two
+it acted on.** A guess can never be HDR, because every guess in the pair is the
+standard-versus-high-definition rule and that answers BT.601 or BT.709 and nothing else, so a
+tone map is always acting on the file's own declaration. That is a property of the guess rule
+rather than an accident, so `ColorProvenanceTest` pins it: if a future guess rule ever learns to
+answer PQ or HLG, it goes red and the warning has to grow a field.
 
 ### 3.6 KC-TRACKSEL + the disposition widening. Size M, NEEDS-DESIGN
 

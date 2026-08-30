@@ -119,10 +119,32 @@ public data class ColorSpaceInfo(
     val chromaLocation: ChromaLocation = ChromaLocation.Left,
     /** False only when the source did not declare a range and [fullRange] is a rendering fallback. */
     val rangeSpecified: Boolean = true,
+    /**
+     * False when the source declared no matrix and [matrix] is this library's guess.
+     *
+     * The guess is right for nearly all video and wrong for the rest, so a consumer that has a
+     * better answer (a container-level hint, a user override) can tell which fields it is allowed
+     * to overrule and which are the file's own word. Every guess made anywhere is the
+     * standard-versus-high-definition rule in [guessFor], so a guessed field is never HDR.
+     */
+    val matrixSpecified: Boolean = true,
+    /** False when the source declared no primaries. See [matrixSpecified]. */
+    val primariesSpecified: Boolean = true,
+    /** False when the source declared no transfer function. See [matrixSpecified]. */
+    val transferSpecified: Boolean = true,
 ) {
     /** True when the transfer function means high dynamic range. */
     public val isHdr: Boolean
         get() = transfer == ColorTransfer.Pq || transfer == ColorTransfer.Hlg
+
+    /**
+     * True when every field here is the source's own word rather than a guess.
+     *
+     * Useful for the one question a consumer actually asks: may I trust this, or should I look
+     * somewhere else first?
+     */
+    public val allSpecified: Boolean
+        get() = matrixSpecified && primariesSpecified && transferSpecified && rangeSpecified
 
     public companion object {
         /** What a decoder should report when the container said nothing. See [guessFor]. */
@@ -132,6 +154,9 @@ public data class ColorSpaceInfo(
             transfer = ColorTransfer.Unspecified,
             chromaLocation = ChromaLocation.Unspecified,
             rangeSpecified = false,
+            matrixSpecified = false,
+            primariesSpecified = false,
+            transferSpecified = false,
         )
 
         /**
@@ -147,6 +172,9 @@ public data class ColorSpaceInfo(
                 ColorPrimaries.Bt601,
                 ColorTransfer.Bt601,
                 rangeSpecified = false,
+                matrixSpecified = false,
+                primariesSpecified = false,
+                transferSpecified = false,
             )
         } else {
             ColorSpaceInfo(
@@ -154,6 +182,9 @@ public data class ColorSpaceInfo(
                 ColorPrimaries.Bt709,
                 ColorTransfer.Bt709,
                 rangeSpecified = false,
+                matrixSpecified = false,
+                primariesSpecified = false,
+                transferSpecified = false,
             )
         }
     }

@@ -98,6 +98,9 @@ internal fun ColorInfo.toPlayerColorSpace(): ColorSpaceInfo = ColorSpaceInfo(
         KiteChromaLocation.Unspecified -> ChromaLocation.Unspecified
     },
     rangeSpecified = rangeSpecified,
+    matrixSpecified = matrixSpecified,
+    primariesSpecified = primariesSpecified,
+    transferSpecified = transferSpecified,
 )
 
 internal fun hardwareKindFor(pixelFormatName: String): HwSurfaceKind? = when (pixelFormatName) {

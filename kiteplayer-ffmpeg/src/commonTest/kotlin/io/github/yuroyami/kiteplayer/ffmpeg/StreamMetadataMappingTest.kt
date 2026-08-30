@@ -27,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertNotSame
 
 class StreamMetadataMappingTest {
@@ -60,6 +61,11 @@ class StreamMetadataMappingTest {
                     fullRange = false,
                     chromaLocation = ChromaLocation.TopLeft,
                     rangeSpecified = false,
+                    // Declared by the file, unlike the range: the whole point of carrying four
+                    // separate flags is that a container can say some of these and not others.
+                    matrixSpecified = true,
+                    primariesSpecified = true,
+                    transferSpecified = false,
                 ),
                 vp9 = Vp9CodecInfo(
                     profile = Vp9Profile.Profile0,
@@ -77,6 +83,12 @@ class StreamMetadataMappingTest {
         assertEquals(PlayerColorPrimaries.Bt2020, color.primaries)
         assertEquals(PlayerColorTransfer.Bt2020Ten, color.transfer)
         assertFalse(color.rangeSpecified)
+        // KC-COLOR-PROV: the provenance crosses the boundary too. Without this the engine cannot
+        // tell a container's own word from this library's standard-definition guess.
+        assertTrue(color.matrixSpecified)
+        assertTrue(color.primariesSpecified)
+        assertFalse(color.transferSpecified)
+        assertFalse(color.allSpecified, "one guessed field is enough to make the whole set a guess")
         assertEquals(PlayerVp9Profile.Profile0, mapped.vp9?.profile)
         assertEquals(PlayerVp9Level.Level4_1, mapped.vp9?.level)
         assertEquals(PlayerVp9BitDepth.Eight, mapped.vp9?.bitDepth)

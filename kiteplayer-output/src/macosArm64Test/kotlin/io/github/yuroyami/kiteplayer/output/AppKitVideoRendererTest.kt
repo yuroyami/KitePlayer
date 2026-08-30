@@ -21,12 +21,19 @@ import kotlinx.cinterop.sizeOf
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import platform.AppKit.NSImage
@@ -50,6 +57,7 @@ import platform.darwin.vm_deallocate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -788,59 +796,83 @@ class AppKitVideoRendererTest {
 
     // ── KP-TONEMAP-WARN: the renderer that DID it is the one that says so ───────────────────
 
+    /**
+     * Collects this renderer's events into a channel, and does not return until the collector is
+     * SUBSCRIBED.
+     *
+     * The events flow has no replay, so anything emitted before a subscriber exists is dropped.
+     * Starting a collector and presenting a frame straight after is a race that a loaded machine
+     * loses, which is exactly how this test first failed. `onSubscription` is the flow's own
+     * answer to it, and the channel keeps the events off a list two threads would share.
+     */
+    private suspend fun CoroutineScope.eventsOf(renderer: AppKitVideoRenderer): Pair<Channel<RendererEvent>, Job> {
+        val events = Channel<RendererEvent>(Channel.UNLIMITED)
+        val subscribed = CompletableDeferred<Unit>()
+        val job = launch(Dispatchers.Default) {
+            @Suppress("UNCHECKED_CAST")
+            (renderer.events as SharedFlow<RendererEvent>)
+                .onSubscription { subscribed.complete(Unit) }
+                .collect { events.send(it) }
+        }
+        subscribed.await()
+        return events to job
+    }
+
     @Test
     fun `a converter that tone maps makes the renderer say so exactly once`() = runBlocking {
         val ledger = LeakLedger()
-        val seen = mutableListOf<RendererEvent>()
         val renderer = AppKitVideoRenderer(
             convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
             toneMapped = { true },
             enqueueOnMain = { block -> block() },
             showImage = { },
         )
-        val collector = launch(Dispatchers.Default) { renderer.events.toList(seen) }
-        try {
-            val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
-            repeat(3) { index ->
-                renderer.present(FakeVideoFrame(Pts(index.toLong()), colorSpace = hdr, ledger = ledger), 0L)
+        coroutineScope {
+            val (events, collector) = eventsOf(renderer)
+            try {
+                val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
+                repeat(3) { index ->
+                    renderer.present(FakeVideoFrame(Pts(index.toLong()), colorSpace = hdr, ledger = ledger), 0L)
+                }
+                val first = withTimeout(10_000) { events.receive() }
+                val announced = first as? RendererEvent.ToneMapEngaged
+                assertNotNull(announced, "the first event must be the tone map, was $first")
+                assertEquals("Pq", announced.transfer, "the SOURCE transfer travels with the event")
+                assertEquals(-1, announced.streamIndex, "a renderer is handed frames, not streams")
+                // Two more frames were presented and neither may speak. The engine latches too,
+                // but a renderer shouting per frame makes its own logs unreadable.
+                assertNull(
+                    withTimeoutOrNull(500) { events.receive() },
+                    "once per renderer, not once per frame",
+                )
+            } finally {
+                collector.cancel()
+                renderer.close()
             }
-            withTimeout(5_000) {
-                while (seen.filterIsInstance<RendererEvent.ToneMapEngaged>().isEmpty()) yield()
-            }
-            // Two more, to prove the latch: the engine latches too, but a renderer that shouts on
-            // every frame is a renderer nobody can read a log from.
-            repeat(20) { yield() }
-            val announced = seen.filterIsInstance<RendererEvent.ToneMapEngaged>()
-            assertEquals(1, announced.size, "once per renderer, not once per frame: got $announced")
-            assertEquals("Pq", announced.single().transfer, "the SOURCE transfer travels with the event")
-            assertEquals(-1, announced.single().streamIndex, "a renderer is handed frames, not streams")
-        } finally {
-            collector.cancel()
-            renderer.close()
         }
     }
 
     @Test
     fun `a converter that does not tone map stays silent even on an HDR frame`() = runBlocking {
         val ledger = LeakLedger()
-        val seen = mutableListOf<RendererEvent>()
         val renderer = AppKitVideoRenderer(
             convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
             enqueueOnMain = { block -> block() },
             showImage = { },
         )
-        val collector = launch(Dispatchers.Default) { renderer.events.toList(seen) }
-        try {
-            val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
-            renderer.present(FakeVideoFrame(Pts(0), colorSpace = hdr, ledger = ledger), 0L)
-            repeat(50) { yield() }
-            assertTrue(
-                seen.filterIsInstance<RendererEvent.ToneMapEngaged>().isEmpty(),
-                "HDR metadata is not the trigger; only a renderer that ROLLED IT OFF may speak",
-            )
-        } finally {
-            collector.cancel()
-            renderer.close()
+        coroutineScope {
+            val (events, collector) = eventsOf(renderer)
+            try {
+                val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
+                renderer.present(FakeVideoFrame(Pts(0), colorSpace = hdr, ledger = ledger), 0L)
+                assertNull(
+                    withTimeoutOrNull(500) { events.receive() },
+                    "HDR metadata is not the trigger; only a renderer that ROLLED IT OFF may speak",
+                )
+            } finally {
+                collector.cancel()
+                renderer.close()
+            }
         }
     }
 

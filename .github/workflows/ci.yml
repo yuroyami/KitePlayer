@@ -28,9 +28,10 @@
 #   - `:kiteplayer-ffmpeg` on the iOS simulator: RealMediaSeekTest cannot see the host's testmedia
 #     tree through the simctl spawn boundary, and VideoToolboxDecodeTest needs hardware the
 #     simulator does not have. Four failures, all environment.
-#   - `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` on wasmJs: their commonTest DOES NOT COMPILE for
-#     that target, because `DecoderFallbackTest` and `FilterAttachmentTest` use `runBlocking`, which
-#     does not exist on wasmJs. That target has therefore never been built. Row KP-WASM-RUNBLOCKING.
+#   - `:kiteplayer-mobile` on wasmJs. Not a gap in the runner: that module has NO shared test
+#     sources at all, only jvmTest and androidHostTest, so its wasmJs test task is NO-SOURCE and
+#     naming it here would widen the job on paper and not in fact. Row KP-UNTESTED-MODULES covers
+#     it with the other source-less modules. Its wasmJs MAIN code is compiled by the build job.
 #   - `:kiteplayer-network:wasmJsBrowserTest` aborts inside webpack with
 #     "RangeError: Invalid array length" while it timestamps a context directory. Deterministic on
 #     the proving Mac across a cleaned build. The NODE half runs here. Row KP-WEBPACK-CONTEXT.
@@ -485,12 +486,18 @@ jobs:
       # wasmJsTest is BOTH halves: wasmJsNodeTest and wasmJsBrowserTest. Running only the node half
       # is what let WebCanvasVideoRendererTest assert a node-only refusal for as long as it did; the
       # browser really has OffscreenCanvas, so the same call draws there.
+      #
+      # `:kiteplayer-ffmpeg` contributes 46 tests here, not its whole suite. The tests that open real
+      # clips live in its `realBackendTest` source set, which only the JVM and native targets take,
+      # because a browser has no filesystem to read the clips from. What runs here is the shared
+      # decoder logic, which is most of it: 29 of the 46 are `DecoderFallbackTest`.
       - name: wasmJs tests, node and browser
         run: |
           ./gradlew --stacktrace \
             :kiteplayer-core:wasmJsTest \
             :kiteplayer-subtitles:wasmJsTest \
-            :kiteplayer-output:wasmJsTest
+            :kiteplayer-output:wasmJsTest \
+            :kiteplayer-ffmpeg:wasmJsTest
 
       # NODE ONLY, and the reason is in the file header: the browser half aborts inside webpack
       # while it timestamps a context directory. That is a row, not a skip, and the node half is

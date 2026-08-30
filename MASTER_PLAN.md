@@ -183,13 +183,8 @@ Each RED first against a revert or scripted fault; cluster commits.
 - [ ] `FrameDropping` warning: force five late drops in one stats interval under the virtual
   clock (the one warning of the F-WRN1 four with no pin)
 
-### 2.3 The two red wasm build rows. Size M
+### 2.3 The last red wasm build row. Size M
 
-- [ ] **KP-WASM-RUNBLOCKING**: `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest do
-  not compile for wasmJs (31 `runBlocking` sites, two files; the target has never built).
-  Move blocking-idiom tests to a source set wasm excludes (the network module's
-  serverBackedTest precedent) or convert to `runTest`; then wire the target into CI's wasm
-  job.
 - [ ] **KP-WEBPACK-CONTEXT**: `:kiteplayer-network:wasmJsBrowserTest` dies in webpack
   (`RangeError: Invalid array length` timestamping a context directory; deterministic; node
   half fine). Bisect the webpack context scope. If the fix is a toolchain bump, STOP: owner

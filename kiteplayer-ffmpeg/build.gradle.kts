@@ -100,6 +100,9 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+            // `runTest` rather than `runBlocking`, because the web has no thread to block and the
+            // decoder tests are shared with it.
+            implementation(libs.kotlinx.coroutines.test)
         }
         val commonMain = getByName("commonMain")
         // Everything that can block, which is everything except the web (17.14 X-09).

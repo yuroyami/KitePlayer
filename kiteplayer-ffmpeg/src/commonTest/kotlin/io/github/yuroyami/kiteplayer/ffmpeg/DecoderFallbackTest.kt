@@ -16,7 +16,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteffmpeg.CodecId
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -64,7 +64,7 @@ class DecoderFallbackTest {
      * terminal here turned a refusable stream into a dead player.
      */
     @Test
-    fun hardwareFailingBeforeAnyOutputFallsBackFromTheStreamHead() = runBlocking {
+    fun hardwareFailingBeforeAnyOutputFallsBackFromTheStreamHead() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 1) }
         }
@@ -79,7 +79,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun hardwareOpenRefusalWarnsOnceAndOpensSoftware() = runBlocking {
+    fun hardwareOpenRefusalWarnsOnceAndOpensSoftware() = runTest {
         val h = Harness().apply {
             hardwareFactory = { throw IllegalStateException("no codec") }
         }
@@ -92,7 +92,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun sendFailureOnThirdPacketReplaysTwoFrameGopByOrdinal() = runBlocking {
+    fun sendFailureOnThirdPacketReplaysTwoFrameGopByOrdinal() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3) }
         }
@@ -107,7 +107,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun flaglessOutputsConfirmTheBoundaryByTimestamp() = runBlocking {
+    fun flaglessOutputsConfirmTheBoundaryByTimestamp() = runTest {
         // FFmpeg's mediacodec wrapper marks no output frame as a keyframe. Confirmation must
         // then come from the timestamp, or every failure before the cap is wrongly terminal.
         val flagless: (TestPacket) -> List<FrameSpec> = { packet ->
@@ -128,7 +128,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun flaglessOutputsReleaseTheWindowBeforeTheCap() = runBlocking {
+    fun flaglessOutputsReleaseTheWindowBeforeTheCap() = runTest {
         // The A3 device shape: keyframed 8 MiB packets, outputs never flagged. Without the
         // timestamp confirmation the window kept every packet, hit the 16 MiB cap mid-file and
         // failed terminally with no seek to save it.
@@ -151,7 +151,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun receiveFailureAfterOneFrameReplaysFromRetainedKeyframe() = runBlocking {
+    fun receiveFailureAfterOneFrameReplaysFromRetainedKeyframe() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failReceiveAt = 2) }
         }
@@ -164,7 +164,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun replayHonoursSendReceiveBackpressure() = runBlocking {
+    fun replayHonoursSendReceiveBackpressure() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3) }
             softwareFactory = {
@@ -189,7 +189,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun hiddenReplayBackpressureIsAbsorbedBeforeCallerPacketIsAccepted() = runBlocking {
+    fun hiddenReplayBackpressureIsAbsorbedBeforeCallerPacketIsAccepted() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3) }
             softwareFactory = {
@@ -217,7 +217,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun duplicatePtsDoNotChangeReplaySuppressionCount() = runBlocking {
+    fun duplicatePtsDoNotChangeReplaySuppressionCount() = runTest {
         val duplicate = Pts(77)
         val h = Harness().apply {
             hardwareFactory = {
@@ -240,7 +240,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun noPtsSentinelDoesNotChangeReplaySuppressionCount() = runBlocking {
+    fun noPtsSentinelDoesNotChangeReplaySuppressionCount() = runTest {
         val noPts = Pts(Long.MIN_VALUE)
         val h = Harness().apply {
             hardwareFactory = {
@@ -263,7 +263,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun pendingKeyframeKeepsOlderGopThroughDelayedBFrameAndFailure() = runBlocking {
+    fun pendingKeyframeKeepsOlderGopThroughDelayedBFrameAndFailure() = runTest {
         val h = Harness().apply {
             val hardware = ScriptDecoder(ledger, hardwareStatus, failReceiveAt = 4) { packet ->
                 when (packet.id) {
@@ -294,7 +294,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun confirmedHandoverMakesDeliveredKeyframeOrdinalOne() = runBlocking {
+    fun confirmedHandoverMakesDeliveredKeyframeOrdinalOne() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 4) }
         }
@@ -309,7 +309,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun sixteenMiBCapCountsOldAndCandidateWindowsBeforeAcceptingCrossingPacket() = runBlocking {
+    fun sixteenMiBCapCountsOldAndCandidateWindowsBeforeAcceptingCrossingPacket() = runTest {
         val h = Harness().apply {
             // The delayed frame belongs to the OLD window, so its timestamp sits BEFORE the
             // candidate keyframe's. It used to carry a fictional future pts, which was harmless
@@ -335,7 +335,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun failureWithoutConfirmedKeyframeIsTypedAndNeverPresentedAsFallback() = runBlocking {
+    fun failureWithoutConfirmedKeyframeIsTypedAndNeverPresentedAsFallback() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 2) }
         }
@@ -351,7 +351,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun requireReturnsNullOnOpenRefusalAndPropagatesRuntimeFailureWithoutSoftware() = runBlocking {
+    fun requireReturnsNullOnOpenRefusalAndPropagatesRuntimeFailureWithoutSoftware() = runTest {
         val refused = Harness().apply { hardwareFactory = { error("refused") } }
         assertNull(refused.open(requireSelection()))
         assertEquals(listOf<CodecId?>(CodecId.H264MediaCodec), refused.opens)
@@ -372,7 +372,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun offDoesNotProbeHardware() = runBlocking {
+    fun offDoesNotProbeHardware() = runTest {
         val h = Harness().apply { hardwareFactory = { error("must not probe") } }
         val decoder = requireNotNull(
             h.open(DecoderSelection(null, mayFallback = false, requiresHardware = false)),
@@ -383,7 +383,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun flushClosesWholeRetainedGopAndResetsEpoch() = runBlocking {
+    fun flushClosesWholeRetainedGopAndResetsEpoch() = runTest {
         val h = Harness()
         val decoder = requireNotNull(h.open(autoSelection()))
         assertDelivered(decoder, h.packet(1, keyframe = true), 1)
@@ -397,7 +397,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun postFlushDemotionReplaysInTheNewGeneration() = runBlocking {
+    fun postFlushDemotionReplaysInTheNewGeneration() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 3) }
         }
@@ -412,7 +412,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun drainBackpressureIsResolvedInternallyBecauseCallerDoesNotRetryNull() = runBlocking {
+    fun drainBackpressureIsResolvedInternallyBecauseCallerDoesNotRetryNull() = runTest {
         val h = Harness().apply {
             hardwareFactory = {
                 ScriptDecoder(
@@ -436,7 +436,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun drainFailureDropsQueuedHardwareCopyAndReplaysTailExactlyOnce() = runBlocking {
+    fun drainFailureDropsQueuedHardwareCopyAndReplaysTailExactlyOnce() = runTest {
         val h = Harness().apply {
             hardwareFactory = {
                 ScriptDecoder(
@@ -472,7 +472,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun demotionReportsSoftwareBeforeWarningAndSoftwareOpen() = runBlocking {
+    fun demotionReportsSoftwareBeforeWarningAndSoftwareOpen() = runTest {
         lateinit var decoder: VideoDecoder
         var statusAtWarning: HwdecStatus? = null
         var statusAtSoftwareOpen: HwdecStatus? = null
@@ -497,7 +497,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun failedSoftwareReopenClosesHardwareAndEveryRetainedOwner() = runBlocking {
+    fun failedSoftwareReopenClosesHardwareAndEveryRetainedOwner() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 2) }
             softwareFactory = { throw IllegalStateException("software gone") }
@@ -512,7 +512,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun failedInitialSoftwareFlushClosesTheFreshDecoder() = runBlocking {
+    fun failedInitialSoftwareFlushClosesTheFreshDecoder() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 2) }
             softwareFactory = { ScriptDecoder(ledger, HwdecStatus.Software, failFlush = true) }
@@ -527,7 +527,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun cancellationDuringSoftwareOpenCleansRetainedOwnersAndStaysCancellation() = runBlocking {
+    fun cancellationDuringSoftwareOpenCleansRetainedOwnersAndStaysCancellation() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 2) }
             softwareFactory = { throw CancellationException("cancel open") }
@@ -542,7 +542,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun cancellationDuringReplayClosesSoftwareAndRetainedOwners() = runBlocking {
+    fun cancellationDuringReplayClosesSoftwareAndRetainedOwners() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 2) }
             softwareFactory = {
@@ -564,7 +564,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun throwingWarningCallbackCannotStrandTheRetainedWindow() = runBlocking {
+    fun throwingWarningCallbackCannotStrandTheRetainedWindow() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failSendAt = 2) }
             warningSink = { throw IllegalStateException("warning callback") }
@@ -580,7 +580,7 @@ class DecoderFallbackTest {
     }
 
     @Test
-    fun delayedReplayShortageBecomesTypedFailureAtSoftwareDrain() = runBlocking {
+    fun delayedReplayShortageBecomesTypedFailureAtSoftwareDrain() = runTest {
         val h = Harness().apply {
             hardwareFactory = { ScriptDecoder(ledger, hardwareStatus, failReceiveAt = 3) }
             softwareFactory = {

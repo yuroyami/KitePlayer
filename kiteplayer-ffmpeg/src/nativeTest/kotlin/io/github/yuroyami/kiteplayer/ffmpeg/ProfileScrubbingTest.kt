@@ -1,4 +1,9 @@
-@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+@file:OptIn(
+    kotlinx.cinterop.ExperimentalForeignApi::class,
+    // PlaybackProfile.Scrubbing carries raw FFmpeg decoder options, which is the whole point of
+    // this arm: it proves those strings reach FFmpeg and change what it decodes.
+    io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class,
+)
 
 package io.github.yuroyami.kiteplayer.ffmpeg
 

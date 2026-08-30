@@ -834,11 +834,31 @@ it.
   then freed on failure leaving earlier entries dangling; four unchecked `av_strdup`; a plane
   index never bounded (and the test asserts the wrong answer; fix both); an eight-channel cap
   on upload only.
-- [ ] **9.7 KC-DSL** (L): untyped steps, no `@DslMarker`, six of seven types unvalidated, raw
-  strings where typed `SampleFormat` exists, the raw map applied after typed keys so it wins
-  (same collision law as 3.2), CBR emitted as VBV without `nal-hrd`, the x264 preset ladder
-  emitted for every codec including VideoToolbox, `CodecId` conflating bitstream identity
-  with implementation.
+- [ ] **9.7 KC-DSL** (L). **Three of its items are DONE 2026-08-30, and the preset one was worse
+  than the row said.** `preset`, `tune` and `crf` are x264-family options with no generic FFmpeg
+  equivalent, and the tuning emitted them for every codec, so asking `h264_videotoolbox` for
+  `preset=slow` set nothing: dropped at open, encode at the hardware defaults, one line in an
+  unused-option report nobody reads. Worse, the recipes build LGPL FFmpeg with NO external
+  encoders, so the shipped video encoders are `mpeg4`, `mjpeg`, `png` and the platform hardware
+  ones, and not one of them has a preset, a tune or a crf. **A preset in this library was always a
+  no-op.** It refuses now, naming the encoders that do accept each knob, and `profile` is left
+  alone because it is an AVCodecContext field rather than an x264 option. CBR also carries
+  `nal-hrd=cbr` on x264 now, which is what turns a capped pipe into conformant CBR; everywhere
+  else the KDoc says plainly that the floor is a request the encoder cannot honour. And the
+  unvalidated types are validated: blank profile or tune, and a zero or negative bitrate in either
+  tuning, all refuse. Two of these changed the golden suite, which had been pinning the no-op.
+
+  **Two items were already false and are dropped.** "The raw map applied after typed keys so it
+  wins" cannot happen: `applyTo` has always refused a collision outright. And "no `@DslMarker`"
+  does not apply to this shape at all, because the encoder tuning is a data class, not a builder
+  scope; the FILTER DSL is the one with a builder, and it is a single receiver with nothing to
+  leak into.
+
+  Left: raw strings where a typed `SampleFormat` exists, and `CodecId` conflating bitstream
+  identity with implementation. The second is the real one and it is NEEDS-DESIGN: `h264`,
+  `libx264` and `h264_videotoolbox` are one type today, which is why a knob check has to read a
+  name at all. `kiteffmpeg-core` ABI moved with the compile signature: klib and jvm both stay at
+  1910 and 1529 lines, one declaration changed in place.
 - [ ] **9.8 KC-BUILD** (L): 23 defects, led by `/usr/lib/include` on Linux (simply wrong),
   target truth duplicated across five hand-synced representations, a cache key recording a
   URL it never compares, redirects auto-followed inside the loop validating them manually,

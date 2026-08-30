@@ -247,6 +247,41 @@ class EngineAuditRegressionTest {
         )
         harness.close()
     }
+    // F-WRN1, the last of the four with no pin. FrameDropping was the same kind of defect as
+    // AudioUnderrun above: a documented public type that nothing could be shown to raise. The
+    // condition is a display too slow for the media, so the renderer here takes five frame periods
+    // to present one, which is what makes the schedule run late enough to start dropping.
+    @Test
+    fun `a display that cannot keep up says FrameDropping out loud`() = runTest {
+        val harness = CoreHarness(
+            this,
+            script = MediaScript(durationUs = 6_000_000, videoFrameDurationUs = 40_000),
+            renderer = RecordingRenderer(presentDuration = 80.milliseconds),
+        )
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(5.seconds)
+
+        val dropping = harness.core.warningHistory()
+            .map { it.warning }
+            .filterIsInstance<PlaybackWarning.FrameDropping>()
+        assertTrue(
+            dropping.isNotEmpty(),
+            "a schedule dropping frames is worth a typed warning, dropped=" +
+                harness.core.stats.value.droppedFramesLate + " history: " +
+                harness.core.warningHistory().map { it.warning::class.simpleName }.toString(),
+        )
+        // The threshold is the claim, not just the type: the warning exists to separate a display
+        // that is struggling from the odd single drop, so anything below five in an interval must
+        // stay quiet. Reporting fewer would make the number in the warning a lie.
+        assertTrue(
+            dropping.all { it.droppedInLastSecond >= 5 },
+            "every FrameDropping must carry at least the threshold it fired on, saw " +
+                dropping.map { it.droppedInLastSecond }.toString(),
+        )
+        harness.close()
+    }
+
     // F-PLAY1 (owner report 2026-08-17): play at the end IS a restart, mpv's law. The intent
     // flag was already true after a natural end, so pressing play changed nothing and the
     // player sat in Ended for ever.

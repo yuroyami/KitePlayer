@@ -153,7 +153,7 @@ What is left:
 
 # PHASE 2: EVIDENCE BUY-BACK (make the unprovable provable)
 
-### 2.1 The test-debt row: ten owed regressions + one warning test. Size M-L total
+### 2.1 The test-debt row: ten owed regressions. Size M-L total
 
 Each RED first against a revert or scripted fault; cluster commits.
 
@@ -168,8 +168,6 @@ Each RED first against a revert or scripted fault; cluster commits.
 - [ ] decoder output diverging from codecpar is surfaced (KC)
 - [ ] empty-output `MediaSink` finalization is clean or typed (KC)
 - [ ] midstream audio format change reaches renegotiation or typed warning (KP)
-- [ ] `FrameDropping` warning: force five late drops in one stats interval under the virtual
-  clock (the one warning of the F-WRN1 four with no pin)
 
 ### 2.2 F-COV1 recounted 2026-08-30. What is left is what cannot run here
 

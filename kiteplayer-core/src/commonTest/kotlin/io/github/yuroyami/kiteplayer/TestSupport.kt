@@ -139,6 +139,14 @@ internal class RecordingRenderer(
     /** False makes every frame refused, the way a renderer whose surface went away refuses. */
     private val accepts: Boolean = true,
     private val decoderFactories: List<VideoDecoderFactory> = emptyList(),
+    /**
+     * How long each [present] takes, which is the only way to make the schedule run late.
+     *
+     * Zero is a renderer that keeps up. Anything longer than one frame's period is a display that
+     * cannot, so the schedule falls behind and the late-drop rule starts firing. Under the test
+     * clock this is a virtual wait, so a slow renderer costs the suite nothing in real seconds.
+     */
+    private val presentDuration: Duration = Duration.ZERO,
 ) : VideoRenderer {
 
     private val received = mutableListOf<Presentation>()
@@ -188,6 +196,7 @@ internal class RecordingRenderer(
         received += Presentation(frame.pts, frame.generation, targetNanos)
         // The renderer owns the frame from here, including when it fails. Anything else leaks.
         frame.close()
+        if (presentDuration > Duration.ZERO) kotlinx.coroutines.delay(presentDuration)
         return accepts
     }
 

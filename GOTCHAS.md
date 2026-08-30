@@ -147,6 +147,11 @@ Never move one silently.
   its own and failed inside a full gate run, reporting that a publishing module depended on the
   SAMPLE, which no build file says. Only `api`, `implementation`, `compileOnly` and `runtimeOnly`,
   plain or source-set prefixed, can reach a POM; read those and nothing else.
+- **`symbol-audit.sh` prefers the GRADLE-built archive, not the host one.** It falls back to
+  `build/plain/lib/libkitecodec_helpers_host.a` only when the Gradle output is absent, so
+  `build-host.sh && symbol-audit.sh` audits whatever Gradle last produced, which can be days old.
+  It reported PASS over a change it had never seen on 2026-08-30. Run
+  `:kiteffmpeg-core:compileKiteFFmpegCForMacosArm64` first, or pass the archive explicitly.
 - **`run-c-tests.sh` never builds, so on its own it proves nothing about a source change.** It
   says so in its own header and it is still easy to miss: change a C file, run the suites, watch
   eight greens, and be looking at yesterday's binaries. `build-host.sh <variant>` first, every

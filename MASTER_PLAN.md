@@ -806,13 +806,21 @@ it.
   allocating native then copying to Java, no common zero-copy lease, handle-table scaling,
   per-frame graph keys, thread-local scaler with no session). Re-measure first: the per-byte
   web half is already dead.
-- [ ] **9.5 KC-BRIDGE** (L): 14 JNI defects, led by the generation mask/compare mismatch
-  (masked at 31 bits, stored and compared at 32: a slot past 0x7FFFFFFF stops resolving;
-  RED with a forced high slot), no lease on resolved handles, O(n) close scan over a table
-  that never shrinks with caller-controlled recursion, kind bits never validated, a pending
-  JNI exception during mint leaking the context, modified-UTF-8 on two paths with the correct
-  decoder unused, callback exceptions collapsed to generic IO, an attached thread never
-  detached, registration erasing every C signature.
+- [ ] **9.5 KC-BRIDGE** (L): 13 JNI defects left. **The lead one is FIXED (2026-08-30): the
+  generation mask/compare mismatch.** The token carries 31 generation bits and the slot's counter
+  was a full uint32_t, so once a slot passed 2^31 the encode truncated and the compare did not:
+  that slot resolved nothing ever again and every token minted from it was dead on arrival. The
+  counter is masked where it MOVES now, which keeps the two identical for the process lifetime and
+  preserves the odd-is-live rule, because the dropped bit's weight is even. A new `test_handles.c`
+  compiles `kc_handles.c` INTO itself so the counter can be wound by hand: two billion mint/close
+  pairs is not a test. Seven cases, falsified by restoring the truncation. Because the table is the
+  SHARED one, the web binding was carrying the same defect and is fixed by the same commit.
+
+  Left: no lease on resolved handles, O(n) close scan over a table that never shrinks with
+  caller-controlled recursion, kind bits never validated, a pending JNI exception during mint
+  leaking the context, modified-UTF-8 on two paths with the correct decoder unused, callback
+  exceptions collapsed to generic IO, an attached thread never detached, registration erasing
+  every C signature.
 - [ ] **9.6 KC-CFILTER** (M): `[out]` found by substring; sources published progressively
   then freed on failure leaving earlier entries dangling; four unchecked `av_strdup`; a plane
   index never bounded (and the test asserts the wrong answer; fix both); an eight-channel cap

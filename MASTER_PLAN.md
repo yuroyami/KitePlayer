@@ -153,15 +153,39 @@ What is left:
 
 # PHASE 2: EVIDENCE BUY-BACK (make the unprovable provable)
 
-### 2.1 The test-debt row: ten owed regressions. Size M-L total
+### 2.1 The test-debt row: what is left needs a DECISION, not a test
 
-Each RED first against a revert or scripted fault; cluster commits.
+Seven of the eleven were written on 2026-08-30 and are gone. The three below are still open for
+the same reason: each one asks the code to SAY something it currently does not say, and what it
+should say is a public API choice. None of them is a missing test over working behaviour, so
+writing a test first would only pin the silence.
 
-- [ ] cancellation after partial audio submission keeps ring/counters consistent (KP)
-- [ ] foreign `StreamInfo` from a backend refuses typed (KP core)
-- [ ] decoder output diverging from codecpar is surfaced (KC)
-- [ ] empty-output `MediaSink` finalization is clean or typed (KC)
-- [ ] midstream audio format change reaches renegotiation or typed warning (KP)
+- [ ] **NEEDS-DESIGN. Foreign `StreamInfo` refuses typed (KP core).** Four entry points take a
+  caller-supplied stream and answer four different ways: `selectTrack(TrackId)` validates and
+  throws `IllegalArgumentException` (deliberate, and `Tracks` KDoc says so); `selectStreams` uses
+  `mapNotNull`, so `{0, 999}` selects 0 and never mentions 999; a decoder factory handed a foreign
+  stream reaches `error("no stream at index N")`, untyped, from the bottom of the stack; and
+  `StreamChoice.At(missing)` resolves to null, indistinguishable from `None` and with no warning.
+  Through the core the third degrades to a typed `NoPlayableStream`, so this is about the SPI's own
+  contract. Decide first whether `IllegalArgumentException` counts as "typed" for caller mistakes
+  (the existing policy) or whether the SPI owes `PlaybackException` throughout.
+- [ ] **NEEDS-DESIGN. Decoder output diverging from codecpar is surfaced (KC).** A stream's
+  `codecpar` announces width, height, pixel format, sample rate and channels; the decoder may emit
+  something else. Nothing compares them, and there is no channel to report it through: KiteFFmpeg
+  has NO logger and NO warning callback anywhere in its Kotlin surface. Its whole non-fatal
+  vocabulary is pull-style values on objects (`corruptDataSkipped`, `unusedOpenOptions`), and the
+  one place a mismatch is checked (encode-side dimensions) throws. Throwing is wrong here: these
+  are files that play. So the decision is which shape the report takes, and `corruptDataSkipped` is
+  the closest precedent.
+- [ ] **NEEDS-DESIGN. Midstream audio format change reaches renegotiation or a typed warning (KP).**
+  The conversion half already works: `AudioPipeline.matches` is full format equality, so a change in
+  rate, channels, sample format or layout rebuilds the pipeline on the buffer that changed. What
+  does not exist is observability. `decoder.outputFormat` is read at open and at track switch only,
+  the sink and ring keep their negotiated format for the session, and `AudioFormatChanged` is never
+  emitted mid-stream. A plain 48 kHz to 44.1 kHz change is completely silent. Decide between
+  renegotiating the device and emitting a warning, then note that a test also needs a new harness
+  knob: `ScriptedAudioDecoder.outputFormat` is `private set` and every buffer is built from it, so
+  the scripted decoder cannot currently change format mid-stream at all.
 
 **Found while writing the `Frame.info` pin, 2026-08-30. NEEDS-DESIGN, size S.** A closed frame
 refuses on every target, but not with the same exception. JVM, Android and native throw

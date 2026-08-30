@@ -704,11 +704,20 @@ account. Signing is checked too, but only on a run that says it must publish
 (`-Pkiteplayer.requireSigning=true`): an ordinary local build has no key and has to stay green.
 The developers block itself was added to the shared POM config, identity only and no address.
 
-- [ ] Wrapper checksum, dependency lockfiles or verification metadata, NDK pinned by exact
-  version (today: chosen by string sort, in five places across the two repos: three KiteFFmpeg
-  build tasks, KitePlayer's `BuildLibassJniTask` and `kiteplayer-libass/build.gradle.kts`).
-  String sort happens to be right for the three NDKs installed here and breaks on a two-digit
-  minor (`29.10` sorts below `29.2`).
+**The wrapper checksum landed 2026-08-30**, taken from gradle.org's own
+`gradle-9.6.0-bin.zip.sha256` and matching the value KiteFFmpeg already pins for the identical
+distribution. `BuildLibassJniTask.locateNdk()` went with it: it was dead (the live resolver is
+`kiteplayer-libass/build.gradle.kts`'s own `resolveNdk()`), and two copies of one rule is how
+they drift.
+
+- [ ] Dependency lockfiles or verification metadata.
+- [ ] NDK pinned by exact version. It is chosen by STRING SORT in four places: three KiteFFmpeg
+  build tasks (`BuildFFmpegTask`, `BuildDav1dTask`, `BuildAssChainTask`) and
+  `kiteplayer-libass/build.gradle.kts`. That is right for the three NDKs installed here and wrong
+  on a two-digit minor, since `29.10` sorts below `29.2`. NOT done blind: this machine has no
+  `kiteplayer.libass.root`, so `androidChainsReady` is false, no `buildLibassJni` task is even
+  registered, and the NDK path cannot be exercised here at all. It wants a machine with the
+  Android chains, like the C pass at the top of Phase 3.
 - [ ] The two unpublished optional modules (`kiteplayer-network`, `kiteplayer-libass`)
   publish, or the README states their absence.
 - [ ] SOL-B8: the ordinary Android AAR publication, proven by a consumer smoke resolving it

@@ -133,14 +133,5 @@ abstract class BuildLibassJniTask : DefaultTask() {
             AndroidAbi("x86_64", "x86_64-linux-android24", "android-x64", "AndroidX64"),
         )
 
-        /** The NDK this machine offers, honouring the env vars the other native tasks read. */
-        fun locateNdk(): File? = sequenceOf(
-            "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT", "ANDROID_NDK_LATEST_HOME",
-        ).mapNotNull(System::getenv).map(::File).firstOrNull { it.isDirectory }
-            ?: sequenceOf(
-                File(System.getProperty("user.home"), "Library/Android/sdk/ndk"),
-                File(System.getProperty("user.home"), "Android/Sdk/ndk"),
-            ).firstOrNull { it.isDirectory }
-                ?.listFiles { f: File -> f.isDirectory }?.maxByOrNull { it.name }
     }
 }

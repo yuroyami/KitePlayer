@@ -18,6 +18,13 @@ import kotlin.test.assertTrue
  */
 class AppleSubtitleRasterizerTest {
 
+    /**
+     * The default [CueStyle] draws a one pixel drop shadow, so every default-styled bitmap is one
+     * pixel wider and taller than the text inside it. Placement still measures the TEXT box, which
+     * is why the numbers below subtract this rather than shifting.
+     */
+    private val shadowPad = 1
+
     private fun cue(
         text: String,
         alignment: CueAlignment = CueAlignment.BottomCenter,
@@ -48,8 +55,8 @@ class AppleSubtitleRasterizerTest {
         }
         assertTrue(drawn > 50, "the bitmap has $drawn non-transparent pixels; text did not draw")
 
-        // Bottom centre, the Android arithmetic verbatim: y = height - margin - imageHeight.
-        val expectedY = 360 - (360 * 0.05f).toInt() - image.bitmap.height
+        // Bottom centre, the Android arithmetic verbatim: y = height - margin - textHeight.
+        val expectedY = 360 - (360 * 0.05f).toInt() - (image.bitmap.height - shadowPad)
         assertEquals(expectedY, image.y, "the cue is not at the bottom margin")
         assertTrue(
             image.x in 0..(640 - image.bitmap.width),
@@ -126,6 +133,66 @@ class AppleSubtitleRasterizerTest {
         // Anchoring at half the height moves the cue up by exactly half the viewport.
         assertEquals(bottom.y - 180, lifted.y, "sub-pos 0.5 must lift the stack by half the height")
         assertEquals(bottom.x, lifted.x, "and never touch the horizontal")
+    }
+
+    // ── the shadow pass, which this rasterizer ignored until 2026-08-30 ─────────────────────
+
+    private fun shadowed(style: CueStyle) = AppleSubtitleRasterizer().rasterize(
+        cues = listOf(cue("shadowed", style = style)),
+        viewportWidth = 640,
+        viewportHeight = 360,
+        fontScale = 1f,
+    ).single()
+
+    @Test
+    fun theShadowIsDrawnInItsOwnColour() {
+        val image = shadowed(
+            CueStyle(
+                fontSizePx = 96f,
+                primaryColor = 0xFFFFFFFF.toInt(),
+                outlineColor = 0xFF000000.toInt(),
+                shadowColor = 0xFFFF0000.toInt(),
+                shadowOffsetPx = 8f,
+            ),
+        )
+        var red = 0
+        val pixels = image.bitmap.pixels
+        for (index in pixels.indices step 4) {
+            val r = pixels[index].toInt() and 0xFF
+            val g = pixels[index + 1].toInt() and 0xFF
+            val a = pixels[index + 3].toInt() and 0xFF
+            if (a > 200 && r > 150 && g < 100) red++
+        }
+        assertTrue(red > 20, "the shadow did not draw: only $red shadow-coloured pixels")
+    }
+
+    @Test
+    fun aShadowGrowsTheBitmapAndLeavesTheTextWhereItWas() {
+        val none = shadowed(CueStyle(shadowOffsetPx = 0f))
+        val withShadow = shadowed(CueStyle(shadowOffsetPx = 8f))
+        assertEquals(none.bitmap.width + 8, withShadow.bitmap.width, "the bitmap must grow by the offset")
+        assertEquals(none.bitmap.height + 8, withShadow.bitmap.height, "on both axes")
+        // The shadow falls down and right, so the text box does not move: the extra pixels hang
+        // off the bottom-right corner.
+        assertEquals(none.x, withShadow.x, "a shadow must not move the text sideways")
+        assertEquals(none.y, withShadow.y, "a shadow must not move the text up or down")
+    }
+
+    @Test
+    fun aShadowThatReachesUpAndLeftMovesTheBitmapInsteadOfTheText() {
+        val none = shadowed(CueStyle(shadowOffsetPx = 0f))
+        val behind = shadowed(CueStyle(shadowOffsetPx = -8f))
+        assertEquals(none.bitmap.width + 8, behind.bitmap.width)
+        assertEquals(none.x - 8, behind.x, "the bitmap must start where the shadow does")
+        assertEquals(none.y - 8, behind.y)
+    }
+
+    @Test
+    fun aTransparentShadowCostsNothing() {
+        val off = shadowed(CueStyle(shadowOffsetPx = 0f))
+        val invisible = shadowed(CueStyle(shadowColor = 0x00FF0000, shadowOffsetPx = 8f))
+        assertEquals(off.bitmap.width, invisible.bitmap.width, "a shadow nobody can see must not grow the bitmap")
+        assertTrue(off.bitmap.pixels.contentEquals(invisible.bitmap.pixels), "and must not change a pixel")
     }
 
     // ── CueWrap, which this rasterizer ignored until 2026-08-30 ─────────────────────────────

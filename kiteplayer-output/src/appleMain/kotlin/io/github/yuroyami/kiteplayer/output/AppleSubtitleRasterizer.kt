@@ -20,6 +20,7 @@ import platform.CoreGraphics.CGColorSpaceCreateDeviceRGB
 import platform.CoreFoundation.CFRelease
 import platform.CoreGraphics.CGContextRelease
 import platform.CoreGraphics.CGContextSetLineJoin
+import platform.CoreGraphics.CGContextSetShadowWithColor
 import platform.CoreGraphics.CGContextSetLineWidth
 import platform.CoreGraphics.CGContextSetStrokeColorWithColor
 import platform.CoreGraphics.CGContextSetTextDrawingMode
@@ -176,15 +177,21 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             val width = fitted.first.coerceIn(1, maxOf(safeWidth, viewportWidth))
             val height = fitted.second.coerceAtLeast(1)
 
-            val pixels = ByteArray(width * height * 4)
+            // The shadow lands outside the text box, so the bitmap grows for it and the placement
+            // below subtracts the origin back off. See CueShadow.
+            val shadow = cueShadow(firstStyle, fontScale)
+            val bitmapWidth = width + shadow.pad
+            val bitmapHeight = height + shadow.pad
+
+            val pixels = ByteArray(bitmapWidth * bitmapHeight * 4)
             pixels.usePinned { pinned ->
                 val colorSpace = CGColorSpaceCreateDeviceRGB()
                 val context = CGBitmapContextCreate(
                     data = pinned.addressOf(0),
-                    width = width.toULong(),
-                    height = height.toULong(),
+                    width = bitmapWidth.toULong(),
+                    height = bitmapHeight.toULong(),
                     bitsPerComponent = 8u,
-                    bytesPerRow = (width * 4).toULong(),
+                    bytesPerRow = (bitmapWidth * 4).toULong(),
                     space = colorSpace,
                     bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
                 )
@@ -202,8 +209,31 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                         CGContextSetStrokeColorWithColor(context, interpretCPointer(outline!!.rawValue))
                         CFRelease(outline)
                     }
+                    if (shadow.draws) {
+                        // CG's own drop shadow: one call, applied to the fill and the stroke
+                        // alike, which is exactly the silhouette a subtitle shadow is. Its y
+                        // runs UP, so down on screen is a negative offset, and a zero blur
+                        // keeps the hard edge every subtitle format means by "shadow".
+                        val shade = firstStyle.shadowColor.toCgColor()
+                        CGContextSetShadowWithColor(
+                            context,
+                            CGSizeMake(shadow.offset.toDouble(), -shadow.offset.toDouble()),
+                            0.0,
+                            interpretCPointer(shade!!.rawValue),
+                        )
+                        CFRelease(shade)
+                    }
+                    // The text box inside the grown bitmap. CoreText fills a frame from the TOP
+                    // of its rect downward, and CG measures y from the bottom, so a shadow that
+                    // reaches down-right leaves its room BELOW the box (rect lifted by the pad)
+                    // and one reaching up-left leaves it above and to the left.
                     val path = CGPathCreateWithRect(
-                        CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()),
+                        CGRectMake(
+                            shadow.origin.toDouble(),
+                            (shadow.pad - shadow.origin).toDouble(),
+                            width.toDouble(),
+                            height.toDouble(),
+                        ),
                         null,
                     )
                     val frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, 0), path, null)
@@ -235,7 +265,12 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                 // word and never move with it, exactly mpv's sub-pos rule.
                 else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
             }
-            return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, pixels))
+            // Placement above measured the TEXT box; the shadow's extra pixels hang off it.
+            return OverlayImage(
+                x = x - shadow.origin,
+                y = y - shadow.origin,
+                bitmap = RgbaBitmap(bitmapWidth, bitmapHeight, pixels),
+            )
         } finally {
             CFRelease(framesetter)
         }

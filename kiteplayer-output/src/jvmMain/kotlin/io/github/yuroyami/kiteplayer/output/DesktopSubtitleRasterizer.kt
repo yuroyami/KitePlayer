@@ -140,25 +140,22 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             textWidth.coerceIn(safeWidth, maxOf(safeWidth, viewportWidth))
         }
 
+        // The shadow lands outside the text box, so the bitmap grows for it and the placement
+        // below subtracts the origin back off. See CueShadow.
+        val shadow = cueShadow(firstStyle, fontScale)
+        val outlineWidth = firstStyle.outlineWidthPx * fontScale
+
         // ARGB_PRE, read straight out of the raster: this is the whole alpha contract.
-        val image = BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB_PRE)
+        val image = BufferedImage(width + shadow.pad, height + shadow.pad, BufferedImage.TYPE_INT_ARGB_PRE)
         val g = image.createGraphics()
         try {
             applyHints(g)
-            val outlineWidth = firstStyle.outlineWidthPx * fontScale
-            var baseline = 0f
-            for (line in lines) {
-                baseline += line.ascent
-                val x = alignedX(line.advance, width, layoutSpec.alignment)
-                if (outlineWidth > 0f) {
-                    // Outline pass first, fill second: the cheap universal legibility trick.
-                    g.color = Color(firstStyle.outlineColor, true)
-                    g.stroke = BasicStroke(outlineWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
-                    g.draw(line.getOutline(AffineTransform.getTranslateInstance(x.toDouble(), baseline.toDouble())))
-                }
-                line.draw(g, x, baseline)
-                baseline += line.descent + line.leading
+            if (shadow.draws) {
+                val at = shadow.origin + shadow.offset
+                drawLines(g, lines, width, layoutSpec.alignment, at, at, outlineWidth, firstStyle.outlineColor, Color(firstStyle.shadowColor, true))
             }
+            val at = shadow.origin.toFloat()
+            drawLines(g, lines, width, layoutSpec.alignment, at, at, outlineWidth, firstStyle.outlineColor, silhouette = null)
         } finally {
             g.dispose()
         }
@@ -197,7 +194,52 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             // word and never move with it, exactly mpv's sub-pos rule.
             else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
         }
-        return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, premultipliedRgba(image)))
+        // Placement above measured the TEXT box; the shadow's extra pixels hang off it.
+        return OverlayImage(
+            x = x - shadow.origin,
+            y = y - shadow.origin,
+            bitmap = RgbaBitmap(image.width, image.height, premultipliedRgba(image)),
+        )
+    }
+
+    /**
+     * Draws the laid-out lines once, at [dx]/[dy] inside the bitmap.
+     *
+     * [silhouette] is the shadow pass: the same glyphs and the same stroke, but flat in one colour
+     * so the copy reads as a shadow rather than as a second, offset subtitle. Null draws the real
+     * text: stroke in the outline colour, then the spans' own colours over it, which is the cheap
+     * universal legibility trick.
+     */
+    private fun drawLines(
+        g: Graphics2D,
+        lines: List<TextLayout>,
+        boxWidth: Int,
+        alignment: CueAlignment,
+        dx: Float,
+        dy: Float,
+        outlineWidth: Float,
+        outlineColor: Int,
+        silhouette: Color?,
+    ) {
+        var baseline = dy
+        for (line in lines) {
+            baseline += line.ascent
+            val x = alignedX(line.advance, boxWidth, alignment) + dx
+            if (outlineWidth > 0f || silhouette != null) {
+                val shape = line.getOutline(AffineTransform.getTranslateInstance(x.toDouble(), baseline.toDouble()))
+                if (outlineWidth > 0f) {
+                    g.color = silhouette ?: Color(outlineColor, true)
+                    g.stroke = BasicStroke(outlineWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                    g.draw(shape)
+                }
+                if (silhouette != null) {
+                    g.color = silhouette
+                    g.fill(shape)
+                }
+            }
+            if (silhouette == null) line.draw(g, x, baseline)
+            baseline += line.descent + line.leading
+        }
     }
 
     /**

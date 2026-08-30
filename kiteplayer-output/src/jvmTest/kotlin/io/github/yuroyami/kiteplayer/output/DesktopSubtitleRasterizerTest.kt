@@ -33,6 +33,13 @@ class DesktopSubtitleRasterizerTest {
         layout = layout,
     )
 
+    /**
+     * The default [CueStyle] draws a one pixel drop shadow, so every default-styled bitmap is one
+     * pixel wider and taller than the text inside it. Placement still measures the TEXT box, which
+     * is why the numbers below subtract this rather than shifting.
+     */
+    private val shadowPad = 1
+
     private fun rasterize(
         vararg cues: SubtitleCue,
         width: Int = 640,
@@ -55,7 +62,14 @@ class DesktopSubtitleRasterizerTest {
         val image = rasterize(
             cue(
                 "MMMM",
-                style = CueStyle(fontSizePx = 96f, primaryColor = 0x80FFFFFF.toInt(), outlineWidthPx = 0f),
+                // No shadow: this arm measures the FILL's alpha, and a 50% shadow under 50%
+                // white composites to 75%, which is a second source of alpha and not the point.
+                style = CueStyle(
+                    fontSizePx = 96f,
+                    primaryColor = 0x80FFFFFF.toInt(),
+                    outlineWidthPx = 0f,
+                    shadowOffsetPx = 0f,
+                ),
             ),
         ).single()
         val pixels = image.bitmap.pixels
@@ -128,10 +142,18 @@ class DesktopSubtitleRasterizerTest {
         assertTrue(drawn > 50, "the bitmap has $drawn non-transparent pixels; text did not draw")
 
         // The safe width is the viewport minus both margins, exactly like Android's StaticLayout.
-        assertEquals(576, image.bitmap.width, "an unpositioned cue's bitmap is the whole safe width")
-        // Bottom centre, the Android arithmetic verbatim: y = height - margin - imageHeight.
-        assertEquals(360 - (360 * 0.05f).toInt() - image.bitmap.height, image.y, "not at the bottom margin")
-        assertEquals((640 - image.bitmap.width) / 2, image.x, "not horizontally centred")
+        assertEquals(
+            576 + shadowPad,
+            image.bitmap.width,
+            "an unpositioned cue's bitmap is the whole safe width, plus room for the shadow",
+        )
+        // Bottom centre, the Android arithmetic verbatim: y = height - margin - textHeight.
+        assertEquals(
+            360 - (360 * 0.05f).toInt() - (image.bitmap.height - shadowPad),
+            image.y,
+            "not at the bottom margin",
+        )
+        assertEquals((640 - (image.bitmap.width - shadowPad)) / 2, image.x, "not horizontally centred")
         assertEquals(image.bitmap.width * image.bitmap.height * 4, image.bitmap.pixels.size, "RGBA8888, no padding")
     }
 
@@ -141,7 +163,11 @@ class DesktopSubtitleRasterizerTest {
         val many = rasterize(
             cue("Hello from KitePlayer, this line is long enough that AWT has to break it into several lines"),
         ).single()
-        assertEquals(576, many.bitmap.width, "wrapping must never widen the bitmap past the safe width")
+        assertEquals(
+            576 + shadowPad,
+            many.bitmap.width,
+            "wrapping must never widen the bitmap past the safe width",
+        )
         assertTrue(many.bitmap.height > one.bitmap.height, "a wrapped cue must be taller than a single line")
     }
 
@@ -168,7 +194,7 @@ class DesktopSubtitleRasterizerTest {
         val top = rasterize(cue("top", alignment = CueAlignment.TopCenter)).single()
         assertEquals((360 * 0.05f).toInt(), top.y)
         val middle = rasterize(cue("mid", alignment = CueAlignment.MiddleCenter)).single()
-        assertEquals((360 - middle.bitmap.height) / 2, middle.y)
+        assertEquals((360 - (middle.bitmap.height - shadowPad)) / 2, middle.y)
         val left = rasterize(cue("left", alignment = CueAlignment.BottomLeft)).single()
         assertEquals((640 * 0.05f).toInt(), left.x)
     }
@@ -189,7 +215,11 @@ class DesktopSubtitleRasterizerTest {
         ).single()
         assertTrue(image.bitmap.width < 576, "a positioned cue must not carry the whole safe width")
         assertEquals(320 - image.bitmap.width / 2, image.x, "an \\an2 anchor centres the extent on the point")
-        assertEquals(180 - image.bitmap.height, image.y, "an \\an2 anchor puts the BOTTOM of the text on the point")
+        assertEquals(
+            180 - (image.bitmap.height - shadowPad),
+            image.y,
+            "an \\an2 anchor puts the BOTTOM of the text on the point",
+        )
     }
 
     @Test
@@ -312,7 +342,7 @@ class DesktopSubtitleRasterizerTest {
         val withNeighbour = rasterize(cue("ordinary"), placed)[1]
         val onItsOwn = rasterize(placed).single()
         assertEquals(onItsOwn.y, withNeighbour.y, "a placed cue never moves with the stack either")
-        assertEquals((360 * 0.2f).toInt() - onItsOwn.bitmap.height, onItsOwn.y)
+        assertEquals((360 * 0.2f).toInt() - (onItsOwn.bitmap.height - shadowPad), onItsOwn.y)
     }
 
     /*
@@ -330,16 +360,63 @@ class DesktopSubtitleRasterizerTest {
     )
 
     @Test
-    fun `shadow colour and offset change nothing, which is what the docs now say`() {
-        val plain = rasterize(cue("shadowed")).single()
-        val shadowed = rasterize(
-            cue("shadowed", style = CueStyle(shadowColor = 0xFFFF0000.toInt(), shadowOffsetPx = 12f)),
+    fun `the shadow is drawn in its own colour`() {
+        val image = rasterize(
+            cue(
+                "O",
+                style = CueStyle(
+                    fontSizePx = 96f,
+                    primaryColor = 0xFFFFFFFF.toInt(),
+                    outlineColor = 0xFF000000.toInt(),
+                    shadowColor = 0xFFFF0000.toInt(),
+                    shadowOffsetPx = 8f,
+                ),
+            ),
         ).single()
-        assertEquals(plain.bitmap.width, shadowed.bitmap.width)
-        assertEquals(plain.bitmap.height, shadowed.bitmap.height)
+        var red = 0
+        val pixels = image.bitmap.pixels
+        for (index in pixels.indices step 4) {
+            val r = pixels[index].toInt() and 0xFF
+            val g = pixels[index + 1].toInt() and 0xFF
+            val a = pixels[index + 3].toInt() and 0xFF
+            if (a > 200 && r > 150 && g < 100) red++
+        }
+        assertTrue(red > 20, "the shadow did not draw: only $red shadow-coloured pixels")
+    }
+
+    @Test
+    fun `a shadow grows the bitmap and leaves the text where it was`() {
+        val none = rasterize(cue("shadowed", style = CueStyle(shadowOffsetPx = 0f))).single()
+        val shadowed = rasterize(cue("shadowed", style = CueStyle(shadowOffsetPx = 8f))).single()
+        assertEquals(none.bitmap.width + 8, shadowed.bitmap.width, "the bitmap must grow by the offset")
+        assertEquals(none.bitmap.height + 8, shadowed.bitmap.height, "on both axes")
+        // The shadow falls down and right, so the text box does not move at all: the extra pixels
+        // hang off the bottom-right corner.
+        assertEquals(none.x, shadowed.x, "a shadow must not move the text sideways")
+        assertEquals(none.y, shadowed.y, "a shadow must not move the text up or down")
+    }
+
+    @Test
+    fun `a shadow that reaches up and left moves the bitmap instead of the text`() {
+        val none = rasterize(cue("shadowed", style = CueStyle(shadowOffsetPx = 0f))).single()
+        val behind = rasterize(cue("shadowed", style = CueStyle(shadowOffsetPx = -8f))).single()
+        assertEquals(none.bitmap.width + 8, behind.bitmap.width)
+        // Now the extra pixels are on the top-left, so the bitmap starts 8 earlier and the text
+        // inside it still lands on the same spot.
+        assertEquals(none.x - 8, behind.x, "the bitmap must start where the shadow does")
+        assertEquals(none.y - 8, behind.y)
+    }
+
+    @Test
+    fun `a transparent shadow costs nothing`() {
+        val off = rasterize(cue("shadowed", style = CueStyle(shadowOffsetPx = 0f))).single()
+        val invisible = rasterize(
+            cue("shadowed", style = CueStyle(shadowColor = 0x00FF0000, shadowOffsetPx = 8f)),
+        ).single()
+        assertEquals(off.bitmap.width, invisible.bitmap.width, "a shadow nobody can see must not grow the bitmap")
         assertTrue(
-            plain.bitmap.pixels.contentEquals(shadowed.bitmap.pixels),
-            "no built-in rasterizer draws a shadow, so a red 12px one must change no pixel",
+            off.bitmap.pixels.contentEquals(invisible.bitmap.pixels),
+            "and must not change a pixel",
         )
     }
 
@@ -403,7 +480,10 @@ class DesktopSubtitleRasterizerTest {
             "the one long line is wider than the safe area, so the bitmap must grow past it, " +
                 "was ${never.bitmap.width}",
         )
-        assertTrue(never.bitmap.width <= 640, "and must stop at the viewport, was ${never.bitmap.width}")
+        assertTrue(
+            never.bitmap.width <= 640 + shadowPad,
+            "and must stop at the viewport, was ${never.bitmap.width}",
+        )
     }
 
     @Test

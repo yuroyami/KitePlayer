@@ -470,6 +470,13 @@ Measured truth table (2026-08-25): per-span colour/bold/italic/underline/strike 
 everywhere; `fontSizePx`/`outline*` apply first-span-whole-cue; `shadowColor/Offset` drawn
 NOWHERE (default was inert); `CueLayout.wrap` ignored; `fontFamily` desktop-only.
 
+**The shadow pass landed 2026-08-30 on all three.** The bitmap grows by the offset and the
+placement keeps measuring the TEXT box, so switching a shadow on never moves the words. The
+default is live now, which means every plain SRT and WebVTT cue carries the one pixel shadow
+the type has always described; a transparent shadow colour or a zero offset turns it off and
+costs nothing. Desktop and Apple proved red-first (Apple uses CG's own shadow, one call
+covering the fill and the stroke together); Android rides DEVICE-DAY with the wrap work.
+
 **`CueWrap` landed 2026-08-30 on all three.** The rule is one shared function
 (`wrapWidthFor`): the three modes differ only in the width handed to the platform line
 breaker, so shaping and bidi stay AWT's, CoreText's and StaticLayout's. `Balanced` binary
@@ -480,9 +487,8 @@ Android is the named skip (no Robolectric, and android.jar is stubs on the host)
 DEVICE-DAY step 9b.
 
 Left, each red-first on all three rasterizers (or a named skip): per-span size and outline,
-the shadow pass (bitmap grown by the offset, placement moved with it), `fontFamily` on Apple
-and Android (platform font lookup with fallback). N31's reverse stacking (`Collisions:`)
-lands here too.
+`fontFamily` on Apple and Android (platform font lookup with fallback). N31's reverse stacking
+(`Collisions:`) lands here too.
 
 ### 4.5 KP-P1-15: viewport subtitles. Size M, NEEDS-DESIGN
 
@@ -817,6 +823,9 @@ a failed build is itself the first finding.
     into near-equal lines, `None` fills the first line and leaves a short second, `Never`
     stays on one line and runs off both edges. Nothing here can test StaticLayout: the host
     JVM's android.jar is stubs, and there is no Robolectric.
+9c. Same cue with a big coloured shadow (`shadowOffsetPx` 8, red). PASS: the shadow falls
+    down-right, is not clipped at the bitmap edge, and the text sits exactly where it sat
+    with the shadow off. Same reason as 9b: Canvas and Bitmap are stubs off-device.
 
 **Android phone, resume anchor (the S23 fix's device half):**
 10. Pause 30+ seconds mid-playback, resume. PASS: no position jump, sync holds (the fix

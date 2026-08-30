@@ -151,22 +151,43 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         }
         val height = layout.height.coerceAtLeast(1)
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        if (glyphShift != 0f) canvas.translate(-glyphShift, 0f)
-        // Outline pass first, fill second: the cheap universal legibility trick.
         val style = cue.spans.firstOrNull()?.style
-        if (style != null && style.outlineWidthPx > 0f) {
+        // The shadow lands outside the text box, so the bitmap grows for it and the placement
+        // below subtracts the origin back off. See CueShadow.
+        val shadow = style?.let { cueShadow(it, fontScale) } ?: NO_CUE_SHADOW
+        val outlineWidth = style?.outlineWidthPx?.times(fontScale) ?: 0f
+
+        val bitmap = Bitmap.createBitmap(width + shadow.pad, height + shadow.pad, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.translate(shadow.origin - glyphShift, shadow.origin.toFloat())
+        if (shadow.draws && style != null) {
+            // The shadow is a flat copy of the text, so the per-span colours come off it: a
+            // shadow that kept them would read as a second, offset subtitle.
+            val flat = SpannableStringBuilder(text)
+            for (colored in flat.getSpans(0, flat.length, ForegroundColorSpan::class.java)) {
+                flat.removeSpan(colored)
+            }
+            canvas.save()
+            canvas.translate(shadow.offset, shadow.offset)
+            // Stroke then fill, so the shadow is as fat as the outlined text casting it.
+            if (outlineWidth > 0f) {
+                drawFlat(canvas, flat, wrapWidth, alignment, paint, style.shadowColor, outlineWidth)
+            }
+            drawFlat(canvas, flat, wrapWidth, alignment, paint, style.shadowColor, strokeWidth = 0f)
+            canvas.restore()
+        }
+        // Outline pass first, fill second: the cheap universal legibility trick.
+        if (style != null && outlineWidth > 0f) {
             val outline = TextPaint(paint).apply {
                 this.style = Paint.Style.STROKE
-                strokeWidth = style.outlineWidthPx * fontScale
+                strokeWidth = outlineWidth
                 color = style.outlineColor
             }
             layoutAt(wrapWidth, outline).draw(canvas)
         }
         layout.draw(canvas)
 
-        val pixels = ByteArray(width * height * 4)
+        val pixels = ByteArray(bitmap.width * bitmap.height * 4)
         bitmap.copyPixelsToBuffer(ByteBuffer.wrap(pixels))
 
         val marginXPx = (viewportWidth * layoutSpec.marginLeft).toInt()
@@ -203,7 +224,42 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             // word and never move with it, exactly mpv's sub-pos rule.
             else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
         }
-        return OverlayImage(x = x, y = y, bitmap = RgbaBitmap(width, height, pixels))
+        // Placement above measured the TEXT box; the shadow's extra pixels hang off it.
+        return OverlayImage(
+            x = x - shadow.origin,
+            y = y - shadow.origin,
+            bitmap = RgbaBitmap(bitmap.width, bitmap.height, pixels),
+        )
+    }
+
+    /**
+     * Draws the text once in a single flat [color], which is what a shadow is.
+     *
+     * [strokeWidth] above zero draws the outline's silhouette instead of the glyphs', so a shadow
+     * comes out as fat as the outlined text casting it.
+     */
+    private fun drawFlat(
+        canvas: Canvas,
+        text: CharSequence,
+        wrapWidth: Int,
+        alignment: Layout.Alignment,
+        base: TextPaint,
+        color: Int,
+        strokeWidth: Float,
+    ) {
+        val paint = TextPaint(base).apply {
+            this.color = color
+            if (strokeWidth > 0f) {
+                this.style = Paint.Style.STROKE
+                this.strokeWidth = strokeWidth
+            } else {
+                this.style = Paint.Style.FILL
+            }
+        }
+        StaticLayout.Builder.obtain(text, 0, text.length, paint, wrapWidth)
+            .setAlignment(alignment)
+            .build()
+            .draw(canvas)
     }
 
 

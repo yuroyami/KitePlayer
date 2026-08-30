@@ -60,7 +60,7 @@ public data class StyledSpan(
  * | [primaryColor], [bold], [italic], [underline], [strikeThrough] | per span | per span | per span |
  * | [fontFamily] | per span | ignored | ignored |
  * | [fontSizePx], [outlineColor], [outlineWidthPx] | first span, whole cue | first span, whole cue | first span, whole cue |
- * | [shadowColor], [shadowOffsetPx] | ignored | ignored | ignored |
+ * | [shadowColor], [shadowOffsetPx] | first span, whole cue | first span, whole cue | first span, whole cue |
  *
  * "First span, whole cue" means a cue whose spans disagree renders with the FIRST span's value
  * everywhere, so mixed sizes or mixed outlines in one cue are flattened.
@@ -81,17 +81,19 @@ public data class CueStyle(
     /** Taken from the cue's FIRST span and applied to all of them. */
     val outlineColor: Int = 0xFF000000.toInt(),
     /**
-     * Not drawn by any built-in rasterizer, so the default below is inert.
+     * The drop shadow's colour. A fully transparent one turns the shadow off, and costs nothing.
      *
-     * Kept because the parsers read it from the source and libass renders its own shadow. Drawing
-     * one here means growing each cue's bitmap by the offset and moving its placement with it,
-     * which is a change to layout rather than a colour, and is why this is stated instead of
-     * quietly defaulted.
+     * Taken from the cue's FIRST span and applied to all of them.
      */
     val shadowColor: Int = 0x80000000.toInt(),
     /** Taken from the cue's FIRST span and applied to all of them. */
     val outlineWidthPx: Float = 2f,
-    /** Not drawn by any built-in rasterizer. See [shadowColor]. */
+    /**
+     * How far down and right the shadow falls. Negative reaches up and left; zero turns it off.
+     *
+     * The cue's bitmap grows by this much to hold the shadow, and the placement still measures
+     * the TEXT, so turning a shadow on never moves the words. Taken from the cue's FIRST span.
+     */
     val shadowOffsetPx: Float = 1f,
 )
 

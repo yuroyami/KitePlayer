@@ -183,16 +183,7 @@ Each RED first against a revert or scripted fault; cluster commits.
 - [ ] `FrameDropping` warning: force five late drops in one stats interval under the virtual
   clock (the one warning of the F-WRN1 four with no pin)
 
-### 2.3 BufferPolicy init require. Size S
-
-A config with `readyDuration` greater than the total buffer cap wedges any longer file in
-Buffering forever (readiness needs more than the budget allows; found by accident, defaults
-are safe).
-
-- [ ] RED: constructing it succeeds today; expect `IllegalArgumentException` naming both
-  numbers. Fix, falsify. Commit: `Refuse a buffer policy that can never become ready`
-
-### 2.4 The two red wasm build rows. Size M
+### 2.3 The two red wasm build rows. Size M
 
 - [ ] **KP-WASM-RUNBLOCKING**: `:kiteplayer-ffmpeg` and `:kiteplayer-mobile` commonTest do
   not compile for wasmJs (31 `runBlocking` sites, two files; the target has never built).
@@ -204,7 +195,7 @@ are safe).
   half fine). Bisect the webpack context scope. If the fix is a toolchain bump, STOP: owner
   decision.
 
-### 2.5 KP-UNTESTED-MODULES: compose-interop's first real test. Size S
+### 2.4 KP-UNTESTED-MODULES: compose-interop's first real test. Size S
 
 The one module left with zero tests: one public `@Composable` with five platform actuals.
 
@@ -212,7 +203,7 @@ The one module left with zero tests: one public `@Composable` with five platform
   constraints (`EmptyKitePlayerSurface` sizing law); with Phase 1 landed, a set player puts
   the SwingPanel in the hierarchy. Commit: `Test the one composable five platforms share`
 
-### 2.6 F-COV1: test-surface recount. Size S
+### 2.5 F-COV1: test-surface recount. Size S
 
 The six-of-twenty coverage claim predates KitePlayer CI (which now EXECUTES linuxX64 on
 Linux, mingw on Windows, wasm in node + browser). Recount from CI logs, attempt

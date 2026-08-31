@@ -638,6 +638,18 @@ Done 2026-08-30: the desktop sink ASKS the mixer whether it takes the source's c
 opens that many when it does, folding to stereo only when it does not. Three tests: six channels
 open six, a mixer that refuses six still folds, and mono and stereo never reach the probe at all.
 
+- [ ] **[owner] One volume change on a real Android device.** Reported from Synkplay on
+  2026-08-31 and fixed the same day: the gain was applied as audio entered the ring, so a change
+  could not reach anything already buffered and stayed inaudible for the ring's whole depth. The
+  lag was measured at 174 ms on a 171 ms ring, and it tracked the depth exactly at every depth
+  tried. Android is the platform that hurt most, because there the depth is the AudioTrack buffer
+  times eight rather than the 200 ms floor.
+  What is proven here is the mechanism, on the Kotlin ring Android actually uses: an automated
+  measurement of when the change is heard, and a differential oracle holding the C ring to the
+  same samples. What no laptop can answer is what an AudioTrack buffer actually is on a given
+  handset, so the before-and-after a user would feel is still owed. Synkplay only receives any of
+  this when its KitePlayer pin moves.
+
 - [ ] **[owner] One run on real surround hardware.** Every test above drives a scripted mixer, so
   what is proven is that the sink asks and honours the answer. Whether a real
   `AudioSystem.isLineSupported` says yes to 5.1 on a machine with a surround device attached is

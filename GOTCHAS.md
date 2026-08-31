@@ -365,7 +365,6 @@ Never move one silently.
   gain walk now lives in both ring implementations and the differential oracle compares them sample
   for sample.
 
-
 - **FFmpeg's audio encoder SEGFAULTS on a frame whose channels or sample format do not match it.**
   Not an error return, not a cryptic failure: the process dies. `avcodec_send_frame` reads
   `nb_samples * channels * bytes_per_sample` using the ENCODER's idea of channels and format, so a

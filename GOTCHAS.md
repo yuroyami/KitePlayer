@@ -352,6 +352,20 @@ Never move one silently.
 
 ## 6. Engine invariants that bite (violating any of these caused a real bug)
 
+- **`AudioPlayback.submit` bypasses the whole pipeline. `submitDecoded` is the real door.** submit
+  writes its floats STRAIGHT to the ring: no channel mix, no resample, no tempo. A caller that
+  reaches for it because the format already matches gets audio that skipped every stage. This is not
+  hypothetical: the first version of the volume-latency test used it, set a volume, and measured
+  nothing at all, because the value it set was never applied to anything. submitDecoded runs the
+  stages and then calls submit with the result, which is the only reason submit looks harmless.
+- **Volume and mute are the RING's, not the pipeline's, and putting them back would be a
+  regression.** A gain applied as samples are written cannot reach audio already buffered, so a
+  change stays inaudible for the ring's entire depth: at least 200 ms, and 300 to 600 ms on Android
+  where the AudioTrack buffer sets it. Measured 2026-08-31 at 174 ms of lag on a 171 ms ring. The
+  gain walk now lives in both ring implementations and the differential oracle compares them sample
+  for sample.
+
+
 - **FFmpeg's audio encoder SEGFAULTS on a frame whose channels or sample format do not match it.**
   Not an error return, not a cryptic failure: the process dies. `avcodec_send_frame` reads
   `nb_samples * channels * bytes_per_sample` using the ENCODER's idea of channels and format, so a

@@ -215,6 +215,9 @@ Never move one silently.
 - On this machine every KiteFFmpeg `apiDump`, `apiCheck` and cinterop invocation needs
   `-Pkiteffmpeg.hostTargetsOnly=true`: only macosArm64 has an FFmpeg tree here.
 - mavenLocal is OPT-IN in KitePlayer, behind `-Pkiteplayer.useMavenLocal=true`, and it says so
+  when enabled. Since KiteFFmpeg 0.1.0 went to Central on 2026-08-31 it is no longer REQUIRED for
+  an ordinary build; it is for testing an unpublished sibling change. Verified by wiping the
+  mavenLocal copies and resolving the pin from Central.
   when on. Never re-add it unconditionally: same version string with different bytes is
   indistinguishable from Central's, and it nearly bit once.
 - **FFmpeg's configure cannot handle a `#` anywhere in its path**, and this repo lives under

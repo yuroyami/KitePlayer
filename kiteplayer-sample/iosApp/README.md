@@ -20,13 +20,7 @@ Run every command from the KitePlayer repository root. The Xcode build phase res
 offline, maps `iphonesimulator` to the debug simulator framework and `iphoneos` to the release arm64
 framework, and rejects every other platform.
 
-Prepare the private phone-target publication first when it is not already present in Maven Local:
-
-```bash
-cd ../KiteFFmpeg
-./gradlew publishToMavenLocal -Pkiteffmpeg.applePhoneTargetsOnly=true
-cd ../KitePlayer
-```
+KiteFFmpeg resolves from Maven Central, so no local publication step is needed.
 
 ## Build and run the named simulator
 

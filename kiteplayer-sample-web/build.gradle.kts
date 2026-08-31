@@ -20,7 +20,7 @@ kotlin {
     sourceSets {
         wasmJsMain.dependencies {
             // The real web backend, not the placeholder.
-            implementation(libs.kiteffmpeg.core)
+            implementation(libs.kiteffmpeg)
             // The whole player stack, to prove the web defaults resolve.
             implementation(project(":kiteplayer-mobile"))
             implementation(compose.runtime)

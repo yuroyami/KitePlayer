@@ -67,7 +67,7 @@ kotlin {
     linuxArm64()
     mingwX64()
     jvm()
-    // The web. kiteffmpeg-core carries a real wasmJs backend now, so this module can
+    // The web. kiteffmpeg carries a real wasmJs backend now, so this module can
     // implement the engine's SPI there the same way it does everywhere else.
     @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
     wasmJs {
@@ -95,7 +95,7 @@ kotlin {
             // api, not implementation: KiteFFmpegVideoFrame publicly exposes kiteffmpeg.Frame, and
             // the phone/compose modules cast to it. Hiding the dependency made that public type
             // invisible to consumers compiling against this module's ABI.
-            api(libs.kiteffmpeg.core)
+            api(libs.kiteffmpeg)
             implementation(libs.kotlinx.atomicfu)
         }
         commonTest.dependencies {

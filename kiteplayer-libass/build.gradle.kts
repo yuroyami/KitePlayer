@@ -143,7 +143,7 @@ kotlin {
     } else if (missing.isNotEmpty()) {
         logger.lifecycle(
             "[kiteplayer-libass] no ass-chain under $libassDepsRoot for: ${missing.joinToString()}. " +
-                "Run :kiteffmpeg-core:buildAssChainFor<Target> for each to enable them.",
+                "Run :kiteffmpeg:buildAssChainFor<Target> for each to enable them.",
         )
     }
 

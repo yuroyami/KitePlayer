@@ -19,7 +19,7 @@ pluginManagement {
  * KiteFFmpeg on 2026-08-29 and restarted its version line at 0.1.0, which Maven Central has never
  * served: Central carries the old `kitecodec-core` coordinates up to 0.1.3 and nothing under the
  * new name until the owner publishes. So until that publish, every build here needs the flag below
- * and resolves the locally published `kiteffmpeg-core:0.1.0`.
+ * and resolves the locally published `kiteffmpeg:0.1.0`.
  *
  * Why it stays opt-in rather than becoming unconditional: when mavenLocal is on it is consulted
  * FIRST and it wins SILENTLY. The moment Central serves a version string this working tree also
@@ -43,7 +43,7 @@ dependencyResolutionManagement {
 if (useMavenLocal) {
     println(
         "[KitePlayer] mavenLocal is ENABLED and is consulted FIRST, so a locally published " +
-            "kiteffmpeg-core shadows the one Maven Central serves under the same version. " +
+            "kiteffmpeg shadows the one Maven Central serves under the same version. " +
             "Drop -Pkiteplayer.useMavenLocal to resolve released artifacts only.",
     )
 }

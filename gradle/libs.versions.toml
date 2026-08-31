@@ -23,7 +23,7 @@ androidxActivityCompose = "1.13.0"
 [libraries]
 # The codec backend. One entry so the library coordinate and the Gradle plugin below cannot drift
 # to different versions: they are the same release and a mismatch resolves two FFmpeg bindings.
-kiteffmpeg-core = { module = "io.github.yuroyami:kiteffmpeg-core", version.ref = "kiteffmpeg" }
+kiteffmpeg = { module = "io.github.yuroyami:kiteffmpeg", version.ref = "kiteffmpeg" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }

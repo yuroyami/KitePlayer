@@ -16,14 +16,25 @@ surface, and the decoder.
 
 ## Install
 
+Everything is on Maven Central under `io.github.yuroyami`, and goes in `commonMain.dependencies`.
+
 ```kotlin
-commonMain.dependencies {
-    implementation("io.github.yuroyami:kiteplayer-mobile:0.0.21")
-}
+// Android + iOS, the default stack: player, decoders, audio, native video view.
+implementation("io.github.yuroyami:kiteplayer-mobile:0.0.21")
 ```
 
-That gives you the default stack on Android and iOS: player, decoders, audio and the native view.
-[Other modules](#modules) let you pick a different rendering model, or take the engine alone.
+```kotlin
+// Building your UI in Compose? This adds the video composable on top, and lets
+// you switch between native-surface and Compose-drawn rendering at runtime.
+implementation("io.github.yuroyami:kiteplayer-compose-ui:0.0.21")
+```
+
+```kotlin
+// Just the engine, bring your own decoder and output. Depends only on coroutines.
+implementation("io.github.yuroyami:kiteplayer-core:0.0.21")
+```
+
+Ten modules publish in total; [Modules](#modules) maps each to what it is for.
 
 ## Playing a file
 

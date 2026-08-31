@@ -395,7 +395,20 @@ internal fun mergeMediaCodecColor(
     if (stream.rangeSpecified && record.rangeSpecified && stream.fullRange != record.fullRange) return null
     val rangeSpecified = stream.rangeSpecified || record.rangeSpecified
     val fullRange = if (stream.rangeSpecified) stream.fullRange else record.fullRange
-    return ColorSpaceInfo(matrix, primaries, transfer, fullRange, chroma, rangeSpecified)
+    // Named, and all four provenance flags given. Positionally this call stopped at rangeSpecified
+    // and let matrixSpecified, primariesSpecified and transferSpecified take their `true` default,
+    // so a merge of two undeclared sources claimed all three were declared.
+    return ColorSpaceInfo(
+        matrix = matrix,
+        primaries = primaries,
+        transfer = transfer,
+        fullRange = fullRange,
+        chromaLocation = chroma,
+        rangeSpecified = rangeSpecified,
+        matrixSpecified = stream.matrixSpecified || record.matrixSpecified,
+        primariesSpecified = stream.primariesSpecified || record.primariesSpecified,
+        transferSpecified = stream.transferSpecified || record.transferSpecified,
+    )
 }
 
 private fun androidVp9Level(level: Int): Int? = when (level) {

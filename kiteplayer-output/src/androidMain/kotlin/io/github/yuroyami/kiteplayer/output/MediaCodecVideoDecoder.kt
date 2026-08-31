@@ -1068,5 +1068,12 @@ internal fun colorSpaceFromCodes(
         },
         chromaLocation = fallback.chromaLocation,
         rangeSpecified = isRecognizedMediaCodecColorRange(range) || fallback.rangeSpecified,
+        // These three follow rangeSpecified above and are not optional to set: they DEFAULT to
+        // true, so leaving them out makes an unrecognized code claim the source declared it, which
+        // is the opposite of what an unrecognized code means. MediaCodec's COLOR_STANDARD carries
+        // matrix and primaries together, so both derive from the same recognition.
+        matrixSpecified = isRecognizedMediaCodecColorStandard(standard) || fallback.matrixSpecified,
+        primariesSpecified = isRecognizedMediaCodecColorStandard(standard) || fallback.primariesSpecified,
+        transferSpecified = isRecognizedMediaCodecColorTransfer(transferCode) || fallback.transferSpecified,
     )
 }

@@ -1,0 +1,122 @@
+# Publishes every KitePlayer library module to Maven Central (Central Portal, vanniktech plugin).
+#
+# ON DEMAND ONLY. workflow_dispatch is the single trigger; pushing a tag publishes nothing by
+# itself. Publishing from the maintainer's machine stays equally valid with the same credentials in
+# ~/.gradle/gradle.properties:
+#   ./gradlew publishAllPublicationsToMavenCentralRepository --no-configuration-cache
+#
+# Either path leaves the deployment staged as USER_MANAGED on the Central Portal. The final Publish
+# click is human, deliberately: Central is immutable and a version cannot be withdrawn.
+#
+# PREREQUISITES
+#   Repository secrets, the same five KiteFFmpeg uses:
+#     MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD   Central Portal user token
+#     SIGNING_IN_MEMORY_KEY / SIGNING_IN_MEMORY_KEY_ID / SIGNING_IN_MEMORY_KEY_PASSWORD
+#       ASCII-armored GPG key, its id, and the passphrase
+#
+# WHAT IS PUBLISHED. The twelve modules that apply the publish plugin. FFmpeg is NOT built here:
+# KitePlayer resolves io.github.yuroyami:kiteffmpeg from Central and that artifact carries FFmpeg
+# inside it, so this workflow needs no vendored tree and no emscripten.
+#
+# WHY macOS. Apple klibs can only be produced on a macOS host, and the publication covers them.
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (must match VERSION in gradle.properties), e.g. 0.0.21"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.event.inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  check-version:
+    name: input matches gradle.properties
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      # A stale gradle.properties must never publish under the version someone asked for. This is
+      # the whole reason the version is an input rather than being read from the file: the two are
+      # compared, so a mismatch is a failure instead of a surprise on the portal.
+      - name: Assert version match
+        run: |
+          gradle_version="$(grep '^VERSION=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          expected="${{ github.event.inputs.version }}"
+          if [ "${gradle_version}" != "${expected}" ]; then
+            echo "::error::version mismatch: gradle.properties has VERSION=${gradle_version} but the run asked for ${expected}" >&2
+            exit 1
+          fi
+          echo "Publishing version ${gradle_version}"
+
+  publish:
+    name: 12 modules → Maven Central
+    needs: check-version
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The Kotlin/Native toolchain and its per-target sysroots, several GB and the single largest
+      # cost of a cold run. Keyed on the version catalog because that is what pins the Kotlin
+      # version that decides which toolchain is fetched.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-publish-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-publish-
+            konan-macos-arm64-
+
+      # Kotlin/JS and Kotlin/Wasm fetch their own node and yarn into ~/.gradle, then populate
+      # node_modules from the committed lockfile. Uncached that is a download and an install on
+      # every run, for publications that are placeholder variants.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/nodejs
+            ~/.gradle/yarn
+            build/js/node_modules
+          key: kotlin-js-${{ hashFiles('kotlin-js-store/yarn.lock', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            kotlin-js-
+
+      # konan's LLVM only lands in ~/.konan/dependencies once a Kotlin/Native compile has run. The
+      # C tasks in kiteplayer-rt compile with that same LLVM, so on a cold runner they can get
+      # there first and die with "No LLVM package with a usable clang". One warmup provisions it.
+      # `|| true` because this exists for its side effect; the publish below reports the real result.
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-core:compileKotlinMacosArm64 --stacktrace || true
+
+      # Refuses before any repository work if the POMs would be rejected: missing name, description,
+      # url, licence, developer or scm, an unsigned publication, or a published module depending on
+      # an unpublished one. Cheaper to fail here than to have the portal fail the upload.
+      - name: Publication readiness
+        run: ./gradlew checkPublicationReadiness --stacktrace
+
+      # Uploads to the Central Portal and stops. The build script calls publishToMavenCentral()
+      # with no automatic release, so the deployment lands as USER_MANAGED and a human finishes it.
+      - name: Publish to Maven Central
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_IN_MEMORY_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+        run: |
+          # The Android AAR's JNI libraries link with the NDK.
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          ./gradlew publishAllPublicationsToMavenCentralRepository \
+            --no-configuration-cache \
+            --stacktrace

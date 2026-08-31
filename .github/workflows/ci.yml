@@ -316,6 +316,16 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      # AGP's own build cache. The SDK itself is NOT cached here: the runner image ships it, and
+      # ${{ env.ANDROID_SDK_ROOT }} does not resolve in a `with:` block, because the env context
+      # holds only workflow-declared variables and not the runner's own. A path written that way
+      # expands to "/platforms" and silently caches nothing.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.android/build-cache
+          key: android-build-cache-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            android-build-cache-
 
       # Only the modules whose tests need no clips. The media-backed suites run on macos-host,
       # where the fixture generator is the one the developer used. This job therefore proves the
@@ -479,6 +489,18 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      # Kotlin/JS and Kotlin/Wasm fetch their own node and yarn into ~/.gradle, then populate
+      # node_modules from the committed lockfile. Uncached that is a download plus an install on
+      # every single run of this job, which was the largest fixed cost here.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/nodejs
+            ~/.gradle/yarn
+            build/js/node_modules
+          key: kotlin-js-${{ hashFiles('kotlin-js-store/yarn.lock', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            kotlin-js-
 
       # wasmJsTest is BOTH halves: wasmJsNodeTest and wasmJsBrowserTest. Running only the node half
       # is what let WebCanvasVideoRendererTest assert a node-only refusal for as long as it did; the

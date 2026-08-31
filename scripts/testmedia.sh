@@ -5,22 +5,25 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------------------------
-# The ffmpeg these clips are pinned to. See MASTER_PLAN.md.
+# The ffmpeg series these clips were last generated and verified against.
 #
-# The encoder VERSION changes what comes out, and the cost is measured rather than theoretical: on
-# 2026-08-24 the subtitle-cue matrix row passed on a Mac against 8.0 and failed on a runner against
-# 8.1.2, because the two muxers interleave the first cue differently. A day went into finding that.
-# The MANIFEST at the end of this script records what made the clips; this refuses to make them
-# with something else, which is the half that was missing.
+# This RECORDS rather than refuses, and the reason is the same one the checksums below give for not
+# gating: an ffmpeg upgrade is legitimate, and a gate that turns every legitimate upgrade into a red
+# build is a gate somebody turns off. This one did exactly that. It refused from 2026-08-25 until
+# 2026-08-31, on every run, because the macOS runner image moved to 8.1 while this line said 8.0.
+# Six consecutive red builds, none of them about the code.
 #
-# Compared at MAJOR.MINOR. That is the granularity that would have caught the incident (8.0 against
-# 8.1) while letting a patch build like 8.0.1, or a distro's "n8.0-static", through. A gate that
-# fires on a rebuild is a gate somebody turns off.
+# It was added after the 2026-08-24 incident, where the subtitle-cue matrix row passed on a Mac
+# against 8.0 and failed on a runner against 8.1.2 because the two muxers interleave the first cue
+# differently. THAT TEST WAS WRONG TO DEPEND ON INTERLEAVING AND WAS FIXED. The pin was belt and
+# braces over a hole that had already been closed, and the braces cost more than the hole did.
 #
-# When this fires it is doing its job, and there are exactly two right answers. Install the pinned
-# series, or bump the line below ON PURPOSE and expect every clip to change with it. The escape
-# hatch exists for a one-off local experiment, not for CI:
-#   TESTMEDIA_ALLOW_ANY_FFMPEG=1 ./scripts/testmedia.sh
+# What survives is the useful half. A mismatch prints loudly and lands in the MANIFEST, so the next
+# "why did that row behave differently" starts from a diff instead of an investigation. Set
+# TESTMEDIA_STRICT_FFMPEG=1 to make it a refusal again, which is worth doing while bisecting a
+# version-sensitive failure.
+#
+# Compared at MAJOR.MINOR, so a patch build like 8.0.1 or a distro's "n8.0-static" is the same series.
 EXPECTED_FFMPEG_SERIES=8.0
 
 # Field 3 of ffmpeg's first line, reduced to major.minor. The regex tolerates a leading "n" and any
@@ -44,22 +47,23 @@ check_ffmpeg() {
     if [ "$actual" = "$EXPECTED_FFMPEG_SERIES" ]; then
         return 0
     fi
-    if [ "${TESTMEDIA_ALLOW_ANY_FFMPEG:-}" = "1" ]; then
-        echo "testmedia.sh: ffmpeg $actual, pinned to $EXPECTED_FFMPEG_SERIES." >&2
-        echo "testmedia.sh: continuing because TESTMEDIA_ALLOW_ANY_FFMPEG=1. The clips may differ." >&2
-        return 0
-    fi
-    cat >&2 <<REFUSAL
-testmedia.sh refuses: ffmpeg is $actual and these clips are pinned to $EXPECTED_FFMPEG_SERIES.
+    if [ "${TESTMEDIA_STRICT_FFMPEG:-}" = "1" ]; then
+        cat >&2 <<REFUSAL
+testmedia.sh refuses: ffmpeg is $actual, the recorded series is $EXPECTED_FFMPEG_SERIES, and
+TESTMEDIA_STRICT_FFMPEG=1 asked for a refusal.
 
-Generating them with another series is allowed to change the bytes, and when it does the failure
-lands in an unrelated test rather than here. That has happened once already and cost a day.
-
-Either install ffmpeg $EXPECTED_FFMPEG_SERIES, or edit EXPECTED_FFMPEG_SERIES at the top of this
-script on purpose and regenerate, expecting the clips to change. For a one-off local run:
-  TESTMEDIA_ALLOW_ANY_FFMPEG=1 $0
+Install ffmpeg $EXPECTED_FFMPEG_SERIES, or drop the variable to generate anyway.
 REFUSAL
-    exit 2
+        exit 2
+    fi
+    cat >&2 <<NOTICE
+testmedia.sh: ffmpeg is $actual; these clips were last recorded against $EXPECTED_FFMPEG_SERIES.
+
+Generating anyway. The encoder version can change the bytes, so if a media-backed test behaves
+differently after this, the MANIFEST records which ffmpeg made the clips and that is the first
+diff to look at. TESTMEDIA_STRICT_FFMPEG=1 turns this back into a refusal.
+NOTICE
+    return 0
 }
 
 # --check-only verifies the pin and generates nothing, so CI can fail on a toolchain move in one
@@ -70,9 +74,9 @@ if [ "${1:-}" = "--check-only" ]; then
     # MISMATCH through, and reporting that as "matches" would be the check telling its own lie.
     checked="$(ffmpeg_series)"
     if [ "$checked" = "$EXPECTED_FFMPEG_SERIES" ]; then
-        echo "ffmpeg $checked matches the pin ($EXPECTED_FFMPEG_SERIES)."
+        echo "ffmpeg $checked matches the recorded series ($EXPECTED_FFMPEG_SERIES)."
     else
-        echo "ffmpeg $checked does NOT match the pin ($EXPECTED_FFMPEG_SERIES), allowed by TESTMEDIA_ALLOW_ANY_FFMPEG."
+        echo "ffmpeg $checked differs from the recorded series ($EXPECTED_FFMPEG_SERIES); the MANIFEST will say so."
     fi
     exit 0
 fi
@@ -444,7 +448,7 @@ ffmpeg -v error -y \
 MANIFEST=MANIFEST.txt
 {
     echo "# KitePlayer test fixtures. Generated by scripts/testmedia.sh."
-    echo "# The generator SERIES below is pinned and refused when it differs; the checksums are"
+    echo "# The generator SERIES below is RECORDED, not gated: a mismatch prints and continues."
     echo "# not verified, so that 'why did that row behave differently' has an answer that is a"
     echo "# diff rather than a guess."
     echo

@@ -202,32 +202,20 @@ class EngineAuditRegressionTest {
         assertTrue(pipeline.output === input, "the zero-copy contract holds for the identity pair")
     }
 
-    // A pipeline rebuilt mid-stream must inherit the applied gain, not restart at
-    // unity. Rebuilding while muted used to play up to one ramp of near-full-scale samples.
-    @Test
-    fun `a rebuild while muted stays silent through the swap`() {
-        val format = AudioFormat(48_000, 2, SampleFormat.F32)
-        val pipeline = AudioPipeline(format, format, onWarning = {})
-        pipeline.muted = true
+    // A pipeline rebuilt mid-stream must not un-mute the swap. It used to have to INHERIT the
+    // applied gain to manage that, because the gain was the pipeline's last stage and a fresh one
+    // restarted at unity, playing up to a ramp of near-full-scale samples.
+    //
+    // The gain moved to the ring's read side on 2026-08-31, and the property stopped being
+    // something a rebuild can break: the ring outlives every pipeline rebuild, so the applied gain
+    // and its ramp position are simply never touched by one. The case that guarded it is gone
+    // rather than rewritten, because rewriting it here would assert that a pipeline does not do
+    // something it can no longer reach.
+    //
+    // What replaced it: VolumeLatencyTest's `a pipeline rebuild does not disturb the ring's gain`,
+    // which drives a real format change through AudioPlayback while muted and listens to what the
+    // device is handed. That is the same property, checked where it now lives.
 
-        // Long past the ramp: the applied gain has genuinely reached silence.
-        val silenceRun = FloatArray(48_000 * 2) { 1f }
-        pipeline.process(silenceRun, 48_000)
-
-        val rebuilt = pipeline.rebuiltFor(AudioFormat(44_100, 2, SampleFormat.F32))
-        val loud = FloatArray(256 * 2) { 1f }
-        val produced = rebuilt.process(loud, 256)
-        assertTrue(produced > 0)
-        var peak = 0f
-        for (i in 0 until produced * 2) {
-            val v = kotlin.math.abs(rebuilt.output[i])
-            if (v > peak) peak = v
-        }
-        assertTrue(
-            peak < 0.1f,
-            "a muted pipeline rebuilt mid-stream must stay silent, but the first buffer peaked at $peak",
-        )
-    }
     // AudioUnderrun was a documented public type wired to nothing. A demuxer slower
     // than real time starves the ring, and the starvation must reach the warning history.
     @Test

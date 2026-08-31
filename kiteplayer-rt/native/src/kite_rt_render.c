@@ -241,6 +241,50 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                    ring->data,
                    (size_t)(to_read - first) * (size_t)channels * sizeof(float));
         }
+        /* The gain, applied to the frames actually rendered and to nothing else. Silence written
+         * below stays exact zeroes, and the walk does not advance across it: letting an underrun
+         * move the ramp would make the gain depend on how badly the feeder was starved.
+         *
+         * Identical in order and arithmetic to `KotlinAudioRing.applyGain`, because the
+         * differential oracle compares the samples. */
+        {
+            uint32_t bits = atomic_load_explicit(&ring->gain_target_bits, memory_order_relaxed);
+            float wanted;
+            float gain = ring->gain_current;
+            int32_t total = to_read * channels;
+            int32_t i;
+            memcpy(&wanted, &bits, sizeof(wanted));
+            if (ring->gain_started == 0) {
+                ring->gain_started = 1;
+                ring->gain_current = wanted;
+                gain = wanted;
+            }
+            if (gain == wanted) {
+                if (wanted != 1.0f) {
+                    for (i = 0; i < total; i++)
+                        destination[i] *= wanted;
+                }
+            } else {
+                int32_t frame;
+                int32_t base = 0;
+                float slope = ring->gain_slope;
+                for (frame = 0; frame < to_read; frame++) {
+                    if (gain < wanted) {
+                        gain += slope;
+                        if (gain > wanted)
+                            gain = wanted;
+                    } else {
+                        gain -= slope;
+                        if (gain < wanted)
+                            gain = wanted;
+                    }
+                    for (i = 0; i < channels; i++)
+                        destination[base + i] *= gain;
+                    base += channels;
+                }
+                ring->gain_current = gain;
+            }
+        }
         atomic_store_explicit(&ring->consumed, start + to_read, memory_order_release);
     }
 

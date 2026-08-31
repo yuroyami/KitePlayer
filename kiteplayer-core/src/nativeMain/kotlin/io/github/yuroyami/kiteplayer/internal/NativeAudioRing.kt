@@ -24,6 +24,7 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_destroy
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_flush
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_free_frames
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_mark_ending
+import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_set_gain
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_render
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_sample_rate
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_segment_giveups
@@ -237,6 +238,20 @@ internal class NativeAudioRing private constructor(
             if (published.valid == 0) return@memScoped null
             AudioAnchor(Pts(published.pts_us), published.audible_at_nanos)
         }
+    }
+
+    /**
+     * Hands the C ring the gain its render walks towards.
+     *
+     * The bound is checked HERE and clamped there. C has no way to report an error to a real-time
+     * caller, so it contains a bad value rather than refusing it; this side is where a bad value is
+     * still a bug worth failing on, and the two together mean a NaN can never reach a multiply.
+     */
+    override fun setGain(target: Float) {
+        require(target.isFinite() && target >= 0f && target <= 1f) {
+            "gain must be between 0 and 1, was $target"
+        }
+        kprt_ring_set_gain(ring, target)
     }
 
     override fun markEnding() {

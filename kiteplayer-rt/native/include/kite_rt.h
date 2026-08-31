@@ -244,6 +244,30 @@ KPRT_API int32_t kprt_ring_commit_write(kprt_ring *ring, int32_t frames, int32_t
  * spotting the real thing. */
 KPRT_API void kprt_ring_mark_ending(kprt_ring *ring);
 
+/* How long the applied gain takes to cross the whole range from silence to unity, in microseconds.
+ *
+ * One law shared with KotlinAudioRing, whose `GAIN_RAMP_DURATION` carries the same value. Long
+ * enough that no click is left, short enough that a mute feels immediate. */
+#define KPRT_GAIN_RAMP_MICROS 5000
+
+/* Sample frames KPRT_GAIN_RAMP_MICROS is worth at `sample_rate`, at least one so a slope is finite.
+ * Exposed because the differential oracle asserts both rings derive the same number. */
+KPRT_API int32_t kprt_gain_ramp_frames(int32_t sample_rate);
+
+/* Sets the gain `kprt_ring_render` multiplies every rendered frame by, from silence at 0 to unity
+ * at 1. The applied gain WALKS towards it at a fixed slope rather than jumping, because a step in
+ * the waveform is a click.
+ *
+ * Read side, and deliberately so. A gain applied as samples are WRITTEN cannot reach audio already
+ * buffered, so a volume change stays inaudible for the ring's whole depth. Applying it as frames
+ * leave costs one multiply per sample on the device's thread and makes the change audible within
+ * one device period.
+ *
+ * Safe from any thread, allocation free, and it never blocks. Mute is not separate: send 0.
+ * Values outside 0..1, NaN included, are clamped rather than refused; there is no way to report an
+ * error to a real-time caller and multiplying every sample by a NaN is the worse outcome. */
+KPRT_API void kprt_ring_set_gain(kprt_ring *ring, float target);
+
 /* ---- The real-time side ---- */
 
 /* Fills `frames` frames of `destination` from the ring, and publishes the anchor.

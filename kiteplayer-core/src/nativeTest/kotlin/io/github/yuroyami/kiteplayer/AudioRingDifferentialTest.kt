@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.internal.AudioAnchor
 import io.github.yuroyami.kiteplayer.internal.KotlinAudioRing
 import io.github.yuroyami.kiteplayer.internal.NativeAudioRing
 import io.github.yuroyami.kiteplayer.internal.framesToMicros
+import io.github.yuroyami.kiteplayer.internal.gainRampFrames
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
@@ -112,6 +113,17 @@ class AudioRingDifferentialTest {
 
     /** The device asks for [frames] frames at [deadlineOffsetNanos] after the scenario's first pull. */
     private class Pull(val frames: Int) : Step
+
+    /**
+     * Both rings are told to walk their gain towards [target].
+     *
+     * The gain moved to the read side on 2026-08-31, so it is now a thing the two rings each do to
+     * the samples on their way out, which makes it exactly the kind of difference this oracle
+     * exists to catch. The walk is per frame and stateful, so a one-frame disagreement in where
+     * the ramp starts, or a slope derived differently from the sample rate, shows up as unequal
+     * samples rather than as anything a state comparison would notice.
+     */
+    private class SetGain(val target: Float) : Step
 
     /** The seek path: both rings are flushed. */
     private object Flush : Step
@@ -219,6 +231,11 @@ class AudioRingDifferentialTest {
 
                         assertEquals(kotlinReal, nativeReal, "$at: frames of real audio")
                         assertSameSamples(kotlinOut.samples, nativeOut, "$at")
+                    }
+
+                    is SetGain -> {
+                        kotlinRing.setGain(step.target)
+                        nativeRing.setGain(step.target)
                     }
 
                     Flush -> {
@@ -663,6 +680,164 @@ class AudioRingDifferentialTest {
                 framesToMicros(frames, sampleRate),
                 io.github.yuroyami.kiteplayer.rt.cinterop.kprt_frames_to_micros(frames, sampleRate),
                 "$frames frames at $sampleRate Hz",
+            )
+        }
+    }
+
+    @Test
+    fun `the gain walk agrees between the two implementations sample for sample`() {
+        // The ramp is the interesting part, not the steady state: a gain that has arrived is one
+        // multiply both sides obviously get right, while a gain in transit is a per-frame walk with
+        // state that survives across calls. Pulls smaller than the ramp are deliberate, so the walk
+        // is compared mid-flight and then resumed on the next call.
+        runScenario(
+            Scenario(
+                "a gain change walks identically across several short pulls",
+                capacityFrames = 4_096,
+                steps = listOf(
+                    Feed(frames = 2_048, mediaFrame = 0),
+                    Pull(frames = 64),
+                    SetGain(0.25f),
+                    Pull(frames = 64),
+                    Pull(frames = 64),
+                    Pull(frames = 64),
+                    // By here the walk has arrived, so this pull compares the steady state too.
+                    Pull(frames = 512),
+                    SetGain(1f),
+                    Pull(frames = 128),
+                    Pull(frames = 512),
+                ),
+            ),
+            sampleRate = 48_000,
+        )
+    }
+
+    @Test
+    fun `the gain walk agrees at every rate and channel count`() {
+        // The slope is derived from the sample rate, so a rate whose ramp length rounds differently
+        // is where two derivations of one law come apart. 44100 gives 220 frames and 192000 gives
+        // 960, and the walk has to land on the same value on both sides at both.
+        for (rate in rates) {
+            for (channels in listOf(1, 2, 6)) {
+                runScenario(
+                    Scenario(
+                        "a mute and a restore",
+                        capacityFrames = 4_096,
+                        steps = listOf(
+                            Feed(frames = 2_048, mediaFrame = 0),
+                            SetGain(0f),
+                            Pull(frames = 96),
+                            Pull(frames = 96),
+                            SetGain(1f),
+                            Pull(frames = 96),
+                            Pull(frames = 1_024),
+                        ),
+                    ),
+                    sampleRate = rate,
+                    channels = channels,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a gain change spanning the ring's wrap agrees`() {
+        // The two implementations take DIFFERENT routes through a wrapped read: the Kotlin ring
+        // copies each run into a scratch and scales the scratch once, while the C ring memcpys both
+        // runs into the destination and scales it in place. A pull that spans the wrap while the
+        // ramp is mid-walk is the only shape that drives both routes at once.
+        runScenario(
+            Scenario(
+                "a gain change while the read wraps",
+                capacityFrames = 512,
+                steps = listOf(
+                    Feed(frames = 512, mediaFrame = 0),
+                    Pull(frames = 448),
+                    Feed(frames = 384, mediaFrame = null),
+                    SetGain(0.5f),
+                    // Starts 64 frames from the end of the storage, so it reads two runs.
+                    Pull(frames = 256),
+                    Pull(frames = 192),
+                ),
+            ),
+            sampleRate = 48_000,
+        )
+    }
+
+    @Test
+    fun `an underrun neither advances the gain walk nor colours the silence`() {
+        // Silence is written after the real frames, and it must stay exact zeroes: scaling it would
+        // still be zero, but ADVANCING the walk across it would make the gain depend on how badly
+        // the feeder was starved, which is a difference an oracle row has to forbid rather than
+        // leave to two authors' judgement.
+        runScenario(
+            Scenario(
+                "a gain change interrupted by an underrun",
+                capacityFrames = 2_048,
+                steps = listOf(
+                    Feed(frames = 128, mediaFrame = 0),
+                    SetGain(0.25f),
+                    // 128 real frames then 128 of silence, mid-walk.
+                    Pull(frames = 256),
+                    Feed(frames = 512, mediaFrame = null),
+                    // The walk must resume exactly where the real frames left it.
+                    Pull(frames = 256),
+                    Pull(frames = 256),
+                ),
+            ),
+            sampleRate = 48_000,
+        )
+    }
+
+    @Test
+    fun `a ring opened below unity snaps rather than fading in`() {
+        // The gain is set BEFORE any frame is rendered, which is what opening a muted or quiet
+        // session looks like. Both rings must start at the target rather than walking down to it
+        // from unity, or the first ramp of a muted open is near-full-scale audio. GainStage.adoptRamp
+        // was the pipeline-side answer to the same problem and went away with the pipeline gain, so
+        // this row is what keeps the property.
+        for (target in listOf(0f, 0.25f)) {
+            runScenario(
+                Scenario(
+                    "opened at a gain of $target",
+                    capacityFrames = 2_048,
+                    steps = listOf(
+                        SetGain(target),
+                        Feed(frames = 1_024, mediaFrame = 0),
+                        // Shorter than a ramp: if either ring walked instead of snapping, the first
+                        // frames would carry a gain well above the target and the two could still
+                        // agree with each other while both being wrong. The value is what makes this
+                        // a real row, so it is asserted directly below as well.
+                        Pull(frames = 64),
+                        Pull(frames = 512),
+                    ),
+                ),
+                sampleRate = 48_000,
+            )
+        }
+
+        // The direct assertion the scenario above cannot make: the FIRST rendered frame carries the
+        // target exactly. Two rings agreeing on a wrong value is the failure a differential oracle
+        // is blind to on its own.
+        val format = AudioFormat(sampleRate = 48_000, channels = 2, sampleFormat = SampleFormat.F32)
+        val ring = KotlinAudioRing(format, capacityFrames = 1_024)
+        ring.setGain(0f)
+        ring.write(FloatArray(256 * 2) { 1f }, 0, 256, Pts(0))
+        val out = CapturingSinkBuffer(format, 64)
+        ring.render(out, 64, FIRST_DEADLINE_NANOS)
+        assertEquals(0f, out.samples[0], "a ring opened muted must render its first frame silent")
+    }
+
+    @Test
+    fun `both implementations derive the same ramp length from a rate`() {
+        // The slope is 1 over this number on both sides. A rate where the two divisions disagree
+        // would put the rings one frame apart for a whole ramp, which the sample comparison would
+        // catch but this names directly.
+        for (rate in rates + listOf(1, 7, 8_000, 11_025, 384_000)) {
+            assertEquals(
+                gainRampFrames(rate),
+                io.github.yuroyami.kiteplayer.rt.cinterop.kprt_gain_ramp_frames(rate),
+                "the ramp length at $rate Hz",
             )
         }
     }

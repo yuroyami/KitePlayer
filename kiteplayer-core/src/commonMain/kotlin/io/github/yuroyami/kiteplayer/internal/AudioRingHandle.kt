@@ -64,6 +64,21 @@ internal interface AudioRingHandle {
      */
     fun anchor(): AudioAnchor?
 
+    /**
+     * Sets the gain the device callback multiplies every rendered frame by, from silence at 0 to
+     * unity at 1. The applied gain WALKS there rather than jumping, so a change never clicks.
+     *
+     * Read side, and that is the whole point of it being here. The gain used to be the last stage
+     * of the feeder's pipeline, applied on the way INTO the ring, where it could not reach audio
+     * already buffered: a volume change stayed inaudible until the ring drained past it, which is
+     * the ring's whole depth. Applying it as the device takes frames out makes the lag one device
+     * period, and leaves the depth free to be as deep as underrun headroom needs.
+     *
+     * Safe from any thread. Mute is not separate: the caller sends 0 for it, so the ring has one
+     * number to walk towards and no policy of its own.
+     */
+    fun setGain(target: Float)
+
     /** Tells the ring that the feeder has finished, so trailing silence is not an underrun. */
     fun markEnding()
 
@@ -131,4 +146,21 @@ internal fun framesToMicros(frames: Long, sampleRate: Int): Long {
     if (whole > Long.MAX_VALUE / 1_000_000L) return Long.MAX_VALUE
     if (whole < Long.MIN_VALUE / 1_000_000L) return Long.MIN_VALUE
     return whole * 1_000_000L + rest * 1_000_000L / rate
+}
+
+/**
+ * How long the applied gain takes to cross the whole range from silence to unity.
+ *
+ * One law, in one place, because two ring implementations walk it and the differential oracle
+ * compares their samples. It was `GainStage.DEFAULT_RAMP_DURATION` while the gain lived in the
+ * pipeline, and it keeps that value: long enough that no click is left, short enough that a mute
+ * feels immediate.
+ */
+internal val GAIN_RAMP_DURATION: kotlin.time.Duration = kotlin.time.Duration.parse("5ms")
+
+/** Sample frames [GAIN_RAMP_DURATION] is worth at [sampleRate]. At least one, so the slope is finite. */
+internal fun gainRampFrames(sampleRate: Int): Int {
+    require(sampleRate > 0) { "a sample rate of $sampleRate is not a rate" }
+    val frames = sampleRate.toLong() * GAIN_RAMP_DURATION.inWholeMicroseconds / 1_000_000L
+    return maxOf(1, frames.toInt())
 }

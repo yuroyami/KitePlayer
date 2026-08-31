@@ -132,7 +132,38 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
     ring->data = (float *)(void *)(aligned + header_bytes);
     ring->block = block;
     ring->nanos_per_frame = 1000000000.0 / (double)sample_rate;
+    /* Unity, walked at the same slope KotlinAudioRing computes from the same law: the ramp's
+     * duration in frames at this rate, at least one so the slope is finite. `memset` above already
+     * zeroed the target bits, and zero bits are 0.0f, so the target must be set explicitly. */
+    ring->gain_current = 1.0f;
+    ring->gain_slope = 1.0f / (float)kprt_gain_ramp_frames(sample_rate);
+    kprt_ring_set_gain(ring, 1.0f);
     return ring;
+}
+
+int32_t kprt_gain_ramp_frames(int32_t sample_rate)
+{
+    int64_t frames;
+    if (sample_rate <= 0)
+        return 1;
+    frames = (int64_t)sample_rate * KPRT_GAIN_RAMP_MICROS / 1000000;
+    return frames < 1 ? 1 : (int32_t)frames;
+}
+
+void kprt_ring_set_gain(kprt_ring *ring, float target)
+{
+    uint32_t bits;
+    if (ring == NULL)
+        return;
+    /* Clamped rather than refused: this is the real-time path's input and a caller that computed a
+     * NaN must not be able to multiply every sample by one. The Kotlin side requires 0..1 at its
+     * own boundary, so a value arriving here outside it is already a bug being contained. */
+    if (!(target >= 0.0f))
+        target = 0.0f;
+    if (target > 1.0f)
+        target = 1.0f;
+    memcpy(&bits, &target, sizeof(bits));
+    atomic_store_explicit(&ring->gain_target_bits, bits, memory_order_relaxed);
 }
 
 void kprt_ring_destroy(kprt_ring *ring)

@@ -94,18 +94,11 @@ class AudioPipelineTest {
         }
     }
 
-    @Test
-    fun `the gain is applied last`() {
-        val pipeline = AudioPipeline(surround51, stereoDevice, downmix = RAW_DOWNMIX)
-        pipeline.muted = true
-        // Long enough for the ramp to finish inside the buffer.
-        val produced = pipeline.process(centreOnly(1024), 1024)
-
-        assertEquals(1024, produced)
-        assertEquals(0f, pipeline.output[produced * 2 - 2], 1e-6f, "a mute reaches silence after the mix")
-        assertEquals(0f, pipeline.output[produced * 2 - 1], 1e-6f)
-        assertTrue(pipeline.output[0] > 0.5f, "and it got there over the ramp, not at once")
-    }
+    // `the gain is applied last` lived here until 2026-08-31 and has no premise any more: the gain
+    // is not in this pipeline at all. It moved to the ring's read side, because a gain applied on
+    // the way INTO the ring cannot reach audio already buffered. What it used to assert is now
+    // covered by AudioRingDifferentialTest's gain rows, which compare both ring implementations
+    // sample for sample, and by VolumeLatencyTest, which measures when a change is actually heard.
 
     @Test
     fun `matching formats alias the input instead of copying it`() {
@@ -132,7 +125,6 @@ class AudioPipelineTest {
     @Test
     fun `a format change is what rebuilding keys on`() {
         val pipeline = AudioPipeline(surround51, stereoDevice)
-        pipeline.volume = 0.5f
 
         assertTrue(pipeline.matches(surround51))
         val changed = format(2, 48_000, MixLayout.Stereo.mask)
@@ -140,7 +132,6 @@ class AudioPipelineTest {
 
         val rebuilt = pipeline.rebuiltFor(changed)
         assertTrue(rebuilt.matches(changed))
-        assertEquals(0.5f, rebuilt.volume, "a rebuild is not a volume change")
         assertEquals(stereoDevice, rebuilt.targetFormat, "the device did not change")
     }
 

@@ -195,6 +195,11 @@ public class AudioPlayback(
         val negotiated = opened.format
         ring = opened.ring
         format = negotiated
+        // The gain is the ring's now, so a path opened while muted or turned down must start there
+        // rather than at unity. Without this, opening a file at volume 0 plays one ramp of
+        // full-scale audio before the walk catches up, which is what `adoptRamp` used to exist for
+        // on the pipeline side.
+        pushGain()
         // A fresh path is a fresh epoch: the rate wanted now is the rate this ring plays at.
         synchronized(lock) {
             epochSpeed = wantedSpeed
@@ -309,10 +314,9 @@ public class AudioPlayback(
             synchronized(lock) { scaledBaseUs = null }
         }
         pipeline = stage
-        // Picked up here, on the feeder, because the gain stage has exactly one owner. The ramp inside it
-        // is what makes a change arriving mid-buffer inaudible rather than a click.
-        stage.volume = wantedVolume.value
-        stage.muted = wantedMute.value
+        // The gain is NOT picked up here any more. It moved to the ring's read side, because a gain
+        // applied on the way into the ring cannot reach audio already buffered, and a listener hears
+        // the whole ring depth of the old volume before the change arrives. See AudioRingHandle.setGain.
         // The epoch's rate, reasserted per buffer for the same one-owner reason. It only ever
         // differs across a flush, so mid-epoch this is an assignment of the value it already has.
         val speedNow = synchronized(lock) { epochSpeed }
@@ -507,6 +511,7 @@ public class AudioPlayback(
                 "volume must be between 0 and 1, was $value"
             }
             wantedVolume.value = value
+            pushGain()
         }
 
     /** Silence without losing the volume setting. Ramped like [volume], and safe from any thread. */
@@ -514,7 +519,21 @@ public class AudioPlayback(
         get() = wantedMute.value
         set(value) {
             wantedMute.value = value
+            pushGain()
         }
+
+    /**
+     * Hands the ring the one number it walks towards: the volume, or silence when muted.
+     *
+     * The ring reads the field under its own atomic, so this needs no ordering of its own. The
+     * `ring` FIELD is read under the lock for the same reason every other member does it: a member
+     * that may run beside [close] must not load the reference in the same instant close is clearing
+     * it. With no path open the value is simply stored, and [open] pushes it into the fresh ring.
+     */
+    private fun pushGain() {
+        val target = if (wantedMute.value) 0f else wantedVolume.value
+        synchronized(lock) { ring }?.setGain(target)
+    }
 
     /**
      * The playback rate as a multiplier of real time, within [TempoStage.MIN_SPEED] to

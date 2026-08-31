@@ -80,6 +80,27 @@ struct kprt_ring {
     _Atomic int64_t segments_retired;
     _Alignas(KPRT_CACHELINE) kprt_segment segments[KPRT_MAX_SEGMENTS];
 
+    /* ---- The gain, applied by the consumer as it renders. ----
+     *
+     * Read side on purpose. The gain used to be the last stage of the Kotlin feeder's pipeline,
+     * applied on the way INTO this ring, where it could not reach audio already buffered: a volume
+     * change stayed inaudible for the ring's whole depth. Applying it as frames leave makes the lag
+     * one device period instead. KotlinAudioRing does the same thing in the same order and the
+     * differential oracle compares the samples, so these three fields mirror its three exactly.
+     *
+     * The target is the float's bits rather than an `_Atomic float`, because a lock-free atomic
+     * float is not guaranteed by the standard while a 32 bit integer one is, and the render path
+     * may not take a lock. `gain_current` belongs to the consumer alone and needs no atomic;
+     * `gain_slope` is immutable after create. */
+    _Alignas(KPRT_CACHELINE) _Atomic uint32_t gain_target_bits;
+    float gain_current;
+    float gain_slope;
+    /* Zero until the first frame is rendered. A ring opened muted has gain_current at unity and a
+     * target below it, so its first render would walk DOWN across a ramp of real audio: a burst of
+     * near-full-scale sound at the moment silence was asked for. Snapping is right here and only
+     * here, because nothing has been heard yet and there is no step to click. Consumer-private. */
+    int32_t gain_started;
+
     /* ---- The anchor seqlock. Consumer writes, anybody reads. ---- */
     _Alignas(KPRT_CACHELINE) _Atomic int64_t anchor_seq;
     _Atomic int64_t anchor_pts_us;

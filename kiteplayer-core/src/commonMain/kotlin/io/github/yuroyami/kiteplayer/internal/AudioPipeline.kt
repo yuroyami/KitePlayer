@@ -16,7 +16,9 @@ import kotlin.time.Duration
  * 3. [TempoStage] makes the sound take `1/speed` as long without moving its pitch. After the
  *    resampler, so pitch detection runs at one known rate; before the gain, so mute stays the
  *    last word.
- * 4. [GainStage] applies volume and mute, last, so a mute is silent immediately and no later stage
+ * The gain is NOT here. Volume and mute moved to the ring's read side on 2026-08-31, because a gain
+ * applied on the way INTO the ring cannot reach audio already buffered and a change stayed inaudible
+ * for the ring's whole depth. See AudioRingHandle.setGain.
  *    smears it.
  *
  * A stage that has nothing to do costs nothing beyond a copy: matching layouts copy channels,
@@ -44,7 +46,6 @@ internal class AudioPipeline(
     /** What the device accepted, which is what the ring and the sink expect. */
     val targetFormat: AudioFormat,
     private val onWarning: (PlaybackWarning) -> Unit = {},
-    private val rampDuration: Duration = GainStage.DEFAULT_RAMP_DURATION,
     /**
      * True runs [speed] through the tempo stage, which keeps pitch. False folds the rate into
      * the resampler instead: cheaper by a whole WSOLA pass, and the pitch moves with the rate,
@@ -77,7 +78,6 @@ internal class AudioPipeline(
     )
 
     private val tempo = TempoStage(targetFormat.channels, targetFormat.sampleRate)
-    private val gain = GainStage(targetFormat.sampleRate, targetFormat.channels, rampDuration)
 
     private val targetChannels = targetFormat.channels
 
@@ -97,19 +97,6 @@ internal class AudioPipeline(
      */
     var output: FloatArray = FloatArray(0)
         private set
-
-    /** Wanted volume, from silence at 0 to unity at 1. */
-    var volume: Float
-        get() = gain.volume
-        set(value) {
-            gain.volume = value
-        }
-
-    var muted: Boolean
-        get() = gain.muted
-        set(value) {
-            gain.muted = value
-        }
 
     /**
      * The playback rate. 1.0 bypasses both mechanisms entirely.
@@ -151,13 +138,11 @@ internal class AudioPipeline(
      * exists to avoid.
      */
     fun rebuiltFor(decoderFormat: AudioFormat, preservePitch: Boolean = this.preservePitch): AudioPipeline =
-        AudioPipeline(decoderFormat, targetFormat, onWarning, rampDuration, preservePitch, downmix).also {
-            it.volume = volume
-            it.muted = muted
+        AudioPipeline(decoderFormat, targetFormat, onWarning, preservePitch, downmix).also {
             it.speed = speed
-            // The ramp POSITION crosses too: the wanted values above only set the
-            // target, and a stage that restarts at unity un-mutes the swap for one whole ramp.
-            it.gain.adoptRamp(gain)
+            // No gain crosses here any more, and none needs to: the gain lives in the ring, which
+            // outlives every pipeline rebuild. A rebuild used to have to carry the ramp POSITION
+            // across or a swap un-muted itself for one whole ramp.
         }
 
     /**
@@ -204,7 +189,6 @@ internal class AudioPipeline(
             tempo.countBypassed(produced)
         }
 
-        gain.apply(result, produced)
         output = result
         return produced
     }
@@ -249,7 +233,6 @@ internal class AudioPipeline(
         if (last > 0) total = appendFinished(tempo.output, last, total)
 
         if (total <= 0) return 0
-        gain.apply(finished, total)
         output = finished
         return total
     }

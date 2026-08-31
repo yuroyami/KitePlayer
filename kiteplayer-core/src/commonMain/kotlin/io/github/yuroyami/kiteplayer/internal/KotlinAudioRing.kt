@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSinkBuffer
 import kotlinx.atomicfu.atomic
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -96,6 +97,62 @@ internal class KotlinAudioRing(
     }
 
     private val data = FloatArray(capacityFrames * channels)
+
+    /**
+     * Scratch the render scales into, so the gain never writes back into [data].
+     *
+     * [data] is the producer's storage. Scaling it in place would multiply samples the feeder may
+     * still be wrapping around into, and would make a frame's value depend on when it was read.
+     * The render copies out, scales the copy, and hands that over.
+     *
+     * One capacity's worth is always enough: a render can never take more frames than the ring
+     * holds, because `toRead` is bounded by what has been written and not yet consumed. Sized once
+     * here because the device's thread may not allocate.
+     */
+    private val renderScratch = FloatArray(capacityFrames * channels)
+
+    /**
+     * The gain the device's callback multiplies by, and the slope it walks there at.
+     *
+     * ### Why the gain lives HERE and not in the pipeline
+     *
+     * It used to be the last stage of `AudioPipeline`, applied by the feeder as it converted a
+     * buffer on its way INTO this ring. That is a write-side gain, and a write-side gain cannot
+     * reach audio that is already buffered: every frame in the ring keeps whatever volume was set
+     * when it was written. So a volume change was inaudible until the ring drained past it, which
+     * is at least 200 ms by the ring's own sizing policy and, on an Android device whose
+     * `AudioTrack` buffer sets the depth, three to six times that.
+     *
+     * Measured before the move, in `VolumeLatencyTest`: lag equals ring depth plus the ramp,
+     * exactly, at every depth tested. Read-side gain makes the lag one device period instead,
+     * without making the ring shallower, which is what the depth is for.
+     *
+     * ### The ramp, and why the slope is a field
+     *
+     * A gain that jumps is a step in the waveform and a step is a click, so the applied gain walks
+     * towards the wanted one at a fixed slope: the whole range takes [GAIN_RAMP_DURATION] and a
+     * smaller change proportionally less. The slope is what the click depends on, not the duration.
+     *
+     * [gainTarget] is written by whatever thread calls [setGain] and read by the device's callback,
+     * so it is atomic. [gainCurrent] belongs to the callback alone.
+     */
+    private val gainTarget = atomic(1f)
+    private var gainCurrent = 1f
+
+    /**
+     * False until the first frame is rendered, and what stops a fresh ring fading IN.
+     *
+     * A ring opened while muted, or at a low volume, has [gainCurrent] at unity and a target
+     * somewhere below it, so its first render would walk down across a whole ramp of real audio.
+     * That is a burst of near-full-scale sound at exactly the moment the user asked for silence.
+     * `GainStage.adoptRamp` existed for the same reason on the pipeline side and is gone with it.
+     *
+     * Snapping instead of walking is right here and only here: no audio has been heard yet, so
+     * there is no step in the waveform and nothing to click. Consumer-private, and read and written
+     * only inside the render, so the engine never races the device for it.
+     */
+    private var gainStarted = false
+    private val gainSlopePerFrame: Float = 1f / gainRampFrames(format.sampleRate)
 
     /** Total frames ever written by the feeder. Only the feeder advances it. */
     private val written = atomic(0L)
@@ -326,25 +383,41 @@ internal class KotlinAudioRing(
      * @param deadlineNanos when the last frame of the whole request becomes audible.
      * @return frames of real audio written. The rest of [destination] is silence.
      */
+    override fun setGain(target: Float) {
+        require(target.isFinite() && target >= 0f && target <= 1f) {
+            "gain must be between 0 and 1, was $target"
+        }
+        gainTarget.value = target
+    }
+
     fun render(destination: AudioSinkBuffer, frames: Int, deadlineNanos: Long): Int {
         val startFrame = consumed.value
         val available = (written.value - startFrame).toInt().coerceAtLeast(0)
         val toRead = min(frames, available)
 
         if (toRead > 0) {
+            // Copy out first, then scale the copy. Two steps and not one, because `data` belongs to
+            // the feeder: scaling in place would multiply frames it may still wrap into.
             var frameIndex = (startFrame % capacityFrames).toInt()
             var writtenSoFar = 0
             while (writtenSoFar < toRead) {
                 val runFrames = min(toRead - writtenSoFar, capacityFrames - frameIndex)
-                destination.writeInterleaved(
-                    source = data,
-                    sourceOffset = frameIndex * channels,
-                    destinationFrameOffset = writtenSoFar,
-                    frames = runFrames,
+                data.copyInto(
+                    destination = renderScratch,
+                    destinationOffset = writtenSoFar * channels,
+                    startIndex = frameIndex * channels,
+                    endIndex = (frameIndex + runFrames) * channels,
                 )
                 frameIndex = (frameIndex + runFrames) % capacityFrames
                 writtenSoFar += runFrames
             }
+            applyGain(renderScratch, toRead)
+            destination.writeInterleaved(
+                source = renderScratch,
+                sourceOffset = 0,
+                destinationFrameOffset = 0,
+                frames = toRead,
+            )
             consumed.value = startFrame + toRead
         }
 
@@ -361,6 +434,37 @@ internal class KotlinAudioRing(
         }
 
         return toRead
+    }
+
+    /**
+     * Multiplies [frames] sample frames of interleaved [samples] in place, walking to the target.
+     *
+     * Only real frames are walked. Silence written after an underrun is already zero, and advancing
+     * the ramp across it would make the gain depend on how badly the feeder was starved.
+     *
+     * The C ring does the same thing in the same order; the differential oracle compares the
+     * samples, so a difference here is a failing row there rather than a surprise on one platform.
+     */
+    private fun applyGain(samples: FloatArray, frames: Int) {
+        val wanted = gainTarget.value
+        if (!gainStarted) {
+            gainStarted = true
+            gainCurrent = wanted
+        }
+        var gain = gainCurrent
+        if (gain == wanted) {
+            if (wanted == 1f) return
+            for (i in 0 until frames * channels) samples[i] *= wanted
+            return
+        }
+        var base = 0
+        for (frame in 0 until frames) {
+            gain = if (gain < wanted) min(wanted, gain + gainSlopePerFrame)
+                   else max(wanted, gain - gainSlopePerFrame)
+            for (channel in 0 until channels) samples[base + channel] *= gain
+            base += channels
+        }
+        gainCurrent = gain
     }
 
     /**

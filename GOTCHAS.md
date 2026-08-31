@@ -74,7 +74,7 @@ gate names the tier and the rule that selected it.
 ```bash
 cd ../KiteFFmpeg
 ./gradlew checkCinteropCoupling
-./gradlew :kiteffmpeg-core:checkFFmpegRecipes
+./gradlew :kiteffmpeg:checkFFmpegRecipes
 ./native/kitecodec-c/scripts/check-deleted-surface.sh
 ./native/kitecodec-c/scripts/run-c-tests.sh plain
 
@@ -159,7 +159,7 @@ Never move one silently.
   `build/plain/lib/libkitecodec_helpers_host.a` only when the Gradle output is absent, so
   `build-host.sh && symbol-audit.sh` audits whatever Gradle last produced, which can be days old.
   It reported PASS over a change it had never seen on 2026-08-30. Run
-  `:kiteffmpeg-core:compileKiteFFmpegCForMacosArm64` first, or pass the archive explicitly.
+  `:kiteffmpeg:compileKiteFFmpegCForMacosArm64` first, or pass the archive explicitly.
 - **`run-c-tests.sh` never builds, so on its own it proves nothing about a source change.** It
   says so in its own header and it is still easy to miss: change a C file, run the suites, watch
   eight greens, and be looking at yesterday's binaries. `build-host.sh <variant>` first, every
@@ -181,7 +181,7 @@ Never move one silently.
   `e: java.util.NoSuchElementException: Key ic#69:kotlin.text/replace|... is missing in the map`,
   which names a stdlib function and looks like a compiler bug in your own code. It is neither: the
   cache is stale. `rm -rf <module>/build/kotlin` and build again. Hit on 2026-08-30 in
-  `:kiteffmpeg-core` the moment `kotlinx-coroutines-test` was added to `commonTest`.
+  `:kiteffmpeg` the moment `kotlinx-coroutines-test` was added to `commonTest`.
 - **The real-media suites fail under load with messages that read like correctness bugs.**
   `RealMediaSeekTest` and its neighbours drive real files and wait on real time with
   `withTimeoutOrNull`, so a busy machine samples the player before it has settled. What you get is
@@ -233,7 +233,7 @@ Never move one silently.
   said the opposite.** Measured three ways on 2026-08-29, each restored afterwards: changing a
   byte in a version header re-ran the C compile, the cinterop AND the link; changing a byte in
   `libavutil.a` re-ran the C compile and the cinterop; restoring it re-ran them again. The
-  wiring is deliberate and documented at length in `kiteffmpeg-core/build.gradle.kts` beside the
+  wiring is deliberate and documented at length in `kiteffmpeg/build.gradle.kts` beside the
   cinterop block, because cinterop's own up-to-date check covers headers and not the libraries
   its def merely names, so the archives are declared with `inputs.files`. `CompileKiteFFmpegCTask`
   additionally tracks the six version headers by CONTENT and carries the FFmpeg ref in its
@@ -526,13 +526,12 @@ Never move one silently.
 - Synkplay (the consumer, `../../syncplay-mobile`) pins KitePlayer in
   `gradle/libs.versions.toml`; the adapter is `shared/src/commonMain/.../player/kite/KiteImpl.kt`;
   mpv is the Android default engine, KitePlayer is picked on the home-screen wheel.
-- **The two names, and which one Central serves.** Maven Central serves the OLD coordinates only:
-  `io.github.yuroyami:kitecodec-core` at 0.1.0, 0.1.1 and 0.1.3 (0.1.2 was cut and superseded the
-  same day, never deployed). The repository renamed itself to KiteFFmpeg on 2026-08-29 and its
-  artifact is `kiteffmpeg-core`, which Central has NEVER served: it exists on this machine's
-  mavenLocal at **0.1.0** and nowhere else until the owner publishes. So KitePlayer cannot build
-  without `-Pkiteplayer.useMavenLocal=true` today, and that is expected rather than broken.
-- **The version went backwards on purpose.** `kiteffmpeg-core` 0.1.0 is strictly NEWER than
+- **The two names Central serves.** Both. `io.github.yuroyami:kitecodec-core` at 0.1.0, 0.1.1 and
+  0.1.3 is the OLD line (0.1.2 was cut and superseded the same day, never deployed) and receives
+  nothing further. The repository renamed itself to KiteFFmpeg on 2026-08-29, and its artifact is
+  `kiteffmpeg`, published at **0.1.0** on 2026-08-31. Note the artifact id lost its `-core` suffix
+  in the same move: the Gradle module is `:kiteffmpeg`.
+- **The version went backwards on purpose.** `kiteffmpeg` 0.1.0 is strictly NEWER than
   `kitecodec-core` 0.1.3: a new artifactId is a new artifact to Central, so the line restarted
   with the name. It carries the n8.1.2 trees plus the interrupt-seam and disposition work that
   never shipped under the old name. Never "fix" the number by bumping past the old line, and say

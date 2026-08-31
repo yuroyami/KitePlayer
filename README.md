@@ -612,8 +612,8 @@ Apache-2.0. See [NOTICE](NOTICE).
 
 Decoding is done by [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), which binds FFmpeg's libav\*
 libraries. The FFmpeg build you link carries its own license, and that license decides whether you may
-ship your binary. KiteFFmpeg's Gradle plugin makes that choice explicit and fails the build if it is
-left unset.
+ship your binary. KiteFFmpeg publishes an LGPL build only, with FFmpeg compiled into the artifact,
+so there is no GPL flavour to choose and nothing to configure.
 
 Part of the Kite family: [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg),
 [KiteCore](https://github.com/yuroyami/KiteCore), [KitePDF](https://github.com/yuroyami/KitePDF),

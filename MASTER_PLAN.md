@@ -26,9 +26,8 @@ WSOLA tempo and pitch preservation, subtitles with libass built for seven target
 outputs on Android, Apple, desktop JVM, Linux (container-proven), and a web canvas path.
 About 880 Kotlin test functions in KitePlayer, about 260 in KiteFFmpeg, plus nineteen C
 suites. Both repos have CI (KitePlayer 7 jobs on 4 OSes). Maven Central serves only the
-sibling's OLD coordinates, `kitecodec-core` up to 0.1.3; the renamed `kiteffmpeg-core` 0.1.0 is
-mavenLocal-only, so KitePlayer builds need `-Pkiteplayer.useMavenLocal=true` until the owner
-publishes. KitePlayer itself has never been published.
+sibling under both names: the old `kitecodec-core` up to 0.1.3, which receives nothing further,
+and `kiteffmpeg` 0.1.0, published 2026-08-31. KitePlayer itself has never been published.
 
 Honest support today: macOS arm64 is the proving ground (experimental full playback). Android
 and iOS play real media on real devices with named open items below. Desktop JVM plays the
@@ -84,18 +83,11 @@ left of it:
   types drag the mass into a base module anyway, and 13 targets times N modules multiplies the
   config drift the SEAM item already documents. Revisit only if a real external consumer asks
   for a playback-only artifact, and then additively.
-- [ ] **Synkplay** moves its pin to `kiteffmpeg-core` whenever it next bumps KitePlayer. Nothing
+- [ ] **Synkplay** moves its pin to `kiteffmpeg` whenever it next bumps KitePlayer. Nothing
   blocks on it, and its adapter needs no change beyond imports. **One thing to check on that bump
   if Synkplay has a desktop build:** desktop `Auto` now resolves to the native view, so Compose
   controls drawn over the video stop receiving clicks. Either move them into an owned overlay
   window or pass `KiteRenderPath.ComposeCanvas` explicitly. Mobile is unaffected.
-- [ ] **[owner] The GitHub repository rename** (KiteCodec to KiteFFmpeg; GitHub redirects old
-  URLs, and the CI badge and the checksum-pinned companion-release fetch URLs already name the
-  new one, so they go live with the rename).
-- [ ] **[owner] Publish `kiteffmpeg-core` 0.1.0 to Central**, spot-checking one published klib
-  for `n8.1.2` before releasing (see GOTCHAS section 4; the check reads the bytes rather than
-  the build's opinion of them, which is worth doing on a first release under a new name). The old
-  `kitecodec-core` line stays on Central untouched and receives nothing further.
 
 ---
 
@@ -794,7 +786,7 @@ TV-stick smoke (owner lane). x86-32 the day Synkplay ships it.
 Replay the KiteFFmpeg playbook: publish/release workflow trio, staging first, artifacts for
 every advertised target or the target is not advertised. Exit: a machine that has never seen
 this checkout builds `implementation("io.github.yuroyami:kiteplayer-mobile:0.0.x")` green
-against Central, resolving `kiteffmpeg-core` 0.1.x (the rename lands first). Release-gate
+against Central, resolving `kiteffmpeg` 0.1.x. Release-gate
 boxes 11, 17, 18, 19, 20 re-grade here; 12/13/14 get their device/browser halves from
 DEVICE-DAY and Phase 6. The codec-side publish already happened at 0.3; nothing else waits on
 it.
@@ -869,7 +861,7 @@ it.
   Left: raw strings where a typed `SampleFormat` exists, and `CodecId` conflating bitstream
   identity with implementation. The second is the real one and it is NEEDS-DESIGN: `h264`,
   `libx264` and `h264_videotoolbox` are one type today, which is why a knob check has to read a
-  name at all. `kiteffmpeg-core` ABI moved with the compile signature: klib and jvm both stay at
+  name at all. `kiteffmpeg` ABI moved with the compile signature: klib and jvm both stay at
   1910 and 1529 lines, one declaration changed in place.
 - [ ] **9.8 KC-BUILD** (S, was L): most of this row was written against a module that no longer
   exists. Each item was checked against the tree rather than against the prose.
@@ -897,7 +889,7 @@ it.
     `task:` so a job wired to a task that does not exist fails too. It is in the CI gate. This was
     the drift that could actually ship: a release is one prebuilt per triple per flavour, so a
     forgotten triple is a binary nobody builds and no gate reports.
-  - OPEN, what is left of target truth: `kiteffmpeg-core/build.gradle.kts` builds its own target
+  - OPEN, what is left of target truth: `kiteffmpeg/build.gradle.kts` builds its own target
     map per scope, and `scripts/linux-tests.sh` and `ci.yml` name targets in prose. None of those
     can ship a wrong artifact on their own, so they are worth a check only if one bites.
   - OPEN: `BuildFFmpegTask.kt` is 1,185 lines, down from 1,286 but still the largest file in

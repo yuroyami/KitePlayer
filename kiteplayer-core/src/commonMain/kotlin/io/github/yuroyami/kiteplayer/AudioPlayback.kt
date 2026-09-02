@@ -110,6 +110,9 @@ public class AudioPlayback(
      */
     private val wantedReplayGain = atomic(1f)
 
+    /** Stereo balance, -1 hard left to 1 hard right. Combined with the replay gain in one stage. */
+    private val wantedBalance = atomic(0f)
+
     private var generation: Generation = Generation.Initial
     private var format: AudioFormat? = null
     private var warnedAboutLatency = false
@@ -337,7 +340,7 @@ public class AudioPlayback(
         // Reasserted per buffer for the same reason the rate is: a pipeline rebuilt for a format
         // change starts at unity, and the trim has to survive that without the rebuild knowing.
         // Idempotent and a handful of floats, so the common case costs a compare.
-        stage.trim.setAll(wantedReplayGain.value)
+        applyTrim(stage)
 
         val emittedBefore = stage.tempoEmittedFrames
         // Converted exactly once: the mixer, resampler and gain ramp all carry state, so running
@@ -552,6 +555,53 @@ public class AudioPlayback(
             }
             wantedReplayGain.value = value
         }
+
+    /**
+     * Stereo balance: -1 is hard left, 0 is centre, 1 is hard right.
+     *
+     * An ATTENUATION of the channel being turned away from, never a boost of the other one. A
+     * balance that amplified could push material already at full scale past it, and there is no
+     * limiter on this side of the ring to catch that.
+     *
+     * Only the first two channels move. Panning a centre or a surround channel is a different
+     * feature with a different name, and doing it quietly here would surprise anyone who asked for
+     * what the word means.
+     *
+     * A change is heard after the audio already buffered has drained, which is the ring's depth:
+     * at least 200 ms, and longer on Android where the device's own buffer sets it. That is the
+     * cost of applying it on the way IN, and it is the right trade here because a balance is set
+     * once and left, unlike the volume, which lives on the ring's read side precisely so that it
+     * is heard within one device period.
+     */
+    public var balance: Float
+        get() = wantedBalance.value
+        set(value) {
+            require(value.isFinite() && value >= -1f && value <= 1f) {
+                "balance must be between -1 and 1, was $value"
+            }
+            wantedBalance.value = value
+        }
+
+    /**
+     * Folds the replay gain and the balance into the pipeline's one per-channel stage.
+     *
+     * Reasserted per buffer for the reason the rate is: a pipeline rebuilt for a format change
+     * starts at unity, and neither setting is carried across the rebuild by anything else.
+     */
+    private fun applyTrim(stage: AudioPipeline) {
+        val gain = wantedReplayGain.value
+        val balanceNow = wantedBalance.value
+        if (balanceNow == 0f) {
+            stage.trim.setAll(gain)
+            return
+        }
+        val perChannel = FloatArray(stage.trim.channels) { gain }
+        if (perChannel.size >= 2) {
+            if (balanceNow > 0f) perChannel[0] = gain * (1f - balanceNow)
+            if (balanceNow < 0f) perChannel[1] = gain * (1f + balanceNow)
+        }
+        stage.trim.set(perChannel)
+    }
 
     /** Silence without losing the volume setting. Ramped like [volume], and safe from any thread. */
     public var muted: Boolean

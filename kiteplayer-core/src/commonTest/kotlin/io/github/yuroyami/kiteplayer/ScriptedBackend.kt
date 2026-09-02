@@ -1240,6 +1240,30 @@ internal class ScriptedSink(
         val heard = destination.distinctValues(written)
         audibleValues += heard
         heard.forEach { audibleSigns += if (it > 0f) 1 else if (it < 0f) -1 else 0 }
+        recordChannelPeaks(destination, written)
+    }
+
+    /** The loudest magnitude heard in each channel, which is what a balance test measures. */
+    val channelPeaks: MutableMap<Int, Float> = mutableMapOf()
+
+    /** The loudest magnitude heard in [channel] so far, or 0 when that channel never carried any. */
+    fun channelPeak(channel: Int): Float = channelPeaks[channel] ?: 0f
+
+    /**
+     * Forgets every channel peak, so what follows is measured on its own.
+     *
+     * A peak is a running maximum, so a test that changes something mid-playback and then reads one
+     * is reading the loudest moment of the WHOLE session, including everything before the change.
+     */
+    fun clearChannelPeaks() { channelPeaks.clear() }
+
+    private fun recordChannelPeaks(destination: ScriptedSinkBuffer, frames: Int) {
+        val channels = negotiated?.channels ?: return
+        for (channel in 0 until channels) {
+            val magnitude = destination.channelPeak(channel, frames)
+            val seen = channelPeaks[channel] ?: 0f
+            if (magnitude > seen) channelPeaks[channel] = magnitude
+        }
     }
 
     /**
@@ -1273,6 +1297,17 @@ private class ScriptedSinkBuffer(
 
     fun reset() {
         data.fill(0f)
+    }
+
+    /** The loudest magnitude in [channel] over the first [frames] frames. */
+    fun channelPeak(channel: Int, frames: Int): Float {
+        var peak = 0f
+        for (frame in 0 until frames) {
+            val value = data[frame * format.channels + channel]
+            val magnitude = if (value < 0f) -value else value
+            if (magnitude > peak) peak = magnitude
+        }
+        return peak
     }
 
     fun distinctValues(frames: Int): Set<Float> {

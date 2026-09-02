@@ -442,6 +442,7 @@ internal class PlaybackCore(
     private var preservePitch: Boolean = config.audio.preservePitch
     private var volume: Float = 1.0f
     private var muted: Boolean = false
+    private var balance: Float = 0f
     private var videoScale: VideoScale = VideoScale.Fit
     private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
     private var renderQuality: io.github.yuroyami.kiteplayer.RenderQuality = config.renderQuality
@@ -1190,6 +1191,11 @@ internal class PlaybackCore(
                     IllegalArgumentException("volume must be between 0 and $volumeCeiling, was ${command.value}")
                 else -> null
             }
+            is CoreCommand.SetBalance -> when {
+                !command.value.isFinite() || command.value < -1f || command.value > 1f ->
+                    IllegalArgumentException("balance must be between -1 and 1, was ${command.value}")
+                else -> null
+            }
             else -> null
         }
     }
@@ -1353,6 +1359,11 @@ internal class PlaybackCore(
             is CoreCommand.SetVolume -> {
                 volume = command.value
                 session?.audio?.volume = command.value
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetBalance -> {
+                balance = command.value
+                session?.audio?.balance = command.value
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetMuted -> {
@@ -2004,6 +2015,7 @@ internal class PlaybackCore(
                 createdPlayback.volume = volume
                 createdPlayback.muted = muted
                 createdPlayback.replayGain = replayGainFor(audioStream, source.metadata)
+                createdPlayback.balance = balance
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
             openStage = OpenStage.Assembly
@@ -2676,6 +2688,7 @@ internal class PlaybackCore(
             playback.volume = volume
             playback.muted = muted
             playback.replayGain = replayGainFor(stream, session?.source?.metadata ?: emptyMap())
+            playback.balance = balance
             playback.flush(requestedEpoch)
             return PreparedAudioPath(playback, createdSink, negotiated)
         } catch (cancellation: CancellationException) {
@@ -5011,6 +5024,7 @@ internal class PlaybackCore(
              * when the device closes, and an effect attached to a closed session is inert. The
              * teardown projection above leaves it at its null default for the same reason. */
             audioSessionId = session?.audio?.platformSessionId,
+            balance = balance,
             /* Reported as APPLIED, in dB, so a gain the peak clamp reduced shows the reduced
              * figure. Null when nothing is applied at all, which a plain 1.0 could not say: a file
              * measured as needing no change publishes 0 dB, not nothing. */
@@ -6611,6 +6625,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class Close(val reply: CompletableDeferred<Unit>) : CoreCommand("close", reply)
     class SetSpeed(val value: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setSpeed", reply)
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
+    class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply)
     class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply)
     class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)

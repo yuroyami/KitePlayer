@@ -19,7 +19,7 @@ package io.github.yuroyami.kiteplayer.internal
  * Not thread safe, and it does not need to be: the feeder owns it, and a change is applied by that
  * same worker between buffers.
  */
-internal class TrimStage(private val channels: Int) {
+internal class TrimStage(val channels: Int) {
 
     init {
         require(channels >= 1) { "a trim stage needs at least one channel, was $channels" }

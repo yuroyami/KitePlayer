@@ -295,7 +295,20 @@ clamp. Note in KDoc which tags are read.
 
 ---
 
-### A4 Stereo balance. Size S, Tier 1
+### A4 Stereo balance. LANDED 2026-09-03
+
+One thing to carry forward, and it cost two debugging rounds:
+
+- **A live balance change is invisible for one ring depth**, because the trim is applied on the
+  way IN and cannot reach audio already buffered. The first test set the balance and measured
+  200 ms later, which is inside the drain, so it read the old setting and looked exactly like the
+  code not working. The test waits 400 ms now, and both public members say so. This is the same
+  law that put the VOLUME on the ring's read side; the difference is that a balance is set once
+  and a volume is swept, so paying the depth is right here and wrong there.
+- The scripted sink's channel peaks are running maxima, so a test that changes something mid
+  playback must clear them or it measures the loudest moment of the whole session.
+
+### A4, as planned. Size S, Tier 1
 
 **Why.** `KitePlayer.kt:49` says stereo balance is "absent rather than stubbed". It is absent. One
 per-channel multiply in `TrimStage` gives it.

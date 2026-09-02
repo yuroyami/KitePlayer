@@ -1063,7 +1063,13 @@ commit that lands it.
   belongs and where balance will join it; the user's volume stays on the ring's read side.
   `PlayerSnapshot.appliedReplayGainDb` reports what was applied rather than what was asked for.
   25 tests, the pipeline application falsified.
-- [ ] A4 Stereo balance. S
+  A4 is DONE (2026-09-03). `setBalance` from -1 to 1, an attenuation of the channel being turned
+  away from and never a boost of the other, so a balanced track can never be louder than a centred
+  one. It rides A3's per-channel stage and multiplies with the replay gain. Only the first two
+  channels move. A live change is heard after the ring drains, at least 200 ms, which is stated on
+  both public members: that is the cost of applying it on the way in, and the right trade for a
+  setting nobody sweeps. 6 tests, the application falsified. With it the facade's list of absent
+  features loses its last stale entry.
 - [ ] A5 Audio-only playback with video parked in place, no reopen. M
 - [ ] A6 A speed change that fades through its flush. S
 - [ ] A7 Sleep timer with a fade. S

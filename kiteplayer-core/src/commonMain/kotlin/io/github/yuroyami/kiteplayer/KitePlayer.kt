@@ -45,14 +45,14 @@ import kotlin.time.Duration
  *
  * ### What is not here
  *
- * Stereo balance is absent rather than stubbed. So are shuffle, gapless queue handoff, a secondary
- * subtitle track and an equaliser; MASTER_PLAN.md carries them with what each one needs.
+ * Shuffle, a gapless queue handoff, a secondary subtitle track and an equaliser are absent rather
+ * than stubbed; MASTER_PLAN.md carries them with what each one needs.
  *
  * External subtitles, filter chains, the open-option escape hatch, chapters, the queue and frame
  * stepping were on this list and are all here now: [addExternalSubtitle], [MediaItem.videoFilter],
  * [MediaItem.openOptions], [chapterAt] with [seekToChapter], [openQueue] with [next] and
- * [previous], and [stepFrame]. A member that describes something still unbuilt says so in its own
- * documentation.
+ * [previous], [stepFrame] and [setBalance]. A member that describes something still unbuilt says
+ * so in its own documentation.
  */
 public class KitePlayer internal constructor(private val core: PlaybackCore) : AutoCloseable {
 
@@ -223,6 +223,28 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             "volume must be between 0 and $ceiling, was $value"
         }
         core.post(CoreCommand.SetVolume(value, CompletableDeferred()))
+    }
+
+    /**
+     * Sets the stereo balance: -1 is hard left, 0 is centre, 1 is hard right.
+     *
+     * An attenuation of the channel being turned away from, never a boost of the other, so a
+     * balanced track can never be louder than the same track centred. Only the first two channels
+     * move; panning a centre or surround channel is a different feature.
+     *
+     * A change is heard after the audio already buffered has drained, which is the ring's depth:
+     * at least 200 ms, and longer on Android where the device's own buffer sets it. That is the
+     * cost of applying it on the way IN, and it is the right trade here because a balance is set
+     * once and left, unlike the volume, which lives on the ring's read side precisely so that it
+     * is heard within one device period.
+     *
+     * @throws IllegalArgumentException when [value] is not finite or is outside -1 to 1.
+     */
+    public fun setBalance(value: Float) {
+        require(value.isFinite() && value >= -1f && value <= 1f) {
+            "balance must be between -1 and 1, was $value"
+        }
+        core.post(CoreCommand.SetBalance(value, CompletableDeferred()))
     }
 
     /** Silences the sound without losing the [setVolume] setting. Ramped the same way. */

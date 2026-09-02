@@ -96,6 +96,8 @@ public data class PlayerSnapshot(
      * not what the tag asked for.
      */
     val appliedReplayGainDb: Float? = null,
+    /** Stereo balance: -1 hard left, 0 centre, 1 hard right. See [KitePlayer.setBalance]. */
+    val balance: Float = 0f,
 )
 
 /**

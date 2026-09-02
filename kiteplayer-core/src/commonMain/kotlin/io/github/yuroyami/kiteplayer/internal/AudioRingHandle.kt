@@ -158,6 +158,14 @@ internal fun framesToMicros(frames: Long, sampleRate: Int): Long {
  */
 internal val GAIN_RAMP_DURATION: kotlin.time.Duration = kotlin.time.Duration.parse("5ms")
 
+/**
+ * The loudest gain a ring accepts. 1 is unity; above it is amplification, folded through
+ * [KotlinAudioRing.softClip] so a boost cannot clip.
+ *
+ * One law, in one place, and the C ring's `KPRT_GAIN_MAX` carries the same value.
+ */
+internal const val GAIN_MAX: Float = 2f
+
 /** Sample frames [GAIN_RAMP_DURATION] is worth at [sampleRate]. At least one, so the slope is finite. */
 internal fun gainRampFrames(sampleRate: Int): Int {
     require(sampleRate > 0) { "a sample rate of $sampleRate is not a rate" }

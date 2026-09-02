@@ -276,6 +276,12 @@ abstract class CompileKiteRtTask @Inject constructor(
          */
         val COMPILER_FLAGS: List<String> = listOf(
             "-O2", "-std=c11",
+            // The gain path folds a boosted sample through a saturator, and that arithmetic is a
+            // multiply-add a compiler is free to contract into one FMA. KotlinAudioRing computes
+            // the same curve and is not contracted the same way, and AudioRingDifferentialTest
+            // compares the two rings by RAW BITS. Off here and in build-host.sh, or the oracle
+            // fails on a difference that is real and is nobody's defect.
+            "-ffp-contract=off",
             "-fvisibility=hidden", "-fPIC",
             "-Wall", "-Wextra", "-Werror", "-Werror=vla",
         )

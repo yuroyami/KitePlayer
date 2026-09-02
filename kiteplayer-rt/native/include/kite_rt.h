@@ -250,13 +250,24 @@ KPRT_API void kprt_ring_mark_ending(kprt_ring *ring);
  * enough that no click is left, short enough that a mute feels immediate. */
 #define KPRT_GAIN_RAMP_MICROS 5000
 
+/* The loudest gain the ring accepts. Above unity is amplification, and it is safe because the
+ * render folds what it would otherwise clip; see `kprt_ring_set_gain`.
+ *
+ * One law shared with KotlinAudioRing, whose `GAIN_MAX` carries the same value. */
+#define KPRT_GAIN_MAX 2.0f
+
 /* Sample frames KPRT_GAIN_RAMP_MICROS is worth at `sample_rate`, at least one so a slope is finite.
  * Exposed because the differential oracle asserts both rings derive the same number. */
 KPRT_API int32_t kprt_gain_ramp_frames(int32_t sample_rate);
 
-/* Sets the gain `kprt_ring_render` multiplies every rendered frame by, from silence at 0 to unity
- * at 1. The applied gain WALKS towards it at a fixed slope rather than jumping, because a step in
- * the waveform is a click.
+/* Sets the gain `kprt_ring_render` multiplies every rendered frame by, from silence at 0 through
+ * unity at 1 to amplification at KPRT_GAIN_MAX. The applied gain WALKS towards it at a fixed slope
+ * rather than jumping, because a step in the waveform is a click.
+ *
+ * Above unity the render folds each sample through a saturator instead of letting it clip: a boost
+ * on already-loud material would otherwise square off its peaks, which is the one sound worse than
+ * being too quiet. At or below unity the saturator is not in the path at all, so nothing about the
+ * old behaviour moves by a bit.
  *
  * Read side, and deliberately so. A gain applied as samples are WRITTEN cannot reach audio already
  * buffered, so a volume change stays inaudible for the ring's whole depth. Applying it as frames
@@ -264,8 +275,9 @@ KPRT_API int32_t kprt_gain_ramp_frames(int32_t sample_rate);
  * one device period.
  *
  * Safe from any thread, allocation free, and it never blocks. Mute is not separate: send 0.
- * Values outside 0..1, NaN included, are clamped rather than refused; there is no way to report an
- * error to a real-time caller and multiplying every sample by a NaN is the worse outcome. */
+ * Values outside 0..KPRT_GAIN_MAX, NaN included, are clamped rather than refused; there is no way
+ * to report an error to a real-time caller and multiplying every sample by a NaN is the worse
+ * outcome. */
 KPRT_API void kprt_ring_set_gain(kprt_ring *ring, float target);
 
 /* ---- The real-time side ---- */

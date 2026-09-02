@@ -384,8 +384,8 @@ internal class KotlinAudioRing(
      * @return frames of real audio written. The rest of [destination] is silence.
      */
     override fun setGain(target: Float) {
-        require(target.isFinite() && target >= 0f && target <= 1f) {
-            "gain must be between 0 and 1, was $target"
+        require(target.isFinite() && target >= 0f && target <= GAIN_MAX) {
+            "gain must be between 0 and $GAIN_MAX, was $target"
         }
         gainTarget.value = target
     }
@@ -453,15 +453,31 @@ internal class KotlinAudioRing(
         }
         var gain = gainCurrent
         if (gain == wanted) {
-            if (wanted == 1f) return
-            for (i in 0 until frames * channels) samples[i] *= wanted
+            if (wanted > 1f) {
+                // Boosting. Fold, so a loud passage cannot leave here squared off.
+                for (i in 0 until frames * channels) {
+                    samples[i] *= wanted
+                    samples[i] = softClip(samples[i])
+                }
+            } else if (wanted != 1f) {
+                for (i in 0 until frames * channels) samples[i] *= wanted
+            }
             return
         }
         var base = 0
         for (frame in 0 until frames) {
             gain = if (gain < wanted) min(wanted, gain + gainSlopePerFrame)
                    else max(wanted, gain - gainSlopePerFrame)
-            for (channel in 0 until channels) samples[base + channel] *= gain
+            // Per FRAME and not per buffer: a walk that crosses unity must leave the frames below
+            // it exactly as they were and fold only the ones above.
+            if (gain > 1f) {
+                for (channel in 0 until channels) {
+                    samples[base + channel] *= gain
+                    samples[base + channel] = softClip(samples[base + channel])
+                }
+            } else {
+                for (channel in 0 until channels) samples[base + channel] *= gain
+            }
             base += channels
         }
         gainCurrent = gain
@@ -566,5 +582,30 @@ internal class KotlinAudioRing(
          * between two device callbacks is not a file anyone can play.
          */
         const val MAX_SEGMENTS: Int = 4
+
+        /**
+         * The saturator the gain walk folds through above unity.
+         *
+         * Identity up to the knee, then a rational fold that approaches full scale without ever
+         * reaching it: the excess over the knee is mapped through x/(1+x), which is 0 at the knee
+         * and tends to 1 however hard it is driven. So a boosted passage compresses instead of
+         * squaring off, and a boost can never produce a sample outside full scale.
+         *
+         * Written as separate statements ON PURPOSE, matching `kprt_soft_clip` in
+         * `kite_rt_render.c` statement for statement. The C side compiles with -ffp-contract=off so
+         * its multiply-add cannot become an FMA; this side must not be written in a shape that
+         * invites the same fusion, because the differential oracle compares the two rings by raw
+         * bits and one fused instruction is a failing row rather than a rounding difference.
+         */
+        internal fun softClip(x: Float): Float {
+            val knee = 0.75f
+            val mag = if (x < 0f) -x else x
+            if (mag <= knee) return x
+            val excess = (mag - knee) / (1f - knee)
+            var folded = excess / (1f + excess)
+            folded = (1f - knee) * folded
+            folded = knee + folded
+            return if (x < 0f) -folded else folded
+        }
     }
 }

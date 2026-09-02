@@ -4,7 +4,7 @@
 #
 # Usage:  ./scripts/run-c-tests.sh <variant> [suite ...]
 #         variant is one of: plain asan tsan interpose
-#         suite names are the file stems, for example test_ring_basic. With none given, all eight
+#         suite names are the file stems, for example test_ring_basic. With none given, all nine
 #         run, which is what a gate does.
 #
 # Build first: ./scripts/build-host.sh <variant>. This script never builds, so a gate cannot
@@ -38,7 +38,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 BIN="$ROOT/build/$VARIANT/bin"
 
-ALL_SUITES="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_sink_callback test_sink_timebase"
+ALL_SUITES="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_ring_gain_boost test_sink_callback test_sink_timebase"
 SUITES="${*:-$ALL_SUITES}"
 
 [ -d "$BIN" ] || {

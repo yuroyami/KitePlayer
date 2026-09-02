@@ -199,15 +199,24 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Sets the volume, from silence at 0 to unity at 1.
+     * Sets the volume, from silence at 0 to unity at 1, and up to
+     * [AudioConfig.volumeCeiling] when that has been raised to allow a boost.
      *
-     * Applied by the audio pipeline's gain stage as one multiply per sample over a short ramp, so a change
-     * never clicks. Above unity is amplification and is refused rather than clipped.
+     * Applied as one multiply per sample as frames leave the ring, over a short ramp, so a change
+     * never clicks and is audible within one device period. Above unity each sample is folded
+     * through a saturator rather than allowed to clip, so a boosted loud passage compresses
+     * instead of squaring off; at or below unity nothing is folded.
      *
-     * @throws IllegalArgumentException when [value] is not finite or is outside 0 to 1.
+     * The ceiling is 1 by default, which refuses every boost: amplifying without being asked is
+     * not a player's decision. Raise [AudioConfig.volumeCeiling] to offer one.
+     *
+     * @throws IllegalArgumentException when [value] is not finite or is outside 0 to the ceiling.
      */
     public fun setVolume(value: Float) {
-        require(value.isFinite() && value >= 0f && value <= 1f) { "volume must be between 0 and 1, was $value" }
+        val ceiling = core.volumeCeiling
+        require(value.isFinite() && value >= 0f && value <= ceiling) {
+            "volume must be between 0 and $ceiling, was $value"
+        }
         core.post(CoreCommand.SetVolume(value, CompletableDeferred()))
     }
 

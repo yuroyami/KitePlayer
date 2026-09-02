@@ -54,7 +54,11 @@ AR="${KPRT_AR:-/usr/bin/ar}"
 [ -x "$CC" ] || { echo "build-host.sh: no compiler at $CC" >&2; exit 1; }
 [ -x "$AR" ] || { echo "build-host.sh: no archiver at $AR" >&2; exit 1; }
 
-BASE_FLAGS="-std=c11 -Wall -Wextra -Werror -Werror=vla -g"
+# -ffp-contract=off keeps the gain path's multiply-add out of an FMA. The Kotlin ring is the C
+# ring's differential oracle and it compares raw bits, so one fused instruction on this side and
+# not the other is a failing row rather than a rounding difference. It must match the flag
+# CompileKiteRtTask passes for the same reason.
+BASE_FLAGS="-std=c11 -ffp-contract=off -Wall -Wextra -Werror -Werror=vla -g"
 case "$VARIANT" in
     plain) VARIANT_FLAGS="-O2" ;;
     asan)  VARIANT_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1" ;;
@@ -79,7 +83,7 @@ INTERPOSE_LIB="$LIB/libkprt_interpose_alloc.dylib"
 # fixtures. KPRT_TESTING is never set by CompileKiteRtTask, so that seam cannot enter a shipped
 # archive. test_sink_timebase checks this library's host tick arithmetic against CoreAudio's own
 # conversion rather than trusting either.
-TESTS="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_sink_callback test_sink_timebase"
+TESTS="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_ring_gain_boost test_sink_callback test_sink_timebase"
 
 # Frameworks for the link.
 #

@@ -207,6 +207,35 @@ static void publish_anchor(kprt_ring *ring, int64_t last_real_frame, int64_t at_
     atomic_store_explicit(&ring->anchor_seq, seq + 2, memory_order_relaxed);
 }
 
+/* The saturator the gain walk folds through above unity.
+ *
+ * Identity up to the knee, then a rational fold that approaches full scale without ever reaching
+ * it: the excess over the knee is mapped through x/(1+x), which is 0 at the knee and tends to 1
+ * however hard it is driven. One divide, no libm call, no branch on the hot path beyond the sign,
+ * which is what lets it live inside the device callback the render audit polices.
+ *
+ * Written as separate statements ON PURPOSE. `knee + (1 - knee) * folded` in one expression is a
+ * multiply-add a compiler may contract into an FMA, and the Kotlin twin will not be contracted the
+ * same way; the differential oracle compares raw bits, so one fused instruction is a failing row.
+ * The build also passes -ffp-contract=off for the same reason, and that flag is the guarantee while
+ * this shape is the reminder.
+ *
+ * Identical in order and arithmetic to `KotlinAudioRing.softClip`. */
+static float kprt_soft_clip(float x)
+{
+    const float knee = 0.75f;
+    float mag = x < 0.0f ? -x : x;
+    float excess;
+    float folded;
+    if (mag <= knee)
+        return x;
+    excess = (mag - knee) / (1.0f - knee);
+    folded = excess / (1.0f + excess);
+    folded = (1.0f - knee) * folded;
+    folded = knee + folded;
+    return x < 0.0f ? -folded : folded;
+}
+
 int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, int64_t deadline_nanos)
 {
     int64_t start;
@@ -260,7 +289,13 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                 gain = wanted;
             }
             if (gain == wanted) {
-                if (wanted != 1.0f) {
+                if (wanted > 1.0f) {
+                    /* Boosting. Fold, so a loud passage cannot leave here squared off. */
+                    for (i = 0; i < total; i++) {
+                        destination[i] *= wanted;
+                        destination[i] = kprt_soft_clip(destination[i]);
+                    }
+                } else if (wanted != 1.0f) {
                     for (i = 0; i < total; i++)
                         destination[i] *= wanted;
                 }
@@ -278,8 +313,17 @@ int32_t kprt_ring_render(kprt_ring *ring, float *destination, int32_t frames, in
                         if (gain < wanted)
                             gain = wanted;
                     }
-                    for (i = 0; i < channels; i++)
-                        destination[base + i] *= gain;
+                    /* Per FRAME and not per buffer: a walk that crosses unity must leave the frames
+                     * below it exactly as they were and fold only the ones above. */
+                    if (gain > 1.0f) {
+                        for (i = 0; i < channels; i++) {
+                            destination[base + i] *= gain;
+                            destination[base + i] = kprt_soft_clip(destination[base + i]);
+                        }
+                    } else {
+                        for (i = 0; i < channels; i++)
+                            destination[base + i] *= gain;
+                    }
                     base += channels;
                 }
                 ring->gain_current = gain;

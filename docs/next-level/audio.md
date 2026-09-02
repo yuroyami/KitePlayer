@@ -12,7 +12,24 @@ Paths below are relative to the repository root. `core` means `kiteplayer-core/s
 
 ---
 
-### A1 Volume boost with a soft limiter. Size M, Tier 3 (the owner runs the device half)
+### A1 Volume boost with a soft limiter. LANDED 2026-09-02 except the device run
+
+**What shipped, and where it differs from the plan below.** All of it, plus three things the plan
+did not foresee:
+
+- `NativeAudioRing.setGain` carried its OWN copy of the 0..1 bound, so widening
+  `KotlinAudioRing` alone left the differential oracle refusing 1.5. Both rings check now.
+- `AudioConfig.volumeCeiling` went LAST in the parameter list, not beside `preservePitch`.
+  Inserting it earlier moved `downmix`'s position and broke every positional caller for nothing.
+- The first version of the walk test could not fail: it walked UP from unity, where the first
+  slope step is already above unity, so every frame was boosted and a per-buffer saturator would
+  have passed. It walks DOWN through unity now. Found by falsifying, which is what falsifying is
+  for.
+
+The plan's remaining text is kept as the record of what was asked for. The device run is DEVICE-DAY
+step 19 and is the owner's.
+
+### A1, as planned. Size M, Tier 3 (the owner runs the device half)
 
 **Why.** `setVolume` refuses anything above 1.0 (`KitePlayer.kt:210`). Consumers want 200 percent for
 quiet material, and mpv and VLC let the multiply exceed unity and clip. Clipping a hot passage

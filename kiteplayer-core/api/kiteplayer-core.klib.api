@@ -1385,7 +1385,7 @@ final class io.github.yuroyami.kiteplayer.subtitle/StyledSpan { // io.github.yur
 }
 
 final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.kiteplayer/AudioConfig|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ...) // io.github.yuroyami.kiteplayer/AudioConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer/AudioConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig;kotlin.Float){}[0]
 
     final val downmix // io.github.yuroyami.kiteplayer/AudioConfig.downmix|{}downmix[0]
         final fun <get-downmix>(): io.github.yuroyami.kiteplayer/DownmixConfig // io.github.yuroyami.kiteplayer/AudioConfig.downmix.<get-downmix>|<get-downmix>(){}[0]
@@ -1393,11 +1393,14 @@ final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.ki
         final fun <get-preferredLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/AudioConfig.preferredLanguages.<get-preferredLanguages>|<get-preferredLanguages>(){}[0]
     final val preservePitch // io.github.yuroyami.kiteplayer/AudioConfig.preservePitch|{}preservePitch[0]
         final fun <get-preservePitch>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.preservePitch.<get-preservePitch>|<get-preservePitch>(){}[0]
+    final val volumeCeiling // io.github.yuroyami.kiteplayer/AudioConfig.volumeCeiling|{}volumeCeiling[0]
+        final fun <get-volumeCeiling>(): kotlin/Float // io.github.yuroyami.kiteplayer/AudioConfig.volumeCeiling.<get-volumeCeiling>|<get-volumeCeiling>(){}[0]
 
     final fun component1(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/AudioConfig.component1|component1(){}[0]
     final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.component2|component2(){}[0]
     final fun component3(): io.github.yuroyami.kiteplayer/DownmixConfig // io.github.yuroyami.kiteplayer/AudioConfig.component3|component3(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ...): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/AudioConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig){}[0]
+    final fun component4(): kotlin/Float // io.github.yuroyami.kiteplayer/AudioConfig.component4|component4(){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer/AudioConfig // io.github.yuroyami.kiteplayer/AudioConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig;kotlin.Float){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/AudioConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/AudioConfig.toString|toString(){}[0]

@@ -168,6 +168,9 @@ internal class PlaybackCore(
     private val statsState = MutableStateFlow(PlaybackStats())
     private val eventSink = MutableSharedFlow<PlayerEvent>(extraBufferCapacity = 64)
 
+    /** The loudest volume this player accepts, from its configuration. See `AudioConfig.volumeCeiling`. */
+    val volumeCeiling: Float get() = config.audio.volumeCeiling
+
     val snapshots: StateFlow<PlayerSnapshot> get() = snapshotState.asStateFlow()
     val progress: StateFlow<Progress> get() = progressState.asStateFlow()
     val stats: StateFlow<PlaybackStats> get() = statsState.asStateFlow()
@@ -1181,8 +1184,8 @@ internal class PlaybackCore(
                 else -> null
             }
             is CoreCommand.SetVolume -> when {
-                !command.value.isFinite() || command.value < 0f || command.value > 1f ->
-                    IllegalArgumentException("volume must be between 0 and 1, was ${command.value}")
+                !command.value.isFinite() || command.value < 0f || command.value > volumeCeiling ->
+                    IllegalArgumentException("volume must be between 0 and $volumeCeiling, was ${command.value}")
                 else -> null
             }
             else -> null

@@ -112,6 +112,17 @@ class AudioRingDifferentialTest {
     private class FeedAtDrift(val frames: Int, val driftUs: Long) : Step
 
     /** The device asks for [frames] frames at [deadlineOffsetNanos] after the scenario's first pull. */
+    /**
+     * The feeder hands over [frames] frames whose every sample is [value].
+     *
+     * [Feed] dates each frame by its own index, so its samples are 0, 1, 2 and upward: right for
+     * catching a wrap mistake, and useless for the saturator, which is shaped around full scale and
+     * is a flat line above 1.0. A gain boost over that ramp would fold every sample to nearly the
+     * same number and the two rings could agree while getting the curve wrong. A constant in the
+     * audio range puts the comparison where the fold actually bends.
+     */
+    private class FeedConstant(val frames: Int, val value: Float) : Step
+
     private class Pull(val frames: Int) : Step
 
     /**
@@ -198,6 +209,15 @@ class AudioRingDifferentialTest {
                         val sourceOffset = step.sourceFrameOffset * channels
                         val kotlinAccepted = kotlinRing.write(source, sourceOffset, step.frames, pts)
                         val nativeAccepted = nativeRing.write(source, sourceOffset, step.frames, pts)
+                        assertEquals(kotlinAccepted, nativeAccepted, "$at: accepted frames")
+                        streamFrame += kotlinAccepted
+                    }
+
+                    is FeedConstant -> {
+                        val source = FloatArray(step.frames * channels) { step.value }
+                        val pts = Pts(framesToMicros(streamFrame, sampleRate))
+                        val kotlinAccepted = kotlinRing.write(source, 0, step.frames, pts)
+                        val nativeAccepted = nativeRing.write(source, 0, step.frames, pts)
                         assertEquals(kotlinAccepted, nativeAccepted, "$at: accepted frames")
                         streamFrame += kotlinAccepted
                     }
@@ -729,6 +749,66 @@ class AudioRingDifferentialTest {
                             Pull(frames = 96),
                             Pull(frames = 96),
                             SetGain(1f),
+                            Pull(frames = 96),
+                            Pull(frames = 1_024),
+                        ),
+                    ),
+                    sampleRate = rate,
+                    channels = channels,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `a boosted gain agrees sample for sample and never leaves full scale`() {
+        // The saturator above unity is the one piece of the gain path that is not a single multiply,
+        // so it is the one most able to drift between the two rings: a divide, a knee comparison and
+        // a sign fold, written twice. The samples are chosen to straddle the knee at gain 1.5, so
+        // some frames take the identity arm and some take the fold: 0.4 stays exact, 0.9 folds.
+        for (value in listOf(0.4f, 0.9f, 1f, -0.9f)) {
+            runScenario(
+                Scenario(
+                    "a boost over a constant of $value",
+                    capacityFrames = 4_096,
+                    steps = listOf(
+                        FeedConstant(frames = 2_048, value = value),
+                        SetGain(1.5f),
+                        // The first pull snaps rather than walking, so this is the steady-state arm.
+                        Pull(frames = 256),
+                        SetGain(2f),
+                        // These cross the ramp, so they are the per-frame arm.
+                        Pull(frames = 64),
+                        Pull(frames = 64),
+                        Pull(frames = 512),
+                        // And back down through unity, where the fold has to stop being applied.
+                        SetGain(0.9f),
+                        Pull(frames = 64),
+                        Pull(frames = 512),
+                    ),
+                ),
+                sampleRate = 48_000,
+            )
+        }
+    }
+
+    @Test
+    fun `the boost agrees at every rate and channel count`() {
+        // The slope is derived from the rate, so the frame on which the walk crosses unity differs
+        // per rate, and that frame is where the fold switches on. Six channels because the fold is
+        // applied inside the per-channel loop and an off-by-one there would show only above stereo.
+        for (rate in rates) {
+            for (channels in listOf(1, 2, 6)) {
+                runScenario(
+                    Scenario(
+                        "a boost and a return",
+                        capacityFrames = 4_096,
+                        steps = listOf(
+                            FeedConstant(frames = 2_048, value = 0.8f),
+                            SetGain(2f),
+                            Pull(frames = 96),
+                            Pull(frames = 96),
+                            SetGain(0.25f),
                             Pull(frames = 96),
                             Pull(frames = 1_024),
                         ),

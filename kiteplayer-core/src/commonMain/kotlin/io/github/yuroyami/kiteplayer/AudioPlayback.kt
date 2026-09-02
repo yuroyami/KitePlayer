@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.AudioPipeline
+import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
 import io.github.yuroyami.kiteplayer.internal.MediaClock
 import io.github.yuroyami.kiteplayer.internal.TempoStage
@@ -495,7 +496,12 @@ public class AudioPlayback(
     }
 
     /**
-     * Playback volume, from silence at 0 to unity at 1. Above unity is amplification and is refused.
+     * Playback volume, from silence at 0 through unity at 1 to amplification at 2.
+     *
+     * The pipeline's own bound is the ring's, because that is where the gain is applied and where
+     * a boost is folded through the saturator. The POLICY bound is the player's
+     * [AudioConfig.volumeCeiling], which is 1 unless a consumer raised it: this class is reached
+     * through the engine, and the engine refuses a boost the configuration did not allow.
      *
      * Real, and applied by the pipeline's gain stage as one multiply per sample with a short ramp, so a
      * change never clicks. It takes effect on the next buffer the feeder converts, which is why setting
@@ -507,8 +513,8 @@ public class AudioPlayback(
     public var volume: Float
         get() = wantedVolume.value
         set(value) {
-            require(value.isFinite() && value >= 0f && value <= 1f) {
-                "volume must be between 0 and 1, was $value"
+            require(value.isFinite() && value >= 0f && value <= GAIN_MAX) {
+                "volume must be between 0 and $GAIN_MAX, was $value"
             }
             wantedVolume.value = value
             pushGain()

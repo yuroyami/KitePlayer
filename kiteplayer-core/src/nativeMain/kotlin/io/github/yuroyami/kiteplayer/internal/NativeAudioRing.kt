@@ -248,8 +248,8 @@ internal class NativeAudioRing private constructor(
      * still a bug worth failing on, and the two together mean a NaN can never reach a multiply.
      */
     override fun setGain(target: Float) {
-        require(target.isFinite() && target >= 0f && target <= 1f) {
-            "gain must be between 0 and 1, was $target"
+        require(target.isFinite() && target >= 0f && target <= GAIN_MAX) {
+            "gain must be between 0 and $GAIN_MAX, was $target"
         }
         kprt_ring_set_gain(ring, target)
     }

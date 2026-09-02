@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import kotlin.time.Duration
@@ -182,7 +183,25 @@ public data class AudioConfig(
     val preservePitch: Boolean = true,
     /** How multichannel audio is folded down when the device has fewer speakers. */
     val downmix: DownmixConfig = DownmixConfig(),
-)
+    /**
+     * The loudest [KitePlayer.setVolume] accepts. 1 is unity and refuses any boost, which is the
+     * default because amplifying without being asked to is not a player's decision to make.
+     *
+     * Raise it to offer a boost, up to 2. Above unity the ring folds each sample through a
+     * saturator instead of letting it clip, so a loud passage compresses rather than squaring off;
+     * at or below unity nothing is folded and the samples are what they always were, bit for bit.
+     *
+     * Last in the list on purpose: inserting it earlier would move `downmix`'s position and break
+     * every caller that passed it positionally.
+     */
+    val volumeCeiling: Float = 1f,
+) {
+    init {
+        require(volumeCeiling.isFinite() && volumeCeiling >= 1f && volumeCeiling <= GAIN_MAX) {
+            "volumeCeiling must be between 1 and $GAIN_MAX, was $volumeCeiling"
+        }
+    }
+}
 
 /**
  * How a multichannel mix is folded into fewer speakers.

@@ -156,12 +156,13 @@ void kprt_ring_set_gain(kprt_ring *ring, float target)
     if (ring == NULL)
         return;
     /* Clamped rather than refused: this is the real-time path's input and a caller that computed a
-     * NaN must not be able to multiply every sample by one. The Kotlin side requires 0..1 at its
-     * own boundary, so a value arriving here outside it is already a bug being contained. */
+     * NaN must not be able to multiply every sample by one. The Kotlin side requires
+     * 0..KPRT_GAIN_MAX at its own boundary, so a value arriving here outside it is already a bug
+     * being contained. */
     if (!(target >= 0.0f))
         target = 0.0f;
-    if (target > 1.0f)
-        target = 1.0f;
+    if (target > KPRT_GAIN_MAX)
+        target = KPRT_GAIN_MAX;
     memcpy(&bits, &target, sizeof(bits));
     atomic_store_explicit(&ring->gain_target_bits, bits, memory_order_relaxed);
 }

@@ -1040,7 +1040,16 @@ tree disagrees with an item, stop and report rather than improvise. Delete a row
 commit that lands it.
 
 **Audio (`audio.md`)**
-- [ ] A1 Volume boost to 2.0 with a soft limiter in both rings. M, Tier 3 (device half is the owner's)
+- [ ] A1 remainder: **the device half only.** The code landed 2026-09-02. `AudioConfig.volumeCeiling`
+  (1 by default, up to 2) is what a consumer raises to allow a boost; above unity both rings fold
+  each sample through a saturator that is identity below a 0.75 knee and never reaches full scale,
+  so a boosted loud passage compresses instead of squaring off. At or below unity nothing is
+  folded and every sample is bit for bit what it was. Proven by a new nine-case C suite, by two new
+  differential-oracle cases holding the C and Kotlin rings to the same raw bits at four rates and
+  three channel counts, and by seven engine tests; each arm falsified. The render audit still finds
+  the device callback calling nothing but memcpy, memset and bzero, so the saturator is legal where
+  it lives. **[owner]** DEVICE-DAY step 19 is what is left: nothing on a laptop can say whether a
+  boost sounds right on a handset.
 - [ ] A2 The Android audio session id, published. S
 - [ ] A3 ReplayGain and R128 tags as a clamped pre-gain. M
 - [ ] A4 Stereo balance. S
@@ -1163,6 +1172,13 @@ a failed build is itself the first finding.
 **iPhone/iPad:**
 13. Play, seek, background, return (as steps 3-4). PASS: picture returns every time.
 14. Read KiteStats once at the end; write the numbers down.
+
+**Android and iPhone, the volume boost (A1's device half):**
+19. Build with `AudioConfig(volumeCeiling = 2f)`, play `sync1080p30.mp4` or any music file, and
+    walk the volume from 1.0 to 2.0 and back while it plays. PASS: it gets audibly louder, no
+    crackle or buzz on the loud passages, and no click at any step. FAIL: capture the material and
+    the volume at which it broke. Then repeat once on a quiet recording, where the boost should be
+    a clean lift with nothing folded.
 
 **iPhone, the dense-subtitle acceptance run (Release build only; Debug invalidates feel):**
 15. The dense Kaguya ASS file vs its `-sn` remux, back to back: scrub hard, mash pause/play a

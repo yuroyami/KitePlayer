@@ -1030,6 +1030,91 @@ it.
 
 ---
 
+# PHASE 10: NEXT LEVEL (written expansions in `docs/next-level/`)
+
+Sixty items, each with its files, contract, red-first tests, gate tier and commit line, grouped
+into seven program files under `docs/next-level/`. `README.md` there carries the execution
+protocol (one executor per repository, never two in one tree), the global order, and the six
+owner decisions. Every item was grounded against the tree on the day it was written; when the
+tree disagrees with an item, stop and report rather than improvise. Delete a row here in the
+commit that lands it.
+
+**Audio (`audio.md`)**
+- [ ] A1 Volume boost to 2.0 with a soft limiter in both rings. M, Tier 3 (device half is the owner's)
+- [ ] A2 The Android audio session id, published. S
+- [ ] A3 ReplayGain and R128 tags as a clamped pre-gain. M
+- [ ] A4 Stereo balance. S
+- [ ] A5 Audio-only playback with video parked in place, no reopen. M
+- [ ] A6 A speed change that fades through its flush. S
+- [ ] A7 Sleep timer with a fade. S
+- [ ] A8 EBU R128 loudness meter in Kotlin, and a call that measures a file. M
+- [ ] A9 A ten-band equaliser, bypassed bit-exact when flat. M
+
+**Video (`video.md`)**
+- [ ] V1 Backward frame step, by landing before the target. M
+- [ ] V2 Refresh-rate awareness on every renderer; Android frame-rate matching. M
+- [ ] V3 A real frame-presented event, exact on Metal and MediaCodec. M
+- [ ] V4 Auto-deinterlace. M, after K2 and K3 publish
+- [ ] V5 Gamma, on Metal and GL together. M
+- [ ] V6 PNG and JPEG snapshots from a captured frame. S
+- [ ] V7 Snapshots with the subtitles on them. M
+- [ ] V8 Secure surface flag on the Android view. S, device proof
+- [ ] V9 Picture-in-picture parameters on Android, and an honest capability answer. S, device proof
+- [ ] V10 Picture in picture on iOS over a sample-buffer layer. L, NEEDS-DESIGN, owner device
+- [ ] V11 Typed filter chains attach to a media item without the opt-in. XS
+
+**Session and platform (`session.md`)**
+- [ ] S1 Queue editing while it plays. M
+- [ ] S2 Shuffle. S
+- [ ] S3 Preload the next item; hand the audio device over instead of stopping it. L, NEEDS-DESIGN
+- [ ] S4 Markers that fire on crossing; next and previous chapter. S
+- [ ] S5 A memento of where playback was, and restore. M
+- [ ] S6 Interruptions, audio focus and noisy routes under one policy. M, device proof
+- [ ] S7 Media session and now playing, both platforms. M, device proof; [owner] module placement
+- [ ] S8 Background policy. M, device proof
+- [ ] S9 Two players in one process, proven. S
+- [ ] S10 Accessibility semantics on the views. S, device proof
+
+**Subtitles (`subtitles.md`)**
+- [ ] T1 Style override with a background box on all three rasterisers. M
+- [ ] T2 The active cues published to the app. S
+- [ ] T3 A secondary subtitle track at the top. M
+- [ ] T4 Subtitle sources through the byte doors, refusing typed. S, after the doors expansion
+- [ ] T5 The cue selector binary searches. S
+- [ ] T6 One overlay geometry law on every renderer. M, Android proof on device
+
+**Observability (`observability.md`)**
+- [ ] O1 Bytes read and bytes per second in the stats; bitrate after K2. S
+- [ ] O2 Decode time and presentation lateness percentiles. S
+- [ ] O3 A trace sink and the Chrome trace format. M
+- [ ] O4 A structured log sink; URIs redacted by default. S
+
+**KiteFFmpeg (`kiteffmpeg.md`, the sibling repository)**
+- [ ] K1 swresample bound; the audio encoder converts; a resampler SPI in the player. L
+- [ ] K2 Field order and container bitrate bound. S
+- [ ] K3 The recipe compiles yadif, bwdif, loudnorm, ebur128, alimiter. S plus a rebake
+- [ ] K4 The filter DSL says which filters the build lacks, before FFmpeg does. S
+- [ ] K5 A public packet write on copy streams. S
+- [ ] K6 Record the selected streams to a file as they play. M, after K5 publishes
+- [ ] K7 A probe in one call; the player's inspect. S plus S
+- [ ] K8 Thumbnails at positions. S
+- [ ] K9 Waveforms, peaks and RMS per bucket. M
+
+**Quality, CI and docs (`quality.md`)**
+- [ ] Q1 Android device tests on an emulator in CI. M; [owner] allows the action
+- [ ] Q2 The iOS sample builds, launches and shows a frame on the simulator. M
+- [ ] Q3 The API reference on GitHub Pages. S; [owner] enables Pages
+- [ ] Q4 Artifact sizes measured and ratcheted. M
+- [ ] Q5 A perf gate on the three hot paths, no new dependency. S; [owner] may prefer kotlinx-benchmark
+- [ ] Q6 The subtitle parsers survive two thousand mutations of every fixture. S
+- [ ] Q7 Dependabot. XS
+- [ ] Q8 Release notes from commits; a changelog that gates the publish. S
+- [ ] Q9 File pickers in both samples. S, after the doors expansion
+- [ ] Q10 The doc-truth sweep, one commit per repository. S
+- [ ] Q11 The conformance matrix writes a report CI publishes. S
+
+---
+
 # THE OWNER LANE (executor prepares, owner acts)
 
 ### DEVICE-DAY: the hardware run sheet (one afternoon, devices out once)

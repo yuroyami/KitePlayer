@@ -1055,7 +1055,14 @@ commit that lands it.
   seam, and `PlayerSnapshot.audioSessionId` carries it to the application. Read live on every
   publish rather than cached, so it goes back to null when the device closes and an application
   knows to let its effect go. Four host tests and three engine tests, the snapshot copy falsified.
-- [ ] A3 ReplayGain and R128 tags as a clamped pre-gain. M
+  A3 is DONE (2026-09-03). `AudioConfig.replayGain` is `Off` by default; `Track` and `Album` honour
+  the container's own measurement, in both vocabularies (ReplayGain's decibels and Opus's R128
+  fixed point, converted across the five decibels between their reference levels). The gain is
+  clamped by the file's own peak against the volume ceiling, so a tag can never make a player clip.
+  Applied on the way IN by a new per-channel `TrimStage`, which is where a per-track constant
+  belongs and where balance will join it; the user's volume stays on the ring's read side.
+  `PlayerSnapshot.appliedReplayGainDb` reports what was applied rather than what was asked for.
+  25 tests, the pipeline application falsified.
 - [ ] A4 Stereo balance. S
 - [ ] A5 Audio-only playback with video parked in place, no reopen. M
 - [ ] A6 A speed change that fades through its flush. S

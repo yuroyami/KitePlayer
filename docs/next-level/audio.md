@@ -219,7 +219,21 @@ null from the driver.
 
 ---
 
-### A3 ReplayGain from the container's tags. Size M, Tier 1
+### A3 ReplayGain from the container's tags. LANDED 2026-09-03
+
+Shipped as planned, with one bug the tests caught that is worth carrying forward:
+
+- **`replayGainFor` first read `session?.source?.metadata`, and `session` is null at both call
+  sites**, because both run while the session is still being assembled. Every container tag was
+  silently missed and the gain fell back to the configured default. It looked like it worked: the
+  "tag makes it quieter" case read 1.0 against 1.0, which is what a correctly-applied 0 dB also
+  looks like. The case that exposed it was the preamp one, where a cancelling +6.02 came out at
+  twice the level instead of the same level, because only the preamp had been applied. The tags
+  are an explicit parameter now, so the mistake cannot recur silently.
+- A4's balance rides `TrimStage`, which this item built. It is per channel already; balance needs
+  only `set(perChannel)` and a ramp for live changes.
+
+### A3, as planned. Size M, Tier 1
 
 **Why.** `PlayerSnapshot.metadata` already carries the container tags (`PlayerState.kt:34`) and
 each track carries its own (`Tracks.kt:57`). `REPLAYGAIN_TRACK_GAIN` and friends arrive there for

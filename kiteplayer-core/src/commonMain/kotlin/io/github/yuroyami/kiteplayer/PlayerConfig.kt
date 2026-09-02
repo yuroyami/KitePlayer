@@ -195,12 +195,48 @@ public data class AudioConfig(
      * every caller that passed it positionally.
      */
     val volumeCeiling: Float = 1f,
+    /**
+     * Whether to honour the loudness the encoder measured, and which measurement to use.
+     *
+     * Off by default: a player changing the level of what it was given, unasked, is a surprise.
+     * Turn it on and a quiet album stops playing quiet without the listener touching the volume.
+     * The gain is clamped by the file's own peak so it can never clip; see [ReplayGainMode].
+     */
+    val replayGain: ReplayGainMode = ReplayGainMode.Off,
+    /** Added to whatever the tag asked for, in dB. The usual taste knob; 0 honours the tag exactly. */
+    val replayGainPreampDb: Float = 0f,
+    /** Applied when [replayGain] is on and the media carries no usable tag, in dB. */
+    val replayGainFallbackDb: Float = 0f,
 ) {
     init {
         require(volumeCeiling.isFinite() && volumeCeiling >= 1f && volumeCeiling <= GAIN_MAX) {
             "volumeCeiling must be between 1 and $GAIN_MAX, was $volumeCeiling"
         }
+        require(replayGainPreampDb.isFinite() && replayGainPreampDb in -30f..30f) {
+            "replayGainPreampDb must be between -30 and 30, was $replayGainPreampDb"
+        }
+        require(replayGainFallbackDb.isFinite() && replayGainFallbackDb in -30f..30f) {
+            "replayGainFallbackDb must be between -30 and 30, was $replayGainFallbackDb"
+        }
     }
+}
+
+/**
+ * Which loudness measurement to honour, when the container carries one.
+ *
+ * Almost every music file has one: FLAC and Ogg write it as a Vorbis comment, MP3 as an ID3v2
+ * frame, Opus as `R128_TRACK_GAIN` in its own unit. Honouring it is what stops a quiet album
+ * playing quiet and a loud one being painful, without touching the volume the user set.
+ */
+public enum class ReplayGainMode {
+    /** Ignore the tags. The default: a player should not change what it was given unasked. */
+    Off,
+
+    /** Level each track to itself. Right for shuffled listening. */
+    Track,
+
+    /** Level each album as a whole, so its own quiet and loud tracks keep their relationship. */
+    Album,
 }
 
 /**

@@ -101,6 +101,15 @@ public class AudioPlayback(
     private val wantedVolume = atomic(1f)
     private val wantedMute = atomic(false)
 
+    /**
+     * The linear ReplayGain for the track being fed, applied by the pipeline's trim stage.
+     *
+     * On the way IN, unlike the volume, and deliberately: this is a property of the material rather
+     * than of the listener, it changes only when a track does, and it must be part of what the ring
+     * buffers rather than something applied to it afterwards.
+     */
+    private val wantedReplayGain = atomic(1f)
+
     private var generation: Generation = Generation.Initial
     private var format: AudioFormat? = null
     private var warnedAboutLatency = false
@@ -325,6 +334,10 @@ public class AudioPlayback(
         // differs across a flush, so mid-epoch this is an assignment of the value it already has.
         val speedNow = synchronized(lock) { epochSpeed }
         stage.speed = speedNow
+        // Reasserted per buffer for the same reason the rate is: a pipeline rebuilt for a format
+        // change starts at unity, and the trim has to survive that without the rebuild knowing.
+        // Idempotent and a handful of floats, so the common case costs a compare.
+        stage.trim.setAll(wantedReplayGain.value)
 
         val emittedBefore = stage.tempoEmittedFrames
         // Converted exactly once: the mixer, resampler and gain ramp all carry state, so running
@@ -521,6 +534,23 @@ public class AudioPlayback(
             }
             wantedVolume.value = value
             pushGain()
+        }
+
+    /**
+     * The ReplayGain to apply to the material, as a linear multiplier. 1 applies nothing.
+     *
+     * Set by the engine when a track opens, from the container's tags and the configured mode; see
+     * `ReplayGainMode`. Already clamped by the file's own peak, so a value here cannot clip.
+     * Applied on the way into the ring, which is right for a per-track constant and wrong for a
+     * live control: the volume is the live one and lives on the other side.
+     */
+    public var replayGain: Float
+        get() = wantedReplayGain.value
+        set(value) {
+            require(value.isFinite() && value > 0f) {
+                "a replay gain must be finite and positive, was $value"
+            }
+            wantedReplayGain.value = value
         }
 
     /** Silence without losing the volume setting. Ramped like [volume], and safe from any thread. */

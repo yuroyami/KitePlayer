@@ -190,9 +190,23 @@ internal class AudioPipeline(
             tempo.countBypassed(produced)
         }
 
+        /* Last, so it scales exactly what reaches the ring, and skipped entirely at unity so a file
+         * with no ReplayGain tags pays nothing for the feature. In place: `result` is either our own
+         * scratch or, in the all-bypass case, the caller's input, and the caller hands that buffer
+         * over for the duration of the call. */
+        trim.apply(result, produced)
+
         output = result
         return produced
     }
+
+    /**
+     * The per-channel pre-gain: ReplayGain today, balance next.
+     *
+     * Exposed rather than configured through the constructor because it is set AFTER open, once the
+     * container's tags have been read and the peak clamp resolved against the volume ceiling.
+     */
+    val trim: TrimStage = TrimStage(targetFormat.channels)
 
     /**
      * Pushes out what the stages are still holding, for the end of the stream.

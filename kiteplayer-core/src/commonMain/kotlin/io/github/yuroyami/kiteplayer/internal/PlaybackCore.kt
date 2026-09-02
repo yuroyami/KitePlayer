@@ -26,6 +26,7 @@ import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
+import io.github.yuroyami.kiteplayer.ReplayGainMode
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.FrameDropPolicy
@@ -45,6 +46,7 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.AudioSink
 import io.github.yuroyami.kiteplayer.spi.BackendSession
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
+import kotlin.math.log10
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
@@ -2001,6 +2003,7 @@ internal class PlaybackCore(
                 negotiated = createdPlayback.open(audioDecoder.outputFormat)
                 createdPlayback.volume = volume
                 createdPlayback.muted = muted
+                createdPlayback.replayGain = replayGainFor(audioStream, source.metadata)
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
             openStage = OpenStage.Assembly
@@ -2626,8 +2629,37 @@ internal class PlaybackCore(
         val negotiated: AudioFormat,
     )
 
+    /**
+     * The ReplayGain to apply to [stream], from the container's tags and the configured mode.
+     *
+     * Returns 1 when the feature is off or nothing usable was found, which is also what an
+     * unclamped measurement of zero decibels returns; `PlayerSnapshot.appliedReplayGainDb` is what
+     * tells those apart. The clamp uses the volume ceiling, so a boost the consumer has not
+     * allowed cannot arrive through a tag.
+     *
+     * [containerTags] is a PARAMETER rather than a read of `session`, and that is not a style
+     * choice: both callers run while the session is still being assembled, so the field is null
+     * there and every container tag was silently missed. The tests caught it because a cancelling
+     * preamp came out at twice the level instead of the same one.
+     */
+    private fun replayGainFor(stream: PlayerStreamInfo?, containerTags: Map<String, String>): Float {
+        val mode = config.audio.replayGain
+        if (mode == ReplayGainMode.Off) return 1f
+        val tags = parseReplayGain(
+            container = containerTags,
+            stream = stream?.metadata ?: emptyMap(),
+        )
+        return replayGainLinear(
+            tags = tags,
+            mode = mode,
+            preampDb = config.audio.replayGainPreampDb,
+            fallbackDb = config.audio.replayGainFallbackDb,
+            ceiling = config.audio.volumeCeiling,
+        )
+    }
+
     /** Builds a dormant device path; ownership transfers only when the lane transaction commits. */
-    private suspend fun prepareAudioPath(decoder: AudioDecoder): PreparedAudioPath {
+    private suspend fun prepareAudioPath(decoder: AudioDecoder, stream: PlayerStreamInfo?): PreparedAudioPath {
         val createdSink = output.audioSink.create()
         var createdPlayback: AudioPlayback? = null
         try {
@@ -2643,6 +2675,7 @@ internal class PlaybackCore(
             val negotiated = playback.open(decoder.outputFormat)
             playback.volume = volume
             playback.muted = muted
+            playback.replayGain = replayGainFor(stream, session?.source?.metadata ?: emptyMap())
             playback.flush(requestedEpoch)
             return PreparedAudioPath(playback, createdSink, negotiated)
         } catch (cancellation: CancellationException) {
@@ -2751,7 +2784,7 @@ internal class PlaybackCore(
                     return true
                 }
                 withContext(dispatchers.audioDecode) { preparedDecoder.flush(requestedEpoch) }
-                if (session.audio == null) preparedPath = prepareAudioPath(preparedDecoder)
+                if (session.audio == null) preparedPath = prepareAudioPath(preparedDecoder, targetStream)
             }
         } catch (cancellation: CancellationException) {
             preparedPath?.playback?.close()
@@ -4978,6 +5011,12 @@ internal class PlaybackCore(
              * when the device closes, and an effect attached to a closed session is inert. The
              * teardown projection above leaves it at its null default for the same reason. */
             audioSessionId = session?.audio?.platformSessionId,
+            /* Reported as APPLIED, in dB, so a gain the peak clamp reduced shows the reduced
+             * figure. Null when nothing is applied at all, which a plain 1.0 could not say: a file
+             * measured as needing no change publishes 0 dB, not nothing. */
+            appliedReplayGainDb = session?.audio?.replayGain
+                ?.takeIf { config.audio.replayGain != ReplayGainMode.Off }
+                ?.let { (20.0 * log10(it.toDouble())).toFloat() },
             muted = muted,
             loop = loop,
             videoScale = videoScale,

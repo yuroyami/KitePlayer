@@ -85,6 +85,17 @@ public data class PlayerSnapshot(
      * which happens when the device closes and its session stops meaning anything.
      */
     val audioSessionId: Int? = null,
+    /**
+     * The ReplayGain actually applied to the current track, in dB, or null when none is.
+     *
+     * Null covers three different situations on purpose: the feature is off, the media carries no
+     * usable tag and no fallback was configured, or no audio track is open. What it never means is
+     * "the tag said zero": a file measured as needing no change publishes 0, not null.
+     *
+     * It reports what was APPLIED, so a gain the peak clamp reduced shows the reduced figure and
+     * not what the tag asked for.
+     */
+    val appliedReplayGainDb: Float? = null,
 )
 
 /**

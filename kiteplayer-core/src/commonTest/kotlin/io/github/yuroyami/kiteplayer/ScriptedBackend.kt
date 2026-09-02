@@ -120,6 +120,8 @@ internal class MediaScript(
     /** True makes the only video stream a still image, which must never carry the timeline. */
     val videoIsCoverArt: Boolean = false,
     val seekable: Boolean = true,
+    /** Extra container tags, for the suites that read them. Merged over the harness's own three. */
+    val containerTags: Map<String, String> = emptyMap(),
     /**
      * How far past the requested target a seek lands, before rounding down to a keyframe.
      *
@@ -626,7 +628,7 @@ internal class ScriptedSource(
     override val duration: Pts = Pts(script.durationUs)
     override val seekable: Boolean = script.seekable
     override val metadata: Map<String, String> =
-        mapOf("title" to "scripted", "artist" to "the harness", "encoder" to "none")
+        mapOf("title" to "scripted", "artist" to "the harness", "encoder" to "none") + script.containerTags
     override val chapters: List<Chapter> = script.chapters
     override val timestampsMayJump: Boolean = false
 

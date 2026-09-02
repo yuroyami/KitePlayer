@@ -218,7 +218,19 @@ presents (Q2's smoke does not exercise it; a manual note suffices).
 
 ---
 
-### Q10 The doc-truth sweep. Size S, Tier 1, one commit per repository
+### Q10 The doc-truth sweep. TREE HALF LANDED 2026-09-03; the release page is the owner's
+
+Every claim below was verified against the tree before it was touched, and all six KitePlayer ones
+were real. Two things worth carrying forward:
+
+- The KiteFFmpeg half turned out to need NOTHING, and the reason is written into it below. An item
+  that says "fix this prose" can be answered with "this prose is correct", and that answer has to
+  be recorded or the next executor re-opens it.
+- `SubtitleConfig.lookahead` was deleted rather than implemented. It removes a public field, which
+  is a real ABI change on a 0.0.x line: the alternative was keeping a knob whose own KDoc admitted
+  nothing read it, which is worse than the break.
+
+### Q10, as planned. Size S, Tier 1, one commit per repository
 
 **Why.** The project's measured failure mode is prose that stopped being true. The sweep that
 grounded this program found these.
@@ -246,12 +258,16 @@ real by X.
   between items (until S3). The executor writes the corrected paragraph into the commit body;
   editing a published release is the owner's click.
 
-**KiteFFmpeg, one commit.**
-- `CHANGELOG.md:203` describes a `kiteffmpegInfo` task; no task by that name is registered. Find
-  the task that prints the per-target report (`grep -rn "Info\"" build.gradle.kts kiteffmpeg/build.gradle.kts buildSrc`)
-  and either name it correctly or state that it was removed and when.
-- `MediaSink.kt:29-31` and `Remuxer.kt:20-21` say bitstream filters are not applied. Still true;
-  leave them, but link the sentence to K5's Matroska default so a reader knows the route.
+**KiteFFmpeg: CHECKED 2026-09-03, and there is nothing to change. Do not reopen it.**
+- `CHANGELOG.md:203` does describe a `kiteffmpegInfo` task that no longer exists, and so do the
+  neighbouring `kiteffmpegCleanCache` and `autoBake` entries. They are not drift. They sit under
+  `## [0.1.1] - 2026-08-22`, which is a record of what that release shipped, and the release that
+  deleted the whole Gradle plugin says so in its own entries higher up the file. A reader going
+  top to bottom learns the plugin is gone before reaching them. Rewriting a released section would
+  be falsifying history, which this program's own rule against it exists to prevent.
+- `MediaSink.kt:29-31` and `Remuxer.kt:20-21` say bitstream filters are not applied. Still true and
+  still correct. When K5 lands, link the sentence to its Matroska default so a reader knows the
+  route; there is nothing to link to before then.
 
 **Commit lines.** `docs: the tree and its prose agree again` in each repository.
 

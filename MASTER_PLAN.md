@@ -743,7 +743,7 @@ One expansion covering:
 Today: unvalidated 206 with no Content-Range/ETag/If-Range anywhere; a seek that validates
 nothing and a class with no closed flag; no timeout/retry/backoff/reconnect; DASH picks one
 representation by bandwidth, drops audio, refuses live and multi-period, cannot seek; an MPD
-repeat count taken verbatim from XML; module unpublished while all eleven others publish.
+repeat count taken verbatim from XML; module unpublished while the twelve that apply the publish plugin do.
 Scope at entry: response validation, resilience, real DASH ABR (audio, live, multi-period,
 seek), HLS (prerequisite: 7.1's interrupt seam), bounded prefetch + progressive cache +
 resume, publication. Exit: the first-afternoon script's network legs pass on devices.
@@ -1123,7 +1123,18 @@ commit that lands it.
 - [ ] Q7 Dependabot. XS
 - [ ] Q8 Release notes from commits; a changelog that gates the publish. S
 - [ ] Q9 File pickers in both samples. S, after the doors expansion
-- [ ] Q10 The doc-truth sweep, one commit per repository. S
+- [ ] Q10 remainder: **the release page, which is the owner's click.** The tree half is DONE
+  (2026-09-03): the facade no longer lists chapters, the queue, frame stepping, external subtitles,
+  filter chains and the option escape hatch as absent when all six exist; `MediaItem` stopped
+  pointing at a `SubtitleSource.io` that was never built; the renderer SPI stopped saying the
+  engine collects nothing from a feed it acts on four ways; the Android picture-in-picture flag
+  says what it actually answers; the stale pipeline comment claiming the gain multiplies there
+  went with it; the unread `SubtitleConfig.lookahead` field is deleted; and the three module
+  counts agree at twelve. KiteFFmpeg was checked and needs nothing: its changelog entries for the
+  deleted Gradle plugin are correct history and the file records the removal higher up.
+  **[owner]** The v0.0.21 release page still advertises gapless `next`/`previous`. The tree pauses
+  the audio device between items, so it is a gap until S3 lands. Corrected wording is in the
+  commit body for 2026-09-03's doc sweep; editing a published release is a click only you have.
 - [ ] Q11 The conformance matrix writes a report CI publishes. S
 
 ---

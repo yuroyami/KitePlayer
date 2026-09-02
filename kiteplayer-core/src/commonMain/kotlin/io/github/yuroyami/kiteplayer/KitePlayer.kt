@@ -45,9 +45,14 @@ import kotlin.time.Duration
  *
  * ### What is not here
  *
- * External subtitles, filter chains, an advanced option escape hatch, chapters, a playlist or queue,
- * frame stepping and stereo balance are all absent rather than stubbed. The configuration members that
- * describe them carry a marker in their own documentation pointing at the roadmap in MASTER_PLAN.md.
+ * Stereo balance is absent rather than stubbed. So are shuffle, gapless queue handoff, a secondary
+ * subtitle track and an equaliser; MASTER_PLAN.md carries them with what each one needs.
+ *
+ * External subtitles, filter chains, the open-option escape hatch, chapters, the queue and frame
+ * stepping were on this list and are all here now: [addExternalSubtitle], [MediaItem.videoFilter],
+ * [MediaItem.openOptions], [chapterAt] with [seekToChapter], [openQueue] with [next] and
+ * [previous], and [stepFrame]. A member that describes something still unbuilt says so in its own
+ * documentation.
  */
 public class KitePlayer internal constructor(private val core: PlaybackCore) : AutoCloseable {
 

@@ -15,6 +15,14 @@ private object AndroidKitePlayerPlatformDefaults : KitePlayerPlatformDefaults {
         )
     }
 
+    /**
+     * Whether a PLAYER can be built here, which is not the same question the name asks.
+     *
+     * Android's picture-in-picture is the activity's to enter, and whether the device allows it is
+     * `PackageManager.FEATURE_PICTURE_IN_PICTURE` plus the user's per-app setting, neither of which
+     * this object reads. What it answers is that the native library loaded, so a player exists to
+     * put in a PiP window at all. Treat it as a floor and ask the package manager yourself.
+     */
     override val supportsPictureInPicture: Boolean
         get() = availability.isAvailable
 

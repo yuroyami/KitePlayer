@@ -158,11 +158,12 @@ internal class AudioPipeline(
 
         /* An identity mixer used to copy the whole buffer anyway. Skipping it means
          * plain stereo-to-stereo playback runs zero pipeline copies until the ring write: the
-         * mixer, the resampler at equal rates and the tempo stage at 1.0 all stand aside, and
-         * the gain multiplies in place only when the volume is not unity. The alias keys on
-         * isIdentity, NOT isPassThrough: a pass-through with unequal counts
-         * still restrides frame by frame, and aliasing it played raw interleave on the wrong
-         * speakers. */
+         * mixer, the resampler at equal rates and the tempo stage at 1.0 all stand aside. The
+         * gain is not one of these stages and has not been since it moved to the read side; it is
+         * applied as frames LEAVE the ring, which is what makes a volume change audible within one
+         * device period instead of one ring depth. The alias keys on isIdentity, NOT isPassThrough:
+         * a pass-through with unequal counts still restrides frame by frame, and aliasing it played
+         * raw interleave on the wrong speakers. */
         var produced = frames
         var result: FloatArray
         if (mixer.isIdentity) {

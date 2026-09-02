@@ -1217,22 +1217,20 @@ public final class io/github/yuroyami/kiteplayer/SeekMode : java/lang/Enum {
 }
 
 public final class io/github/yuroyami/kiteplayer/SubtitleConfig {
-	public synthetic fun <init> (Ljava/util/List;ZZJJFILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/util/List;ZZJJFLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;ZZJFILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;ZZJFLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/List;
 	public final fun component2 ()Z
 	public final fun component3 ()Z
 	public final fun component4-UwyO8pc ()J
-	public final fun component5-UwyO8pc ()J
-	public final fun component6 ()F
-	public final fun copy-MHpS38I (Ljava/util/List;ZZJJF)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
-	public static synthetic fun copy-MHpS38I$default (Lio/github/yuroyami/kiteplayer/SubtitleConfig;Ljava/util/List;ZZJJFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
+	public final fun component5 ()F
+	public final fun copy-zkXUZaI (Ljava/util/List;ZZJF)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
+	public static synthetic fun copy-zkXUZaI$default (Lio/github/yuroyami/kiteplayer/SubtitleConfig;Ljava/util/List;ZZJFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/SubtitleConfig;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getAutoSelect ()Z
 	public final fun getAutoSelectForced ()Z
 	public final fun getDelay-UwyO8pc ()J
 	public final fun getFontScale ()F
-	public final fun getLookahead-UwyO8pc ()J
 	public final fun getPreferredLanguages ()Ljava/util/List;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;

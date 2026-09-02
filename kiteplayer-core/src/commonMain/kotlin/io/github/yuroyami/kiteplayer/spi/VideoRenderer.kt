@@ -92,10 +92,15 @@ public interface VideoRenderer : AutoCloseable {
     /**
      * Surface loss, surface return, refresh changes, hard failure.
      *
-     * The engine collects nothing from this feed yet. A renderer that cannot draw refuses the frame
-     * instead, which the schedule counts as a drop and carries on from, so nothing is lost by the
-     * silence except the chance to report why.
-     * Not implemented yet; see MASTER_PLAN.md.
+     * The engine collects this feed and acts on four of them. [RendererEvent.SurfaceLost] and
+     * [RendererEvent.Failed] become warnings; [RendererEvent.ToneMapEngaged] is what lets
+     * `PlaybackWarning.HdrToneMapped` fire, since only the renderer knows whether it actually tone
+     * mapped. [RendererEvent.SurfaceAvailable] and [RendererEvent.VsyncChanged] are collected and
+     * currently ignored: no renderer reports a refresh interval yet, so there is nothing to act on.
+     *
+     * Emitting is optional. A renderer that cannot draw refuses the frame instead, which the
+     * schedule counts as a drop and carries on from, so a silent feed costs only the chance to
+     * report why.
      */
     public val events: Flow<RendererEvent>
 

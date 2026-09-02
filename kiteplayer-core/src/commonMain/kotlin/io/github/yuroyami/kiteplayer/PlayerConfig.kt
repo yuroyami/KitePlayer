@@ -253,8 +253,8 @@ public data class DownmixConfig(
  * Which subtitle track to pick, when to show its cues, and how large to draw them.
  *
  * Read by the session core: track selection uses the language preferences and the forced rule,
- * cue timing applies [delay], and the platform rasterizer receives [fontScale]. [lookahead] is
- * not consulted yet; decoded cues are held for the session and pruned on flush.
+ * cue timing applies [delay], and the platform rasterizer receives [fontScale]. Decoded cues are
+ * held for the session and pruned on flush.
  */
 public data class SubtitleConfig(
     /** Select a subtitle track automatically when one matches these languages. */
@@ -274,19 +274,10 @@ public data class SubtitleConfig(
     val autoSelect: Boolean = true,
     /** Shift every cue by this much. Positive shows cues later. */
     val delay: Duration = Duration.ZERO,
-    /**
-     * How far ahead cues would be parsed and held.
-     *
-     * Not implemented yet: no code reads this value, and the cue store currently holds every
-     * parsed cue with a fixed prune window behind the position. Stated here rather than
-     * discovered, like the other unread knobs in this file.
-     */
-    val lookahead: Duration = 5.seconds,
     /** Scale applied to the authored font size. */
     val fontScale: Float = 1.0f,
 ) {
     init {
-        require(lookahead >= Duration.ZERO) { "lookahead must not be negative, was $lookahead" }
         require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }
     }
 }

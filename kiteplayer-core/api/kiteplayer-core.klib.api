@@ -1989,7 +1989,7 @@ final class io.github.yuroyami.kiteplayer/RenderQuality { // io.github.yuroyami.
 }
 
 final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami.kiteplayer/SubtitleConfig|null[0]
-    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.time.Duration;kotlin.Float){}[0]
+    constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer/SubtitleConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float){}[0]
 
     final val autoSelect // io.github.yuroyami.kiteplayer/SubtitleConfig.autoSelect|{}autoSelect[0]
         final fun <get-autoSelect>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.autoSelect.<get-autoSelect>|<get-autoSelect>(){}[0]
@@ -1999,8 +1999,6 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
         final fun <get-delay>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SubtitleConfig.delay.<get-delay>|<get-delay>(){}[0]
     final val fontScale // io.github.yuroyami.kiteplayer/SubtitleConfig.fontScale|{}fontScale[0]
         final fun <get-fontScale>(): kotlin/Float // io.github.yuroyami.kiteplayer/SubtitleConfig.fontScale.<get-fontScale>|<get-fontScale>(){}[0]
-    final val lookahead // io.github.yuroyami.kiteplayer/SubtitleConfig.lookahead|{}lookahead[0]
-        final fun <get-lookahead>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SubtitleConfig.lookahead.<get-lookahead>|<get-lookahead>(){}[0]
     final val preferredLanguages // io.github.yuroyami.kiteplayer/SubtitleConfig.preferredLanguages|{}preferredLanguages[0]
         final fun <get-preferredLanguages>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer/SubtitleConfig.preferredLanguages.<get-preferredLanguages>|<get-preferredLanguages>(){}[0]
 
@@ -2008,9 +2006,8 @@ final class io.github.yuroyami.kiteplayer/SubtitleConfig { // io.github.yuroyami
     final fun component2(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component2|component2(){}[0]
     final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.component3|component3(){}[0]
     final fun component4(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SubtitleConfig.component4|component4(){}[0]
-    final fun component5(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SubtitleConfig.component5|component5(){}[0]
-    final fun component6(): kotlin/Float // io.github.yuroyami.kiteplayer/SubtitleConfig.component6|component6(){}[0]
-    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.time.Duration;kotlin.Float){}[0]
+    final fun component5(): kotlin/Float // io.github.yuroyami.kiteplayer/SubtitleConfig.component5|component5(){}[0]
+    final fun copy(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin/Float = ...): io.github.yuroyami.kiteplayer/SubtitleConfig // io.github.yuroyami.kiteplayer/SubtitleConfig.copy|copy(kotlin.collections.List<kotlin.String>;kotlin.Boolean;kotlin.Boolean;kotlin.time.Duration;kotlin.Float){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SubtitleConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SubtitleConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SubtitleConfig.toString|toString(){}[0]

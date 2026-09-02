@@ -94,10 +94,11 @@ public data class MediaItem(
  * Threading: called from the demux worker only, one call at a time, never concurrently.
  * Implementations do not need to be thread safe. They may suspend.
  *
- * Implemented by the FFmpeg backend since the custom AVIO bridge: a
- * [MediaItem.io] carries the media's bytes; a [SubtitleSource.io] is still unwired and warns
- * typed. The demux worker blocks on [read], so a source that never produces a byte and never
- * returns -1 stalls playback; that is the contract, not a defect.
+ * Implemented by the FFmpeg backend since the custom AVIO bridge, and [MediaItem.io] is the one
+ * place it is accepted: [SubtitleSource] has no reader of its own, so an external subtitle is read
+ * as a local path and a network URL is skipped with a warning. The demux worker blocks on [read],
+ * so a source that never produces a byte and never returns -1 stalls playback; that is the
+ * contract, not a defect.
  */
 public interface MediaIo : AutoCloseable {
     /** Total size in bytes, or null when unknown, for example a live stream. */

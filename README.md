@@ -34,7 +34,8 @@ implementation("io.github.yuroyami:kiteplayer-compose-ui:0.0.21")
 implementation("io.github.yuroyami:kiteplayer-core:0.0.21")
 ```
 
-Ten modules publish in total; [Modules](#modules) maps each to what it is for.
+Twelve modules publish in total, two of them the deprecated umbrellas named at the end of
+[Modules](#modules); that section maps each one to what it is for.
 
 ## Playing a file
 

@@ -1050,7 +1050,11 @@ commit that lands it.
   the device callback calling nothing but memcpy, memset and bzero, so the saturator is legal where
   it lives. **[owner]** DEVICE-DAY step 19 is what is left: nothing on a laptop can say whether a
   boost sounds right on a handset.
-- [ ] A2 The Android audio session id, published. S
+  A2 is DONE (2026-09-03). `AudioSink.platformSessionId` defaults to null so no other sink
+  changed, the Android sink answers its `AudioTrack.audioSessionId` through the existing driver
+  seam, and `PlayerSnapshot.audioSessionId` carries it to the application. Read live on every
+  publish rather than cached, so it goes back to null when the device closes and an application
+  knows to let its effect go. Four host tests and three engine tests, the snapshot copy falsified.
 - [ ] A3 ReplayGain and R128 tags as a clamped pre-gain. M
 - [ ] A4 Stereo balance. S
 - [ ] A5 Audio-only playback with video parked in place, no reopen. M

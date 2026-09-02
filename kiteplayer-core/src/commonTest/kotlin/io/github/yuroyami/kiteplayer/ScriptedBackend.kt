@@ -1117,7 +1117,17 @@ internal class ScriptedSink(
      * change to three hundred tests to serve one. Only the suite that emits events asks for it.
      */
     private val publishesEvents: Boolean = false,
+    /**
+     * The platform effect handle this sink claims while a device is open, or null for a platform
+     * that has none. Null by default, which is what every sink but Android's answers.
+     */
+    private val sessionIdAnswer: Int? = null,
 ) : AudioSink {
+
+    /* Mirrors the real sinks: a handle from open until close, and nothing outside that. Keyed on
+     * the negotiated format rather than on `running`, because a paused device still has a session
+     * and an effect attached to it is still live. */
+    override val platformSessionId: Int? get() = if (negotiated != null && !closed) sessionIdAnswer else null
 
     private var render: AudioRenderCallback? = null
     private var buffer: ScriptedSinkBuffer? = null

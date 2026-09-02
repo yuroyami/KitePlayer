@@ -78,6 +78,22 @@ public interface AudioSink : AutoCloseable {
     public val latencyQuality: LatencyQuality
 
     /**
+     * A platform handle for effects that attach to this device's stream, or null when the platform
+     * has no such concept.
+     *
+     * Android's audio session id is the only one today, and it is here because nothing above the
+     * sink can work it out. `LoudnessEnhancer`, `Equalizer` and `Visualizer` all attach to a
+     * session, and a session allocated by an application is one nothing is playing on: the effect
+     * attaches and does nothing, with no error. The number has to come from the `AudioTrack` that
+     * is actually playing, which only the sink holds.
+     *
+     * Null while no device is open, and null again after close. A released session id still reads
+     * like a valid number and effects attached to it are silently inert, so saying nothing is the
+     * honest answer and lets a caller wait instead.
+     */
+    public val platformSessionId: Int? get() = null
+
+    /**
      * Device loss, underrun, format change. The sink reports; the engine decides what to do.
      *
      * **What the engine does with this today, per event, so a sink author is not guessing.** It

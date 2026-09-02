@@ -163,7 +163,18 @@ soft limiter above unity". `AudioPlayback.kt:498` KDoc says the same.
 
 ---
 
-### A2 The Android audio session id. Size S, Tier 2
+### A2 The Android audio session id. LANDED 2026-09-03
+
+Shipped as planned. Two notes for whoever does the next one:
+
+- `PlayerSnapshot.audioSessionId` went LAST in the parameter list. Putting it beside `volume`
+  where it reads best shifted every `componentN` after it, which is a source break for anyone
+  destructuring the snapshot. The ABI diff went from 46 lines to 16 by moving it. Same lesson as
+  A1's `volumeCeiling`: append to a data class, never insert.
+- Adding a member to the internal `AudioTrackDriver` seam breaks the existing host suite's fake,
+  which is the seam working as intended. The fake takes a default, so no test case changed.
+
+### A2, as planned. Size S, Tier 2
 
 **Why.** Android's `LoudnessEnhancer`, `Equalizer` and `Visualizer` attach to an audio session id.
 `PlatformAudioTrackDriver` builds the track at `kiteplayer-output/src/androidMain/kotlin/io/github/yuroyami/kiteplayer/output/AudioTrackDriver.kt:105-122`

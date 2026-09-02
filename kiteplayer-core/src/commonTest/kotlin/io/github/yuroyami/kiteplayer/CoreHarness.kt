@@ -46,6 +46,8 @@ internal class CoreHarness(
     publishesSinkEvents: Boolean = false,
     /** What the scripted device claims it is holding, for the stats that report it. */
     sinkLatencyNanos: Long = 0L,
+    /** The platform effect handle the scripted device claims while open. Null on every platform but Android. */
+    sinkSessionId: Int? = null,
 ) {
     val scheduler: TestCoroutineScheduler = scope.testScheduler
     val clock: VirtualClock = VirtualClock(scheduler)
@@ -58,6 +60,7 @@ internal class CoreHarness(
         trace = trace,
         publishesEvents = publishesSinkEvents,
         latencyNanosAnswer = sinkLatencyNanos,
+        sessionIdAnswer = sinkSessionId,
     )
     val output: ScriptedOutput = ScriptedOutput(clock, sink)
 

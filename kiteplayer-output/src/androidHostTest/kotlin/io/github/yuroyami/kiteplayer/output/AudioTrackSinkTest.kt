@@ -33,6 +33,7 @@ import kotlin.test.fail
  */
 private class FakeAudioTrackDriver(
     override val bufferSizeInFrames: Int = 2048,
+    override val sessionId: Int = 1,
 ) : AudioTrackDriver {
 
     val calls = mutableListOf<String>()

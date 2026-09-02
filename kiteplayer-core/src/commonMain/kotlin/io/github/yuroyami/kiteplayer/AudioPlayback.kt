@@ -161,6 +161,9 @@ public class AudioPlayback(
 
     public val latencyQuality: LatencyQuality get() = sink.latencyQuality
 
+    /** The sink's platform handle for audio effects, or null. See `AudioSink.platformSessionId`. */
+    public val platformSessionId: Int? get() = sink.platformSessionId
+
     /**
      * What the device says it is holding: handed over, not yet audible.
      *

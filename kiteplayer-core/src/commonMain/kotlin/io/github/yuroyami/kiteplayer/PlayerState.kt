@@ -74,6 +74,17 @@ public data class PlayerSnapshot(
     val queue: List<MediaItem> = emptyList(),
     /** The index of [media] inside [queue], or -1 outside queue playback. */
     val queueIndex: Int = -1,
+    /**
+     * The audio device's platform handle for effects, or null when there is no device open or the
+     * platform has no such concept.
+     *
+     * Android's audio session id, and nothing else today. It is what `LoudnessEnhancer`,
+     * `Equalizer` and `Visualizer` attach to, and an application cannot work it out: a session it
+     * allocates itself is one nothing plays on, so the effect attaches and does nothing. Watch this
+     * field, attach when it becomes non-null, and release the effect when it goes back to null,
+     * which happens when the device closes and its session stops meaning anything.
+     */
+    val audioSessionId: Int? = null,
 )
 
 /**

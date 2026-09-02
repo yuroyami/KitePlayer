@@ -51,6 +51,7 @@ public final class io/github/yuroyami/kiteplayer/output/DesktopAudioSink : io/gi
 	public fun getDeviceBufferFrames ()I
 	public fun getEvents ()Lkotlinx/coroutines/flow/Flow;
 	public fun getLatencyQuality ()Lio/github/yuroyami/kiteplayer/LatencyQuality;
+	public fun getPlatformSessionId ()Ljava/lang/Integer;
 	public fun latencyNanos ()J
 	public fun open (Lio/github/yuroyami/kiteplayer/spi/AudioFormat;Lio/github/yuroyami/kiteplayer/spi/AudioRenderCallback;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun setPaused (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;

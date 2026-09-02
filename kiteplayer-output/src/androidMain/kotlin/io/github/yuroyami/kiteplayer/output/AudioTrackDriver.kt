@@ -19,6 +19,9 @@ internal interface AudioTrackDriver {
     /** The device's own buffer size in sample frames, from `getBufferSizeInFrames`. */
     val bufferSizeInFrames: Int
 
+    /** The track's `audioSessionId`, which is what an `AudioEffect` attaches to. */
+    val sessionId: Int
+
     /**
      * Called once by the writer thread as its first act. Production raises the thread to
      * THREAD_PRIORITY_AUDIO here; the fake does nothing, which is also why this lives on the
@@ -122,6 +125,8 @@ internal class PlatformAudioTrackDriver(accepted: AudioFormat) : AudioTrackDrive
     }
 
     override val bufferSizeInFrames: Int get() = track.bufferSizeInFrames
+
+    override val sessionId: Int get() = track.audioSessionId
 
     override fun onWriterThreadStart() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)

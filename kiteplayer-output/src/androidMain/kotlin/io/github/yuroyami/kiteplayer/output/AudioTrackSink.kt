@@ -102,6 +102,12 @@ public class AudioTrackSink internal constructor(
     override val deviceBufferFrames: Int
         get() = driver?.bufferSizeInFrames ?: 0
 
+    /* Null before open and after close, because a session id outlives its track as a number that
+     * still looks usable: an AudioEffect attached to a released session is silently inert, and a
+     * caller that sees null can wait for the next open instead of attaching to nothing. */
+    override val platformSessionId: Int?
+        get() = synchronized(lifecycle) { driver?.sessionId }
+
     override val latencyQuality: LatencyQuality
         /* The playback-head fallback is an estimate even on the runs where timestamps are
          * usually present, so the honest declared quality is the weaker of the two (step 6). */

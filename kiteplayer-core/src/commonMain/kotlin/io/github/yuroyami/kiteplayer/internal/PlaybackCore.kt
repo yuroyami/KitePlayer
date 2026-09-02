@@ -4974,6 +4974,10 @@ internal class PlaybackCore(
             metadata = session?.source?.metadata ?: emptyMap(),
             speed = speed,
             volume = volume,
+            /* Read from the live sink every publish rather than cached at open: it becomes null
+             * when the device closes, and an effect attached to a closed session is inert. The
+             * teardown projection above leaves it at its null default for the same reason. */
+            audioSessionId = session?.audio?.platformSessionId,
             muted = muted,
             loop = loop,
             videoScale = videoScale,

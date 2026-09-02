@@ -87,7 +87,9 @@ left of it:
   blocks on it, and its adapter needs no change beyond imports. **One thing to check on that bump
   if Synkplay has a desktop build:** desktop `Auto` now resolves to the native view, so Compose
   controls drawn over the video stop receiving clicks. Either move them into an owned overlay
-  window or pass `KiteRenderPath.ComposeCanvas` explicitly. Mobile is unaffected.
+  window or pass `KiteRenderPath.ComposeCanvas` explicitly. Mobile is unaffected. **And once
+  5.5's Task 6 has landed:** replace `KiteMediaResolver`'s descriptor dance with `MediaIo.ofUri`,
+  and opt in to `KitePlayerLowLevelApi` only if any `openOptions` use remains.
 
 ---
 
@@ -650,6 +652,38 @@ open six, a mixer that refuses six still folds, and mono and stereo never reach 
 
 Upmix (mono/stereo to 5.1) stays re-filed as KP-AUDIO-UPMIX, unscheduled, owner taste.
 
+### 5.5 Media input doors and typed open options. Size L total, cluster commits
+
+Written expansion: `docs/media-input-doors.md`. One seam (`MediaIo`), named doors per platform,
+typed container-open knobs with a builder, and a raw escape hatch behind the low-level opt-in.
+Today a consumer can hand the player a path, a raw descriptor number, or a hand-written byte
+reader, and nothing else; Synkplay wrote its own `content://` resolver because of it.
+
+Found while writing the expansion, fixed by its Task 8: **per-item `headers` never reach https.**
+`MediaIoResolver.resolve` receives only the URI, so the Ktor resolver sends the headers it was
+constructed with and the item's go to FFmpeg's http funnel, which never opens for that item. They
+come back as an unused-option warning.
+
+- [ ] **[owner] Decisions A to E** (expansion section 8, recommended answers stated there):
+  refuse two keys rather than allowlist (A); a new `kiteplayer-io` module (B); no kotlinx-io (C);
+  change `MediaItem.io`'s type now (D); a raw key colliding with a typed field refuses at open (E).
+  The GOTCHAS allowlist sentence moves with A. Nothing below starts before these are answered.
+- [ ] Task 1: `MediaIoFactory` as a type; `openOptions` refuses `fflags=fastseek` and `usetoc`. S
+- [ ] Task 2: `MediaIo.ofBytes`, `MediaItem.from`, and the contract test every door passes. S
+- [ ] Task 3: `PipedMediaIo`, a bounded pipe for sources that push. S
+- [ ] Task 4: the `kiteplayer-io` module; JVM `ofFile`, `ofPath`, `ofChannel`, `ofStream`. M
+- [ ] Task 5: posix `ofPath` on Apple and Linux; `ofUrl(NSURL)` with security scope released on close. M
+- [ ] Task 6: Android `ofUri` and `ofAsset`, the descriptor opened per session and read
+  positionally, which retires the shared-offset defect by construction. M; device half is
+  DEVICE-DAY step 10b
+- [ ] Task 7: `DemuxPolicy`, `ProbeDepth`, `CorruptPackets`, and the `mediaItem { }` builder. S
+- [ ] Task 8: `MediaIoResolver.resolve(item)`; the Ktor resolver merges item headers over its own. S
+- [ ] Task 9: the FFmpeg backend translates `DemuxPolicy`; a raw key shadowing a typed field
+  refuses typed at open; `PreOpenOptionsTest` moves with it. M
+- [ ] Task 10: `DemuxOptions` in KiteFFmpeg, the sibling `DecoderOptions` never had. M, other
+  repo; nothing here waits on its publish
+- [ ] Task 11: README "Feeding it media", two cookbook paragraphs; then delete this section. S
+
 
 ---
 
@@ -692,9 +726,10 @@ One expansion covering:
 - **The three network-side twins**: install the interrupt callback on the URL path, bound
   every network wait with timeouts, harden the undocumented URL path (it must not be
   advertised until then).
-- **PAR-7**: `fd:`/content:// gets a positional-read MediaIo (`pread`/`FileChannel.read`),
-  removing the shared-offset mutation and silent unseekable degradation by construction.
-  User-facing: this is the Android content:// route.
+- **PAR-7**: the Android content:// route. Lands as `MediaIo.ofUri` in 5.5, Task 6: the
+  descriptor is opened per session and read positionally, so the shared-offset mutation cannot
+  occur. What stays here is the `fd:` protocol path itself for anyone still on it, and the
+  device proof.
 - **The unused bounded-seek floor**: `PacketReader.seek` takes `notEarlierThan` and the
   player never passes it; give it falsifiable behaviour with the retry-on-refusal policy.
 - The HLS child-context interrupt trap from GOTCHAS applies throughout.
@@ -984,6 +1019,14 @@ it.
   the gate is green, so the bump is one variable and not two; and 9.x has had a few more point
   releases. Note when picking it up that 9.1 and 8.2 were both already in development on
   2026-08-29, so check what the current lines are rather than trusting this paragraph.
+- [ ] **9.17 A generated, exhaustive typed option surface for KiteFFmpeg.** Horizon, not
+  scheduled. FFmpeg exposes every open-time option through `av_opt_next` on the format context
+  and on each demuxer's and protocol's private class, and the wasm binding generator already
+  shows this build can emit Kotlin from a table. Doing the same for options would give a typed
+  knob for every option of the linked recipe: hundreds, differing per build, behind a new C
+  entry point (the same enumeration gap as 3.10). Wrong size for a player, possibly right for
+  the library one day. Revisit only after `DemuxOptions` (5.5, Task 10) has users asking for
+  fields it lacks.
 
 ---
 
@@ -1024,6 +1067,9 @@ a failed build is itself the first finding.
 **Android phone, resume anchor (the S23 fix's device half):**
 10. Pause 30+ seconds mid-playback, resume. PASS: no position jump, sync holds (the fix
     rejects pre-pause device timestamps; this confirms it on real silicon).
+10b. Only after 5.5's Task 6 has landed: pick a file with the system picker and play it through
+    `MediaIo.ofUri`; then play a bundled asset through `MediaIo.ofAsset`. PASS: both play, both
+    seek, and the picked file still plays after a track switch (the reopen path).
 
 **TV stick (only after the 32-bit ABI builds, Phase 8.2):**
 11. Sideload, play 2 minutes. PASS: video + audio in sync, no crash on open.

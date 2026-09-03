@@ -162,7 +162,7 @@ that found it pinned as a named regression test.
 
 ---
 
-### Q7 Dependency automation. Size XS, Tier 1
+### Q7 Dependency automation. LANDED 2026-09-03
 
 **Why.** KiteFFmpeg has `.github/dependabot.yml`; KitePlayer does not. Proposals cost nothing;
 the no-new-dependency rule is about merging, not about seeing.

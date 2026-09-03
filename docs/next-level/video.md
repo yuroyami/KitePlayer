@@ -250,7 +250,14 @@ every channel within 1; at `gamma = 1f` the output equals the untouched golden b
 
 ---
 
-### V6 PNG and JPEG snapshots. Size S, Tier 1
+### V6 PNG and JPEG snapshots. LANDED 2026-09-03
+
+Two departures from the block below, both deliberate. The receiver is `SoftwareReadableFrame`,
+which `CapturedFrame` implements, so the same call serves a capture and a backend's own frame,
+and the test can decode a frame with the backend instead of needing a player session for a
+capture. And `space.mp4` does not exist in the test media; `colors-bt709.mp4` is the clip.
+
+### V6, as planned. Size S, Tier 1
 
 **Why.** `captureFrame` returns raw planes. KiteFFmpeg already ships `Frame.encodeImage(codec)`
 with the `png` and `mjpeg` encoders compiled in. The wrapper is small and everybody wants it.

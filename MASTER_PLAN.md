@@ -544,7 +544,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **V6** PNG and JPEG snapshots from a captured frame. S. `video.md`
 - [ ] **K8** Thumbnails at positions (KitePlayer, `kiteplayer-ffmpeg`). S; the `io` route waits on
   the doors. `kiteffmpeg.md`
 - [ ] **A8 remainder** `AudioAnalysis.measureLoudness(item)` in `kiteplayer-ffmpeg`. S. The meter

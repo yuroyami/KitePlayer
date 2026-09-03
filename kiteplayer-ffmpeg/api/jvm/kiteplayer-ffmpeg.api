@@ -64,6 +64,19 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame : i
 	public fun planeStride (I)I
 }
 
+public final class io/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat : java/lang/Enum {
+	public static final field Jpeg Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;
+	public static final field Png Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;
+}
+
+public final class io/github/yuroyami/kiteplayer/ffmpeg/SnapshotsKt {
+	public static final fun encode (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;)[B
+	public static synthetic fun encode$default (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;ILjava/lang/Object;)[B
+}
+
 public final class io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter;
 	public final fun toRgba (Lio/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame;)[B

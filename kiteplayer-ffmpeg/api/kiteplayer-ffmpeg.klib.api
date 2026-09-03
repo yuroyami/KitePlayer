@@ -7,6 +7,17 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-ffmpeg>
+final enum class io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat : kotlin/Enum<io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat> { // io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat|null[0]
+    enum entry Jpeg // io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat.Jpeg|null[0]
+    enum entry Png // io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat.Png|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat> // io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat // io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat> // io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat.values|values#static(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegAudioDecoderFactory : io.github.yuroyami.kiteplayer.spi/AudioDecoderFactory { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegAudioDecoderFactory|null[0]
     final val name // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegAudioDecoderFactory.name|{}name[0]
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegAudioDecoderFactory.name.<get-name>|<get-name>(){}[0]
@@ -97,6 +108,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.githu
 }
 
 final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]
+final fun (io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame).io.github.yuroyami.kiteplayer.ffmpeg/encode(io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat = ...): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/encode|encode@io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame(io.github.yuroyami.kiteplayer.ffmpeg.SnapshotFormat){}[0]
 final fun (io.github.yuroyami.kiteplayer/MediaItem).io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter(io.github.yuroyami.kiteffmpeg.dsl/FilterChain): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter|withVideoFilter@io.github.yuroyami.kiteplayer.MediaItem(io.github.yuroyami.kiteffmpeg.dsl.FilterChain){}[0]
 
 // Targets: [native]

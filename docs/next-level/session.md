@@ -457,7 +457,11 @@ DEVICE-DAY step 26.
 
 ---
 
-### S9 Two players at once. Size S, Tier 2
+### S9 Two players at once. LANDED 2026-09-03
+
+Both tests passed first run: nothing needed fixing, the item was the proof.
+
+### S9, as planned. Size S, Tier 2
 
 **Why.** A preview thumbnail beside the main picture, a picture-in-picture second stream, a
 crossfade someday: all need two players in one process. Nothing in the engine is a singleton

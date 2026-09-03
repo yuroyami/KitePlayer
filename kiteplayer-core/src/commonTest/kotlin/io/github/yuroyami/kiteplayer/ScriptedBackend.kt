@@ -1374,6 +1374,9 @@ internal class ScriptedOutput(
     /** Cue identities handed to the rasterizer, in publication order. */
     val rasterizedCueTexts: MutableList<List<String>> = mutableListOf()
 
+    /** The first-span style of every TEXT cue each raster call received, for the override tests. */
+    val rasterizedCueStyles: MutableList<List<io.github.yuroyami.kiteplayer.subtitle.CueStyle>> = mutableListOf()
+
     override val audioSink: AudioSinkFactory = object : AudioSinkFactory {
         override val name: String = "scripted"
         override suspend fun create(): AudioSink = sink
@@ -1389,6 +1392,9 @@ internal class ScriptedOutput(
                 fontScale: Float,
                 position: Float,
             ): List<io.github.yuroyami.kiteplayer.spi.OverlayImage> {
+                rasterizedCueStyles += cues
+                    .filterIsInstance<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text>()
+                    .mapNotNull { it.spans.firstOrNull()?.style }
                 rasterizedCueTexts += cues.map { cue ->
                     when (cue) {
                         is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue.plainText

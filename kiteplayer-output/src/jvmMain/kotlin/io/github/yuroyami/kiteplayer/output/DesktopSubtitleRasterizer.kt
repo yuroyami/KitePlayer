@@ -153,16 +153,37 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         // below subtracts the origin back off. See CueShadow.
         val shadow = cueShadow(firstStyle, fontScale)
 
+        // The viewer's box (T1): drawn under everything, padded past the glyphs, and the bitmap
+        // grows by the padding on every side so the box is never clipped. Transparent draws
+        // nothing and costs nothing, which is every cue no override touched.
+        val boxPad = if (firstStyle.backgroundColor ushr 24 != 0) {
+            ceil((firstStyle.backgroundPaddingPx * fontScale).toDouble()).toInt()
+        } else {
+            0
+        }
+
         // ARGB_PRE, read straight out of the raster: this is the whole alpha contract.
-        val image = BufferedImage(width + shadow.pad, height + shadow.pad, BufferedImage.TYPE_INT_ARGB_PRE)
+        val image = BufferedImage(
+            width + shadow.pad + 2 * boxPad,
+            height + shadow.pad + 2 * boxPad,
+            BufferedImage.TYPE_INT_ARGB_PRE,
+        )
         val g = image.createGraphics()
         try {
             applyHints(g)
+            val inset = shadow.origin + boxPad
+            if (boxPad > 0) {
+                drawBoxes(
+                    g, lines, width, layoutSpec.alignment,
+                    inset.toFloat(), inset.toFloat(), boxPad.toFloat(),
+                    Color(firstStyle.backgroundColor, true),
+                )
+            }
             if (shadow.draws) {
-                val at = shadow.origin + shadow.offset
+                val at = inset + shadow.offset
                 drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, fontScale, Color(firstStyle.shadowColor, true))
             }
-            val at = shadow.origin.toFloat()
+            val at = inset.toFloat()
             drawLines(g, lines, runs, width, layoutSpec.alignment, at, at, fontScale, silhouette = null)
         } finally {
             g.dispose()
@@ -202,12 +223,48 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
             // word and never move with it, exactly mpv's sub-pos rule.
             else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
         }
-        // Placement above measured the TEXT box; the shadow's extra pixels hang off it.
+        // Placement above measured the TEXT box; the shadow's and the box's extra pixels hang
+        // off it, so the words do not move when either is switched on.
         return OverlayImage(
-            x = x - shadow.origin,
-            y = y - shadow.origin,
+            x = x - shadow.origin - boxPad,
+            y = y - shadow.origin - boxPad,
             bitmap = RgbaBitmap(image.width, image.height, premultipliedRgba(image)),
         )
+    }
+
+    /**
+     * The viewer's box, one padded rectangle per line, unioned before the fill so a translucent
+     * box does not double-blend where the paddings of two lines overlap.
+     */
+    private fun drawBoxes(
+        g: Graphics2D,
+        lines: List<Line>,
+        boxWidth: Int,
+        alignment: CueAlignment,
+        dx: Float,
+        dy: Float,
+        pad: Float,
+        color: Color,
+    ) {
+        val area = java.awt.geom.Area()
+        var baseline = dy
+        for (line in lines) {
+            baseline += line.layout.ascent
+            val x = alignedX(line.layout.advance, boxWidth, alignment) + dx
+            area.add(
+                java.awt.geom.Area(
+                    Rectangle2D.Double(
+                        (x - pad).toDouble(),
+                        (baseline - line.layout.ascent - pad).toDouble(),
+                        (line.layout.advance + 2 * pad).toDouble(),
+                        (line.layout.ascent + line.layout.descent + 2 * pad).toDouble(),
+                    ),
+                ),
+            )
+            baseline += line.layout.descent + line.layout.leading
+        }
+        g.color = color
+        g.fill(area)
     }
 
     /** One span's character range and the style it carries, in the joined cue text. */

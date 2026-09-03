@@ -498,6 +498,9 @@ internal class PlaybackCore(
     /** Runtime subtitle size, seeded from config, applied at the next rasterisation. */
     private var subtitleScale: Float = config.subtitles.fontScale
 
+    /** The viewer's style override, seeded from config, applied at the next rasterisation. */
+    private var subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = config.subtitles.style
+
     /**
      * Where the implicit bottom stack anchors, as a fraction of the viewport height (mpv's
      * sub-pos over 100). 1.0 is the ordinary bottom edge; explicitly positioned cues never move.
@@ -1564,6 +1567,12 @@ internal class PlaybackCore(
             }
             is CoreCommand.SetSubtitleScale -> {
                 subtitleScale = command.value
+                session?.publishedCueKey = null
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetSubtitleStyle -> {
+                subtitleStyle = command.value
+                // Re-rasterised on the very next pass, the same key-drop as a scale change.
                 session?.publishedCueKey = null
                 command.reply.complete(Unit)
             }
@@ -3954,7 +3963,9 @@ internal class PlaybackCore(
         val cues = active.toList()
         session.rasterJob?.cancel()
         session.rasterJob = scope.launch(dispatchers.raster) {
-            val images = rasterizer.rasterize(cues, width, height, subtitleScale, subtitlePosition)
+            val images = rasterizer.rasterize(
+                applyOverride(cues, subtitleStyle), width, height, subtitleScale, subtitlePosition,
+            )
             if (session.overlayGeneration.value != generation) return@launch
             session.renderer.setOverlay(
                 SubtitleOverlay(
@@ -5198,6 +5209,7 @@ internal class PlaybackCore(
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
+            subtitleStyle = subtitleStyle,
             subtitlePosition = subtitlePosition,
             audioDelay = audioDelay,
             abLoopA = abLoopA,
@@ -5480,6 +5492,7 @@ internal class PlaybackCore(
             videoTransform = videoTransform,
             subtitleDelay = subtitleDelay,
             subtitleScale = subtitleScale,
+            subtitleStyle = subtitleStyle,
             subtitlePosition = subtitlePosition,
             audioDelay = audioDelay,
             abLoopA = abLoopA,
@@ -7183,6 +7196,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         CoreCommand("setVideoTransform", reply)
     class SetSubtitleDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleDelay", reply)
     class SetSubtitleScale(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setSubtitleScale", reply)
+    class SetSubtitleStyle(
+        val value: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("setSubtitleStyle", reply)
     class SetSubtitlePosition(val value: Float, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setSubtitlePosition", reply)
     class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)

@@ -481,6 +481,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Overrides the authored subtitle style with the viewer's own, or clears the override.
+     *
+     * Fields set on the override replace the authored value on every span; null fields keep the
+     * author's. Applies to the text showing now, not just to the next cue. Bitmap subtitles are
+     * untouched. [PlayerSnapshot.subtitleStyle] reports what is set.
+     */
+    public fun setSubtitleStyle(override: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride?) {
+        core.post(CoreCommand.SetSubtitleStyle(override, CompletableDeferred()))
+    }
+
+    /**
      * Moves the subtitles up the screen: [value] is where the implicit bottom stack anchors, as
      * a fraction of the viewport height, mpv's `sub-pos` over 100. 1.0, the default, is the
      * ordinary bottom edge; 0.9 lifts the stack a tenth of the screen, which is what a viewer

@@ -376,4 +376,57 @@ class AppleSubtitleRasterizerTest {
             assertEquals(balanced.x, other.x, "and must land in the same place")
         }
     }
+
+    // The background box (T1), the same pixel arms as the desktop test.
+
+    @Test
+    fun aBackgroundBoxPaintsBehindTheGlyphsAndGrowsTheBitmap() {
+        fun raster(style: CueStyle) = AppleSubtitleRasterizer().rasterize(
+            cues = listOf(cue("MMMM", style = style)),
+            viewportWidth = 640,
+            viewportHeight = 360,
+            fontScale = 1f,
+        ).single()
+        val plain = raster(CueStyle(fontSizePx = 48f, outlineWidthPx = 0f, shadowOffsetPx = 0f))
+        val boxed = raster(
+            CueStyle(
+                fontSizePx = 48f, outlineWidthPx = 0f, shadowOffsetPx = 0f,
+                backgroundColor = 0xFFFF0000.toInt(), backgroundPaddingPx = 6f,
+            ),
+        )
+        assertEquals(plain.bitmap.height + 12, boxed.bitmap.height, "the bitmap must grow by the padding")
+        assertEquals(plain.y - 6, boxed.y, "the padded box must not move the text")
+
+        // The top edge at the horizontal centre is padding above the first line: pure box.
+        val pixels = boxed.bitmap.pixels
+        val probe = (boxed.bitmap.width / 2) * 4
+        val r = pixels[probe].toInt() and 0xFF
+        val g = pixels[probe + 1].toInt() and 0xFF
+        val b = pixels[probe + 2].toInt() and 0xFF
+        val a = pixels[probe + 3].toInt() and 0xFF
+        assertEquals(255, a, "the padded top edge of an opaque box must be opaque")
+        assertTrue(r > 200 && g < 50 && b < 50, "the padded top edge must be the box's red, got rgb($r,$g,$b)")
+
+        var sawWhite = false
+        for (index in pixels.indices step 4) {
+            val rr = pixels[index].toInt() and 0xFF
+            val gg = pixels[index + 1].toInt() and 0xFF
+            val bb = pixels[index + 2].toInt() and 0xFF
+            if (rr > 200 && gg > 200 && bb > 200) { sawWhite = true; break }
+        }
+        assertTrue(sawWhite, "the text itself must still render in its own colour over the box")
+    }
+
+    @Test
+    fun noBoxByDefault() {
+        val image = AppleSubtitleRasterizer().rasterize(
+            cues = listOf(cue("MMMM", style = CueStyle(fontSizePx = 48f, outlineWidthPx = 0f, shadowOffsetPx = 0f))),
+            viewportWidth = 640,
+            viewportHeight = 360,
+            fontScale = 1f,
+        ).single()
+        val pixels = image.bitmap.pixels
+        val probe = (image.bitmap.width / 2) * 4
+        assertEquals(0, pixels[probe + 3].toInt() and 0xFF, "the top edge of a boxless bitmap stays transparent")
+    }
 }

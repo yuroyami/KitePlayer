@@ -50,6 +50,8 @@ public data class PlayerSnapshot(
     val subtitleDelay: Duration = Duration.ZERO,
     /** The runtime subtitle size multiplier over the authored size. */
     val subtitleScale: Float = 1.0f,
+    /** The viewer's live subtitle style override, or null when the authored styles stand. */
+    val subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
     /** Where the implicit subtitle stack anchors, as a fraction of the height. 1.0 is the bottom. */
     val subtitlePosition: Float = 1.0f,
     /** The runtime audio timing shift. Positive presents video earlier to meet late sound. */

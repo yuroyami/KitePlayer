@@ -16,7 +16,14 @@ returning null, reported as a generic string. `CueSelector.activeAt` scans from 
 
 ---
 
-### T1 Subtitle style override. Size M, Tier 2
+### T1 Subtitle style override. LANDED 2026-09-03 except the Android device step
+
+All three rasterisers draw the box (desktop and Apple proven by pixels, red-first and
+falsified; Android compiles and rides DEVICE-DAY step 9f). One deviation from the block below:
+`CueStyle` gained `backgroundPaddingPx` beside `backgroundColor`, because the rasterisers draw
+from `CueStyle` and a padding that lived only on the override could never reach them.
+
+### T1, as planned. Size M, Tier 2
 
 **Why.** Users set their own font, size, colour and a background box behind the text. The only
 global knobs are `fontScale`, delay and position.

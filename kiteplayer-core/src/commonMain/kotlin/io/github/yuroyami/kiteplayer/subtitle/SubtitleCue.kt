@@ -96,6 +96,13 @@ public data class CueStyle(
      * the TEXT, so turning a shadow on never moves the words. Taken from the cue's FIRST span.
      */
     val shadowOffsetPx: Float = 1f,
+    /**
+     * ARGB box behind each line of text, padded by [backgroundPaddingPx]. The default is fully
+     * transparent, which draws nothing and costs nothing; no subtitle format authors this field,
+     * it exists for the viewer's [SubtitleStyleOverride]. Taken from the cue's FIRST span.
+     */
+    val backgroundColor: Int = 0x00000000,
+    val backgroundPaddingPx: Float = 4f,
 )
 
 /** Where a cue goes. */

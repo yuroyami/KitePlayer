@@ -177,9 +177,38 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         val shadow = firstStyle?.let { cueShadow(it, fontScale) } ?: NO_CUE_SHADOW
         val anyOutline = runs.any { it.style.outlineWidthPx > 0f }
 
-        val bitmap = Bitmap.createBitmap(width + shadow.pad, height + shadow.pad, Bitmap.Config.ARGB_8888)
+        // The viewer's box (T1): the bitmap grows by the padding on every side so the box is
+        // never clipped, and the placement subtracts it back off. Transparent draws nothing.
+        val boxColor = firstStyle?.backgroundColor ?: 0
+        val boxPad = if (boxColor ushr 24 != 0) {
+            kotlin.math.ceil((firstStyle!!.backgroundPaddingPx * fontScale).toDouble()).toInt()
+        } else {
+            0
+        }
+
+        val bitmap = Bitmap.createBitmap(
+            width + shadow.pad + 2 * boxPad,
+            height + shadow.pad + 2 * boxPad,
+            Bitmap.Config.ARGB_8888,
+        )
         val canvas = Canvas(bitmap)
-        canvas.translate(shadow.origin - glyphShift, shadow.origin.toFloat())
+        canvas.translate(shadow.origin - glyphShift + boxPad, (shadow.origin + boxPad).toFloat())
+        if (boxPad > 0) {
+            // One padded rectangle per laid-out line, drawn under the shadow and the text. The
+            // canvas is already translated to the text origin, so the layout's own line
+            // coordinates are the right frame.
+            val boxPaint = android.graphics.Paint().apply { color = boxColor }
+            val pad = boxPad.toFloat()
+            for (line in 0 until layout.lineCount) {
+                canvas.drawRect(
+                    layout.getLineLeft(line) - pad,
+                    layout.getLineTop(line) - pad,
+                    layout.getLineRight(line) + pad,
+                    layout.getLineBottom(line) + pad,
+                    boxPaint,
+                )
+            }
+        }
         if (shadow.draws && firstStyle != null) {
             canvas.save()
             canvas.translate(shadow.offset, shadow.offset)
@@ -231,10 +260,11 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
             // word and never move with it, exactly mpv's sub-pos rule.
             else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
         }
-        // Placement above measured the TEXT box; the shadow's extra pixels hang off it.
+        // Placement above measured the TEXT box; the shadow's and the box's extra pixels hang
+        // off it, so the words do not move when either is switched on.
         return OverlayImage(
-            x = x - shadow.origin,
-            y = y - shadow.origin,
+            x = x - shadow.origin - boxPad,
+            y = y - shadow.origin - boxPad,
             bitmap = RgbaBitmap(bitmap.width, bitmap.height, pixels),
         )
     }

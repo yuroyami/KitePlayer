@@ -9,10 +9,28 @@ import io.github.yuroyami.kiteplayer.subtitle.CueStyle
 import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.CValue
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.allocArray
+import kotlinx.cinterop.get
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import platform.CoreFoundation.CFArrayGetCount
+import platform.CoreFoundation.CFArrayGetValueAtIndex
+import platform.CoreGraphics.CGContextFillRect
+import platform.CoreGraphics.CGContextRef
+import platform.CoreGraphics.CGContextSetFillColorWithColor
+import platform.CoreGraphics.CGFloatVar
+import platform.CoreGraphics.CGPoint
+import platform.CoreGraphics.CGRect
+import platform.CoreText.CTFrameGetLineOrigins
+import platform.CoreText.CTFrameGetLines
+import platform.CoreText.CTLineGetTypographicBounds
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.interpretCPointer
 import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.value
 import kotlinx.cinterop.useContents
 import platform.CoreFoundation.CFRangeMake
 import platform.CoreGraphics.CGBitmapContextCreate
@@ -200,8 +218,15 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             // The shadow lands outside the text box, so the bitmap grows for it and the placement
             // below subtracts the origin back off. See CueShadow.
             val shadow = cueShadow(firstStyle, fontScale)
-            val bitmapWidth = width + shadow.pad
-            val bitmapHeight = height + shadow.pad
+            // The viewer's box (T1): the bitmap grows by the padding on every side so the box is
+            // never clipped, and the placement subtracts it back off. Transparent draws nothing.
+            val boxPad = if (firstStyle.backgroundColor shr 24 and 0xFF != 0) {
+                ceil((firstStyle.backgroundPaddingPx * fontScale).toDouble()).toInt()
+            } else {
+                0
+            }
+            val bitmapWidth = width + shadow.pad + 2 * boxPad
+            val bitmapHeight = height + shadow.pad + 2 * boxPad
 
             val pixels = ByteArray(bitmapWidth * bitmapHeight * 4)
             pixels.usePinned { pinned ->
@@ -219,6 +244,16 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                 CFRelease(colorSpace)
                 if (context == null) return null
                 try {
+                    // The text box inside the grown bitmap, shifted in by the box padding too.
+                    val textRect = CGRectMake(
+                        (shadow.origin + boxPad).toDouble(),
+                        (shadow.pad - shadow.origin + boxPad).toDouble(),
+                        width.toDouble(),
+                        height.toDouble(),
+                    )
+                    if (boxPad > 0) {
+                        drawLineBoxes(context, framesetter, textRect, boxPad.toDouble(), firstStyle.backgroundColor)
+                    }
                     if (shadow.draws) {
                         // CG's own drop shadow: one call, applied to the fill and the stroke
                         // alike, which is exactly the silhouette a subtitle shadow is. Its y
@@ -233,19 +268,11 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                         )
                         CFRelease(shade)
                     }
-                    // The text box inside the grown bitmap. CoreText fills a frame from the TOP
-                    // of its rect downward, and CG measures y from the bottom, so a shadow that
-                    // reaches down-right leaves its room BELOW the box (rect lifted by the pad)
-                    // and one reaching up-left leaves it above and to the left.
-                    val path = CGPathCreateWithRect(
-                        CGRectMake(
-                            shadow.origin.toDouble(),
-                            (shadow.pad - shadow.origin).toDouble(),
-                            width.toDouble(),
-                            height.toDouble(),
-                        ),
-                        null,
-                    )
+                    // CoreText fills a frame from the TOP of its rect downward, and CG measures
+                    // y from the bottom, so a shadow that reaches down-right leaves its room
+                    // BELOW the box (rect lifted by the pad) and one reaching up-left leaves it
+                    // above and to the left. The rect is the same one the box pass measured.
+                    val path = CGPathCreateWithRect(textRect, null)
                     val frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, 0), path, null)
                     CFRelease(path)
                     try {
@@ -275,14 +302,70 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
                 // word and never move with it, exactly mpv's sub-pos rule.
                 else -> (viewportHeight * position).toInt() - marginYPx - height - stackedBottom
             }
-            // Placement above measured the TEXT box; the shadow's extra pixels hang off it.
+            // Placement above measured the TEXT box; the shadow's and the box's extra pixels
+            // hang off it, so the words do not move when either is switched on.
             return OverlayImage(
-                x = x - shadow.origin,
-                y = y - shadow.origin,
+                x = x - shadow.origin - boxPad,
+                y = y - shadow.origin - boxPad,
                 bitmap = RgbaBitmap(bitmapWidth, bitmapHeight, pixels),
             )
         } finally {
             CFRelease(framesetter)
+        }
+    }
+
+    /**
+     * The viewer's box, one padded rectangle per laid-out line (T1), drawn BEFORE the context's
+     * shadow is set so the box never casts one. A throwaway frame is laid out to measure the
+     * lines; CoreText frames are cheap next to the draw, and the real frame follows.
+     */
+    private fun drawLineBoxes(
+        context: CGContextRef?,
+        framesetter: platform.CoreText.CTFramesetterRef?,
+        textRect: CValue<CGRect>,
+        pad: Double,
+        color: Int,
+    ) {
+        val path = CGPathCreateWithRect(textRect, null)
+        val frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, 0), path, null)
+        CFRelease(path)
+        try {
+            val lines = CTFrameGetLines(frame)
+            val count = CFArrayGetCount(lines).toInt()
+            if (count == 0) return
+            memScoped {
+                val origins = allocArray<CGPoint>(count)
+                CTFrameGetLineOrigins(frame, CFRangeMake(0, count.toLong()), origins)
+                val fill = color.toCgColor()!!
+                CGContextSetFillColorWithColor(context, interpretCPointer(fill.rawValue))
+                textRect.useContents {
+                    for (index in 0 until count) {
+                        val line = CFArrayGetValueAtIndex(lines, index.toLong())
+                        val ascent = alloc<CGFloatVar>()
+                        val descent = alloc<CGFloatVar>()
+                        val leading = alloc<CGFloatVar>()
+                        val lineWidth = CTLineGetTypographicBounds(
+                            interpretCPointer(line!!.rawValue),
+                            ascent.ptr, descent.ptr, leading.ptr,
+                        )
+                        // Line origins are relative to the PATH's own origin, at the baseline.
+                        val x = origin.x + origins[index].x
+                        val y = origin.y + origins[index].y
+                        CGContextFillRect(
+                            context,
+                            CGRectMake(
+                                x - pad,
+                                y - descent.value - pad,
+                                lineWidth + 2 * pad,
+                                ascent.value + descent.value + 2 * pad,
+                            ),
+                        )
+                    }
+                }
+                CFRelease(fill)
+            }
+        } finally {
+            CFRelease(frame)
         }
     }
 

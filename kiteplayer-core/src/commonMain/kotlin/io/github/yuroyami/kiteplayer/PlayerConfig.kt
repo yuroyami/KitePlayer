@@ -371,6 +371,8 @@ public data class SubtitleConfig(
     val delay: Duration = Duration.ZERO,
     /** Scale applied to the authored font size. */
     val fontScale: Float = 1.0f,
+    /** The viewer's style override, applied over every authored style. Null changes nothing. */
+    val style: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
 ) {
     init {
         require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }

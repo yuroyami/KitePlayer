@@ -267,6 +267,10 @@ screenshots for 7 to 9.
     both outline colours show, and the taller span sets the line height.
 9e. A cue with `fontFamily` set to a font the device HAS (say "serif") and one it does not.
     PASS: the first changes the face, the second reads normally in the default face.
+9f. Set a style override with an opaque background box (`setSubtitleStyle`, red box, padding 6)
+    over a plain SRT cue. PASS: a box behind every line, padded past the glyphs, text unmoved
+    and still its own colour; clearing the override removes the box. Same reason as 9b: Canvas
+    is stubs off-device, so the Android box has compile-only proof until this step.
     Steps 9b to 9e are the last open part of the subtitle styling row [SOL-S7]; delete them
     once run.
 
@@ -544,8 +548,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **T1** Style override with a background box on all three rasterisers. M; Android on
-  DEVICE-DAY step 9f. `subtitles.md`
 - [ ] **T3** A secondary subtitle track at the top. M. `subtitles.md`
 - [ ] **V2** Refresh-rate awareness on every renderer; Android frame-rate matching. M; device
   step 20. `video.md`

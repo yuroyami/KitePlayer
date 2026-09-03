@@ -43,7 +43,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       # ~/.konan holds the Kotlin/Native distribution and the per-target sysroots konan fetches on
       # demand; Dokka resolves every target's dependencies, so a cold cache re-downloads all of it.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.konan
           key: konan-docs-${{ hashFiles('gradle/libs.versions.toml') }}

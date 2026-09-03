@@ -1,13 +1,18 @@
 package io.github.yuroyami.kiteplayer.view
 
+import android.app.PictureInPictureParams
 import android.content.Context
+import android.graphics.Rect
+import android.os.Build
 import android.os.Looper
 import android.util.AttributeSet
+import android.util.Rational
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.widget.FrameLayout
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import kotlin.math.roundToInt
@@ -40,6 +45,7 @@ public open class KitePlayerView @JvmOverloads constructor(
     private val surfaceView = SurfaceView(context)
     private val subtitleView = SubtitleOverlayView(context)
     private var videoAspect: Float = 0f
+    private var videoRotation: Int = 0
     private var rendererGeneration: Long = 0L
 
     /**
@@ -148,6 +154,30 @@ public open class KitePlayerView @JvmOverloads constructor(
         }
 
     /**
+     * Parameters for `Activity.enterPictureInPictureMode`: the video's own aspect, turned with its
+     * rotation and clamped to what the OS accepts, this view's video area as the source rectangle
+     * so the transition starts from the picture, and on API 31 and later auto-enter armed while
+     * the player is playing when [autoEnterWhilePlaying] is set. The activity owns the transition
+     * and the manifest; rebuild these whenever the picture or the play state changes, because the
+     * OS reads auto-enter from the parameters once rather than watching anything.
+     */
+    public fun pictureInPictureParams(autoEnterWhilePlaying: Boolean = true): PictureInPictureParams {
+        val snapshot = player?.state?.value
+        val size = snapshot?.videoSize
+        val aspect = pictureInPictureAspect(size?.displayWidth ?: 0, size?.height ?: 0, videoRotation)
+        val builder = PictureInPictureParams.Builder()
+            .setAspectRatio(Rational(aspect.numerator, aspect.denominator))
+        val sourceRect = Rect()
+        if (surfaceView.getGlobalVisibleRect(sourceRect) && !sourceRect.isEmpty) {
+            builder.setSourceRectHint(sourceRect)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setAutoEnterEnabled(autoEnterWhilePlaying && snapshot?.status == PlaybackStatus.Playing)
+        }
+        return builder.build()
+    }
+
+    /**
      * Permanently releases this view's player pairing and active renderer.
      *
      * Call this from an Activity's `onDestroy` or an `AndroidView` wrapper's `onRelease` callback.
@@ -221,6 +251,7 @@ public open class KitePlayerView @JvmOverloads constructor(
         } else {
             displayAspect
         }
+        videoRotation = turn
         subtitleView.setVideoRotation(turn)
         requestLayout()
     }

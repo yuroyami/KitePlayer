@@ -335,8 +335,14 @@ screenshots for 7 to 9.
     PASS: the video area is black in the screenshot and normal on the glass. Then set it back to
     false and screenshot again. PASS: the picture is in the screenshot.
 
-Steps 20, 22 to 27 are added by the items that need them as they land (V2, V9, V10, S6, S7, S8,
-S10, and T1's step 9f), each spec naming its own step.
+**Android phone, picture in picture [V9]:**
+22. From the sample, call `KitePlayerView.pictureInPictureParams()` and enter picture in picture
+    while a file plays, once upright and once on `rotated90ccw.mp4`. PASS: the window has the
+    picture's aspect both times and the transition starts from the video area. On API 31 or
+    later, background the app while playing. PASS: it enters the window by itself.
+
+Steps 20, 23 to 27 are added by the items that need them as they land (V2, V10, S6, S7, S8, S10,
+and T1's step 9f), each spec naming its own step.
 
 ## Device halves and runs owed beyond the sheet
 
@@ -538,9 +544,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **V9** Picture-in-picture parameters on Android, and an honest capability answer. S,
-  device proof (step 22). `video.md`
-- [ ] **V11** Typed filter chains attach to a media item without the opt-in. XS. `video.md`
 - [ ] **V6** PNG and JPEG snapshots from a captured frame. S. `video.md`
 - [ ] **K8** Thumbnails at positions (KitePlayer, `kiteplayer-ffmpeg`). S; the `io` route waits on
   the doors. `kiteffmpeg.md`
@@ -775,11 +778,11 @@ libVLC. Parity of what EXISTS beats new feature count; nothing here is scheduled
   discontinuity policy.
 - Chapters and programs: programs and editions (deleted from the API until built), attachments.
   Chapter navigation and position markers exist.
-- Processing: typed filter plans (V11), runtime rebuild, recording while playing (K6),
+- Processing: runtime filter rebuild, recording while playing (K6),
   thumbnails (K8), waveforms (K9).
 - Observability: sequenced transitions, trace export (O3). Structured logs with redaction and
   frame timing percentiles exist.
-- Platform: media session and lock screen (S7), audio focus (S6), real PiP (V9, V10), casting
+- Platform: media session and lock screen (S7), audio focus (S6), real PiP on iOS (V10), casting
   (decided later horizon), background policy (S8), accessibility semantics (S10).
 - Security: DRM and CDM (out of scope until a product decision), secure surfaces (exist on Android),
   credential redaction (exists for URIs in logs), sandboxed parsing (fuzzing, BIG-BITES).

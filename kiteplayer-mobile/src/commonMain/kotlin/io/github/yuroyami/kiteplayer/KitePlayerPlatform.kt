@@ -40,9 +40,10 @@ public object KitePlayerPlatform {
         get() = availability.isAvailable
 
     /**
-     * Whether the default presentation path is compatible with host-managed picture-in-picture.
-     *
-     * The host application still owns its Activity/controller and manifest configuration.
+     * Whether a player can be built here at all, which is the floor for putting one in a
+     * picture-in-picture window. It does NOT ask the device: on Android,
+     * `KitePlayerPlatform.supportsPictureInPicture(context)` asks the package manager, and the
+     * host application still owns its Activity, its manifest and the user's per-app permission.
      */
     public val supportsPictureInPicture: Boolean
         get() = platformKitePlayerDefaults.supportsPictureInPicture

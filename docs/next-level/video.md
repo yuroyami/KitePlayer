@@ -345,7 +345,7 @@ is black." Add that step.
 
 ---
 
-### V9 Picture in picture on Android, the helper. Size S, Tier 2 (proof on device)
+### V9 Picture in picture on Android, the helper. LANDED 2026-09-03 except the device run
 
 **Why.** `KitePlayerPlatform.supportsPictureInPicture` on Android mirrors "is the player available"
 (`KitePlayerPlatform.android.kt:18-19`), which is not what the name says. The activity owns the
@@ -426,7 +426,7 @@ leave the app, picture keeps moving, play/pause from the PiP window works." The 
 
 ---
 
-### V11 Typed video filters through the player. Size XS, Tier 1
+### V11 Typed video filters through the player. LANDED 2026-09-03
 
 **Why.** `MediaItem.videoFilter` is a raw string behind the low-level opt-in. KiteFFmpeg's
 `videoFilters { scale(...); eq(...) }` builds the same string with types. The bridge is one function.

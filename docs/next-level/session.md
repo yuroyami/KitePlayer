@@ -245,7 +245,7 @@ no-op and does not throw.
 
 ---
 
-### S5 State export and restore. Size M, Tier 1
+### S5 State export and restore. LANDED 2026-09-03
 
 **Why.** Every app rebuilds "resume where I was" by hand: queue, index, position, speed, volume,
 track choices. The engine knows all of it and can hand it out as one value.

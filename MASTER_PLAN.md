@@ -533,7 +533,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **S5** A memento of where playback was, and restore. M. `session.md`
 - [ ] **V8** Secure surface flag on the Android view. S, device proof (step 21). `video.md`
 - [ ] **V9** Picture-in-picture parameters on Android, and an honest capability answer. S,
   device proof (step 22). `video.md`
@@ -753,10 +752,11 @@ CI prove the trees this Mac cannot build.
 A MAP, not a backlog: it asks "which of these does an item buy". Comparison class is libmpv and
 libVLC. Parity of what EXISTS beats new feature count; nothing here is scheduled by being listed.
 
-- Session: interruption policy (S6), crash-safe recovery, documented readiness.
+- Session: interruption policy (S6), crash-safe recovery (the memento is the state half),
+  documented readiness.
 - Clock and sync: route recovery (DOABLES), refresh-rate change (V2), passthrough clocks,
   live-edge policy.
-- Queue: gapless and crossfade (S3), persistence (S5). The queue itself and shuffle exist.
+- Queue: gapless and crossfade (S3). The queue itself, shuffle and a memento for persistence exist.
 - Rate: reverse and trick play, slow-motion policy, scan and jog.
 - Tracks: in-place video switching (rides streaming resilience), ranked language and
   accessibility policy (track selection, DOABLES), multi-angle, stable handles.

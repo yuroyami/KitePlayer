@@ -721,6 +721,74 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Where playback is, as one value: the queue, the item, the position and every setting the
+     * player holds. Store it however you like and hand it back to [restore]. A player that opened
+     * a single item reports a queue of one; a player with nothing open reports an empty queue and
+     * an index of -1, which [restore] refuses.
+     */
+    public fun memento(): PlayerMemento {
+        val snapshot = state.value
+        val tracks = snapshot.tracks
+        val queue = snapshot.queue.ifEmpty { listOfNotNull(snapshot.media) }
+        val index = if (snapshot.queue.isEmpty()) queue.lastIndex else snapshot.queueIndex
+        return PlayerMemento(
+            queue = queue,
+            queueIndex = index,
+            position = position(),
+            speed = snapshot.speed,
+            preservePitch = snapshot.preservePitch,
+            volume = snapshot.volume,
+            muted = snapshot.muted,
+            loop = snapshot.loop,
+            shuffle = snapshot.shuffle,
+            subtitleDelay = snapshot.subtitleDelay,
+            audioDelay = snapshot.audioDelay,
+            audioLanguage = tracks.selectedAudio?.let { tracks.find(it) }?.language,
+            subtitleLanguage = tracks.selectedSubtitle?.let { tracks.find(it) }?.language,
+            subtitlesOff = tracks.selectedSubtitle == null && tracks.subtitles.isNotEmpty(),
+        )
+    }
+
+    /**
+     * Takes the player back to a [memento]: opens its queue at its index, applies every setting,
+     * seeks to its position, then picks the audio and subtitle tracks by language where the new
+     * container has them. Ends paused, like every open. A track the memento names and the
+     * container lacks leaves the container's own choice in place.
+     *
+     * @throws IllegalArgumentException when the memento's queue is empty or its index is outside it.
+     */
+    public suspend fun restore(memento: PlayerMemento) {
+        require(memento.queue.isNotEmpty()) { "a memento with no queue has nowhere to go back to" }
+        require(memento.queueIndex in memento.queue.indices) {
+            "queue index ${memento.queueIndex} is outside a queue of ${memento.queue.size}"
+        }
+        openQueue(memento.queue, memento.queueIndex)
+        setSpeed(memento.speed)
+        setPreservePitch(memento.preservePitch)
+        setVolume(memento.volume)
+        setMuted(memento.muted)
+        setLoop(memento.loop)
+        setShuffle(memento.shuffle)
+        setSubtitleDelay(memento.subtitleDelay)
+        setAudioDelay(memento.audioDelay)
+        if (memento.position > Duration.ZERO) seek(memento.position)
+
+        val tracks = state.value.tracks
+        memento.audioLanguage?.let { language ->
+            val wanted = tracks.audio.firstOrNull { it.language == language } ?: return@let
+            if (tracks.selectedAudio != wanted.id) selectTrack(TrackKind.Audio, wanted.id)
+        }
+        if (memento.subtitlesOff) {
+            if (tracks.selectedSubtitle != null) selectTrack(TrackKind.Subtitle, null)
+        } else {
+            memento.subtitleLanguage?.let { language ->
+                val wanted = tracks.subtitles.firstOrNull { it.language == language } ?: return@let
+                if (tracks.selectedSubtitle != wanted.id) selectTrack(TrackKind.Subtitle, wanted.id)
+            }
+        }
+    }
+
+    /**
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
      * Switching a CONTAINER track reopens the container and seeks back to where playback was,

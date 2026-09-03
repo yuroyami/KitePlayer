@@ -74,19 +74,21 @@ the state snapshot, so your UI can read it back.
 | | |
 |---|---|
 | **Playback** | `open`, `play`, `pause`, `stop`, `seek`, `stepFrame`, `close` / `closeAndAwait` |
-| **Playlists** | `openQueue` with `next` and `previous`, `setLoop` (looping one item or wrapping the whole queue) |
+| **Playlists** | `openQueue` with `next` and `previous`, `setLoop` (looping one item or wrapping the whole queue), and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` to edit it while it plays |
 | **Speed** | `setSpeed` from 0.25x to 4x with the pitch preserved, or `setPreservePitch(false)` to let it change like a tape |
-| **Sound** | `setVolume`, `setMuted`, `setAudioDelay` |
+| **Sound** | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), and `setVideoEnabled(false)` to keep only the audio without reopening anything |
+| **Volume above 100%** | Raise `PlayerConfig.audio.volumeCeiling` to as much as 2. Past unity every sample is folded through a saturator, so a loud passage compresses instead of squaring off. At or below unity nothing is folded and the samples are untouched, bit for bit |
+| **Loudness** | ReplayGain from the container's own tags, off by default because a player changing the level unasked is a surprise. `PlayerConfig.audio.replayGain` turns it on |
 | **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
-| **Subtitles** | `selectTrack`, `addExternalSubtitle` (load a `.srt` or `.vtt` mid-playback), `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition` |
+| **Subtitles** | `selectTrack`, `addExternalSubtitle` (load a `.srt` or `.vtt` mid-playback), `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, and `subtitleCues` to read the lines showing right now and draw them yourself |
 | **Looping a section** | `setAbLoop`, which repeats between two points and wraps B back to A |
 | **Chapters** | `chapterAt`, `seekToChapter` |
 | **Screenshots** | `captureFrame` |
 | **Rendering** | `attachRenderer`, `detachRenderer`, swappable while media is playing |
-| **Diagnosis** | `diagnosticsDump`, `warningHistory`, `supportBundle`, and `KiteLog` as the one logging seam (silent by default) |
+| **Diagnosis** | `diagnosticsDump`, `warningHistory`, `supportBundle`, and `KiteLog` as the one logging seam (silent by default). `KiteLog.installStructured` gives you fields instead of a sentence, and URIs are stripped of their query strings before they reach any sink |
 
-Four `Flow`s publish what is happening: `state`, `progress`, `stats` and `events`. `position()`
-reads the current time without collecting anything.
+Five `Flow`s publish what is happening: `state`, `progress`, `stats`, `events` and
+`subtitleCues`. `position()` reads the current time without collecting anything.
 
 Two seek modes. The default is exact. `SeekMode.KeyframeThenRefine` is genuinely two-phase: the
 nearest keyframe appears immediately, then the exact frame replaces it, which is what makes

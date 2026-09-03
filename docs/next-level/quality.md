@@ -220,6 +220,19 @@ presents (Q2's smoke does not exercise it; a manual note suffices).
 
 ### Q10 The doc-truth sweep. TREE HALF LANDED 2026-09-03; the release page is the owner's
 
+A second tree pass ran on 2026-09-03 after the audio and session work landed. The README's
+feature table had drifted behind ten shipped calls at once, which is what a table of calls does
+when nothing points at it. Two corrections worth remembering:
+
+- **The table claimed a capability the default does not have.** The first draft of the volume row
+  said the player boosts to 2x. It does not: `volumeCeiling` is 1 by default and an application
+  has to raise it. A feature table that reads like a promise has to be checked against the
+  DEFAULT, not against what the code can be configured to do.
+- **Read the API dump, not the source.** Every name in the table was checked against
+  `kiteplayer-core.klib.api`, which is where a name that no longer exists shows up as absent
+  rather than as a grep hit in a comment.
+
+
 Every claim below was verified against the tree before it was touched, and all six KitePlayer ones
 were real. Two things worth carrying forward:
 

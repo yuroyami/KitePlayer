@@ -446,4 +446,18 @@ class AndroidSurfaceVideoRendererTest {
         r.close()
         assertEquals(1, target.released)
     }
+
+    /** The display's interval is fed by the view; 120 Hz must answer as nanoseconds (V2). */
+    @Test
+    fun theFedRefreshRateAnswersAsAnInterval() {
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            target = FakeTarget(canvasWidth = 64, canvasHeight = 64),
+        )
+        assertEquals(null, renderer.vsyncIntervalNanos(), "nothing fed yet: honestly unknown")
+        renderer.setDisplayRefreshRate(120f)
+        assertEquals(8_333_333L, renderer.vsyncIntervalNanos())
+        renderer.setDisplayRefreshRate(0f)
+        assertEquals(null, renderer.vsyncIntervalNanos(), "a detached view feeds zero, which is unknown")
+    }
 }

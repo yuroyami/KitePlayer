@@ -191,7 +191,15 @@ public class AndroidGpuImageVideoRenderer(
         return accepted
     }
 
-    override fun vsyncIntervalNanos(): Long? = null
+    override fun vsyncIntervalNanos(): Long? = displayVsyncNanos
+
+    /** Fed by the view that owns the surface; see AndroidSurfaceVideoRenderer.setDisplayRefreshRate. */
+    @Volatile
+    private var displayVsyncNanos: Long? = null
+
+    public fun setDisplayRefreshRate(hz: Float) {
+        displayVsyncNanos = if (hz > 0f) (1_000_000_000.0 / hz).toLong() else null
+    }
 
     override fun setViewport(width: Int, height: Int, scale: Float) {
         if (!closed.value) bridge.setViewport(width, height, scale)

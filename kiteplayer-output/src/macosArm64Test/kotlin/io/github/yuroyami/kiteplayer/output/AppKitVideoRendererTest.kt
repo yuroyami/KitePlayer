@@ -998,3 +998,24 @@ private fun liveThreadCount(): Int = memScoped {
     )
     total
 }
+
+/** The refresh interval is plausible on a machine with a screen, and honest null without one (V2). */
+class AppKitVsyncTest {
+    @Test
+    fun theRefreshIntervalIsPlausibleOrHonestlyUnknown() {
+        val renderer = AppKitVideoRenderer(
+            convert = { frame -> ByteArray(frame.size.width * frame.size.height * 4) },
+            enqueueOnMain = { block -> block() },
+            showImage = { },
+        )
+        try {
+            val interval = renderer.vsyncIntervalNanos()
+            assertTrue(
+                interval == null || interval in 4_000_000L..100_000_000L,
+                "a real display answers between 10 and 250 Hz, got ${'$'}interval",
+            )
+        } finally {
+            renderer.close()
+        }
+    }
+}

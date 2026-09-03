@@ -106,6 +106,14 @@ public class VideoPlayback(
      * is what paces playback, and resetting it when it falls too far behind is what stops a stall from
      * becoming a burst of frames the viewer sees as a fast-forward glitch.
      */
+    /**
+     * The display's refresh interval, seeded at renderer attach and moved by
+     * [io.github.yuroyami.kiteplayer.spi.RendererEvent.VsyncChanged]. Advisory, exactly as the
+     * SPI says: null costs smoothness on a high-refresh display and nothing else. Held here
+     * because the schedule is the one consumer pacing against a display.
+     */
+    internal var vsyncIntervalNanos: Long? = null
+
     private var frameTimerNanos: Long = 0
     private var started = false
 

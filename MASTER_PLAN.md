@@ -326,6 +326,12 @@ screenshots for 7 to 9.
     should be a clean lift with nothing folded.
 
 **Any device, the speed-change click [A6]:**
+19c. Play `sync1080p30.mp4` on a 120 Hz phone; note dropped and repeated frames from KiteStats,
+    then the same clip on the Mac. The refresh-rate plumbing landed 2026-09-03 (the view feeds
+    the display's rate, renderers answer their screens, VsyncChanged reaches the running
+    schedule) and Android additionally asks the OS for frame-rate matching from the measured
+    frame cadence (API 30+); what no laptop can see is whether a 120 Hz panel actually drops to
+    30/60 and whether the numbers improve. [V2, step 20 in the specs]
 19b. Play a file and change speed repeatedly. Listen. The fade was built on 2026-09-03 and
     reverted: the virtual harness completes the flush and the refill between two device pumps,
     so the device never receives the silence a click would come from, and the test passed
@@ -548,8 +554,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **V2** Refresh-rate awareness on every renderer; Android frame-rate matching. M; device
-  step 20. `video.md`
 - [ ] **V3** A real frame-presented event, exact on Metal and MediaCodec. M. `video.md`
 - [ ] **V5** Gamma, on Metal and GL together. M. `video.md`
 - [ ] **S6** Interruptions, audio focus and noisy routes under one policy. M, device proof (step

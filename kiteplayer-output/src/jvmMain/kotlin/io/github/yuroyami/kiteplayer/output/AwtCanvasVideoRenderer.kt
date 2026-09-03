@@ -135,7 +135,15 @@ public class AwtCanvasVideoRenderer(
     /** No hardware path: the desktop backend decodes in software and the painter converts on the CPU. */
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = emptySet()
 
-    override fun vsyncIntervalNanos(): Long? = null
+    override fun vsyncIntervalNanos(): Long? = try {
+        // The default screen's mode; 0 and REFRESH_RATE_UNKNOWN both mean "no answer". Headless
+        // JVMs (CI) throw, which is the same honest null.
+        val rate = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+            .defaultScreenDevice.displayMode.refreshRate
+        if (rate > 0) 1_000_000_000L / rate else null
+    } catch (unavailable: Throwable) {
+        null
+    }
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 

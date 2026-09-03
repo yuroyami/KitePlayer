@@ -40,4 +40,8 @@ private class MobileAndroidPlayerViewRenderer(
     override fun setSurface(surface: Surface?) {
         delegate.setSurface(surface)
     }
+
+    override fun setDisplayRefreshRate(hz: Float) {
+        delegate.setDisplayRefreshRate(hz)
+    }
 }

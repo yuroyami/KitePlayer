@@ -635,6 +635,9 @@ internal class PlaybackCore(
     /** Where the seek machine is, for the test that drives it. */
     val phase: SeekPhase get() = seekPhase
 
+    /** The schedule's current display interval; read by tests, written at attach and on VsyncChanged. */
+    val videoScheduleVsyncNanos: Long? get() = session?.video?.vsyncIntervalNanos
+
     /**
      * Everything a stuck session needs to explain itself, in one line.
      *
@@ -1686,6 +1689,8 @@ internal class PlaybackCore(
         } else {
             session.renderer.delegate = renderer
         }
+        // The display this renderer draws into, handed to the schedule while it is attached.
+        session.video?.vsyncIntervalNanos = renderer?.vsyncIntervalNanos()
         pendingRenderer = renderer
         watchRendererEvents(renderer)
         return true
@@ -1794,7 +1799,11 @@ internal class PlaybackCore(
                                 )
                             }
                         }
-                        is RendererEvent.SurfaceAvailable, is RendererEvent.VsyncChanged -> Unit
+                        is RendererEvent.SurfaceAvailable -> Unit
+                        is RendererEvent.VsyncChanged ->
+                            // A display change reaches the running schedule without a reopen: a
+                            // window dragged to another monitor, a phone dropping to 60 Hz.
+                            session?.video?.vsyncIntervalNanos = event.intervalNanos
                     }
                 }
             }
@@ -2164,6 +2173,8 @@ internal class PlaybackCore(
                     dropPolicy = config.frameDrop,
                 )
             }
+            // Seed the schedule with the display the renderer already knows, before first frame.
+            videoPlayback?.vsyncIntervalNanos = pendingRenderer?.vsyncIntervalNanos()
             if (videoPlayback != null) {
                 rollback += { videoPlayback.close() }
                 // Pre-start, so it applies immediately; the scheduler for this playback does not

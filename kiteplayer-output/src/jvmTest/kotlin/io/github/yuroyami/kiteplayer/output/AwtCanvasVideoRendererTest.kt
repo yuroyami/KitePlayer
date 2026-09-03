@@ -292,4 +292,17 @@ class AwtCanvasVideoRendererTest {
         )
         r.close()
     }
+
+    /**
+     * The refresh interval never throws (V2). On a machine with a display it is a plausible
+     * interval; on a headless CI JVM it is an honest null. Both are legal, an exception is not.
+     */
+    @Test
+    fun `the refresh interval is plausible or honestly unknown`() {
+        val interval = renderer().vsyncIntervalNanos()
+        assertTrue(
+            interval == null || interval in 4_000_000L..100_000_000L,
+            "a real display answers between 10 and 250 Hz, got $interval",
+        )
+    }
 }

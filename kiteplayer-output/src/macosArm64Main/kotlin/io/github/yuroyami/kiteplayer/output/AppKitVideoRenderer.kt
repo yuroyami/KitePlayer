@@ -547,7 +547,19 @@ public class AppKitVideoRenderer internal constructor(
         }
     }
 
-    override fun vsyncIntervalNanos(): Long? = null
+    override fun vsyncIntervalNanos(): Long? {
+        // CoreGraphics rather than NSScreen.maximumFramesPerSecond: the konan AppKit binding does
+        // not carry that property. The main display's mode answers the same question; a 0 rate
+        // (some virtual displays) is an honest null.
+        val mode = platform.CoreGraphics.CGDisplayCopyDisplayMode(platform.CoreGraphics.CGMainDisplayID())
+            ?: return null
+        return try {
+            val rate = platform.CoreGraphics.CGDisplayModeGetRefreshRate(mode)
+            if (rate > 0.0) (1_000_000_000.0 / rate).toLong() else null
+        } finally {
+            platform.CoreGraphics.CGDisplayModeRelease(mode)
+        }
+    }
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 

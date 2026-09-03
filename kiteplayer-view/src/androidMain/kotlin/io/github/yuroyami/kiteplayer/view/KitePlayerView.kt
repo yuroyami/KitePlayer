@@ -206,11 +206,14 @@ public open class KitePlayerView @JvmOverloads constructor(
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
             override fun surfaceCreated(holder: SurfaceHolder) {
                 binding.activeRenderer?.setSurface(holder.surface)
+                feedDisplayRefreshRate()
                 binding.surfaceReady()
             }
 
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
                 binding.activeRenderer?.setSurface(holder.surface)
+                // Re-read on every change: the window may have moved to another display.
+                feedDisplayRefreshRate()
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -219,6 +222,14 @@ public open class KitePlayerView @JvmOverloads constructor(
                 binding.surfaceGone()
             }
         })
+    }
+
+    /**
+     * A Surface does not know its display, so the view, which does, hands the refresh rate to
+     * the renderer. Null display (detached view) feeds 0, which the renderer reads as unknown.
+     */
+    private fun feedDisplayRefreshRate() {
+        binding.activeRenderer?.setDisplayRefreshRate(display?.refreshRate ?: 0f)
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -270,6 +281,12 @@ public open class KitePlayerView @JvmOverloads constructor(
  */
 public interface AndroidPlayerViewRenderer : PlayerViewRenderer {
     public fun setSurface(surface: Surface?)
+
+    /**
+     * The refresh rate of the display this view sits on, fed by the view because a Surface does
+     * not know its display. 0 means unknown. Default: ignored, for renderers that do not pace.
+     */
+    public fun setDisplayRefreshRate(hz: Float) {}
 }
 
 /** Creates the Android renderer adapter used by [KitePlayerView]. */

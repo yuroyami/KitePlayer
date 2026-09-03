@@ -505,7 +505,10 @@ public class UIKitVideoRenderer internal constructor(
         }
     }
 
-    override fun vsyncIntervalNanos(): Long? = null
+    override fun vsyncIntervalNanos(): Long? =
+        // The device's ceiling: 120 on ProMotion phones, 60 elsewhere.
+        platform.UIKit.UIScreen.mainScreen.maximumFramesPerSecond
+            .takeIf { it > 0 }?.let { 1_000_000_000L / it }
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 

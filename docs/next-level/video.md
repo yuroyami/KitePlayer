@@ -73,7 +73,14 @@ the target; the harness test lands on 100_000 and goes red.
 
 ---
 
-### V2 Refresh-rate awareness. Size M, Tier 2
+### V2 Refresh-rate awareness. LANDED 2026-09-03 except the device run
+
+One deviation: macOS answers through CoreGraphics' display mode (the konan AppKit binding has
+no maximumFramesPerSecond), and Android's frame-rate matching measures the cadence from two
+consecutive frame timestamps in the renderer, because a renderer is handed frames and no track
+metadata. The Metal presentAtScheduledTime half stays open below, off by default as written.
+
+### V2, as planned. Size M, Tier 2
 
 **Why.** The SPI says returning null from `vsyncIntervalNanos` "costs smoothness on a high refresh
 display and nothing else" (`spi/VideoRenderer.kt:20`). Every renderer returns null. Phones at

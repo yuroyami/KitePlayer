@@ -259,6 +259,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * drawn: the renderer is closed, or the Surface is gone. The frame is closed either way.
      */
     override suspend fun present(frame: VideoFrame, targetNanos: Long): Boolean {
+        matchFrameRate(frame.pts.micros)
         if (closed.value) {
             frame.close()
             failed.incrementAndGet()
@@ -524,7 +525,49 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         failed.incrementAndGet()
     }
 
-    override fun vsyncIntervalNanos(): Long? = null
+    override fun vsyncIntervalNanos(): Long? = displayVsyncNanos
+
+    /**
+     * The display's interval, fed by whoever owns the Surface: the renderer itself cannot ask,
+     * because a Surface does not know its display. [io.github.yuroyami.kiteplayer.view.KitePlayerView]
+     * calls this from the view's own display and again on every surface change, and a change
+     * while attached is announced as [RendererEvent.VsyncChanged].
+     */
+    @Volatile
+    private var displayVsyncNanos: Long? = null
+
+    /**
+     * The OS's own frame-rate matching (API 30+): the display can switch to the video's cadence.
+     * The rate is measured from the frames themselves, two consecutive timestamps, because the
+     * renderer is handed frames and no track metadata; asked once per surface, cleared with it.
+     * Device proof rides DEVICE-DAY step 20.
+     */
+    @Volatile private var matchedSurface: Surface? = null
+    @Volatile private var matchedFrameRate: Float = 0f
+    @Volatile private var lastFramePtsUs: Long = Long.MIN_VALUE
+
+    private fun matchFrameRate(ptsUs: Long) {
+        if (android.os.Build.VERSION.SDK_INT < 30) return
+        val surface = matchedSurface ?: return
+        if (matchedFrameRate > 0f) return
+        val last = lastFramePtsUs
+        lastFramePtsUs = ptsUs
+        if (last == Long.MIN_VALUE) return
+        val deltaUs = ptsUs - last
+        if (deltaUs !in 4_000..200_000) return
+        val fps = 1_000_000f / deltaUs
+        matchedFrameRate = fps
+        runCatching {
+            surface.setFrameRate(fps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
+        }
+    }
+
+    public fun setDisplayRefreshRate(hz: Float) {
+        val nanos = if (hz > 0f) (1_000_000_000.0 / hz).toLong() else null
+        val changed = nanos != displayVsyncNanos
+        displayVsyncNanos = nanos
+        if (changed && nanos != null) eventFlow.tryEmit(RendererEvent.VsyncChanged(nanos))
+    }
 
     override fun setViewport(width: Int, height: Int, scale: Float): Unit = Unit
 
@@ -584,6 +627,10 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         val directTarget = codecTarget
             ?: throw IllegalStateException("this renderer was built with a test CanvasTarget")
         if (closed.value) return
+        // A new surface has no matched rate yet; the next frames measure it again (API 30+).
+        matchedSurface = surface
+        matchedFrameRate = 0f
+        lastFramePtsUs = Long.MIN_VALUE
         runCatching { directTarget.update(surface) }
             .onFailure { failure ->
                 eventFlow.tryEmit(

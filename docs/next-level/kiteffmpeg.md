@@ -127,7 +127,13 @@ synthesised interlaced stream produces frames. `checkFFmpegRecipes` green. The w
 
 ---
 
-### K5 A public packet write. Size S, Tier 1
+### K5 A public packet write. LANDED 2026-09-04
+
+One correction to the block below: the packet is written as a REFERENCE, because the muxer takes
+ownership of the payload and the rebase rewrites the packet it is handed. Packet.copy already
+existed, so the clone half of the plan was already satisfied under another name.
+
+### K5, as planned. Size S, Tier 1
 
 **Why.** `MediaSink.addCopyStream` returns a `CopyStream` with no public member, and the write is
 `internal` (`MediaSink.jvm.kt:553`, `MediaSink.native.kt:750`). A player that wants to tee its

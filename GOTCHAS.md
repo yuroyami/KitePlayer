@@ -320,6 +320,10 @@ Never move one silently.
   instantly, proving nothing. Wait for a reading that reflects the new position first. This slept
   in `RealMediaSeekTest` until seeks got fast enough to return before the next progress tick.
 
+- A wasmJs compile can fail with `NoSuchElementException: Key ic#NN:kotlin.text/... is missing in
+  the map`. That is a stale incremental-compilation cache, not the change under test. Delete
+  `build/classes/kotlin/wasmJs` and rerun with `--rerun-tasks` before believing it.
+
 ## 5. Kotlin/Wasm and browser traps
 
 - Kotlin/Wasm has NO bulk typed-array bridge: naive per-byte JS crossings run at roughly

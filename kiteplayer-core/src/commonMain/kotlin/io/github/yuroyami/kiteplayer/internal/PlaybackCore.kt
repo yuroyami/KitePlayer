@@ -170,10 +170,23 @@ internal class PlaybackCore(
     private val snapshotState = MutableStateFlow(PlayerSnapshot())
     private val progressState = MutableStateFlow(Progress())
     private val statsState = MutableStateFlow(PlaybackStats())
+
+    /**
+     * The cues showing right now.
+     *
+     * Its own flow rather than a field on the snapshot, because it changes on every cue edge, which
+     * on a dense track is several times a second: putting it in the snapshot would make every
+     * consumer of any other field recompose at that rate.
+     */
+    private val cuesState =
+        MutableStateFlow<List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>>(emptyList())
     private val eventSink = MutableSharedFlow<PlayerEvent>(extraBufferCapacity = 64)
 
     /** The loudest volume this player accepts, from its configuration. See `AudioConfig.volumeCeiling`. */
     val volumeCeiling: Float get() = config.audio.volumeCeiling
+
+    val subtitleCues: StateFlow<List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>>
+        get() = cuesState.asStateFlow()
 
     val snapshots: StateFlow<PlayerSnapshot> get() = snapshotState.asStateFlow()
     val progress: StateFlow<Progress> get() = progressState.asStateFlow()
@@ -2656,6 +2669,10 @@ internal class PlaybackCore(
         }
         session.publishedCueKey = null
         session.publishedCanvas = null
+        // The drawn overlay and the published set are withdrawn together. Leaving the flow holding
+        // the last cues would tell an application that text is on screen after it has been taken
+        // off, which is the same defect the overlay withdrawal itself exists to prevent.
+        cuesState.value = emptyList()
     }
 
     private fun discardSelection(kind: TrackKind, reason: String) {
@@ -3706,6 +3723,9 @@ internal class PlaybackCore(
         if (active != session.publishedCueKey || canvasNow != session.publishedCanvas) {
             session.publishedCueKey = active.toList()
             session.publishedCanvas = canvasNow
+            // Published from the same branch that decides the overlay, so what an application reads
+            // and what the renderer draws can never be two different sets.
+            cuesState.value = active
             publishOverlay(session, active)
         }
 
@@ -4916,6 +4936,9 @@ internal class PlaybackCore(
     private fun detachSession(): OpenSession? {
         val detached = session ?: return null
         session = null
+        // No session, no cues. A stop or a close that left the last line published would have an
+        // application drawing subtitles over nothing.
+        cuesState.value = emptyList()
         retireCounters(detached)
         return detached
     }

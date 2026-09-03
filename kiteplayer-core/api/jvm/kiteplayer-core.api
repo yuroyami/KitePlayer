@@ -329,6 +329,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun getProgress ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getStats ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun getSubtitleCues ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun next (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun openQueue (Ljava/util/List;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;

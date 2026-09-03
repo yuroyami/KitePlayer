@@ -1718,6 +1718,8 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
         final fun <get-state>(): kotlinx.coroutines.flow/StateFlow<io.github.yuroyami.kiteplayer/PlayerSnapshot> // io.github.yuroyami.kiteplayer/KitePlayer.state.<get-state>|<get-state>(){}[0]
     final val stats // io.github.yuroyami.kiteplayer/KitePlayer.stats|{}stats[0]
         final fun <get-stats>(): kotlinx.coroutines.flow/StateFlow<io.github.yuroyami.kiteplayer/PlaybackStats> // io.github.yuroyami.kiteplayer/KitePlayer.stats.<get-stats>|<get-stats>(){}[0]
+    final val subtitleCues // io.github.yuroyami.kiteplayer/KitePlayer.subtitleCues|{}subtitleCues[0]
+        final fun <get-subtitleCues>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>> // io.github.yuroyami.kiteplayer/KitePlayer.subtitleCues.<get-subtitleCues>|<get-subtitleCues>(){}[0]
 
     final fun attachRenderer(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.attachRenderer|attachRenderer(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]
     final fun chapterAt(kotlin.time/Duration): io.github.yuroyami.kiteplayer/Chapter? // io.github.yuroyami.kiteplayer/KitePlayer.chapterAt|chapterAt(kotlin.time.Duration){}[0]

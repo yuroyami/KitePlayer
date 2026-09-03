@@ -65,6 +65,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /** Diagnostics, republished on `PlayerConfig.statsInterval`. */
     public val stats: StateFlow<PlaybackStats> = core.stats
 
+    /**
+     * The subtitle cues showing right now, in draw order. Empty when none are.
+     *
+     * Its own flow rather than a field on [state], because it changes on every cue edge, which on a
+     * dense track is several times a second: a consumer watching the track list or the status would
+     * otherwise be woken at that rate for a value it never reads.
+     *
+     * This is what the renderer is drawing, published from the same decision, so the two cannot
+     * disagree. It is for an application that wants to draw its own subtitles, read them aloud, log
+     * them, or show them somewhere other than over the video.
+     */
+    public val subtitleCues: StateFlow<List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>> =
+        core.subtitleCues
+
     /** Warnings, failures and the occurrences worth naming. Replays nothing to a late collector. */
     public val events: SharedFlow<PlayerEvent> = core.events
 

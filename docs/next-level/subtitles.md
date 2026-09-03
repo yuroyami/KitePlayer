@@ -72,7 +72,16 @@ without the box. Apple golden the same. Android rides DEVICE-DAY step 9f.
 
 ---
 
-### T2 A cue flow for the app. Size S, Tier 1
+### T2 A cue flow for the app. LANDED 2026-09-03
+
+One thing the plan did not say, and it is the part worth keeping: the flow has to be WITHDRAWN
+in the same places the overlay is, not only published where the overlay is. There are two: the
+overlay withdrawal used on a track change, and session teardown. A flow left holding the last cue
+tells an application that text is on screen after it has been taken off, which is the identical
+defect the overlay withdrawal itself exists to prevent. Falsifying the teardown clear is what
+turns the closing case red.
+
+### T2, as planned. Size S, Tier 1
 
 **Why.** An app that wants to draw its own subtitles, log them, or read them to a screen reader
 cannot see them: the active cues go to the renderer and nowhere else.

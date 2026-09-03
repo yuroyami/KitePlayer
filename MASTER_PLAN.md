@@ -1140,7 +1140,13 @@ commit that lands it.
 
 **Subtitles (`subtitles.md`)**
 - [ ] T1 Style override with a background box on all three rasterisers. M
-- [ ] T2 The active cues published to the app. S
+  T2 is DONE (2026-09-03). `KitePlayer.subtitleCues` is a `StateFlow` of the cues showing now, in
+  draw order. Its own flow rather than a snapshot field, because it changes on every cue edge and
+  would otherwise wake every consumer of the track list or the status several times a second.
+  Published from the same branch that decides the overlay, so an application and the renderer can
+  never hold different sets, and withdrawn with it on a track change and on teardown: a flow still
+  holding the last line would say text is on screen after it came off. 4 tests, publish and
+  withdrawal falsified separately. T3's secondary track can now carry both tables through it.
 - [ ] T3 A secondary subtitle track at the top. M
 - [ ] T4 Subtitle sources through the byte doors, refusing typed. S, after the doors expansion
   T5 is DONE (2026-09-03). `CueIndex` answers the same questions `CueSelector` defines, with a

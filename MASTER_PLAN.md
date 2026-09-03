@@ -747,8 +747,6 @@ CI prove the trees this Mac cannot build.
   enforce it, so a pure C or JNI consumer reaches FFmpeg ungated.
 - [ ] An entry-point audit for `requireCompatibleFFmpeg`: 15 call sites, nothing keeps them
   complete.
-- [ ] Fuzz targets for the two public-reachable string parsers without one:
-  `ffkmp_fmt_alloc_output2`'s format and the three raw `*_by_name` lookups.
 - [ ] The opaque-migration prototype: one family early, before more C work depends on the
   assumption.
 

@@ -184,7 +184,7 @@ the no-new-dependency rule is about merging, not about seeing.
 
 ---
 
-### Q8 Release notes from commits, and a changelog. Size S, Tier 1
+### Q8 Release notes from commits, and a changelog. LANDED 2026-09-03
 
 **Why.** Commit messages here are sentences with a prefix; a release is a handful of them
 grouped. Nobody should retype them, and `publish.yml` should refuse a version that has no notes.

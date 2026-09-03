@@ -533,7 +533,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **Q8** Release notes from commits; a changelog that gates the publish. S. `quality.md`
 - [ ] **O2** Decode time and presentation lateness percentiles. S. `observability.md`
 - [ ] **S4** Markers that fire on crossing; next and previous chapter. S. `session.md`
 - [ ] **S5** A memento of where playback was, and restore. M. `session.md`

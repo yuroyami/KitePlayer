@@ -53,6 +53,12 @@ jobs:
             echo "::error::version mismatch: gradle.properties has VERSION=${gradle_version} but the run asked for ${expected}" >&2
             exit 1
           fi
+          # A version with no changelog section has no release notes, and a release with no notes
+          # is a number nobody can read. scripts/release-notes.sh drafts the section from the commits.
+          if ! grep -q "^## \[${expected}\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no '## [${expected}]' section; write the notes before publishing (scripts/release-notes.sh drafts them)" >&2
+            exit 1
+          fi
           echo "Publishing version ${gradle_version}"
 
   publish:

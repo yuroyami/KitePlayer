@@ -11,6 +11,7 @@ import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import kotlin.math.roundToInt
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
@@ -271,10 +272,16 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                 failFrame("a MediaCodec frame belongs to a different Surface target")
                 return false
             }
+            val framePtsUs = frame.pts.micros
             val accepted = frame.renderAt(targetNanos) { rendered ->
                 if (rendered) {
                     presented.incrementAndGet()
                     noteSurfaceAvailable()
+                    // Best effort: the codec released the buffer toward the surface. The EXACT
+                    // report is MediaCodec's own rendered listener, still owed (V3 remainder).
+                    eventFlow.tryEmit(
+                        RendererEvent.FramePresented(Pts(framePtsUs), atNanos = System.nanoTime(), exact = false),
+                    )
                 } else if (!closed.value) {
                     failed.incrementAndGet()
                 }
@@ -310,6 +317,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /** Draws whatever is waiting, if anything. Worker thread only. */
     private fun drawPending() {
         val frame = pending.getAndSet(null) ?: return
+        val framePts = frame.pts
         val size = frame.size
         val rotation = quarterTurn(frame.rotationDegrees)
         geometryConsumer?.invoke(size, rotation)
@@ -323,7 +331,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             frame.close()
         }
         val picture = converted?.let { swizzle(it, size) } ?: return
-        draw(picture, size, rotation)
+        draw(picture, size, rotation, framePts)
     }
 
     /**
@@ -399,7 +407,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * once as a transition, and then the worker carries on: the next lock that succeeds says so and
      * drawing resumes. Nothing here calls the player.
      */
-    private fun draw(picture: IntArray, size: VideoSize, rotationDegrees: Int) {
+    private fun draw(picture: IntArray, size: VideoSize, rotationDegrees: Int, framePts: Pts) {
         if (!targetIsValid()) {
             failWithLostSurface("the Surface went away before a canvas could be locked")
             return
@@ -459,6 +467,10 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         }
         presented.incrementAndGet()
         noteSurfaceAvailable()
+        // Best effort by design: the canvas was posted, the closest this CPU path can observe.
+        eventFlow.tryEmit(
+            RendererEvent.FramePresented(framePts, atNanos = System.nanoTime(), exact = false),
+        )
     }
 
     /**

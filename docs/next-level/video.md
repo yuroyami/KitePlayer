@@ -129,7 +129,12 @@ repeated frames from KiteStats for each."
 
 ---
 
-### V3 A real frame-presented signal. Size M, Tier 2
+### V3 A real frame-presented signal. LANDED 2026-09-03 except the two exact halves
+
+The best-effort halves and the whole engine path are in; Metal's presented handler and
+MediaCodec's rendered listener remain, filed in the plan.
+
+### V3, as planned. Size M, Tier 2
 
 **Why.** `PlayerEvent.FirstFrameRendered` says in its own KDoc that it "is not a report that a
 pixel reached a display" (`PlayerEvent.kt:44-48`). Metal's `addPresentedHandler` and MediaCodec's

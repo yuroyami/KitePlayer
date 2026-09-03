@@ -200,7 +200,14 @@ public class AwtCanvasVideoRenderer(
         }
         val size = frame.size
         val rotation = frame.rotationDegrees
-        if (painted) announceToneMap(frame)
+        if (painted) {
+            announceToneMap(frame)
+            // Best effort by design: the AWT blit returned, which is the closest this path can
+            // observe to pixels on glass.
+            eventFlow.tryEmit(
+                RendererEvent.FramePresented(frame.pts, atNanos = System.nanoTime(), exact = false),
+            )
+        }
         frame.close()
         if (!painted) {
             failed.incrementAndGet()

@@ -839,12 +839,16 @@ class AppKitVideoRendererTest {
                 assertNotNull(announced, "the first event must be the tone map, was $first")
                 assertEquals("Pq", announced.transfer, "the SOURCE transfer travels with the event")
                 assertEquals(-1, announced.streamIndex, "a renderer is handed frames, not streams")
-                // Two more frames were presented and neither may speak. The engine latches too,
-                // but a renderer shouting per frame makes its own logs unreadable.
-                assertNull(
-                    withTimeoutOrNull(500) { events.receive() },
-                    "once per renderer, not once per frame",
-                )
+                // Two more frames were presented and neither may announce the tone map AGAIN.
+                // The stream legitimately carries FramePresented reports per frame now, so the
+                // assertion filters to its own subject rather than demanding total silence.
+                while (true) {
+                    val next = withTimeoutOrNull(500) { events.receive() } ?: break
+                    assertTrue(
+                        next !is RendererEvent.ToneMapEngaged,
+                        "once per renderer, not once per frame; saw $next again",
+                    )
+                }
             } finally {
                 collector.cancel()
                 renderer.close()
@@ -865,11 +869,13 @@ class AppKitVideoRendererTest {
             try {
                 val hdr = ColorSpaceInfo(transfer = ColorTransfer.Pq, primaries = ColorPrimaries.Bt2020)
                 renderer.present(FakeVideoFrame(Pts(0), colorSpace = hdr, ledger = ledger), 0L)
-                assertNull(
-                    withTimeoutOrNull(500) { events.receive() },
-                    "HDR metadata is not the trigger; only a renderer that ROLLED IT OFF may speak",
-                )
-            } finally {
+                while (true) {
+                    val next = withTimeoutOrNull(500) { events.receive() } ?: break
+                    assertTrue(
+                        next !is RendererEvent.ToneMapEngaged,
+                        "HDR metadata is not the trigger; only a renderer that ROLLED IT OFF may speak, saw $next",
+                    )
+                }            } finally {
                 collector.cancel()
                 renderer.close()
             }

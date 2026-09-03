@@ -554,7 +554,11 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **V3** A real frame-presented event, exact on Metal and MediaCodec. M. `video.md`
+- [ ] **V3 remainder: the EXACT halves.** The event exists end to end (SPI, engine gate,
+  latency against the schedule's remembered target, best-effort emits after the AWT, AppKit and
+  Android surface blits, `exact = false`). What is left is the platform's own word: Metal's
+  addPresentedHandler on the drawable with the host-time conversion, and MediaCodec's
+  setOnFrameRenderedListener mapped back to the frame's pts. S each. `video.md`
 - [ ] **V5** Gamma, on Metal and GL together. M. `video.md`
 - [ ] **S6** Interruptions, audio focus and noisy routes under one policy. M, device proof (step
   24). `session.md`

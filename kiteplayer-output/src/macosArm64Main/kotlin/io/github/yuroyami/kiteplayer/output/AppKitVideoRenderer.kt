@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
+import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.spi.RendererEvent
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
@@ -147,7 +148,9 @@ public class AppKitVideoRenderer internal constructor(
     private val pending = atomic<VideoFrame?>(null)
 
     /** The single finished image waiting for the main thread. Newest wins. */
-    private val pendingImage = atomic<NSImage?>(null)
+    private class PendingDelivery(val image: NSImage, val ptsUs: Long)
+
+    private val pendingImage = atomic<PendingDelivery?>(null)
 
     /** True from the moment a delivery block is queued until that block starts running. */
     private val deliveryQueued = atomic(false)
@@ -268,6 +271,7 @@ public class AppKitVideoRenderer internal constructor(
         // conversion this worker had not started yet; close() drains the slot after the join.
         if (closed.value) return
         val frame = pending.getAndSet(null) ?: return
+        val ptsUs = frame.pts.micros
         val width = frame.size.width
         val height = frame.size.height
         val displayWidth = frame.size.displayWidth
@@ -286,6 +290,7 @@ public class AppKitVideoRenderer internal constructor(
                 retainedHeight = height
                 retainedDisplayWidth = displayWidth
                 retainedRotation = rotation
+        retainedPtsUs = ptsUs
                 makeImage(rgba, width, height, displayWidth, rotation)
             }
         } catch (failure: Throwable) {
@@ -300,7 +305,7 @@ public class AppKitVideoRenderer internal constructor(
             failed.incrementAndGet()
             return
         }
-        deliver(image)
+        deliver(image, ptsUs)
     }
 
     /**
@@ -309,8 +314,8 @@ public class AppKitVideoRenderer internal constructor(
      * The flag is what bounds the work: it is set when a block is queued and cleared when that block
      * starts, so while one is waiting every further image just replaces the one in the slot.
      */
-    private fun deliver(image: NSImage) {
-        if (pendingImage.getAndSet(image) != null) superseded.incrementAndGet()
+    private fun deliver(image: NSImage, ptsUs: Long) {
+        if (pendingImage.getAndSet(PendingDelivery(image, ptsUs)) != null) superseded.incrementAndGet()
         if (deliveryQueued.compareAndSet(expect = false, update = true)) {
             enqueueOnMain { drawPendingImage() }
         }
@@ -321,14 +326,23 @@ public class AppKitVideoRenderer internal constructor(
         // Cleared first. An image stored while this block runs must be able to queue a block of its own,
         // or it would sit in the slot waiting for a delivery that has already happened.
         deliveryQueued.value = false
-        val image = pendingImage.getAndSet(null) ?: return
+        val delivery = pendingImage.getAndSet(null) ?: return
         if (closed.value) {
             // The renderer is closed, so the window is no longer this renderer's to draw into.
             failed.incrementAndGet()
             return
         }
-        showImage(image)
+        showImage(delivery.image)
         presented.incrementAndGet()
+        // Best effort by design: the image reached the view on the main thread, which is the
+        // closest this CPU path can observe to pixels on glass.
+        eventFlow.tryEmit(
+            RendererEvent.FramePresented(
+                Pts(delivery.ptsUs),
+                atNanos = AppleHostClock.nanos(),
+                exact = false,
+            ),
+        )
     }
 
     /** Closes and counts a frame nobody will draw. */
@@ -588,6 +602,7 @@ public class AppKitVideoRenderer internal constructor(
      */
     /* Worker-thread confined. */
     private var retainedRgba: ByteArray? = null
+    private var retainedPtsUs: Long = 0L
     private var retainedWidth: Int = 0
     private var retainedHeight: Int = 0
     private var retainedDisplayWidth: Int = 0
@@ -604,7 +619,7 @@ public class AppKitVideoRenderer internal constructor(
         } catch (_: Throwable) {
             null
         } ?: return
-        deliver(image)
+        deliver(image, retainedPtsUs)
     }
 
     override suspend fun setOverlay(overlay: SubtitleOverlay?) {

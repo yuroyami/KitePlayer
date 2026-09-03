@@ -49,6 +49,8 @@ public data class PlayerConfig(
     val progressInterval: Duration = 200.milliseconds,
     /** How often [KitePlayer.stats] is sampled. */
     val statsInterval: Duration = 1.seconds,
+    /** Emit [PlayerEvent.FramePresented] per frame. Off by default: sixty events a second is a cost nobody should pay unasked. */
+    val frameEvents: Boolean = false,
     /** The backends to build the pipeline from. Replace them for a test or a new platform. */
     val backends: Backends = Backends(),
     /**

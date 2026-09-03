@@ -1799,6 +1799,17 @@ internal class PlaybackCore(
                                 )
                             }
                         }
+                        is RendererEvent.FramePresented -> if (config.frameEvents) {
+                            val target = session?.video?.targetFor(event.pts.micros)
+                            emitEvent(
+                                PlayerEvent.FramePresented(
+                                    pts = event.pts,
+                                    atNanos = event.atNanos,
+                                    latency = target?.let { (event.atNanos - it).nanoseconds } ?: Duration.ZERO,
+                                    exact = event.exact,
+                                ),
+                            )
+                        }
                         is RendererEvent.SurfaceAvailable -> Unit
                         is RendererEvent.VsyncChanged ->
                             // A display change reaches the running schedule without a reopen: a

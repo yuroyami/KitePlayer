@@ -114,6 +114,29 @@ public class VideoPlayback(
      */
     internal var vsyncIntervalNanos: Long? = null
 
+    /**
+     * The last few (pts, target) pairs handed to the renderer, so a presented report arriving
+     * later can be dated against the schedule's own intent. Eight pairs is more in-flight frames
+     * than any renderer here holds.
+     */
+    private val recentTargets = LongArray(16) { Long.MIN_VALUE }
+    private var recentTargetsAt = 0
+
+    internal fun rememberTarget(ptsUs: Long, targetNanos: Long) {
+        recentTargets[recentTargetsAt] = ptsUs
+        recentTargets[recentTargetsAt + 1] = targetNanos
+        recentTargetsAt = (recentTargetsAt + 2) % recentTargets.size
+    }
+
+    internal fun targetFor(ptsUs: Long): Long? {
+        var index = 0
+        while (index < recentTargets.size) {
+            if (recentTargets[index] == ptsUs) return recentTargets[index + 1]
+            index += 2
+        }
+        return null
+    }
+
     private var frameTimerNanos: Long = 0
     private var started = false
 
@@ -349,6 +372,7 @@ public class VideoPlayback(
         }
         // The renderer owns the frame from here, including on failure, so it must not be touched
         // afterwards.
+        rememberTarget(frame.pts.micros, targetNanos)
         if (renderer.present(frame, targetNanos)) {
             submitted++
             // Read after present returns: a renderer that blocks while it draws is late by that much.

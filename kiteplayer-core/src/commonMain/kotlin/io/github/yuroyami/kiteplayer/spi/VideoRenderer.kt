@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.spi
 
+import io.github.yuroyami.kiteplayer.Pts
+
 import io.github.yuroyami.kiteplayer.subtitle.RgbaBitmap
 import kotlinx.coroutines.flow.Flow
 
@@ -128,6 +130,13 @@ public sealed interface RendererEvent {
 
     /** The display's refresh interval changed, for example the window moved to another monitor. */
     public data class VsyncChanged(val intervalNanos: Long) : RendererEvent
+
+    /**
+     * A frame reached the display, or the closest thing this renderer can observe; [exact] says
+     * which. Exact comes from the platform's own report (Metal's presented handler, MediaCodec's
+     * rendered listener); best effort is the renderer's clock right after its blit.
+     */
+    public data class FramePresented(val pts: Pts, val atNanos: Long, val exact: Boolean) : RendererEvent
 
     /**
      * This renderer rolled HDR off to standard dynamic range to show it.

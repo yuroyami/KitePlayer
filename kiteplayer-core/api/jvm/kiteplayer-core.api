@@ -2347,6 +2347,13 @@ public final class io/github/yuroyami/kiteplayer/subtitle/CueAlignment : java/la
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/subtitle/CueAlignment;
 }
 
+public final class io/github/yuroyami/kiteplayer/subtitle/CueIndex {
+	public fun <init> ()V
+	public final fun activeAt (J)Ljava/util/List;
+	public final fun nextChangeAfter (J)Ljava/lang/Long;
+	public final fun syncTo (Ljava/util/List;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/subtitle/CueLayout {
 	public fun <init> ()V
 	public fun <init> (Lio/github/yuroyami/kiteplayer/subtitle/CueAlignment;FFFLjava/lang/Float;Ljava/lang/Float;Ljava/lang/Integer;Lio/github/yuroyami/kiteplayer/subtitle/CueWrap;Lio/github/yuroyami/kiteplayer/subtitle/CueStacking;JJ)V

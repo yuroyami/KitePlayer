@@ -3692,7 +3692,11 @@ internal class PlaybackCore(
     /** The timing half of handleSubtitles, shared by container and external cue tables (S4.e). */
     private suspend fun timeAndPublishCues(session: OpenSession) {
         val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
-        val active = CueSelector.activeAt(session.subtitleCues, positionUs)
+        // The index is a derived cache over the very same list; it extends on an append and
+        // rebuilds after a prune, a merge or a clear. Syncing here rather than at every mutation
+        // site keeps the cue table's own code unchanged and costs one size compare per pass.
+        session.cueIndex.syncTo(session.subtitleCues)
+        val active = session.cueIndex.activeAt(positionUs)
         // The cues themselves are the identity, not their timestamps: two different texts or
         // styles over the same interval are different overlays, and a (start, end) key republished
         // nothing for them. Structural equality on the data classes is exact.
@@ -3706,7 +3710,7 @@ internal class PlaybackCore(
         }
 
         // Sleep exactly to the next cue edge instead of polling for it.
-        CueSelector.nextChangeAfter(session.subtitleCues, positionUs)?.let { nextUs ->
+        session.cueIndex.nextChangeAfter(positionUs)?.let { nextUs ->
             val untilNext = (nextUs - positionUs).microseconds
             if (untilNext > Duration.ZERO) wakeIn(minOf(untilNext, WORKER_POLL))
         }
@@ -6326,6 +6330,10 @@ internal class PlaybackCore(
                 .toMutableMap()
 
         /** The cue store currently timed by the selector; external tracks use a detached table. */
+        /** The lookup cache over [subtitleCues]. Derived, so nothing has to keep it in step by hand. */
+        val cueIndex: io.github.yuroyami.kiteplayer.subtitle.CueIndex =
+            io.github.yuroyami.kiteplayer.subtitle.CueIndex()
+
         var subtitleCues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> =
             subtitleStream?.let { subtitleCueCaches.getValue(it.index) } ?: mutableListOf()
 

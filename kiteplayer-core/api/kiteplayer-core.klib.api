@@ -1345,6 +1345,14 @@ final class io.github.yuroyami.kiteplayer.subtitle/BitmapRegion { // io.github.y
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/BitmapRegion.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.subtitle/CueIndex { // io.github.yuroyami.kiteplayer.subtitle/CueIndex|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.subtitle/CueIndex.<init>|<init>(){}[0]
+
+    final fun activeAt(kotlin/Long): kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue> // io.github.yuroyami.kiteplayer.subtitle/CueIndex.activeAt|activeAt(kotlin.Long){}[0]
+    final fun nextChangeAfter(kotlin/Long): kotlin/Long? // io.github.yuroyami.kiteplayer.subtitle/CueIndex.nextChangeAfter|nextChangeAfter(kotlin.Long){}[0]
+    final fun syncTo(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>) // io.github.yuroyami.kiteplayer.subtitle/CueIndex.syncTo|syncTo(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.subtitle/CueLayout { // io.github.yuroyami.kiteplayer.subtitle/CueLayout|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer.subtitle/CueAlignment = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin/Float? = ..., kotlin/Float? = ..., kotlin/Int? = ..., io.github.yuroyami.kiteplayer.subtitle/CueWrap = ..., io.github.yuroyami.kiteplayer.subtitle/CueStacking = ..., kotlin/Long = ..., kotlin/Long = ...) // io.github.yuroyami.kiteplayer.subtitle/CueLayout.<init>|<init>(io.github.yuroyami.kiteplayer.subtitle.CueAlignment;kotlin.Float;kotlin.Float;kotlin.Float;kotlin.Float?;kotlin.Float?;kotlin.Int?;io.github.yuroyami.kiteplayer.subtitle.CueWrap;io.github.yuroyami.kiteplayer.subtitle.CueStacking;kotlin.Long;kotlin.Long){}[0]
 

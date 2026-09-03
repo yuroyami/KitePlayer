@@ -1143,7 +1143,14 @@ commit that lands it.
 - [ ] T2 The active cues published to the app. S
 - [ ] T3 A secondary subtitle track at the top. M
 - [ ] T4 Subtitle sources through the byte doors, refusing typed. S, after the doors expansion
-- [ ] T5 The cue selector binary searches. S
+  T5 is DONE (2026-09-03). `CueIndex` answers the same questions `CueSelector` defines, with a
+  binary search for the last cue that could have started and a backward walk that terminates on a
+  prefix of maximum end times. Near the end of a seventy-thousand-cue ASS track the old rule
+  visited every cue on every timing edge; this visits a handful. `CueSelector` is untouched and
+  stays pure, which is what lets it be the oracle: 7,200 randomised lookups over overlapping,
+  duplicate-start, zero-length and lecture-length cues compare the two. The index is a cache the
+  session owns, extended on an append and rebuilt after a prune, a merge or a clear. 10 tests, the
+  prefix maxima and the append guard falsified separately.
 - [ ] T6 One overlay geometry law on every renderer. M, Android proof on device
 
 **Observability (`observability.md`)**

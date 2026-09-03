@@ -164,7 +164,26 @@ missing local file warns `SubtitleSourceUnreadable` naming the uri, not `TrackDe
 
 ---
 
-### T5 A faster cue selector. Size S, Tier 1
+### T5 A faster cue selector. LANDED 2026-09-03
+
+Three departures from the plan, each forced by the tree:
+
+- **`CueSelector` was not modified.** Its KDoc says purity is the whole design and that nothing
+  there remembers anything, and a cache inside it would have made that false. The index is a
+  separate class the session owns, which also leaves the pure version available as the ORACLE the
+  property test compares against. Changing the thing under test into the thing that tests it would
+  have left nothing to check the shortcut against.
+- **The cue table is not replaced wholesale.** The plan assumed it was. It grows by appending
+  decoded batches, is rebuilt as a merge when a decoder emits out of order, is pruned from the
+  front as playback moves on, and is cleared on a track change. So the index syncs rather than
+  being constructed: it extends on a pure append and rebuilds otherwise.
+- **Size alone cannot detect a merge.** A merge can leave the list longer while moving what sits at
+  earlier positions, which looks exactly like an append. The index checks the identity of the last
+  cue it built from. The first version of the test suite could not catch this, because its only
+  non-append case was a prune, which shrinks and therefore rebuilds anyway; a merge case was added
+  and removing the guard now turns it red.
+
+### T5, as planned. Size S, Tier 1
 
 **Why.** `CueSelector.activeAt` walks every cue from index 0 on every tick and so does
 `nextChangeAfter` (`CueSelector.kt:18-40`). The dense ASS files the device sessions use carry

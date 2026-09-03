@@ -532,7 +532,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **Q6** The subtitle parsers survive two thousand mutations of every fixture. S. `quality.md`
 - [ ] **Q3** The API reference on GitHub Pages. S; the owner enables Pages at the end. `quality.md`
 - [ ] **Q8** Release notes from commits; a changelog that gates the publish. S. `quality.md`
 - [ ] **O2** Decode time and presentation lateness percentiles. S. `observability.md`

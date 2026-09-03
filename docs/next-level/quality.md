@@ -137,7 +137,13 @@ constants in the test with the measured number beside each in a comment.
 
 ---
 
-### Q6 Subtitle parser fuzzing. Size S, Tier 1
+### Q6 Subtitle parser fuzzing. LANDED 2026-09-03
+
+Nothing was found: five harnesses, 2,000 mutations per seed over every fixture, all green on the
+first run. Falsified by breaking SubRip's timing line and ASS's start/end order on purpose; the
+harness caught both and the other three stayed green.
+
+### Q6, as planned. Size S, Tier 1
 
 **Why.** Three parsers, 29 tests, all on well-formed input. Subtitle files from the internet are
 not well formed.

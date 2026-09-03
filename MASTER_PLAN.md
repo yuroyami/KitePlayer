@@ -1070,7 +1070,13 @@ commit that lands it.
   both public members: that is the cost of applying it on the way in, and the right trade for a
   setting nobody sweeps. 6 tests, the application falsified. With it the facade's list of absent
   features loses its last stale entry.
-- [ ] A5 Audio-only playback with video parked in place, no reopen. M
+  A5 is DONE (2026-09-03). `setVideoEnabled(false)` discards video packets before the decoder and
+  freezes the picture; audio and subtitles carry on because the container is still being read, and
+  nothing is reopened. Resuming waits for a keyframe, and on a seekable source seeks precisely to
+  where playback already is so the picture returns at the right frame. `PlayerConfig.videoEnabled`
+  opens parked for an audio-only application. Parked packets are counted as nothing: a drop counter
+  means the engine could not keep up, and this is a decision. 5 tests, the park falsified.
+  S8's background policy is the consumer this was built for.
 - [ ] A6 A speed change that fades through its flush. S
 - [ ] A7 Sleep timer with a fade. S
 - [ ] A8 EBU R128 loudness meter in Kotlin, and a call that measures a file. M

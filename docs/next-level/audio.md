@@ -341,7 +341,18 @@ commit fixes the balance word only).
 
 ---
 
-### A5 Audio-only playback, without reopening the container. Size M, Tier 1
+### A5 Audio-only playback, without reopening the container. LANDED 2026-09-03
+
+Shipped as planned. Two notes:
+
+- **A rebuild must not silently un-park.** A track switch or a decoder recovery builds a fresh
+  session whose flags start at their defaults, so the park is reasserted at all three sites where
+  a session is assigned. Missing one would un-park video the moment a user changed audio track.
+- **`PlayerConfig.videoEnabled` went last in the parameter list.** Third data class in this
+  program to need that, after A1's `volumeCeiling` and A2's `audioSessionId`. It is worth
+  treating as the rule rather than the exception: append to a data class, never insert.
+
+### A5, as planned. Size M, Tier 1
 
 **Why.** The only way to stop video work is `selectTrack(TrackKind.Video, null)`, which reopens the
 container and seeks back (`KitePlayer.kt:507`, sample `Main.kt:269-274`). An app going to the

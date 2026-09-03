@@ -443,6 +443,7 @@ internal class PlaybackCore(
     private var volume: Float = 1.0f
     private var muted: Boolean = false
     private var balance: Float = 0f
+    private var videoEnabled: Boolean = config.videoEnabled
     private var videoScale: VideoScale = VideoScale.Fit
     private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
     private var renderQuality: io.github.yuroyami.kiteplayer.RenderQuality = config.renderQuality
@@ -1366,6 +1367,26 @@ internal class PlaybackCore(
                 session?.audio?.balance = command.value
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetVideoEnabled -> {
+                val changed = videoEnabled != command.value
+                videoEnabled = command.value
+                session?.videoParked?.value = !command.value
+                /* Coming back, the decoder needs a keyframe: it has been fed nothing for a while
+                 * and the next packet is mid group-of-pictures. A seekable source gets a precise
+                 * seek to where playback already is, which flushes the lane and lands on a
+                 * keyframe, so the picture returns at the right frame rather than at the next one
+                 * the container happens to key. An unseekable source waits for that keyframe. */
+                if (changed && command.value) {
+                    session?.videoWaitingForKeyframe?.value = true
+                    if (session?.source?.seekable == true && status.isActive) {
+                        queueSeek(
+                            SeekRequest(SeekTarget.Absolute(currentPosition()), SeekMode.Precise),
+                            CompletableDeferred(),
+                        )
+                    }
+                }
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetMuted -> {
                 muted = command.value
                 session?.audio?.muted = command.value
@@ -1714,6 +1735,9 @@ internal class PlaybackCore(
             val subtitleChoice = if (immediateExternal != null) StreamChoice.None else StreamChoice.Auto
             var built = buildSession(command.media, StreamChoice.Auto, StreamChoice.Auto, subtitleChoice)
             session = built
+            // Parked from the first packet when the player was configured that way, so an
+            // audio-only application never decodes a frame it is going to throw away.
+            built.videoParked.value = !videoEnabled
             // The item's start position, first half: the SOURCE is moved before the
             // workers start, while nothing reads it, so the initial fill decodes from the
             // keyframe at or before the target and nothing from the beginning of the media is
@@ -2962,6 +2986,8 @@ internal class PlaybackCore(
             requestedEpoch = requestedEpoch.next()
             var rebuilt = buildSession(item, video, audio, subtitle)
             session = rebuilt
+        rebuilt.videoParked.value = !videoEnabled
+            rebuilt.videoParked.value = !videoEnabled
             startWorkers(rebuilt)
             var recoveredAndPositioned = false
             when (awaitInitialFill(rebuilt)) {
@@ -5025,6 +5051,7 @@ internal class PlaybackCore(
              * teardown projection above leaves it at its null default for the same reason. */
             audioSessionId = session?.audio?.platformSessionId,
             balance = balance,
+            videoEnabled = videoEnabled,
             /* Reported as APPLIED, in dB, so a gain the peak clamp reduced shows the reduced
              * figure. Null when nothing is applied at all, which a plain 1.0 could not say: a file
              * measured as needing no change publishes 0 dB, not nothing. */
@@ -5656,6 +5683,23 @@ internal class PlaybackCore(
                 withTimeoutOrNull(WORKER_POLL) { queue.awaitData() }
                 continue
             }
+            if (session.videoParked.value) {
+                // Discarded before the decoder, and counted as nothing: this is a decision, not a
+                // shortfall. The container keeps being read, so audio and subtitles are untouched
+                // and nothing has to be reopened when the lane comes back.
+                packet.close()
+                continue
+            }
+            if (session.videoWaitingForKeyframe.value) {
+                // Just un-parked. The decoder has been starved and the next packet is mid
+                // group-of-pictures, which decodes to nothing usable; wait for a frame it can
+                // start from.
+                if (!packet.isKeyframe) {
+                    packet.close()
+                    continue
+                }
+                session.videoWaitingForKeyframe.value = false
+            }
             if (skipToKeyframe(session, packet, skippingToKeyframe)) {
                 skippingToKeyframe = true
                 session.droppedVideoBeforeDecode.incrementAndGet()
@@ -6146,6 +6190,16 @@ internal class PlaybackCore(
         val lastVideoPtsUs = atomic(NO_POSITION)
         val driftUs = atomic(0L)
         val discardBeforeUs = atomic(Long.MIN_VALUE)
+        /**
+         * True while the video lane is parked: packets are discarded before the decoder.
+         *
+         * Not a drop. The drop counters mean the engine could not keep up, and reporting a
+         * deliberate park through them would turn every backgrounded application into a
+         * performance bug report.
+         */
+        val videoParked = atomic(false)
+        /** Set when the lane un-parks: packets are discarded until a keyframe the decoder can start from. */
+        val videoWaitingForKeyframe = atomic(false)
         /** Audio-only precise boundary for a lane swap; video remains on the current epoch. */
         val audioSwitchDiscardBeforeUs = atomic(Long.MIN_VALUE)
         val schedulerMode = atomic(SCHEDULER_IDLE)
@@ -6626,6 +6680,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetSpeed(val value: Double, val reply: CompletableDeferred<Unit>) : CoreCommand("setSpeed", reply)
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
     class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply)
+    class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
     class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply)
     class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)

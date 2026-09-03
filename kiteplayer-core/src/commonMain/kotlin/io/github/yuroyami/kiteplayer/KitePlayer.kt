@@ -247,6 +247,26 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetBalance(value, CompletableDeferred()))
     }
 
+    /**
+     * Parks or resumes video decoding in place, without reopening anything.
+     *
+     * Parked, video packets are discarded before the decoder and the picture freezes on the last
+     * frame; audio keeps playing and subtitles keep timing, because the container is still being
+     * read. This is what an application going to the background wants: the alternative,
+     * deselecting the video track, reopens the container and seeks back, which on a network source
+     * is a fresh request nobody asked for.
+     *
+     * Resumed, decoding restarts at a keyframe. On a seekable source the engine seeks precisely to
+     * where playback already is, so the picture returns at the right frame rather than at whatever
+     * the container keys next; an unseekable source waits for that next keyframe.
+     *
+     * Parked frames are not counted as drops. A drop means the engine could not keep up, and this
+     * is a decision.
+     */
+    public fun setVideoEnabled(enabled: Boolean) {
+        core.post(CoreCommand.SetVideoEnabled(enabled, CompletableDeferred()))
+    }
+
     /** Silences the sound without losing the [setVolume] setting. Ramped the same way. */
     public fun setMuted(value: Boolean) {
         core.post(CoreCommand.SetMuted(value, CompletableDeferred()))

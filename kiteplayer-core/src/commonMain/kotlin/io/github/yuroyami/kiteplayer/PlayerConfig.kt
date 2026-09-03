@@ -57,6 +57,14 @@ public data class PlayerConfig(
      * [MediaIo]-fed open with a forward window and a RAM seek-back window.
      */
     val network: NetworkConfig = NetworkConfig(),
+    /**
+     * False opens media with video decoding parked: audio plays, no video frame is decoded.
+     *
+     * For an application that knows from the start it is only playing sound. Change it while
+     * playing with [KitePlayer.setVideoEnabled], which parks and resumes in place without
+     * reopening anything.
+     */
+    val videoEnabled: Boolean = true,
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive

@@ -317,6 +317,12 @@ internal class FaultPlan(
     var videoDecodeSendDelay: Duration = Duration.ZERO
 
     /**
+     * How long every video `receive` that yields a frame takes: the decode itself, since a real
+     * decoder does its work on the receive side. Zero is the instant decoder.
+     */
+    var videoDecodeReceiveDelay: Duration = Duration.ZERO
+
+    /**
      * Receive throws after this many delivered frames, but only while the decoder reports a
      * hardware status: the shape of a hardware session dying mid-play (VideoToolbox invalidated by
      * backgrounding, a MediaCodec error). The software decoder a recovery builds stays healthy.
@@ -951,7 +957,10 @@ internal class ScriptedVideoDecoder(
         }
         val frame = pending.removeFirstOrNull()
         if (frame == null && ending) drained = true
-        if (frame != null) delivered++
+        if (frame != null) {
+            delivered++
+            if (faults.videoDecodeReceiveDelay > Duration.ZERO) delay(faults.videoDecodeReceiveDelay)
+        }
         return frame
     }
 

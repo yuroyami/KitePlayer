@@ -279,13 +279,6 @@ public data class PlaybackStats(
     val audioLatencyQuality: LatencyQuality = LatencyQuality.Unreliable,
     val hardwareDecode: HwdecStatus = HwdecStatus.Software,
     /**
-     * The container's overall bitrate.
-     *
-     * Always null. A source reports a bitrate per stream and none reports one for the container,
-     * because no backend binds an entry point for it; adding one is C surface across every target
-     * and is grouped with the others waiting on that.
-     */
-    /**
      * Bytes pulled from the media source since this player opened.
      *
      * Counts what came over the wire: a seek served from the engine's byte cache adds nothing, and
@@ -296,7 +289,33 @@ public data class PlaybackStats(
     val ioBytesTotal: Long = 0,
     /** Bytes pulled over the last stats interval, per second. Same caveat as [ioBytesTotal]. */
     val ioBytesPerSecond: Long = 0,
-        val containerBitrate: Long? = null,
+    /**
+     * Wall time one decoded video frame took, median over the last 240 frames.
+     *
+     * Measured around the decoder's receive call on the video worker, which is where a decoder does
+     * its work. Zero until two frames have been decoded, and zero for the whole session under a
+     * decoder that does its work on the send side instead.
+     */
+    val decodeTimeP50: Duration = ZERO,
+    /** Wall time one decoded video frame took, 95th percentile over the last 240 frames. */
+    val decodeTimeP95: Duration = ZERO,
+    /**
+     * How late frames reached the renderer against the schedule's own target, 95th percentile over
+     * the last 240 accepted frames. Negative is early.
+     *
+     * Read just after the renderer's present returns, so a renderer that blocks while it draws
+     * reports its draw time here. Frames the renderer refused and frames presented with no
+     * renderer attached are not counted: nothing was shown.
+     */
+    val presentLatenessP95: Duration = ZERO,
+    /**
+     * The container's overall bitrate.
+     *
+     * Always null. A source reports a bitrate per stream and none reports one for the container,
+     * because no backend binds an entry point for it; adding one is C surface across every target
+     * and is grouped with the others waiting on that.
+     */
+    val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,
     val masterClock: MasterClock = MasterClock.None,
 )

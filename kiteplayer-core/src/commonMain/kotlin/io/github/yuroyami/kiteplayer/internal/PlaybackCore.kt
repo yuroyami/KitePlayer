@@ -5518,6 +5518,9 @@ internal class PlaybackCore(
                 audioLatency = (session?.audio?.latencyNanos ?: 0L).nanoseconds,
                 audioLatencyQuality = session?.audio?.latencyQuality ?: LatencyQuality.Unreliable,
                 hardwareDecode = session?.videoDecoder?.hardware ?: HwdecStatus.Software,
+                decodeTimeP50 = (session?.decodeTimes?.p(0.5) ?: 0L).nanoseconds,
+                decodeTimeP95 = (session?.decodeTimes?.p(0.95) ?: 0L).nanoseconds,
+                presentLatenessP95 = (session?.video?.presentLatenessP95Nanos() ?: 0L).nanoseconds,
                 syncMode = config.syncMode,
                 masterClock = masterClockKind(session),
             )
@@ -6084,7 +6087,7 @@ internal class PlaybackCore(
                     // has output immediately, but Android's asynchronous internals can transiently
                     // expose neither an input slot nor an output frame. Retry in bounded steps so
                     // that ordinary readiness is not fatal and a seek can still park this worker.
-                    val frame = videoDecoderReceive(decoder)
+                    val frame = timedVideoReceive(session, decoder)
                     if (frame != null) {
                         session.decodedVideoFrames.incrementAndGet()
                         session.videoInFlight.incrementAndGet()
@@ -6123,7 +6126,7 @@ internal class PlaybackCore(
         video: VideoPlayback,
         epoch: Generation,
     ): Boolean {
-        val frame = videoDecoderReceive(decoder) ?: return false
+        val frame = timedVideoReceive(session, decoder) ?: return false
         session.decodedVideoFrames.incrementAndGet()
         session.videoInFlight.incrementAndGet()
         handOver(session, worker, video, frame, epoch)
@@ -6139,6 +6142,14 @@ internal class PlaybackCore(
         throw cancellation
     } catch (failure: Throwable) {
         throw VideoDecoderRuntimeFailure("send", failure)
+    }
+
+    /** [videoDecoderReceive], timed: a frame that came out is one sample of decode time. */
+    private suspend fun timedVideoReceive(session: OpenSession, decoder: VideoDecoder): VideoFrame? {
+        val startedNanos = clock.nanos()
+        val frame = videoDecoderReceive(decoder)
+        if (frame != null) session.decodeTimes.add(clock.nanos() - startedNanos)
+        return frame
     }
 
     private suspend fun videoDecoderReceive(decoder: VideoDecoder): VideoFrame? = try {
@@ -6555,6 +6566,9 @@ internal class PlaybackCore(
         val audioTailFlushed = atomic(false)
 
         val decodedVideoFrames = atomic(0L)
+
+        /** Wall time each decoded frame took on the receive side; sorted only at the stats tick. */
+        val decodeTimes = Percentiles(240)
 
         /** Packets thrown away before the decoder ever saw them. See FrameDropPolicy.LateAndDecode. */
         val droppedVideoBeforeDecode = atomic(0L)

@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.internal.Percentiles
 import io.github.yuroyami.kiteplayer.internal.FrameDurationEstimator
 import io.github.yuroyami.kiteplayer.internal.FrameOffer
 import io.github.yuroyami.kiteplayer.internal.FrameQueue
@@ -115,6 +116,9 @@ public class VideoPlayback(
     private var repeated = 0L
     private var lastDriftUs = 0L
 
+    /** How late each accepted frame reached the renderer; sorted only when the stats tick asks. */
+    private val lateness = Percentiles(240)
+
     /**
      * Frames a renderer accepted.
      *
@@ -159,6 +163,9 @@ public class VideoPlayback(
      * renderer never satisfies the wait and burns the whole budget instead.
      */
     public val releasedFrames: Long get() = submitted + headless + refused
+
+    /** How late accepted frames reached the renderer, 95th percentile over the last 240, in nanoseconds. */
+    internal fun presentLatenessP95Nanos(): Long = lateness.p(0.95)
 
     /**
      * Frames the schedule held on screen for a second period, because video was ahead of the master
@@ -334,7 +341,13 @@ public class VideoPlayback(
         }
         // The renderer owns the frame from here, including on failure, so it must not be touched
         // afterwards.
-        if (renderer.present(frame, targetNanos)) submitted++ else refused++
+        if (renderer.present(frame, targetNanos)) {
+            submitted++
+            // Read after present returns: a renderer that blocks while it draws is late by that much.
+            lateness.add(clock.nanos() - targetNanos)
+        } else {
+            refused++
+        }
         return Duration.ZERO
     }
 

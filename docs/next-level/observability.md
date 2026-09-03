@@ -62,7 +62,7 @@ both at zero and the KDoc says why.
 
 ---
 
-### O2 Frame timing percentiles. Size S, Tier 1
+### O2 Frame timing percentiles. LANDED 2026-09-03
 
 **Why.** "Is it the decoder or the display" is the first question of every device session, and
 the stats cannot answer it: no decode time, no lateness.

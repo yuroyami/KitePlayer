@@ -389,11 +389,11 @@ class UIKitVideoRendererTest {
     fun `the production callback fills a real caller layer and close leaves those contents intact`() = runBlocking {
         val layer = CALayer()
         val ledger = LeakLedger()
-        val renderer = UIKitVideoRenderer(layer) { frame ->
+        val renderer = UIKitVideoRenderer(layer, convert = { frame ->
             ByteArray(frame.size.width * frame.size.height * 4) { index ->
                 if (index % 4 == 3) -1 else (index and 0x7F).toByte()
             }
-        }
+        })
         renderer.present(FakeVideoFrame(Pts(0), VideoSize(10, 6), ledger = ledger), 0L)
         awaitTrue("the real CALayer contents", pumpMainRunLoop = true) { layer.contents != null }
         assertEquals(kCAGravityResizeAspect, layer.contentsGravity)

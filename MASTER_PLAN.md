@@ -711,6 +711,14 @@ CI prove the trees this Mac cannot build.
 
 ## Release hygiene and CI
 
+- [ ] **The output module's iOS simulator suite, revived and triaged** (S). It had not COMPILED
+  since the tone-map parameter landed (a trailing lambda bound to the new last parameter; fixed
+  2026-09-03) and no CI job runs it, which is how it rotted. Green now except 20 standing reds:
+  19 are "opening the audio device failed", the simctl-spawn host boundary the simulator is
+  known for, and one audio-session lease arm expects an exception the simulator's audio stack
+  never throws. Decide guard-or-gate: skip the device-opening arms under the simulator the way
+  the known-red list already treats them, or wire the suite into the iOS CI job with those arms
+  filtered. Until one of those lands, nothing keeps this suite compiling.
 - [ ] **Clean-consumer proof of 0.0.21** [KP-PROD remainder] (S). A container or CI job that has never seen this
   checkout builds the README's three install lines against Central, resolving `kiteffmpeg`
   0.1.0 and the Android AAR. Regrade gate boxes 11 and 17 with the result. Closes the

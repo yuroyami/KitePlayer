@@ -397,24 +397,34 @@ class AppleSubtitleRasterizerTest {
         assertEquals(plain.bitmap.height + 12, boxed.bitmap.height, "the bitmap must grow by the padding")
         assertEquals(plain.y - 6, boxed.y, "the padded box must not move the text")
 
-        // The top edge at the horizontal centre is padding above the first line: pure box.
-        val pixels = boxed.bitmap.pixels
-        val probe = (boxed.bitmap.width / 2) * 4
-        val r = pixels[probe].toInt() and 0xFF
-        val g = pixels[probe + 1].toInt() and 0xFF
-        val b = pixels[probe + 2].toInt() and 0xFF
-        val a = pixels[probe + 3].toInt() and 0xFF
-        assertEquals(255, a, "the padded top edge of an opaque box must be opaque")
-        assertTrue(r > 200 && g < 50 && b < 50, "the padded top edge must be the box's red, got rgb($r,$g,$b)")
+        // Scanning row-major from the top, the first SOLID pixel must be the box, never a glyph:
+        // that is what "under the text, padded past it" means in pixels, without assuming where
+        // CoreText's first line sits or where the glyph gaps fall. The solidity floor skips the
+        // box edge's own antialiasing.
+        val firstSolid = firstSolidPixel(boxed.bitmap.pixels)
+        assertTrue(firstSolid >= 0, "nothing solid painted at all")
+        val r = boxed.bitmap.pixels[firstSolid].toInt() and 0xFF
+        val g = boxed.bitmap.pixels[firstSolid + 1].toInt() and 0xFF
+        val b = boxed.bitmap.pixels[firstSolid + 2].toInt() and 0xFF
+        assertTrue(r > 150 && r > 2 * g && r > 2 * b, "the first solid paint must be the box's red, got rgb($r,$g,$b)")
 
         var sawWhite = false
-        for (index in pixels.indices step 4) {
-            val rr = pixels[index].toInt() and 0xFF
-            val gg = pixels[index + 1].toInt() and 0xFF
-            val bb = pixels[index + 2].toInt() and 0xFF
+        val boxedPixels = boxed.bitmap.pixels
+        for (index in boxedPixels.indices step 4) {
+            val rr = boxedPixels[index].toInt() and 0xFF
+            val gg = boxedPixels[index + 1].toInt() and 0xFF
+            val bb = boxedPixels[index + 2].toInt() and 0xFF
             if (rr > 200 && gg > 200 && bb > 200) { sawWhite = true; break }
         }
         assertTrue(sawWhite, "the text itself must still render in its own colour over the box")
+    }
+
+    /** The first pixel, row-major, whose alpha clears the antialiasing floor; -1 when none does. */
+    private fun firstSolidPixel(pixels: ByteArray): Int {
+        for (at in pixels.indices step 4) {
+            if ((pixels[at + 3].toInt() and 0xFF) > 127) return at
+        }
+        return -1
     }
 
     @Test
@@ -425,8 +435,18 @@ class AppleSubtitleRasterizerTest {
             viewportHeight = 360,
             fontScale = 1f,
         ).single()
+        // Without a box, nothing anywhere may be red-dominant: white glyphs and their grey
+        // antialiasing are all the bitmap holds. This is the assertion that goes red when a
+        // default-transparent box ever starts painting.
         val pixels = image.bitmap.pixels
-        val probe = (image.bitmap.width / 2) * 4
-        assertEquals(0, pixels[probe + 3].toInt() and 0xFF, "the top edge of a boxless bitmap stays transparent")
+        for (at in pixels.indices step 4) {
+            val r = pixels[at].toInt() and 0xFF
+            val g = pixels[at + 1].toInt() and 0xFF
+            val b = pixels[at + 2].toInt() and 0xFF
+            assertTrue(
+                !(r > 150 && r > 2 * g && r > 2 * b),
+                "a boxless bitmap painted something red-dominant at byte $at: rgb($r,$g,$b)",
+            )
+        }
     }
 }

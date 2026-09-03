@@ -324,9 +324,14 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public static final field SPEED_MAX D
 	public static final field SPEED_MIN D
 	public final fun addExternalSubtitle-HaszKYI (Lio/github/yuroyami/kiteplayer/SubtitleSource;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun addToQueue (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun addToQueue (Ljava/util/List;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/util/List;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun attachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public final fun captureFrame (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun chapterAt-LRDsOJo (J)Lio/github/yuroyami/kiteplayer/Chapter;
+	public final fun clearQueue (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun close ()V
 	public final fun closeAndAwait (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun detachRenderer ()V
@@ -337,6 +342,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun getState ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getStats ()Lkotlinx/coroutines/flow/StateFlow;
 	public final fun getSubtitleCues ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun moveInQueue (IILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun next (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun open (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun openQueue (Ljava/util/List;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -345,6 +351,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun play ()V
 	public final fun position-UwyO8pc ()J
 	public final fun previous (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun removeFromQueue (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun seek-KLykuaI (JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun seek-KLykuaI$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun seekLater-VtjQ1oo (JLio/github/yuroyami/kiteplayer/SeekMode;)V

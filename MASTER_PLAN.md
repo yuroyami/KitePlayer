@@ -1127,7 +1127,13 @@ commit that lands it.
 - [ ] V11 Typed filter chains attach to a media item without the opt-in. XS
 
 **Session and platform (`session.md`)**
-- [ ] S1 Queue editing while it plays. M
+  S1 is DONE (2026-09-03). `addToQueue`, `removeFromQueue`, `moveInQueue` and `clearQueue` edit
+  the queue while it plays. One law covers all four: the item that is playing keeps playing, is
+  not reopened, and the cursor goes wherever that item went. The only edit that opens anything is
+  removing the item that is playing, because that item is gone and something has to take its
+  place; with nothing behind it the player stops and the rest of the queue stays where it is.
+  A plain `open` counts as a queue of one, so adding a second item never reopens the first.
+  19 tests, ten separate falsifications, one per rule the index follows.
 - [ ] S2 Shuffle. S
 - [ ] S3 Preload the next item; hand the audio device over instead of stopping it. L, NEEDS-DESIGN
 - [ ] S4 Markers that fire on crossing; next and previous chapter. S

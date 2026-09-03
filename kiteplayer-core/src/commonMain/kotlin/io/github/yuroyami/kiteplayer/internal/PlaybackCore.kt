@@ -725,6 +725,36 @@ internal class PlaybackCore(
     }
 
     /**
+     * The four queue edits (S1).
+     *
+     * Only a removal of the item that is playing owns the session, because only it opens
+     * something; the other three rearrange a list and cancel on their own.
+     */
+    suspend fun addToQueue(items: List<MediaItem>, index: Int? = null) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.EditQueue(QueueEdit.Add(items, index), reply))
+        awaitReply(reply)
+    }
+
+    suspend fun removeFromQueue(index: Int) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.EditQueue(QueueEdit.Remove(index), reply))
+        awaitReply(reply, stopOnCancellation = true)
+    }
+
+    suspend fun moveInQueue(from: Int, to: Int) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.EditQueue(QueueEdit.Move(from, to), reply))
+        awaitReply(reply)
+    }
+
+    suspend fun clearQueue() {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.EditQueue(QueueEdit.Clear, reply))
+        awaitReply(reply)
+    }
+
+    /**
      * Cancellable on its own, like every request that does not own the session.
      *
      * The step is an ordinary seek that has already been accepted; abandoning the wait abandons
@@ -1209,6 +1239,7 @@ internal class PlaybackCore(
                 )
                 else -> null
             }
+            is CoreCommand.EditQueue -> queueEditRejection(command.edit)
             is CoreCommand.SetSpeed -> when {
                 !command.value.isFinite() || command.value <= 0.0 ->
                     IllegalArgumentException("speed must be finite and positive, was ${command.value}")
@@ -1269,6 +1300,7 @@ internal class PlaybackCore(
             }
             is CoreCommand.QueueNext -> jumpQueue(queueIndex + 1, command.reply, "next")
             is CoreCommand.QueuePrevious -> jumpQueue(queueIndex - 1, command.reply, "previous")
+            is CoreCommand.EditQueue -> applyQueueEdit(command.edit, command.reply)
             is CoreCommand.StepFrame -> stepOneFrame(command.reply)
             is CoreCommand.CaptureFrame -> requestCapture(command.reply)
             is CoreCommand.WithdrawCapture ->
@@ -4213,6 +4245,114 @@ internal class PlaybackCore(
     }
 
     /**
+     * The queue as an edit sees it (S1).
+     *
+     * A plain [open] is a queue of one that has not been written down, so an edit counts it as
+     * one. Refusing an edit there would make an application call `openQueue` with the item it is
+     * already playing just to add a second one, which reopens what is on screen for nothing.
+     */
+    private fun editableQueueSize(): Int =
+        if (queueItems.isNotEmpty()) queueItems.size else if (media != null) 1 else 0
+
+    private fun queueEditRejection(edit: QueueEdit): Throwable? {
+        val size = editableQueueSize()
+        if (size == 0) {
+            return IllegalStateException("${edit.name} needs an open item or queue; open or openQueue first")
+        }
+        fun outside(index: Int, limit: Int): Throwable? =
+            if (index in 0..limit) null else IllegalArgumentException(
+                "index $index is outside the queue of $size",
+            )
+        return when (edit) {
+            is QueueEdit.Add -> when {
+                edit.items.isEmpty() -> IllegalArgumentException("addToQueue needs at least one item")
+                // One past the end is legal, and only here: that position IS an append.
+                else -> outside(edit.index ?: size, size)
+            }
+            is QueueEdit.Remove -> outside(edit.index, size - 1)
+            is QueueEdit.Move -> outside(edit.from, size - 1) ?: outside(edit.to, size - 1)
+            QueueEdit.Clear -> null
+        }
+    }
+
+    /**
+     * Applies one edit (S1).
+     *
+     * The law all four follow: the item that was playing keeps playing, and the cursor goes
+     * wherever that item went. Removing the playing item is the only edit that opens anything,
+     * because that item is gone and something has to take its place.
+     */
+    private suspend fun applyQueueEdit(edit: QueueEdit, reply: CompletableDeferred<Unit>) {
+        // The unwritten queue of one becomes a written one on its first edit.
+        if (queueItems.isEmpty()) {
+            queueItems = listOfNotNull(media)
+            queueIndex = 0
+        }
+        when (edit) {
+            is QueueEdit.Add -> {
+                val at = edit.index ?: queueItems.size
+                queueItems = queueItems.toMutableList().apply { addAll(at, edit.items) }
+                if (at <= queueIndex) queueIndex += edit.items.size
+                publishSnapshot()
+                reply.complete(Unit)
+            }
+            is QueueEdit.Move -> {
+                queueItems = queueItems.toMutableList().apply { add(edit.to, removeAt(edit.from)) }
+                queueIndex = if (queueIndex == edit.from) {
+                    edit.to
+                } else {
+                    // Where the playing item ends up: the removal pulls it back when it sat
+                    // behind the moved one, and the insert pushes it along when the moved one
+                    // lands at or in front of it.
+                    val afterRemoval = if (edit.from < queueIndex) queueIndex - 1 else queueIndex
+                    if (edit.to <= afterRemoval) afterRemoval + 1 else afterRemoval
+                }
+                publishSnapshot()
+                reply.complete(Unit)
+            }
+            QueueEdit.Clear -> {
+                queueItems = listOf(queueItems[queueIndex])
+                queueIndex = 0
+                publishSnapshot()
+                reply.complete(Unit)
+            }
+            is QueueEdit.Remove -> removeQueueItem(edit.index, reply)
+        }
+    }
+
+    private suspend fun removeQueueItem(index: Int, reply: CompletableDeferred<Unit>) {
+        val removedPlaying = index == queueIndex
+        queueItems = queueItems.toMutableList().apply { removeAt(index) }
+        if (!removedPlaying) {
+            if (index < queueIndex) queueIndex -= 1
+            publishSnapshot()
+            reply.complete(Unit)
+            return
+        }
+        // What followed it takes its place. LoopMode.All is what makes the ends meet, here as
+        // everywhere else in the queue.
+        val next = when {
+            index < queueItems.size -> index
+            loop == LoopMode.All && queueItems.isNotEmpty() -> 0
+            else -> null
+        }
+        if (next == null) {
+            // Nothing followed it, so the player stops rather than holding a picture of media the
+            // queue no longer contains. The cursor rests on the last item still there, so
+            // previous() has somewhere to go; an emptied queue puts it back to -1, which is the
+            // same expression.
+            queueIndex = queueItems.size - 1
+            runStop()
+            reply.complete(Unit)
+            return
+        }
+        val wasPlaying = playRequested
+        queueIndex = next
+        runOpen(CoreCommand.Open(queueItems[next], reply))
+        playRequested = wasPlaying
+    }
+
+    /**
      * At most one seek per pass, and the two waiting rules.
      *
      * Inside the coalescing window a new request waits for a frame from the previous seek to have
@@ -6796,6 +6936,9 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class QueueNext(val reply: CompletableDeferred<Unit>) : CoreCommand("queueNext", reply)
     class QueuePrevious(val reply: CompletableDeferred<Unit>) : CoreCommand("queuePrevious", reply)
 
+    class EditQueue(val edit: QueueEdit, val reply: CompletableDeferred<Unit>) :
+        CoreCommand(edit.name, reply)
+
     class StepFrame(val reply: CompletableDeferred<Unit>) : CoreCommand("stepFrame", reply)
 
     class CaptureFrame(
@@ -6887,3 +7030,30 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
         )
     },
 )
+
+/**
+ * One edit to the open queue (S1).
+ *
+ * They travel as a single command so that the items and the cursor into them can only be read
+ * together: a snapshot taken between the two halves of an edit would name the wrong item.
+ */
+internal sealed interface QueueEdit {
+    /** The public call this edit came from, used in refusals and diagnostics. */
+    val name: String
+
+    data class Add(val items: List<MediaItem>, val index: Int?) : QueueEdit {
+        override val name: String get() = "addToQueue"
+    }
+
+    data class Remove(val index: Int) : QueueEdit {
+        override val name: String get() = "removeFromQueue"
+    }
+
+    data class Move(val from: Int, val to: Int) : QueueEdit {
+        override val name: String get() = "moveInQueue"
+    }
+
+    data object Clear : QueueEdit {
+        override val name: String get() = "clearQueue"
+    }
+}

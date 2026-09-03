@@ -15,7 +15,30 @@ session lease is reference-counted by design.
 
 ---
 
-### S1 Queue mutation. Size M, Tier 1
+### S1 Queue editing. LANDED 2026-09-03
+
+Three things the plan did not say, all about the cursor rather than the list:
+
+- **A plain `open` is a queue of one, and the first edit writes it down.** The plan said this in
+  one clause and it turned out to be the difference between a usable API and a useless one:
+  refusing an edit there would make an application call `openQueue` with the item it is already
+  playing just to add a second one, which reopens what is on screen for nothing. Materialising a
+  queue of one changes no behaviour anywhere else, because every other queue rule already treats a
+  size of one and a size of zero the same way.
+- **Removing the playing LAST item has to leave the queue alone.** The plan said only "with
+  nothing left to play it stops". Emptying the queue as well would throw away items the person
+  never removed. The cursor rests on the last item still there, which also happens to be the
+  same expression that puts it back to -1 when the queue really is empty.
+- **A move needs the cursor computed, not cased.** The four cases in the first draft were right
+  by accident. The rule underneath is two steps: the removal pulls the playing item back when it
+  sat behind the moved one, then the insert pushes it along when the moved one lands at or in
+  front of it. Writing those two steps is shorter than the cases and provable line by line.
+
+The falsification pass was the point here. Ten mutations, one per rule the cursor follows, each
+turning a different named test red. Two of the rules had exactly one test covering them, which is
+how a rule quietly stops being enforced.
+
+### S1, as planned. Size M, Tier 1
 
 **Why.** `openQueue` is the only way to shape a queue (`KitePlayer.kt:423`). A music app adds,
 removes and reorders while playing.

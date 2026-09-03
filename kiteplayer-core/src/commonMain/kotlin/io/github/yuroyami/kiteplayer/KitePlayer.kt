@@ -547,6 +547,67 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Inserts [items] at [index], or at the end when [index] is null.
+     *
+     * The item that is playing keeps playing and is not reopened. [PlayerSnapshot.queueIndex]
+     * follows it, so it moves by [items] size when the insert lands in front of it.
+     *
+     * A plain [open] counts as a queue of one here: the first edit writes that queue down rather
+     * than refusing, so adding a second item never has to reopen the first.
+     *
+     * @throws IllegalArgumentException for an empty list, or an index outside 0..queue size. That
+     *         upper bound is inclusive, because one past the end is where an append goes.
+     * @throws IllegalStateException when nothing is open at all.
+     */
+    public suspend fun addToQueue(items: List<MediaItem>, index: Int? = null) {
+        core.addToQueue(items, index)
+    }
+
+    /** Inserts one item. See the list overload for everything else. */
+    public suspend fun addToQueue(item: MediaItem, index: Int? = null) {
+        core.addToQueue(listOf(item), index)
+    }
+
+    /**
+     * Removes the item at [index].
+     *
+     * Removing anything other than the playing item touches nothing but the list and the cursor.
+     * Removing the PLAYING item opens whatever followed it, keeping the play or pause intent;
+     * [LoopMode.All] wraps back to the front when it was the last one. With nothing to play after
+     * it the player stops, and the rest of the queue stays where it is with the cursor resting on
+     * its last item.
+     *
+     * @throws IllegalArgumentException for an index outside the queue.
+     * @throws IllegalStateException when nothing is open at all.
+     * @throws PlaybackException when the item that took its place could not be opened.
+     */
+    public suspend fun removeFromQueue(index: Int) {
+        core.removeFromQueue(index)
+    }
+
+    /**
+     * Moves the item at [from] so that it sits at [to] in the new order.
+     *
+     * The playing item stays the playing item wherever it lands, and nothing is reopened, so this
+     * is what a drag in a playlist should call.
+     *
+     * @throws IllegalArgumentException for an index outside the queue.
+     * @throws IllegalStateException when nothing is open at all.
+     */
+    public suspend fun moveInQueue(from: Int, to: Int) {
+        core.moveInQueue(from, to)
+    }
+
+    /**
+     * Removes every item except the one playing, which is left at index 0 and is not reopened.
+     *
+     * @throws IllegalStateException when nothing is open at all.
+     */
+    public suspend fun clearQueue() {
+        core.clearQueue()
+    }
+
+    /**
      * Steps a PAUSED player forward by exactly one frame and returns with it on screen (S4.e).
      *
      * One DECODED frame, and not one nominal frame period: the decoder has already filled the queue

@@ -1,0 +1,75 @@
+name: Docs
+
+# Builds the aggregated Dokka API reference (every published module, one site at
+# build/dokka/html) and deploys it to GitHub Pages: https://yuroyami.github.io/KitePlayer/.
+# There is no prose site here; the README is the prose. KiteFFmpeg's docs.yml is the model,
+# minus its MkDocs half and minus the FFmpeg tree fetch, since this repository's FFmpeg comes
+# from the published kiteffmpeg artifacts.
+#
+# Until Pages is enabled in the repository settings (Settings > Pages > Source: GitHub Actions)
+# the deploy job fails and the build job is still the proof that the reference generates.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.kt'
+      - '**/build.gradle.kts'
+      - 'dokka-templates/**'
+      - 'gradle/libs.versions.toml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time, and an in-progress one is left to finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      # ~/.konan holds the Kotlin/Native distribution and the per-target sysroots konan fetches on
+      # demand; Dokka resolves every target's dependencies, so a cold cache re-downloads all of it.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-docs-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-docs-
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      - name: Generate the Dokka API reference
+        run: ./gradlew dokkaGenerate --no-configuration-cache --stacktrace
+
+      - name: Disable Jekyll processing
+        run: touch build/dokka/html/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/dokka/html
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

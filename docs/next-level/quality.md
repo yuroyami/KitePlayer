@@ -68,7 +68,12 @@ with the variable set through `SIMCTL_CHILD_KITEPLAYER_SMOKE=1`, then `grep -q "
 
 ---
 
-### Q3 The API site. Size S, Tier 1. [owner] enables Pages once
+### Q3 The API site. LANDED 2026-09-03 except the Pages click
+
+`dokkaGenerate` proven locally (ten modules aggregate into `build/dokka/html`); the workflow's
+build job is the CI proof, its deploy job waits on the owner enabling Pages.
+
+### Q3, as planned. Size S, Tier 1. [owner] enables Pages once
 
 **Why.** Dokka is configured and aggregated and nobody can read it. KiteFFmpeg publishes its site
 from `docs.yml`; the same file minus mkdocs does it here.

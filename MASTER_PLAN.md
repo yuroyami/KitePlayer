@@ -180,7 +180,8 @@ Recommended answers are stated. The executor does not guess. Each names what it 
   the audio device between items, so it is a gap until preload lands [S3]. Corrected wording is
   in the body of commit `991ea99`. Editing a published release is a click only you have.
   [Q10 remainder]
-- [ ] GitHub Pages for the API reference, once the workflow exists [Q3].
+- [ ] GitHub Pages for the API reference: Settings, Pages, Source "GitHub Actions". The workflow
+  (`docs.yml`) exists and builds the site; its deploy job fails until this click. [Q3]
 - [ ] Blocked-upstream rechecks, each one command in GOTCHAS: an AGP bump means re-measuring the
   one Gradle 10 deprecation; a Kotlin bump means re-measuring whether `abiValidation` grew an
   Android dump variant.
@@ -532,7 +533,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **Q3** The API reference on GitHub Pages. S; the owner enables Pages at the end. `quality.md`
 - [ ] **Q8** Release notes from commits; a changelog that gates the publish. S. `quality.md`
 - [ ] **O2** Decode time and presentation lateness percentiles. S. `observability.md`
 - [ ] **S4** Markers that fire on crossing; next and previous chapter. S. `session.md`

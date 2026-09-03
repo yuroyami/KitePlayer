@@ -37,6 +37,8 @@ implementation("io.github.yuroyami:kiteplayer-core:0.0.21")
 Twelve modules publish in total, two of them the deprecated umbrellas named at the end of
 [Modules](#modules); that section maps each one to what it is for.
 
+The API reference for every published module is at https://yuroyami.github.io/KitePlayer/.
+
 ## Playing a file
 
 ```kotlin

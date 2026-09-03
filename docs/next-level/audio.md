@@ -501,7 +501,22 @@ unity, at t = 9 s the gain reaching the sink is about half, at t = 10 s the stat
 
 ---
 
-### A8 Loudness measurement, EBU R128 in Kotlin. Size M, Tier 1 (plus one real-media test)
+### A8 The METER landed 2026-09-03; the file-measuring call is what remains
+
+`LoudnessMeter` is done and held to the standard's own numbers. Two test mistakes worth carrying
+forward, both found by falsifying rather than by reading:
+
+- **The LFE case used a DC constant** and could never fail. The meter's own 38 Hz high pass removes
+  0 Hz entirely, so a constant in the LFE looks excluded whether it is weighted or not. It carries a
+  real sine now, and counting the LFE turns the case red.
+- **The relative gate was untested.** The quiet passage in the gating case sat below -70 LUFS, so
+  the ABSOLUTE gate already removed it and the relative rule was never exercised. A second case now
+  uses a passage 20 LU down but well above -70, which only the relative rule can exclude.
+
+What is left is the `kiteplayer-ffmpeg` half below: the sample conversion and the one call that
+measures a file. Write the conversion once; K9's waveforms need the same thing.
+
+### A8, as planned. Size M, Tier 1 (plus one real-media test)
 
 **Why.** A3 needs a number when the tags are missing, and a library that can say "this file is
 -14 LUFS" is a library apps stop wrapping. The `ebur128` filter is not compiled into the LGPL

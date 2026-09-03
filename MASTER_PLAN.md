@@ -1094,7 +1094,17 @@ commit that lands it.
   advancing, so a player paused overnight does not sleep through its own timer, and the level is
   computed from the time remaining rather than stepped, so a late pass cannot strand it. 6 tests,
   the firing and the fade falsified separately. The pass-order ratchet moved with a stated reason.
-- [ ] A8 EBU R128 loudness meter in Kotlin, and a call that measures a file. M
+- [ ] A8 remainder: **the file-measuring call.** The METER is DONE (2026-09-03):
+  `LoudnessMeter` implements ITU-R BS.1770-4 in pure common Kotlin, both weighting filters derived
+  from the sample rate rather than tabulated at 48 kHz, 400 ms blocks at 75 percent overlap, the
+  absolute and relative gates, LFE excluded and surrounds weighted 1.41. Held to the standard's own
+  reference values: a full-scale 997 Hz tone reads -3.01 LUFS and a 20 dB drop moves it 20 LU.
+  11 tests; the rate derivation, the relative gate and the LFE exclusion each falsified.
+  What is LEFT is `AudioAnalysis.measureLoudness(item)` in `kiteplayer-ffmpeg`: decode the primary
+  audio stream, convert `Frame` bytes to interleaved floats per `SampleFormat`, feed the meter.
+  That needs the sample-conversion helper K9's waveforms also want, so write it once for both. The
+  oracle test compares against the host `ffmpeg` binary's `ebur128` filter, which is on PATH and
+  does not wait for K3.
   A9 is DONE (2026-09-03). Ten ISO octave bands from 31 Hz to 16 kHz, the set every hardware
   equaliser has had since the 1970s, so a preset written for one means the same here. Each band is
   a cookbook peaking biquad whose gain at its own centre is exactly what was asked for, state per

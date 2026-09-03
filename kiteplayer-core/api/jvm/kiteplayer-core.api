@@ -1615,6 +1615,27 @@ public final class io/github/yuroyami/kiteplayer/VideoTransform$Companion {
 	public final fun getIdentity ()Lio/github/yuroyami/kiteplayer/VideoTransform;
 }
 
+public final class io/github/yuroyami/kiteplayer/audio/LoudnessMeter {
+	public fun <init> (II)V
+	public final fun feed ([FI)V
+	public final fun result ()Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
+}
+
+public final class io/github/yuroyami/kiteplayer/audio/LoudnessResult {
+	public fun <init> (DFI)V
+	public final fun component1 ()D
+	public final fun component2 ()F
+	public final fun component3 ()I
+	public final fun copy (DFI)Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;DFIILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audio/LoudnessResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBlocksMeasured ()I
+	public final fun getIntegratedLufs ()D
+	public final fun getSamplePeak ()F
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioBuffer : java/lang/AutoCloseable {
 	public abstract fun copyChannel (I[FI)V
 	public static synthetic fun copyChannel$default (Lio/github/yuroyami/kiteplayer/spi/AudioBuffer;I[FIILjava/lang/Object;)V

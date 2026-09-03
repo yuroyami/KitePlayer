@@ -83,6 +83,8 @@ public data class Tracks(
      * is still refused with a typed error rather than selected and left silent.
      */
     val selectedSubtitle: TrackId? = null,
+    /** The secondary subtitle track, drawn at the top of the picture, or null when off. */
+    val selectedSecondarySubtitle: TrackId? = null,
 ) {
     public val video: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Video }
     public val audio: List<TrackInfo> get() = all.filter { it.kind == TrackKind.Audio }

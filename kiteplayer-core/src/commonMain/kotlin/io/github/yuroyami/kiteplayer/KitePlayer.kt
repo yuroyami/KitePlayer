@@ -828,6 +828,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.selectTrack(kind, track)
 
     /**
+     * Shows a second subtitle track at the top of the picture, or clears it with null.
+     *
+     * The secondary track's cues are forced to the top, so the two tracks never sit on each
+     * other; the primary stays where its author put it. External tracks (negative ids) are
+     * allowed on either slot. Selecting the track that already fills the other slot throws
+     * [IllegalArgumentException]. [Tracks.selectedSecondarySubtitle] reports the selection.
+     */
+    public suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange =
+        core.selectSecondarySubtitle(track)
+
+    /**
      * Attaches a renderer, or replaces the one attached. Legal at any time, including while playing.
      *
      * Video decoding never depends on a renderer existing. With none attached the schedule still paces

@@ -361,6 +361,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun seekLater-VtjQ1oo (JLio/github/yuroyami/kiteplayer/SeekMode;)V
 	public static synthetic fun seekLater-VtjQ1oo$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JLio/github/yuroyami/kiteplayer/SeekMode;ILjava/lang/Object;)V
 	public final fun seekToChapter (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun selectSecondarySubtitle-Cr4VdJg (Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun selectTrack-rt36JlU (Lio/github/yuroyami/kiteplayer/TrackKind;Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun setAbLoop-NKUU228 (Lkotlin/time/Duration;Lkotlin/time/Duration;)V
 	public static synthetic fun setAbLoop-NKUU228$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lkotlin/time/Duration;Lkotlin/time/Duration;ILjava/lang/Object;)V
@@ -1594,19 +1595,21 @@ public final class io/github/yuroyami/kiteplayer/TrackKind : java/lang/Enum {
 
 public final class io/github/yuroyami/kiteplayer/Tracks {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/Tracks$Companion;
-	public synthetic fun <init> (Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/List;
 	public final fun component2-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
 	public final fun component3-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
 	public final fun component4-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
-	public final fun copy-YpUfCEI (Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;)Lio/github/yuroyami/kiteplayer/Tracks;
-	public static synthetic fun copy-YpUfCEI$default (Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/Tracks;
+	public final fun component5-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
+	public final fun copy-JCa4aVs (Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;)Lio/github/yuroyami/kiteplayer/Tracks;
+	public static synthetic fun copy-JCa4aVs$default (Lio/github/yuroyami/kiteplayer/Tracks;Ljava/util/List;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/TrackId;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/Tracks;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun find-f-2aJC8 (I)Lio/github/yuroyami/kiteplayer/TrackInfo;
 	public final fun getAll ()Ljava/util/List;
 	public final fun getAudio ()Ljava/util/List;
 	public final fun getSelectedAudio-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
+	public final fun getSelectedSecondarySubtitle-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
 	public final fun getSelectedSubtitle-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
 	public final fun getSelectedVideo-Rudedvk ()Lio/github/yuroyami/kiteplayer/TrackId;
 	public final fun getSubtitles ()Ljava/util/List;

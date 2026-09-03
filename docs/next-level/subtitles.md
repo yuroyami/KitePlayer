@@ -113,7 +113,12 @@ cue two once; deselecting subtitles emits empty.
 
 ---
 
-### T3 A secondary subtitle track. Size M, Tier 1
+### T3 A secondary subtitle track. LANDED 2026-09-03
+
+In place rather than by reopen: the demuxer already routes every subtitle stream to its own
+live queue, so the block below's reopen sentence described a tree that no longer exists.
+
+### T3, as planned. Size M, Tier 1
 
 **Why.** Learners watch with two languages; mpv has `--secondary-sid`. One slot exists.
 

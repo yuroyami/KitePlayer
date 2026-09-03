@@ -239,6 +239,7 @@ internal class PlaybackCore(
 
     /** The external track currently timing cues, or null when none is. */
     private var selectedExternalSubtitle: TrackId? = null
+    private var selectedExternalSubtitle2: TrackId? = null
 
     /** An external selection waiting for handleTrackChanges to finish its container rebuild. */
     private var pendingExternalSubtitle: TrackId? = null
@@ -894,6 +895,12 @@ internal class PlaybackCore(
         return awaitReply(reply)
     }
 
+    suspend fun selectSecondarySubtitle(track: TrackId?): TrackChange {
+        val reply = CompletableDeferred<TrackChange>()
+        send(CoreCommand.SelectSecondarySubtitle(track, reply))
+        return awaitReply(reply)
+    }
+
     suspend fun attachRenderer(renderer: VideoRenderer) {
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.AttachRenderer(renderer, reply))
@@ -1237,6 +1244,11 @@ internal class PlaybackCore(
             is CoreCommand.Seek -> seekRejection()
             is CoreCommand.SeekLater -> null
             is CoreCommand.SelectTrack -> when {
+                command.kind == TrackKind.Subtitle && command.track != null &&
+                    command.track == tracks.selectedSecondarySubtitle ->
+                    IllegalArgumentException(
+                        "subtitle track ${'$'}{command.track} is already the secondary; one track cannot fill both slots",
+                    )
                 session == null && pendingVideoRecovery == null ->
                     IllegalStateException("selectTrack needs an open media item")
                 session != null && session?.source?.seekable != true && command.kind == TrackKind.Video ->
@@ -1387,6 +1399,7 @@ internal class PlaybackCore(
                 command.reply.complete(Unit)
             }
             is CoreCommand.Close -> runClose(command.reply)
+            is CoreCommand.SelectSecondarySubtitle -> applySecondarySubtitle(command)
             is CoreCommand.SelectTrack -> {
                 val externalTarget = command.track?.takeIf { isExternalSubtitle(it) }
                 val externalActive = selectedExternalSubtitle != null
@@ -1825,6 +1838,7 @@ internal class PlaybackCore(
         markerCursorEpoch = null
         externalSubtitleTracks = emptyList()
         selectedExternalSubtitle = null
+        selectedExternalSubtitle2 = null
         pendingExternalSubtitle = null
         // An open ends paused by contract, whatever was asked for before it. A play issued while this one
         // is still running arrives after this line and is honoured, which is what queueing it means.
@@ -2755,6 +2769,98 @@ internal class PlaybackCore(
             }
         }
         return true
+    }
+
+    /**
+     * The secondary slot (T3). In place, like every subtitle change: the demuxer already routes
+     * every subtitle stream to its own live queue, so a second stream needs a decoder and a cue
+     * table, never a reopen. The spec predated that and said reopen; the tree is better.
+     */
+    private suspend fun applySecondarySubtitle(command: CoreCommand.SelectSecondarySubtitle) {
+        val session = this.session
+        if (session == null) {
+            command.reply.completeExceptionally(IllegalStateException("selectSecondarySubtitle needs an open media item"))
+            return
+        }
+        val track = command.track
+        if (track != null && track == tracks.selectedSubtitle) {
+            command.reply.completeExceptionally(
+                IllegalArgumentException("subtitle track $track is already the primary; one track cannot fill both slots"),
+            )
+            return
+        }
+        val targetExternal = track?.takeIf(::isExternalSubtitle)
+        val targetStream = track
+            ?.takeUnless(::isExternalSubtitle)
+            ?.let { id -> session.source.streams.firstOrNull { it.index == id.value && it.kind == TrackKind.Subtitle } }
+        if (track != null && targetExternal == null && targetStream == null) {
+            command.reply.completeExceptionally(
+                IllegalArgumentException("no subtitle stream has index ${track.value}"),
+            )
+            return
+        }
+        var preparedDecoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null
+        if (targetStream != null) {
+            preparedDecoder = try {
+                session.backendSession.subtitleDecoders.firstNotNullOfOrNull { it.create(targetStream) }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                command.reply.complete(
+                    TrackChange.Discarded("the secondary subtitle decoder could not be created${causeDetail(failure)}"),
+                )
+                return
+            }
+            if (preparedDecoder == null) {
+                command.reply.complete(
+                    TrackChange.Discarded("no decoder accepted subtitle stream ${targetStream.index}"),
+                )
+                return
+            }
+            try {
+                preparedDecoder.flush(requestedEpoch)
+            } catch (cancellation: CancellationException) {
+                preparedDecoder.close()
+                throw cancellation
+            } catch (failure: Throwable) {
+                runCatching { preparedDecoder.close() }
+                command.reply.complete(
+                    TrackChange.Discarded("the secondary subtitle decoder could not align to the live epoch${causeDetail(failure)}"),
+                )
+                return
+            }
+        }
+
+        session.pendingSubtitle2Packet?.close()
+        session.pendingSubtitle2Packet = null
+        session.subtitle2DecoderMayHaveOutput = false
+        session.lastSubtitle2PruneCutoffUs = Long.MIN_VALUE
+        val retired = session.subtitle2Decoder
+        session.subtitle2Stream = targetStream
+        session.subtitle2Decoder = preparedDecoder
+        session.subtitle2Queue = targetStream?.let { session.subtitleQueues[it.index] }
+        session.subtitle2Queue?.dropBefore(
+            currentPosition().micros - CUE_PRUNE_BEHIND_MICROS,
+            assumedDurationUs = CUE_PRUNE_BEHIND_MICROS,
+        )
+        session.subtitle2Cues = when {
+            targetStream != null -> session.subtitleCueCaches.getValue(targetStream.index)
+            targetExternal != null -> externalSubtitleTracks.firstOrNull { it.id == targetExternal }
+                ?.cues?.toMutableList() ?: mutableListOf()
+            else -> mutableListOf()
+        }
+        selectedExternalSubtitle2 = targetExternal
+        // Force the combined set to republish on the very next pass, gone cues included.
+        session.publishedCueKey = null
+        tracks = tracks.copy(selectedSecondarySubtitle = track)
+        publishSnapshot()
+        command.reply.complete(TrackChange.Applied(TrackKind.Subtitle, track))
+
+        if (retired != null && retired !== preparedDecoder) {
+            runCatching { retired.close() }.exceptionOrNull()?.let { failure ->
+                warn(PlaybackWarning.ResourcesNotReleased("retired secondary subtitle decoder: ${failure.message}"))
+            }
+        }
     }
 
     private suspend fun withdrawSubtitleOverlay(session: OpenSession) {
@@ -3758,7 +3864,7 @@ internal class PlaybackCore(
                 }
                 receiveBatches++
                 cuesInserted = true
-                insertCues(session, decoded)
+                insertCues(session.subtitleCues, decoded)
                 if (actorWorkWaiting()) {
                     interrupted = true
                     return
@@ -3828,9 +3934,92 @@ internal class PlaybackCore(
             wakeIn(Duration.ZERO)
         }
 
+        // The secondary lane's decode, the same budgeted shape, after the primary's so the
+        // primary always wins a contended pass.
+        if (!interrupted) interrupted = driveSecondarySubtitleDecode(session)
+
         // The command or failure already captured above should not pay a cue-table scan or a raster
         // launch. The next pass handles it first, then comes back here to publish the resulting state.
         if (!interrupted) timeAndPublishCues(session)
+    }
+
+    /**
+     * The secondary lane's half of [handleSubtitles] (T3): the same budgets, the same retained
+     * packet, the same back-pressure contract, against the lane-2 fields. Returns true when a
+     * waiting command interrupted the pass.
+     */
+    private suspend fun driveSecondarySubtitleDecode(session: OpenSession): Boolean {
+        val decoder = session.subtitle2Decoder ?: return false
+        val queue = session.subtitle2Queue ?: return false
+        var packetAttempts = 0
+        var receiveBatches = 0
+        var cuesInserted = false
+        var interrupted = false
+
+        suspend fun drainDecoderOutput() {
+            while (session.subtitle2DecoderMayHaveOutput && receiveBatches < SUBTITLE_RECEIVE_BATCHES_PER_PASS) {
+                val decoded = decoder.receive()
+                if (decoded.isEmpty()) {
+                    session.subtitle2DecoderMayHaveOutput = false
+                    return
+                }
+                receiveBatches++
+                cuesInserted = true
+                insertCues(session.subtitle2Cues, decoded)
+                if (actorWorkWaiting()) {
+                    interrupted = true
+                    return
+                }
+            }
+        }
+
+        drainDecoderOutput()
+        while (!interrupted && !session.subtitle2DecoderMayHaveOutput && packetAttempts < SUBTITLE_PACKETS_PER_PASS) {
+            val packet = session.pendingSubtitle2Packet ?: queue.poll() ?: break
+            session.pendingSubtitle2Packet = null
+            val accepted = try {
+                decoder.send(packet)
+            } catch (failure: Throwable) {
+                packet.close()
+                throw failure
+            }
+            packetAttempts++
+            session.subtitle2DecoderMayHaveOutput = true
+            if (accepted) packet.close() else session.pendingSubtitle2Packet = packet
+            if (actorWorkWaiting()) {
+                interrupted = true
+                break
+            }
+            drainDecoderOutput()
+            if (!accepted) {
+                wakeIn(if (session.subtitle2DecoderMayHaveOutput) Duration.ZERO else WORKER_POLL)
+                break
+            }
+        }
+        if (!interrupted && actorWorkWaiting()) interrupted = true
+        if (cuesInserted && !interrupted) pruneSecondaryCueHistory(session)
+        val backlog = session.subtitle2DecoderMayHaveOutput ||
+            session.pendingSubtitle2Packet != null ||
+            queue.count > 0
+        if (interrupted || backlog && packetAttempts >= SUBTITLE_PACKETS_PER_PASS ||
+            session.subtitle2DecoderMayHaveOutput && receiveBatches >= SUBTITLE_RECEIVE_BATCHES_PER_PASS
+        ) {
+            wakeIn(Duration.ZERO)
+        }
+        return interrupted
+    }
+
+    /** The lane-2 pruning cursor, the same policy as [pruneCueHistory]. */
+    private fun pruneSecondaryCueHistory(session: OpenSession) {
+        if (session.subtitle2Decoder == null) return
+        val cutoff = currentPosition().micros - subtitleDelay.inWholeMicroseconds - CUE_PRUNE_BEHIND_MICROS
+        if (cutoff <= 0) return
+        if (
+            session.lastSubtitle2PruneCutoffUs != Long.MIN_VALUE &&
+            cutoff - session.lastSubtitle2PruneCutoffUs < CUE_PRUNE_STEP_MICROS
+        ) return
+        session.lastSubtitle2PruneCutoffUs = cutoff
+        session.subtitle2Cues.removeAll { it.endMicros < cutoff }
     }
 
     /** The timing half of handleSubtitles, shared by container and external cue tables (S4.e). */
@@ -3840,7 +4029,26 @@ internal class PlaybackCore(
         // rebuilds after a prune, a merge or a clear. Syncing here rather than at every mutation
         // site keeps the cue table's own code unchanged and costs one size compare per pass.
         session.cueIndex.syncTo(session.subtitleCues)
-        val active = session.cueIndex.activeAt(positionUs)
+        val primaryActive = session.cueIndex.activeAt(positionUs)
+        // The secondary lane rides the same clock and the same delay, forced to the top of the
+        // picture on the way out so the two tracks can never sit on each other (T3).
+        session.cue2Index.syncTo(session.subtitle2Cues)
+        val active = if (session.subtitle2Cues.isEmpty()) {
+            primaryActive
+        } else {
+            primaryActive + session.cue2Index.activeAt(positionUs).map { cue ->
+                when (cue) {
+                    is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue.copy(
+                        layout = cue.layout.copy(
+                            alignment = io.github.yuroyami.kiteplayer.subtitle.CueAlignment.TopCenter,
+                            positionX = null,
+                            positionY = null,
+                        ),
+                    )
+                    is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap -> cue
+                }
+            }
+        }
         // The cues themselves are the identity, not their timestamps: two different texts or
         // styles over the same interval are different overlays, and a (start, end) key republished
         // nothing for them. Structural equality on the data classes is exact.
@@ -3856,14 +4064,21 @@ internal class PlaybackCore(
             publishOverlay(session, active)
         }
 
-        // Sleep exactly to the next cue edge instead of polling for it.
-        session.cueIndex.nextChangeAfter(positionUs)?.let { nextUs ->
+        // Sleep exactly to the next cue edge instead of polling for it, whichever lane's comes
+        // first.
+        listOfNotNull(
+            session.cueIndex.nextChangeAfter(positionUs),
+            session.cue2Index.nextChangeAfter(positionUs),
+        ).minOrNull()?.let { nextUs ->
             val untilNext = (nextUs - positionUs).microseconds
             if (untilNext > Duration.ZERO) wakeIn(minOf(untilNext, WORKER_POLL))
         }
     }
 
-    private fun insertCues(session: OpenSession, decoded: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>) {
+    private fun insertCues(
+        cues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+        decoded: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+    ) {
         if (decoded.isEmpty()) return
         var decodedIsSorted = true
         for (index in 1 until decoded.size) {
@@ -3877,7 +4092,6 @@ internal class PlaybackCore(
         } else {
             decoded.sortedBy { it.startMicros }
         }
-        val cues = session.subtitleCues
         if (cues.isEmpty() || cues.last().startMicros <= incoming.first().startMicros) {
             cues.addAll(incoming)
             subtitleCueAppendBatches++
@@ -4907,6 +5121,20 @@ internal class PlaybackCore(
             ?.let { session.subtitleCues.addAll(it) }
         session.publishedCueKey = null
         session.subtitleDecoder?.flush(epoch)
+        // The secondary lane's mirror of everything above (T3).
+        session.pendingSubtitle2Packet?.close()
+        session.pendingSubtitle2Packet = null
+        session.subtitle2DecoderMayHaveOutput = false
+        session.lastSubtitle2PruneCutoffUs = Long.MIN_VALUE
+        session.subtitle2Cues = when {
+            session.subtitle2Stream != null ->
+                session.subtitleCueCaches.getValue(session.subtitle2Stream!!.index)
+            selectedExternalSubtitle2 != null ->
+                externalSubtitleTracks.firstOrNull { it.id == selectedExternalSubtitle2 }
+                    ?.cues?.toMutableList() ?: mutableListOf()
+            else -> mutableListOf()
+        }
+        session.subtitle2Decoder?.flush(epoch)
         while (true) {
             val buffer = session.decodedAudio.tryReceive().getOrNull() ?: break
             buffer.close()
@@ -5340,6 +5568,7 @@ internal class PlaybackCore(
             // Subtitles are resources like the other two paths: the decoder holds backend state and
             // the queue holds owned packets, and skipping them here leaked both.
             release("subtitle decoder") { session.subtitleDecoder?.close() }
+            release("secondary subtitle decoder") { session.subtitle2Decoder?.close() }
             session.subtitleQueues.values.forEach { queue ->
                 release("subtitle queue ${queue.streamIndex}") { queue.close() }
             }
@@ -6726,6 +6955,19 @@ internal class PlaybackCore(
         var subtitleCues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> =
             subtitleStream?.let { subtitleCueCaches.getValue(it.index) } ?: mutableListOf()
 
+        // The secondary subtitle lane (T3): the same shape as the primary fields above, driven by
+        // its own budgeted pass and timed by its own index; its cues are forced to the top before
+        // rasterising. One slot per direction, exactly mpv's secondary-sid.
+        var subtitle2Stream: PlayerStreamInfo? = null
+        var subtitle2Decoder: io.github.yuroyami.kiteplayer.spi.SubtitleDecoder? = null
+        var subtitle2Queue: PacketQueue? = null
+        var pendingSubtitle2Packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket? = null
+        var subtitle2DecoderMayHaveOutput: Boolean = false
+        var subtitle2Cues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> = mutableListOf()
+        var lastSubtitle2PruneCutoffUs: Long = Long.MIN_VALUE
+        val cue2Index: io.github.yuroyami.kiteplayer.subtitle.CueIndex =
+            io.github.yuroyami.kiteplayer.subtitle.CueIndex()
+
         /**
          * A subtitle packet the decoder refused because its output side was full, retained so the
          * next pass retries it instead of losing the cue. Session thread only; closed on flush
@@ -7205,6 +7447,11 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetAudioDelay(val value: Duration, val reply: CompletableDeferred<Unit>) : CoreCommand("setAudioDelay", reply)
     class AddExternalSubtitle(val source: SubtitleSource, val reply: CompletableDeferred<TrackId>) :
         CoreCommand("addExternalSubtitle", reply)
+
+    class SelectSecondarySubtitle(
+        val track: TrackId?,
+        val reply: CompletableDeferred<TrackChange>,
+    ) : CoreCommand("selectSecondarySubtitle", reply)
 
     class SelectTrack(
         val kind: TrackKind,

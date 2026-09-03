@@ -1834,6 +1834,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun restore(io.github.yuroyami.kiteplayer/PlayerMemento) // io.github.yuroyami.kiteplayer/KitePlayer.restore|restore(io.github.yuroyami.kiteplayer.PlayerMemento){}[0]
     final suspend fun seek(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayer.seek|seek(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.seekToChapter|seekToChapter(kotlin.Int){}[0]
+    final suspend fun selectSecondarySubtitle(io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectSecondarySubtitle|selectSecondarySubtitle(io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectTrack(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectTrack|selectTrack(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun stepFrame() // io.github.yuroyami.kiteplayer/KitePlayer.stepFrame|stepFrame(){}[0]
     final suspend fun stop() // io.github.yuroyami.kiteplayer/KitePlayer.stop|stop(){}[0]
@@ -2442,7 +2443,7 @@ final class io.github.yuroyami.kiteplayer/TrackInfo { // io.github.yuroyami.kite
 }
 
 final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kiteplayer/Tracks|null[0]
-    constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ...) // io.github.yuroyami.kiteplayer/Tracks.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+    constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ...) // io.github.yuroyami.kiteplayer/Tracks.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?){}[0]
 
     final val all // io.github.yuroyami.kiteplayer/Tracks.all|{}all[0]
         final fun <get-all>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> // io.github.yuroyami.kiteplayer/Tracks.all.<get-all>|<get-all>(){}[0]
@@ -2450,6 +2451,8 @@ final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kitepla
         final fun <get-audio>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> // io.github.yuroyami.kiteplayer/Tracks.audio.<get-audio>|<get-audio>(){}[0]
     final val selectedAudio // io.github.yuroyami.kiteplayer/Tracks.selectedAudio|{}selectedAudio[0]
         final fun <get-selectedAudio>(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.selectedAudio.<get-selectedAudio>|<get-selectedAudio>(){}[0]
+    final val selectedSecondarySubtitle // io.github.yuroyami.kiteplayer/Tracks.selectedSecondarySubtitle|{}selectedSecondarySubtitle[0]
+        final fun <get-selectedSecondarySubtitle>(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.selectedSecondarySubtitle.<get-selectedSecondarySubtitle>|<get-selectedSecondarySubtitle>(){}[0]
     final val selectedSubtitle // io.github.yuroyami.kiteplayer/Tracks.selectedSubtitle|{}selectedSubtitle[0]
         final fun <get-selectedSubtitle>(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.selectedSubtitle.<get-selectedSubtitle>|<get-selectedSubtitle>(){}[0]
     final val selectedVideo // io.github.yuroyami.kiteplayer/Tracks.selectedVideo|{}selectedVideo[0]
@@ -2463,7 +2466,8 @@ final class io.github.yuroyami.kiteplayer/Tracks { // io.github.yuroyami.kitepla
     final fun component2(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.component2|component2(){}[0]
     final fun component3(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.component3|component3(){}[0]
     final fun component4(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.component4|component4(){}[0]
-    final fun copy(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ...): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/Tracks.copy|copy(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+    final fun component5(): io.github.yuroyami.kiteplayer/TrackId? // io.github.yuroyami.kiteplayer/Tracks.component5|component5(){}[0]
+    final fun copy(kotlin.collections/List<io.github.yuroyami.kiteplayer/TrackInfo> = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/TrackId? = ...): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/Tracks.copy|copy(kotlin.collections.List<io.github.yuroyami.kiteplayer.TrackInfo>;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/Tracks.equals|equals(kotlin.Any?){}[0]
     final fun find(io.github.yuroyami.kiteplayer/TrackId): io.github.yuroyami.kiteplayer/TrackInfo? // io.github.yuroyami.kiteplayer/Tracks.find|find(io.github.yuroyami.kiteplayer.TrackId){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/Tracks.hashCode|hashCode(){}[0]

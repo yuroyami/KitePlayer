@@ -548,7 +548,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **T3** A secondary subtitle track at the top. M. `subtitles.md`
 - [ ] **V2** Refresh-rate awareness on every renderer; Android frame-rate matching. M; device
   step 20. `video.md`
 - [ ] **V3** A real frame-presented event, exact on Metal and MediaCodec. M. `video.md`

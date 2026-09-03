@@ -45,7 +45,7 @@ class MarkersTest {
     }
 
     @Test
-    fun `a seek past a marker does not fire it, and a seek back re-arms it`() = runTest {
+    fun `a seek past a marker does not fire it and a seek back re-arms it`() = runTest {
         val harness = harness(this)
         harness.openWithRenderer()
         harness.core.setMarkers(listOf(Marker(1.seconds, "one"), Marker(2.seconds, "two")))

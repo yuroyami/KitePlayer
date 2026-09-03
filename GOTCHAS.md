@@ -311,6 +311,10 @@ Never move one silently.
 - Never apply `AVFMT_FLAG_FAST_SEEK`, and never pass demuxer options from a config map without
   an allowlist. MP3 seeking correctness rests on `usetoc=0` AND fast-seek unset together.
 
+- A backtick test name with a comma compiles on the JVM and refuses on every Kotlin/Native
+  target ("Name contains illegal characters"). Tier 1 compiles only the JVM half, so the comma
+  ships and the macosArm64 gate finds it a commit later. No commas in test names.
+
 ## 5. Kotlin/Wasm and browser traps
 
 - Kotlin/Wasm has NO bulk typed-array bridge: naive per-byte JS crossings run at roughly

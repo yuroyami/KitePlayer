@@ -24,6 +24,8 @@ public data class PlayerSnapshot(
      * them). Empty for media with no chapter table.
      */
     val chapters: List<Chapter> = emptyList(),
+    /** The markers set with [io.github.yuroyami.kiteplayer.KitePlayer.setMarkers], sorted by position. */
+    val markers: List<Marker> = emptyList(),
     /**
      * The container's own tags: `title`, `artist`, `encoder` and whatever else it wrote.
      *
@@ -495,3 +497,10 @@ public data class Chapter(
  */
 internal fun List<Chapter>.chapterHolding(positionMicros: Long): Chapter? =
     lastOrNull { it.holds(positionMicros) }
+
+/**
+ * A position playback announces when it crosses it. Set with
+ * [io.github.yuroyami.kiteplayer.KitePlayer.setMarkers], announced as [PlayerEvent.MarkerReached].
+ * [id] is the application's own name for it and means nothing to the engine.
+ */
+public data class Marker(val position: Duration, val id: String)

@@ -14,6 +14,7 @@ import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.Marker
 import io.github.yuroyami.kiteplayer.SubtitleSource
 import io.github.yuroyami.kiteplayer.PlaybackError
 import io.github.yuroyami.kiteplayer.PlaybackException
@@ -212,6 +213,13 @@ internal class PlaybackCore(
      * always the list someone built, and turning shuffle off needs nothing put back.
      */
     private var shuffleEnabled = false
+
+    /** Positions to announce on crossing, sorted. Player-level: they outlive the item. */
+    private var markers: List<Marker> = emptyList()
+
+    /** The published position at the last marker pass, and the seek epoch it was read in. */
+    private var markerCursorUs: Long = NO_POSITION
+    private var markerCursorEpoch: Generation? = null
     private var shuffleRandom: Random = Random.Default
     private var queueOrder: List<Int> = emptyList()
 
@@ -931,6 +939,12 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
+    suspend fun setMarkers(markers: List<Marker>) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.SetMarkers(markers, reply))
+        awaitReply(reply)
+    }
+
     /** The position as of the last pass, which is never more than the wake floor old; while a seek
      * request is in flight, the newest requested target, which is the timeline the caller asked for. */
     fun position(): Duration {
@@ -1330,6 +1344,11 @@ internal class PlaybackCore(
                     shuffleRandom = command.seed?.let { Random(it) } ?: Random.Default
                 }
                 rebuildQueueOrder()
+                publishSnapshot()
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetMarkers -> {
+                markers = command.markers.sortedBy { it.position }
                 publishSnapshot()
                 command.reply.complete(Unit)
             }
@@ -1792,6 +1811,8 @@ internal class PlaybackCore(
         if (session != null) teardownSession()
         media = command.media
         lastChapterIndex = Int.MIN_VALUE
+        markerCursorUs = NO_POSITION
+        markerCursorEpoch = null
         externalSubtitleTracks = emptyList()
         selectedExternalSubtitle = null
         pendingExternalSubtitle = null
@@ -3596,6 +3617,31 @@ internal class PlaybackCore(
                 emitEvent(PlayerEvent.ChapterChanged(current))
             }
         }
+        // Markers: announced on CROSSING while playing. The cursor is the published reading of the
+        // previous pass; a seek moves it to the landing without announcing anything, which is what
+        // lets a backward seek or a loop re-arm the markers behind the new position.
+        if (markers.isNotEmpty() && pendingSeek == null) {
+            val positionUs = publishedPositionMicros.value
+            if (markerCursorEpoch != requestedEpoch || markerCursorUs == NO_POSITION) {
+                markerCursorEpoch = requestedEpoch
+                markerCursorUs = positionUs
+            } else if (status == PlaybackStatus.Playing && positionUs > markerCursorUs) {
+                for (marker in markers) {
+                    val markerUs = marker.position.inWholeMicroseconds
+                    if (markerUs > markerCursorUs && markerUs <= positionUs) {
+                        emitEvent(PlayerEvent.MarkerReached(marker))
+                    }
+                }
+                markerCursorUs = positionUs
+            }
+            if (status == PlaybackStatus.Playing) {
+                // Wake when the next marker lands rather than a whole pass later, the way the A-B
+                // loop does: media distance over rate is wall distance.
+                markers.firstOrNull { it.position.inWholeMicroseconds > positionUs }?.let { next ->
+                    wakeIn(((next.position.inWholeMicroseconds - positionUs) / speed).toLong().microseconds)
+                }
+            }
+        }
         if (session.isStillImage && session.framesOut(session.video) > 0) {
             if (stillImageShownSinceNanos == 0L) stillImageShownSinceNanos = clock.nanos()
             val shownFor = (clock.nanos() - stillImageShownSinceNanos).nanoseconds
@@ -5150,6 +5196,7 @@ internal class PlaybackCore(
             queueIndex = queueIndex,
             shuffle = shuffleEnabled,
             queueOrder = queueOrder,
+            markers = markers,
         )
     }
 
@@ -5431,6 +5478,7 @@ internal class PlaybackCore(
             queueIndex = queueIndex,
             shuffle = shuffleEnabled,
             queueOrder = queueOrder,
+            markers = markers,
         )
         publishProgressAndStats()
     }
@@ -7054,6 +7102,9 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val seed: Long?,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("setShuffle", reply)
+
+    class SetMarkers(val markers: List<Marker>, val reply: CompletableDeferred<Unit>) :
+        CoreCommand("setMarkers", reply)
 
     class StepFrame(val reply: CompletableDeferred<Unit>) : CoreCommand("stepFrame", reply)
 

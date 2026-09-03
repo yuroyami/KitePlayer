@@ -9,6 +9,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The player.
@@ -682,6 +683,44 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Seeks to the start of the chapter after the one holding the current position, with [seek]'s
+     * contract. Does nothing at the last chapter, and in media with no chapter table.
+     */
+    public suspend fun nextChapter() {
+        val here = position()
+        val next = state.value.chapters.filter { it.start > here }.minByOrNull { it.start } ?: return
+        seek(next.start)
+    }
+
+    /**
+     * Seeks to the start of the current chapter, or of the previous one when less than three
+     * seconds into the current one: the rule every music player has, so a second press means
+     * "the one before". At the first chapter both readings restart it. In a gap between chapters
+     * the last chapter to have started counts as the current one. Does nothing in media with no
+     * chapter table.
+     */
+    public suspend fun previousChapter() {
+        val here = position()
+        val chapters = state.value.chapters
+        val current = chapters.filter { it.start <= here }.maxByOrNull { it.start } ?: return
+        val target = if (here - current.start < CHAPTER_RESTART_WINDOW) {
+            chapters.filter { it.start < current.start }.maxByOrNull { it.start } ?: current
+        } else {
+            current
+        }
+        seek(target.start)
+    }
+
+    /**
+     * Positions to announce with [PlayerEvent.MarkerReached] as playback crosses them. Sorted by
+     * the engine and replaced wholesale, so an empty list clears them. They belong to the player
+     * rather than to the item: a new item starts with every marker armed.
+     */
+    public fun setMarkers(markers: List<Marker>) {
+        core.post(CoreCommand.SetMarkers(markers, CompletableDeferred()))
+    }
+
+    /**
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
      * Switching a CONTAINER track reopens the container and seeks back to where playback was,
@@ -862,3 +901,6 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         }
     }
 }
+
+/** How far into a chapter "previous" still means the one before rather than a restart. */
+private val CHAPTER_RESTART_WINDOW: Duration = 3.seconds

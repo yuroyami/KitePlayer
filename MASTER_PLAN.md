@@ -533,7 +533,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **S4** Markers that fire on crossing; next and previous chapter. S. `session.md`
 - [ ] **S5** A memento of where playback was, and restore. M. `session.md`
 - [ ] **V8** Secure surface flag on the Android view. S, device proof (step 21). `video.md`
 - [ ] **V9** Picture-in-picture parameters on Android, and an honest capability answer. S,
@@ -770,8 +769,8 @@ libVLC. Parity of what EXISTS beats new feature count; nothing here is scheduled
   exist.
 - Network: streaming resilience (BIG-BITES). Live: DVR window, low-latency HLS and DASH,
   discontinuity policy.
-- Chapters and programs: end-aware chapters (S4), programs and editions (deleted from the API
-  until built), attachments.
+- Chapters and programs: programs and editions (deleted from the API until built), attachments.
+  Chapter navigation and position markers exist.
 - Processing: typed filter plans (V11), runtime rebuild, recording while playing (K6),
   thumbnails (K8), waveforms (K9).
 - Observability: sequenced transitions, trace export (O3). Structured logs with redaction and

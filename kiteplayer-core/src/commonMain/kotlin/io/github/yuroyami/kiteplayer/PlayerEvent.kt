@@ -66,5 +66,14 @@ public sealed interface PlayerEvent {
      * first chapter of a chaptered file. Media with no chapter table emits nothing.
      */
     public data class ChapterChanged(val chapter: Chapter?) : PlayerEvent
+
+    /**
+     * Playback crossed [marker] while advancing.
+     *
+     * Fires when the published position moves from before the marker to at or past it while
+     * playing. A seek that lands past a marker does not fire it; a seek back behind one, or a
+     * loop, re-arms it for the next pass. Each marker fires at most once per pass.
+     */
+    public data class MarkerReached(val marker: Marker) : PlayerEvent
 }
 

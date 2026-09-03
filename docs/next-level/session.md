@@ -194,7 +194,15 @@ wording; do not touch it here.
 
 ---
 
-### S4 Markers, and chapter navigation. Size S, Tier 1
+### S4 Markers, and chapter navigation. LANDED 2026-09-03
+
+One reconciliation: the test paragraph below says "at 2 s into chapter 2 goes to chapter 2's
+start", which contradicts the contract's own three-second rule two lines above it. The contract
+won: within three seconds of a chapter's start, previous goes back one chapter; further in, it
+restarts the chapter. The landed tests use five seconds and one second so the two cases cannot
+be confused.
+
+### S4, as planned. Size S, Tier 1
 
 **Why.** Synkplay-style sync, ad cue points, lyric lines and "skip intro" all want "tell me when
 we pass this position". Chapters exist (`chapterAt`, `seekToChapter`) but there is no next or

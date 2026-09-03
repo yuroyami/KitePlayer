@@ -138,6 +138,8 @@ documented OS support range.
 - **AV1 on the web.** Every native target cross-builds dav1d 1.5.4 with full SIMD, and hardware AV1
   is used where it exists. The wasm build is single-threaded and dav1d requires pthreads, so the
   web has no software AV1.
+- **Everything else that is left** is in one file, [MASTER_PLAN.md](MASTER_PLAN.md), grouped by
+  what blocks each item. How the project works, its traps and its decisions: [GOTCHAS.md](GOTCHAS.md).
 
 ## Modules
 

@@ -22,7 +22,7 @@
   red proves nothing.
 - **Public API changes** run `./gradlew updateKotlinAbi` in the same commit (KitePlayer) or
   `./gradlew apiDump -Pkiteffmpeg.hostTargetsOnly=true` (KiteFFmpeg). Both `explicitApi()`.
-- **`MASTER_PLAN.md` Phase 10 loses the item's row in the same commit** that lands it. Half done
+- **`MASTER_PLAN.md` loses the item's row (under DOABLES, or wherever it sits) in the same commit** that lands it. Half done
   is reduced in place with the remainder named.
 - **Gate tier by changed path**, `GOTCHAS.md` section 3. Prose is Tier 1. A platform source set,
   a `build.gradle.kts`, or anything under `native/` is Tier 2. `kite_rt_render.c` or the ring

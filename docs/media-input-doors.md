@@ -266,7 +266,7 @@ Capacity is `capacityChunks * 256 KiB`, 4 MiB by default. Say that in the KDoc.
 
 A pipe is single use, so it is NOT wrapped in a factory by the library. The consumer writes
 `MediaItem.from(MediaIoFactory { pipe }, "live")` and accepts that a reopen fails. That is the
-same limit live network media already has (`MASTER_PLAN.md` section 7.3).
+same limit live network media already has (the streaming resilience item in `MASTER_PLAN.md`).
 
 ### 4.5 The new module `kiteplayer-io`
 
@@ -409,7 +409,7 @@ internal class AfdChannelMediaIo(private val afd: AssetFileDescriptor) : MediaIo
 ```
 
 This is the door that retires Synkplay's hand-written resolver and reduces `MASTER_PLAN.md`
-section 7.1's positional-read bullet: the descriptor is ours, opened per session, read
+the IO pass's `fd:` bullet in `MASTER_PLAN.md`: the descriptor is ours, opened per session, read
 positionally, so the shared-offset defect cannot occur by construction. The `fd:` protocol route
 keeps working for anyone already on it.
 
@@ -490,17 +490,17 @@ container). That is not an error; the flag just decides whether to stop later.
 ### 4.7 What stays out, named so nobody re-adds it by accident
 
 - `SubtitleSource.io`: declared and documented unwired. Stays that way; it rides the subtitle
-  program in `MASTER_PLAN.md` Phase 4.
+  program in `MASTER_PLAN.md` (the bitmap subtitle bridge, under BIG-BITES).
 - kotlinx-io and okio adapters: decision C. Default no.
 - Windows (`mingwX64`) doors: no output backend exists there and nobody has run the target. Add
   when Windows plays.
-- A disk cache, retry or concat wrapper over `MediaIo`: network program, Phase 7.
+- A disk cache, retry or concat wrapper over `MediaIo`: the streaming resilience item in `MASTER_PLAN.md`.
 - A `Flow<ByteArray>` door: `PipedMediaIo` plus a ten-line collector covers it; do not add API for
   it until a consumer asks.
 - Overloads on `KitePlayer.open`. Never.
 - Typed http knobs beyond headers (`userAgent`, `timeout`, `reconnect`): `kiteplayer-network` has no
   timeout, retry or reconnect today, so a typed field there would be a promise the Ktor path cannot
-  keep. They ride Phase 7. A `User-Agent` header already works through `headers`.
+  keep. They ride streaming resilience. A `User-Agent` header already works through `headers`.
 - `seek2any`: lands on non-keyframes, which decodes garbage. Not a player knob.
 - A generated, exhaustive typed surface over every FFmpeg option (`av_opt_next` over every demuxer
   and protocol class of the linked build). Real, and the wrong size: hundreds of types that change
@@ -877,11 +877,10 @@ or reducing its `MASTER_PLAN.md` row.
 ### Task 0: the design commit (Tier 1, prose only)
 
 - Add this file at `docs/media-input-doors.md`.
-- `MASTER_PLAN.md`: add section "5.5 Media input doors and typed open options" under Phase 5 with
-  one paragraph pointing here, the task list below as checkboxes, the https-headers defect named,
-  and decisions A to E listed as the owner's. Reduce section 7.1's positional-read bullet to
-  "lands with `MediaIo.ofUri` in docs/media-input-doors.md Task 6". Add the generated-option-surface
-  horizon item to Phase 9. Add the Synkplay bump note to section 0.1.
+- `MASTER_PLAN.md`: the doors item under OWNER-GATED already points here, carries the task list
+  as checkboxes, names the https-headers defect, and lists decisions A to E as the owner's. The
+  IO pass (BIG-BITES) carries the `fd:` path remainder, the horizon list carries the generated
+  option surface, and the Synkplay bump note sits under OWNER-GATED. This step is done.
 - `GOTCHAS.md` section 4: rewrite the allowlist sentence as section 4.2 above says. This line
   waits for decision A; everything else in this task does not.
 - No code. Commit: `design: media input doors and typed open options`.
@@ -995,7 +994,7 @@ tests in `kiteplayer-io/src/androidHostTest` for what the host can reach.
   play and seek." Add the same two calls to the Android sample behind a menu entry so the step
   has something to tap (`kiteplayer-sample-android/.../SampleController.kt`, beside the existing
   `player.open(MediaItem(uri = materialiseClip().absolutePath))` at line 72).
-- Reduce `MASTER_PLAN.md` section 7.1's positional-read bullet to its device half.
+- Reduce the IO pass's `fd:` bullet in `MASTER_PLAN.md` (BIG-BITES) to its device half.
 - Commit: `io: Android content and asset doors, the descriptor is ours`.
 
 ### Task 7: `DemuxPolicy`, and the builder (Tier 1)
@@ -1080,7 +1079,7 @@ tests `kiteplayer-core/src/commonTest/kotlin/io/github/yuroyami/kiteplayer/Media
 - `docs/spi-cookbook.md`: one paragraph under "The source" saying a backend that reads bytes gets
   them through `MediaIo`, so it inherits every door for free; and one saying a backend receives
   `MediaItem.demux` typed and owes each field an honour or a typed refusal.
-- Delete section 5.5 from `MASTER_PLAN.md` when every checkbox above is gone.
+- Delete the doors item from `MASTER_PLAN.md` when every checkbox above is gone.
 - Commit: `docs: the doors, the knobs, and what a plain path still is`.
 
 ---
@@ -1112,7 +1111,7 @@ Tier 2 (Tasks 4, 5, 6), on top of Tier 1:
 
 ## 8. Decisions the owner makes before execution
 
-Answer these in the design commit's message or in `MASTER_PLAN.md` section 5.5. An executor does
+Answer these in the design commit's message or on the doors item in `MASTER_PLAN.md`. An executor does
 not guess them.
 
 - **A. `openOptions` policy.** Recommended: refusal list of two keys plus `@KitePlayerLowLevelApi`

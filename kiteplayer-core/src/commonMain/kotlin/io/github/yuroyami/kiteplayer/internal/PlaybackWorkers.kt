@@ -9,6 +9,10 @@ import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.selects.SelectClause1
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -103,6 +107,12 @@ internal class Worker(val name: String) {
     private val acked = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     private val released = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
+    /**
+     * Wakes an idle worker the moment the actor asks it to quiesce, so a nap is never waited out.
+     * Conflated like the others: a worker re-reads its own flags on waking.
+     */
+    private val wake = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
     /** The epoch this worker is running under. Changed by the actor only while the worker is parked. */
     val epoch: Generation get() = Generation(epochValue.value)
 
@@ -178,7 +188,44 @@ internal class Worker(val name: String) {
             val drained = acked.tryReceive()
         } while (drained.isSuccess)
         pauseRequested.value = true
+        wake.trySend(Unit)
+        // The wake is the second half of the request. Setting the flag alone left an idle worker
+        // asleep in its own poll until that poll expired, and a seek paid that nap before the
+        // pipeline could park.
     }
+
+    /**
+     * Sleeps up to [duration], returning at once when the actor asks this worker to quiesce.
+     *
+     * Every idle wait in a worker loop goes through this rather than through a bare `delay`. The
+     * difference is the whole cost of a seek on an idle pipeline: a worker that only notices the
+     * request at its next wake-up made the actor wait out a full poll per worker.
+     */
+    suspend fun nap(duration: Duration) {
+        if (pauseRequested.value) return
+        withTimeoutOrNull(duration) { wake.receive() }
+    }
+
+    /**
+     * [nap] with a second way to end: whatever [signal] waits for, or the quiesce request, or the
+     * duration. For the loops whose idle wait is already woken by their own queue.
+     */
+    suspend fun napUntil(duration: Duration, signal: suspend () -> Unit) {
+        if (pauseRequested.value) return
+        coroutineScope {
+            val signalled = async { signal() }
+            withTimeoutOrNull(duration) {
+                select<Unit> {
+                    wake.onReceive { }
+                    signalled.onAwait { }
+                }
+            }
+            signalled.cancel()
+        }
+    }
+
+    /** The wake as a select clause, for loops that already select on their own work. */
+    val onWake: SelectClause1<Unit> get() = wake.onReceive
 
     /** Actor side, the wait half. Call after [requestQuiesce]; same answer as [quiesce]. */
     suspend fun awaitQuiesced(timeout: Duration): Boolean {
@@ -189,6 +236,11 @@ internal class Worker(val name: String) {
 
     /** Actor side. Puts the worker into [newEpoch], voids its local state, and lets it run again. */
     fun release(newEpoch: Generation) {
+        // A wake token left over from the request this release answers must not cut short the
+        // first nap of the new epoch.
+        do {
+            val stale = wake.tryReceive()
+        } while (stale.isSuccess)
         epochValue.value = newEpoch.value
         releaseCount.incrementAndGet()
         pauseRequested.value = false

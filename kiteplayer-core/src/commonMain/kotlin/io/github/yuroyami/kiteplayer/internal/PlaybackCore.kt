@@ -6209,7 +6209,7 @@ internal class PlaybackCore(
                 ended = false
             }
             if (ended) {
-                delay(WORKER_POLL)
+                worker.nap(WORKER_POLL)
                 continue
             }
             if (overBudget(session)) {
@@ -6220,7 +6220,7 @@ internal class PlaybackCore(
                     // Woken by whichever consumer takes something, rather than by a timer, so read-ahead
                     // resumes the moment there is room. Nothing is taken here, so the bounded wait can lose
                     // at most a wake-up.
-                    withTimeoutOrNull(WORKER_POLL) { session.selectedQueues().first().awaitDrain() }
+                    worker.napUntil(WORKER_POLL) { session.selectedQueues().first().awaitDrain() }
                 }
                 continue
             }
@@ -6372,14 +6372,14 @@ internal class PlaybackCore(
                     if (videoDecoderSend(decoder, null)) ending = true
                     continue
                 }
-                delay(WORKER_POLL)
+                worker.nap(WORKER_POLL)
                 continue
             }
             val packet = queue.poll()
             if (packet == null) {
                 // Nothing taken, so nothing can be lost: the wait is bounded and the poll above is what
                 // actually takes a packet.
-                withTimeoutOrNull(WORKER_POLL) { queue.awaitData() }
+                worker.napUntil(WORKER_POLL) { queue.awaitData() }
                 continue
             }
             if (session.videoParked.value) {
@@ -6546,7 +6546,7 @@ internal class PlaybackCore(
             }
             val active = lane
             if (active == null) {
-                delay(WORKER_POLL)
+                worker.nap(WORKER_POLL)
                 continue
             }
             val queue = active.queue
@@ -6558,12 +6558,12 @@ internal class PlaybackCore(
                     if (decoder.send(null)) ending = true
                     continue
                 }
-                delay(WORKER_POLL)
+                worker.nap(WORKER_POLL)
                 continue
             }
             val packet = queue.poll()
             if (packet == null) {
-                withTimeoutOrNull(WORKER_POLL) { queue.awaitData() }
+                worker.napUntil(WORKER_POLL) { queue.awaitData() }
                 continue
             }
             try {
@@ -6623,6 +6623,9 @@ internal class PlaybackCore(
                 // cancelled at the wrong instant can leave a buffer neither queued nor owned by anyone.
                 val sent = select<Boolean> {
                     session.decodedAudio.onSend(buffer) { true }
+                    // The quiesce request ends the wait like a timeout does: the caller loops and
+                    // reads its own flags, which is what a bare timeout made it wait to do.
+                    worker.onWake { false }
                     onTimeout(WORKER_POLL) { false }
                 }
                 if (sent) {
@@ -6655,6 +6658,7 @@ internal class PlaybackCore(
             }
             val buffer = select<AudioBuffer?> {
                 session.decodedAudio.onReceive { it }
+                worker.onWake { null }
                 onTimeout(WORKER_POLL) { null }
             }
             if (buffer == null) {
@@ -6741,7 +6745,10 @@ internal class PlaybackCore(
                     video.resumeSchedule()
                     val wait = video.tick(masterPosition(session))
                     recordVideoClock(session, video)
-                    if (wait > Duration.ZERO) delay(minOf(wait, WORKER_POLL).atLeastOneTick())
+                    // The pacing wait yields to a park request like every other idle wait: while
+                    // playing, this sleep IS the schedule, so a seek that did not interrupt it paid
+                    // most of a frame period before the pipeline could be parked.
+                    if (wait > Duration.ZERO) worker.nap(minOf(wait, WORKER_POLL).atLeastOneTick())
                 }
                 SCHEDULER_ONE_FRAME -> {
                     video.resumeSchedule()
@@ -6756,12 +6763,16 @@ internal class PlaybackCore(
                         // The actor's presentFirstFrame is watching these counters; wake it.
                         session.landingArrived.trySend(Unit)
                     } else if (wait > Duration.ZERO) {
-                        delay(minOf(wait, WORKER_POLL).atLeastOneTick())
+                        worker.nap(minOf(wait, WORKER_POLL).atLeastOneTick())
                     }
                 }
                 else -> {
                     video.pauseSchedule()
-                    withTimeoutOrNull(WORKER_POLL) { session.schedulerNudge.receive() }
+                    select<Unit> {
+                        session.schedulerNudge.onReceive { }
+                        worker.onWake { }
+                        onTimeout(WORKER_POLL) { }
+                    }
                 }
             }
         }

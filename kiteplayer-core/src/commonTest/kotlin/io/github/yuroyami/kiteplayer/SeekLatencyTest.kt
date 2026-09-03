@@ -18,14 +18,15 @@ import kotlin.time.Duration.Companion.seconds
  * ONE AFTER ANOTHER, each sleeping out its own 50 ms nap before it saw the request, and the landing
  * was then observed at a 50 ms sampling interval rather than when the frame arrived.
  *
- * The budget is one nap, not one nap per worker: the request must go to every worker before any
- * acknowledgement is waited for, and the landing must wake the actor when it happens. 75 ms of
- * virtual time holds the whole seek to that shape with room for one 50 ms residual sleep.
+ * The budget is no nap at all. The request goes to every worker before any acknowledgement is
+ * awaited, an idle worker WAKES on the request instead of sleeping out its own poll, and the
+ * landing and the first present wake the actor when they happen. 15 ms of virtual time leaves
+ * room for the handshakes and nothing else.
  */
 class SeekLatencyTest {
 
     @Test
-    fun `a paused seek costs one worker nap and not one per worker`() = runTest {
+    fun `a paused seek waits for no worker nap at all`() = runTest {
         val harness = CoreHarness(this)
         harness.openWithRenderer()
         // Paused on purpose: an idle pipeline is the seek-bar case, and the slowest. Every worker
@@ -37,7 +38,7 @@ class SeekLatencyTest {
         val elapsed = harness.scheduler.currentTime - before
 
         assertTrue(
-            elapsed <= 75,
+            elapsed <= 15,
             "a paused precise seek with instant media took ${elapsed}ms of virtual time; " +
                 "the engine's own signalling is the only thing that can cost this much",
         )
@@ -56,7 +57,7 @@ class SeekLatencyTest {
         val elapsed = harness.scheduler.currentTime - before
 
         assertTrue(
-            elapsed <= 75,
+            elapsed <= 15,
             "a playing precise seek with instant media took ${elapsed}ms of virtual time",
         )
         harness.close()

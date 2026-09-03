@@ -315,6 +315,11 @@ Never move one silently.
   target ("Name contains illegal characters"). Tier 1 compiles only the JVM half, so the comma
   ships and the macosArm64 gate finds it a commit later. No commas in test names.
 
+- A `StateFlow.first { }` samples the CURRENT element before it waits, so a test that seeks and
+  then waits for "the position advanced" can match the reading from BEFORE the seek and return
+  instantly, proving nothing. Wait for a reading that reflects the new position first. This slept
+  in `RealMediaSeekTest` until seeks got fast enough to return before the next progress tick.
+
 ## 5. Kotlin/Wasm and browser traps
 
 - Kotlin/Wasm has NO bulk typed-array bridge: naive per-byte JS crossings run at roughly

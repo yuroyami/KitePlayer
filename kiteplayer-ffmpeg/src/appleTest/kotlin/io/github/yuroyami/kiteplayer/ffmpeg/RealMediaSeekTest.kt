@@ -176,13 +176,29 @@ class RealMediaSeekTest {
                 "a seek to zero mid play landed at $landed rather than at the start",
             )
 
+            // The progress FLOW has to catch up to the seek before it can prove anything about what
+            // came after it. `first` samples the current element, and until the next progress tick
+            // that element still holds the position from BEFORE the seek, which is already past any
+            // "advanced from the landing" threshold: the wait below then returns instantly and proves
+            // nothing. Waiting for a reading that reflects the landing first is what makes the second
+            // wait an observation of playback rather than of a stale value.
+            val caughtUp = withTimeoutOrNull(10.seconds) {
+                player.progress.first { it.position < 500.milliseconds }
+            }
+            assertNotNull(caughtUp, "the progress flow never reported the position the seek landed on")
+
             // And it is playback that resumes, not a frozen first frame: the position moves on from the
             // landing under its own steam.
             val resumed = withTimeoutOrNull(10.seconds) {
                 player.progress.first { it.position > landed + 300.milliseconds }
             }
             assertNotNull(resumed, "the player stopped advancing after seeking to zero")
-            assertEquals(PlaybackStatus.Playing, player.state.value.status)
+            // Status follows the refill, so it is reached on an actor pass rather than at the instant
+            // the position moves. Bounded rather than instantaneous, for the same reason.
+            val playing = withTimeoutOrNull(10.seconds) {
+                player.state.first { it.status == PlaybackStatus.Playing }
+            }
+            assertNotNull(playing, "playback advanced but the status stayed ${player.state.value.status}")
             assertNull(player.state.value.error)
         } finally {
             closeAndAwait(player)

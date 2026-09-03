@@ -75,6 +75,7 @@ the state snapshot, so your UI can read it back.
 |---|---|
 | **Playback** | `open`, `play`, `pause`, `stop`, `seek`, `stepFrame`, `close` / `closeAndAwait` |
 | **Playlists** | `openQueue` with `next` and `previous`, `setLoop` (looping one item or wrapping the whole queue), and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` to edit it while it plays |
+| **Shuffle** | `setShuffle`. The items in the queue never move, so the list you show stays the list your user built. What changes is `queueOrder`, which is published so you can show what is coming next |
 | **Speed** | `setSpeed` from 0.25x to 4x with the pitch preserved, or `setPreservePitch(false)` to let it change like a tape |
 | **Sound** | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), and `setVideoEnabled(false)` to keep only the audio without reopening anything |
 | **Volume above 100%** | Raise `PlayerConfig.audio.volumeCeiling` to as much as 2. Past unity every sample is folded through a saturator, so a loud passage compresses instead of squaring off. At or below unity nothing is folded and the samples are untouched, bit for bit |

@@ -1160,7 +1160,15 @@ commit that lands it.
 - [ ] T6 One overlay geometry law on every renderer. M, Android proof on device
 
 **Observability (`observability.md`)**
-- [ ] O1 Bytes read and bytes per second in the stats; bitrate after K2. S
+- [ ] O1 remainder: **`containerBitrate`, which waits for K2.** The THROUGHPUT half is DONE
+  (2026-09-03): `PlaybackStats.ioBytesTotal` and `ioBytesPerSecond` report what came over the wire,
+  counted where the engine's byte cache already sees every upstream read. A seek served from the
+  cache's own window adds nothing, because nothing was fetched, which is the number a consumer
+  diagnosing a stall wants. The total is the player's rather than the session's, so a reopen does
+  not put a cliff in anyone's graph. An item opened as a plain path reports zero and its KDoc says
+  that means "not measurable here" rather than "nothing was read". 4 tests, the counter and the
+  retirement falsified. The scripted backend now drains the reader it is handed, which it never did:
+  without that the engine's byte path was being handed a reader nobody called.
 - [ ] O2 Decode time and presentation lateness percentiles. S
 - [ ] O3 A trace sink and the Chrome trace format. M
   O4 is DONE (2026-09-03). `KiteLog.StructuredSink` receives the tag, the message and the FIELDS

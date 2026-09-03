@@ -116,6 +116,15 @@ internal class CoreHarness(
         core.open(MediaItem(uri))
     }
 
+    /**
+     * Opens an item whose bytes come from [io], which is what puts the engine's byte cache in the
+     * path. A plain path opens on the backend's own protocol and the cache never sees a byte.
+     */
+    suspend fun openThroughIo(io: suspend () -> io.github.yuroyami.kiteplayer.MediaIo) {
+        attachRenderer()
+        core.open(MediaItem("scripted://media", io = io))
+    }
+
     /** Opens with the renderer already attached, which is what a real caller does. */
     suspend fun openWithRenderer(uri: String = "scripted://media") {
         attachRenderer()

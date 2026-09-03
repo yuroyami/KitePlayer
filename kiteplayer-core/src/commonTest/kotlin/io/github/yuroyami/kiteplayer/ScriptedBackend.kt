@@ -504,7 +504,13 @@ internal class ScriptedBackend(
         lastOpenedItem = media
         openGate?.await()
         openFailure?.let { throw it }
-        return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus).also { sessions += it }
+        // A real demuxer reads bytes; this one is scripted and normally does not. When the item
+        // carries a reader it drains a little from it per packet, so the engine's byte path is
+        // exercised rather than assumed: without this, anything measuring what a source delivered
+        // measures a reader nobody ever called.
+        val io = media.io?.invoke()
+        return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus, io)
+            .also { sessions += it }
     }
 }
 
@@ -514,9 +520,11 @@ internal class ScriptedSession(
     private val faults: FaultPlan,
     private val trace: ScriptTrace = ScriptTrace(),
     videoDecoderStatus: ScriptedVideoDecoderStatus = ScriptedVideoDecoderStatus(),
+    /** The engine's byte reader, when the item carried one. Drained a little per packet. */
+    private val io: io.github.yuroyami.kiteplayer.MediaIo? = null,
 ) : BackendSession {
 
-    val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace)
+    val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace, io)
 
     override val source: PlayerMediaSource get() = scriptedSource
 
@@ -569,6 +577,8 @@ internal class ScriptedSource(
     private val ledger: LeakLedger,
     private val faults: FaultPlan,
     private val trace: ScriptTrace = ScriptTrace(),
+    /** The engine's byte reader when the item carried one; a real demuxer reads, so this one does too. */
+    private val io: io.github.yuroyami.kiteplayer.MediaIo? = null
 ) : PlayerMediaSource {
 
     override val streams: List<PlayerStreamInfo> = buildList {
@@ -749,9 +759,16 @@ internal class ScriptedSource(
         return packet
     }
 
+    /** Scratch for the byte drain; one buffer reused, because a demuxer does not allocate per read. */
+    private val ioScratch = ByteArray(4096)
+
     override suspend fun readPacket(): PlayerPacket? {
         check(selectCalls > 0) { "selectStreams must be called before readPacket" }
         reads++
+        // What a real demuxer does and this one otherwise would not: pull bytes. Without it the
+        // engine's byte cache is handed a reader nobody ever calls, and anything measuring what a
+        // source delivered measures nothing at all.
+        io?.let { reader -> runCatching { reader.read(ioScratch, 0, ioScratch.size) } }
         faults.readWedgesAfter?.let { limit ->
             if (reads > limit && !wedgeReleased.isCompleted) wedge("read")
         }

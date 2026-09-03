@@ -50,6 +50,15 @@ internal class CachingMediaIo(
     val windowStartByte = atomic(0L)
     val windowEndByte = atomic(0L)
 
+    /**
+     * Bytes actually pulled from the source, for the stats sampler.
+     *
+     * Upstream reads only, so a seek served from the window costs nothing here and the figure means
+     * what a network consumer would expect it to mean: what came over the wire. Read from the
+     * stats thread while the demux worker writes it, so it is atomic.
+     */
+    val upstreamBytesRead = atomic(0L)
+
     override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
         if (length <= 0) return 0
         // Serve from the window when the cursor is inside it.
@@ -66,6 +75,7 @@ internal class CachingMediaIo(
         if (upstreamEof && cursor == upstreamPos) return -1
         val chunk = ByteArray(policy.readChunkBytes)
         val pulled = upstream.read(chunk, 0, chunk.size)
+        if (pulled > 0) upstreamBytesRead.addAndGet(pulled.toLong())
         if (pulled < 0) {
             upstreamEof = true
             return -1

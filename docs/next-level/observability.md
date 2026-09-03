@@ -11,7 +11,24 @@ export exists.
 
 ---
 
-### O1 IO throughput in the stats. Size S, Tier 1 (the bitrate half waits for K2)
+### O1 The throughput half landed 2026-09-03; `containerBitrate` still waits for K2
+
+Two things the plan did not anticipate, both about the TEST rather than the code:
+
+- **The scripted backend never read a byte.** It produces packets from a script, so the engine
+  handed it a reader nobody ever called and the counter legitimately stayed at zero. It drains a
+  little per packet now, which is what a real demuxer does; without that, anything measuring what a
+  source delivered measures nothing and looks like a broken counter.
+- **The rate is legitimately zero at the end of a run.** It is a per-interval difference, and the
+  demuxer stops pulling once its buffers are full, so a reading taken afterwards is correct and the
+  first version of the test failed against working code. The rate is sampled across the run now,
+  and what is asserted is that it rose while bytes were actually arriving.
+
+A third thing falsifying caught: the reopen case used a second source as large as the first, so a
+total that had forgotten the retired bytes still climbed past the old figure and the case passed
+while being wrong. The second source is tiny now.
+
+### O1, as planned. Size S, Tier 1 (the bitrate half waits for K2)
 
 **Why.** A network player that cannot say how fast bytes arrive cannot explain a rebuffer.
 `CachingMediaIo` sees every upstream read and counts nothing.

@@ -274,7 +274,18 @@ public data class PlaybackStats(
      * because no backend binds an entry point for it; adding one is C surface across every target
      * and is grouped with the others waiting on that.
      */
-    val containerBitrate: Long? = null,
+    /**
+     * Bytes pulled from the media source since this player opened.
+     *
+     * Counts what came over the wire: a seek served from the engine's byte cache adds nothing, and
+     * an item opened as a plain path, which the backend reads through its own protocol rather than
+     * through the engine's cache, stays at zero throughout. Zero therefore means "not measurable
+     * here", not "nothing was read".
+     */
+    val ioBytesTotal: Long = 0,
+    /** Bytes pulled over the last stats interval, per second. Same caveat as [ioBytesTotal]. */
+    val ioBytesPerSecond: Long = 0,
+        val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,
     val masterClock: MasterClock = MasterClock.None,
 )

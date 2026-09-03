@@ -563,6 +563,11 @@ internal class PlaybackCore(
     /* Rising-edge state for the two counter-backed warnings: warned when the
      * counter MOVED this stats interval, so the history records onsets rather than flooding. */
     private var lastStatsUnderruns = 0L
+    private var lastStatsIoBytes = 0L
+
+    /** Bytes read by sessions that have already closed, so a reopen does not reset the total. */
+    private var retiredIoBytes = 0L
+
     private var lastStatsDroppedLate = 0L
 
     /** The deadline this pass may sleep until. Handlers lower it; nothing raises it. */
@@ -4957,6 +4962,7 @@ internal class PlaybackCore(
         retiredRefused += session.video?.refusedFrames ?: 0
         retiredRepeated += session.video?.repeatedFrames ?: 0
         retiredUnderruns += session.audio?.underruns ?: 0
+        retiredIoBytes += session.cachingIo?.upstreamBytesRead?.value ?: 0L
     }
 
     private suspend fun releaseSession(session: OpenSession) {
@@ -5242,7 +5248,22 @@ internal class PlaybackCore(
                 warn(PlaybackWarning.FrameDropping(droppedDelta.toInt()))
             }
             lastStatsDroppedLate = droppedLateNow
+
+            // Bytes over the wire. The rate is a difference between two samples divided by the
+            // interval the sampler actually runs on, so a late tick reports a lower rate rather
+            // than a spike, which is the honest way round for a figure used to explain a rebuffer.
+            val ioBytesNow = retiredIoBytes + (session?.cachingIo?.upstreamBytesRead?.value ?: 0L)
+            val ioDelta = (ioBytesNow - lastStatsIoBytes).coerceAtLeast(0)
+            lastStatsIoBytes = ioBytesNow
+            val ioPerSecond = if (config.statsInterval > Duration.ZERO) {
+                ioDelta * 1000L / config.statsInterval.inWholeMilliseconds.coerceAtLeast(1)
+            } else {
+                0L
+            }
+
             statsState.value = PlaybackStats(
+                ioBytesTotal = ioBytesNow,
+                ioBytesPerSecond = ioPerSecond,
                 decodedVideoFrames = decoded,
                 submittedFrames = retiredSubmitted + (session?.renderer?.submittedFrames ?: 0),
                 headlessFrames = retiredHeadless + (session?.renderer?.headlessFrames ?: 0),

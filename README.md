@@ -103,6 +103,9 @@ for HTTP requests, and `formatHint` when a container needs naming.
 
 Anything the player cannot honour is refused with a typed error rather than accepted and ignored.
 
+More than one player per process is supported and tested: two players play two files at once,
+and closing one leaves the other running.
+
 ## Where it runs
 
 | | |

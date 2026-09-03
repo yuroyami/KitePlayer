@@ -544,14 +544,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **K8** Thumbnails at positions (KitePlayer, `kiteplayer-ffmpeg`). S; the `io` route waits on
-  the doors. `kiteffmpeg.md`
-- [ ] **A8 remainder** `AudioAnalysis.measureLoudness(item)` in `kiteplayer-ffmpeg`. S. The meter
-  itself (`LoudnessMeter`, BS.1770-4 in common Kotlin) is done. Decode the primary audio stream,
-  convert `Frame` bytes to interleaved floats per `SampleFormat`, feed the meter. That needs the
-  sample-conversion helper K9's waveforms also want, so write it once for both. The oracle test
-  compares against the host `ffmpeg` binary's `ebur128` filter, which is on PATH and does not
-  wait for K3. `audio.md`
 - [ ] **K9** Waveforms, peaks and RMS per bucket (KitePlayer, `kiteplayer-ffmpeg`). M. `kiteffmpeg.md`
 - [ ] **T1** Style override with a background box on all three rasterisers. M; Android on
   DEVICE-DAY step 9f. `subtitles.md`
@@ -769,7 +761,7 @@ libVLC. Parity of what EXISTS beats new feature count; nothing here is scheduled
 - Subtitles: the bitmap bridge and libass (BIG-BITES), then style override (T1), external URL
   sources (T4), accessibility captions.
 - Video out: Linux and Windows GPU contexts (BIG-BITES and horizon), WebGL and WebGPU, HDR
-  display capability (RQ-6), hotplug, thumbnails (K8).
+  display capability (RQ-6), hotplug. Thumbnails exist.
 - Audio out: WASAPI, ALSA and Pulse quality backends, enumeration and hotplug (device selection,
   DOABLES), exclusive mode, passthrough (owner scope). ReplayGain, the limiter and the equaliser
   exist.
@@ -777,8 +769,8 @@ libVLC. Parity of what EXISTS beats new feature count; nothing here is scheduled
   discontinuity policy.
 - Chapters and programs: programs and editions (deleted from the API until built), attachments.
   Chapter navigation and position markers exist.
-- Processing: runtime filter rebuild, recording while playing (K6),
-  thumbnails (K8), waveforms (K9).
+- Processing: runtime filter rebuild, recording while playing (K6), waveforms (K9).
+  Thumbnails and loudness measurement exist.
 - Observability: sequenced transitions, trace export (O3). Structured logs with redaction and
   frame timing percentiles exist.
 - Platform: media session and lock screen (S7), audio focus (S6), real PiP on iOS (V10), casting

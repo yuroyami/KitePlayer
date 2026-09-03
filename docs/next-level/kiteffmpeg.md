@@ -201,7 +201,7 @@ equals the `tracks.all`, `chapters` and `duration` that `open` publishes.
 
 ---
 
-### K8 Thumbnails. Size S, Tier 1 (KitePlayer, `kiteplayer-ffmpeg`)
+### K8 Thumbnails. LANDED 2026-09-03
 
 **Why.** Seek previews and library grids. `extractFrame(atMicros)`, the `scale` filter and
 `encodeImage` already exist; this is the sentence that joins them.

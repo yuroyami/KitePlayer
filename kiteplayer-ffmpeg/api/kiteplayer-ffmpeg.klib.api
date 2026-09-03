@@ -107,6 +107,43 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.githu
     final fun planeStride(kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame.planeStride|planeStride(kotlin.Int){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail { // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail|null[0]
+    constructor <init>(kotlin.time/Duration, kotlin/Int, kotlin/Int, kotlin/ByteArray, io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat) // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.<init>|<init>(kotlin.time.Duration;kotlin.Int;kotlin.Int;kotlin.ByteArray;io.github.yuroyami.kiteplayer.ffmpeg.SnapshotFormat){}[0]
+
+    final val bytes // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.bytes|{}bytes[0]
+        final fun <get-bytes>(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.bytes.<get-bytes>|<get-bytes>(){}[0]
+    final val format // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.format|{}format[0]
+        final fun <get-format>(): io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.format.<get-format>|<get-format>(){}[0]
+    final val height // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.height|{}height[0]
+        final fun <get-height>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.height.<get-height>|<get-height>(){}[0]
+    final val position // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.position|{}position[0]
+        final fun <get-position>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.position.<get-position>|<get-position>(){}[0]
+    final val width // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.width|{}width[0]
+        final fun <get-width>(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.width.<get-width>|<get-width>(){}[0]
+
+    final fun component1(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.component1|component1(){}[0]
+    final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.component2|component2(){}[0]
+    final fun component3(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.component3|component3(){}[0]
+    final fun component4(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.component4|component4(){}[0]
+    final fun component5(): io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.component5|component5(){}[0]
+    final fun copy(kotlin.time/Duration = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/ByteArray = ..., io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat = ...): io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.copy|copy(kotlin.time.Duration;kotlin.Int;kotlin.Int;kotlin.ByteArray;io.github.yuroyami.kiteplayer.ffmpeg.SnapshotFormat){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.toString|toString(){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis { // io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis|null[0]
+    final suspend fun measureLoudness(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.audio/LoudnessResult // io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis.measureLoudness|measureLoudness(io.github.yuroyami.kiteplayer.MediaItem){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.ffmpeg/AudioSamples { // io.github.yuroyami.kiteplayer.ffmpeg/AudioSamples|null[0]
+    final fun toFloatInterleaved(io.github.yuroyami.kiteffmpeg/Frame): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/AudioSamples.toFloatInterleaved|toFloatInterleaved(io.github.yuroyami.kiteffmpeg.Frame){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails { // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails|null[0]
+    final suspend fun at(io.github.yuroyami.kiteplayer/MediaItem, kotlin.collections/List<kotlin.time/Duration>, kotlin/Int = ..., io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat = ...): kotlin.collections/List<io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail> // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails.at|at(io.github.yuroyami.kiteplayer.MediaItem;kotlin.collections.List<kotlin.time.Duration>;kotlin.Int;io.github.yuroyami.kiteplayer.ffmpeg.SnapshotFormat){}[0]
+}
+
 final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]
 final fun (io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame).io.github.yuroyami.kiteplayer.ffmpeg/encode(io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat = ...): kotlin/ByteArray // io.github.yuroyami.kiteplayer.ffmpeg/encode|encode@io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame(io.github.yuroyami.kiteplayer.ffmpeg.SnapshotFormat){}[0]
 final fun (io.github.yuroyami.kiteplayer/MediaItem).io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter(io.github.yuroyami.kiteffmpeg.dsl/FilterChain): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter|withVideoFilter@io.github.yuroyami.kiteplayer.MediaItem(io.github.yuroyami.kiteffmpeg.dsl.FilterChain){}[0]

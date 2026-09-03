@@ -1,3 +1,13 @@
+public final class io/github/yuroyami/kiteplayer/ffmpeg/AudioAnalysis {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/AudioAnalysis;
+	public final fun measureLoudness (Lio/github/yuroyami/kiteplayer/MediaItem;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/ffmpeg/AudioSamples {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/AudioSamples;
+	public final fun toFloatInterleaved (Lio/github/yuroyami/kiteffmpeg/Frame;)[F
+}
+
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegAudioDecoderFactory : io/github/yuroyami/kiteplayer/spi/AudioDecoderFactory {
 	public fun create (Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun getName ()Ljava/lang/String;
@@ -81,6 +91,31 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter;
 	public final fun toRgba (Lio/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegVideoFrame;)[B
 	public final fun toneMapsHdr (Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;)Z
+}
+
+public final class io/github/yuroyami/kiteplayer/ffmpeg/Thumbnail {
+	public synthetic fun <init> (JII[BLio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1-UwyO8pc ()J
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()[B
+	public final fun component5 ()Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;
+	public final fun copy-gRj5Bb8 (JII[BLio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;)Lio/github/yuroyami/kiteplayer/ffmpeg/Thumbnail;
+	public static synthetic fun copy-gRj5Bb8$default (Lio/github/yuroyami/kiteplayer/ffmpeg/Thumbnail;JII[BLio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/ffmpeg/Thumbnail;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBytes ()[B
+	public final fun getFormat ()Lio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;
+	public final fun getHeight ()I
+	public final fun getPosition-UwyO8pc ()J
+	public final fun getWidth ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ffmpeg/Thumbnails {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/Thumbnails;
+	public final fun at (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/util/List;ILio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun at$default (Lio/github/yuroyami/kiteplayer/ffmpeg/Thumbnails;Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/util/List;ILio/github/yuroyami/kiteplayer/ffmpeg/SnapshotFormat;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
 public final class io/github/yuroyami/kiteplayer/ffmpeg/TypedFiltersKt {

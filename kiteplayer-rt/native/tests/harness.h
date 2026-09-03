@@ -4,11 +4,17 @@
  * returns non-zero on the first failure.
  *
  * Deliberately a SEPARATE file from KiteFFmpeg's `native/kitecodec-c/tests/harness.h`, and with a
- * different symbol prefix (`kt_` here, `kc_` there). Plan section 15.2 B1.7 step 1 says the two C
- * build layers must not be shared across repositories: KiteFFmpeg is a public FFmpeg binding and
- * KitePlayer is a private player, and a shared harness would make the second a build dependency
- * of the first for no gain. The KiteFFmpeg harness also links `libavutil` to quiet FFmpeg's log,
- * which this library has no business depending on.
+ * different symbol prefix (`kt_` here, `kc_` there). The two C build layers are not shared across
+ * repositories: KiteFFmpeg is a public FFmpeg binding and KitePlayer is a player, and a shared
+ * harness would make one a build dependency of the other for no gain. The KiteFFmpeg harness also
+ * links `libavutil` to quiet FFmpeg's log, which this library has no business depending on, and
+ * their assertion vocabularies have diverged by domain: floats and zero-fill here, strings and
+ * memory there.
+ *
+ * They are PEERS, and that is the whole decision. Neither is the other's source of truth and
+ * neither is a vendored copy to be re-synced. What they do owe each other is a check: a defect
+ * found in one is looked for in the other, which is how KiteFFmpeg's `kc_partial` gained the hard
+ * failure this file's `kt_partial` always had, and how its `new_calls` gained the realloc term.
  *
  * Shape of a suite:
  *

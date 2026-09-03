@@ -501,7 +501,7 @@ unity, at t = 9 s the gain reaching the sink is about half, at t = 10 s the stat
 
 ---
 
-### A8 The METER landed 2026-09-03; the file-measuring call is what remains
+### A8 The meter and the file-measuring call. LANDED 2026-09-03
 
 `LoudnessMeter` is done and held to the standard's own numbers. Two test mistakes worth carrying
 forward, both found by falsifying rather than by reading:

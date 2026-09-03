@@ -100,7 +100,26 @@ public data class PlayerSnapshot(
     val balance: Float = 0f,
     /** False while video decoding is parked. See [KitePlayer.setVideoEnabled]. */
     val videoEnabled: Boolean = true,
+    /** The armed sleep timer, or null. Cleared when it fires. See [KitePlayer.setSleepTimer]. */
+    val sleepTimer: SleepTimer? = null,
 )
+
+/**
+ * When to stop playing on its own.
+ *
+ * The engine fades the sound down before it pauses, and puts the level back afterwards, so the
+ * volume the user set is never touched and the next play starts at it.
+ */
+public sealed interface SleepTimer {
+    /** Fire this long from when the timer was armed, measured in wall time while playing. */
+    public data class After(val duration: Duration) : SleepTimer
+
+    /** Fire when playback reaches this position in the media. */
+    public data class At(val position: Duration) : SleepTimer
+
+    /** Fire at the end of the current item, without advancing a queue past it. */
+    public data object EndOfItem : SleepTimer
+}
 
 /**
  * What the player is doing.

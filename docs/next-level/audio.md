@@ -446,7 +446,24 @@ where today's code fails that assertion at the flush boundary. Falsify by removi
 
 ---
 
-### A7 Sleep timer with a fade. Size S, Tier 1
+### A7 Sleep timer with a fade. LANDED 2026-09-03
+
+Two departures from the plan, both deliberate:
+
+- **The fade is computed from the time remaining, not stepped every 50 ms** as the plan suggested.
+  A stepped fade strands the level wherever it was if the actor is late for a pass, and the actor
+  is late whenever anything else is busy. Deriving `remaining / fade` each pass is self-correcting
+  and needs no timer of its own.
+- **It is a separate multiplier on the ring gain, not the volume.** The plan said to step "the ring
+  gain", which would have meant reading and writing the user's own volume. The multiplier keeps the
+  published volume still throughout, which is what stops a UI bound to it sliding to the bottom
+  while the user watches.
+
+Adding a pass handler moves the order ratchet in `PlaybackCoreTest`. That is the ratchet working:
+update it in the same commit with the reason for the placement, which here is after the status has
+settled and before the queue advances.
+
+### A7, as planned. Size S, Tier 1
 
 **Why.** Every app writes its own. The library owns the only clean way to do it: a slow volume
 ramp the ring cannot do by itself (its ramp is fixed at 5 ms), then pause, then restore the

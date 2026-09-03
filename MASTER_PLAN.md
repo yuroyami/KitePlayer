@@ -1087,7 +1087,13 @@ commit that lands it.
   ears. Cost of the fix is a real 20 ms delay on every speed change. So: do not rebuild it from the
   plan. Play a file, change speed repeatedly, and listen first. If a click is real, the fade is the
   right fix and the code is in the reverted commit's diff.
-- [ ] A7 Sleep timer with a fade. S
+  A7 is DONE (2026-09-03). `setSleepTimer` takes `After`, `At` or `EndOfItem`, fades the sound down
+  over a configurable stretch, pauses, and puts the level back. The fade is the engine's own
+  multiplier on the ring gain, so the published volume never moves and the next play is not silent,
+  which is the bug every hand-written sleep timer has. `After` counts only while playback is
+  advancing, so a player paused overnight does not sleep through its own timer, and the level is
+  computed from the time remaining rather than stepped, so a late pass cannot strand it. 6 tests,
+  the firing and the fade falsified separately. The pass-order ratchet moved with a stated reason.
 - [ ] A8 EBU R128 loudness meter in Kotlin, and a call that measures a file. M
 - [ ] A9 A ten-band equaliser, bypassed bit-exact when flat. M
 

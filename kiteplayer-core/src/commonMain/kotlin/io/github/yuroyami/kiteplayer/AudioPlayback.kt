@@ -620,8 +620,24 @@ public class AudioPlayback(
      * it. With no path open the value is simply stored, and [open] pushes it into the fresh ring.
      */
     private fun pushGain() {
-        val target = if (wantedMute.value) 0f else wantedVolume.value
+        val target = if (wantedMute.value) 0f else wantedVolume.value * fadeLevel.value
         synchronized(lock) { ring }?.setGain(target)
+    }
+
+    /**
+     * A multiplier the ENGINE applies on top of the user's volume, from 1 down to 0.
+     *
+     * The sleep timer's fade uses it. Separate from [volume] on purpose: a fade that drove the
+     * public volume down would leave the user at zero the next time they pressed play, and would
+     * make a UI bound to the volume slide to the bottom while they watched.
+     */
+    private val fadeLevel = atomic(1f)
+
+    /** Sets the engine's own fade multiplier. 1 is no fade. Rides the ring's ramp, so it never clicks. */
+    internal fun setFadeLevel(level: Float) {
+        require(level.isFinite() && level in 0f..1f) { "a fade level must be between 0 and 1, was $level" }
+        fadeLevel.value = level
+        pushGain()
     }
 
     /**

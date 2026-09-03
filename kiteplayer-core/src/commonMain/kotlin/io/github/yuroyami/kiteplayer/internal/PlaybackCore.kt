@@ -27,6 +27,7 @@ import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
 import io.github.yuroyami.kiteplayer.ReplayGainMode
+import io.github.yuroyami.kiteplayer.SleepTimer
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.FrameDropPolicy
@@ -444,6 +445,11 @@ internal class PlaybackCore(
     private var muted: Boolean = false
     private var balance: Float = 0f
     private var videoEnabled: Boolean = config.videoEnabled
+
+    /** The armed sleep timer, its fade length, and the wall instant an [SleepTimer.After] fires at. */
+    private var sleepTimer: SleepTimer? = null
+    private var sleepFade: Duration = Duration.ZERO
+    private var sleepDeadlineNanos: Long = 0L
     private var videoScale: VideoScale = VideoScale.Fit
     private var videoAdjustments: VideoAdjustments = VideoAdjustments.Identity
     private var renderQuality: io.github.yuroyami.kiteplayer.RenderQuality = config.renderQuality
@@ -646,6 +652,7 @@ internal class PlaybackCore(
         Handler("handleSubtitles") { handleSubtitles() },
         Handler("handleEof") { handleEof() },
         Handler("handleLoop") { handleLoop() },
+        Handler("handleSleepTimer") { handleSleepTimer() },
         Handler("handleQueueAdvance") { handleQueueAdvance() },
         Handler("handleQueuedSeek") { handleQueuedSeek() },
         Handler("publishSnapshot") { publishSnapshotIfDirty() },
@@ -1197,6 +1204,13 @@ internal class PlaybackCore(
                     IllegalArgumentException("balance must be between -1 and 1, was ${command.value}")
                 else -> null
             }
+            is CoreCommand.SetSleepTimer -> when {
+                command.fade < Duration.ZERO ->
+                    IllegalArgumentException("a sleep-timer fade must not be negative, was ${command.fade}")
+                command.timer is SleepTimer.After && command.timer.duration <= Duration.ZERO ->
+                    IllegalArgumentException("a sleep timer must be set in the future, was ${command.timer.duration}")
+                else -> null
+            }
             else -> null
         }
     }
@@ -1365,6 +1379,18 @@ internal class PlaybackCore(
             is CoreCommand.SetBalance -> {
                 balance = command.value
                 session?.audio?.balance = command.value
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.SetSleepTimer -> {
+                sleepTimer = command.timer
+                sleepFade = command.fade
+                sleepDeadlineNanos = when (val timer = command.timer) {
+                    is SleepTimer.After -> clock.nanos() + timer.duration.inWholeNanoseconds
+                    else -> 0L
+                }
+                // Cancelling has to undo a fade that already started, or a cancelled timer leaves
+                // the listener with quiet audio and no way to see why.
+                if (command.timer == null) session?.audio?.setFadeLevel(1f)
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetVideoEnabled -> {
@@ -3978,8 +4004,58 @@ internal class PlaybackCore(
      * owns the repeat-current cases, and the Ended-to-Opening transition makes re-entry
      * impossible: by the time this pass ends the status has left Ended.
      */
+    /**
+     * The sleep timer, one pass at a time.
+     *
+     * Runs only while playback is advancing, so a paused player does not sleep through its own
+     * timer and a timer set during a pause waits for play. The fade is computed from how much of
+     * it is left rather than stepped, so a pass the actor was late for cannot leave the level
+     * stranded, and a fade longer than the time remaining simply starts already part way down.
+     */
+    private suspend fun handleSleepTimer() {
+        val timer = sleepTimer ?: return
+        val audio = session?.audio
+        if (!status.isActive) return
+
+        val remaining: Duration = when (timer) {
+            is SleepTimer.After -> (sleepDeadlineNanos - clock.nanos()).nanoseconds
+            is SleepTimer.At -> timer.position - currentPosition().asDuration
+            // Handled by the end-of-stream path, which knows when an item is genuinely over.
+            SleepTimer.EndOfItem -> return
+        }
+
+        if (remaining <= Duration.ZERO) {
+            fireSleepTimer()
+            return
+        }
+        if (sleepFade > Duration.ZERO && remaining < sleepFade) {
+            val level = (remaining / sleepFade).toFloat().coerceIn(0f, 1f)
+            audio?.setFadeLevel(level)
+        }
+    }
+
+    /** Pauses, disarms, and gives the level back so the next play is not silent. */
+    private suspend fun fireSleepTimer() {
+        sleepTimer = null
+        playRequested = false
+        applyPause()
+        // The level goes back BEFORE anything else can play: a timer that left the fade in place
+        // would make the next play silent, which is the bug every hand-written sleep timer has.
+        session?.audio?.setFadeLevel(1f)
+        snapshotDirty = true
+    }
+
     private suspend fun handleQueueAdvance() {
         if (status != PlaybackStatus.Ended) return
+        // An end-of-item timer stops here rather than letting the queue move on, which is what
+        // "finish this one and stop" means.
+        if (sleepTimer == SleepTimer.EndOfItem) {
+            sleepTimer = null
+            playRequested = false
+            session?.audio?.setFadeLevel(1f)
+            snapshotDirty = true
+            return
+        }
         if (loop == LoopMode.One) return
         if (queueItems.size <= 1) return
         val next = when {
@@ -5052,6 +5128,7 @@ internal class PlaybackCore(
             audioSessionId = session?.audio?.platformSessionId,
             balance = balance,
             videoEnabled = videoEnabled,
+            sleepTimer = sleepTimer,
             /* Reported as APPLIED, in dB, so a gain the peak clamp reduced shows the reduced
              * figure. Null when nothing is applied at all, which a plain 1.0 could not say: a file
              * measured as needing no change publishes 0 dB, not nothing. */
@@ -6681,6 +6758,11 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
     class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply)
     class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
+    class SetSleepTimer(
+        val timer: SleepTimer?,
+        val fade: Duration,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("setSleepTimer", reply)
     class SetMuted(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setMuted", reply)
     class SetLoop(val mode: LoopMode, val reply: CompletableDeferred<Unit>) : CoreCommand("setLoop", reply)
     class SetAbLoop(val a: Duration?, val b: Duration?, val reply: CompletableDeferred<Unit>) : CoreCommand("setAbLoop", reply)

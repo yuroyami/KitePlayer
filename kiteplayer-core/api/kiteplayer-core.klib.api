@@ -994,6 +994,40 @@ sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroya
     }
 }
 
+sealed interface io.github.yuroyami.kiteplayer/SleepTimer { // io.github.yuroyami.kiteplayer/SleepTimer|null[0]
+    final class After : io.github.yuroyami.kiteplayer/SleepTimer { // io.github.yuroyami.kiteplayer/SleepTimer.After|null[0]
+        constructor <init>(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/SleepTimer.After.<init>|<init>(kotlin.time.Duration){}[0]
+
+        final val duration // io.github.yuroyami.kiteplayer/SleepTimer.After.duration|{}duration[0]
+            final fun <get-duration>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SleepTimer.After.duration.<get-duration>|<get-duration>(){}[0]
+
+        final fun component1(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SleepTimer.After.component1|component1(){}[0]
+        final fun copy(kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer/SleepTimer.After // io.github.yuroyami.kiteplayer/SleepTimer.After.copy|copy(kotlin.time.Duration){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SleepTimer.After.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SleepTimer.After.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SleepTimer.After.toString|toString(){}[0]
+    }
+
+    final class At : io.github.yuroyami.kiteplayer/SleepTimer { // io.github.yuroyami.kiteplayer/SleepTimer.At|null[0]
+        constructor <init>(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/SleepTimer.At.<init>|<init>(kotlin.time.Duration){}[0]
+
+        final val position // io.github.yuroyami.kiteplayer/SleepTimer.At.position|{}position[0]
+            final fun <get-position>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SleepTimer.At.position.<get-position>|<get-position>(){}[0]
+
+        final fun component1(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/SleepTimer.At.component1|component1(){}[0]
+        final fun copy(kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer/SleepTimer.At // io.github.yuroyami.kiteplayer/SleepTimer.At.copy|copy(kotlin.time.Duration){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SleepTimer.At.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SleepTimer.At.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SleepTimer.At.toString|toString(){}[0]
+    }
+
+    final object EndOfItem : io.github.yuroyami.kiteplayer/SleepTimer { // io.github.yuroyami.kiteplayer/SleepTimer.EndOfItem|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/SleepTimer.EndOfItem.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/SleepTimer.EndOfItem.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/SleepTimer.EndOfItem.toString|toString(){}[0]
+    }
+}
+
 sealed interface io.github.yuroyami.kiteplayer/TrackChange { // io.github.yuroyami.kiteplayer/TrackChange|null[0]
     final class Applied : io.github.yuroyami.kiteplayer/TrackChange { // io.github.yuroyami.kiteplayer/TrackChange.Applied|null[0]
         constructor <init>(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?) // io.github.yuroyami.kiteplayer/TrackChange.Applied.<init>|<init>(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
@@ -1637,6 +1671,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final fun setMuted(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayer.setMuted|setMuted(kotlin.Boolean){}[0]
     final fun setPreservePitch(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KitePlayer.setPreservePitch|setPreservePitch(kotlin.Boolean){}[0]
     final fun setRenderQuality(io.github.yuroyami.kiteplayer/RenderQuality) // io.github.yuroyami.kiteplayer/KitePlayer.setRenderQuality|setRenderQuality(io.github.yuroyami.kiteplayer.RenderQuality){}[0]
+    final fun setSleepTimer(io.github.yuroyami.kiteplayer/SleepTimer?, kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer/KitePlayer.setSleepTimer|setSleepTimer(io.github.yuroyami.kiteplayer.SleepTimer?;kotlin.time.Duration){}[0]
     final fun setSpeed(kotlin/Double) // io.github.yuroyami.kiteplayer/KitePlayer.setSpeed|setSpeed(kotlin.Double){}[0]
     final fun setSubtitleDelay(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/KitePlayer.setSubtitleDelay|setSubtitleDelay(kotlin.time.Duration){}[0]
     final fun setSubtitlePosition(kotlin/Float) // io.github.yuroyami.kiteplayer/KitePlayer.setSubtitlePosition|setSubtitlePosition(kotlin.Float){}[0]
@@ -1666,6 +1701,9 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
             final fun <get-SPEED_MAX>(): kotlin/Double // io.github.yuroyami.kiteplayer/KitePlayer.Companion.SPEED_MAX.<get-SPEED_MAX>|<get-SPEED_MAX>(){}[0]
         final const val SPEED_MIN // io.github.yuroyami.kiteplayer/KitePlayer.Companion.SPEED_MIN|{}SPEED_MIN[0]
             final fun <get-SPEED_MIN>(): kotlin/Double // io.github.yuroyami.kiteplayer/KitePlayer.Companion.SPEED_MIN.<get-SPEED_MIN>|<get-SPEED_MIN>(){}[0]
+
+        final val DEFAULT_SLEEP_FADE // io.github.yuroyami.kiteplayer/KitePlayer.Companion.DEFAULT_SLEEP_FADE|{}DEFAULT_SLEEP_FADE[0]
+            final fun <get-DEFAULT_SLEEP_FADE>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/KitePlayer.Companion.DEFAULT_SLEEP_FADE.<get-DEFAULT_SLEEP_FADE>|<get-DEFAULT_SLEEP_FADE>(){}[0]
 
         final fun create(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer // io.github.yuroyami.kiteplayer/KitePlayer.Companion.create|create(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
     }
@@ -1868,7 +1906,7 @@ final class io.github.yuroyami.kiteplayer/PlayerConfig { // io.github.yuroyami.k
 }
 
 final class io.github.yuroyami.kiteplayer/PlayerSnapshot { // io.github.yuroyami.kiteplayer/PlayerSnapshot|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/PlaybackStatus = ..., io.github.yuroyami.kiteplayer/MediaItem? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., io.github.yuroyami.kiteplayer/Tracks = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Double = ..., kotlin/Float = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/LoopMode = ..., io.github.yuroyami.kiteplayer/VideoScale = ..., io.github.yuroyami.kiteplayer/VideoAdjustments = ..., io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/VideoTransform = ..., kotlin.time/Duration = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/PlaybackError? = ..., io.github.yuroyami.kiteplayer/Generation = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem> = ..., kotlin/Int = ..., kotlin/Int? = ..., kotlin/Float? = ..., kotlin/Float = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/PlayerSnapshot.<init>|<init>(io.github.yuroyami.kiteplayer.PlaybackStatus;io.github.yuroyami.kiteplayer.MediaItem?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.VideoSize?;io.github.yuroyami.kiteplayer.Tracks;kotlin.collections.List<io.github.yuroyami.kiteplayer.Chapter>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Double;kotlin.Float;kotlin.Boolean;io.github.yuroyami.kiteplayer.LoopMode;io.github.yuroyami.kiteplayer.VideoScale;io.github.yuroyami.kiteplayer.VideoAdjustments;io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.VideoTransform;kotlin.time.Duration;kotlin.Float;kotlin.Float;kotlin.time.Duration;kotlin.time.Duration?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.PlaybackError?;io.github.yuroyami.kiteplayer.Generation;kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int;kotlin.Int?;kotlin.Float?;kotlin.Float;kotlin.Boolean){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/PlaybackStatus = ..., io.github.yuroyami.kiteplayer/MediaItem? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., io.github.yuroyami.kiteplayer/Tracks = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Double = ..., kotlin/Float = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/LoopMode = ..., io.github.yuroyami.kiteplayer/VideoScale = ..., io.github.yuroyami.kiteplayer/VideoAdjustments = ..., io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/VideoTransform = ..., kotlin.time/Duration = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/PlaybackError? = ..., io.github.yuroyami.kiteplayer/Generation = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem> = ..., kotlin/Int = ..., kotlin/Int? = ..., kotlin/Float? = ..., kotlin/Float = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/SleepTimer? = ...) // io.github.yuroyami.kiteplayer/PlayerSnapshot.<init>|<init>(io.github.yuroyami.kiteplayer.PlaybackStatus;io.github.yuroyami.kiteplayer.MediaItem?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.VideoSize?;io.github.yuroyami.kiteplayer.Tracks;kotlin.collections.List<io.github.yuroyami.kiteplayer.Chapter>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Double;kotlin.Float;kotlin.Boolean;io.github.yuroyami.kiteplayer.LoopMode;io.github.yuroyami.kiteplayer.VideoScale;io.github.yuroyami.kiteplayer.VideoAdjustments;io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.VideoTransform;kotlin.time.Duration;kotlin.Float;kotlin.Float;kotlin.time.Duration;kotlin.time.Duration?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.PlaybackError?;io.github.yuroyami.kiteplayer.Generation;kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int;kotlin.Int?;kotlin.Float?;kotlin.Float;kotlin.Boolean;io.github.yuroyami.kiteplayer.SleepTimer?){}[0]
 
     final val abLoopA // io.github.yuroyami.kiteplayer/PlayerSnapshot.abLoopA|{}abLoopA[0]
         final fun <get-abLoopA>(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer/PlayerSnapshot.abLoopA.<get-abLoopA>|<get-abLoopA>(){}[0]
@@ -1908,6 +1946,8 @@ final class io.github.yuroyami.kiteplayer/PlayerSnapshot { // io.github.yuroyami
         final fun <get-renderQuality>(): io.github.yuroyami.kiteplayer/RenderQuality // io.github.yuroyami.kiteplayer/PlayerSnapshot.renderQuality.<get-renderQuality>|<get-renderQuality>(){}[0]
     final val seekable // io.github.yuroyami.kiteplayer/PlayerSnapshot.seekable|{}seekable[0]
         final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerSnapshot.seekable.<get-seekable>|<get-seekable>(){}[0]
+    final val sleepTimer // io.github.yuroyami.kiteplayer/PlayerSnapshot.sleepTimer|{}sleepTimer[0]
+        final fun <get-sleepTimer>(): io.github.yuroyami.kiteplayer/SleepTimer? // io.github.yuroyami.kiteplayer/PlayerSnapshot.sleepTimer.<get-sleepTimer>|<get-sleepTimer>(){}[0]
     final val speed // io.github.yuroyami.kiteplayer/PlayerSnapshot.speed|{}speed[0]
         final fun <get-speed>(): kotlin/Double // io.github.yuroyami.kiteplayer/PlayerSnapshot.speed.<get-speed>|<get-speed>(){}[0]
     final val status // io.github.yuroyami.kiteplayer/PlayerSnapshot.status|{}status[0]
@@ -1958,13 +1998,14 @@ final class io.github.yuroyami.kiteplayer/PlayerSnapshot { // io.github.yuroyami
     final fun component3(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer/PlayerSnapshot.component3|component3(){}[0]
     final fun component30(): kotlin/Float // io.github.yuroyami.kiteplayer/PlayerSnapshot.component30|component30(){}[0]
     final fun component31(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerSnapshot.component31|component31(){}[0]
+    final fun component32(): io.github.yuroyami.kiteplayer/SleepTimer? // io.github.yuroyami.kiteplayer/PlayerSnapshot.component32|component32(){}[0]
     final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerSnapshot.component4|component4(){}[0]
     final fun component5(): io.github.yuroyami.kiteplayer/VideoSize? // io.github.yuroyami.kiteplayer/PlayerSnapshot.component5|component5(){}[0]
     final fun component6(): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/PlayerSnapshot.component6|component6(){}[0]
     final fun component7(): kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> // io.github.yuroyami.kiteplayer/PlayerSnapshot.component7|component7(){}[0]
     final fun component8(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlayerSnapshot.component8|component8(){}[0]
     final fun component9(): kotlin/Double // io.github.yuroyami.kiteplayer/PlayerSnapshot.component9|component9(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/PlaybackStatus = ..., io.github.yuroyami.kiteplayer/MediaItem? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., io.github.yuroyami.kiteplayer/Tracks = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Double = ..., kotlin/Float = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/LoopMode = ..., io.github.yuroyami.kiteplayer/VideoScale = ..., io.github.yuroyami.kiteplayer/VideoAdjustments = ..., io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/VideoTransform = ..., kotlin.time/Duration = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/PlaybackError? = ..., io.github.yuroyami.kiteplayer/Generation = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem> = ..., kotlin/Int = ..., kotlin/Int? = ..., kotlin/Float? = ..., kotlin/Float = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/PlayerSnapshot // io.github.yuroyami.kiteplayer/PlayerSnapshot.copy|copy(io.github.yuroyami.kiteplayer.PlaybackStatus;io.github.yuroyami.kiteplayer.MediaItem?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.VideoSize?;io.github.yuroyami.kiteplayer.Tracks;kotlin.collections.List<io.github.yuroyami.kiteplayer.Chapter>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Double;kotlin.Float;kotlin.Boolean;io.github.yuroyami.kiteplayer.LoopMode;io.github.yuroyami.kiteplayer.VideoScale;io.github.yuroyami.kiteplayer.VideoAdjustments;io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.VideoTransform;kotlin.time.Duration;kotlin.Float;kotlin.Float;kotlin.time.Duration;kotlin.time.Duration?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.PlaybackError?;io.github.yuroyami.kiteplayer.Generation;kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int;kotlin.Int?;kotlin.Float?;kotlin.Float;kotlin.Boolean){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/PlaybackStatus = ..., io.github.yuroyami.kiteplayer/MediaItem? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/VideoSize? = ..., io.github.yuroyami.kiteplayer/Tracks = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin/Double = ..., kotlin/Float = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/LoopMode = ..., io.github.yuroyami.kiteplayer/VideoScale = ..., io.github.yuroyami.kiteplayer/VideoAdjustments = ..., io.github.yuroyami.kiteplayer/RenderQuality = ..., io.github.yuroyami.kiteplayer/VideoTransform = ..., kotlin.time/Duration = ..., kotlin/Float = ..., kotlin/Float = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., kotlin.time/Duration? = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/PlaybackError? = ..., io.github.yuroyami.kiteplayer/Generation = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem> = ..., kotlin/Int = ..., kotlin/Int? = ..., kotlin/Float? = ..., kotlin/Float = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/SleepTimer? = ...): io.github.yuroyami.kiteplayer/PlayerSnapshot // io.github.yuroyami.kiteplayer/PlayerSnapshot.copy|copy(io.github.yuroyami.kiteplayer.PlaybackStatus;io.github.yuroyami.kiteplayer.MediaItem?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.VideoSize?;io.github.yuroyami.kiteplayer.Tracks;kotlin.collections.List<io.github.yuroyami.kiteplayer.Chapter>;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.Double;kotlin.Float;kotlin.Boolean;io.github.yuroyami.kiteplayer.LoopMode;io.github.yuroyami.kiteplayer.VideoScale;io.github.yuroyami.kiteplayer.VideoAdjustments;io.github.yuroyami.kiteplayer.RenderQuality;io.github.yuroyami.kiteplayer.VideoTransform;kotlin.time.Duration;kotlin.Float;kotlin.Float;kotlin.time.Duration;kotlin.time.Duration?;kotlin.time.Duration?;kotlin.Boolean;io.github.yuroyami.kiteplayer.PlaybackError?;io.github.yuroyami.kiteplayer.Generation;kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int;kotlin.Int?;kotlin.Float?;kotlin.Float;kotlin.Boolean;io.github.yuroyami.kiteplayer.SleepTimer?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerSnapshot.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerSnapshot.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerSnapshot.toString|toString(){}[0]

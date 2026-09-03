@@ -267,6 +267,24 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.post(CoreCommand.SetVideoEnabled(enabled, CompletableDeferred()))
     }
 
+    /**
+     * Stops playback later, fading the sound down first. Null cancels an armed timer.
+     *
+     * The fade is the engine's own and rides the ring's gain, so it never touches the volume the
+     * user set: the published value is unchanged throughout, and the level is restored the moment
+     * the player pauses. That last part is what every hand-written sleep timer gets wrong, and it
+     * is why the next play is not silent.
+     *
+     * [SleepTimer.After] counts wall time while playback is advancing, so a player paused for an
+     * hour does not sleep through its own timer. [SleepTimer.At] fires at a media position.
+     * [SleepTimer.EndOfItem] fires when the current item ends and does not advance a queue past it.
+     *
+     * @throws IllegalArgumentException when [fade] is negative, or an [SleepTimer.After] is not in the future.
+     */
+    public fun setSleepTimer(timer: SleepTimer?, fade: Duration = DEFAULT_SLEEP_FADE) {
+        core.post(CoreCommand.SetSleepTimer(timer, fade, CompletableDeferred()))
+    }
+
     /** Silences the sound without losing the [setVolume] setting. Ramped the same way. */
     public fun setMuted(value: Boolean) {
         core.post(CoreCommand.SetMuted(value, CompletableDeferred()))
@@ -695,6 +713,9 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
         /** The fastest [setSpeed] accepts. */
         public const val SPEED_MAX: Double = 4.0
+
+        /** How long [setSleepTimer] fades for when the caller does not say. */
+        public val DEFAULT_SLEEP_FADE: Duration = kotlin.time.Duration.parse("10s")
         /**
          * Builds a player from [config].
          *

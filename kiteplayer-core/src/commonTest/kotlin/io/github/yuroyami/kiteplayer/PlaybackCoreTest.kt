@@ -60,6 +60,10 @@ class PlaybackCoreTest {
             "handleSubtitles",
             "handleEof",
             "handleLoop",
+            // After the status has settled for this pass, so a timer reads the real position and
+            // the real playing state; before the queue advances, because an end-of-item timer must
+            // stop the queue rather than watch it move on.
+            "handleSleepTimer",
             "handleQueueAdvance",
             "handleQueuedSeek",
             "publishSnapshot",

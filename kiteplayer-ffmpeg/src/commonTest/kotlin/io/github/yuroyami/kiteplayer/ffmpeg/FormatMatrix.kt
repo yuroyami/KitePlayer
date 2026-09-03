@@ -116,6 +116,43 @@ internal class MatrixResult(
 /** Where the matrix media lives on this platform, or null when this platform cannot run it. */
 internal expect fun formatMatrixMediaDir(): String?
 
+/**
+ * Writes the conformance report, or does nothing on a platform with no filesystem to write to.
+ *
+ * Returns the path it wrote, so the test can say where the evidence went; null means this platform
+ * declines, which is not a failure.
+ */
+internal expect fun writeConformanceReport(fileName: String, markdown: String): String?
+
+/** Names this platform in the report and in its file name, for example "macos-arm64". */
+internal expect fun conformancePlatformName(): String
+
+/**
+ * The matrix results as the table the README's "where it runs" should be citing.
+ *
+ * The runner's own transcript is one line per row on stdout, which is right for a developer
+ * watching a run and useless afterwards: CI keeps the log for a while and nobody reads it. The
+ * same rows as Markdown are an artifact a job can upload and a person can read, and the answer
+ * they carry is not "green" but which clip played where and what happened when it did not.
+ */
+internal fun conformanceReport(platform: String, results: List<MatrixResult>): String = buildString {
+    val passed = results.count { it.ok }
+    appendLine("# Format conformance: $platform")
+    appendLine()
+    appendLine("$passed of ${results.size} rows met their verdict.")
+    appendLine()
+    appendLine("| Clip | Verdict | Result | Outcome |")
+    appendLine("|---|---|---|---|")
+    for (result in results) {
+        // The outcome is the row's own transcript and can carry a pipe; escaping keeps the table
+        // a table rather than silently losing a column.
+        val outcome = result.outcome.replace("|", "\\|")
+        appendLine(
+            "| `${result.clip}` | ${result.verdict.name} | ${if (result.ok) "PASS" else "FAIL"} | $outcome |",
+        )
+    }
+}
+
 internal object FormatMatrixRunner {
 
     /** A row that makes no progress for this long is hanging, which fails both verdicts. */

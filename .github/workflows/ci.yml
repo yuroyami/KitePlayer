@@ -227,6 +227,28 @@ jobs:
             :kiteplayer-network:macosArm64Test \
             :kiteplayer-ffmpeg:macosArm64Test
 
+      # The conformance table, which is the answer "green" does not carry: which clip played on
+      # this platform and what happened when one did not. Written by the matrix run itself, before
+      # its assertion, so a FAILING run uploads the table naming the row that failed. always(),
+      # for the same reason.
+      - name: The conformance report
+        if: always()
+        run: |
+          for report in kiteplayer-ffmpeg/build/reports/conformance/*.md; do
+            [ -f "$report" ] || continue
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload the conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-macos-host
+          path: kiteplayer-ffmpeg/build/reports/conformance/*.md
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

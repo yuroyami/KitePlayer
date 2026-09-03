@@ -126,6 +126,10 @@ Two honest limits on all of it: there is no automated device farm, so device evi
 hand-verified rather than green on every push, and no platform has a performance budget or a
 documented OS support range.
 
+Which clip plays where is measured rather than claimed: every CI run of the format matrix writes a
+conformance table, uploaded as the `conformance-macos-host` artifact and printed in the run's
+summary. It lists each clip, what was asked of it, and what happened.
+
 ## What is missing
 
 - **Adaptive streaming.** No HLS, no DASH ABR, no caching layer. HTTP and HTTPS playback of a

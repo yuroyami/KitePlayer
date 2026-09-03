@@ -8,3 +8,8 @@ package io.github.yuroyami.kiteplayer.ffmpeg
  * absence is the environment rather than a gap in coverage.
  */
 internal actual fun formatMatrixMediaDir(): String? = null
+
+/** No filesystem worth writing a report to, and no matrix run here either. */
+internal actual fun writeConformanceReport(fileName: String, markdown: String): String? = null
+
+internal actual fun conformancePlatformName(): String = "wasm-js"

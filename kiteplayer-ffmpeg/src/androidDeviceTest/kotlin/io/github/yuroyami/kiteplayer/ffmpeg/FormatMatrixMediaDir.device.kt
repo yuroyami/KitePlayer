@@ -19,3 +19,18 @@ internal actual fun formatMatrixMediaDir(): String? {
     val root = context.getExternalFilesDir(null) ?: return null
     return "${root.absolutePath}/testmedia"
 }
+
+internal actual fun writeConformanceReport(fileName: String, markdown: String): String? {
+    val dir = java.io.File(
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation()
+            .targetContext.getExternalFilesDir(null),
+        "conformance",
+    )
+    dir.mkdirs()
+    val file = java.io.File(dir, fileName)
+    file.writeText(markdown)
+    return file.path
+}
+
+internal actual fun conformancePlatformName(): String =
+    "android-" + android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()

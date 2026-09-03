@@ -8,3 +8,17 @@ package io.github.yuroyami.kiteplayer.ffmpeg
  */
 internal actual fun formatMatrixMediaDir(): String? =
     System.getenv("KITEPLAYER_TESTMEDIA") ?: "testmedia"
+
+internal actual fun writeConformanceReport(fileName: String, markdown: String): String? {
+    val dir = java.io.File("build/reports/conformance")
+    dir.mkdirs()
+    val file = java.io.File(dir, fileName)
+    file.writeText(markdown)
+    return file.path
+}
+
+internal actual fun conformancePlatformName(): String {
+    val os = System.getProperty("os.name").orEmpty().lowercase().replace(" ", "-")
+    val arch = System.getProperty("os.arch").orEmpty().lowercase()
+    return "jvm-$os-$arch"
+}

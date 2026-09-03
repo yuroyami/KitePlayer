@@ -297,7 +297,13 @@ real by X.
 
 ---
 
-### Q11 A conformance report from CI. Size S, Tier 1
+### Q11 A conformance report from CI. LANDED 2026-09-04
+
+One deviation: the runner works at the SOURCE level, not through the player, so there is no
+hardwareDecode stat to report per row. What each row carries instead is its own transcript, which
+already names the frames decoded and where the seek landed.
+
+### Q11, as planned. Size S, Tier 1
 
 **Why.** The format matrix runs on macOS, on Linux native, on Windows and on the emulator (Q1),
 and the answer is a green tick. Which clip played where, with which decoder, is the evidence

@@ -572,7 +572,6 @@ and report rather than improvise. Delete the row here in the commit that lands i
 - [ ] **Q4** Artifact sizes measured and ratcheted. M. `quality.md`
 - [ ] **Q5** A perf gate on the three hot paths, no new dependency by default (the owner may
   prefer kotlinx-benchmark). S. `quality.md`
-- [ ] **Q11** The conformance matrix writes a report CI publishes. S. `quality.md`
 - [ ] **Q2** The iOS sample builds, launches and shows a frame on the simulator. M. `quality.md`
 
 After the doors land (OWNER-GATED): **T4** subtitle sources through the byte doors, refusing

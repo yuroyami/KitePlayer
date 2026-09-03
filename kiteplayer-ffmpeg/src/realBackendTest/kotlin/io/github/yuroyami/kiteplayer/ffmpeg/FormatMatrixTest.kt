@@ -17,6 +17,14 @@ class FormatMatrixTest {
             ?: error("this platform declares no matrix media directory")
         val results = FormatMatrixRunner.runAll(mediaDir)
         results.forEach { println("MATRIX $it") }
+
+        // Written BEFORE the assertion, so a failing run still leaves the table that says which
+        // row failed and what it said. A report only produced on success is evidence about the
+        // one case that never needed any.
+        val platform = conformancePlatformName()
+        val written = writeConformanceReport("$platform.md", conformanceReport(platform, results))
+        println("MATRIX report ${written ?: "not written on this platform"}")
+
         val failed = results.filterNot { it.ok }
         assertTrue(
             failed.isEmpty(),

@@ -743,10 +743,11 @@ CI prove the trees this Mac cannot build.
 
 ## The C-layer backlog (each S to M)
 
-- [ ] The identity gate inside the C library's constructor helpers: today only Kotlin call sites
-  enforce it, so a pure C or JNI consumer reaches FFmpeg ungated.
-- [ ] An entry-point audit for `requireCompatibleFFmpeg`: 15 call sites, nothing keeps them
-  complete.
+- [ ] **The deleted-surface check is red on a spec file, not on code.**
+  `check-deleted-surface.sh` fails because `docs/next-level/kiteffmpeg.md` names
+  `ffkmp_fmt_bit_rate`, a deleted symbol that K2's spec proposes bringing back. Resolve it with K2:
+  a resurrection is recorded in `deleted-surface.txt` as `resurrected-in-<item>`, which is what the
+  record is for. Pre-existing, and unrelated to whatever else is red.
 - [ ] The opaque-migration prototype: one family early, before more C work depends on the
   assumption.
 

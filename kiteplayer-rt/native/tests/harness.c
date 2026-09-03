@@ -154,18 +154,6 @@ long kt_first_nonzero_f32(const float *start, size_t count)
     return -1;
 }
 
-long kt_first_diff_f32(const float *a, const float *b, size_t count)
-{
-    size_t i;
-    if (a == NULL || b == NULL)
-        return (count == 0) ? -1 : 0;
-    for (i = 0; i < count; i++) {
-        if (a[i] != b[i])
-            return (long)i;
-    }
-    return -1;
-}
-
 /* ---- Allocation accounting ----
  *
  * The probe has to live here rather than in interpose_alloc.c. dyld does not apply an interpose

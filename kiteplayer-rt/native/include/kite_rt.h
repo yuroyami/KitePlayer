@@ -309,7 +309,6 @@ KPRT_API void kprt_ring_anchor(kprt_ring *ring, kprt_anchor *out);
 
 KPRT_API int32_t kprt_ring_buffered_frames(const kprt_ring *ring);
 KPRT_API int32_t kprt_ring_free_frames(const kprt_ring *ring);
-KPRT_API int32_t kprt_ring_capacity_frames(const kprt_ring *ring);
 KPRT_API int32_t kprt_ring_channels(const kprt_ring *ring);
 KPRT_API int32_t kprt_ring_sample_rate(const kprt_ring *ring);
 KPRT_API int64_t kprt_ring_underruns(const kprt_ring *ring);

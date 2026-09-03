@@ -28,7 +28,7 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.set
 
-/**
+/*
  * Feeding and reading the C ring from a test, without the engine in between.
  *
  * ### Why the tests do it this way now
@@ -43,6 +43,9 @@ import kotlinx.cinterop.set
  * `NativeAudioRing` in `kiteplayer-core` is `internal`, so this module cannot use it and does not need
  * to: the C API is public through the `kitert` bindings, and using it directly keeps these tests one
  * step away from the sink rather than two.
+ *
+ * A plain block comment, not a KDoc: it explains the FILE, and a KDoc here bound to no
+ * declaration at all, because the next one down starts its own block.
  */
 
 /** Each frame carries its own stream position as its sample value, so a lost or repeated frame shows. */

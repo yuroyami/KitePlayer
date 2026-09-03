@@ -15,7 +15,6 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_anchor
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_anchor_giveups
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_begin_write
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_buffered_frames
-import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_capacity_frames
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_channels
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_commit_write
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_consumed_frames
@@ -30,7 +29,6 @@ import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_sample_rate
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_segment_giveups
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_underruns
 import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_write_window
-import io.github.yuroyami.kiteplayer.rt.cinterop.kprt_ring_written_frames
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 import io.github.yuroyami.kiteplayer.spi.NativeRingAddress
 import kotlinx.cinterop.CPointer
@@ -105,9 +103,6 @@ internal class NativeAudioRing private constructor(
 
     private val channels = format.channels
 
-    /** Frames the ring holds, read from the ring rather than remembered, so an adopted one is right. */
-    val capacityFrames: Int = kprt_ring_capacity_frames(created)
-
     private var handle: CPointer<kprt_ring>? = created
 
     /** The live handle, or an error naming what was done to a closed ring. */
@@ -122,9 +117,6 @@ internal class NativeAudioRing private constructor(
 
     /** Frames the ring can still take. Not on the interface, for the reason [KotlinAudioRing] gives. */
     val freeFrames: Int get() = kprt_ring_free_frames(ring)
-
-    /** Total frames ever published by the feeder. Read by the oracle, not by the engine. */
-    val writtenFrames: Long get() = kprt_ring_written_frames(ring)
 
     /** Total frames ever handed to the device. Read by the oracle, not by the engine. */
     val consumedFrames: Long get() = kprt_ring_consumed_frames(ring)

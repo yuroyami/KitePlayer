@@ -311,6 +311,7 @@ int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_w
     int32_t granted;
     int32_t head;
     int32_t first;
+    int32_t channels;
 
     if (out == NULL)
         return 0;
@@ -330,14 +331,17 @@ int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_w
     if (atomic_load_explicit(&ring->has_pending, memory_order_relaxed))
         return 0;
 
+    channels = ring->channels;
     written = atomic_load_explicit(&ring->written, memory_order_relaxed);
     consumed = atomic_load_explicit(&ring->consumed, memory_order_acquire);
     room = (int64_t)ring->capacity_frames - (written - consumed);
-    if (room <= 0) {
-        atomic_store_explicit(&ring->has_pending, 0, memory_order_relaxed);
-        atomic_store_explicit(&ring->pending_frames, 0, memory_order_relaxed);
+    /* A full ring grants nothing. The two stores that used to sit here cleared has_pending and
+     * pending_frames, and both were provably already zero: the refusal above returns whenever
+     * has_pending is set, so this line is only reached with no reservation outstanding. Dead
+     * stores in the one function the feeder calls per buffer, and they read as if a refusal
+     * cancelled something. */
+    if (room <= 0)
         return 0;
-    }
     granted = (int64_t)frames < room ? frames : (int32_t)room;
 
     head = (int32_t)(written % ring->capacity_frames);
@@ -345,7 +349,7 @@ int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_w
     if (first > granted)
         first = granted;
 
-    out->first = ring->data + (size_t)head * (size_t)ring->channels;
+    out->first = ring->data + (size_t)head * (size_t)channels;
     out->first_frames = first;
     if (granted > first) {
         out->second = ring->data;
@@ -464,11 +468,6 @@ int32_t kprt_ring_free_frames(const kprt_ring *ring)
     if (ring == NULL)
         return 0;
     return ring->capacity_frames - kprt_ring_buffered_frames(ring);
-}
-
-int32_t kprt_ring_capacity_frames(const kprt_ring *ring)
-{
-    return ring == NULL ? 0 : ring->capacity_frames;
 }
 
 int32_t kprt_ring_channels(const kprt_ring *ring)

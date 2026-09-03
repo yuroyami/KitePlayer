@@ -142,9 +142,6 @@ _Noreturn void kt_fail_at(const char *file, int line, const char *fmt, ...)
 /* Index of the first float that is not exactly zero, or -1. */
 long kt_first_nonzero_f32(const float *start, size_t count);
 
-/* Index of the first differing float, or -1. */
-long kt_first_diff_f32(const float *a, const float *b, size_t count);
-
 /* ---- Allocation accounting ---- */
 
 /* Counters maintained by tests/interpose_alloc.c through the Mach-O __DATA,__interpose section.

@@ -234,7 +234,7 @@ after the call (open a second time to prove nothing is held; the test's temp roo
 
 ---
 
-### K9 Waveforms. Size M, Tier 1 (KitePlayer, `kiteplayer-ffmpeg`)
+### K9 Waveforms. LANDED 2026-09-03
 
 **Why.** Audio apps draw the file. `decodedFrames` plus `copyPlanesToByteArray` give the samples
 and nothing turns them into peaks.

@@ -122,3 +122,24 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/TypedFiltersKt {
 	public static final fun withVideoFilter (Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteffmpeg/dsl/FilterChain;)Lio/github/yuroyami/kiteplayer/MediaItem;
 }
 
+public final class io/github/yuroyami/kiteplayer/ffmpeg/Waveform {
+	public synthetic fun <init> (J[F[FLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1-UwyO8pc ()J
+	public final fun component2 ()[F
+	public final fun component3 ()[F
+	public final fun copy-KLykuaI (J[F[F)Lio/github/yuroyami/kiteplayer/ffmpeg/Waveform;
+	public static synthetic fun copy-KLykuaI$default (Lio/github/yuroyami/kiteplayer/ffmpeg/Waveform;J[F[FILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/ffmpeg/Waveform;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBucketDuration-UwyO8pc ()J
+	public final fun getPeaks ()[F
+	public final fun getRms ()[F
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ffmpeg/Waveforms {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ffmpeg/Waveforms;
+	public final fun of-rvjwDTY (Lio/github/yuroyami/kiteplayer/MediaItem;ILio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun of-rvjwDTY$default (Lio/github/yuroyami/kiteplayer/ffmpeg/Waveforms;Lio/github/yuroyami/kiteplayer/MediaItem;ILio/github/yuroyami/kiteplayer/TrackId;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+

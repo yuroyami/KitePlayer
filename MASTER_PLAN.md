@@ -544,7 +544,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **K9** Waveforms, peaks and RMS per bucket (KitePlayer, `kiteplayer-ffmpeg`). M. `kiteffmpeg.md`
 - [ ] **T1** Style override with a background box on all three rasterisers. M; Android on
   DEVICE-DAY step 9f. `subtitles.md`
 - [ ] **T3** A secondary subtitle track at the top. M. `subtitles.md`
@@ -769,8 +768,8 @@ libVLC. Parity of what EXISTS beats new feature count; nothing here is scheduled
   discontinuity policy.
 - Chapters and programs: programs and editions (deleted from the API until built), attachments.
   Chapter navigation and position markers exist.
-- Processing: runtime filter rebuild, recording while playing (K6), waveforms (K9).
-  Thumbnails and loudness measurement exist.
+- Processing: runtime filter rebuild, recording while playing (K6). Thumbnails, waveforms
+  and loudness measurement exist.
 - Observability: sequenced transitions, trace export (O3). Structured logs with redaction and
   frame timing percentiles exist.
 - Platform: media session and lock screen (S7), audio focus (S6), real PiP on iOS (V10), casting

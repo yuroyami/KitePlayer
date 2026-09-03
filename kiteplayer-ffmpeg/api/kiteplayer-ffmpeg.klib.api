@@ -132,6 +132,25 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail { // io.github.yuroya
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.ffmpeg/Waveform { // io.github.yuroyami.kiteplayer.ffmpeg/Waveform|null[0]
+    constructor <init>(kotlin.time/Duration, kotlin/FloatArray, kotlin/FloatArray) // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.<init>|<init>(kotlin.time.Duration;kotlin.FloatArray;kotlin.FloatArray){}[0]
+
+    final val bucketDuration // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.bucketDuration|{}bucketDuration[0]
+        final fun <get-bucketDuration>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.bucketDuration.<get-bucketDuration>|<get-bucketDuration>(){}[0]
+    final val peaks // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.peaks|{}peaks[0]
+        final fun <get-peaks>(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.peaks.<get-peaks>|<get-peaks>(){}[0]
+    final val rms // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.rms|{}rms[0]
+        final fun <get-rms>(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.rms.<get-rms>|<get-rms>(){}[0]
+
+    final fun component1(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.component1|component1(){}[0]
+    final fun component2(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.component2|component2(){}[0]
+    final fun component3(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.component3|component3(){}[0]
+    final fun copy(kotlin.time/Duration = ..., kotlin/FloatArray = ..., kotlin/FloatArray = ...): io.github.yuroyami.kiteplayer.ffmpeg/Waveform // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.copy|copy(kotlin.time.Duration;kotlin.FloatArray;kotlin.FloatArray){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.ffmpeg/Waveform.toString|toString(){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis { // io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis|null[0]
     final suspend fun measureLoudness(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.audio/LoudnessResult // io.github.yuroyami.kiteplayer.ffmpeg/AudioAnalysis.measureLoudness|measureLoudness(io.github.yuroyami.kiteplayer.MediaItem){}[0]
 }
@@ -142,6 +161,10 @@ final object io.github.yuroyami.kiteplayer.ffmpeg/AudioSamples { // io.github.yu
 
 final object io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails { // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails|null[0]
     final suspend fun at(io.github.yuroyami.kiteplayer/MediaItem, kotlin.collections/List<kotlin.time/Duration>, kotlin/Int = ..., io.github.yuroyami.kiteplayer.ffmpeg/SnapshotFormat = ...): kotlin.collections/List<io.github.yuroyami.kiteplayer.ffmpeg/Thumbnail> // io.github.yuroyami.kiteplayer.ffmpeg/Thumbnails.at|at(io.github.yuroyami.kiteplayer.MediaItem;kotlin.collections.List<kotlin.time.Duration>;kotlin.Int;io.github.yuroyami.kiteplayer.ffmpeg.SnapshotFormat){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.ffmpeg/Waveforms { // io.github.yuroyami.kiteplayer.ffmpeg/Waveforms|null[0]
+    final suspend fun of(io.github.yuroyami.kiteplayer/MediaItem, kotlin/Int = ..., io.github.yuroyami.kiteplayer/TrackId? = ...): io.github.yuroyami.kiteplayer.ffmpeg/Waveform // io.github.yuroyami.kiteplayer.ffmpeg/Waveforms.of|of(io.github.yuroyami.kiteplayer.MediaItem;kotlin.Int;io.github.yuroyami.kiteplayer.TrackId?){}[0]
 }
 
 final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]

@@ -330,6 +330,23 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Plays the queue in a shuffled order, or puts it back in the order it was given.
+     *
+     * Shuffle is an order OVER the queue, not a reorder OF it. The items in
+     * [PlayerSnapshot.queue] never move, so the list an application shows stays the list someone
+     * built, and turning shuffle off needs nothing put back. What moves is
+     * [PlayerSnapshot.queueOrder], which [next], [previous] and the advance at the end of an item
+     * all follow.
+     *
+     * Turning it on leaves the item that is playing playing, and makes it first in the new order.
+     * An item added later joins the order somewhere after the one playing rather than always
+     * last. [seed] makes the order reproducible, which is what a test or a shared session needs.
+     */
+    public fun setShuffle(enabled: Boolean, seed: Long? = null) {
+        core.post(CoreCommand.SetShuffle(enabled, seed, CompletableDeferred()))
+    }
+
+    /**
      * Arms or clears the A-B loop: while armed, playback that reaches [b] jumps straight back to
      * [a] and keeps going, which is how a phrase is practised and a scene is studied frame by
      * frame. Independent of [setLoop]; while armed, the A-B loop owns the end of the region and

@@ -104,6 +104,17 @@ public data class PlayerSnapshot(
     val sleepTimer: SleepTimer? = null,
     /** The equaliser in force. See [KitePlayer.setEqualizer]. */
     val equalizer: EqualizerSettings = EqualizerSettings.Flat,
+    /** Whether the queue is playing in a shuffled order. See [KitePlayer.setShuffle]. */
+    val shuffle: Boolean = false,
+    /**
+     * Positions into [queue] in PLAY order, which is what next, previous and the advance at the
+     * end of an item all follow.
+     *
+     * Plain 0, 1, 2 while [shuffle] is off, and empty when no queue is open. The items in [queue]
+     * never move, shuffled or not, so this is the only thing that changes and an application can
+     * read it to show what is coming next.
+     */
+    val queueOrder: List<Int> = emptyList(),
 )
 
 /**

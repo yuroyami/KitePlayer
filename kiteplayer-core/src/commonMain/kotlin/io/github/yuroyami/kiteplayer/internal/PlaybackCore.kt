@@ -85,6 +85,7 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.CoroutineContext
+import kotlin.random.Random
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 import kotlin.time.Duration.Companion.milliseconds
@@ -201,6 +202,18 @@ internal class PlaybackCore(
     /** The queue (S4.e): the items and the cursor. Empty and -1 outside queue playback. */
     private var queueItems: List<MediaItem> = emptyList()
     private var queueIndex: Int = -1
+
+    /**
+     * Shuffle as an order OVER the queue rather than a reorder OF it (S2).
+     *
+     * [queueOrder] holds positions into [queueItems] in play order, and everything that walks the
+     * queue walks it: next, previous, and the advance at the end of an item. With shuffle off it
+     * is the plain 0, 1, 2. The items themselves never move, so the list an application shows is
+     * always the list someone built, and turning shuffle off needs nothing put back.
+     */
+    private var shuffleEnabled = false
+    private var shuffleRandom: Random = Random.Default
+    private var queueOrder: List<Int> = emptyList()
 
     /** The chapter the last ChapterChanged named, as an index; MIN_VALUE forces the first emit. */
     private var lastChapterIndex: Int = Int.MIN_VALUE
@@ -912,6 +925,12 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
+    suspend fun setShuffle(enabled: Boolean, seed: Long? = null) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.SetShuffle(enabled, seed, reply))
+        awaitReply(reply)
+    }
+
     /** The position as of the last pass, which is never more than the wake floor old; while a seek
      * request is in flight, the newest requested target, which is the timeline the caller asked for. */
     fun position(): Duration {
@@ -1291,16 +1310,29 @@ internal class PlaybackCore(
                 // A plain open is single-media by contract: whatever queue existed is replaced.
                 queueItems = emptyList()
                 queueIndex = -1
+                rebuildQueueOrder()
                 runOpen(command)
             }
             is CoreCommand.OpenQueue -> {
                 queueItems = command.items
                 queueIndex = command.startIndex
+                rebuildQueueOrder()
                 runOpen(CoreCommand.Open(command.items[command.startIndex], command.reply))
             }
-            is CoreCommand.QueueNext -> jumpQueue(queueIndex + 1, command.reply, "next")
-            is CoreCommand.QueuePrevious -> jumpQueue(queueIndex - 1, command.reply, "previous")
+            is CoreCommand.QueueNext -> jumpQueue(neighbourInOrder(1), command.reply, "next")
+            is CoreCommand.QueuePrevious -> jumpQueue(neighbourInOrder(-1), command.reply, "previous")
             is CoreCommand.EditQueue -> applyQueueEdit(command.edit, command.reply)
+            is CoreCommand.SetShuffle -> {
+                shuffleEnabled = command.enabled
+                // A named seed restarts the sequence, so the same seed on the same queue gives the
+                // same order every time; without one, the platform default carries on.
+                if (command.enabled) {
+                    shuffleRandom = command.seed?.let { Random(it) } ?: Random.Default
+                }
+                rebuildQueueOrder()
+                publishSnapshot()
+                command.reply.complete(Unit)
+            }
             is CoreCommand.StepFrame -> stepOneFrame(command.reply)
             is CoreCommand.CaptureFrame -> requestCapture(command.reply)
             is CoreCommand.WithdrawCapture ->
@@ -4128,11 +4160,7 @@ internal class PlaybackCore(
         }
         if (loop == LoopMode.One) return
         if (queueItems.size <= 1) return
-        val next = when {
-            queueIndex + 1 < queueItems.size -> queueIndex + 1
-            loop == LoopMode.All -> 0
-            else -> return
-        }
+        val next = neighbourInOrder(1) ?: return
         queueIndex = next
         runOpen(CoreCommand.Open(queueItems[next], CompletableDeferred()))
         // An open ends paused by contract; a queue that was playing keeps playing through it.
@@ -4219,28 +4247,46 @@ internal class PlaybackCore(
         }
     }
 
+    /**
+     * The queue index one step away in PLAY order, or null when there is no such item (S2).
+     *
+     * Play order and list order are the same thing until shuffle is on, so this is the only place
+     * that has to know which is which.
+     */
+    private fun neighbourInOrder(delta: Int): Int? {
+        if (queueOrder.isEmpty()) return null
+        val at = queueOrder.indexOf(queueIndex)
+        if (at < 0) return null
+        val target = at + delta
+        return when {
+            target in queueOrder.indices -> queueOrder[target]
+            loop == LoopMode.All ->
+                queueOrder[((target % queueOrder.size) + queueOrder.size) % queueOrder.size]
+            else -> null
+        }
+    }
+
     /** Explicit queue movement, refused typed when there is nowhere to go (S4.e). */
-    private suspend fun jumpQueue(target: Int, reply: CompletableDeferred<Unit>, direction: String) {
+    private suspend fun jumpQueue(target: Int?, reply: CompletableDeferred<Unit>, direction: String) {
         if (queueItems.isEmpty()) {
             reply.completeExceptionally(IllegalStateException("no queue is open; openQueue first"))
             return
         }
-        val resolved = when {
-            target in queueItems.indices -> target
-            loop == LoopMode.All -> ((target % queueItems.size) + queueItems.size) % queueItems.size
-            else -> {
-                reply.completeExceptionally(
-                    IllegalStateException(
-                        "the queue has no $direction item from ${queueIndex + 1} of ${queueItems.size}; " +
-                            "LoopMode.All is what makes the ends meet",
-                    ),
-                )
-                return
-            }
+        if (target == null) {
+            // The position quoted is the one in PLAY order, which is the order the person is
+            // hearing; quoting the list position under shuffle would name a different item.
+            val playPosition = queueOrder.indexOf(queueIndex) + 1
+            reply.completeExceptionally(
+                IllegalStateException(
+                    "the queue has no $direction item from $playPosition of ${queueItems.size}; " +
+                        "LoopMode.All is what makes the ends meet",
+                ),
+            )
+            return
         }
         val wasPlaying = playRequested
-        queueIndex = resolved
-        runOpen(CoreCommand.Open(queueItems[resolved], reply))
+        queueIndex = target
+        runOpen(CoreCommand.Open(queueItems[target], reply))
         playRequested = wasPlaying
     }
 
@@ -4251,6 +4297,31 @@ internal class PlaybackCore(
      * one. Refusing an edit there would make an application call `openQueue` with the item it is
      * already playing just to add a second one, which reopens what is on screen for nothing.
      */
+    /**
+     * Builds the play order from nothing (S2).
+     *
+     * Shuffled, the item already playing comes first, because a shuffle that started somewhere
+     * else would interrupt what is on screen to obey a setting.
+     */
+    private fun rebuildQueueOrder() {
+        queueOrder = when {
+            queueItems.isEmpty() -> emptyList()
+            !shuffleEnabled || queueIndex !in queueItems.indices -> queueItems.indices.toList()
+            else -> listOf(queueIndex) +
+                queueItems.indices.filter { it != queueIndex }.shuffled(shuffleRandom)
+        }
+    }
+
+    /**
+     * Carries the play order across an edit that renumbers the list (S2).
+     *
+     * Rebuilding instead would reshuffle what the listener has not heard yet, so adding one track
+     * would change the order of every track after it.
+     */
+    private fun remapQueueOrder(renumber: (Int) -> Int) {
+        queueOrder = queueOrder.map(renumber)
+    }
+
     private fun editableQueueSize(): Int =
         if (queueItems.isNotEmpty()) queueItems.size else if (media != null) 1 else 0
 
@@ -4287,17 +4358,36 @@ internal class PlaybackCore(
         if (queueItems.isEmpty()) {
             queueItems = listOfNotNull(media)
             queueIndex = 0
+            rebuildQueueOrder()
         }
         when (edit) {
             is QueueEdit.Add -> {
                 val at = edit.index ?: queueItems.size
                 queueItems = queueItems.toMutableList().apply { addAll(at, edit.items) }
                 if (at <= queueIndex) queueIndex += edit.items.size
+                remapQueueOrder { if (it >= at) it + edit.items.size else it }
+                queueOrder = queueOrder.toMutableList().apply {
+                    // Shuffled, each new item lands at a random position AFTER the one playing:
+                    // last every time would make an add predictable, and anywhere at all would let
+                    // it jump ahead of tracks that were already queued to play.
+                    val after = indexOf(queueIndex) + 1
+                    (at until at + edit.items.size).forEach { added ->
+                        add(if (shuffleEnabled) shuffleRandom.nextInt(after, size + 1) else added, added)
+                    }
+                }
                 publishSnapshot()
                 reply.complete(Unit)
             }
             is QueueEdit.Move -> {
                 queueItems = queueItems.toMutableList().apply { add(edit.to, removeAt(edit.from)) }
+                remapQueueOrder { position ->
+                    when {
+                        position == edit.from -> edit.to
+                        edit.from < position && position <= edit.to -> position - 1
+                        edit.to <= position && position < edit.from -> position + 1
+                        else -> position
+                    }
+                }
                 queueIndex = if (queueIndex == edit.from) {
                     edit.to
                 } else {
@@ -4313,6 +4403,7 @@ internal class PlaybackCore(
             QueueEdit.Clear -> {
                 queueItems = listOf(queueItems[queueIndex])
                 queueIndex = 0
+                queueOrder = listOf(0)
                 publishSnapshot()
                 reply.complete(Unit)
             }
@@ -4323,6 +4414,7 @@ internal class PlaybackCore(
     private suspend fun removeQueueItem(index: Int, reply: CompletableDeferred<Unit>) {
         val removedPlaying = index == queueIndex
         queueItems = queueItems.toMutableList().apply { removeAt(index) }
+        queueOrder = queueOrder.filter { it != index }.map { if (it > index) it - 1 else it }
         if (!removedPlaying) {
             if (index < queueIndex) queueIndex -= 1
             publishSnapshot()
@@ -5056,6 +5148,8 @@ internal class PlaybackCore(
             generation = requestedEpoch,
             queue = queueItems,
             queueIndex = queueIndex,
+            shuffle = shuffleEnabled,
+            queueOrder = queueOrder,
         )
     }
 
@@ -5335,6 +5429,8 @@ internal class PlaybackCore(
             generation = requestedEpoch,
             queue = queueItems,
             queueIndex = queueIndex,
+            shuffle = shuffleEnabled,
+            queueOrder = queueOrder,
         )
         publishProgressAndStats()
     }
@@ -6938,6 +7034,12 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
 
     class EditQueue(val edit: QueueEdit, val reply: CompletableDeferred<Unit>) :
         CoreCommand(edit.name, reply)
+
+    class SetShuffle(
+        val enabled: Boolean,
+        val seed: Long?,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("setShuffle", reply)
 
     class StepFrame(val reply: CompletableDeferred<Unit>) : CoreCommand("stepFrame", reply)
 

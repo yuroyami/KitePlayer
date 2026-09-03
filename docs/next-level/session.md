@@ -80,7 +80,24 @@ bad index throws. `next()` after an insert follows the new order.
 
 ---
 
-### S2 Shuffle. Size S, Tier 1
+### S2 Shuffle. LANDED 2026-09-03
+
+The design held. What did not hold was the testing, twice, and both are worth keeping:
+
+- **A seeded shuffle can come back unshuffled.** Four items land in list order once in every
+  twenty-four seeds, and the first seed picked here did exactly that. Three cases that walk a
+  shuffled order were therefore walking the list order and proving nothing: a mutation that made
+  the natural advance ignore the order entirely passed all of them. Every such case now asserts
+  the order is actually shuffled before it walks it.
+- **"Somewhere after the current item" is not the same as "after the current item".** The first
+  placement test only checked that an added item did not jump ahead of the one playing. Appending
+  every add to the very end satisfies that perfectly and is still wrong. It now adds four items at
+  once and checks that at least one of the ones already queued still plays after one of them.
+
+The advance case was also read once at the end of the run, which meant guessing how many items had
+gone by; it guessed wrong and failed against working code. It samples the whole path now.
+
+### S2, as planned. Size S, Tier 1
 
 **Why.** The parity map says shuffle "does not exist today". It does not.
 

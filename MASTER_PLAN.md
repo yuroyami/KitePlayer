@@ -1134,7 +1134,13 @@ commit that lands it.
   place; with nothing behind it the player stops and the rest of the queue stays where it is.
   A plain `open` counts as a queue of one, so adding a second item never reopens the first.
   19 tests, ten separate falsifications, one per rule the index follows.
-- [ ] S2 Shuffle. S
+  S2 is DONE (2026-09-03). Shuffle is an order OVER the queue, not a reorder OF it. The items
+  never move, so the list an application shows stays the list someone built and turning shuffle
+  off needs nothing put back; what moves is `PlayerSnapshot.queueOrder`, which next, previous and
+  the advance at the end of an item all follow. The playing item becomes first in the order rather
+  than being interrupted, an added item lands at a random spot after it instead of always last,
+  and an edit carries the order across rather than reshuffling what nobody has heard yet.
+  A named seed makes the whole thing reproducible. 15 tests, ten falsifications.
 - [ ] S3 Preload the next item; hand the audio device over instead of stopping it. L, NEEDS-DESIGN
 - [ ] S4 Markers that fire on crossing; next and previous chapter. S
 - [ ] S5 A memento of where playback was, and restore. M

@@ -97,6 +97,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegVideoFrame : io.githu
 }
 
 final fun (io.github.yuroyami.kiteplayer.spi/AudioBuffer).io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat(): kotlin/FloatArray // io.github.yuroyami.kiteplayer.ffmpeg/interleavedFloat|interleavedFloat@io.github.yuroyami.kiteplayer.spi.AudioBuffer(){}[0]
+final fun (io.github.yuroyami.kiteplayer/MediaItem).io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter(io.github.yuroyami.kiteffmpeg.dsl/FilterChain): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer.ffmpeg/withVideoFilter|withVideoFilter@io.github.yuroyami.kiteplayer.MediaItem(io.github.yuroyami.kiteffmpeg.dsl.FilterChain){}[0]
 
 // Targets: [native]
 final class io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes { // io.github.yuroyami.kiteplayer.ffmpeg/UploadPlanes|null[0]

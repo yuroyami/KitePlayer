@@ -70,3 +70,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/SoftwareConverter {
 	public final fun toneMapsHdr (Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;)Z
 }
 
+public final class io/github/yuroyami/kiteplayer/ffmpeg/TypedFiltersKt {
+	public static final fun withVideoFilter (Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteffmpeg/dsl/FilterChain;)Lio/github/yuroyami/kiteplayer/MediaItem;
+}
+

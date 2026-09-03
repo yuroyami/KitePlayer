@@ -330,7 +330,12 @@ screenshots for 7 to 9.
     every speed change. If a click is real, the fade is the right fix and the code is in the
     reverted commit's diff. If not, delete this step.
 
-Steps 20 to 27 are added by the items that need them as they land (V2, V8, V9, V10, S6, S7, S8,
+**Android phone, the secure surface [V8]:**
+21. Set `KitePlayerView.secure = true` in the sample and take a screenshot while a file plays.
+    PASS: the video area is black in the screenshot and normal on the glass. Then set it back to
+    false and screenshot again. PASS: the picture is in the screenshot.
+
+Steps 20, 22 to 27 are added by the items that need them as they land (V2, V9, V10, S6, S7, S8,
 S10, and T1's step 9f), each spec naming its own step.
 
 ## Device halves and runs owed beyond the sheet
@@ -533,7 +538,6 @@ The rest of the next-level lane. Each has a full spec block in `docs/next-level/
 contract, red-first tests, gate tier and commit line. When the tree disagrees with a spec, stop
 and report rather than improvise. Delete the row here in the commit that lands it.
 
-- [ ] **V8** Secure surface flag on the Android view. S, device proof (step 21). `video.md`
 - [ ] **V9** Picture-in-picture parameters on Android, and an honest capability answer. S,
   device proof (step 22). `video.md`
 - [ ] **V11** Typed filter chains attach to a media item without the opt-in. XS. `video.md`
@@ -777,7 +781,7 @@ libVLC. Parity of what EXISTS beats new feature count; nothing here is scheduled
   frame timing percentiles exist.
 - Platform: media session and lock screen (S7), audio focus (S6), real PiP (V9, V10), casting
   (decided later horizon), background policy (S8), accessibility semantics (S10).
-- Security: DRM and CDM (out of scope until a product decision), secure surfaces (V8),
+- Security: DRM and CDM (out of scope until a product decision), secure surfaces (exist on Android),
   credential redaction (exists for URIs in logs), sandboxed parsing (fuzzing, BIG-BITES).
 - Extensibility: stable plugin points for protocols, decryptors, subtitle providers, effects;
   none exposing FFmpeg or JNI internals.

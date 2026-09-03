@@ -322,7 +322,7 @@ outside the union of the overlay image rectangles, inequality inside at least on
 
 ---
 
-### V8 Secure surface on Android. Size S, Tier 2 (proof on device)
+### V8 Secure surface on Android. LANDED 2026-09-03 except the device screenshot
 
 **Why.** Apps showing paid content ask for `FLAG_SECURE` on the video surface. Nothing exposes it.
 

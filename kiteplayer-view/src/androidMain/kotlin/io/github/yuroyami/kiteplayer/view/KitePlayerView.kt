@@ -137,6 +137,17 @@ public open class KitePlayerView @JvmOverloads constructor(
         }
 
     /**
+     * Marks the surface secure: excluded from screenshots, screen recording and non-secure
+     * displays, which is what paid content asks for. Off by default. Reads back what this view
+     * last set; the platform does not report the flag.
+     */
+    public var secure: Boolean = false
+        set(value) {
+            field = value
+            surfaceView.setSecure(value)
+        }
+
+    /**
      * Permanently releases this view's player pairing and active renderer.
      *
      * Call this from an Activity's `onDestroy` or an `AndroidView` wrapper's `onRelease` callback.

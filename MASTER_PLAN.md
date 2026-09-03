@@ -750,8 +750,6 @@ CI prove the trees this Mac cannot build.
 - [ ] Fuzz targets for the two public-reachable string parsers without one:
   `ffkmp_fmt_alloc_output2`'s format and the three raw `*_by_name` lookups.
 - [ ] Split `test_convert.c` into contract versus baseline counts.
-- [ ] The four early returns in the device callback that skip zeroing, and the OutputIsSilence
-  flag.
 - [ ] Teardown defence with a mock AudioUnit.
 - [ ] The two forked C harnesses: decide source-of-truth versus vendored copy.
 - [ ] The opaque-migration prototype: one family early, before more C work depends on the

@@ -297,6 +297,84 @@ int main(void)
                   REQUESTED_FRAMES, WRITABLE_FRAMES);
     }
 
+    kt_case("a zero-frame request silences a writable buffer rather than repeating it");
+    {
+        /* Every other refusal that HOLDS a writable buffer zeroes it. This one did not: it shares
+         * its guard with the null-destination and zero-byte cases, which have nothing to zero, so a
+         * zero-frame request handed the device back whatever the previous callback left there. The
+         * silence flag is advisory, and a host that renders the buffer anyway repeats the last
+         * period of audio. */
+        enum { FRAMES = 4 };
+        float samples[FRAMES * CHANNELS + 1];
+        kprt_test_audio_buffer buffer;
+        uint32_t flags = 0;
+        int32_t i;
+
+        for (i = 0; i < FRAMES * CHANNELS; i++)
+            samples[i] = 7.0f;
+        samples[FRAMES * CHANNELS] = 93.0f;
+        buffer.data = samples;
+        buffer.byte_size = FRAMES * CHANNELS * (uint32_t)sizeof(float);
+        buffer.channels = CHANNELS;
+        reset_sink(NULL);
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      &sink, 0, 1, &buffer, 1, 5000, &flags), 0);
+        KT_CHECK((flags & KPRT_TEST_OUTPUT_IS_SILENCE) != 0);
+        KT_ALL_ZERO_F32(samples, FRAMES * CHANNELS);
+        KT_EQ_F32(samples[FRAMES * CHANNELS], 93.0f);
+        kt_detail("requested=0 zeroed=%d canary=93 silence=1", FRAMES * CHANNELS);
+    }
+
+    kt_case("a null sink silences the buffer it was handed");
+    {
+        enum { FRAMES = 4 };
+        float samples[FRAMES * CHANNELS + 1];
+        kprt_test_audio_buffer buffer;
+        uint32_t flags = 0;
+        int32_t i;
+
+        for (i = 0; i < FRAMES * CHANNELS; i++)
+            samples[i] = 11.0f;
+        samples[FRAMES * CHANNELS] = 94.0f;
+        buffer.data = samples;
+        buffer.byte_size = FRAMES * CHANNELS * (uint32_t)sizeof(float);
+        buffer.channels = CHANNELS;
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      NULL, FRAMES, 1, &buffer, 1, 6000, &flags), 0);
+        KT_CHECK((flags & KPRT_TEST_OUTPUT_IS_SILENCE) != 0);
+        KT_ALL_ZERO_F32(samples, FRAMES * CHANNELS);
+        KT_EQ_F32(samples[FRAMES * CHANNELS], 94.0f);
+        kt_detail("sink=null zeroed=%d canary=94 silence=1", FRAMES * CHANNELS);
+    }
+
+    kt_case("a sink with no channels silences the buffer it was handed");
+    {
+        enum { FRAMES = 4 };
+        float samples[FRAMES * CHANNELS + 1];
+        kprt_test_audio_buffer buffer;
+        uint32_t flags = 0;
+        int32_t i;
+
+        for (i = 0; i < FRAMES * CHANNELS; i++)
+            samples[i] = 13.0f;
+        samples[FRAMES * CHANNELS] = 95.0f;
+        buffer.data = samples;
+        buffer.byte_size = FRAMES * CHANNELS * (uint32_t)sizeof(float);
+        buffer.channels = CHANNELS;
+        reset_sink(NULL);
+        sink.channels = 0;
+
+        KT_EQ_INT(kprt_test_invoke_render_callback(
+                      &sink, FRAMES, 1, &buffer, 1, 7000, &flags), 0);
+        KT_CHECK((flags & KPRT_TEST_OUTPUT_IS_SILENCE) != 0);
+        KT_ALL_ZERO_F32(samples, FRAMES * CHANNELS);
+        KT_EQ_F32(samples[FRAMES * CHANNELS], 95.0f);
+        reset_sink(NULL);
+        kt_detail("channels=0 zeroed=%d canary=95 silence=1", FRAMES * CHANNELS);
+    }
+
     kt_case("the callback still renders a correct single interleaved buffer");
     {
         enum { FRAMES = 4 };

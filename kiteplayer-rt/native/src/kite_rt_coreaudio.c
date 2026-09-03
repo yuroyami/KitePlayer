@@ -227,6 +227,17 @@ static OSStatus kprt_render_cb(void *ref,
     if (destination == NULL || data->mBuffers[0].mDataByteSize == 0 || frames == 0) {
         if (action_flags != NULL)
             *action_flags |= kAudioUnitRenderAction_OutputIsSilence;
+        /* A buffer we were handed is silenced before we refuse it. Nothing to silence when the
+         * span is null or empty, which is why those two disjuncts share this guard; a zero-frame
+         * request is the one that arrives WITH a writable buffer, and returning it untouched hands
+         * the device back whatever the previous callback left there. The silence flag is advisory,
+         * so a host that renders the buffer anyway repeats the last period of audio. Every other
+         * refusal below already silences what it holds; this one now does too. */
+        byte_destination = (volatile unsigned char *)data->mBuffers[0].mData;
+        if (byte_destination != NULL) {
+            for (byte_index = 0; byte_index < data->mBuffers[0].mDataByteSize; byte_index++)
+                byte_destination[byte_index] = 0;
+        }
         return noErr;
     }
 

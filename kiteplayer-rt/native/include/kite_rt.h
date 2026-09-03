@@ -395,6 +395,15 @@ typedef struct {
     uint32_t channels;
 } kprt_test_audio_buffer;
 
+/* Forces the three verdicts `kprt_sink_destroy` reads from CoreAudio, and skips the real calls
+ * with them, so the host suite can drive a teardown that refuses. There is no audio unit in a host
+ * build to make refuse, and the branch being covered is the one that must NOT free the ring.
+ * `active` zero restores the ordinary path. Owner-thread only, like destroy itself. */
+KPRT_API void kprt_test_set_teardown_verdicts(int32_t active,
+                                              int32_t stop_ok,
+                                              int32_t uninitialize_ok,
+                                              int32_t dispose_ok);
+
 KPRT_API int32_t kprt_test_invoke_render_callback(
     kprt_sink *sink,
     uint32_t requested_frames,

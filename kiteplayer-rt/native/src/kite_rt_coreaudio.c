@@ -615,6 +615,24 @@ int32_t kprt_sink_set_paused(kprt_sink *sink, int32_t paused, int32_t *out_os_st
     return kprt_sink_start(sink, out_os_status);
 }
 
+#if defined(KPRT_TESTING)
+static int32_t kprt_test_teardown_active = 0;
+static int32_t kprt_test_teardown_stop_ok = 1;
+static int32_t kprt_test_teardown_uninitialize_ok = 1;
+static int32_t kprt_test_teardown_dispose_ok = 1;
+
+void kprt_test_set_teardown_verdicts(int32_t active,
+                                     int32_t stop_ok,
+                                     int32_t uninitialize_ok,
+                                     int32_t dispose_ok)
+{
+    kprt_test_teardown_active = active;
+    kprt_test_teardown_stop_ok = stop_ok;
+    kprt_test_teardown_uninitialize_ok = uninitialize_ok;
+    kprt_test_teardown_dispose_ok = dispose_ok;
+}
+#endif
+
 int32_t kprt_sink_destroy(kprt_sink *sink)
 {
     kprt_ring *ring;
@@ -625,6 +643,20 @@ int32_t kprt_sink_destroy(kprt_sink *sink)
     if (sink->unit != NULL) {
         AudioComponentInstance instance = (AudioComponentInstance)sink->unit;
         int quiesced = 1;
+#if defined(KPRT_TESTING)
+        if (kprt_test_teardown_active) {
+            /* The host suite's `unit` is a fabricated pointer, so the real calls below would be
+             * undefined behaviour. The verdicts are supplied instead, and the ordering, the
+             * bookkeeping and the fail-closed branch under them are the real code. */
+            if (atomic_load_explicit(&sink->running, memory_order_relaxed) &&
+                !kprt_test_teardown_stop_ok)
+                quiesced = 0;
+            if (sink->initialized && !kprt_test_teardown_uninitialize_ok)
+                quiesced = 0;
+            if (!kprt_test_teardown_dispose_ok)
+                quiesced = 0;
+        } else {
+#endif
         (void)AudioUnitRemovePropertyListenerWithUserData(instance, kAudioUnitProperty_StreamFormat,
                                                           kprt_format_listener, sink);
         (void)AudioUnitRemovePropertyListenerWithUserData(instance,
@@ -637,6 +669,9 @@ int32_t kprt_sink_destroy(kprt_sink *sink)
             quiesced = 0;
         if (AudioComponentInstanceDispose(instance) != noErr)
             quiesced = 0;
+#if defined(KPRT_TESTING)
+        }
+#endif
         if (!quiesced) {
             /* One of the teardown steps refused, so nothing here PROVES the callback is out. Free
              * the ring or the sink now and a still-running render reads freed memory. Fail closed:

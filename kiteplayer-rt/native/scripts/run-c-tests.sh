@@ -38,7 +38,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 BIN="$ROOT/build/$VARIANT/bin"
 
-ALL_SUITES="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_ring_gain_boost test_sink_callback test_sink_timebase"
+ALL_SUITES="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_ring_gain_boost test_sink_callback test_sink_teardown test_sink_timebase"
 SUITES="${*:-$ALL_SUITES}"
 
 [ -d "$BIN" ] || {

@@ -43,7 +43,7 @@ WSOLA tempo and pitch preservation, a soft limiter, ReplayGain, balance, a ten-b
 a loudness meter and a sleep timer, subtitles with libass built for seven target families, a
 queue that can be edited and shuffled while it plays, outputs on Android, Apple, desktop JVM,
 Linux (container-proven), and a web canvas path. About 1,190 Kotlin test functions in
-KitePlayer, about 310 in KiteFFmpeg, plus 23 C suites. Both repos have CI (KitePlayer 7 jobs
+KitePlayer, about 310 in KiteFFmpeg, plus 24 C suites. Both repos have CI (KitePlayer 7 jobs
 across macOS, Linux and Windows runners).
 
 Maven Central serves `kiteffmpeg` 0.1.0 (published 2026-08-31), the old `kitecodec-core` line
@@ -750,7 +750,6 @@ CI prove the trees this Mac cannot build.
 - [ ] Fuzz targets for the two public-reachable string parsers without one:
   `ffkmp_fmt_alloc_output2`'s format and the three raw `*_by_name` lookups.
 - [ ] Split `test_convert.c` into contract versus baseline counts.
-- [ ] Teardown defence with a mock AudioUnit.
 - [ ] The two forked C harnesses: decide source-of-truth versus vendored copy.
 - [ ] The opaque-migration prototype: one family early, before more C work depends on the
   assumption.

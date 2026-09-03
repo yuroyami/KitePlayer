@@ -83,7 +83,7 @@ INTERPOSE_LIB="$LIB/libkprt_interpose_alloc.dylib"
 # fixtures. KPRT_TESTING is never set by CompileKiteRtTask, so that seam cannot enter a shipped
 # archive. test_sink_timebase checks this library's host tick arithmetic against CoreAudio's own
 # conversion rather than trusting either.
-TESTS="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_ring_gain_boost test_sink_callback test_sink_timebase"
+TESTS="test_ring_rescale test_ring_basic test_ring_silence test_ring_bounded test_ring_threads test_ring_alloc test_ring_gain_boost test_sink_callback test_sink_teardown test_sink_timebase"
 
 # Frameworks for the link.
 #

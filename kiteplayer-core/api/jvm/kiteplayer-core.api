@@ -305,11 +305,18 @@ public final class io/github/yuroyami/kiteplayer/IoCachePolicy {
 
 public final class io/github/yuroyami/kiteplayer/KiteLog {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/KiteLog;
+	public final fun getRedactUris ()Z
 	public final fun install (Lio/github/yuroyami/kiteplayer/KiteLog$Sink;)V
+	public final fun installStructured (Lio/github/yuroyami/kiteplayer/KiteLog$StructuredSink;)V
+	public final fun setRedactUris (Z)V
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/KiteLog$Sink {
 	public abstract fun log (Ljava/lang/String;Ljava/lang/String;)V
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/KiteLog$StructuredSink {
+	public abstract fun event (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoCloseable {
@@ -686,6 +693,7 @@ public final class io/github/yuroyami/kiteplayer/PlaybackStatus : java/lang/Enum
 }
 
 public abstract class io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun getFields ()Ljava/util/Map;
 	public abstract fun getMessage ()Ljava/lang/String;
 }
 
@@ -808,6 +816,7 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$FrameDropping :
 	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$FrameDropping;IILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$FrameDropping;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDroppedInLastSecond ()I
+	public fun getFields ()Ljava/util/Map;
 	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -834,6 +843,7 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$HdrToneMapped :
 	public final fun copy (Ljava/lang/String;I)Lio/github/yuroyami/kiteplayer/PlaybackWarning$HdrToneMapped;
 	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$HdrToneMapped;Ljava/lang/String;IILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$HdrToneMapped;
 	public fun equals (Ljava/lang/Object;)Z
+	public fun getFields ()Ljava/util/Map;
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getStreamIndex ()I
 	public final fun getTransfer ()Ljava/lang/String;
@@ -966,6 +976,7 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$TrackDeselected
 	public static synthetic fun copy-u3zM3e0$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$TrackDeselected;ILjava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$TrackDeselected;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDetail ()Ljava/lang/String;
+	public fun getFields ()Ljava/util/Map;
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getTrack-fQpssaM ()I
 	public fun hashCode ()I

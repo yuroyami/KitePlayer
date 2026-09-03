@@ -2704,6 +2704,8 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackError { // io.github.yuroyami
 sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning|null[0]
     abstract val message // io.github.yuroyami.kiteplayer/PlaybackWarning.message|{}message[0]
         abstract fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.message.<get-message>|<get-message>(){}[0]
+    open val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.fields|{}fields[0]
+        open fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.fields.<get-fields>|<get-fields>(){}[0]
 
     final class AudioDeviceChanged : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged|null[0]
         constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioDeviceChanged.<init>|<init>(kotlin.String){}[0]
@@ -2851,6 +2853,8 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
 
         final val droppedInLastSecond // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.droppedInLastSecond|{}droppedInLastSecond[0]
             final fun <get-droppedInLastSecond>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.droppedInLastSecond.<get-droppedInLastSecond>|<get-droppedInLastSecond>(){}[0]
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.fields.<get-fields>|<get-fields>(){}[0]
         final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.message|{}message[0]
             final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping.message.<get-message>|<get-message>(){}[0]
 
@@ -2882,6 +2886,8 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
     final class HdrToneMapped : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped|null[0]
         constructor <init>(kotlin/String, kotlin/Int) // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.<init>|<init>(kotlin.String;kotlin.Int){}[0]
 
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.fields.<get-fields>|<get-fields>(){}[0]
         final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.message|{}message[0]
             final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.message.<get-message>|<get-message>(){}[0]
         final val streamIndex // io.github.yuroyami.kiteplayer/PlaybackWarning.HdrToneMapped.streamIndex|{}streamIndex[0]
@@ -3049,6 +3055,8 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
 
         final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.detail|{}detail[0]
             final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.detail.<get-detail>|<get-detail>(){}[0]
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.fields.<get-fields>|<get-fields>(){}[0]
         final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.message|{}message[0]
             final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.message.<get-message>|<get-message>(){}[0]
         final val track // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.track|{}track[0]
@@ -3069,10 +3077,19 @@ final object io.github.yuroyami.kiteplayer.subtitle/CueSelector { // io.github.y
 }
 
 final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kiteplayer/KiteLog|null[0]
+    final var redactUris // io.github.yuroyami.kiteplayer/KiteLog.redactUris|{}redactUris[0]
+        final fun <get-redactUris>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KiteLog.redactUris.<get-redactUris>|<get-redactUris>(){}[0]
+        final fun <set-redactUris>(kotlin/Boolean) // io.github.yuroyami.kiteplayer/KiteLog.redactUris.<set-redactUris>|<set-redactUris>(kotlin.Boolean){}[0]
+
     final fun install(io.github.yuroyami.kiteplayer/KiteLog.Sink?) // io.github.yuroyami.kiteplayer/KiteLog.install|install(io.github.yuroyami.kiteplayer.KiteLog.Sink?){}[0]
+    final fun installStructured(io.github.yuroyami.kiteplayer/KiteLog.StructuredSink?) // io.github.yuroyami.kiteplayer/KiteLog.installStructured|installStructured(io.github.yuroyami.kiteplayer.KiteLog.StructuredSink?){}[0]
 
     abstract fun interface Sink { // io.github.yuroyami.kiteplayer/KiteLog.Sink|null[0]
         abstract fun log(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/KiteLog.Sink.log|log(kotlin.String;kotlin.String){}[0]
+    }
+
+    abstract fun interface StructuredSink { // io.github.yuroyami.kiteplayer/KiteLog.StructuredSink|null[0]
+        abstract fun event(kotlin/String, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteLog.StructuredSink.event|event(kotlin.String;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     }
 }
 

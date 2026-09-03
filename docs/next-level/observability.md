@@ -128,7 +128,20 @@ were never entered (count calls through a test seam on `Tracing`).
 
 ---
 
-### O4 A structured log sink, with redaction. Size S, Tier 1
+### O4 A structured log sink, with redaction. LANDED 2026-09-03
+
+Two departures from the plan:
+
+- **`installStructured`, not an `install` overload.** The plan wrote a second `install(sink:
+  StructuredSink?)`. Two nullable overloads make a bare `install(null)` ambiguous, and existing
+  tests used exactly that to go back to silence, so the overload broke them at compile time. A
+  separate name costs nothing and breaks nobody.
+- **The fields live on `PlaybackWarning`, not at the call site.** An open `fields` property
+  defaulting to the class's own simple name means every warning is queryable without touching the
+  one place the engine logs, and a new warning is structured the day it is written rather than the
+  day someone remembers to add it to a `when`.
+
+### O4, as planned. Size S, Tier 1
 
 **Why.** `KiteLog.Sink.log(tag, message)` flattens the warning type, the stream index and the
 URI into prose. Structured backends want fields, and a log line should not carry a token.

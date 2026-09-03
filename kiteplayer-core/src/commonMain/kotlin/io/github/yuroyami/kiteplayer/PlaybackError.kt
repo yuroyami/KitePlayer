@@ -126,6 +126,16 @@ public sealed class PlaybackWarning {
     public abstract val message: String
 
     /**
+     * The warning as key and value pairs, for a structured log sink.
+     *
+     * `warning` is always this class's own simple name, so a backend can group by it without
+     * parsing a sentence. Subclasses add whatever they carry that is worth querying on: a stream
+     * index, a track id, a detail. Anything that is only prose stays in [message].
+     */
+    public open val fields: Map<String, String>
+        get() = mapOf("warning" to (this::class.simpleName ?: "PlaybackWarning"))
+
+    /**
      * The attached renderer reported an unrecoverable failure through its own event feed (S4.d).
      * Playback continues; the schedule keeps pacing and the renderer keeps refusing, so the
      * degradation is a black or frozen picture, which is exactly why it is worth a warning.
@@ -156,6 +166,9 @@ public sealed class PlaybackWarning {
      * `PlaybackStats.droppedFramesLate` for a caller who would rather diff two samples.
      */
     public data class FrameDropping(val droppedInLastSecond: Int) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("dropped" to droppedInLastSecond.toString())
+
         override val message: String get() = "dropping frames: $droppedInLastSecond in the last second"
     }
 
@@ -229,6 +242,9 @@ public sealed class PlaybackWarning {
      * [io.github.yuroyami.kiteplayer.spi.RendererEvent.ToneMapEngaged] from the renderer that did it.
      */
     public data class HdrToneMapped(val transfer: String, val streamIndex: Int) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("transfer" to transfer, "stream" to streamIndex.toString())
+
         override val message: String
             get() = "HDR ($transfer) tone mapped to standard dynamic range for this display on " +
                 "stream $streamIndex"
@@ -291,6 +307,9 @@ public sealed class PlaybackWarning {
 
     /** A non-essential track failed and was deselected. */
     public data class TrackDeselected(val track: TrackId, val detail: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("track" to track.toString(), "detail" to detail)
+
         override val message: String get() = "deselected $track: $detail"
     }
 

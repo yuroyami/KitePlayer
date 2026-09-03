@@ -5327,7 +5327,7 @@ internal class PlaybackCore(
             warningLog.addLast(TimedWarning(clock.nanos(), warning))
             while (warningLog.size > WARNING_HISTORY_LIMIT) warningLog.removeFirst()
         }
-        io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", warning.message)
+        io.github.yuroyami.kiteplayer.KiteLog.log("kiteplayer", warning.message, warning.fields)
         emitEvent(PlayerEvent.Warning(warning))
     }
 

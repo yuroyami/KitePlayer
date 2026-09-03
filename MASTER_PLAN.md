@@ -1163,7 +1163,16 @@ commit that lands it.
 - [ ] O1 Bytes read and bytes per second in the stats; bitrate after K2. S
 - [ ] O2 Decode time and presentation lateness percentiles. S
 - [ ] O3 A trace sink and the Chrome trace format. M
-- [ ] O4 A structured log sink; URIs redacted by default. S
+  O4 is DONE (2026-09-03). `KiteLog.StructuredSink` receives the tag, the message and the FIELDS
+  behind it, so a backend groups by `warning` instead of parsing a sentence with a regular
+  expression; every `PlaybackWarning` names its own type and the ones carrying a stream, a track or
+  a count add those. URIs in messages and in field values are reduced to a bare filename by
+  default, because a log line quoting a URI quotes its query string, that is where tokens live, and
+  logs get pasted into issue trackers; `KiteLog.redactUris` turns it off. A plain sink still gets
+  the fields appended rather than losing them. Installing either kind replaces the other, and the
+  structured installer has its own NAME because two nullable overloads would have made a bare
+  `install(null)` ambiguous and broken every caller using it to go quiet. 6 tests, redaction and
+  the plain-sink passthrough falsified.
 
 **KiteFFmpeg (`kiteffmpeg.md`, the sibling repository)**
 - [ ] K1 swresample bound; the audio encoder converts; a resampler SPI in the player. L

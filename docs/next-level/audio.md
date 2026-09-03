@@ -403,7 +403,25 @@ shows `decodedVideoFrames` unchanged while `position` advances.
 
 ---
 
-### A6 A speed change without a click. Size S, Tier 1
+### A6 A speed change without a click. ATTEMPTED AND REVERTED 2026-09-03
+
+**Read this before rebuilding it.** The item below asserts a click exists. That was never
+verified, and an attempt to verify it failed in a way worth recording:
+
+- The fade was implemented exactly as described and the test could not tell it apart from no fade
+  at all. In the virtual harness the seek's flush and the refill both happen between two device
+  pumps, so the scripted device never receives the silence a click would come from. A test that
+  passes identically with and without the fix proves nothing about the fix.
+- `AudioPlayback.speed`'s own KDoc already calls the change "one brief, gapless-sounding rebuffer,
+  the same trade mpv makes". Someone judged this with ears and found it acceptable.
+- The fix costs a real 20 ms delay on every speed change, which is a cost paid by everyone for a
+  benefit nobody has heard.
+
+Everything was reverted. The next step is not code: play a file, nudge the speed repeatedly, and
+listen. If the click is real, the design below is right and the diff is recoverable from the
+session that wrote this.
+
+### A6, as planned. Size S, Tier 1
 
 **Why.** `setSpeed` lands as a precise seek to the current position (`PlaybackCore.kt:1330-1341`),
 which flushes the ring: the device plays a hard edge. The engine changes speed through a flush on

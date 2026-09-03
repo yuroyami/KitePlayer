@@ -1077,7 +1077,16 @@ commit that lands it.
   opens parked for an audio-only application. Parked packets are counted as nothing: a drop counter
   means the engine could not keep up, and this is a decision. 5 tests, the park falsified.
   S8's background policy is the consumer this was built for.
-- [ ] A6 A speed change that fades through its flush. S
+- [ ] A6 **ATTEMPTED 2026-09-03 AND REVERTED. Needs device evidence before it is worth doing.**
+  The premise was that the flush behind a live speed change leaves a step in the waveform and
+  therefore a click. Two things say otherwise. The fade was built and could not be shown to help:
+  the virtual harness completes the flush and the refill between two device pumps, so the device
+  never receives the silence the click would come from, and the test passed identically with the
+  fade removed. And `AudioPlayback.speed` already documents the change as "one brief,
+  gapless-sounding rebuffer, the same trade mpv makes", which is a judgement someone made with
+  ears. Cost of the fix is a real 20 ms delay on every speed change. So: do not rebuild it from the
+  plan. Play a file, change speed repeatedly, and listen first. If a click is real, the fade is the
+  right fix and the code is in the reverted commit's diff.
 - [ ] A7 Sleep timer with a fade. S
 - [ ] A8 EBU R128 loudness meter in Kotlin, and a call that measures a file. M
 - [ ] A9 A ten-band equaliser, bypassed bit-exact when flat. M

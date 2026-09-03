@@ -71,6 +71,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -2584,6 +2585,7 @@ internal class PlaybackCore(
         val headlessBefore = session.renderer.headlessFrames
         val refusedBefore = video.refusedFrames
         session.schedulerMode.value = SCHEDULER_ONE_FRAME
+        session.schedulerNudge.trySend(Unit)
         val deadline = clock.nanos() + budget.inWholeNanoseconds
         var outcome = FirstFrame.None
         while (clock.nanos() < deadline) {
@@ -2602,7 +2604,8 @@ internal class PlaybackCore(
             // very end looks like from here, and the whole budget used to be spent on it before
             // the session could even be told it had ended (owner report 2026-08-23).
             if (atEndOfStream(session)) break
-            delay(WORKER_POLL)
+            // Woken by the schedule's own release ping; the poll bounds the conditions above.
+            withTimeoutOrNull(WORKER_POLL) { session.landingArrived.receive() }
         }
         session.schedulerMode.value = SCHEDULER_IDLE
         return outcome
@@ -4743,6 +4746,10 @@ internal class PlaybackCore(
             session.firstVideo.clear()
             session.firstDecodedVideo.clear()
             session.firstAudio.clear()
+            // A ping from the flushed epoch must not satisfy this landing's first wait.
+            do {
+                val stale = session.landingArrived.tryReceive()
+            } while (stale.isSuccess)
             releaseWorkers(session, epoch)
             landed = awaitLanding(session, epoch)
 
@@ -4829,9 +4836,13 @@ internal class PlaybackCore(
     }
 
     private suspend fun quiesceWorkers(session: OpenSession): Boolean {
+        // Every flag first, then every acknowledgement: the workers park in parallel, so the whole
+        // pipeline costs one worker's residual nap rather than the sum of all of them.
+        val workers = session.workers
+        for (worker in workers) worker.requestQuiesce()
         var quiescent = true
-        for (worker in session.workers) {
-            if (!worker.quiesce(QUIESCE_DEADLINE)) quiescent = false
+        for (worker in workers) {
+            if (!worker.awaitQuiesced(QUIESCE_DEADLINE)) quiescent = false
         }
         seekFlushCycles++
         return quiescent
@@ -4936,7 +4947,9 @@ internal class PlaybackCore(
             if (preempted()) return video ?: audio
             // A newer request ends this wait too; whatever landed is the answer.
             if (seekSuperseded()) return video ?: audio
-            delay(WORKER_POLL)
+            // Woken by the worker that records the landing; the poll stays only as the bound for
+            // every condition above that has no ping of its own.
+            withTimeoutOrNull(WORKER_POLL) { session.landingArrived.receive() }
         }
         return session.firstVideo.of(epoch) ?: session.firstAudio.of(epoch)
     }
@@ -6233,8 +6246,10 @@ internal class PlaybackCore(
             // a whole group of pictures, so judging the landing by the first frame that survived the discard
             // would call every correct precise seek an overshoot.
             session.firstDecodedVideo.record(epoch, frame.pts)
+            session.landingArrived.trySend(Unit)
             if (frame.pts.micros < session.discardBeforeUs.value) return true
             session.firstVideo.record(epoch, frame.pts)
+            session.landingArrived.trySend(Unit)
             while (true) {
                 // The offer itself is atomic. Until it succeeds this function still owns the frame, so
                 // cancellation during the bounded retry closes it in finally instead of orphaning a
@@ -6398,6 +6413,7 @@ internal class PlaybackCore(
                 if (buffer.generation != epoch) continue
                 val audio = session.audio ?: continue
                 session.firstAudio.record(epoch, buffer.pts)
+                session.landingArrived.trySend(Unit)
                 var interleaved = interleaver.interleave(buffer)
                 var pts = buffer.pts
                 var frames = buffer.frameCount
@@ -6473,13 +6489,15 @@ internal class PlaybackCore(
                     recordVideoClock(session, video)
                     if (session.framesReleased(video) > before) {
                         session.schedulerMode.compareAndSet(SCHEDULER_ONE_FRAME, SCHEDULER_IDLE)
+                        // The actor's presentFirstFrame is watching these counters; wake it.
+                        session.landingArrived.trySend(Unit)
                     } else if (wait > Duration.ZERO) {
                         delay(minOf(wait, WORKER_POLL).atLeastOneTick())
                     }
                 }
                 else -> {
                     video.pauseSchedule()
-                    delay(WORKER_POLL)
+                    withTimeoutOrNull(WORKER_POLL) { session.schedulerNudge.receive() }
                 }
             }
         }
@@ -6577,6 +6595,22 @@ internal class PlaybackCore(
 
         /** Between the audio decoder and the feeder. Small, because the ring is the real buffer. */
         val decodedAudio: Channel<AudioBuffer> = Channel(capacity = 4)
+
+        /**
+         * Pinged when a worker records a first timestamp for a new epoch, and when the schedule
+         * releases the frame a one-frame request asked for, so the actor's waits wake when the
+         * thing happens instead of at their next 50 ms sample. Conflated: one token is enough,
+         * every waiter re-reads its own conditions.
+         */
+        val landingArrived: Channel<Unit> =
+            Channel(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+        /**
+         * Pinged by the actor when it changes [schedulerMode] and needs the schedule to act on it
+         * now, so an idle scheduler wakes instead of sleeping out the rest of its 50 ms nap.
+         */
+        val schedulerNudge: Channel<Unit> =
+            Channel(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
         /**
          * Decoded audio that has left the decoder and has not yet reached the device.

@@ -161,12 +161,28 @@ internal class Worker(val name: String) {
      *         carrying on as if the pipeline were quiescent.
      */
     suspend fun quiesce(timeout: Duration): Boolean {
-        if (finished.value) return true
+        requestQuiesce()
+        return awaitQuiesced(timeout)
+    }
+
+    /**
+     * Actor side, the request half alone. Raising every worker's flag BEFORE waiting on any of
+     * them is what makes a pipeline park in one nap instead of one nap per worker: an idle worker
+     * only notices the flag at its next wake-up, and asking serially stacked those wake-ups end to
+     * end. Measured on real media: about 65 ms of a 200 ms seek was exactly this stack.
+     */
+    fun requestQuiesce() {
+        if (finished.value) return
         // A stale acknowledgement from the previous handshake must not satisfy this one.
         do {
             val drained = acked.tryReceive()
         } while (drained.isSuccess)
         pauseRequested.value = true
+    }
+
+    /** Actor side, the wait half. Call after [requestQuiesce]; same answer as [quiesce]. */
+    suspend fun awaitQuiesced(timeout: Duration): Boolean {
+        if (finished.value) return true
         if (parkedNow.value) return true
         return withTimeoutOrNull(timeout) { acked.receive() } != null || parkedNow.value || finished.value
     }

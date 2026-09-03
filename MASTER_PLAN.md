@@ -650,6 +650,14 @@ CI prove the trees this Mac cannot build.
 
 ## KitePlayer correctness and contracts
 
+- [ ] **The last 50 ms of seek latency: wake a napping worker on the quiesce request** (S). The
+  2026-09-03 seek fix made the pipeline park in one worker's residual nap instead of five in a
+  row and made the landing and the present wake the actor; a paused real-media keyframe seek
+  went from about 207 ms to about 80 ms. The floor left is that one nap: an idle worker sleeps
+  in `delay(WORKER_POLL)` and only reads the quiesce flag at its next wake. Giving each worker
+  a wake channel its idle sleeps select on (the shape `schedulerNudge` already has) takes the
+  floor to single-digit milliseconds. Touches every worker loop's idle wait, so it wants its own
+  careful pass; `SeekLatencyTest` tightens from 75 ms to about 15 when it lands.
 - [ ] **Three SPI contract decisions from the old test-debt row** (S each, NEEDS-DESIGN). None is
   a missing test over working behaviour; each asks the code to SAY something it does not, so a
   test first would only pin the silence.

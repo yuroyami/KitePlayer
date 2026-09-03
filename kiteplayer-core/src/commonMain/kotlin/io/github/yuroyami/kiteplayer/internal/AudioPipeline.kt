@@ -194,6 +194,9 @@ internal class AudioPipeline(
          * with no ReplayGain tags pays nothing for the feature. In place: `result` is either our own
          * scratch or, in the all-bypass case, the caller's input, and the caller hands that buffer
          * over for the duration of the call. */
+        // Before the trim, so ReplayGain and balance scale what the equaliser produced rather than
+        // the equaliser amplifying a level the trim already set.
+        equalizer.apply(result, produced)
         trim.apply(result, produced)
 
         output = result
@@ -207,6 +210,12 @@ internal class AudioPipeline(
      * container's tags have been read and the peak clamp resolved against the volume ceiling.
      */
     val trim: TrimStage = TrimStage(targetFormat.channels)
+
+    /**
+     * The ten-band equaliser, at the device's own rate because that is what its coefficients are
+     * derived from. Flat by default and then free: see [EqualizerStage].
+     */
+    val equalizer: EqualizerStage = EqualizerStage(targetFormat.channels, targetFormat.sampleRate)
 
     /**
      * Pushes out what the stages are still holding, for the end of the stream.
@@ -272,6 +281,9 @@ internal class AudioPipeline(
     fun reset() {
         resampler.reset()
         tempo.reset()
+        // The filters ring for a few dozen samples, so a seek that kept their history would splice
+        // the tail of the old position onto the head of the new one.
+        equalizer.reset()
     }
 
     private fun grown(buffer: FloatArray, values: Int): FloatArray =

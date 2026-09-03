@@ -102,6 +102,8 @@ public data class PlayerSnapshot(
     val videoEnabled: Boolean = true,
     /** The armed sleep timer, or null. Cleared when it fires. See [KitePlayer.setSleepTimer]. */
     val sleepTimer: SleepTimer? = null,
+    /** The equaliser in force. See [KitePlayer.setEqualizer]. */
+    val equalizer: EqualizerSettings = EqualizerSettings.Flat,
 )
 
 /**

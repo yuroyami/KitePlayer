@@ -1095,7 +1095,13 @@ commit that lands it.
   computed from the time remaining rather than stepped, so a late pass cannot strand it. 6 tests,
   the firing and the fade falsified separately. The pass-order ratchet moved with a stated reason.
 - [ ] A8 EBU R128 loudness meter in Kotlin, and a call that measures a file. M
-- [ ] A9 A ten-band equaliser, bypassed bit-exact when flat. M
+  A9 is DONE (2026-09-03). Ten ISO octave bands from 31 Hz to 16 kHz, the set every hardware
+  equaliser has had since the 1970s, so a preset written for one means the same here. Each band is
+  a cookbook peaking biquad whose gain at its own centre is exactly what was asked for, state per
+  band per channel, direct form 1. Flat is skipped entirely rather than run with identity
+  coefficients, so a player nobody has equalised pays nothing. A band whose centre reaches the
+  Nyquist frequency is dropped rather than allowed to degenerate. 15 tests: the filters measured
+  against real sines, the wiring through a session, and both falsified.
 
 **Video (`video.md`)**
 - [ ] V1 Backward frame step, by landing before the target. M

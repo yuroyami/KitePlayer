@@ -113,6 +113,9 @@ public class AudioPlayback(
     /** Stereo balance, -1 hard left to 1 hard right. Combined with the replay gain in one stage. */
     private val wantedBalance = atomic(0f)
 
+    /** The equaliser the feeder applies. Held here so a pipeline rebuild cannot lose it. */
+    private val wantedEqualizer = atomic(EqualizerSettings.Flat)
+
     private var generation: Generation = Generation.Initial
     private var format: AudioFormat? = null
     private var warnedAboutLatency = false
@@ -323,6 +326,11 @@ public class AudioPlayback(
             existing.matches(sourceFormat) && existing.preservePitch == pitchNow -> existing
             else -> existing.rebuiltFor(sourceFormat, pitchNow)
         }
+        if (stage !== existing) {
+            // A fresh pipeline has a fresh equaliser at flat, so the cache of what was written
+            // into the OLD one must not stop the new one being configured.
+            appliedEqualizer = null
+        }
         if (stage !== existing && existing != null) {
             // A fresh stage counts its emitted frames from zero, so the scaled axis must drop
             // its base and re-anchor on the next timestamped buffer. Keeping the
@@ -341,6 +349,14 @@ public class AudioPlayback(
         // change starts at unity, and the trim has to survive that without the rebuild knowing.
         // Idempotent and a handful of floats, so the common case costs a compare.
         applyTrim(stage)
+        // Reasserted per buffer like the trim and for the same reason: a pipeline rebuilt for a
+        // format change starts flat, and a flat stage is skipped, so the cost when nothing is set
+        // is one reference compare.
+        val wantedEq = wantedEqualizer.value
+        if (appliedEqualizer !== wantedEq) {
+            stage.equalizer.set(wantedEq)
+            appliedEqualizer = wantedEq
+        }
 
         val emittedBefore = stage.tempoEmittedFrames
         // Converted exactly once: the mixer, resampler and gain ramp all carry state, so running
@@ -573,6 +589,13 @@ public class AudioPlayback(
      * once and left, unlike the volume, which lives on the ring's read side precisely so that it
      * is heard within one device period.
      */
+    /** The ten-band equaliser. Flat by default, and free while it is. */
+    public var equalizer: EqualizerSettings
+        get() = wantedEqualizer.value
+        set(value) {
+            wantedEqualizer.value = value
+        }
+
     public var balance: Float
         get() = wantedBalance.value
         set(value) {
@@ -588,6 +611,9 @@ public class AudioPlayback(
      * Reasserted per buffer for the reason the rate is: a pipeline rebuilt for a format change
      * starts at unity, and neither setting is carried across the rebuild by anything else.
      */
+    /** The settings last written into the current pipeline, so an unchanged one is not rebuilt. */
+    private var appliedEqualizer: EqualizerSettings? = null
+
     private fun applyTrim(stage: AudioPipeline) {
         val gain = wantedReplayGain.value
         val balanceNow = wantedBalance.value

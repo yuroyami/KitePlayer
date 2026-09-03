@@ -45,8 +45,8 @@ import kotlin.time.Duration
  *
  * ### What is not here
  *
- * Shuffle, a gapless queue handoff, a secondary subtitle track and an equaliser are absent rather
- * than stubbed; MASTER_PLAN.md carries them with what each one needs.
+ * Shuffle, a gapless queue handoff and a secondary subtitle track are absent rather than stubbed;
+ * MASTER_PLAN.md carries them with what each one needs.
  *
  * External subtitles, filter chains, the open-option escape hatch, chapters, the queue and frame
  * stepping were on this list and are all here now: [addExternalSubtitle], [MediaItem.videoFilter],
@@ -283,6 +283,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      */
     public fun setSleepTimer(timer: SleepTimer?, fade: Duration = DEFAULT_SLEEP_FADE) {
         core.post(CoreCommand.SetSleepTimer(timer, fade, CompletableDeferred()))
+    }
+
+    /**
+     * Sets the ten-band equaliser. [EqualizerSettings.Flat] turns it off.
+     *
+     * Flat is not just neutral, it is free: the filters are skipped entirely rather than run with
+     * coefficients that happen to be the identity, so a player nobody has equalised pays nothing.
+     *
+     * A change swaps coefficients at the next buffer. The one buffer of transient that costs is
+     * inaudible, and interpolating twenty coefficients per sample to avoid it would cost more than
+     * the filter does.
+     */
+    public fun setEqualizer(settings: EqualizerSettings) {
+        core.post(CoreCommand.SetEqualizer(settings, CompletableDeferred()))
     }
 
     /** Silences the sound without losing the [setVolume] setting. Ramped the same way. */

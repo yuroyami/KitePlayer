@@ -203,6 +203,8 @@ public data class AudioConfig(
      * every caller that passed it positionally.
      */
     val volumeCeiling: Float = 1f,
+    /** The equaliser a fresh player starts at. Change it live with [KitePlayer.setEqualizer]. */
+    val equalizer: EqualizerSettings = EqualizerSettings.Flat,
     /**
      * Whether to honour the loudness the encoder measured, and which measurement to use.
      *
@@ -226,6 +228,55 @@ public data class AudioConfig(
         require(replayGainFallbackDb.isFinite() && replayGainFallbackDb in -30f..30f) {
             "replayGainFallbackDb must be between -30 and 30, was $replayGainFallbackDb"
         }
+    }
+}
+
+/**
+ * A ten-band graphic equaliser, in dB per band.
+ *
+ * The bands are the ISO octave centres from 31 Hz to 16 kHz, the ten every hardware equaliser has
+ * had since the 1970s, so a preset written for one of those means the same thing here.
+ *
+ * All zero is bypass, and bypass is bit-exact: the filters are skipped entirely rather than run
+ * with coefficients that happen to be the identity.
+ */
+public data class EqualizerSettings(
+    /** One gain per band, in the order of [Bands]. */
+    val gainsDb: List<Float> = List(10) { 0f },
+    /**
+     * Applied before the bands, in dB.
+     *
+     * Boosting several bands can push a mix past full scale, and the usual answer is to pull
+     * everything down first. Negative values are the useful ones.
+     */
+    val preampDb: Float = 0f,
+) {
+    init {
+        require(gainsDb.size == Bands.size) { "an equaliser has ${Bands.size} bands, got ${gainsDb.size}" }
+        require(gainsDb.all { it.isFinite() && it in -12f..12f }) {
+            "every band gain must be finite and within -12 to 12 dB, got $gainsDb"
+        }
+        require(preampDb.isFinite() && preampDb in -12f..12f) {
+            "the preamp must be finite and within -12 to 12 dB, was $preampDb"
+        }
+    }
+
+    /** True when this changes nothing, in which case the engine skips the filters entirely. */
+    public val isFlat: Boolean get() = preampDb == 0f && gainsDb.all { it == 0f }
+
+    public companion object {
+        /**
+         * The band centres in Hz, in order.
+         *
+         * FIRST in this companion, and it has to be: [Flat] constructs an instance whose `init`
+         * reads this list, and a companion initialises its properties in source order, so
+         * declaring it second leaves the check reading null and the whole class fails to load.
+         */
+        public val Bands: List<Float> =
+            listOf(31.25f, 62.5f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
+
+        /** No change at all. The default. */
+        public val Flat: EqualizerSettings = EqualizerSettings()
     }
 }
 

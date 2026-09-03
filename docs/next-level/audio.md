@@ -569,7 +569,25 @@ measures -23.0 LUFS within 0.1 (the standard's reference: a full-scale 997 Hz si
 
 ---
 
-### A9 A ten-band equaliser. Size M, Tier 1
+### A9 A ten-band equaliser. LANDED 2026-09-03
+
+Three things worth carrying forward:
+
+- **A session test cannot measure a band.** The scripted source is a constant, which is a signal at
+  0 Hz, and a peaking filter at 1 kHz passes 0 Hz at unity: that is what makes it a peaking filter
+  rather than a shelf. The first session test asserted a band boost raised the level and failed
+  because the DSP was RIGHT. The session tests use the preamp, which scales everything including a
+  constant; the bands are measured against real sines in the stage's own test.
+- **`EqualizerSettings.Bands` must be declared before `Flat` in the companion.** `Flat` constructs
+  an instance whose `init` reads `Bands`, and a companion initialises in source order, so the other
+  way round the list is still null and the entire class fails to load with
+  `ExceptionInInitializerError`. Every test in the file failed at once, including the trivial ones,
+  which is the signature of a class-initialisation problem rather than a logic one.
+- **A pipeline rebuild needs the settings cache invalidated.** The stage is reasserted per buffer
+  only when the settings object changes, so a fresh pipeline, which starts flat, would never have
+  been configured. Cleared where the rebuild is detected.
+
+### A9, as planned. Size M, Tier 1
 
 **Why.** The parity map lists it, Synkplay's users ask for it, and every knob it needs already
 exists in the pipeline shape: a stage, per-channel state, bit-exact off.

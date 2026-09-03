@@ -26,6 +26,7 @@ import io.github.yuroyami.kiteplayer.PlayerConfig
 import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
+import io.github.yuroyami.kiteplayer.EqualizerSettings
 import io.github.yuroyami.kiteplayer.ReplayGainMode
 import io.github.yuroyami.kiteplayer.SleepTimer
 import io.github.yuroyami.kiteplayer.Pts
@@ -444,6 +445,7 @@ internal class PlaybackCore(
     private var volume: Float = 1.0f
     private var muted: Boolean = false
     private var balance: Float = 0f
+    private var equalizer: EqualizerSettings = config.audio.equalizer
     private var videoEnabled: Boolean = config.videoEnabled
 
     /** The armed sleep timer, its fade length, and the wall instant an [SleepTimer.After] fires at. */
@@ -1393,6 +1395,11 @@ internal class PlaybackCore(
                 if (command.timer == null) session?.audio?.setFadeLevel(1f)
                 command.reply.complete(Unit)
             }
+            is CoreCommand.SetEqualizer -> {
+                equalizer = command.settings
+                session?.audio?.equalizer = command.settings
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetVideoEnabled -> {
                 val changed = videoEnabled != command.value
                 videoEnabled = command.value
@@ -2066,6 +2073,7 @@ internal class PlaybackCore(
                 createdPlayback.muted = muted
                 createdPlayback.replayGain = replayGainFor(audioStream, source.metadata)
                 createdPlayback.balance = balance
+                createdPlayback.equalizer = equalizer
                 emitEvent(PlayerEvent.AudioFormatChanged(negotiated.sampleRate, negotiated.channels))
             }
             openStage = OpenStage.Assembly
@@ -2739,6 +2747,7 @@ internal class PlaybackCore(
             playback.muted = muted
             playback.replayGain = replayGainFor(stream, session?.source?.metadata ?: emptyMap())
             playback.balance = balance
+            playback.equalizer = equalizer
             playback.flush(requestedEpoch)
             return PreparedAudioPath(playback, createdSink, negotiated)
         } catch (cancellation: CancellationException) {
@@ -5128,6 +5137,7 @@ internal class PlaybackCore(
             audioSessionId = session?.audio?.platformSessionId,
             balance = balance,
             videoEnabled = videoEnabled,
+            equalizer = equalizer,
             sleepTimer = sleepTimer,
             /* Reported as APPLIED, in dB, so a gain the peak clamp reduced shows the reduced
              * figure. Null when nothing is applied at all, which a plain 1.0 could not say: a file
@@ -6758,6 +6768,7 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetVolume(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setVolume", reply)
     class SetBalance(val value: Float, val reply: CompletableDeferred<Unit>) : CoreCommand("setBalance", reply)
     class SetVideoEnabled(val value: Boolean, val reply: CompletableDeferred<Unit>) : CoreCommand("setVideoEnabled", reply)
+    class SetEqualizer(val settings: EqualizerSettings, val reply: CompletableDeferred<Unit>) : CoreCommand("setEqualizer", reply)
     class SetSleepTimer(
         val timer: SleepTimer?,
         val fade: Duration,

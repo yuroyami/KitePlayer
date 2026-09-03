@@ -591,8 +591,6 @@ them: the signature baseline, the generated wasm binding and its CI mirror check
 wrapper, and a compile on all twelve target trees. Batch them so the tax is paid once, and let
 CI prove the trees this Mac cannot build.
 
-- [ ] **K4** The filter DSL says which filters the build lacks, before FFmpeg does. S, Tier 1.
-  `kiteffmpeg.md`
 - [ ] **K2** Field order and container bitrate bound. S, Tier 2. `kiteffmpeg.md`
 - [ ] **K3** The recipe compiles yadif, bwdif, loudnorm, ebur128, alimiter. S plus a rebake.
   `kiteffmpeg.md`
@@ -639,10 +637,10 @@ CI prove the trees this Mac cannot build.
   sources published progressively then freed on failure leaving earlier entries dangling; four
   unchecked `av_strdup`; a plane index never bounded (and the test asserts the wrong answer; fix
   both); an eight-channel cap on upload only.
-- [ ] **DSL leftovers** [KC-DSL]. Raw strings where a typed `SampleFormat` exists (S). And the real
-  one, NEEDS-DESIGN: `CodecId` conflates bitstream identity with implementation, so `h264`,
-  `libx264` and `h264_videotoolbox` are one type today, which is why a knob check has to read a
-  name at all.
+- [ ] **CodecId conflates bitstream identity with implementation** [KC-DSL remainder] (NEEDS-DESIGN).
+  `h264`, `libx264` and `h264_videotoolbox` are one type today, which is why a knob check has to
+  read a name at all. The raw-string half of this row is done: aformat takes a typed SampleFormat,
+  and nothing else in the DSL is a raw string with a typed counterpart to use.
 - [ ] **Frame access copies** [SOL-P3] (M). Native pays scratch plus a second ByteArray, JVM
   copies before JNI's own copy, nominally zero-copy reads box a plane list per access. One reused
   holder, one copy fewer per backend.

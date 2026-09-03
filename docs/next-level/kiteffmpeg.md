@@ -26,7 +26,9 @@ the other trees. That is the whole reason the C items are grouped.
 
 ---
 
-### K4 The filter DSL says what the build lacks. Size S, Tier 1
+### K4 The filter DSL says what the build lacks. LANDED 2026-09-04
+
+### K4, as planned. Size S, Tier 1
 
 **Why.** `videoFilters { deinterlace() }` compiles to `bwdif`, which is not in the build; the
 failure arrives from `avfilter_graph_parse` as an untyped error at graph build time.

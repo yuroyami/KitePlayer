@@ -1511,9 +1511,12 @@ internal class PlaybackCore(
                     is SleepTimer.After -> clock.nanos() + timer.duration.inWholeNanoseconds
                     else -> 0L
                 }
-                // Cancelling has to undo a fade that already started, or a cancelled timer leaves
-                // the listener with quiet audio and no way to see why.
-                if (command.timer == null) session?.audio?.setFadeLevel(1f)
+                // Any change to the timer starts from full level. Cancelling has to undo a fade
+                // that already started, and so does replacing: a later timer with more time left
+                // than its fade never enters the fade branch, so the old multiplier would stay on
+                // the ring and the listener hears a quarter of the volume with no way to see why.
+                // A replacement already inside its own fade is brought back down on the next pass.
+                session?.audio?.setFadeLevel(1f)
                 command.reply.complete(Unit)
             }
             is CoreCommand.SetEqualizer -> {

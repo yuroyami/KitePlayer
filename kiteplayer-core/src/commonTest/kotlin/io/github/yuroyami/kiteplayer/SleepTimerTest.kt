@@ -54,6 +54,23 @@ class SleepTimerTest {
     }
 
     @Test
+    fun `pushing the timer back during its fade brings the sound back up`() = runTest {
+        // Extending a timer is the ordinary case: the film turned out better than expected. The
+        // old fade's multiplier was left on the ring, so the extension played on at a quarter
+        // of the volume with nothing to show why.
+        val harness = playing(this)
+        harness.setTimer(SleepTimer.After(3.seconds), fade = 2.seconds)
+        harness.run(2500.milliseconds)
+        harness.setTimer(SleepTimer.After(20.seconds), fade = 2.seconds)
+        harness.sink.clearChannelPeaks()
+        harness.run(300.milliseconds)
+        assertEquals(PlaybackStatus.Playing, harness.core.snapshots.value.status, "the extension paused")
+        val peak = harness.sink.channelPeak(0)
+        assertTrue(peak > 0.9f, "the old fade stayed in force: peak $peak")
+        harness.close()
+    }
+
+    @Test
     fun `the sound gets quieter before it stops`() = runTest {
         // The point of the feature. Without this arm the timer is a delay and a pause, which is
         // what every application already writes for itself.

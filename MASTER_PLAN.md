@@ -597,7 +597,6 @@ CI prove the trees this Mac cannot build.
 - [ ] **K2** Field order and container bitrate bound. S, Tier 2. `kiteffmpeg.md`
 - [ ] **K3** The recipe compiles yadif, bwdif, loudnorm, ebur128, alimiter. S plus a rebake.
   `kiteffmpeg.md`
-- [ ] **K7** A probe in one call (the library half). S. `kiteffmpeg.md`
 - [ ] **The wasm model's VP9 field** [KC-WASM-MODEL] (S). The rest of the metadata model is bound
   and proven against the fake; no `ffkmp_*vp9*` entry point exists for wasm at all. New C
   surface; rides K2's pass.

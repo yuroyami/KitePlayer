@@ -167,6 +167,11 @@ streams, duration equal within one frame, packet count equal (count with a secon
 
 ---
 
+### K7 The library half LANDED 2026-09-04; the player half waits on the publish
+
+MediaProbe and MediaSource.probe are in. MediaProbe carries no bitrateBps: nothing binds the
+container bit rate until K2.
+
 ### K7 A probe in one call, and the player's `inspect`. Size S plus S, Tier 1
 
 **Why.** `MediaSource.open` already does the cheap thing (open plus `find_stream_info`, no

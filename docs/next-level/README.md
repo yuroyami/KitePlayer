@@ -55,15 +55,15 @@ Two lanes, one per repository. Inside a lane, top to bottom. An item marked `aft
 in the other lane, which means: it waits for the owner to PUBLISH the KiteFFmpeg version carrying
 X and for the pin in `gradle/libs.versions.toml` to move. Nothing else crosses the lanes.
 
-**KiteFFmpeg lane:** K4, K2, K3, K5, K7 (the library half), K1. Then publish (owner). K8 and K9
+**KiteFFmpeg lane:** K4, K3, K5, K7 (the library half), K1. Then publish (owner). K8 and K9
 live in KitePlayer's `kiteplayer-ffmpeg` module and are in the other lane.
 
 **KitePlayer lane, no cross-lane wait:** Q10, Q7, Q6, Q3, Q8, O4, O1, O2, T5, T2, A2, A3, A4, S4,
 S2, S1, S5, V8, V9, V11, V6, K8, A7, A9, A8, K9, T1, T3, V2, V3, V5, A1, A6, A5, S6, S8, S7, S9,
 S10, T6, T4, V1, O3, V7, S3, Q4, Q5, Q11, Q9, Q1, Q2, V10.
 
-**KitePlayer lane, after the KiteFFmpeg publish:** K6 (after K5), V4 (after K2 and K3), K7's
-player half (after K7), O1's bitrate half (after K2), K1's player half (after K1).
+**KitePlayer lane, after the KiteFFmpeg publish:** K6 (after K5), V4 (after K3), K7's player
+half (after K7), O1's bitrate half, K1's player half (after K1).
 
 The doors expansion (`docs/media-input-doors.md`) is a prerequisite for T4, Q9 and K8's `io`
 route. Run it first, or those three items wait. Where a test in this program uses

@@ -183,14 +183,15 @@ invoking the listener produces the event.
 
 ---
 
-### V4 Auto-deinterlace. Size M, Tier 2. After K2 and K3 are published
+### V4 Auto-deinterlace. Size M, Tier 2. After K3 is published
 
 **Why.** Interlaced material still exists (DVD rips, broadcast captures, `vob-mpeg2.vob` in the
-fixture set is progressive but the shape is common). Nothing in either repository reads the
-field order, and `yadif` and `bwdif` are not compiled into the LGPL build. K2 exposes the field
-order, K3 compiles the filters. This item is the policy.
+fixture set is progressive but the shape is common). KiteFFmpeg reads the field order now;
+KitePlayer does not carry it through, and `yadif` and `bwdif` are not compiled into the LGPL
+build. K3 compiles the filters. This item is the policy.
 
-**Depends on:** K2 (`VideoStreamInfo.fieldOrder`), K3 (the filters), and the KiteFFmpeg pin moving.
+**Depends on:** K3 (the filters) and the KiteFFmpeg pin moving, which carries the already-built
+`VideoStreamInfo.fieldOrder`.
 
 **Files.** Modify `core/PlayerConfig.kt`, `core/spi/MediaSource.kt` (`PlayerStreamInfo.fieldOrder`),
 `kiteplayer-ffmpeg/src/commonMain/.../KiteFFmpegSource.kt` (map the field, prepend the filter),

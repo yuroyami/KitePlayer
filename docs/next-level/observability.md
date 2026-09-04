@@ -11,7 +11,7 @@ export exists.
 
 ---
 
-### O1 The throughput half landed 2026-09-03; `containerBitrate` still waits for K2
+### O1 The throughput half landed 2026-09-03; `containerBitrate` waits for the KiteFFmpeg publish
 
 Two things the plan did not anticipate, both about the TEST rather than the code:
 
@@ -28,12 +28,13 @@ A third thing falsifying caught: the reopen case used a second source as large a
 total that had forgotten the retired bytes still climbed past the old figure and the case passed
 while being wrong. The second source is tiny now.
 
-### O1, as planned. Size S, Tier 1 (the bitrate half waits for K2)
+### O1, as planned. Size S, Tier 1 (the bitrate half waits for the pin to move)
 
 **Why.** A network player that cannot say how fast bytes arrive cannot explain a rebuffer.
 `CachingMediaIo` sees every upstream read and counts nothing.
 
-**Depends on:** nothing. The `containerBitrate` half depends on K2 being published.
+**Depends on:** nothing. `MediaSource.bitrateBps` is built in KiteFFmpeg; the `containerBitrate`
+half waits only for that to be published and the pin to move.
 
 **Files.** Modify `core/internal/CachingMediaIo.kt` (counters), `core/PlayerState.kt`
 (`PlaybackStats`), `core/internal/PlaybackCore.kt` (the stats tick). Tests `IoStatsTest.kt` on the
@@ -50,7 +51,7 @@ val ioBytesPerSecond: Long = 0,
 ```
 
 `CachingMediaIo` keeps an atomic `bytesRead` incremented by each upstream `read`'s return value;
-the stats tick publishes the total and the delta divided by `statsInterval`. After K2,
+the stats tick publishes the total and the delta divided by `statsInterval`. Once the pin moves,
 `containerBitrate` is filled from the backend's `bitrateBps` and its "Always null" KDoc goes.
 
 **Tests.** Harness, `MediaIo.ofBytes(1_000_000 bytes)` item played 2 s at `statsInterval = 1.seconds`:

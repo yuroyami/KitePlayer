@@ -582,24 +582,23 @@ After the doors land (OWNER-GATED): **T4** subtitle sources through the byte doo
 typed (S, `subtitles.md`); **Q9** file pickers in both samples (S, `quality.md`).
 
 After the next KiteFFmpeg publish (OWNER-GATED): **K6** record the selected streams to a file as
-they play (M, after K5); **V4** auto-deinterlace (M, after K2 and K3); **K7**'s player half, the
-`inspect` call (after K7); **O1 remainder**, `PlaybackStats.containerBitrate` (after K2; no
-backend binds a container-level bitrate today, so the field is honestly documented unbuilt);
+they play (M, after K5); **V4** auto-deinterlace (M, after K3); **K7**'s player half, the
+`inspect` call (after K7); **O1 remainder**, `PlaybackStats.containerBitrate` (all four
+KiteFFmpeg backends read it now, so this is a read-through and a stats field);
 **K1**'s player half, the resampler SPI (after K1).
 
 ## KiteFFmpeg, in order
 
-The first five add C entry points. Each is small; what makes them one job is the tax around
+Several of these add C entry points. Each is small; what makes them one job is the tax around
 them: the signature baseline, the generated wasm binding and its CI mirror check, the JNI
 wrapper, and a compile on all twelve target trees. Batch them so the tax is paid once, and let
 CI prove the trees this Mac cannot build.
 
-- [ ] **K2** Field order and container bitrate bound. S, Tier 2. `kiteffmpeg.md`
 - [ ] **K3** The recipe compiles yadif, bwdif, loudnorm, ebur128, alimiter. S plus a rebake.
   `kiteffmpeg.md`
 - [ ] **The wasm model's VP9 field** [KC-WASM-MODEL] (S). The rest of the metadata model is bound
   and proven against the fake; no `ffkmp_*vp9*` entry point exists for wasm at all. New C
-  surface; rides K2's pass.
+  surface, so it pays the whole tax on its own now that K2 has gone.
 - [ ] **Codec enumeration and a measured build inventory** [KC-CAPS] (S + S).
   `FFmpeg.hasDecoder(name)` exists; enumeration does not (`av_codec_iterate` unbound), and
   `kiteffmpegInfo` prints the DSL toggles, not a measured inventory of the linked tree. Design
@@ -726,11 +725,6 @@ CI prove the trees this Mac cannot build.
 
 ## The C-layer backlog (each S to M)
 
-- [ ] **The deleted-surface check is red on a spec file, not on code.**
-  `check-deleted-surface.sh` fails because `docs/next-level/kiteffmpeg.md` names
-  `ffkmp_fmt_bit_rate`, a deleted symbol that K2's spec proposes bringing back. Resolve it with K2:
-  a resurrection is recorded in `deleted-surface.txt` as `resurrected-in-<item>`, which is what the
-  record is for. Pre-existing, and unrelated to whatever else is red.
 - [ ] The opaque-migration prototype: one family early, before more C work depends on the
   assumption.
 

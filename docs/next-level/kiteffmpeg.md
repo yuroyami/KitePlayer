@@ -64,47 +64,6 @@ contains the filter name; `videoFilters { scale(320, 240) }` builds.
 
 ---
 
-### K2 The small C entry points: field order and container bitrate. Size S, Tier 2
-
-**Why.** `AVCodecParameters.field_order` and `AVFormatContext.bit_rate` exist in every build and
-neither is bound. KitePlayer's auto-deinterlace (V4) and the always-null `containerBitrate` stat
-(O1) wait on exactly these two.
-
-**Depends on:** nothing.
-
-**Files.** Modify `native/kitecodec-c/include/kitecodec_helpers.h`, `native/kitecodec-c/src/helpers_codecpar.c`,
-`native/kitecodec-c/src/helpers_format.c`, `native/kitecodec-jni/methods.def` plus the matching
-`kj_*.c`, the wasm binding (regenerate), `lib/StreamInfo.kt` (`VideoStreamInfo.fieldOrder`),
-`lib/MediaSource.kt` (`bitrateBps`), both `MediaSource` actuals and the wasm reader, the wasm fake
-in `wasmJsTest`. Tests in `nativeTest` and `wasmJsTest`.
-
-**Contract.**
-
-```c
-/* 0 unknown, 1 progressive, 2 top field first, 3 bottom field first; the coded-order variants map to their display order. */
-KC_API int32_t ffkmp_codecpar_field_order(const AVCodecParameters *par);
-/* The container's own bit rate estimate, or 0 when it has none. */
-KC_API int64_t ffkmp_fmt_bit_rate(const AVFormatContext *ctx);
-```
-
-```kotlin
-public enum class FieldOrder { Unknown, Progressive, TopFirst, BottomFirst }
-// VideoStreamInfo gains: val fieldOrder: FieldOrder = FieldOrder.Unknown
-// MediaSource gains: public val bitrateBps: Long?   (null when the container reports 0)
-```
-
-**Tests.** Native: a synthesised MPEG-4 part 2 encode with `options = mapOf("flags" to "+ilme+ildct", "top" to "1")`
-reopened reports `TopFirst`; a plain synthesised encode reports `Progressive` or `Unknown` and
-never `TopFirst`. If the mpeg4 encoder does not stamp the field order (check `ffprobe -show_streams`
-on the temp file for `field_order`), keep the progressive assertion and note that V4's fixture in
-KitePlayer proves the interlaced answer. `bitrateBps` on the synthesised file is above zero and
-within 30 percent of file size times eight over duration. Wasm: the fake scripts both fields and
-the reader reads them. `apiDump` with the host flag.
-
-**Commit.** `c: field order and container bitrate are bound`
-
----
-
 ### K3 The missing filters join the recipe. Size S code, one rebake, Tier 2
 
 **Why.** The DSL promises `deinterlace()` and `loudnorm()`; the build has neither. Loudness and
@@ -169,8 +128,8 @@ streams, duration equal within one frame, packet count equal (count with a secon
 
 ### K7 The library half LANDED 2026-09-04; the player half waits on the publish
 
-MediaProbe and MediaSource.probe are in. MediaProbe carries no bitrateBps: nothing binds the
-container bit rate until K2.
+MediaProbe and MediaSource.probe are in, and MediaProbe carries bitrateBps now that all four
+backends read the container's own figure.
 
 ### K7 A probe in one call, and the player's `inspect`. Size S plus S, Tier 1
 

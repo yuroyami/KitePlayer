@@ -10,9 +10,20 @@ package io.github.yuroyami.kiteplayer.internal
  * A redacted URI is its basename and nothing else. The query and the fragment go first, so no
  * token, signature or session id can survive; anything before the last slash goes with them, so
  * no host, path or `user:password@` userinfo survives either.
+ *
+ * A URI with a scheme and no path has no basename, and its last slash is the one inside `://`:
+ * taking what follows that slash hands back the whole authority, password included. Past the
+ * scheme, only a slash that starts a path counts, and no path means nothing comes out.
  */
 internal fun redactUri(uri: String): String {
-    val basename = uri.substringBefore('#').substringBefore('?').substringAfterLast('/')
+    val stripped = uri.substringBefore('#').substringBefore('?')
+    val schemeEnd = stripped.indexOf("://")
+    val basename = if (schemeEnd < 0) {
+        stripped.substringAfterLast('/')
+    } else {
+        val rest = stripped.substring(schemeEnd + 3)
+        if ('/' in rest) rest.substringAfterLast('/') else ""
+    }
     return basename.ifEmpty { "(redacted)" }
 }
 

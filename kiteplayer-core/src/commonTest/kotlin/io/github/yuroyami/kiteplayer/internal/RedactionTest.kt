@@ -46,6 +46,20 @@ class RedactionTest {
     }
 
     @Test
+    fun `an authority with no path is redacted whole and takes its userinfo with it`() {
+        // The last slash of `https://viewer:secret@host:8443` is the one inside `://`, so
+        // basename-after-last-slash handed back the whole authority, password included.
+        assertEquals("(redacted)", redactUri("https://viewer:SECRET@host:8443"))
+        assertEquals("(redacted)", redactUri("https://viewer:SECRET@host:8443?token=OTHER"))
+        assertEquals("(redacted)", redactUri("https://[::1]:8443"))
+        assertEquals("(redacted)", redactUri("rtsp://viewer:SECRET@camera/"))
+        assertEquals(
+            "failed (redacted)",
+            redactUrisIn("failed https://viewer:SECRET@host:8443?token=OTHER"),
+        )
+    }
+
+    @Test
     fun `text with no uri in it is returned unchanged`() {
         assertEquals("the decoder refused frame 12", redactUrisIn("the decoder refused frame 12"))
     }

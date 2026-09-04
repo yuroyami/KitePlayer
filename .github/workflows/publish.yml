@@ -27,6 +27,10 @@ on:
       version:
         description: "Version to publish (must match VERSION in gradle.properties), e.g. 0.0.21"
         required: true
+      release:
+        description: "Also press Publish on the Central Portal. Off leaves the deployment staged for a human to finish."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -111,8 +115,10 @@ jobs:
       - name: Publication readiness
         run: ./gradlew checkPublicationReadiness --stacktrace
 
-      # Uploads to the Central Portal and stops. The build script calls publishToMavenCentral()
-      # with no automatic release, so the deployment lands as USER_MANAGED and a human finishes it.
+      # Uploads to the Central Portal. By default it stops there: the deployment lands as
+      # USER_MANAGED and a human presses Publish. With the release input on, the plugin presses it,
+      # which is the same click made by the run rather than by a person. Central is immutable
+      # either way, so the version gate above is what protects a wrong number, not this switch.
       - name: Publish to Maven Central
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -123,6 +129,8 @@ jobs:
         run: |
           # The Android AAR's JNI libraries link with the NDK.
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          ./gradlew publishAllPublicationsToMavenCentralRepository \
+          task=publishToMavenCentral
+          if [ "${{ inputs.release }}" = "true" ]; then task=publishAndReleaseToMavenCentral; fi
+          ./gradlew "$task" \
             --no-configuration-cache \
             --stacktrace

@@ -28,6 +28,21 @@ implementation("io.github.yuroyami:kiteplayer-core:0.0.22")
 This release needs [KiteFFmpeg 0.2.0](https://github.com/yuroyami/KiteFFmpeg/releases). Gradle
 pulls it in for you.
 
+### Upgrading from 0.0.21
+
+- **On desktop, the default render path is the native view, and Compose content drawn over the
+  video does not receive clicks there.** This has been true since 0.0.21 and was never written
+  down. macOS routes a click to the topmost native view, so a control that overlaps the picture is
+  painted and never pressed. Either put those controls in a borderless window owned by the video
+  window, or ask for `KiteRenderPath.ComposeCanvas` explicitly, which takes input normally at the
+  cost of following the UI's frame rate. Controls beside the video are unaffected. Android and iOS
+  are unaffected.
+- **`AudioConfig`, `PlayerConfig` and `PlaybackStats` gained fields**, so their generated `copy()`
+  signatures moved. Named arguments keep working. A positional `copy()` on any of the three needs
+  a recompile, and probably an edit.
+- **Nothing else asks anything of you.** KiteFFmpeg moves to 0.2.0 underneath, and nothing here
+  calls the one API it broke.
+
 ### Added
 
 Audio:
@@ -109,10 +124,8 @@ Diagnostics:
 
 ### Changed
 
-- **`AudioConfig`, `PlayerConfig` and `PlaybackStats` gained fields**, so their generated `copy()`
-  signatures moved. Named arguments keep working; a positional `copy()` needs a recompile. This is
-  a binary break on a 0.x library and is deliberate.
-- **KiteFFmpeg 0.1.0 to 0.2.0.**
+- **KiteFFmpeg 0.1.0 to 0.2.0.** The binary break in the three `copy()` signatures above is
+  deliberate on a 0.x library.
 
 ### Fixed
 

@@ -487,7 +487,15 @@ fix it under the same commit with the test as its red.
 
 ---
 
-### S10 Accessibility semantics on the views. Size S, Tier 2 (screen reader proof on device)
+### S10 Accessibility semantics on the views. LANDED 2026-09-04 except the device run
+
+Two deviations. The Compose surface is not wired: KitePlayerVideo hosts the platform view, which
+carries the semantics itself, so labelling the composable too would make a reader announce the
+video twice. And the state is refreshed by an explicit updateAccessibilityState() rather than by
+collecting a flow, because neither view owns a scope and one started for a label would outlive the
+pairing it belongs to.
+
+### S10, as planned. Size S, Tier 2 (screen reader proof on device)
 
 **Why.** No `contentDescription`, no `accessibilityLabel`, no Compose semantics anywhere in the
 views. A screen reader sees an unlabelled rectangle.

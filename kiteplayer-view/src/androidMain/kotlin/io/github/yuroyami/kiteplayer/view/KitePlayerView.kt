@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.view
 
+import kotlin.time.Duration
 import android.app.PictureInPictureParams
 import android.content.Context
 import android.graphics.Rect
@@ -140,7 +141,38 @@ public open class KitePlayerView @JvmOverloads constructor(
         set(value) {
             field = value
             binding.setPlayer(value)
+            updateAccessibilityState()
         }
+
+    /**
+     * Re-reads what a screen reader should say about the player and tells the platform.
+     *
+     * Called when the player is assigned and by an application whenever the state it cares about
+     * moved. It is NOT wired to a flow here on purpose: this view holds no scope of its own, and
+     * one started for a label would outlive the pairing it belongs to. The state text is a pure
+     * function, so an application already collecting the snapshot can call this from the same
+     * place it updates its own controls.
+     */
+    public fun updateAccessibilityState() {
+        val snapshot = player?.state?.value
+        val text = if (snapshot == null) {
+            accessibilityStateText(PlaybackStatus.Idle, Duration.ZERO, null)
+        } else {
+            accessibilityStateText(
+                snapshot.status,
+                player?.progress?.value?.position ?: Duration.ZERO,
+                snapshot.duration,
+            )
+        }
+        // stateDescription is API 30. Below it the label carries both, which is what a reader on
+        // an older phone would otherwise never hear.
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            stateDescription = text
+            contentDescription = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+        } else {
+            contentDescription = "$DEFAULT_VIDEO_ACCESSIBILITY_LABEL. $text"
+        }
+    }
 
     /**
      * Marks the surface secure: excluded from screenshots, screen recording and non-secure
@@ -201,6 +233,11 @@ public open class KitePlayerView @JvmOverloads constructor(
         get() = failedBefore + (binding.activeRenderer?.failedFrames ?: 0L)
 
     init {
+        // A screen reader saw an unlabelled rectangle. This view IS the video, so it is the
+        // element that announces itself; the surface and the subtitle overlay inside it are
+        // decoration and stay out of the reader's way.
+        contentDescription = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         addView(surfaceView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(subtitleView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {

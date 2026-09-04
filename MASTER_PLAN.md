@@ -332,6 +332,11 @@ screenshots for 7 to 9.
     schedule) and Android additionally asks the OS for frame-rate matching from the measured
     frame cadence (API 30+); what no laptop can see is whether a 120 Hz panel actually drops to
     30/60 and whether the numbers improve. [V2, step 20 in the specs]
+19d. Turn TalkBack on (Android) and VoiceOver on (iOS), and focus the video. PASS: it is
+    announced as "Video" and its value reads the state and the position, for example "Playing,
+    1:23 of 4:56"; on a live stream the position is absent rather than zero. The wording is one
+    shared pure function and is unit tested; what no laptop can see is whether the reader focuses
+    the view at all and whether it re-announces on every position tick. [S10, step 27 in the specs]
 19b. Play a file and change speed repeatedly. Listen. The fade was built on 2026-09-03 and
     reverted: the virtual harness completes the flush and the refill between two device pumps,
     so the device never receives the silence a click would come from, and the test passed
@@ -563,7 +568,6 @@ and report rather than improvise. Delete the row here in the commit that lands i
 - [ ] **S6** Interruptions, audio focus and noisy routes under one policy. M, device proof (step
   24). `session.md`
 - [ ] **S8** Background policy. M, device proof (step 26). `session.md`
-- [ ] **S10** Accessibility semantics on the views. S, device proof (step 27). `session.md`
 - [ ] **T6** One overlay geometry law on every renderer. M, Android proof on device. Land it as
   one law with viewport subtitles (BIG-BITES) or ahead of it; do not land two. `subtitles.md`
 - [ ] **V1** Backward frame step, by landing before the target. M. `video.md`

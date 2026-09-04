@@ -44,4 +44,10 @@ final class io.github.yuroyami.kiteplayer.view/KitePlayerUIView : platform.UIKit
     final fun didMoveToWindow() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.didMoveToWindow|objc:didMoveToWindow[0]
     final fun layoutSubviews() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.layoutSubviews|objc:layoutSubviews[0]
     final fun release() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.release|release(){}[0]
+    final fun updateAccessibilityState() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.updateAccessibilityState|updateAccessibilityState(){}[0]
 }
+
+final const val io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL // io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL|{}DEFAULT_VIDEO_ACCESSIBILITY_LABEL[0]
+    final fun <get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>(): kotlin/String // io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL.<get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>|<get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>(){}[0]
+
+final fun io.github.yuroyami.kiteplayer.view/accessibilityStateText(io.github.yuroyami.kiteplayer/PlaybackStatus, kotlin.time/Duration, kotlin.time/Duration?): kotlin/String // io.github.yuroyami.kiteplayer.view/accessibilityStateText|accessibilityStateText(io.github.yuroyami.kiteplayer.PlaybackStatus;kotlin.time.Duration;kotlin.time.Duration?){}[0]

@@ -1,3 +1,8 @@
+public final class io/github/yuroyami/kiteplayer/view/AccessibilityKt {
+	public static final field DEFAULT_VIDEO_ACCESSIBILITY_LABEL Ljava/lang/String;
+	public static final fun accessibilityStateText-OxNrBVY (Lio/github/yuroyami/kiteplayer/PlaybackStatus;JLkotlin/time/Duration;)Ljava/lang/String;
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/view/AwtPlayerViewRenderer : io/github/yuroyami/kiteplayer/view/PlayerViewRenderer {
 	public abstract fun setCanvas (Ljava/awt/Canvas;)V
 }

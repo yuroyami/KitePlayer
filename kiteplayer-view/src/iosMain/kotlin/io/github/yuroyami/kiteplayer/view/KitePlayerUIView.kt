@@ -2,6 +2,13 @@
 
 package io.github.yuroyami.kiteplayer.view
 
+import platform.UIKit.setIsAccessibilityElement
+import platform.UIKit.setAccessibilityValue
+import platform.UIKit.setAccessibilityTraits
+import platform.UIKit.setAccessibilityLabel
+import platform.UIKit.UIAccessibilityTraitUpdatesFrequently
+import kotlin.time.Duration
+import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.KitePlayer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.readValue
@@ -117,6 +124,28 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
             binding.setPlayer(value)
         }
 
+    /**
+     * Re-reads what VoiceOver should say about the player and sets it as this view's value.
+     *
+     * Not wired to a flow here, for the reason the Android view gives: this view owns no scope,
+     * and one started for a label would outlive the pairing. The text is a pure function shared
+     * with every other view, so an application updating its own controls calls this beside them.
+     */
+    public fun updateAccessibilityState() {
+        val snapshot = player?.state?.value
+        setAccessibilityValue(
+            if (snapshot == null) {
+                accessibilityStateText(PlaybackStatus.Idle, Duration.ZERO, null)
+            } else {
+                accessibilityStateText(
+                    snapshot.status,
+                    player?.progress?.value?.position ?: Duration.ZERO,
+                    snapshot.duration,
+                )
+            },
+        )
+    }
+
     /** Frames delivered to this view's layer, across every renderer this view has built. */
     public val presentedFrames: Long
         get() = presentedBefore + (binding.activeRenderer?.presentedFrames ?: 0L)
@@ -154,6 +183,11 @@ public class KitePlayerUIView : UIView(frame = CGRectZero.readValue()) {
         get() = binding.activeRenderer?.presentedFrames ?: 0L
 
     init {
+        // VoiceOver saw an unlabelled rectangle. UpdatesFrequently tells it not to re-announce
+        // the value on every change, which is what a moving position would otherwise do.
+        setIsAccessibilityElement(true)
+        setAccessibilityLabel(DEFAULT_VIDEO_ACCESSIBILITY_LABEL)
+        setAccessibilityTraits(UIAccessibilityTraitUpdatesFrequently)
         backgroundColor = UIColor.blackColor
         layer.addSublayer(videoLayer)
         layer.addSublayer(metalLayer)

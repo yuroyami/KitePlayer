@@ -15,11 +15,10 @@ pluginManagement {
 /*
  * mavenLocal is OPT-IN for dependencies, because when it is on it wins SILENTLY.
  *
- * RIGHT NOW mavenLocal is REQUIRED to build, and that is temporary. The sibling renamed itself to
- * KiteFFmpeg on 2026-08-29 and restarted its version line at 0.1.0, which Maven Central has never
- * served: Central carries the old `kitecodec-core` coordinates up to 0.1.3 and nothing under the
- * new name until the owner publishes. So until that publish, every build here needs the flag below
- * and resolves the locally published `kiteffmpeg:0.1.0`.
+ * mavenLocal is needed ONLY while the sibling's next version is not on Maven Central yet. The
+ * catalog here pins the kiteffmpeg version this tree is written against, and there is always a
+ * window between that version existing locally and Central serving it. Inside that window, a
+ * build without the flag fails to resolve; outside it, the flag buys nothing.
  *
  * Why it stays opt-in rather than becoming unconditional: when mavenLocal is on it is consulted
  * FIRST and it wins SILENTLY. The moment Central serves a version string this working tree also

@@ -20,18 +20,18 @@ Everything is on Maven Central under `io.github.yuroyami`, and goes in `commonMa
 
 ```kotlin
 // Android + iOS, the default stack: player, decoders, audio, native video view.
-implementation("io.github.yuroyami:kiteplayer-mobile:0.0.21")
+implementation("io.github.yuroyami:kiteplayer-mobile:0.0.22")
 ```
 
 ```kotlin
 // Building your UI in Compose? This adds the video composable on top, and lets
 // you switch between native-surface and Compose-drawn rendering at runtime.
-implementation("io.github.yuroyami:kiteplayer-compose-ui:0.0.21")
+implementation("io.github.yuroyami:kiteplayer-compose-ui:0.0.22")
 ```
 
 ```kotlin
 // Just the engine, bring your own decoder and output. Depends only on coroutines.
-implementation("io.github.yuroyami:kiteplayer-core:0.0.21")
+implementation("io.github.yuroyami:kiteplayer-core:0.0.22")
 ```
 
 Twelve modules publish in total, two of them the deprecated umbrellas named at the end of

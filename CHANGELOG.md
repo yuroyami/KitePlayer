@@ -10,47 +10,126 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
-### docs
+Nothing yet.
 
-- the install section spoke only to mobile, and the release notes to nobody
-- the tree and its prose agree again
-- the feature table had fallen ten calls behind the code
-- the feature table gains the shuffle row
-- the API reference publishes to GitHub Pages
+## [0.0.22] - 2026-09-04
 
-### audio
+The first release after the first one. Audio grew an equaliser, a loudness meter, balance and
+ReplayGain. The queue can be edited while it plays. Subtitles gained a second track and a style
+override. There is a sleep timer, chapter navigation, position markers, and a way to save where
+playback was and put it back.
 
-- volume boosts to 2.0 through a limiter that lives with the gain
-- the Android audio session id reaches the application
-- the loudness the encoder measured is honoured, and cannot clip
-- stereo balance, the last thing the facade called absent
-- a ten-band equaliser, free when it is flat
-- a loudness meter, held to the standard's own numbers
+```kotlin
+implementation("io.github.yuroyami:kiteplayer-mobile:0.0.22")
+implementation("io.github.yuroyami:kiteplayer-compose-ui:0.0.22")
+implementation("io.github.yuroyami:kiteplayer-core:0.0.22")
+```
 
-### core
+This release needs [KiteFFmpeg 0.2.0](https://github.com/yuroyami/KiteFFmpeg/releases). Gradle
+pulls it in for you.
 
-- video decoding parks and resumes in place, no reopen
-- a sleep timer that fades, pauses, then gives the level back
-- the subtitle cues showing now are published to the application
-- the queue can be edited while it plays
-- shuffle, as an order over the queue rather than a reorder of it
+### Added
 
-### subtitles
+Audio:
 
-- the cue lookup binary searches instead of scanning
-- the parsers survive two thousand mutations of every fixture
+- **A ten band equaliser.** `EqualizerSettings` with per band gains and a preamp, set live through
+  `player.equalizer` or up front in `AudioConfig`. A flat setting costs nothing: the stage is
+  skipped entirely.
+- **Stereo balance**, through `player.balance`, from full left to full right.
+- **ReplayGain.** `AudioConfig.replayGain` honours the loudness the encoder already measured, with
+  a preamp and a fallback for files that carry no tag. It cannot clip: the gain goes through the
+  same limiter as the volume boost.
+- **Volume above 1.0**, up to 2.0, through a limiter that lives with the gain rather than after it.
+  `AudioConfig.volumeCeiling` sets the ceiling.
+- **A loudness meter.** `LoudnessMeter` answers integrated loudness to ITU-R BS.1770-4, the same
+  number EBU R128 and ReplayGain 2.0 are defined against, plus the sample peak and how many blocks
+  survived the standard's two gates. `AudioAnalysis.measureLoudness(item)` measures a whole file in
+  one call, for a normalise pass before playback starts.
+- **The Android audio session id** reaches the application through `player.platformSessionId`, so
+  the platform equaliser and visualiser APIs can attach to it.
+- **A warning when a decoder changes format mid stream**, as
+  `PlaybackWarning.AudioSourceFormatChanged`, carrying the old and new sample rate and channel
+  count.
 
-### diagnostics
+Playback and the queue:
 
-- a structured log sink, and URIs redacted by default
+- **Edit the queue while it plays.** `addToQueue`, `removeFromQueue`, `moveInQueue` and
+  `clearQueue`, all safe against the item currently playing.
+- **Shuffle**, as an order laid over the queue rather than a reorder of it, so turning it off puts
+  the original order back. `setShuffle(enabled, seed)`.
+- **Chapter navigation**, `nextChapter()` and `previousChapter()`.
+- **Markers that fire on crossing.** `setMarkers(list)` and `PlayerEvent.MarkerReached`, for
+  chapter art, ad breaks or anything else pinned to a position.
+- **A sleep timer.** `SleepTimer.After`, `SleepTimer.At` or `SleepTimer.EndOfItem`. It fades the
+  volume down, pauses, then gives the level back, so resuming is not silent.
+- **Save and restore where playback was.** `player.memento()` returns a `PlayerMemento` with the
+  item, position, tracks and speed; `player.restore(memento)` puts it all back. Serialise it and
+  you have resume across app launches.
+- **Turn video off without closing the file.** `setVideoEnabled(false)` parks video decoding in
+  place and resumes it where it was, with no reopen and no seek. Use it for audio only playback of
+  a video file, or when the window is hidden.
+- **Two players in one process**, proven by a test rather than assumed.
 
-### stats
+Subtitles:
 
-- bytes read and bytes per second, from the cache that already saw them
+- **A second subtitle track**, drawn at the top of the frame, through
+  `selectSecondarySubtitle(trackId)`. For a translation over the original, or dialogue over signs.
+- **A style override**, `SubtitleStyleOverride`, with a background box, on all three rasterisers.
+- **The cues showing right now**, published as `player.subtitleCues`, so an application can render
+  them itself or show them somewhere other than over the video.
 
-### ci
+Snapshots and analysis, in `kiteplayer-ffmpeg`:
 
-- dependabot watches actions and gradle
+- **Encode a captured frame** to PNG or JPEG in one call: `frame.encode(SnapshotFormat.Png)`.
+- **Thumbnails at positions**, scaled and encoded in one call, through `Thumbnails`. For a seek bar
+  preview strip or a chapter grid.
+- **A waveform of any item**, peaks and RMS per bucket, through `Waveforms`.
+- **A typed filter chain** attaches to a media item without the low level opt in.
+
+View and platform:
+
+- **A secure surface flag** on the Android view, `KitePlayerView.secure`, which blocks screenshots
+  and screen recording of the video.
+- **Picture in picture parameters**, `KitePlayerView.pictureInPictureParams(...)`, and an honest
+  capability answer from `KitePlayerPlatform.supportsPictureInPicture`.
+- **The video announces itself to screen readers**, through `accessibilityStateText(...)` and
+  `DEFAULT_VIDEO_ACCESSIBILITY_LABEL`.
+- **Renderers report the display's refresh interval**, and the Android renderer asks the display to
+  match the video's frame rate.
+- **A frame presented event**, `PlayerEvent.FramePresented`, best effort on every platform that can
+  observe one. Off by default; turn it on with `PlayerConfig.frameEvents`.
+
+Diagnostics:
+
+- **A structured log sink.** `KiteLog.installStructured(sink)` delivers events as a name and a map
+  of fields instead of a formatted line, so they can go straight into an existing logger. URIs are
+  redacted by default; `KiteLog.redactUris` turns that off.
+- **Five new numbers on `PlaybackStats`**: `ioBytesTotal`, `ioBytesPerSecond`, `decodeTimeP50`,
+  `decodeTimeP95` and `presentLatenessP95`.
+
+### Changed
+
+- **`AudioConfig`, `PlayerConfig` and `PlaybackStats` gained fields**, so their generated `copy()`
+  signatures moved. Named arguments keep working; a positional `copy()` needs a recompile. This is
+  a binary break on a 0.x library and is deliberate.
+- **KiteFFmpeg 0.1.0 to 0.2.0.**
+
+### Fixed
+
+- **Seeks are roughly twice as fast.** A paused seek used to spend almost all of its time waiting
+  rather than reading: five workers parked one after another, each sleeping out its own 50 ms poll,
+  and the landed frame was then noticed at another 50 ms interval. Now every worker is asked to
+  park before any acknowledgement is awaited, and the waiters are woken rather than polled.
+  Measured on real media, p50: keyframe seek 207 ms to 86, precise 257 to 102, keyframe then
+  refine 425 to 199.
+- **An idle worker wakes on the park request** instead of sleeping out its poll interval first.
+- **A zero frame request silences the audio buffer** on Apple output. CoreAudio can ask for zero
+  frames, and the buffer was handed back untouched, so a host that renders it anyway replayed the
+  previous period of audio.
+- **The cue lookup binary searches instead of scanning from the start.** Free on a film with a few
+  hundred lines, not free on a dense typeset ASS track running to about seventy thousand cues,
+  where every subtitle pass near the end cost seventy thousand comparisons.
+- **The subtitle parsers survive two thousand mutations of every fixture.**
 
 ## [0.0.21] - 2026-08-31
 

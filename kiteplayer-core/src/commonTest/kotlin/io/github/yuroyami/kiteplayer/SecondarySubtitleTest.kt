@@ -92,4 +92,32 @@ class SecondarySubtitleTest {
         )
         harness.close()
     }
+
+    @Test
+    fun `the refusal to use one track in both slots names the track`() = runTest {
+        val harness = CoreHarness(this, script = script)
+        harness.openWithRenderer()
+        harness.core.play()
+        harness.run(300.milliseconds)
+
+        assertTrue(harness.core.selectSecondarySubtitle(TrackId(3)) is TrackChange.Applied)
+        harness.run(300.milliseconds)
+
+        val refusal = assertFailsWith<IllegalArgumentException> {
+            harness.core.selectTrack(TrackKind.Subtitle, TrackId(3))
+        }
+        // A refusal that cannot say WHICH track is the whole message wasted: the caller is holding
+        // several and has to guess which one it was told about.
+        assertTrue(
+            refusal.message?.contains("TrackId(value=3)") == true ||
+                refusal.message?.contains("3") == true,
+            "the refusal must name the track, it said: ${refusal.message}",
+        )
+        assertTrue(
+            refusal.message?.contains("\${command") != true,
+            "the refusal printed an uninterpolated placeholder: ${refusal.message}",
+        )
+        harness.close()
+    }
+
 }

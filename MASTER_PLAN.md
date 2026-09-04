@@ -648,20 +648,14 @@ CI prove the trees this Mac cannot build.
 
 ## KitePlayer correctness and contracts
 
-- [ ] **Two SPI contract decisions from the old test-debt row** (S each, NEEDS-DESIGN). Neither is
-  a missing test over working behaviour; each asks the code to SAY something it does not, so a
-  test first would only pin the silence. The third, a silent midstream audio format change, is
-  decided and built: the device is not reopened and the change arrives as
-  `PlaybackWarning.AudioSourceFormatChanged`.
-  - **Foreign `StreamInfo` refuses typed.** Four entry points take a caller-supplied stream and
-    answer four ways: `selectTrack(TrackId)` validates and throws `IllegalArgumentException`
-    (deliberate, and `Tracks` KDoc says so); `selectStreams` uses `mapNotNull`, so `{0, 999}`
-    selects 0 and never mentions 999; a decoder factory handed a foreign stream reaches
-    `error("no stream at index N")`, untyped, from the bottom of the stack; and
-    `StreamChoice.At(missing)` resolves to null, indistinguishable from `None` and with no
-    warning. Through the core the third degrades to a typed `NoPlayableStream`, so this is about
-    the SPI's own contract. Decide whether `IllegalArgumentException` counts as typed for caller
-    mistakes (the existing policy) or whether the SPI owes `PlaybackException` throughout.
+- [ ] **One SPI contract decision from the old test-debt row** (S, NEEDS-DESIGN). It is not a
+  missing test over working behaviour; it asks the code to SAY something it does not, so a test
+  first would only pin the silence. Two of the three are decided and built. A silent midstream
+  audio format change now arrives as `PlaybackWarning.AudioSourceFormatChanged`, with the device
+  left alone. A stream a caller names but the source does not have is now refused with
+  `IllegalArgumentException`, which was already the documented answer for a caller mistake and is
+  now the answer everywhere; a selection the ENGINE carried into a rebuild and no longer finds is
+  a `TrackDeselected` warning instead, because the caller made no mistake.
   - **Decoder output diverging from codecpar is surfaced** (KiteFFmpeg). `codecpar` announces
     width, height, pixel format, sample rate and channels; the decoder may emit something else.
     Nothing compares them, and there is no channel to report it through: KiteFFmpeg has NO

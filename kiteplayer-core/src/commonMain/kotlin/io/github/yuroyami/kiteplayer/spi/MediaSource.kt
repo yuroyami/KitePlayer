@@ -40,7 +40,16 @@ public interface PlayerMediaSource : AutoCloseable {
      */
     public val timestampsMayJump: Boolean
 
-    /** Packets for streams outside this set are read and discarded by the source. */
+    /**
+     * Packets for streams outside this set are read and discarded by the source.
+     *
+     * Every index must be one this source offers. A set naming one it does not is a caller
+     * mistake and an implementation must refuse the whole call, never quietly select the subset it
+     * recognised: a caller that asked for two streams and silently got one has no way to find out.
+     *
+     * @throws IllegalArgumentException when [indices] is empty or names a stream this source does
+     *   not have.
+     */
     public fun selectStreams(indices: Set<Int>)
 
     /**

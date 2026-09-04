@@ -1250,7 +1250,7 @@ internal class PlaybackCore(
                 command.kind == TrackKind.Subtitle && command.track != null &&
                     command.track == tracks.selectedSecondarySubtitle ->
                     IllegalArgumentException(
-                        "subtitle track ${'$'}{command.track} is already the secondary; one track cannot fill both slots",
+                        "subtitle track ${command.track} is already the secondary; one track cannot fill both slots",
                     )
                 session == null && pendingVideoRecovery == null ->
                     IllegalStateException("selectTrack needs an open media item")
@@ -2092,24 +2092,21 @@ internal class PlaybackCore(
             val source = backendSession.source
             tracks = source.streams.toTracks()
 
-            val videoCandidate = when (videoChoice) {
-                StreamChoice.None -> null
-                is StreamChoice.At -> source.streams.firstOrNull { it.index == videoChoice.index }
-                StreamChoice.Auto -> source.streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt }
-                    // A file whose only picture is its cover art still has a picture worth showing, and the
-                    // still-image rule is what keeps it from carrying the timeline.
-                    ?: source.streams.firstOrNull { it.kind == TrackKind.Video }
-            }
-            val audioCandidate = when (audioChoice) {
-                StreamChoice.None -> null
-                is StreamChoice.At -> source.streams.firstOrNull { it.index == audioChoice.index }
-                StreamChoice.Auto -> pickAudio(source.streams)
-            }
-            val subtitleCandidate = when (subtitleChoice) {
-                StreamChoice.None -> null
-                is StreamChoice.At -> source.streams.firstOrNull { it.index == subtitleChoice.index }
-                StreamChoice.Auto -> pickSubtitle(source.streams, audioCandidate)
-            }
+            val videoCandidate =
+                resolveStreamChoice(videoChoice, source.streams, TrackKind.Video, ::warn) {
+                    source.streams.firstOrNull { it.kind == TrackKind.Video && !it.isCoverArt }
+                        // A file whose only picture is its cover art still has a picture worth showing, and the
+                        // still-image rule is what keeps it from carrying the timeline.
+                        ?: source.streams.firstOrNull { it.kind == TrackKind.Video }
+                }
+            val audioCandidate =
+                resolveStreamChoice(audioChoice, source.streams, TrackKind.Audio, ::warn) {
+                    pickAudio(source.streams)
+                }
+            val subtitleCandidate =
+                resolveStreamChoice(subtitleChoice, source.streams, TrackKind.Subtitle, ::warn) {
+                    pickSubtitle(source.streams, audioCandidate)
+                }
 
             var videoStream = videoCandidate
             var audioStream = audioCandidate
@@ -7219,6 +7216,45 @@ private val DISPATCHER_TICK: Duration = 1.milliseconds
  * means "choose the default". Collapsing those two into one null is how a player ends up unable to turn its
  * own audio off.
  */
+/**
+ * The stream a choice names, and a warning when the media no longer has it.
+ *
+ * One function rather than three copies of the same `when`, because the three copies is how the
+ * hole stayed open: [StreamChoice.None] and an [StreamChoice.At] naming a stream that is gone both
+ * answered null, sitting one line apart, and neither said anything. A caller who switched
+ * subtitles off and a rebuild whose subtitle stream vanished looked identical from every angle.
+ *
+ * The missing index is a WARNING and not a refusal. Nothing reaches here that a caller invented:
+ * `selectTrack` is validated against the live track set before it can become a choice, so an
+ * [StreamChoice.At] is either that validated id or an index the engine read off the session it is
+ * rebuilding. When it goes missing the caller made no mistake and the media changed underneath.
+ *
+ * @param auto what to pick when the choice is [StreamChoice.Auto]. Its own empty answer stays
+ *   silent: media with no stream of a kind is ordinary, and warning about it would fire on most
+ *   files.
+ */
+internal fun resolveStreamChoice(
+    choice: StreamChoice,
+    streams: List<PlayerStreamInfo>,
+    kind: TrackKind,
+    warn: (PlaybackWarning) -> Unit,
+    auto: () -> PlayerStreamInfo?,
+): PlayerStreamInfo? = when (choice) {
+    StreamChoice.None -> null
+    StreamChoice.Auto -> auto()
+    is StreamChoice.At -> streams.firstOrNull { it.index == choice.index }
+        ?: run {
+            warn(
+                PlaybackWarning.TrackDeselected(
+                    TrackId(choice.index),
+                    "this media has no $kind stream at index ${choice.index} any more, " +
+                        "so the selection carried into this open was dropped",
+                ),
+            )
+            null
+        }
+}
+
 internal sealed interface StreamChoice {
     /** Pick the default: the first non-cover-art video, and audio by language then disposition. */
     data object Auto : StreamChoice

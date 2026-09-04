@@ -156,8 +156,17 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
 
     override fun selectStreams(indices: Set<Int>) {
         check(reader == null) { "streams must be selected before the first read" }
-        val selected = indices.mapNotNull { byIndex[it] }
-        require(selected.isNotEmpty()) { "no selectable stream among $indices" }
+        // Named one by one, not filtered. A mapNotNull here meant {0, 999} selected 0 and never
+        // mentioned 999: the caller asked for two streams, got one, and nothing said which request
+        // went nowhere. A missing index is a caller mistake and this library answers those with
+        // IllegalArgumentException, so it says so.
+        val unknown = indices.filter { it !in byIndex }
+        require(unknown.isEmpty()) {
+            "no selectable stream at ${unknown.sorted()}; this source offers " +
+                "${byIndex.keys.sorted()}"
+        }
+        val selected = indices.map { byIndex.getValue(it) }
+        require(selected.isNotEmpty()) { "selectStreams needs at least one stream" }
         reader = source.openPacketReader(selected)
     }
 
@@ -189,8 +198,18 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
         source.close()
     }
 
+    /**
+     * The library stream behind a caller-supplied index.
+     *
+     * Refuses with [IllegalArgumentException] rather than `error(...)`, which threw
+     * IllegalStateException from the bottom of the decoder-factory stack. A stream this source
+     * does not have is a caller mistake, and this repository answers those one way.
+     */
     internal fun kiteStream(index: Int): StreamInfo =
-        byIndex[index] ?: error("no stream at index $index")
+        byIndex[index] ?: throw IllegalArgumentException(
+            "no stream at index $index in this source; it offers ${byIndex.keys.sorted()}. " +
+                "Pass a stream from this source's own stream list.",
+        )
 
     /** KD-6: the backend's profile knobs, applied to every VIDEO decoder opened here. */
     internal var videoDecoderOptions: Map<String, String> = emptyMap()

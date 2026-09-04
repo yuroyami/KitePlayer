@@ -45,6 +45,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - The local Maven repository is opt-in here, behind a flag, and the build says so when it is on.
   Never re-enable it unconditionally: the same version string with different bytes is
   indistinguishable from the published one.
+- Neither `ci.yml` nor `publish.yml` passes that flag, so both resolve kiteffmpeg from Maven
+  Central only. Raising the catalog's kiteffmpeg version to one Central does not serve yet turns
+  CI red on the next push and makes the publish fail. The sibling reaches Central first, then this
+  repository is pushed and published.
 
 ### Tests that fail for reasons that are not bugs
 

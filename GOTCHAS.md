@@ -141,6 +141,12 @@ Never move one silently.
 
 ## 4. Build and toolchain traps, each one paid for
 
+- **A property named `field` is unreachable by that name inside any accessor of the same class.**
+  Inside a getter, `field` is Kotlin's backing-field keyword, so a data class with a `field`
+  property and a `message` getter that mentions `$field` makes the compiler read `message` as
+  having a backing field it never initialises. It reports `Property must be initialized` on the
+  property NAME, which points nowhere near the string that caused it. Spell it `${this.field}`,
+  or do not name a property `field`.
 - **KiteFFmpeg's `apiCheck` needs `-Pkiteffmpeg.hostTargetsOnly=true`, on this machine especially.**
   The committed klib dump lists three targets (`js, macosArm64, wasmJs`) because CI builds one
   FFmpeg tree and can present no more. A developer machine that HAS all twelve trees compiles all

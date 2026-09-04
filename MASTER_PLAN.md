@@ -587,6 +587,12 @@ they play (M, after K5); **V4** auto-deinterlace (M, after K3); **K7**'s player 
 KiteFFmpeg backends read it now, so this is a read-through and a stats field);
 **K1**'s player half, the resampler SPI (after K1).
 
+After the next KiteFFmpeg publish (OWNER-GATED): **the divergence report reaches the player**.
+`MediaSource.streamDivergences` names every field where a container's declaration and its
+decoder disagree. KitePlayer reads none of it, and it is exactly what a viewer sees as a
+wrong-sized surface or an audio device opened for a rate nothing feeds. One read after the first
+frames, one new `PlaybackWarning`, and the warning audit forces it to name where it is emitted.
+
 ## KiteFFmpeg, in order
 
 Several of these add C entry points. Each is small; what makes them one job is the tax around
@@ -648,21 +654,12 @@ CI prove the trees this Mac cannot build.
 
 ## KitePlayer correctness and contracts
 
-- [ ] **One SPI contract decision from the old test-debt row** (S, NEEDS-DESIGN). It is not a
-  missing test over working behaviour; it asks the code to SAY something it does not, so a test
-  first would only pin the silence. Two of the three are decided and built. A silent midstream
-  audio format change now arrives as `PlaybackWarning.AudioSourceFormatChanged`, with the device
-  left alone. A stream a caller names but the source does not have is now refused with
-  `IllegalArgumentException`, which was already the documented answer for a caller mistake and is
-  now the answer everywhere; a selection the ENGINE carried into a rebuild and no longer finds is
-  a `TrackDeselected` warning instead, because the caller made no mistake.
-  - **Decoder output diverging from codecpar is surfaced** (KiteFFmpeg). `codecpar` announces
-    width, height, pixel format, sample rate and channels; the decoder may emit something else.
-    Nothing compares them, and there is no channel to report it through: KiteFFmpeg has NO
-    logger and NO warning callback in its Kotlin surface. Its whole non-fatal vocabulary is
-    pull-style values on objects (`corruptDataSkipped`, `unusedOpenOptions`), and the one place a
-    mismatch is checked (encode-side dimensions) throws. Throwing is wrong here: these are files
-    that play. Decide the shape of the report; `corruptDataSkipped` is the closest precedent.
+- [ ] **The web backend's divergence comparison is wired and unexercised** (S). Native and JVM are
+  proven by falsification: break the comparison and their real-media cases fail. The web fake
+  decodes SUBTITLE streams, which declare no width and no sample rate, so the recorder returns
+  before it looks at a frame and the web path is compiled but never run. Needs a fake that decodes
+  video: a video codec type plus the frame accessors, and changing the existing fake's stream type
+  would move a dozen unrelated tests, so it wants its own fake.
 - [ ] **An external master clock** [`SyncMode.ExternalMaster`, SOL-API4] (M, NEEDS-DESIGN). A wall clock
   drives playback and audio resamples to follow. Nothing in the public API can hand the engine an
   external clock, so the seam is the decision. Virtual-clock test driving a scripted external

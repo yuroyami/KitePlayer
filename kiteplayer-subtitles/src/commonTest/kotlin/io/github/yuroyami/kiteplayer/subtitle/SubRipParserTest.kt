@@ -242,6 +242,37 @@ class SubRipParserTest {
     }
 
     @Test
+    fun `open ends resolve past a run of cues that share one start`() {
+        // Three cues start together and none has a length. The next DISTINCT start closes all
+        // three, and the one after that closes itself with the default. The resolution is one
+        // backward pass; it used to copy the tail of the list once per open cue.
+        val cues = parse(
+            """
+            1
+            00:00:01,000 --> 00:00:01,000
+            A
+
+            2
+            00:00:01,000 --> 00:00:00,500
+            B
+
+            3
+            00:00:01,000 --> 00:00:01,000
+            C
+
+            4
+            00:00:04,000 --> 00:00:04,000
+            D
+            """.trimIndent(),
+        )
+        assertEquals(listOf("A", "B", "C", "D"), cues.map { it.plainText })
+        assertEquals(
+            listOf(4_000_000L, 4_000_000L, 4_000_000L, 4_000_000L + SubRipParser.OPEN_CUE_DEFAULT_MICROS),
+            cues.map { it.endMicros },
+        )
+    }
+
+    @Test
     fun `entities decode after tag handling`() {
         val cue = parse(
             """

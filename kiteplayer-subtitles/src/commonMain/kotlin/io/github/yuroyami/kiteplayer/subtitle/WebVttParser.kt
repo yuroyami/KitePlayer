@@ -64,19 +64,9 @@ public object WebVttParser {
             }
         }
 
-        val sorted = cues.sortedBy { it.startMicros }
         // The same open-end resolution SubRip applies: a clamped backwards or
         // zero-length cue closes at the next cue's start, or after the shared default.
-        return sorted.mapIndexed { index, cue ->
-            if (cue.endMicros > cue.startMicros) {
-                cue
-            } else {
-                val nextStart = sorted.drop(index + 1)
-                    .firstOrNull { it.startMicros > cue.startMicros }
-                    ?.startMicros
-                cue.copy(endMicros = nextStart ?: (cue.startMicros + SubRipParser.OPEN_CUE_DEFAULT_MICROS))
-            }
-        }
+        return cues.sortedBy { it.startMicros }.closingOpenEnds(SubRipParser.OPEN_CUE_DEFAULT_MICROS)
     }
 
     /** One cue's body from a container track, timing already on the packet (S4.c). */

@@ -77,19 +77,9 @@ public object SubRipParser {
             }
         }
 
-        val sorted = cues.sortedBy { it.startMicros }
         // The open-end resolution: a clamped backwards or zero-length cue closes
         // at the NEXT cue's start, or after the documented default when nothing follows.
-        return sorted.mapIndexed { index, cue ->
-            if (cue.endMicros > cue.startMicros) {
-                cue
-            } else {
-                val nextStart = sorted.drop(index + 1)
-                    .firstOrNull { it.startMicros > cue.startMicros }
-                    ?.startMicros
-                cue.copy(endMicros = nextStart ?: (cue.startMicros + OPEN_CUE_DEFAULT_MICROS))
-            }
-        }
+        return cues.sortedBy { it.startMicros }.closingOpenEnds(OPEN_CUE_DEFAULT_MICROS)
     }
 
     /**
@@ -147,6 +137,29 @@ private fun looksLikeIndex(line: String): Boolean =
  * Unknown tags are kept as literal text. That is deliberate: a viewer seeing `<foo>` learns the
  * file is odd, whereas silently deleting content hides a real problem and can remove dialogue.
  */
+/**
+ * Closes every cue whose end is not after its start at the next DISTINCT start in this list,
+ * which is sorted by start, or at [defaultMicros] past its own start when nothing follows.
+ *
+ * One backward pass carrying the next distinct start. It used to be `drop(index + 1)` and a
+ * search per open cue, which copies the tail of the list every time: a file made of zero-length
+ * cues, which both parsers accept on purpose, allocated the square of its own length.
+ */
+internal fun List<SubtitleCue.Text>.closingOpenEnds(defaultMicros: Long): List<SubtitleCue.Text> {
+    val closed = toMutableList()
+    var next: Long? = null
+    var followingStart: Long? = null
+    for (index in lastIndex downTo 0) {
+        val cue = this[index]
+        if (followingStart != null && followingStart != cue.startMicros) next = followingStart
+        if (cue.endMicros <= cue.startMicros) {
+            closed[index] = cue.copy(endMicros = next ?: (cue.startMicros + defaultMicros))
+        }
+        followingStart = cue.startMicros
+    }
+    return closed
+}
+
 internal object InlineMarkup {
 
     fun parse(text: String): List<StyledSpan> {

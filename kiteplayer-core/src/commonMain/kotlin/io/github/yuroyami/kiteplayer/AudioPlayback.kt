@@ -326,6 +326,18 @@ public class AudioPlayback(
             existing.matches(sourceFormat) && existing.preservePitch == pitchNow -> existing
             else -> existing.rebuiltFor(sourceFormat, pitchNow)
         }
+        // Only a FORMAT change is worth saying out loud. A pitch-law change rebuilds the same
+        // stage too, and that one the caller asked for, so it is not news.
+        if (existing != null && !existing.matches(sourceFormat)) {
+            onWarning(
+                PlaybackWarning.AudioSourceFormatChanged(
+                    fromSampleRate = existing.sourceFormat.sampleRate,
+                    fromChannels = existing.sourceFormat.channels,
+                    toSampleRate = sourceFormat.sampleRate,
+                    toChannels = sourceFormat.channels,
+                ),
+            )
+        }
         if (stage !== existing) {
             // A fresh pipeline has a fresh equaliser at flat, so the cache of what was written
             // into the OLD one must not stop the new one being configured.

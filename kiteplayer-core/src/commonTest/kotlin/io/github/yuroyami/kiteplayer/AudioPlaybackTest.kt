@@ -232,4 +232,58 @@ class AudioPlaybackTest {
             late.submit(pts = null, interleaved = samples, frames = 64)
         }
     }
+
+    @Test
+    fun `a decoder that changes format mid-stream says so once`() = runTest {
+        // The conversion half has always worked: the pipeline is keyed on the source format, so a
+        // change rebuilds it on the buffer that changed. What did not exist was anyone being told.
+        // A 48 kHz stream turning into a 44.1 kHz one was completely silent, and the only symptom
+        // was a resampler appearing in a profile.
+        val warnings = mutableListOf<PlaybackWarning>()
+        val audio = AudioPlayback(FakeAudioSink(), TestClock(), onWarning = { warnings += it })
+        audio.open(format(2))
+
+        val frames = 128
+        audio.submitDecoded(null, FloatArray(frames * 2), frames, format(2, 48_000))
+        assertTrue(
+            warnings.none { it is PlaybackWarning.AudioSourceFormatChanged },
+            "the first buffer establishes the format; it did not change",
+        )
+
+        audio.submitDecoded(null, FloatArray(frames * 2), frames, format(2, 44_100))
+        val changed = warnings.filterIsInstance<PlaybackWarning.AudioSourceFormatChanged>()
+        assertEquals(1, changed.size, "one change, one warning, got $warnings")
+        assertEquals(48_000, changed[0].fromSampleRate)
+        assertEquals(44_100, changed[0].toSampleRate)
+        assertEquals(2, changed[0].fromChannels)
+        assertEquals(2, changed[0].toChannels)
+
+        // A steady stream after the change must not keep warning: the pipeline now matches, and a
+        // warning per buffer would bury every other warning a caller is listening for.
+        repeat(3) { audio.submitDecoded(null, FloatArray(frames * 2), frames, format(2, 44_100)) }
+        assertEquals(
+            1,
+            warnings.filterIsInstance<PlaybackWarning.AudioSourceFormatChanged>().size,
+            "the warning repeated on buffers that did not change anything",
+        )
+        audio.close()
+    }
+
+    @Test
+    fun `a channel count change is reported as well as a rate change`() = runTest {
+        val warnings = mutableListOf<PlaybackWarning>()
+        val audio = AudioPlayback(FakeAudioSink(), TestClock(), onWarning = { warnings += it })
+        audio.open(format(2))
+
+        val frames = 64
+        audio.submitDecoded(null, FloatArray(frames * 2), frames, format(2, 48_000))
+        audio.submitDecoded(null, FloatArray(frames * 6), frames, format(6, 48_000))
+
+        val changed = warnings.filterIsInstance<PlaybackWarning.AudioSourceFormatChanged>()
+        assertEquals(1, changed.size, "a layout change is a format change, got $warnings")
+        assertEquals(2, changed[0].fromChannels)
+        assertEquals(6, changed[0].toChannels)
+        audio.close()
+    }
+
 }

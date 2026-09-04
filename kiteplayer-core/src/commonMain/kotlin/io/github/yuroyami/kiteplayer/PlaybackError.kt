@@ -229,6 +229,38 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The decoder started producing a different audio format part way through the same stream.
+     *
+     * The player handles it: the conversion stage is keyed on what the decoder produces, so it is
+     * rebuilt on the buffer that changed and the device keeps the format it agreed to. The device
+     * is NOT reopened, which is deliberate. Reopening would gap the sound, and there is nothing to
+     * gain from it while the conversion is exact.
+     *
+     * It is a warning because it is otherwise invisible. A stream that switches from 48 kHz to
+     * 44.1 kHz sounds the same and quietly adds a resampler for the rest of the file, and the only
+     * way anyone found out was by noticing it in a profile. Concatenated files and some broadcast
+     * captures do this.
+     *
+     * Once per change, not once per buffer.
+     */
+    public data class AudioSourceFormatChanged(
+        val fromSampleRate: Int,
+        val fromChannels: Int,
+        val toSampleRate: Int,
+        val toChannels: Int,
+    ) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf(
+                "from" to "${fromSampleRate}Hz/${fromChannels}ch",
+                "to" to "${toSampleRate}Hz/${toChannels}ch",
+            )
+
+        override val message: String
+            get() = "the decoder changed audio format mid-stream, from ${fromSampleRate}Hz " +
+                "${fromChannels}ch to ${toSampleRate}Hz ${toChannels}ch; converting, device unchanged"
+    }
+
+    /**
      * HDR was rolled off to standard dynamic range so this display can show it. Once per open.
      *
      * Not a defect and not a fallback: PQ and HLG carry more range than an SDR panel can present,

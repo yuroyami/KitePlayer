@@ -20,6 +20,7 @@ class WarningAuditTest {
         PlaybackWarning.AudioUnderrun(1),
         PlaybackWarning.AudioDrainIncomplete("x"),
         PlaybackWarning.AudioLatencyUnreliable("x"),
+        PlaybackWarning.AudioSourceFormatChanged(48_000, 2, 44_100, 2),
         @Suppress("DEPRECATION")
         PlaybackWarning.TonemappingUnavailable("x"),
         PlaybackWarning.HdrToneMapped("PQ", 0),
@@ -73,6 +74,10 @@ class WarningAuditTest {
         )
         is PlaybackWarning.AudioLatencyUnreliable -> listOf(
             "PlaybackCore's open path, when the sink reports LatencyQuality.Unreliable",
+        )
+        is PlaybackWarning.AudioSourceFormatChanged -> listOf(
+            "AudioPlayback.submitDecoded, when the decoder's format stops matching the conversion " +
+                "stage's, so the stage is rebuilt on the buffer that changed",
         )
         is PlaybackWarning.HdrToneMapped -> listOf(
             "PlaybackCore.watchRendererEvents, on RendererEvent.ToneMapEngaged from the renderer " +

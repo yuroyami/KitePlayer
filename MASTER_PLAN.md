@@ -648,9 +648,11 @@ CI prove the trees this Mac cannot build.
 
 ## KitePlayer correctness and contracts
 
-- [ ] **Three SPI contract decisions from the old test-debt row** (S each, NEEDS-DESIGN). None is
+- [ ] **Two SPI contract decisions from the old test-debt row** (S each, NEEDS-DESIGN). Neither is
   a missing test over working behaviour; each asks the code to SAY something it does not, so a
-  test first would only pin the silence.
+  test first would only pin the silence. The third, a silent midstream audio format change, is
+  decided and built: the device is not reopened and the change arrives as
+  `PlaybackWarning.AudioSourceFormatChanged`.
   - **Foreign `StreamInfo` refuses typed.** Four entry points take a caller-supplied stream and
     answer four ways: `selectTrack(TrackId)` validates and throws `IllegalArgumentException`
     (deliberate, and `Tracks` KDoc says so); `selectStreams` uses `mapNotNull`, so `{0, 999}`
@@ -667,14 +669,6 @@ CI prove the trees this Mac cannot build.
     pull-style values on objects (`corruptDataSkipped`, `unusedOpenOptions`), and the one place a
     mismatch is checked (encode-side dimensions) throws. Throwing is wrong here: these are files
     that play. Decide the shape of the report; `corruptDataSkipped` is the closest precedent.
-  - **A midstream audio format change reaches renegotiation or a typed warning.** The conversion
-    half works: `AudioPipeline.matches` is full format equality, so a change in rate, channels,
-    sample format or layout rebuilds the pipeline on the buffer that changed. What does not exist
-    is observability: `decoder.outputFormat` is read at open and at track switch only, the sink
-    and ring keep their negotiated format for the session, and `AudioFormatChanged` is never
-    emitted mid-stream. A plain 48 kHz to 44.1 kHz change is completely silent. Decide between
-    renegotiating the device and emitting a warning; a test needs a new harness knob, since
-    `ScriptedAudioDecoder.outputFormat` is `private set` and every buffer is built from it.
 - [ ] **An external master clock** [`SyncMode.ExternalMaster`, SOL-API4] (M, NEEDS-DESIGN). A wall clock
   drives playback and audio resamples to follow. Nothing in the public API can hand the engine an
   external clock, so the seam is the decision. Virtual-clock test driving a scripted external

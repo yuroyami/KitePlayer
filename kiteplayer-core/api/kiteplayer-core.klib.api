@@ -2995,6 +2995,32 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioLatencyUnreliable.toString|toString(){}[0]
     }
 
+    final class AudioSourceFormatChanged : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged|null[0]
+        constructor <init>(kotlin/Int, kotlin/Int, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.<init>|<init>(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+
+        final val fields // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.fields|{}fields[0]
+            final fun <get-fields>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.fields.<get-fields>|<get-fields>(){}[0]
+        final val fromChannels // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.fromChannels|{}fromChannels[0]
+            final fun <get-fromChannels>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.fromChannels.<get-fromChannels>|<get-fromChannels>(){}[0]
+        final val fromSampleRate // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.fromSampleRate|{}fromSampleRate[0]
+            final fun <get-fromSampleRate>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.fromSampleRate.<get-fromSampleRate>|<get-fromSampleRate>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.message.<get-message>|<get-message>(){}[0]
+        final val toChannels // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.toChannels|{}toChannels[0]
+            final fun <get-toChannels>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.toChannels.<get-toChannels>|<get-toChannels>(){}[0]
+        final val toSampleRate // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.toSampleRate|{}toSampleRate[0]
+            final fun <get-toSampleRate>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.toSampleRate.<get-toSampleRate>|<get-toSampleRate>(){}[0]
+
+        final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.component1|component1(){}[0]
+        final fun component2(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.component2|component2(){}[0]
+        final fun component3(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.component3|component3(){}[0]
+        final fun component4(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.component4|component4(){}[0]
+        final fun copy(kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ..., kotlin/Int = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.copy|copy(kotlin.Int;kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.toString|toString(){}[0]
+    }
+
     final class AudioUnderrun : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun|null[0]
         constructor <init>(kotlin/Long) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun.<init>|<init>(kotlin.Long){}[0]
 

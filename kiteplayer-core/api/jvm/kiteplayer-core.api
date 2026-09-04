@@ -784,6 +784,25 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioLatencyUnr
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioSourceFormatChanged : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (IIII)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()I
+	public final fun copy (IIII)Lio/github/yuroyami/kiteplayer/PlaybackWarning$AudioSourceFormatChanged;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$AudioSourceFormatChanged;IIIIILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$AudioSourceFormatChanged;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getFields ()Ljava/util/Map;
+	public final fun getFromChannels ()I
+	public final fun getFromSampleRate ()I
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getToChannels ()I
+	public final fun getToSampleRate ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioUnderrun : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (J)V
 	public final fun component1 ()J

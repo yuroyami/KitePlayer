@@ -617,14 +617,6 @@ CI prove the trees this Mac cannot build.
   `TrackSelector` policy (defaults documented, language hook) plus widened `Disposition` flags.
   Then: the cover-art-first fixture picks real video on wasm too; descriptive audio is never
   auto-picked over an ordinary sibling. apiDump.
-- [ ] **A cancelled emit in `FilterGraph.process`** (S, NEEDS-DESIGN). The two backends are wrong
-  in opposite directions. JVM (`FilterGraph.jvm.kt`, the `emit(out)` site) wraps the emit in
-  `catch (Throwable) { out.close(); throw error }`, but `take` and `first` end a flow by throwing
-  out of `emit` AFTER the value reached the collector, so `process(input).first()` hands back a
-  frame the library then closed. Native (`FilterGraph.native.kt`, same site) has no catch, so an
-  emit cancelled from OUTSIDE strands the clone. Nothing at the emit site can tell "the collector
-  took it and stopped" from "the scope died before delivery". Decide which loss is preferred, or
-  give the frame a reclamation path that makes the question moot, then align both.
 - [ ] **The API ratchet watches 3 of 13 targets** [KC-ABI-SCOPE] (M). An iOS-only public API
   change passes today (dumps re-based under the host-only flag). Fix: CI fetches the prebuilt
   static trees (the mechanism the consumer jobs already use) for ios, linux and mingw and dumps

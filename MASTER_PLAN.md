@@ -705,7 +705,16 @@ CI prove the trees this Mac cannot build.
   publication and an atomic publish (box 20); licence, SBOM and provenance per bundled native
   dependency (box 19); the web runtime in a versioned package that releases with the player
   modules (boxes 14 and 18; needs the web deployment item below).
-- [ ] **Dependency lockfiles or verification metadata** (S) [KP-B1..B13].
+- [ ] **Artifact checksum verification** (M, not the S this was filed as). The hygiene half is
+  done: `scripts/check-dependency-hygiene.sh` in both repositories, in both CI ratchet steps,
+  holding six rules that were all true and none of them guarded. What is left is real checksum
+  verification, and it does not fit yet. Measured, not guessed: generating
+  `gradle/verification-metadata.xml` recorded 486 components from ONE jvm compile, and the next
+  task failed on `:detachedConfiguration1`, which Kotlin/Native and the Node setup resolve
+  through and the generator never sees. CI also runs on three operating systems and each
+  resolves its own toolchain artifacts, so a file written on this Mac cannot carry the Linux and
+  Windows halves. Turning it on today reddens two thirds of CI to verify one third. Reopen when
+  either Gradle covers detached configurations or the metadata can be merged per host in CI.
 - [ ] **armeabi-v7a** [SOL-B5] (M). Owner-ruled: every ABI stays. Add armeabi-v7a to the JNI link
   recipes and the libass adapter. Three gates before the ABI is CLAIMED: (1) the RT ring's
   64-bit positions audited for ARMv7 atomics (LDREXD class) with a compile-time lock-free

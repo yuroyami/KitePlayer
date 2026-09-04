@@ -489,6 +489,13 @@ Never move one silently.
   Ktor engines: OkHttp, NSURLSession, browser fetch); libplacebo REJECTED as a dependency
   (its viewer-visible value is ~150 lines of shader we author; its correctness core is already
   shipped; it cannot follow the engine to wasm).
+- **Gradle artifact checksum verification is not on, and the reason is measured.** Writing
+  `gradle/verification-metadata.xml` recorded 486 components from one jvm compile, and the very
+  next task failed on `:detachedConfiguration1`: Kotlin/Native and the Node setup resolve through
+  detached configurations the generator never observes. CI also runs on three operating systems,
+  each resolving its own toolchain artifacts, and a file written on one host cannot carry the
+  other two. `scripts/check-dependency-hygiene.sh` guards the parts that can be guarded instead,
+  and both CI ratchet steps run it. Reopen only with a way to merge metadata per host.
 - **Native Linux/Windows https stays absent**: those targets have no OS TLS to delegate to and
   no output backend; desktop rides the JVM, which has https.
 - **Every Android ABI stays supported, owner-ruled.** "minSdk 26 excludes 32-bit" is true for

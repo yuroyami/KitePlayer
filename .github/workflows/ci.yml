@@ -183,7 +183,9 @@ jobs:
       # spelling); checkKitertCoupling holds the kitert boundary against a committed baseline;
       # checkPublicationReadiness reads all 116 generated POMs and the project dependency edges.
       - name: The ratchets
-        run: ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
+        run: |
+          ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
+          ./scripts/check-dependency-hygiene.sh
 
       # Every module that HAS jvm tests. The three that need the clips (ffmpeg, mobile,
       # compose-video) are here rather than on Linux for the generator reason above.

@@ -298,7 +298,8 @@ jobs:
             :kiteplayer-subtitles:iosSimulatorArm64Test \
             :kiteplayer-rt:iosSimulatorArm64Test \
             :kiteplayer-view:iosSimulatorArm64Test \
-            :kiteplayer-network:iosSimulatorArm64Test
+            :kiteplayer-network:iosSimulatorArm64Test \
+            :kiteplayer-output:iosSimulatorArm64Test
 
       # Compiling the device triples is a weaker claim than running them and is still worth making:
       # it is what catches an appleMain change that only breaks on the real target.

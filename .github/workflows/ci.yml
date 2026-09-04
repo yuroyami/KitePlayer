@@ -30,16 +30,16 @@
 #     simulator does not have. Four failures, all environment.
 #   - `:kiteplayer-mobile` on wasmJs. Not a gap in the runner: that module has NO shared test
 #     sources at all, only jvmTest and androidHostTest, so its wasmJs test task is NO-SOURCE and
-#     naming it here would widen the job on paper and not in fact. MASTER_PLAN.md covers
-#     it with the other source-less modules. Its wasmJs MAIN code is compiled by the build job.
+#     naming it here would widen the job on paper and not in fact. It is tracked with the other
+#     source-less modules. Its wasmJs MAIN code is compiled by the build job.
 #   - Android DEVICE tests (`connectedAndroidTest`) and the physical-device rows. Those need
-#     hardware and stay owner-gated exactly as the register says.
+#     hardware and stay owner-gated, tracked in the hardware verification plan.
 #   - `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone`, which have test
 #     TASKS and no test SOURCES. They were named here on the first run and came back NO-SOURCE.
 #     Naming a task that cannot run is how a job looks broader than it is, so they are gone from
-#     the lists and the gap is a plan row instead.
+#     the lists and the gap is an issue instead.
 #   - A PINNED fixture generator. The clips are made by whatever ffmpeg Homebrew ships that week,
-#     which is 8.1.2 today and 8.0 on the proving Mac. See MASTER_PLAN.md.
+#     which is 8.1.2 today and 8.0 on the proving Mac. That gap is tracked as an issue.
 #   - `:kiteplayer-output`'s CoreAudio ANCHOR assertion, on macOS too. See the macos-host job: this
 #     runner's audio device lags where real hardware leads, so the one assertion that depends on
 #     that is filtered out by name and reported as not run. The other 94 tests in the module,
@@ -71,7 +71,7 @@ jobs:
   # The headline. Nine C suites, off this project's one laptop for the first time.
   # ---------------------------------------------------------------------------------------------
   c-suites:
-    name: The nine C suites (macos-latest)
+    name: The C suites (macos-latest)
     runs-on: macos-latest
     timeout-minutes: 20
     steps:

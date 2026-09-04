@@ -46,8 +46,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * ### What is not here
  *
- * Shuffle, a gapless queue handoff and a secondary subtitle track are absent rather than stubbed;
- * MASTER_PLAN.md carries them with what each one needs.
+ * Shuffle, a gapless queue handoff and a secondary subtitle track are absent rather than stubbed.
+ * Each is tracked as its own issue.
  *
  * External subtitles, filter chains, the open-option escape hatch, chapters, the queue and frame
  * stepping were on this list and are all here now: [addExternalSubtitle], [MediaItem.videoFilter],
@@ -807,7 +807,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * that path needs a seekable source. Selecting an EXTERNAL subtitle track (S4.e, a negative
      * [TrackId] from [MediaItem.externalSubtitles]) while no container subtitle stream is
      * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
-     * switching is on the roadmap in MASTER_PLAN.md.
+     * switching is tracked as an issue.
      *
      * Selections of DIFFERENT kinds made close together are merged into one reopen, so setting the
      * audio track and then the subtitle track costs one rebuild and both are applied. Two requests

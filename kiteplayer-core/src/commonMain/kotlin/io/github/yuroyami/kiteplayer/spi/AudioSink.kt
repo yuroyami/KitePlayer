@@ -71,7 +71,7 @@ public interface AudioSink : AutoCloseable {
      *
      * No engine code reads this. The audio clock is anchored from the deadline the render callback
      * carries, which needs no latency figure, so this exists for diagnostics and for a later sink
-     * that has no such callback. Not implemented yet; see MASTER_PLAN.md.
+     * that has no such callback. Not implemented yet.
      */
     public fun latencyNanos(): Long
 
@@ -180,7 +180,7 @@ public interface AudioSinkBuffer {
      *
      * Nothing calls it: the engine's ring is interleaved and writes through [writeInterleaved]. It is
      * here for a platform whose device buffer is planar.
-     * Not implemented yet; see MASTER_PLAN.md.
+     * Not implemented yet.
      */
     public fun writePlane(
         channel: Int,

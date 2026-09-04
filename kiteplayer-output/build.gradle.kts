@@ -17,8 +17,8 @@ plugins {
  * testable on the development machine, and because iOS then shares the same code. The desktop JVM
  * came next in phase W: SourceDataLine for audio and the JDK's own text engine for subtitles, which
  * is decision W-D2, Kotlin first under D-7. The Kotlin/Native desktops publish the common surface
- * only for now, so a consumer that compiles them still resolves; their C device sinks are register
- * MASTER_PLAN.md.
+ * only for now, so a consumer that compiles them still resolves; their C device sinks are not
+ * built.
  */
 kotlin {
     explicitApi()
@@ -34,8 +34,7 @@ kotlin {
     iosSimulatorArm64()
     // The Kotlin/Native desktops (phase W). They publish the common surface plus whatever backend
     // exists for them, which today is none: a Kotlin/Native desktop consumer has the engine and
-    // the FFmpeg backend but no device sink yet, and MASTER_PLAN.md is where that
-    // lands. Declaring the targets is what lets :kiteplayer-ffmpeg's real-media tests resolve this
+    // the FFmpeg backend but no device sink yet. Declaring the targets is what lets :kiteplayer-ffmpeg's real-media tests resolve this
     // module on Linux at all.
     linuxX64()
     linuxArm64()
@@ -67,7 +66,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
-            // The library only, never the Gradle plugin: MASTER_PLAN.md. Used by
+            // The library only, never the Gradle plugin. Used by
             // CoreAudioSink for one lock, which orders its own teardown against a diagnostic read
             // from another thread. Nothing on the real-time path takes it; the device callback is a
             // C function that never enters this module.

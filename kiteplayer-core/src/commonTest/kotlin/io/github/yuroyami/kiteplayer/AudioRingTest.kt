@@ -86,8 +86,8 @@ private class RingCase(val name: String, val steps: List<RingStep>)
  * B1.8 onward it is NOT the implementation the macOS device path uses: there the C ring in
  * `kiteplayer-rt` holds the samples and a `static` C function renders them. So on macOS these tests
  * exercise a ring no user runs, and letting a total test count quietly imply otherwise would be
- * exactly the substitution MASTER_PLAN.md forbids. The plan
- * requires it said in three places: here, in the README, and in the execution log.
+ * exactly the substitution this project forbids. It is said in two places on purpose: here and
+ * in the README.
  *
  * The shipped macOS path is carried by two other things instead. The C suites under
  * `kiteplayer-rt/native/tests`, which run under plain, ASan plus UBSan, and TSan builds. And
@@ -311,7 +311,7 @@ class AudioRingTest {
     fun `dating a frame delta divides before it multiplies`() {
         // Both places this ring dates a frame used to compute
         // `delta * 1_000_000L / sampleRate`, whose product overflows a signed 64 bit intermediate once
-        // the delta passes about 9.2e12: the same shape MASTER_PLAN.md records against KiteFFmpeg's
+        // the delta passes about 9.2e12: the same shape found in the media library's
         // timestamp helpers as defect D9.
         //
         // The table has to go through `framesToMicros` rather than through `write` and `render`,

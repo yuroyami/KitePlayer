@@ -200,7 +200,7 @@ public data class Progress(
  * of numbers side by side: submitted against drawn is the difference between the engine keeping up
  * and the output keeping up, and copying the second group into this class would only invent a figure
  * the engine cannot know, because no member of the renderer interface reports one. Per-submission
- * terminal feedback is the roadmap item that would change that; see MASTER_PLAN.md (B5).
+ * terminal feedback is the tracked work that would change that.
  */
 public data class PlaybackStats(
     val decodedVideoFrames: Long = 0,
@@ -373,7 +373,7 @@ public enum class SyncMode {
      * A wall clock drives playback and audio is resampled to follow it.
      *
      * Nothing drives playback from an external clock, and nothing resamples audio to follow one.
-     * Not implemented yet; see MASTER_PLAN.md.
+     * Not implemented yet.
      */
     ExternalMaster,
 }
@@ -382,7 +382,7 @@ public enum class SyncMode {
  * Which clock is actually in charge right now, as opposed to which was requested.
  *
  * [External] is never reported, because [SyncMode.ExternalMaster] is not implemented.
- * Not implemented yet; see MASTER_PLAN.md.
+ * Not implemented yet.
  */
 public enum class MasterClock { None, Audio, Video, External }
 
@@ -391,7 +391,7 @@ public enum class MasterClock { None, Audio, Video, External }
  *
  * A sink reports one of these and the engine's tolerances do not change. The only response today is
  * a single warning when a sink says [Unreliable], and the one sink that exists says [Estimated].
- * Not implemented yet; see MASTER_PLAN.md.
+ * Not implemented yet.
  */
 public enum class LatencyQuality {
     /** The platform reports a real measured figure. */

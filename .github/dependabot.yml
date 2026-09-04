@@ -1,7 +1,7 @@
 # Weekly dependency update PRs for the two ecosystems this repo pins:
 #   - GitHub Actions used by .github/workflows/*
 #   - Gradle dependencies (gradle/libs.versions.toml + build scripts)
-# Proposals only. Merging one is still an owner decision (GOTCHAS rule 10).
+# Proposals only. Merging one is still an owner decision: see CONTRIBUTING.md.
 version: 2
 updates:
   - package-ecosystem: github-actions

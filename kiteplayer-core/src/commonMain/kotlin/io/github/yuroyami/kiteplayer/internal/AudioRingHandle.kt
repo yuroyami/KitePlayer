@@ -109,8 +109,8 @@ internal data class AudioAnchor(val pts: Pts, val audibleAtNanos: Long)
  *
  * Both places that dated a frame in the ring used to compute
  * `frames * 1_000_000L / sampleRate`, which overflows a signed 64 bit intermediate once the frame
- * delta passes about 9.2e12. It is the same shape MASTER_PLAN.md records against KiteFFmpeg's
- * timestamp helpers as defect D9: latent at ordinary session lengths and wrong at long ones. Writing
+ * delta passes about 9.2e12. It is the same shape found in the media library's timestamp
+ * helpers: latent at ordinary session lengths and wrong at long ones. Writing
  * it once, correctly, is what stops the C ring being a faithful transliteration of a bug, and it is
  * what lets the differential oracle compare two correct implementations rather than two matching
  * ones.

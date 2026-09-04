@@ -25,7 +25,7 @@ import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Surface
 
 /**
- * The web stop gate. See MASTER_PLAN.md.
+ * The web stop gate.
  *
  * Answers one question with a number: what does a 1080p frame cost on wasm, with ONE thread,
  * from planar YUV to pixels on the glass. Nothing here decodes; a synthetic frame is honest for

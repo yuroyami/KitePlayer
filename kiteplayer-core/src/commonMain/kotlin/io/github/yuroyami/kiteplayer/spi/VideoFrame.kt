@@ -45,7 +45,7 @@ public interface VideoFrame : AutoCloseable {
      * Real media produces 0, 90, 180 and 270. A renderer draws any other value unrotated rather than
      * refusing the frame, because a picture the right way up matters more than an exact affine
      * transform. Mirrored and arbitrarily skewed display matrices are not modelled; see the roadmap in
-     * MASTER_PLAN.md.
+     * tracked as an issue.
      */
     public val rotationDegrees: Int get() = 0
 

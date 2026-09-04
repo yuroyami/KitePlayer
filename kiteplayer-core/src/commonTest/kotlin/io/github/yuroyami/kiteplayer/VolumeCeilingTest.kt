@@ -70,7 +70,7 @@ class VolumeCeilingTest {
 
     @Test
     // No comma in this name: a backtick test name containing one compiles on JVM and breaks every
-    // Kotlin/Native target. See GOTCHAS.md section 4.
+    // Kotlin/Native target. See CLAUDE.md.
     fun `the saturator is odd-symmetric so a boost adds no DC offset`() {
         for (value in listOf(0.8f, 1f, 3f)) {
             assertEquals(

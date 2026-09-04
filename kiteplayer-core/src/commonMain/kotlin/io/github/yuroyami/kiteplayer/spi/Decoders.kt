@@ -96,7 +96,7 @@ public interface AudioDecoder : AutoCloseable {
  * No backend supplies one: both return an empty list from `BackendSession.subtitleDecoders`, and the
  * engine's own subtitle handler has an empty body, so no cue is decoded, timed or drawn. The SubRip
  * parser in `kiteplayer-subtitles` reads a file but is not connected to playback.
- * Not implemented yet; see MASTER_PLAN.md.
+ * Not implemented yet.
  */
 public interface SubtitleDecoderFactory {
     public suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder?
@@ -107,7 +107,7 @@ public interface SubtitleDecoderFactory {
  * Turns subtitle packets into cues.
  *
  * Nothing implements this and nothing calls it. See [SubtitleDecoderFactory].
- * Not implemented yet; see MASTER_PLAN.md.
+ * Not implemented yet.
  */
 public interface SubtitleDecoder : AutoCloseable {
     public suspend fun send(packet: PlayerPacket?): Boolean

@@ -266,7 +266,7 @@ private external fun webCanvasHeight(canvas: JsAny): Int
  * The offscreen canvas the frame is written into, rebuilt only when the frame size changes.
  *
  * `OffscreenCanvas` where it exists and a detached element otherwise, so this works in a worker as
- * well as a page, which the Worker work in MASTER_PLAN.md will need.
+ * well as a page, which the worker work will need.
  */
 @JsFun(
     """(s, w, h) => {

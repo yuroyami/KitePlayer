@@ -370,6 +370,20 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * An ASS track met an installed typesetting engine that could not start, so the Kotlin
+     * dialogue tier draws it instead: styles and positions, no animated typesetting.
+     *
+     * The usual cause is a desktop JVM whose jar carries no native library for its operating
+     * system, or a native library that failed to load. Once per session; the track still plays.
+     */
+    public data class TypesetterUnavailable(val provider: String, val detail: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("provider" to provider, "detail" to detail)
+
+        override val message: String get() = "subtitle typesetter $provider unavailable, using the built-in styling: $detail"
+    }
+
+    /**
      * A control the engine could not honour, named so a fire-and-forget caller still finds out
      * The suspending form of the same member throws instead; this
      * warning is how the refusal reaches [KitePlayer.events] and the warning history when the

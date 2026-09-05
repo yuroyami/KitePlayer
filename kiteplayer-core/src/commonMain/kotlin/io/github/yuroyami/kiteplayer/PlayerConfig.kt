@@ -114,13 +114,19 @@ public sealed class HwdecPolicy {
  */
 public data class NetworkConfig(
     /**
-     * Consulted at open for a [MediaItem] that carries a URI and no [MediaItem.io]. Null (the
-     * default) means URIs go to the backend untouched. kiteplayer-network ships the Ktor
-     * resolver that makes http and https play with the OS supplying TLS.
+     * Consulted at open for a [MediaItem] with no [MediaItem.io]. An explicit resolver takes
+     * precedence over automatic providers, even when it returns null to select the backend.
+     * With null, [autoResolve] controls whether installed providers may supply a reader.
      */
     val ioResolver: MediaIoResolver? = null,
     /** The engine-owned byte cache every [MediaIo]-fed open gets. */
     val ioCache: IoCachePolicy = IoCachePolicy(),
+    /**
+     * Consult installed optional transport providers when [ioResolver] and [MediaItem.io] are
+     * absent. Adding kiteplayer-network supplies HTTP/HTTPS without configuring a resolver.
+     * False preserves the backend's URI handling. Explicit readers and resolvers still apply.
+     */
+    val autoResolve: Boolean = true,
 )
 
 /**
@@ -375,6 +381,18 @@ public data class SubtitleConfig(
     val fontScale: Float = 1.0f,
     /** The viewer's style override, applied over every authored style. Null changes nothing. */
     val style: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
+    /**
+     * Route ASS and SSA tracks through an installed typesetting engine when one is present.
+     * Adding `kiteplayer-libass` installs one; the standard entry points include it. False keeps
+     * the Kotlin dialogue tier for every track, which draws styles but not animated typesetting.
+     * With no engine installed this changes nothing.
+     */
+    val typesetting: Boolean = true,
+    /**
+     * Fonts handed to the typesetting engine on top of what the platform and the media supply.
+     * Ignored by the Kotlin tier, which uses the platform's own font system.
+     */
+    val fonts: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleFont> = emptyList(),
 ) {
     init {
         require(fontScale.isFinite() && fontScale > 0f) { "fontScale must be finite and positive, was $fontScale" }

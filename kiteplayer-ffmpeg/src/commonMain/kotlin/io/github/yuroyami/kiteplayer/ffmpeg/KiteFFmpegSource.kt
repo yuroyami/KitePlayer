@@ -24,6 +24,7 @@ import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.MediaSourceFactory
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
+import io.github.yuroyami.kiteplayer.spi.MediaAttachment
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
@@ -115,6 +116,22 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
     }
 
     override val streams: List<PlayerStreamInfo> = selectableStreams.map { it.second }
+
+    /**
+     * Matroska attachments, read once from the container's attachment streams. FFmpeg keeps an
+     * attachment's bytes in that stream's codec extradata and its name and type in the stream's
+     * tags, so no packet is ever read for one. Fonts are what the subtitle typesetter loads.
+     */
+    override val attachments: List<MediaAttachment> = source.streams
+        .filter { it.type == MediaType.Attachment }
+        .mapNotNull { stream ->
+            val bytes = stream.codecExtradata?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            MediaAttachment(
+                fileName = stream.metadata["filename"] ?: "attachment-${stream.index}",
+                mimeType = stream.metadata["mimetype"],
+                data = bytes,
+            )
+        }
 
     /** Raw KiteFFmpeg descriptors only for indices actually exposed through [streams]. */
     private val byIndex: Map<Int, StreamInfo> = selectableStreams.associate { (raw, _) -> raw.index to raw }

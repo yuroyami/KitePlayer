@@ -31,6 +31,14 @@ public interface PlayerMediaSource : AutoCloseable {
     public val chapters: List<Chapter>
 
     /**
+     * Files the container carries beside its streams, Matroska attachments above all. Fonts are
+     * the ones that matter: a typeset ASS track ships the faces it was authored with, and the
+     * subtitle typesetter loads every [MediaAttachment.isFont] entry before it draws. Empty for a
+     * container that carries none, and for a source that cannot read them.
+     */
+    public val attachments: List<MediaAttachment> get() = emptyList()
+
+    /**
      * True when this container may contain timestamp discontinuities, MPEG-TS above all.
      *
      * The engine uses this to choose between a 10 second and a 3600 second sanity ceiling on frame
@@ -266,4 +274,37 @@ public interface PlayerPacket : AutoCloseable {
 
     /** Byte offset in the container, when known. Used for progress on streams with broken times. */
     public val bytePosition: Long?
+}
+
+/**
+ * One file attached to a container, as the container wrote it. See [PlayerMediaSource.attachments].
+ *
+ * [mimeType] is the container's own claim and may be missing or wrong, so [isFont] also accepts
+ * the file extensions font files actually carry.
+ */
+public class MediaAttachment(
+    public val fileName: String,
+    public val mimeType: String?,
+    /** SHARED, not copied: a font can be megabytes and is read once. Treat it as read-only. */
+    public val data: ByteArray,
+) {
+    /** True for the TrueType and OpenType files a typesetter can shape with. */
+    public val isFont: Boolean
+        get() {
+            val mime = mimeType?.lowercase()
+            if (mime != null && (mime.startsWith("font/") || mime in FONT_MIME_TYPES)) return true
+            val extension = fileName.substringAfterLast('.', "").lowercase()
+            return extension in FONT_EXTENSIONS
+        }
+
+    override fun toString(): String = "MediaAttachment($fileName, ${mimeType ?: "no type"}, ${data.size} bytes)"
+
+    private companion object {
+        val FONT_MIME_TYPES: Set<String> = setOf(
+            "application/x-truetype-font", "application/x-font-ttf", "application/x-font-otf",
+            "application/x-font-truetype", "application/x-font-opentype", "application/vnd.ms-opentype",
+            "application/font-sfnt", "application/x-font", "application/octet-stream+font",
+        )
+        val FONT_EXTENSIONS: Set<String> = setOf("ttf", "otf", "ttc", "otc", "sfnt")
+    }
 }

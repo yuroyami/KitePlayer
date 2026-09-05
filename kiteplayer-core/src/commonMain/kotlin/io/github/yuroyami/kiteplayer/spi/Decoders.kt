@@ -93,10 +93,10 @@ public interface AudioDecoder : AutoCloseable {
 /**
  * Creates subtitle decoders.
  *
- * No backend supplies one: both return an empty list from `BackendSession.subtitleDecoders`, and the
- * engine's own subtitle handler has an empty body, so no cue is decoded, timed or drawn. The SubRip
- * parser in `kiteplayer-subtitles` reads a file but is not connected to playback.
- * Not implemented yet.
+ * The FFmpeg backend supplies one for SubRip, WebVTT, MP4 timed text and the ASS dialogue tier.
+ * An ASS track's packets are read twice when a [SubtitleTypesetter] is installed: the decoder
+ * fills the cue table and the cue flow, and the engine hands the same bytes to the typesetter,
+ * which draws them.
  */
 public interface SubtitleDecoderFactory {
     public suspend fun create(stream: PlayerStreamInfo): SubtitleDecoder?
@@ -104,10 +104,8 @@ public interface SubtitleDecoderFactory {
 }
 
 /**
- * Turns subtitle packets into cues.
- *
- * Nothing implements this and nothing calls it. See [SubtitleDecoderFactory].
- * Not implemented yet.
+ * Turns subtitle packets into cues. The engine drains it on the actor between packets and flushes
+ * it on every seek; see [SubtitleDecoderFactory].
  */
 public interface SubtitleDecoder : AutoCloseable {
     public suspend fun send(packet: PlayerPacket?): Boolean

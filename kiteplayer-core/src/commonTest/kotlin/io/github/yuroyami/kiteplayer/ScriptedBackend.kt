@@ -98,6 +98,11 @@ internal data class ScriptedSubtitleTrack(
             ScriptedSubtitlePacket(
                 startMicros = startMicros,
                 endMicros = atStart.maxOf { it.endMicros },
+                // The packet's own bytes, in the Matroska ASS event shape a typesetter reads, so a
+                // test can assert which events reached it. Text cues only; a bitmap carries none.
+                payload = atStart.filterIsInstance<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text>()
+                    .joinToString("\n") { "0,0,Default,,0,0,0,,${it.plainText}" }
+                    .encodeToByteArray(),
             )
         }
         .sortedBy { it.startMicros }
@@ -150,6 +155,12 @@ internal class MediaScript(
     /** Scripted subtitle cues. Non-empty adds a subtitle stream whose packets carry them. */
     val subtitleCues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> = emptyList(),
     val subtitleLanguage: String = "eng",
+    /** The codec name the scripted subtitle streams declare. "ass" routes them to a typesetter. */
+    val subtitleCodec: String = "scripted-subtitle",
+    /** The codec header the scripted subtitle streams declare, an ASS script header in practice. */
+    val subtitleHeader: ByteArray? = null,
+    /** Files the scripted container attaches, fonts in practice. */
+    val attachments: List<io.github.yuroyami.kiteplayer.spi.MediaAttachment> = emptyList(),
     /** Counts the scripted decoder's work without putting timing assumptions into a virtual-time test. */
     val subtitleProbe: ScriptedSubtitleProbe = ScriptedSubtitleProbe(),
     /** Extra container audio tracks. Explicit indices make identity assertions unambiguous. */
@@ -237,9 +248,10 @@ internal class MediaScript(
 }
 
 /** The timing carried by one scripted subtitle packet. Its cues live in [MediaScript.subtitleCuesByStart]. */
-internal data class ScriptedSubtitlePacket(
+internal class ScriptedSubtitlePacket(
     val startMicros: Long,
     val endMicros: Long,
+    val payload: ByteArray = ByteArray(0),
 )
 
 /**
@@ -610,7 +622,8 @@ internal class ScriptedSource(
                 PlayerStreamInfo(
                     index = track.index,
                     kind = TrackKind.Subtitle,
-                    codec = "scripted-subtitle",
+                    codec = script.subtitleCodec,
+                    codecExtradata = script.subtitleHeader,
                     language = track.language,
                     title = track.title,
                     isDefault = track.isDefault,
@@ -646,6 +659,8 @@ internal class ScriptedSource(
     override val metadata: Map<String, String> =
         mapOf("title" to "scripted", "artist" to "the harness", "encoder" to "none") + script.containerTags
     override val chapters: List<Chapter> = script.chapters
+
+    override val attachments: List<io.github.yuroyami.kiteplayer.spi.MediaAttachment> = script.attachments
     override val timestampsMayJump: Boolean = false
 
     private var selected: Set<Int> = emptySet()
@@ -798,6 +813,7 @@ internal class ScriptedSource(
                     duration = Pts(candidate.packet.endMicros - candidate.packet.startMicros),
                     isKeyframe = true,
                     ledger = ledger,
+                    packetBytes = candidate.packet.payload,
                 ),
             )
         }

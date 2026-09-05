@@ -54,6 +54,12 @@ public data class PlayerSnapshot(
     val subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = null,
     /** Where the implicit subtitle stack anchors, as a fraction of the height. 1.0 is the bottom. */
     val subtitlePosition: Float = 1.0f,
+    /**
+     * The identifier of the typesetting engine drawing the selected subtitle track, or null when
+     * the built-in styling draws it. Non-null only for an ASS or SSA track with `kiteplayer-libass`
+     * installed and [SubtitleConfig.typesetting] on.
+     */
+    val subtitleTypesetter: String? = null,
     /** The runtime audio timing shift. Positive presents video earlier to meet late sound. */
     val audioDelay: Duration = Duration.ZERO,
     /** The A of the armed A-B loop, or null when none is armed. */

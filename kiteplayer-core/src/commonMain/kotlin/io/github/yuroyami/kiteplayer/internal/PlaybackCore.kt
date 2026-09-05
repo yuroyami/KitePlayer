@@ -1,7 +1,7 @@
 // onTimeout is the select clause that makes an actor's wait cancellation free. Its alternative, a
 // timeout wrapped around a receive, can consume a message and then be cancelled, which loses a command
 // and suspends its caller for ever.
-@file:OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class)
+@file:OptIn(DelicateCoroutinesApi::class, ExperimentalCoroutinesApi::class, io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
 
 package io.github.yuroyami.kiteplayer.internal
 
@@ -232,6 +232,8 @@ internal class PlaybackCore(
         val id: TrackId,
         val info: TrackInfo,
         val cues: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+        /** The whole text of an ASS or SSA file, for the typesetter. Null for other formats. */
+        val script: String? = null,
     )
 
     /** The media item's parsed external subtitle files, in declaration order. */
@@ -345,6 +347,7 @@ internal class PlaybackCore(
                     title = sourceFile.title ?: sourceFile.uri.substringAfterLast('/'),
                 ),
                 cues = cues.sortedBy { cue -> cue.startMicros },
+                script = if (isAss) trimmed else null,
             ),
         )
     }
@@ -355,7 +358,7 @@ internal class PlaybackCore(
      * menu. Unlike the open path, a file that cannot load fails the call typed and loudly: this
      * is a direct answer to a direct request, not a best-effort side dish of an open.
      */
-    private fun addExternalSubtitle(command: CoreCommand.AddExternalSubtitle) {
+    private suspend fun addExternalSubtitle(command: CoreCommand.AddExternalSubtitle) {
         val active = session
         if (active == null) {
             command.reply.completeExceptionally(
@@ -431,20 +434,21 @@ internal class PlaybackCore(
     }
 
     /** Takes an external subtitle track back out after its selection failed to apply. */
-    private fun withdrawExternalSubtitle(id: TrackId) {
+    private suspend fun withdrawExternalSubtitle(id: TrackId) {
         externalSubtitleTracks = externalSubtitleTracks.filterNot { it.id == id }
         tracks = tracks.copy(all = tracks.all.filterNot { it.id == id })
         if (selectedExternalSubtitle == id) {
             selectedExternalSubtitle = null
             session?.subtitleCues?.clear()
             tracks = tracks.withSelection(TrackKind.Subtitle, null)
+            refreshTypesetting()
         }
         if (pendingExternalSubtitle == id) pendingExternalSubtitle = null
         publishSnapshot()
     }
 
     /** Swaps the timed cue table in place (S4.e): no container reopen, one publish. */
-    private fun applyExternalSubtitle(target: TrackId?) {
+    private suspend fun applyExternalSubtitle(target: TrackId?) {
         val active = session ?: return
         selectedExternalSubtitle = target
         active.subtitleCues = target
@@ -453,6 +457,7 @@ internal class PlaybackCore(
             ?.toMutableList()
             ?: mutableListOf()
         tracks = tracks.withSelection(TrackKind.Subtitle, target)
+        refreshTypesetting()
         publishSnapshot()
     }
     private var session: OpenSession? = null
@@ -498,6 +503,9 @@ internal class PlaybackCore(
 
     /** Runtime subtitle size, seeded from config, applied at the next rasterisation. */
     private var subtitleScale: Float = config.subtitles.fontScale
+
+    /** True once the installed typesetter failed to start or threw: this player stays on the Kotlin tier. */
+    private var typesetterRefused: Boolean = false
 
     /** The viewer's style override, seeded from config, applied at the next rasterisation. */
     private var subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = config.subtitles.style
@@ -1985,6 +1993,7 @@ internal class PlaybackCore(
             // Unconditional: when this is non-null the container's subtitle stream was left
             // unselected above, so there is never a competing selection to defer to.
             immediateExternal?.let { applyExternalSubtitle(it.id) }
+            refreshTypesetting()
             // The start position's second half: the exact landing, as an ordinary precise seek
             // through the ordinary machine, so the masked position report, generation fencing
             // and pause preservation all hold without a special case.
@@ -2053,7 +2062,7 @@ internal class PlaybackCore(
         // a live reader precisely because this line runs again for every rebuild: a track switch, a
         // decoder recovery, a loop and a queue returning to the same item all come back through it,
         // and the reader the previous session was given has been closed since.
-        val suppliedIo = item.io?.invoke() ?: config.network.ioResolver?.resolve(item.uri)
+        val suppliedIo = resolveMediaIo(item, config.network)
         val cachingIo = if (suppliedIo != null && config.network.ioCache.enabled) {
             CachingMediaIo(suppliedIo, config.network.ioCache)
         } else {
@@ -2780,6 +2789,7 @@ internal class PlaybackCore(
         }
         selectedExternalSubtitle = targetExternal
         pendingExternalSubtitle = null
+        refreshTypesetting()
         tracks = tracks.withSelection(TrackKind.Subtitle, request.track)
         publishSnapshot()
         pendingSelections.remove(TrackKind.Subtitle)
@@ -2887,7 +2897,14 @@ internal class PlaybackCore(
 
     private suspend fun withdrawSubtitleOverlay(session: OpenSession) {
         session.rasterJob?.cancel()
-        if (session.publishedCueKey != null) {
+        // The typeset lane's images are withdrawn with the rest: orphan every request first, then
+        // wait for a render in flight, so nothing lands after the clear below.
+        val typesetPublished = session.typeset?.let { lane ->
+            lane.epoch.incrementAndGet()
+            lane.job?.let { job -> job.cancel(); runCatching { job.join() } }
+            lane.published.getAndSet(false)
+        } ?: false
+        if (session.publishedCueKey != null || typesetPublished) {
             session.renderer.setOverlay(
                 SubtitleOverlay(
                     images = emptyList(),
@@ -3313,6 +3330,7 @@ internal class PlaybackCore(
                 pendingExternalSubtitle = null
                 applyExternalSubtitle(waiting)
             }
+            refreshTypesetting()
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
             requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
         } catch (cancellation: CancellationException) {
@@ -3918,7 +3936,14 @@ internal class PlaybackCore(
             packetAttempts++
             subtitlePacketAttempts++
             session.subtitleDecoderMayHaveOutput = true
-            if (accepted) packet.close() else session.pendingSubtitlePacket = packet
+            if (accepted) {
+                // The typesetter reads the event's own bytes; the decoder above read them for the
+                // cue table and the cue flow. Same packet, two readers, one copy each.
+                session.typeset?.let { lane -> stageTypesetEvent(lane, packet) }
+                packet.close()
+            } else {
+                session.pendingSubtitlePacket = packet
+            }
 
             // A command posted from another thread while send() parsed this packet wins the actor
             // before even its output drain. That output remains marked and is the first work of the
@@ -4055,10 +4080,10 @@ internal class PlaybackCore(
         // The secondary lane rides the same clock and the same delay, forced to the top of the
         // picture on the way out so the two tracks can never sit on each other (T3).
         session.cue2Index.syncTo(session.subtitle2Cues)
-        val active = if (session.subtitle2Cues.isEmpty()) {
-            primaryActive
+        val secondaryActive = if (session.subtitle2Cues.isEmpty()) {
+            emptyList()
         } else {
-            primaryActive + session.cue2Index.activeAt(positionUs).map { cue ->
+            session.cue2Index.activeAt(positionUs).map { cue ->
                 when (cue) {
                     is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Text -> cue.copy(
                         layout = cue.layout.copy(
@@ -4070,6 +4095,15 @@ internal class PlaybackCore(
                     is io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap -> cue
                 }
             }
+        }
+        val active = if (secondaryActive.isEmpty()) primaryActive else primaryActive + secondaryActive
+        // A typesetter that threw on its lane is abandoned here, on the actor, and the Kotlin tier
+        // takes the track over on this very pass.
+        var lane = session.typeset
+        val laneFailure = lane?.failed?.value
+        if (lane != null && laneFailure != null) {
+            abandonTypesetting(session, lane, laneFailure)
+            lane = null
         }
         // The cues themselves are the identity, not their timestamps: two different texts or
         // styles over the same interval are different overlays, and a (start, end) key republished
@@ -4083,7 +4117,14 @@ internal class PlaybackCore(
             // Published from the same branch that decides the overlay, so what an application reads
             // and what the renderer draws can never be two different sets.
             cuesState.value = active
-            publishOverlay(session, active)
+            if (lane == null) publishOverlay(session, active)
+        }
+        lane?.let { live ->
+            // The typesetter owns the primary track's text. Bitmap cues and the secondary lane
+            // are still the rasterizer's, drawn beside the typeset images by the same job.
+            val others = primaryActive.filterIsInstance<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue.Bitmap>() +
+                secondaryActive
+            driveTypesetting(session, live, positionUs, others)
         }
 
         // Sleep exactly to the next cue edge instead of polling for it, whichever lane's comes
@@ -4209,6 +4250,252 @@ internal class PlaybackCore(
                     viewportWidth = width,
                     viewportHeight = height,
                     contentHash = generation,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Starts, keeps or stops the typesetting lane to match the selected subtitle track.
+     *
+     * Idempotent, and called from every path that changes the selection: open, the in-place
+     * container switch, an external file coming or going, and a rebuild. The lane is keyed on the
+     * track, so a call that changes nothing costs one string compare.
+     *
+     * Events already decoded before a lane exists are not replayed into it: the raw bytes are gone
+     * once the packet is closed. Every caller runs before the first drain of the track it selects,
+     * because a switch installs its decoder and the queue's retained history in the same pass.
+     */
+    private suspend fun refreshTypesetting() {
+        val session = session ?: return
+        val stream = session.subtitleStream
+        val external = selectedExternalSubtitle?.let { id -> externalSubtitleTracks.firstOrNull { it.id == id } }
+        val target: Pair<String, TypesetOp>? = when {
+            !config.subtitles.typesetting || typesetterRefused -> null
+            external != null -> external.script?.let { script ->
+                "external:${external.id.value}" to TypesetOp.Document(script.encodeToByteArray())
+            }
+            stream != null && isTypesetCodec(stream.codec) ->
+                "stream:${stream.index}" to TypesetOp.Header(stream.codecExtradata ?: ByteArray(0))
+            else -> null
+        }
+        if (target == null) {
+            stopTypesetting(session)
+            return
+        }
+        val (key, opener) = target
+        if (session.typeset?.key == key) return
+        stopTypesetting(session)
+        val provider = io.github.yuroyami.kiteplayer.spi.SubtitleTypesetters.select() ?: return
+        val typesetter = try {
+            provider.create()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            refuseTypesetting(provider.id, failure.message ?: failure::class.simpleName ?: "failed to start")
+            return
+        }
+        if (typesetter == null) {
+            refuseTypesetting(provider.id, "no engine for this platform")
+            return
+        }
+        val lane = TypesetLane(key, provider.id, typesetter)
+        // Fonts first, so the header's styles resolve against them: the application's, then the
+        // container's own attachments, then the track.
+        config.subtitles.fonts.forEach { font -> lane.stage(TypesetOp.Font(font.name, font.data)) }
+        session.source.attachments.filter { it.isFont }.forEach { attachment ->
+            lane.stage(TypesetOp.Font(attachment.fileName, attachment.data))
+        }
+        lane.stage(opener)
+        session.typeset = lane
+        // Whatever the Kotlin tier had on the glass belongs to the old owner of this track.
+        session.publishedCueKey = null
+        snapshotDirty = true
+    }
+
+    /** Once per player: a provider that cannot start is not asked again, and the viewer is told why. */
+    private fun refuseTypesetting(provider: String, detail: String) {
+        typesetterRefused = true
+        warn(PlaybackWarning.TypesetterUnavailable(provider, detail))
+    }
+
+    /** The lane threw on its own thread: fall back to the Kotlin tier for the rest of this player. */
+    private suspend fun abandonTypesetting(session: OpenSession, lane: TypesetLane, failure: Throwable) {
+        refuseTypesetting(lane.providerId, failure.message ?: failure::class.simpleName ?: "render failed")
+        stopTypesetting(session)
+    }
+
+    /**
+     * Ends the lane: orphans its requests, waits for a render in flight, closes the engine on the
+     * lane it always ran on, and clears what it had drawn. The next pass republishes through the
+     * Kotlin tier, which is what the cleared published key asks for.
+     */
+    private suspend fun stopTypesetting(session: OpenSession) {
+        val lane = session.typeset ?: return
+        session.typeset = null
+        lane.epoch.incrementAndGet()
+        lane.job?.let { job -> job.cancel(); runCatching { job.join() } }
+        withContext(dispatchers.raster) { runCatching { lane.close() } }
+        if (lane.published.getAndSet(false)) {
+            val frame = lane.lastRequestFrame
+            session.renderer.setOverlay(
+                SubtitleOverlay(
+                    images = emptyList(),
+                    viewportWidth = frame?.width ?: DEFAULT_SUBTITLE_CANVAS_WIDTH,
+                    viewportHeight = frame?.height ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT,
+                    contentHash = session.overlayGeneration.incrementAndGet(),
+                ),
+            )
+        }
+        session.publishedCueKey = null
+        session.publishedCanvas = null
+        snapshotDirty = true
+    }
+
+    /** One container event for the lane: its bytes and its timing in the typesetter's milliseconds. */
+    private fun stageTypesetEvent(lane: TypesetLane, packet: io.github.yuroyami.kiteplayer.spi.PlayerPacket) {
+        val startUs = packet.pts?.micros ?: return
+        val durationUs = packet.duration?.micros?.takeIf { it > 0 } ?: TYPESET_DEFAULT_HOLD_MICROS
+        lane.stage(TypesetOp.Event(packet.copyBytes(), startUs / 1000, durationUs / 1000))
+    }
+
+    /** The geometry the typesetter draws into, from the same canvas rule [publishOverlay] uses. */
+    private fun typesetFrame(session: OpenSession): io.github.yuroyami.kiteplayer.spi.TypesetFrame {
+        val canvas = session.renderer.outputSize
+        val size = session.videoStream?.videoSize
+        val width = canvas?.width?.takeIf { it > 0 }
+            ?: size?.displayWidth?.takeIf { it > 0 }
+            ?: DEFAULT_SUBTITLE_CANVAS_WIDTH
+        val height = canvas?.height?.takeIf { it > 0 }
+            ?: size?.height?.takeIf { it > 0 }
+            ?: DEFAULT_SUBTITLE_CANVAS_HEIGHT
+        var videoWidth = size?.displayWidth?.takeIf { it > 0 } ?: width
+        var videoHeight = size?.height?.takeIf { it > 0 } ?: height
+        // The renderer turns a sideways recording upright, so the fitted picture is the turned one.
+        if ((session.videoStream?.rotationDegrees ?: 0) % 180 != 0) {
+            val turned = videoWidth
+            videoWidth = videoHeight
+            videoHeight = turned
+        }
+        val margins = fittedMargins(width, height, videoWidth, videoHeight, videoScale)
+        return io.github.yuroyami.kiteplayer.spi.TypesetFrame(
+            width = width,
+            height = height,
+            videoWidth = videoWidth,
+            videoHeight = videoHeight,
+            marginTop = margins[0],
+            marginBottom = margins[1],
+            marginLeft = margins[2],
+            marginRight = margins[3],
+            fontScale = subtitleScale,
+            linePosition = subtitlePosition,
+        )
+    }
+
+    /** One video frame of media time, bounded so a broken frame rate cannot spin or stall the lane. */
+    private fun typesetFrameIntervalUs(session: OpenSession): Long {
+        val rate = session.videoStream?.frameRate?.takeIf { it.isFinite() && it >= 1.0 } ?: return 40_000L
+        return (1_000_000.0 / rate).toLong().coerceIn(TYPESET_MIN_INTERVAL_MICROS, WORKER_POLL.inWholeMicroseconds)
+    }
+
+    /**
+     * The per-pass half of typesetting: decides whether this pass asks for a render, and keeps the
+     * actor waking at frame cadence while the picture moves.
+     *
+     * Renders are asked for when the engine has staged input, when the geometry or the other cues
+     * changed, and otherwise once per video frame while playing. Paused, a position change alone
+     * (a seek) asks once. The typesetter answers "unchanged" for a static line, so the cadence
+     * costs one cheap call per frame and publishes nothing.
+     */
+    private fun driveTypesetting(
+        session: OpenSession,
+        lane: TypesetLane,
+        positionUs: Long,
+        others: List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>,
+    ) {
+        val frame = typesetFrame(session)
+        val timeMillis = positionUs.coerceAtLeast(0L) / 1000
+        val playing = status == PlaybackStatus.Playing
+        val intervalUs = typesetFrameIntervalUs(session)
+        val first = lane.lastRequestMillis == Long.MIN_VALUE
+        val moved = timeMillis != lane.lastRequestMillis
+        val frameElapsed = first || timeMillis < lane.lastRequestMillis ||
+            (timeMillis - lane.lastRequestMillis) * 1000 >= intervalUs
+        val wanted = lane.hasStaged() || frame != lane.lastRequestFrame || others != lane.lastRequestOthers ||
+            (moved && (frameElapsed || !playing))
+        if (wanted) {
+            lane.lastRequestMillis = timeMillis
+            lane.lastRequestFrame = frame
+            lane.lastRequestOthers = others
+            requestTypesetRender(
+                session,
+                lane,
+                TypesetRequest(timeMillis, frame, others, subtitleStyle, lane.epoch.value),
+            )
+        }
+        if (playing) wakeIn(intervalUs.microseconds)
+    }
+
+    /** Posts the newest request and makes sure exactly one render job owns the lane. */
+    private fun requestTypesetRender(session: OpenSession, lane: TypesetLane, request: TypesetRequest) {
+        if (lane.failed.value != null) return
+        lane.requested.value = request
+        if (lane.running.compareAndSet(expect = false, update = true)) {
+            lane.job = scope.launch(dispatchers.raster) { typesetLoop(session, lane) }
+        }
+    }
+
+    /**
+     * The render job. It drains coalesced requests until none is left, then hands the lane back.
+     *
+     * The handover is the delicate part: a request posted after this job saw an empty slot but
+     * before it released the lane would otherwise wait for a render nobody schedules. Releasing
+     * first and then re-checking, with the same CAS the actor uses to launch, closes that window
+     * from both sides: either this job reclaims the lane and renders, or the actor's CAS won and a
+     * new job does.
+     */
+    private suspend fun typesetLoop(session: OpenSession, lane: TypesetLane) {
+        while (true) {
+            val request = lane.requested.getAndSet(null)
+            if (request == null) {
+                lane.running.value = false
+                if (lane.requested.value == null || !lane.running.compareAndSet(expect = false, update = true)) return
+                continue
+            }
+            if (request.epoch != lane.epoch.value) continue
+            val images = try {
+                lane.renderNow(request)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                lane.failed.value = failure
+                lane.running.value = false
+                return
+            }
+            if (images == null && request.otherCues == lane.publishedOthers) continue
+            if (images != null) lane.lastImages = images
+            lane.publishedOthers = request.otherCues
+            val frame = request.frame
+            val rasterized = if (request.otherCues.isEmpty()) {
+                emptyList()
+            } else {
+                output.subtitleRasterizer?.rasterize(
+                    applyOverride(request.otherCues, request.otherStyle),
+                    frame.width,
+                    frame.height,
+                    frame.fontScale,
+                    frame.linePosition,
+                ).orEmpty()
+            }
+            // Re-checked after the render, because a withdrawal may have happened during it.
+            if (request.epoch != lane.epoch.value) continue
+            lane.published.value = true
+            session.renderer.setOverlay(
+                SubtitleOverlay(
+                    images = lane.lastImages + rasterized,
+                    viewportWidth = frame.width,
+                    viewportHeight = frame.height,
+                    contentHash = session.overlayGeneration.incrementAndGet(),
                 ),
             )
         }
@@ -5143,6 +5430,11 @@ internal class PlaybackCore(
             ?.let { session.subtitleCues.addAll(it) }
         session.publishedCueKey = null
         session.subtitleDecoder?.flush(epoch)
+        // The typesetter drops its events too and re-reads them as the demuxer redelivers.
+        session.typeset?.let { lane ->
+            lane.stage(TypesetOp.Clear)
+            lane.lastRequestMillis = Long.MIN_VALUE
+        }
         // The secondary lane's mirror of everything above (T3).
         session.pendingSubtitle2Packet?.close()
         session.pendingSubtitle2Packet = null
@@ -5461,6 +5753,7 @@ internal class PlaybackCore(
             subtitleScale = subtitleScale,
             subtitleStyle = subtitleStyle,
             subtitlePosition = subtitlePosition,
+            subtitleTypesetter = session?.typeset?.providerId,
             audioDelay = audioDelay,
             abLoopA = abLoopA,
             abLoopB = abLoopB,
@@ -5533,7 +5826,11 @@ internal class PlaybackCore(
             // session that published it: after a track change, the fresh session's empty key said
             // "nothing to clear" and the old text stayed on the glass for ever, which read as
             // "disable subtitles does nothing". A dying session therefore withdraws its own cues.
-            if (session.publishedCueKey != null) {
+            session.typeset?.let { lane ->
+                lane.epoch.incrementAndGet()
+                lane.job?.let { job -> job.cancel(); runCatching { job.join() } }
+            }
+            if (session.publishedCueKey != null || session.typeset?.published?.value == true) {
                 session.rasterJob?.cancel()
                 session.renderer.setOverlay(
                     SubtitleOverlay(
@@ -5569,6 +5866,10 @@ internal class PlaybackCore(
             session.rasterJob?.cancel()
             session.jobs.forEach { runCatching { it.join() } }
             session.rasterJob?.let { runCatching { it.join() } }
+            session.typeset?.let { lane ->
+                session.typeset = null
+                release("subtitle typesetter") { withContext(dispatchers.raster) { lane.close() } }
+            }
             // Direct hardware frames retain codec output slots. Release the playback queue while the
             // codec owner is still alive; closing MediaCodec first invalidates queued frame handles.
             release("video output") { session.video?.close() }
@@ -5745,6 +6046,7 @@ internal class PlaybackCore(
             subtitleScale = subtitleScale,
             subtitleStyle = subtitleStyle,
             subtitlePosition = subtitlePosition,
+            subtitleTypesetter = session?.typeset?.providerId,
             audioDelay = audioDelay,
             abLoopA = abLoopA,
             abLoopB = abLoopB,
@@ -7027,6 +7329,9 @@ internal class PlaybackCore(
         /** Bumped on the actor, read by the raster lane's stale-work guard. */
         val overlayGeneration = atomic(0L)
 
+        /** The typesetting lane drawing the selected ASS track, or null when the Kotlin tier does. */
+        var typeset: TypesetLane? = null
+
         var videoStatus: StreamStatus = StreamStatus.Syncing
         var audioStatus: StreamStatus = StreamStatus.Syncing
 
@@ -7131,6 +7436,12 @@ internal class PlaybackCore(
         const val LATE_BEFORE_DECODE_US: Long = 500_000L
 
         /** Overlay canvas for subtitles on audio-only media, where no video size exists. */
+        /** An ASS event whose container declares no duration holds five seconds, libass' own habit. */
+        const val TYPESET_DEFAULT_HOLD_MICROS: Long = 5_000_000L
+
+        /** No render cadence faster than 100 frames a second, whatever the container claims. */
+        const val TYPESET_MIN_INTERVAL_MICROS: Long = 10_000L
+
         const val DEFAULT_SUBTITLE_CANVAS_WIDTH: Int = 1280
         const val DEFAULT_SUBTITLE_CANVAS_HEIGHT: Int = 720
 

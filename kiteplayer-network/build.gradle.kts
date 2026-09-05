@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
+    alias(libs.plugins.vanniktech.publish)
     alias(libs.plugins.dokka)
 }
 
@@ -37,6 +38,12 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
     jvm()
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
+    js {
+        browser()
+        nodejs()
+        binaries.library()
+    }
     // The web (17.14). Ktor's js engine issues `fetch`, so the BROWSER terminates TLS: the same
     // arrangement every other target has, with the one TLS implementation nobody has to maintain.
     // It is also the target where https matters most, since loading media over the network is
@@ -51,6 +58,10 @@ kotlin {
         compileSdk = 36
         minSdk = 26
         withHostTest {}
+        optimization {
+            consumerKeepRules.publish = true
+            consumerKeepRules.file("consumer-rules.pro")
+        }
     }
 
     sourceSets {
@@ -68,6 +79,9 @@ kotlin {
         getByName("androidMain").dependsOn(jvmAndAndroidMain)
         appleMain.dependencies {
             implementation(libs.ktor.client.darwin)
+        }
+        getByName("jsMain").dependencies {
+            implementation(libs.ktor.client.js)
         }
         getByName("wasmJsMain").dependencies {
             implementation(libs.ktor.client.js)

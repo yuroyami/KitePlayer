@@ -92,11 +92,8 @@ android {
 }
 
 dependencies {
-    // The playable stack and the two deliberately different Compose presentation products.
-    implementation(project(":kiteplayer-mobile"))
-    implementation(project(":kiteplayer-compose-interop"))
-    implementation(project(":kiteplayer-compose-video"))
-    implementation(project(":kiteplayer-compose-ui"))
+    // The complete entry point supplies the runtime, native views and both Compose paths.
+    implementation(project(":kiteplayer-compose"))
     implementation(compose.runtime)
     implementation(compose.ui)
     implementation(compose.foundation)

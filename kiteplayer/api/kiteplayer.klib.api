@@ -1,0 +1,59 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer>
+sealed interface io.github.yuroyami.kiteplayer/KitePlayerAvailability { // io.github.yuroyami.kiteplayer/KitePlayerAvailability|null[0]
+    abstract val isAvailable // io.github.yuroyami.kiteplayer/KitePlayerAvailability.isAvailable|{}isAvailable[0]
+        abstract fun <get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KitePlayerAvailability.isAvailable.<get-isAvailable>|<get-isAvailable>(){}[0]
+
+    final class Unavailable : io.github.yuroyami.kiteplayer/KitePlayerAvailability { // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.<init>|<init>(kotlin.String){}[0]
+
+        final val isAvailable // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.isAvailable|{}isAvailable[0]
+            final fun <get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.isAvailable.<get-isAvailable>|<get-isAvailable>(){}[0]
+        final val reason // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Unavailable.toString|toString(){}[0]
+    }
+
+    final object Available : io.github.yuroyami.kiteplayer/KitePlayerAvailability { // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Available|null[0]
+        final val isAvailable // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Available.isAvailable|{}isAvailable[0]
+            final fun <get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Available.isAvailable.<get-isAvailable>|<get-isAvailable>(){}[0]
+
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Available.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Available.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayerAvailability.Available.toString|toString(){}[0]
+    }
+}
+
+final object io.github.yuroyami.kiteplayer/KitePlayerPlatform { // io.github.yuroyami.kiteplayer/KitePlayerPlatform|null[0]
+    final val availability // io.github.yuroyami.kiteplayer/KitePlayerPlatform.availability|{}availability[0]
+        final fun <get-availability>(): io.github.yuroyami.kiteplayer/KitePlayerAvailability // io.github.yuroyami.kiteplayer/KitePlayerPlatform.availability.<get-availability>|<get-availability>(){}[0]
+    final val isAvailable // io.github.yuroyami.kiteplayer/KitePlayerPlatform.isAvailable|{}isAvailable[0]
+        final fun <get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KitePlayerPlatform.isAvailable.<get-isAvailable>|<get-isAvailable>(){}[0]
+    final val supportsPictureInPicture // io.github.yuroyami.kiteplayer/KitePlayerPlatform.supportsPictureInPicture|{}supportsPictureInPicture[0]
+        final fun <get-supportsPictureInPicture>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KitePlayerPlatform.supportsPictureInPicture.<get-supportsPictureInPicture>|<get-supportsPictureInPicture>(){}[0]
+
+    final fun createOrNull(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer? // io.github.yuroyami.kiteplayer/KitePlayerPlatform.createOrNull|createOrNull(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
+}
+
+final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer.mobile/mobileBackends|mobileBackends(){}[0]
+
+// Targets: [wasmJs]
+final class io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory : io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory|null[0]
+    constructor <init>(kotlin.js/JsAny) // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.<init>|<init>(kotlin.js.JsAny){}[0]
+
+    final val name // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name|{}name[0]
+        final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.name.<get-name>|<get-name>(){}[0]
+
+    final suspend fun create(): io.github.yuroyami.kiteplayer.spi/VideoRenderer // io.github.yuroyami.kiteplayer.mobile/WebCanvasRendererFactory.create|create(){}[0]
+}

@@ -94,16 +94,19 @@ else
     pass "every dependency goes through the version catalog"
 fi
 
-# ---- 3. Repositories are declared in settings and buildSrc only ----
+# ---- 3. Repositories belong to the settings of the named builds ----
 #
-# buildSrc is a separate build with its own settings, so it declares its own and that is correct.
+# buildSrc and the network distribution fixture are separate builds. The fixture must resolve
+# staged Maven bytes exclusively, without inheriting project dependencies or Maven Local. Its
+# one settings file owns resolution for every fixture target, including the conditional Android
+# application. Allow that exact file, not arbitrary repositories anywhere under verification/.
 repos=$(build_files | xargs grep -ln '^[[:space:]]*repositories[[:space:]]*{' 2>/dev/null | \
-    grep -vE '^\./(settings\.gradle\.kts|buildSrc/(build|settings)\.gradle\.kts)$' || true)
+    grep -vE '^\./(settings\.gradle\.kts|buildSrc/(build|settings)\.gradle\.kts|verification/network-consumer/settings\.gradle\.kts)$' || true)
 if [ -n "$repos" ]; then
     fail "a module declares its own repositories, so settings no longer owns resolution"
     printf '%s\n' "$repos" | while IFS= read -r f; do note "$f"; done
 else
-    pass "resolution is owned by settings and buildSrc alone"
+    pass "resolution is owned by the named builds and their settings"
 fi
 
 # ---- 4. mavenLocal stays behind its opt-in guard ----

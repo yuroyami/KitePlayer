@@ -72,7 +72,7 @@ kotlin {
         }
         getByName("androidDeviceTest").dependencies {
             implementation(kotlin("test"))
-            implementation(project(":kiteplayer-mobile"))
+            implementation(project(":kiteplayer"))
             implementation(libs.androidx.test.core)
             implementation(libs.androidx.test.runner)
             implementation(libs.androidx.test.ext.junit)

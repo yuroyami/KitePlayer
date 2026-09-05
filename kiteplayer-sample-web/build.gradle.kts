@@ -22,7 +22,7 @@ kotlin {
             // The real web backend, not the placeholder.
             implementation(libs.kiteffmpeg)
             // The whole player stack, to prove the web defaults resolve.
-            implementation(project(":kiteplayer-mobile"))
+            implementation(project(":kiteplayer"))
             implementation(compose.runtime)
             implementation(compose.ui)
             implementation(compose.foundation)

@@ -10,9 +10,9 @@ plugins {
 /*
  * :kiteplayer-compose-ui is the runtime-choice layer: one KitePlayerVideo composable hosting
  * either the native-view path (compose-interop) or the true Compose path (compose-video), and
- * able to swap between them while media plays. Consumers wanting exactly one path keep
- * depending on that path's module directly. No web targets: neither underlying path has a real
- * web playback surface yet.
+ * able to swap between them while a caller-owned player runs. It selects no player factory or
+ * network transport. The complete entry point is :kiteplayer-compose; consumers wanting exactly
+ * one path can keep depending on that path's module directly. Web surfaces remain separate.
  */
 kotlin {
     explicitApi()

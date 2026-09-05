@@ -1,7 +1,8 @@
 name: Docs
 
 # Builds the aggregated Dokka API reference (every published module, one site at
-# build/dokka/html) and deploys it to GitHub Pages: https://yuroyami.github.io/KitePlayer/.
+# build/dokka/html). Pushes validate the reference; only an explicit workflow dispatch deploys
+# it to GitHub Pages: https://yuroyami.github.io/KitePlayer/.
 # There is no prose site here; the README is the prose. KiteFFmpeg's docs.yml is the model,
 # minus its MkDocs half and minus the FFmpeg tree fetch, since this repository's FFmpeg comes
 # from the published kiteffmpeg artifacts.
@@ -64,6 +65,8 @@ jobs:
           path: build/dokka/html
 
   deploy:
+    # Preparing an unpublished version on main must not replace the public API reference.
+    if: github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-24.04
     environment:

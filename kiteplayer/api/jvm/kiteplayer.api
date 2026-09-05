@@ -1,0 +1,37 @@
+public abstract interface class io/github/yuroyami/kiteplayer/KitePlayerAvailability {
+	public abstract fun isAvailable ()Z
+}
+
+public final class io/github/yuroyami/kiteplayer/KitePlayerAvailability$Available : io/github/yuroyami/kiteplayer/KitePlayerAvailability {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/KitePlayerAvailability$Available;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun isAvailable ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/KitePlayerAvailability$Unavailable : io/github/yuroyami/kiteplayer/KitePlayerAvailability {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/KitePlayerAvailability$Unavailable;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/KitePlayerAvailability$Unavailable;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/KitePlayerAvailability$Unavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun isAvailable ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/KitePlayerPlatform {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/KitePlayerPlatform;
+	public final fun createOrNull (Lio/github/yuroyami/kiteplayer/PlayerConfig;)Lio/github/yuroyami/kiteplayer/KitePlayer;
+	public static synthetic fun createOrNull$default (Lio/github/yuroyami/kiteplayer/KitePlayerPlatform;Lio/github/yuroyami/kiteplayer/PlayerConfig;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/KitePlayer;
+	public final fun getAvailability ()Lio/github/yuroyami/kiteplayer/KitePlayerAvailability;
+	public final fun getSupportsPictureInPicture ()Z
+	public final fun isAvailable ()Z
+}
+
+public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {
+	public static final fun mobileBackends ()Lio/github/yuroyami/kiteplayer/Backends;
+}
+

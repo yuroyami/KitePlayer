@@ -9,7 +9,9 @@ import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -124,6 +126,38 @@ class KtorMediaIoTest {
         val io = resolver.resolve("HTTP://127.0.0.1:$port/media")
         assertTrue(io is KtorMediaIo, "an http uri resolves to the Ktor reader")
         io.close()
+    }
+
+    @Test
+    fun itemHeadersOverrideResolverDefaultsWithoutDuplicatingHttpNames() = runBlocking {
+        withTimeout<Unit>(15_000) {
+            val received = CompletableDeferred<List<String>?>()
+            val server = embeddedServer(CIO, port = 0) {
+                routing {
+                    get("/media") {
+                        received.complete(call.request.headers.getAll(HttpHeaders.Authorization))
+                        call.respondBytes(content(16))
+                    }
+                }
+            }.start(wait = false)
+            try {
+                val port = server.engine.resolvedConnectors().first().port
+                KtorMediaIoResolver(headers = mapOf("authorization" to "Bearer default")).use { resolver ->
+                    val io = resolver.resolve(
+                        "http://127.0.0.1:$port/media",
+                        mapOf("Authorization" to "Bearer item"),
+                    ) ?: error("HTTP resolver declined the URL")
+                    try {
+                        assertEquals(listOf("Bearer item"), received.await())
+                    } finally {
+                        io.close()
+                    }
+                }
+            } finally {
+                // This server is a child of runBlocking, so @AfterTest would run too late to stop it.
+                server.stop(100, 500)
+            }
+        }
     }
 
     @Test

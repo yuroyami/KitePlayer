@@ -198,9 +198,11 @@ public class KtorMediaIo private constructor(
 public class KtorMediaIoException(message: String) : Exception(message)
 
 /**
- * The resolver that makes `player.open(MediaItem("https://..."))` just work: install it as
- * [io.github.yuroyami.kiteplayer.NetworkConfig.ioResolver] and every http and https uri opens
- * through [KtorMediaIo], everything else passes to the backend untouched.
+ * Explicit HTTP/HTTPS resolver for a shared [HttpClient] or default request headers. Install
+ * it as [io.github.yuroyami.kiteplayer.NetworkConfig.ioResolver]; other URIs pass to the backend.
+ * Adding this module already supplies automatic transport for standard opens, whose private
+ * clients close with each reader. Use this resolver when the application owns a shared client
+ * or wants resolver-wide defaults. Per-item headers override these defaults.
  *
  * The lazily created client lives for the resolver's lifetime, which is normally the process:
  * exactly how OkHttp and NSURLSession want to be held. A resolver with a shorter life closes
@@ -216,10 +218,14 @@ public class KtorMediaIoResolver(
 
     private val shared: HttpClient by lazy { client ?: HttpClient().also { created = it } }
 
-    override suspend fun resolve(uri: String): MediaIo? {
-        val lower = uri.lowercase()
-        if (!lower.startsWith("http://") && !lower.startsWith("https://")) return null
-        return KtorMediaIo.open(uri, shared, headers)
+    override suspend fun resolve(uri: String): MediaIo? = resolve(uri, emptyMap())
+
+    /** Per-item headers override this resolver's defaults, with case-insensitive HTTP names. */
+    override suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? {
+        if (!uri.isHttpUri()) return null
+        val itemNames = headers.keys.map { it.lowercase() }.toSet()
+        val merged = this.headers.filterKeys { it.lowercase() !in itemNames } + headers
+        return KtorMediaIo.open(uri, shared, merged)
     }
 
     /** Closes the client this resolver created, if it ever created one. Idempotent. */

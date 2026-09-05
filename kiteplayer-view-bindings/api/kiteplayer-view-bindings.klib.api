@@ -1,0 +1,13 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-view-bindings>
+final object io.github.yuroyami.kiteplayer.mobile/MobileApplePlayerViewRendererFactory : io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory { // io.github.yuroyami.kiteplayer.mobile/MobileApplePlayerViewRendererFactory|null[0]
+    final fun create(platform.QuartzCore/CALayer, platform.QuartzCore/CAMetalLayer, kotlin/Boolean): io.github.yuroyami.kiteplayer.view/PlayerViewRenderer // io.github.yuroyami.kiteplayer.mobile/MobileApplePlayerViewRendererFactory.create|create(platform.QuartzCore.CALayer;platform.QuartzCore.CAMetalLayer;kotlin.Boolean){}[0]
+}
+
+final fun (io.github.yuroyami.kiteplayer.view/KitePlayerUIView).io.github.yuroyami.kiteplayer.mobile/installMobileRenderer() // io.github.yuroyami.kiteplayer.mobile/installMobileRenderer|installMobileRenderer@io.github.yuroyami.kiteplayer.view.KitePlayerUIView(){}[0]

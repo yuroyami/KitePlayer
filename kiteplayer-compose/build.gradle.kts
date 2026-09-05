@@ -6,9 +6,9 @@ plugins {
 }
 
 /*
- * Compatibility umbrella for the 0.0.2 coordinate that combined two different rendering
- * products. New code chooses :kiteplayer-compose-interop for native-view hosting or
- * :kiteplayer-compose-video for true Compose drawing. No clean module depends on this one.
+ * Complete Compose entry point: the standard runtime and its network transport, plus both video
+ * presentation paths through compose-ui. The legacy phone API remains re-exported for existing
+ * consumers, while UI-only applications can choose compose-ui without this runtime.
  */
 kotlin {
     explicitApi()
@@ -19,22 +19,19 @@ kotlin {
 
     iosArm64()
     iosSimulatorArm64()
-    // Umbrella-only jvm presence: every re-exported module publishes jvm, so the umbrella
-    // resolves from a consumer's commonMain when that consumer also compiles a desktop target.
     jvm()
 
     android {
-        namespace = "io.github.yuroyami.kiteplayer.compose.compat"
+        namespace = "io.github.yuroyami.kiteplayer.compose"
         compileSdk = 37
         minSdk = 26
     }
 
     sourceSets {
         commonMain.dependencies {
-            api(project(":kiteplayer-compose-interop"))
-            api(project(":kiteplayer-compose-video"))
-            // 0.0.2 exported the phone aggregate transitively. Keep that source-level migration
-            // path here without making either clean Compose module depend on it.
+            api(project(":kiteplayer"))
+            api(project(":kiteplayer-compose-ui"))
+            // Preserve the old phoneBackends and view names without making UI modules own them.
             api(project(":kiteplayer-phone"))
         }
     }

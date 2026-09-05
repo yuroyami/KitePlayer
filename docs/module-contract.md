@@ -2,7 +2,8 @@
 
 Agreed for issue #123. This document defines the public dependency and activation contract before
 its implementation. The 0.0.23 work prepares commits and artifacts for verification only. It does
-not publish to Central, create a release or tag, or implement libass integration.
+not publish to Central or create a release or tag. The libass integration landed after this
+document was agreed and is described under Subtitles below.
 
 ## Entry points
 
@@ -42,6 +43,8 @@ caller-supplied resources remain caller-owned. Do not silently share mutable pla
 an extension registry. Competing providers must have deterministic selection.
 
 JVM and Android use service metadata; Native and web use target initialization/registration.
+The Android network artifact supplies the normal `android.permission.INTERNET` permission through
+manifest merging, so consumers do not need a separate permission declaration.
 Kotlin's eager initialization is experimental/deprecated, so dependency-presence activation must
 be verified against this pinned toolchain in optimized consumers before being claimed. A consumer
 proof references only core APIs: touching a network symbol would hide a missing registration root.
@@ -56,8 +59,15 @@ lazy-created client, so reader close also releases the client.
 ## Subtitles and compatibility
 
 Default playback continues to include the Kotlin subtitle parsers through the FFmpeg backend,
-with cue timing in core and text rasterization in output. Full ASS/libass is separate future work.
-Its existing standalone renderer is not advertised as an integrated playback capability.
+with cue timing in core and text rasterization in output. `kiteplayer-libass` joins the default
+assembly the way the network module does: `kiteplayer` depends on it, so `kiteplayer-mobile` and
+`kiteplayer-compose` inherit it, and `kiteplayer-compose-ui` does not. Discovery mirrors the
+transport providers exactly: `SubtitleTypesetterProvider` through service metadata on the JVM and
+Android, eager registration on native, and `SubtitleTypesetters.register` for anyone else. The
+engine routes the primary ASS or SSA track to the installed typesetter, on the raster lane, at
+video frame cadence; `SubtitleConfig.typesetting` turns that off, and a provider that cannot start
+warns once and leaves the Kotlin tier in charge. The module's web variants resolve and install
+nothing, which is the honest answer until the browser chain exists.
 
 The existing broad `kiteplayer-compose` coordinate becomes the recommended complete Compose
 entry point. A `kiteplayer-compose-ui` consumer that also needs default construction switches to

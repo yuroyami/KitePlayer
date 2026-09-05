@@ -28,7 +28,7 @@
 #   - `:kiteplayer-ffmpeg` on the iOS simulator: RealMediaSeekTest cannot see the host's testmedia
 #     tree through the simctl spawn boundary, and VideoToolboxDecodeTest needs hardware the
 #     simulator does not have. Four failures, all environment.
-#   - `:kiteplayer-mobile` on wasmJs. Not a gap in the runner: that module has NO shared test
+#   - `:kiteplayer` on wasmJs. Not a gap in the runner: that module has NO shared test
 #     sources at all, only jvmTest and androidHostTest, so its wasmJs test task is NO-SOURCE and
 #     naming it here would widen the job on paper and not in fact. It is tracked with the other
 #     source-less modules. Its wasmJs MAIN code is compiled by the build job.
@@ -106,9 +106,11 @@ jobs:
         working-directory: kiteplayer-rt/native
         run: ./scripts/build-host.sh tsan && ./scripts/run-c-tests.sh tsan
 
-      # The ninth suite. It borrows kiteplayer-rt's harness on purpose (same repository, same build
-      # layer, same prefix) and needs neither jni.h nor libass: it covers the packed-buffer size
-      # arithmetic, which lives in a header precisely so it can be proven without a renderer.
+      # The libass suites borrow kiteplayer-rt's harness on purpose (same repository, same build
+      # layer, same prefix). The packing suite needs neither jni.h nor libass; the driver suite
+      # needs a real libass and asserts pixels, which is why the formula is installed here.
+      - name: Install libass for the driver suite
+        run: brew install libass
       - name: kiteplayer-libass, plain then asan
         working-directory: kiteplayer-libass/native
         run: ./scripts/run-c-tests.sh plain && ./scripts/run-c-tests.sh asan
@@ -134,9 +136,10 @@ jobs:
           restore-keys: |
             konan-macos-arm64-
 
-      # libass is a REAL dependency of :kiteplayer-libass on this host: its macosArm64 cinterop
-      # reads /opt/homebrew/include, which is the same source the desktop FFmpeg profile links its
-      # text stack from. ffmpeg is the fixture generator below.
+      # :kiteplayer-libass no longer reads Homebrew's libass: every target embeds the chain the
+      # sibling cross-builds, downloaded here from the KiteFFmpeg release pinned in
+      # kiteplayer-libass/ass-chain.sha256 (no sibling checkout on a runner). ffmpeg is the fixture
+      # generator below.
       #
       # WHY THE FIXTURES ARE GENERATED ON macOS AND NOWHERE ELSE: one codec set, one place, so a
       # red is about the player rather than about which runner made the clips. Ubuntu's apt ffmpeg
@@ -151,8 +154,8 @@ jobs:
       # which is the right fix, and the unpinned generator has its own plan row.
       # KiteFFmpeg learned the same lesson from the other direction and its ci.yml says it in one
       # line: a pin against a moving formula is a calendar, not a gate.
-      - name: Install libass and the ffmpeg CLI
-        run: brew install libass ffmpeg
+      - name: Install the ffmpeg CLI
+        run: brew install ffmpeg
 
       # One line in the log so the next fixture divergence is diagnosable by reading rather than by
       # bisecting. This is what turned "multitrack.mkv decoded no subtitle cue" into an answer.
@@ -181,13 +184,13 @@ jobs:
       # The ratchets first, because a surface change should fail before a two-minute test suite
       # does. checkKotlinAbi is Kotlin's own ABI validation (checkLegacyAbi is its deprecated
       # spelling); checkKitertCoupling holds the kitert boundary against a committed baseline;
-      # checkPublicationReadiness reads all 116 generated POMs and the project dependency edges.
+      # checkPublicationReadiness reads the generated POMs and the project dependency edges.
       - name: The ratchets
         run: |
           ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
           ./scripts/check-dependency-hygiene.sh
 
-      # Every module that HAS jvm tests. The three that need the clips (ffmpeg, mobile,
+      # Every module that HAS jvm tests. The three that need the clips (ffmpeg, kiteplayer,
       # compose-video) are here rather than on Linux for the generator reason above.
       #
       # `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` were in this
@@ -204,8 +207,10 @@ jobs:
             :kiteplayer-view:jvmTest \
             :kiteplayer-network:jvmTest \
             :kiteplayer-ffmpeg:jvmTest \
-            :kiteplayer-mobile:jvmTest \
-            :kiteplayer-compose-video:jvmTest
+            :kiteplayer-libass:jvmTest \
+            :kiteplayer:jvmTest \
+            :kiteplayer-compose-video:jvmTest \
+            :kiteplayer-compose-ui:jvmTest
 
       # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the 17.5 format matrix against
       # real clips.
@@ -228,6 +233,14 @@ jobs:
             :kiteplayer-libass:macosArm64Test \
             :kiteplayer-network:macosArm64Test \
             :kiteplayer-ffmpeg:macosArm64Test
+
+      # An isolated external consumer must retain optional registration after Native release
+      # optimization. A hosted runner also verifies public HTTPS independently of host firewalls.
+      # Staging writes only build/verification-maven; these tasks never upload a release.
+      - name: Published-format Native consumer and HTTPS
+        run: |
+          ./scripts/verify-network-distribution.sh --stage
+          ./scripts/verify-network-distribution.sh --run --target macos --url https://example.com
 
       # The conformance table, which is the answer "green" does not carry: which clip played on
       # this platform and what happened when one did not. Written by the matrix run itself, before
@@ -301,6 +314,7 @@ jobs:
             :kiteplayer-rt:iosSimulatorArm64Test \
             :kiteplayer-view:iosSimulatorArm64Test \
             :kiteplayer-network:iosSimulatorArm64Test \
+            :kiteplayer-libass:iosSimulatorArm64Test \
             :kiteplayer-output:iosSimulatorArm64Test
 
       # Compiling the device triples is a weaker claim than running them and is still worth making:
@@ -311,6 +325,7 @@ jobs:
             :kiteplayer-core:compileKotlinIosArm64 \
             :kiteplayer-output:compileKotlinIosArm64 \
             :kiteplayer-ffmpeg:compileKotlinIosArm64 \
+            :kiteplayer-libass:compileKotlinIosArm64 \
             :kiteplayer-view:compileKotlinIosArm64
 
       - name: Upload test reports
@@ -427,7 +442,8 @@ jobs:
             :kiteplayer-core:linuxX64Test \
             :kiteplayer-subtitles:linuxX64Test \
             :kiteplayer-output:linuxX64Test \
-            :kiteplayer-rt:linuxX64Test
+            :kiteplayer-rt:linuxX64Test \
+            :kiteplayer-libass:linuxX64Test
 
       # The player's FFmpeg backend links its embedded KiteFFmpeg on Linux. This is the step that
       # would catch kiteffmpeg-core shipping a klib whose linuxX64 half does not resolve.
@@ -481,6 +497,7 @@ jobs:
           :kiteplayer-subtitles:mingwX64Test
           :kiteplayer-output:mingwX64Test
           :kiteplayer-rt:mingwX64Test
+          :kiteplayer-libass:mingwX64Test
 
       - name: Link the FFmpeg backend for mingwX64
         run: ./gradlew --stacktrace :kiteplayer-ffmpeg:linkDebugTestMingwX64

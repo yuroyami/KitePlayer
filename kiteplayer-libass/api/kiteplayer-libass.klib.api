@@ -1,0 +1,58 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxArm64, linuxX64, macosArm64, mingwX64, wasmJs]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.yuroyami:kiteplayer-libass>
+final class io.github.yuroyami.kiteplayer.libass/LibassRenderer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.libass/LibassRenderer|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.libass/LibassRenderer.<init>|<init>(){}[0]
+
+    final fun addFont(kotlin/String, kotlin/ByteArray) // io.github.yuroyami.kiteplayer.libass/LibassRenderer.addFont|addFont(kotlin.String;kotlin.ByteArray){}[0]
+    final fun close() // io.github.yuroyami.kiteplayer.libass/LibassRenderer.close|close(){}[0]
+    final fun renderDocument(kotlin/String, kotlin/Long, kotlin/Int, kotlin/Int, kotlin/Long = ..., kotlin/Long = ...): io.github.yuroyami.kiteplayer.subtitle/SubtitleCue.Bitmap? // io.github.yuroyami.kiteplayer.libass/LibassRenderer.renderDocument|renderDocument(kotlin.String;kotlin.Long;kotlin.Int;kotlin.Int;kotlin.Long;kotlin.Long){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.libass/LibassTypesetter : io.github.yuroyami.kiteplayer.spi/SubtitleTypesetter { // io.github.yuroyami.kiteplayer.libass/LibassTypesetter|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.<init>|<init>(){}[0]
+
+    final fun addEvent(kotlin/ByteArray, kotlin/Long, kotlin/Long) // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.addEvent|addEvent(kotlin.ByteArray;kotlin.Long;kotlin.Long){}[0]
+    final fun addFont(kotlin/String, kotlin/ByteArray) // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.addFont|addFont(kotlin.String;kotlin.ByteArray){}[0]
+    final fun clearEvents() // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.clearEvents|clearEvents(){}[0]
+    final fun close() // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.close|close(){}[0]
+    final fun openDocument(kotlin/ByteArray) // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.openDocument|openDocument(kotlin.ByteArray){}[0]
+    final fun openTrack(kotlin/ByteArray) // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.openTrack|openTrack(kotlin.ByteArray){}[0]
+    final fun render(kotlin/Long, io.github.yuroyami.kiteplayer.spi/TypesetFrame): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/OverlayImage>? // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.render|render(kotlin.Long;io.github.yuroyami.kiteplayer.spi.TypesetFrame){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.Companion|null[0]
+        final fun createOrNull(): io.github.yuroyami.kiteplayer.libass/LibassTypesetter? // io.github.yuroyami.kiteplayer.libass/LibassTypesetter.Companion.createOrNull|createOrNull(){}[0]
+    }
+}
+
+final class io.github.yuroyami.kiteplayer.libass/LibassTypesetterProvider : io.github.yuroyami.kiteplayer.spi/SubtitleTypesetterProvider { // io.github.yuroyami.kiteplayer.libass/LibassTypesetterProvider|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.libass/LibassTypesetterProvider.<init>|<init>(){}[0]
+
+    final val id // io.github.yuroyami.kiteplayer.libass/LibassTypesetterProvider.id|{}id[0]
+        final fun <get-id>(): kotlin/String // io.github.yuroyami.kiteplayer.libass/LibassTypesetterProvider.id.<get-id>|<get-id>(){}[0]
+
+    final fun create(): io.github.yuroyami.kiteplayer.spi/SubtitleTypesetter? // io.github.yuroyami.kiteplayer.libass/LibassTypesetterProvider.create|create(){}[0]
+}
+
+final object io.github.yuroyami.kiteplayer.libass/KiteLibass { // io.github.yuroyami.kiteplayer.libass/KiteLibass|null[0]
+    final const val PROVIDER_ID // io.github.yuroyami.kiteplayer.libass/KiteLibass.PROVIDER_ID|{}PROVIDER_ID[0]
+        final fun <get-PROVIDER_ID>(): kotlin/String // io.github.yuroyami.kiteplayer.libass/KiteLibass.PROVIDER_ID.<get-PROVIDER_ID>|<get-PROVIDER_ID>(){}[0]
+
+    final val needsSystemFontFiles // io.github.yuroyami.kiteplayer.libass/KiteLibass.needsSystemFontFiles|{}needsSystemFontFiles[0]
+        final fun <get-needsSystemFontFiles>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.libass/KiteLibass.needsSystemFontFiles.<get-needsSystemFontFiles>|<get-needsSystemFontFiles>(){}[0]
+
+    final var fontDirectories // io.github.yuroyami.kiteplayer.libass/KiteLibass.fontDirectories|{}fontDirectories[0]
+        final fun <get-fontDirectories>(): kotlin.collections/List<kotlin/String> // io.github.yuroyami.kiteplayer.libass/KiteLibass.fontDirectories.<get-fontDirectories>|<get-fontDirectories>(){}[0]
+        final fun <set-fontDirectories>(kotlin.collections/List<kotlin/String>) // io.github.yuroyami.kiteplayer.libass/KiteLibass.fontDirectories.<set-fontDirectories>|<set-fontDirectories>(kotlin.collections.List<kotlin.String>){}[0]
+    final var systemFontBudgetBytes // io.github.yuroyami.kiteplayer.libass/KiteLibass.systemFontBudgetBytes|{}systemFontBudgetBytes[0]
+        final fun <get-systemFontBudgetBytes>(): kotlin/Long // io.github.yuroyami.kiteplayer.libass/KiteLibass.systemFontBudgetBytes.<get-systemFontBudgetBytes>|<get-systemFontBudgetBytes>(){}[0]
+        final fun <set-systemFontBudgetBytes>(kotlin/Long) // io.github.yuroyami.kiteplayer.libass/KiteLibass.systemFontBudgetBytes.<set-systemFontBudgetBytes>|<set-systemFontBudgetBytes>(kotlin.Long){}[0]
+
+    final fun isAvailable(): kotlin/Boolean // io.github.yuroyami.kiteplayer.libass/KiteLibass.isAvailable|isAvailable(){}[0]
+    final fun libraryVersion(): kotlin/Int // io.github.yuroyami.kiteplayer.libass/KiteLibass.libraryVersion|libraryVersion(){}[0]
+}

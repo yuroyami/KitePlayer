@@ -14,9 +14,11 @@
 # there is no such boundary: this is the same build layer, the same compiler flags, and the same
 # `kt_` prefix, so a second copy would only be a second thing to keep in step.
 #
-# WHAT IT DELIBERATELY DOES NOT NEED. No jni.h and no libass. The suite covers the packed-buffer
-# size arithmetic, which lives in src/libass_pack_limits.h precisely so it can be compiled and
-# proven without a JVM or a subtitle renderer present.
+# TWO SUITES, ONE OPTIONAL. test_pack_limits needs neither jni.h nor libass: it covers the
+# packed-buffer size arithmetic, which lives in src/libass_pack_limits.h precisely so it can be
+# proven without a renderer present. test_kite_ass drives the shared driver in src/kite_ass.h
+# against a REAL libass and asserts pixels, so it runs only where one is installed (Homebrew on
+# the macOS host) and says SKIPPED loudly otherwise, never silently.
 #
 set -euo pipefail
 
@@ -44,6 +46,12 @@ rm -rf "$OUT"
 mkdir -p "$OUT/bin"
 
 SUITES="test_pack_limits"
+LIBASS_PREFIX="${KPLA_LIBASS_PREFIX:-/opt/homebrew}"
+if [ -f "$LIBASS_PREFIX/include/ass/ass.h" ] && [ -e "$LIBASS_PREFIX/lib/libass.dylib" ]; then
+    SUITES="$SUITES test_kite_ass"
+else
+    echo "run-c-tests.sh: SKIPPED test_kite_ass (no libass under $LIBASS_PREFIX; brew install libass)"
+fi
 
 echo "run-c-tests.sh: variant $VARIANT"
 echo "  compiler   $CC ($("$CC" --version | head -1))"
@@ -61,12 +69,16 @@ echo "  harness    $RT_TESTS"
 FAILED=0
 for suite in $SUITES; do
     echo "  cc  $suite"
+    SUITE_FLAGS=""
+    if [ "$suite" = test_kite_ass ]; then
+        SUITE_FLAGS="-I$LIBASS_PREFIX/include -L$LIBASS_PREFIX/lib -lass -Wl,-rpath,$LIBASS_PREFIX/lib"
+    fi
     # shellcheck disable=SC2086
     "$CC" $BASE_FLAGS $VARIANT_FLAGS \
         -I "$RT_TESTS" -I "$ROOT/src" -I "$ROOT/tests" \
         -o "$OUT/bin/$suite" \
         "$ROOT/tests/$suite.c" "$RT_TESTS/harness.c" \
-        "$OUT/bin/libkprt_interpose_alloc.dylib" -Wl,-rpath,"$OUT/bin"
+        "$OUT/bin/libkprt_interpose_alloc.dylib" -Wl,-rpath,"$OUT/bin" $SUITE_FLAGS
 done
 
 export ASAN_OPTIONS="detect_leaks=0:abort_on_error=1:print_stacktrace=1:strict_string_checks=1"

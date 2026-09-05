@@ -1,46 +1,130 @@
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import com.android.build.api.variant.KotlinMultiplatformAndroidComponentsExtension
+import io.github.yuroyami.kiteplayer.buildtools.BuildLibassHostJniTask
+import io.github.yuroyami.kiteplayer.buildtools.FetchAssChainTask
+import io.github.yuroyami.kiteplayer.buildtools.MergeAssChainTask
+import org.gradle.api.tasks.PathSensitivity
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 import java.io.File
 import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
+    alias(libs.plugins.vanniktech.publish)
     alias(libs.plugins.dokka)
 }
 
 /*
- * :kiteplayer-libass is the OPTIONAL full ASS renderer (pulled forward by
- * owner order 2026-08-16, decision D-7): libass and its chain rendering typesetting-grade
- * subtitles through the engine's existing bitmap-cue path. An app that skips this module ships
- * not one extra native byte; the Kotlin dialogue tier in :kiteplayer-subtitles remains the
- * default everywhere.
+ * :kiteplayer-libass is the typesetting engine: libass and its chain (HarfBuzz, FreeType, FriBidi)
+ * behind the engine's SubtitleTypesetter interface. Adding it installs a provider the core
+ * discovers, and every ASS and SSA track is then typeset instead of drawn by the Kotlin dialogue
+ * tier. The standard entry points (:kiteplayer, :kiteplayer-compose, :kiteplayer-mobile) include
+ * it, so most applications never name this module.
  *
- * Targets: the macOS host always (Homebrew's libass, the proving ground), and every other
- * Kotlin/Native target this project ships when -Pkiteplayer.libass.root points at a KiteFFmpeg
- * `native-libs/deps` tree holding cross-built ass-chain installs (buildAssChainFor<Target>).
- * That now means the iOS pair AND the Linux and Windows desktop triples.
+ * One C driver, three bindings. native/src/kite_ass.h owns every libass call and the packed-buffer
+ * conversion; Kotlin/Native includes it through cinterop, Android and the desktop JVM through the
+ * JNI adapter beside it. The web build of the chain is separate work and this module's wasmJs and
+ * js variants carry an honest "no engine" provider until it lands.
  *
- * The renderer itself is plain Kotlin/Native over the cinterop bindings, which is why widening
- * this list cost a link line and not a rewrite: it lived in appleMain only because that was the
- * only place targets existed, and it moved to nativeMain unchanged.
- *
- * Android and the JVM are the ones still missing, and for a reason no link line fixes: this module
- * reaches libass through Kotlin/Native cinterop, and both of those are JVM targets that would need
- * a JNI bridge (a C shim, per-ABI .so packaging) exactly like KiteFFmpeg's. wasm needs libass built
- * to emscripten and a binding besides. Those stay the recorded next slices.
+ * THE CHAIN. Cross-built in the sibling repository as static archives, one install per target.
+ * A build finds a target's chain in this order, and says which it used:
+ *   1. -Pkiteplayer.libass.root=<dir>, a KiteFFmpeg native-libs/deps tree.
+ *   2. The sibling checkout, ../KiteFFmpeg/native-libs/deps, which the maintainer's machine has.
+ *   3. A download from the KiteFFmpeg release named below, pinned by SHA-256 in ass-chain.sha256.
+ * The four archives are merged into ONE libkiteass.a per target and embedded in the klib, so a
+ * consumer links without knowing the chain exists. The Android AAR carries one adapter .so per ABI
+ * whose chain exists; the jvm jar carries one adapter per desktop host whose toolchain this
+ * machine has (see hostJniTriples below).
  */
 
-val libassDepsRoot: File? = providers.gradleProperty("kiteplayer.libass.root")
+/** The KiteFFmpeg release whose assets are `ass-chain-<target>.zip`; see FetchAssChainTask. */
+val assChainReleaseTag = "ass-chain-r1"
+
+val chainRootProperty: File? = providers.gradleProperty("kiteplayer.libass.root")
     .map { File(it).absoluteFile.normalize() }
     .orNull
+val siblingChainRoot: File = rootDir.resolve("../KiteFFmpeg/native-libs/deps").normalize()
+
+/** `<target dir name>` to the pinned SHA-256 of its release asset. Missing pin means "no download". */
+val chainPins: Map<String, String> = file("ass-chain.sha256").takeIf { it.isFile }?.readLines()
+    .orEmpty()
+    .map { it.trim() }
+    .filter { it.isNotEmpty() && !it.startsWith("#") }
+    .associate { line ->
+        val (sha, asset) = line.split(Regex("\\s+"), limit = 2)
+        asset.removePrefix("ass-chain-").removeSuffix(".zip") to sha
+    }
+
+val konanDataDirProvider = providers.environmentVariable("KONAN_DATA_DIR")
+    .orElse(providers.systemProperty("user.home").map { home -> "$home/.konan" })
+    .map { path -> File(path) }
+
+fun gradleSuffix(dirName: String): String =
+    dirName.split('-').joinToString("") { part -> part.replaceFirstChar { it.uppercaseChar() } }
+
+/** One target's chain: where its headers and archives are, and the task that puts them there. */
+class Chain(val dirName: String, val root: File, val producer: TaskProvider<*>?) {
+    val includeDir: File get() = root.resolve("include")
+    val libDir: File get() = root.resolve("lib")
+}
+
+val chains = mutableMapOf<String, Chain?>()
+
+/** The chain for one target directory name, or null when nothing can supply it. */
+fun chainFor(dirName: String): Chain? = chains.getOrPut(dirName) {
+    val local = listOfNotNull(chainRootProperty, siblingChainRoot.takeIf { it.isDirectory })
+        .map { it.resolve("$dirName/ass-chain") }
+        .firstOrNull { it.resolve("lib/libass.a").isFile }
+    if (local != null) {
+        logger.info("[kiteplayer-libass] $dirName: ass chain at $local")
+        return@getOrPut Chain(dirName, local, null)
+    }
+    val pin = chainPins[dirName]
+    if (pin == null) {
+        logger.lifecycle(
+            "[kiteplayer-libass] $dirName: no ass chain locally and no pin in ass-chain.sha256, so this " +
+                "target is skipped. Build it with KiteFFmpeg's :kiteffmpeg:buildAssChainFor${gradleSuffix(dirName)}.",
+        )
+        return@getOrPut null
+    }
+    val fetched = layout.buildDirectory.dir("ass-chain/$dirName").get().asFile
+    val fetch = tasks.register<FetchAssChainTask>("fetchAssChain${gradleSuffix(dirName)}") {
+        targetDirName.set(dirName)
+        releaseTag.set(assChainReleaseTag)
+        expectedSha256.set(pin)
+        outputDir.set(fetched)
+    }
+    Chain(dirName, fetched, fetch)
+}
+
+val merges = mutableMapOf<String, TaskProvider<MergeAssChainTask>>()
+
+/** The merged single-archive task for one konan target, shared between cinterop and the JVM adapter. */
+fun mergeFor(konanTargetName: String, chain: Chain): TaskProvider<MergeAssChainTask> = merges.getOrPut(konanTargetName) {
+    tasks.register<MergeAssChainTask>("mergeAssChain${gradleSuffix(konanTargetName.replace('_', '-'))}") {
+        chainLibDir.set(chain.libDir)
+        chain.producer?.let { dependsOn(it) }
+        this.konanTargetName.set(konanTargetName)
+        konanDataDir.fileProvider(konanDataDirProvider)
+        outputDir.set(layout.buildDirectory.dir("ass-chain-merged/$konanTargetName"))
+    }
+}
+
+/** Konan target name to the chain directory the sibling builds for it. */
+val nativeChainDirs = mapOf(
+    "macos_arm64" to "macos-arm64",
+    "ios_arm64" to "ios-arm64",
+    "ios_simulator_arm64" to "ios-simulator-arm64",
+    "linux_x64" to "linux-x64",
+    "linux_arm64" to "linux-arm64",
+    "mingw_x64" to "mingw-x64",
+)
 
 /**
- * The Android NDK, for the JNI adapter only.
- *
- * `local.properties` is consulted as well as the environment, because that is where this project
- * already records its SDK and the NDK lives inside it. The native tasks in KiteFFmpeg read only the
- * environment, which is why an Android build there needs ANDROID_NDK_HOME exported by hand.
+ * The Android NDK, for the JNI adapter. local.properties is consulted as well as the environment,
+ * because that is where this project records its SDK and the NDK lives inside it.
  */
 fun resolveNdk(): File? {
     sequenceOf("ANDROID_NDK_HOME", "ANDROID_NDK_ROOT", "ANDROID_NDK_LATEST_HOME")
@@ -64,24 +148,13 @@ fun resolveNdk(): File? {
         ?.listFiles { f: File -> f.isDirectory }?.maxByOrNull { it.name }
 }
 
-/*
- * The Android target is always DECLARED, and only its native half is conditional.
- *
- * Applying the Android plugin obliges configuring the target: leave it out and every build of this
- * project fails with "compileSdk version is not set", whether or not it wanted libass. So the
- * target exists unconditionally and the JNI wiring below does not, which means a build with no ass
- * chain still produces Kotlin that compiles and simply has no library to load. That trade is only
- * acceptable because this module is OPTIONAL and unpublished: its whole purpose needs the chain,
- * and the log line below says so plainly rather than letting it be discovered at runtime.
- */
-val androidChainsReady: Boolean = libassDepsRoot != null &&
-    BuildLibassJniTask.ABIS.all {
-        libassDepsRoot.resolve("${it.depsDirName}/ass-chain/lib/libass.a").isFile
-    }
-val ndkForJni: File? = if (androidChainsReady) resolveNdk() else null
-val androidReady: Boolean = androidChainsReady && ndkForJni != null
-if (androidReady) {
-    apply(plugin = libs.plugins.android.kmp.library.get().pluginId)
+// The media fixtures live at the repo root; a test's working directory is not something to rely on.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+    environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}
+tasks.withType<Test>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
 
 kotlin {
@@ -90,138 +163,89 @@ kotlin {
 
     applyDefaultHierarchyTemplate()
 
-    // Android is a different SHAPE of target rather than one more entry in the list below: it
-    // reaches libass through the JNI adapter in native/src, built by BuildLibassJniTask into the
-    // jniLibs layout AGP packages.
+    @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
+    abiValidation {
+        // Declaring the block is what switches tracking on.
+    }
+
+    // The engine is an expect class with one actual per binding; the flag only silences the
+    // beta note the compiler still prints for that shape.
+    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
+
+    // Every target the standard entry point has, plus the desktop Kotlin/Native triples the FFmpeg
+    // backend has. A dependency edge that resolves for only some of a consumer's targets fails at
+    // whichever target nobody compiled, so the list here is not optional per machine: a target whose
+    // chain cannot be found fails its native tasks with the three ways to supply it.
+    macosArm64()
+    iosArm64()
+    iosSimulatorArm64()
+    linuxX64()
+    linuxArm64()
+    mingwX64()
+    jvm()
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    js {
+        browser()
+        nodejs()
+        binaries.library()
+    }
+    @OptIn(ExperimentalWasmDsl::class)
+    wasmJs {
+        browser()
+        nodejs()
+    }
     android {
         namespace = "io.github.yuroyami.kiteplayer.libass"
         compileSdk = 36
         minSdk = 26
-        // Device tests only. A host test could not load the adapter: it is an Android .so, and
-        // proving this half means proving the library loads and renders on a real runtime.
         withDeviceTestBuilder {
             sourceSetTreeName = "test"
         }.configure {
             instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
-    }
-    if (!androidReady) {
-        logger.lifecycle(
-            "[kiteplayer-libass] Android target has NO native library: " +
-                if (!androidChainsReady) {
-                    "no ass-chain for ${BuildLibassJniTask.ABIS.joinToString { it.depsDirName }} " +
-                        "(set -Pkiteplayer.libass.root and run buildAssChainFor<Target>)."
-                } else {
-                    "no Android NDK found (set ANDROID_NDK_HOME or sdk.dir in local.properties)."
-                },
-        )
-    }
-
-    macosArm64()
-
-    // A cross target appears only when its chain is actually ON DISK, not merely when a deps root
-    // was named. Declaring a target whose ass-chain is missing produces a link failure at the far
-    // end of a long build, naming -lass rather than the absent directory; this way an unbuilt
-    // chain is a target that quietly is not there, which is what "optional module" should mean.
-    fun chainPresent(dirName: String): Boolean =
-        libassDepsRoot?.resolve("$dirName/ass-chain/lib/libass.a")?.isFile == true
-
-    val optionalTargets = mapOf(
-        "ios-arm64" to { iosArm64(); Unit },
-        "ios-simulator-arm64" to { iosSimulatorArm64(); Unit },
-        "linux-x64" to { linuxX64(); Unit },
-        "linux-arm64" to { linuxArm64(); Unit },
-        "mingw-x64" to { mingwX64(); Unit },
-    )
-    val missing = optionalTargets.keys.filterNot(::chainPresent)
-    optionalTargets.filterKeys(::chainPresent).values.forEach { it() }
-    if (libassDepsRoot == null) {
-        logger.lifecycle(
-            "[kiteplayer-libass] cross targets skipped: set -Pkiteplayer.libass.root to a " +
-                "KiteFFmpeg native-libs/deps tree with ass-chain installs to enable them.",
-        )
-    } else if (missing.isNotEmpty()) {
-        logger.lifecycle(
-            "[kiteplayer-libass] no ass-chain under $libassDepsRoot for: ${missing.joinToString()}. " +
-                "Run :kiteffmpeg:buildAssChainFor<Target> for each to enable them.",
-        )
-    }
-
-    /** The `deps/<target>/ass-chain` directory name for a konan target, or null for the host. */
-    fun chainDirName(konanTargetName: String): String? = when (konanTargetName) {
-        "ios_arm64" -> "ios-arm64"
-        "ios_simulator_arm64" -> "ios-simulator-arm64"
-        "linux_x64" -> "linux-x64"
-        "linux_arm64" -> "linux-arm64"
-        "mingw_x64" -> "mingw-x64"
-        else -> null
+        optimization {
+            consumerKeepRules.publish = true
+            consumerKeepRules.file("consumer-rules.pro")
+        }
     }
 
     targets.withType(KotlinNativeTarget::class.java).configureEach {
-        val chainDir = chainDirName(konanTarget.name)
-            ?.let { libassDepsRoot?.resolve("$it/ass-chain") }
-        val isApple = konanTarget.name.startsWith("ios_") || konanTarget.name.startsWith("macos_")
+        val konanName = konanTarget.name
+        val dirName = nativeChainDirs[konanName] ?: error("no ass chain directory is known for $konanName")
+        val chain = chainFor(dirName)
+        val merge = chain?.let { mergeFor(konanName, it) }
+        val mergedDir = layout.buildDirectory.dir("ass-chain-merged/$konanName").get().asFile
         compilations.getByName("main").cinterops.create("libass") {
             defFile(project.file("src/nativeInterop/cinterop/libass.def"))
-            if (chainDir != null) {
-                includeDirs(chainDir.resolve("include"))
+            val driverDir = project.file("native/src")
+            if (chain != null) {
+                includeDirs(chain.includeDir, driverDir)
+                compilerOpts("-I${chain.includeDir.absolutePath}", "-I${driverDir.absolutePath}")
             } else {
-                // The macOS host proves the module against Homebrew's libass, the same source
-                // the desktop FFmpeg profile links its text stack from.
-                includeDirs("/opt/homebrew/include")
+                includeDirs(driverDir)
+                compilerOpts("-I${driverDir.absolutePath}")
             }
+            extraOpts("-libraryPath", mergedDir.absolutePath)
         }
-        binaries.all {
-            if (chainDir == null) {
-                linkerOpts("-L/opt/homebrew/lib", "-lass")
-                return@all
-            }
-            // The chain is the same four archives everywhere, dependents first, because a GNU
-            // linker resolves static archives left to right and libass draws from all three below
-            // it. On the GNU targets they additionally go in a GROUP: harfbuzz and freetype
-            // reference each other, and a single left-to-right pass cannot close a cycle. Apple's
-            // ld needs no group (it re-scans) and does not understand the flag.
-            linkerOpts("-L${chainDir.resolve("lib")}")
-            if (isApple) {
-                linkerOpts("-lass", "-lharfbuzz", "-lfreetype", "-lfribidi")
+        /*
+         * cinterop embeds the merged archive, so it has to exist first AND be a declared input of the
+         * cinterop task: its own up-to-date check covers the def and the headers, not a library the
+         * def merely names, and a rebuilt chain would otherwise stay stale inside the klib.
+         */
+        val cinteropTaskName = "cinteropLibass${name.replaceFirstChar { it.uppercaseChar() }}"
+        tasks.matching { it.name == cinteropTaskName }.configureEach {
+            if (merge != null) {
+                dependsOn(merge)
+                inputs.files(merge.map { m -> m.outputDir.file(MergeAssChainTask.ARCHIVE_NAME) })
+                    .withPropertyName("kiteAssArchive")
+                    .withPathSensitivity(PathSensitivity.NAME_ONLY)
             } else {
-                // Named by ABSOLUTE PATH rather than -l, and inside a group. `-l` left the GNU
-                // targets resolving `FT_*` against nothing at all while reporting no missing
-                // library, which is what a lookup that quietly picked something else looks like.
-                // A path cannot be mistaken for another file, and the group closes the
-                // harfbuzz/freetype cycle that one left-to-right pass cannot.
-                val lib = chainDir.resolve("lib")
-                linkerOpts("-Wl,--start-group")
-                listOf("libass.a", "libharfbuzz.a", "libfreetype.a", "libfribidi.a").forEach {
-                    linkerOpts(lib.resolve(it).absolutePath)
-                }
-                linkerOpts("-Wl,--end-group")
-            }
-            // What differs per platform is only what the C++ half of harfbuzz and the text stack
-            // need underneath: Apple ships its font provider as frameworks and its C++ runtime as
-            // libc++, the GNU targets link libstdc++ and their own math library.
-            if (isApple) {
-                linkerOpts(
-                    "-lz", "-liconv", "-lc++",
-                    "-framework", "CoreText",
-                    "-framework", "CoreFoundation",
-                    "-framework", "CoreGraphics",
-                )
-            } else {
-                // -lz is not optional and the linkage test is what proved it: freetype is built
-                // against the system zlib, so libfreetype.a carries undefined `inflate*` that
-                // nothing else in the chain resolves. -lstdc++ is harfbuzz's, which is the only
-                // C++ member; -lm is freetype's.
-                linkerOpts("-lz", "-lstdc++", "-lm")
-                if (konanTarget.name == "mingw_x64") {
-                    // Windows is the one platform where libass HAS a system font provider, so
-                    // unlike the Linux build it is not font-less: it enumerates through GDI and
-                    // shapes through DirectWrite, and those are OS libraries rather than chain
-                    // members. Without them the link ends on CreateFontIndirectW and friends.
-                    linkerOpts("-lgdi32", "-ldwrite", "-lole32", "-luuid", "-luser32")
-                    // libass recodes legacy-encoded scripts through GNU libiconv here, exactly as
-                    // it does on Apple; the GNU spelling of the symbols is `libiconv_*`.
-                    linkerOpts("-liconv")
+                doFirst {
+                    throw GradleException(
+                        "No ass chain for $dirName. Point -Pkiteplayer.libass.root at a KiteFFmpeg " +
+                            "native-libs/deps tree, keep the sibling checkout beside this one, or pin the " +
+                            "release asset in kiteplayer-libass/ass-chain.sha256.",
+                    )
                 }
             }
         }
@@ -231,29 +255,71 @@ kotlin {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
         }
+        // Android and the desktop JVM share the JNI half; only the loader differs.
+        val jvmAndAndroidMain = maybeCreate("jvmAndAndroidMain").apply { dependsOn(getByName("commonMain")) }
+        getByName("jvmMain").dependsOn(jvmAndAndroidMain)
+        getByName("androidMain").dependsOn(jvmAndAndroidMain)
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
         }
+        // The end-to-end proof on the two hosts that can run it: real FFmpeg demuxes a real ASS
+        // track, the engine routes it here, and the streamed path is compared against whole
+        // documents. Test-only, so the shipped module stays backend-free. Shared between the
+        // macOS native and JVM runs because both have runBlocking and a filesystem.
+        val hostRenderTest = maybeCreate("hostRenderTest").apply {
+            dependsOn(getByName("commonTest"))
+            dependencies {
+                implementation(project(":kiteplayer-ffmpeg"))
+                implementation(project(":kiteplayer-output"))
+                implementation(libs.kotlinx.atomicfu)
+            }
+        }
+        getByName("macosArm64Test").dependsOn(hostRenderTest)
+        getByName("jvmTest").dependsOn(hostRenderTest)
         getByName("androidDeviceTest").dependencies {
-                implementation(kotlin("test"))
-                implementation(libs.androidx.test.core)
-                implementation(libs.androidx.test.runner)
+            implementation(kotlin("test"))
+            implementation(libs.androidx.test.core)
+            implementation(libs.androidx.test.runner)
             implementation(libs.androidx.test.ext.junit)
         }
     }
 }
 
-// The JNI adapter, and the one wiring that puts it in the AAR. The task's output root sits one
-// level ABOVE the ABI directories on purpose: `addGeneratedSourceDirectory` packages `arm64-v8a/`
-// and `x86_64/` from underneath it, which is the layout Android's loader expects to find.
-if (androidReady) {
-    ndkForJni?.let { ndk ->
+// The e2e test binary consumes :kiteplayer-ffmpeg, whose klib names the libav* libraries; the
+// host test names the Homebrew location itself, the same way kiteplayer-network does.
+kotlin.macosArm64 {
+    binaries.all { linkerOpts("-L/opt/homebrew/lib") }
+}
+
+/*
+ * ── Android: one adapter .so per ABI whose chain exists ──────────────────
+ */
+run {
+    val abiChains = BuildLibassJniTask.ABIS
+        .mapNotNull { abi -> chainFor(abi.depsDirName)?.let { abi to it } }
+    val ndk = resolveNdk()
+    if (abiChains.isEmpty() || ndk == null) {
+        val why = if (ndk == null) "no Android NDK found (set ANDROID_NDK_HOME or sdk.dir in local.properties)"
+        else "no ass chain for any Android ABI"
+        logger.lifecycle("[kiteplayer-libass] Android target ships NO native library: $why.")
+        tasks.matching { it.name.startsWith("compileAndroidMain") || it.name == "bundleAndroidMainAar" }.configureEach {
+            doFirst { logger.warn("[kiteplayer-libass] WARNING: this Android artifact carries no libass adapter ($why).") }
+        }
+    } else {
         val buildJni = tasks.register<BuildLibassJniTask>("buildLibassJni") {
             sourceFile.set(project.file("native/src/libass_jni.c"))
-            assChainRoot.set(libassDepsRoot)
+            driverHeaders.from(fileTree("native/src") { include("*.h") })
+            abis.set(abiChains.map { (abi, _) -> abi.abiDirName })
+            chainDirs.set(abiChains.associate { (abi, chain) -> abi.abiDirName to chain.root.absolutePath })
+            abiChains.forEach { (_, chain) ->
+                chain.producer?.let { dependsOn(it) }
+                chainArchives.from(MergeAssChainTask.MEMBERS.map { chain.libDir.resolve("$it.a") })
+            }
             ndkDirectory.set(ndk.absolutePath)
             outputDir.set(layout.buildDirectory.dir("libass-jni"))
         }
+        logger.lifecycle("[kiteplayer-libass] Android adapter for ${abiChains.joinToString { it.first.abiDirName }}")
         extensions.configure<KotlinMultiplatformAndroidComponentsExtension> {
             onVariants { variant ->
                 val jniLibs = checkNotNull(variant.sources.jniLibs) {
@@ -262,5 +328,62 @@ if (androidReady) {
                 jniLibs.addGeneratedSourceDirectory(buildJni, BuildLibassJniTask::outputDir)
             }
         }
+    }
+}
+
+/*
+ * ── Desktop JVM: one adapter per host whose toolchain this machine has ───
+ *
+ * macOS links with the host clang, Linux and Windows are cross-linked with konan's clang and
+ * sysroots, which arrive with the Kotlin/Native distribution once those targets have compiled once.
+ * -Pkiteplayer.libass.requireAllHostJni=true turns a skipped host into a failure; the publish
+ * path passes it, so a jar cannot ship missing a desktop it promises.
+ */
+run {
+    val osName = System.getProperty("os.name").orEmpty().lowercase()
+    val hostIsMac = "mac" in osName || "darwin" in osName
+    val hostIsLinux = !hostIsMac && "win" !in osName
+    val requireAll = providers.gradleProperty("kiteplayer.libass.requireAllHostJni").orNull == "true"
+    val konanDependencies = konanDataDirProvider.get().resolve("dependencies")
+    fun sysrootPresent(konanTargetName: String): Boolean {
+        val relative = io.github.yuroyami.kiteplayer.buildtools.CompileKiteRtTask.specFor(konanTargetName).konanSysroot ?: return false
+        return konanDependencies.resolve(relative).isDirectory
+    }
+    val javaHomeProvider = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+        .map { it.metadata.installationPath.asFile.absolutePath }
+
+    val staged = mutableListOf<TaskProvider<BuildLibassHostJniTask>>()
+    BuildLibassHostJniTask.CHAIN_DIR_FOR_HOST.forEach { (hostTriple, chainDirName) ->
+        val konanTargetName = BuildLibassHostJniTask.KONAN_TARGET_FOR_HOST.getValue(hostTriple)
+        val toolchainReady = when (hostTriple) {
+            "macos-arm64" -> hostIsMac && File("/usr/bin/clang").canExecute()
+            "macos-x64" -> false // The sibling builds no macos-x64 chain; Intel Macs fall back to the Kotlin tier.
+            "linux-x64", "linux-arm64", "windows-x64" -> konanTargetName != null && sysrootPresent(konanTargetName) && !hostIsLinux
+            else -> false
+        }
+        val chain = if (toolchainReady) chainFor(chainDirName) else null
+        if (!toolchainReady || chain == null) {
+            if (hostTriple == "macos-x64") return@forEach
+            val why = if (!toolchainReady) "no toolchain for it on this machine" else "no ass chain for $chainDirName"
+            if (requireAll) throw GradleException("kiteplayer.libass.requireAllHostJni: cannot build the $hostTriple adapter, $why.")
+            logger.lifecycle("[kiteplayer-libass] jvm jar skips the $hostTriple adapter: $why.")
+            return@forEach
+        }
+        val mergeKonan = konanTargetName ?: "macos_arm64"
+        val merge = mergeFor(mergeKonan, chain)
+        staged += tasks.register<BuildLibassHostJniTask>("buildLibassHostJni${gradleSuffix(hostTriple)}") {
+            this.hostTriple.set(hostTriple)
+            sourceFile.set(project.file("native/src/libass_jni.c"))
+            driverDir.set(project.file("native/src"))
+            chainIncludeDir.set(chain.includeDir)
+            chain.producer?.let { dependsOn(it) }
+            mergedArchive.set(merge.flatMap { m -> m.outputDir.file(MergeAssChainTask.ARCHIVE_NAME) })
+            javaHome.set(javaHomeProvider)
+            konanDataDir.fileProvider(konanDataDirProvider)
+            outputDir.set(layout.buildDirectory.dir("libass-host-jni/$hostTriple"))
+        }
+    }
+    tasks.named<ProcessResources>("jvmProcessResources") {
+        staged.forEach { stage -> from(stage.flatMap { it.outputDir }) }
     }
 }

@@ -1,11 +1,27 @@
-# libass, the full ASS/SSA renderer. Include and library paths are
-# supplied per target by the build script: Homebrew on the macOS host, the KiteFFmpeg
-# ass-chain deps tree for the phones.
-headers = ass/ass.h
-headerFilter = ass/**
+# libass plus the shared driver in native/src/kite_ass.h. Include paths arrive from the build
+# script: the KiteFFmpeg ass-chain install of each target, and this module's native/src.
+#
+# The chain is ONE merged archive, libkiteass.a, built by the module's build script from libass,
+# HarfBuzz, FreeType and FriBidi, so cinterop embeds one static library per target and a consumer
+# links without knowing the four exist. Its directory differs per target, so it arrives as
+# -libraryPath from the build script rather than from a def line.
+headers = ass/ass.h kite_ass.h
+headerFilter = ass/** kite_ass.h libass_pack_limits.h
 package = libass
+staticLibraries = libkiteass.a
 
-# ass_add_font takes `const char *data` for BINARY font bytes, which cinterop would otherwise map
-# to String? on the heuristic that a const char* is text. Fonts are not text, and a ByteArray
-# cannot be passed as one, so this function keeps raw pointers on both of its char* parameters.
-noStringConversion = ass_add_font
+# Binary parameters that cinterop would otherwise map to String? on the const char* heuristic.
+# Fonts, headers, scripts and events are bytes, not text.
+noStringConversion = ass_add_font kite_ass_add_font kite_ass_open_track kite_ass_open_document kite_ass_add_event
+
+# What the chain needs underneath, per platform. Apple ships its font provider as frameworks and
+# its C++ runtime as libc++; the GNU targets link libstdc++ and their own math library. -lz is not
+# optional: FreeType is built against the system zlib and carries undefined inflate* symbols.
+linkerOpts.osx = -lz -liconv -lc++ -framework CoreText -framework CoreFoundation -framework CoreGraphics
+linkerOpts.ios = -lz -liconv -lc++ -framework CoreText -framework CoreFoundation -framework CoreGraphics
+linkerOpts.linux_x64 = -lz -lstdc++ -lm
+linkerOpts.linux_arm64 = -lz -lstdc++ -lm
+# Windows is the one platform where libass HAS a system font provider: GDI enumerates and
+# DirectWrite shapes, and those are OS libraries. libass recodes legacy scripts through GNU
+# libiconv there; FreeType took its own bundled zlib, so no -lz.
+linkerOpts.mingw_x64 = -lstdc++ -lgdi32 -ldwrite -lole32 -luuid -luser32 -liconv

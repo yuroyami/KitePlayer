@@ -1,37 +1,29 @@
 package io.github.yuroyami.kiteplayer.libass
 
+import io.github.yuroyami.kiteplayer.spi.TypesetFrame
+import io.github.yuroyami.kiteplayer.subtitle.BitmapRegion
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 
 /**
- * Typesetting-grade ASS rendering through libass, emitting the engine's
- * EXISTING bitmap-cue vocabulary: each rendered event becomes [SubtitleCue.Bitmap] regions in the
- * frame's own coordinate space, exactly what the rasterizers already draw for bitmap subtitle
- * formats. Nothing engine-side had to learn a new type, which is the whole point of that path.
+ * Whole-document rendering, one call per picture, for tools and tests.
  *
- * Two implementations sit behind this, and they differ only in how they REACH libass: the
- * Kotlin/Native targets bind it directly through cinterop, while the JVM targets call a small JNI
- * adapter. Both produce identical pixels, premultiplied RGBA, because the conversion is written
- * once per side against the same rules and checked against each other.
- *
- * Fonts are the one behaviour that genuinely differs, and it is the platform's doing rather than
- * this API's. Apple has CoreText and Windows has GDI/DirectWrite, so libass finds system fonts by
- * itself there. Android, Linux and the JVM have no provider in this chain (fontconfig is
- * deliberately absent, decision D-7), so a caller supplies fonts through [addFont] or gets an empty
- * render. That is why [addFont] is on the common API rather than hidden on one actual.
+ * Playback does not use this: the engine streams events into a [LibassTypesetter] and renders per
+ * frame. This wraps the same typesetter for the case where a caller holds a complete script and
+ * wants the picture at one instant as a bitmap cue, which is what the module's reference tests
+ * compare the streamed path against.
  */
-public expect class LibassRenderer() : AutoCloseable {
+public class LibassRenderer() : AutoCloseable {
+
+    private val typesetter: LibassTypesetter = LibassTypesetter()
+    private var document: ByteArray? = null
+
+    /** Adds one font from memory, under [name], for libass to shape with. */
+    public fun addFont(name: String, data: ByteArray): Unit = typesetter.addFont(name, data)
 
     /**
-     * Adds one font from memory, under [name], for libass to shape with.
-     *
-     * On a platform whose libass has a system font provider this ADDS to what it already finds; on
-     * one without, these are the only fonts there are.
-     */
-    public fun addFont(name: String, data: ByteArray)
-
-    /**
-     * Renders one whole ASS document at [timeMillis] into bitmap regions for a
-     * [frameWidth] x [frameHeight] video frame. Returns null when nothing is visible there.
+     * Renders [script] at [timeMillis] into bitmap regions for a [frameWidth] x [frameHeight]
+     * frame. Returns null when nothing is visible there. The script is parsed once and kept until
+     * a different one arrives.
      */
     public fun renderDocument(
         script: String,
@@ -40,7 +32,40 @@ public expect class LibassRenderer() : AutoCloseable {
         frameHeight: Int,
         startMicros: Long = timeMillis * 1000,
         endMicros: Long = (timeMillis + 1) * 1000,
-    ): SubtitleCue.Bitmap?
+    ): SubtitleCue.Bitmap? {
+        require(frameWidth > 0 && frameHeight > 0) { "frame has no dimensions: ${frameWidth}x$frameHeight" }
+        val bytes = script.encodeToByteArray()
+        if (document?.contentEquals(bytes) != true) {
+            typesetter.openDocument(bytes)
+            document = bytes
+        }
+        val frame = TypesetFrame(frameWidth, frameHeight, frameWidth, frameHeight)
+        // "Unchanged" means the last answer still stands. The driver always answers the first
+        // render after a document opens, so there is always a last answer to stand.
+        typesetter.render(timeMillis, frame)?.let { lastImages = it }
+        return lastAnswer(frameWidth, frameHeight, startMicros, endMicros)
+    }
 
-    override fun close()
+    private var lastImages: List<io.github.yuroyami.kiteplayer.spi.OverlayImage> = emptyList()
+
+    private fun lastAnswer(width: Int, height: Int, startMicros: Long, endMicros: Long): SubtitleCue.Bitmap? {
+        if (lastImages.isEmpty()) return null
+        return SubtitleCue.Bitmap(
+            startMicros = startMicros,
+            endMicros = endMicros,
+            regions = lastImages.map { image ->
+                BitmapRegion(
+                    x = image.x,
+                    y = image.y,
+                    width = image.bitmap.width,
+                    height = image.bitmap.height,
+                    canvasWidth = width,
+                    canvasHeight = height,
+                    bitmap = image.bitmap,
+                )
+            },
+        )
+    }
+
+    override fun close(): Unit = typesetter.close()
 }

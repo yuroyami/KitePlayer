@@ -429,6 +429,53 @@ ffmpeg -v error -y \
   -i subs.srt \
   -map 0:v -map 1 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:s ass asssubbed.mkv
 
+# typeset.mkv: a genuinely typeset ASS track (a moving sign, an animated transform, a karaoke
+# line) beside a font ATTACHED to the container under the family the styles name. This is what the
+# libass module's end-to-end tests play: the engine must route the track to the typesetter, load the
+# attachment as a font, and re-render as the sign moves. The font is whichever sans-serif TrueType
+# file this host has; the attachment name is what libass matches, so the style resolves either way.
+cat > typeset.ass <<'ASS'
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 640
+PlayResY: 360
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,KiteTestSans,36,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+Style: Sign,KiteTestSans,48,&H0000FF00,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,0,8,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:07.00,Default,,0,0,0,,Static line at the bottom
+Dialogue: 1,0:00:01.00,0:00:06.00,Sign,,0,0,0,,{\move(40,40,560,40)}Moving sign
+Dialogue: 2,0:00:02.00,0:00:06.00,Sign,,0,0,0,,{\pos(320,180)\t(\frz360)\t(\c&HFF0000&)}Turning and tinting
+Dialogue: 3,0:00:03.00,0:00:07.00,Default,,0,0,0,,{\k100}Kara{\k100}oke {\k100}fill {\k100}line
+ASS
+TYPESET_FONT=""
+for candidate in \
+  "/System/Library/Fonts/Supplemental/Arial.ttf" \
+  "/System/Library/Fonts/Supplemental/Verdana.ttf" \
+  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf" \
+  "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" \
+  "/usr/share/fonts/dejavu/DejaVuSans.ttf"; do
+  if [ -f "$candidate" ]; then TYPESET_FONT="$candidate"; break; fi
+done
+if [ -n "$TYPESET_FONT" ]; then
+  ffmpeg -v error -y \
+    -f lavfi -i "testsrc2=size=640x360:rate=25:duration=8" \
+    -i typeset.ass \
+    -attach "$TYPESET_FONT" -metadata:s:t:0 mimetype=font/ttf -metadata:s:t:0 filename=KiteTestSans.ttf \
+    -map 0:v -map 1 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:s ass typeset.mkv
+else
+  echo "testmedia.sh: no sans-serif TrueType font found on this host; typeset.mkv has no attachment" >&2
+  ffmpeg -v error -y \
+    -f lavfi -i "testsrc2=size=640x360:rate=25:duration=8" \
+    -i typeset.ass \
+    -map 0:v -map 1 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:s ass typeset.mkv
+fi
+
 # ---------------------------------------------------------------------------------------------
 # Provenance.
 #

@@ -159,6 +159,16 @@ Each line is something that bit someone. Delete a line when it stops being true.
   implementation.
 - The blocking web reader's use of a blocking call is safe only because close never queues behind
   the demux lane. That reasoning is load bearing; re-check it before touching either side.
+- libass' change detection compares against the last frame it drew for a track WITH events. A
+  track flushed to no events skips that bookkeeping, so the first render after events come back
+  reports "unchanged" against the picture from before the flush. The C driver tracks what it last
+  emitted itself; do not trust the verdict alone.
+- The typesetter's "unchanged" answer is null, and null means "what it was". A caller that treats
+  null as "nothing" draws blank frames; the engine's lane and the corpus test both carry the last
+  picture forward.
+- Every typesetter call happens on the raster lane, including close, and requests coalesce: the
+  actor posts the newest and a CAS on the lane's running flag decides who renders it. Bypassing
+  that to call libass from the actor is a data race with the render in flight.
 
 ### The web target
 
@@ -281,3 +291,41 @@ Do not reopen these without new evidence.
   offers it on a home-screen selector; another engine is its default on Android.
 - Pulling logs off an iPhone for that application uses the device control command with the
   application data container domain, and an in-room setting adds one statistics line per tick.
+
+## The 0.0.23 module boundary
+
+The agreed entry-point and automatic-transport contract is in `docs/module-contract.md`.
+`kiteplayer` owns default construction; `kiteplayer-mobile` reexports it. The complete Compose
+entry point is `kiteplayer-compose`; `kiteplayer-compose-ui` only supplies presentation.
+FFmpeg/native view adapters live in `kiteplayer-view-bindings`, below both construction and
+Compose. Their existing package names stay compatible.
+
+Network provider discovery lives below direct core creation. Explicit item IO and configured
+resolvers win, including a configured resolver that returns null. `NetworkConfig.autoResolve`
+turns automatic discovery off. The automatic provider uses reader-owned clients; merely creating
+a player allocates no HTTP client. Native/web eager registration is toolchain-sensitive, so test
+optimized consumers that reference no network symbol.
+
+`kiteplayer-libass` rides `kiteplayer` the same way and is discovered the same way, through
+`SubtitleTypesetterProvider`. The engine typesets only the primary ASS/SSA track, on the raster
+lane, at video frame cadence, and publishes only when libass reports a change. The web variants of
+the module install nothing until the browser chain exists.
+
+## The libass chain
+
+- The chain (libass, HarfBuzz, FreeType, FriBidi) is cross-built in the sibling and found in this
+  order: `-Pkiteplayer.libass.root`, then `../KiteFFmpeg/native-libs/deps`, then a download from the
+  KiteFFmpeg release pinned in `kiteplayer-libass/ass-chain.sha256`. CI and a fresh clone take the
+  third road, so the release asset must exist before either can build the module. Package the
+  assets with the sibling's `scripts/package-ass-chain.sh` and re-pin after every chain rebuild.
+- The four archives are merged into one `libkiteass.a` per target before cinterop embeds it. Four
+  archives embedded separately depend on the consumer's link order; one archive does not.
+- The desktop JVM adapter is linked from the same chain, so the Linux and Windows chains must be
+  built with `-fPIC`. libass builds through autotools, which adds none; the sibling's chain task
+  now passes it, and a chain built before that refuses to enter a shared object with "relocation
+  cannot be used against symbol 'font_constructors'". Rebuild the chain, do not patch the link.
+- Cross-linking a Linux shared object with konan's clang needs the gcc runtime directory passed
+  with `-B` as well as `-L`, or lld cannot find `crtbeginS.o`.
+- The publish path must pass `-Pkiteplayer.libass.requireAllHostJni=true`, which turns a desktop
+  adapter this machine cannot link into a failure. Without it the jar quietly ships without that
+  desktop and the player there warns `TypesetterUnavailable` and keeps the Kotlin tier.

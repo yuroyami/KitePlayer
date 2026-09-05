@@ -1,5 +1,5 @@
 // Klib ABI Dump
-// Targets: [iosArm64, iosSimulatorArm64, macosArm64, wasmJs]
+// Targets: [iosArm64, iosSimulatorArm64, js, macosArm64, wasmJs]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
@@ -267,6 +267,7 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.githu
 
     final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.close|close(){}[0]
     final suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.resolve|resolve(kotlin.String){}[0]
+    final suspend fun resolve(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.resolve|resolve(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer.network.dash/Dash { // io.github.yuroyami.kiteplayer.network.dash/Dash|null[0]

@@ -22,3 +22,13 @@ license. The complete component list, per-component licenses, and the
 distribution obligations they carry are documented at:
 https://yuroyami.github.io/KiteFFmpeg/licensing/
 (source: docs/licensing.md in the KiteFFmpeg repository).
+
+kiteplayer-libass links, statically, into its published artifacts:
+libass 0.17.4 (ISC, https://github.com/libass/libass), HarfBuzz 14.2.1 (MIT,
+https://github.com/harfbuzz/harfbuzz), FreeType 2.14.3 (FreeType License,
+https://freetype.org) and FriBidi 1.0.16 (LGPL-2.1-or-later,
+https://github.com/fribidi/fribidi). Their license texts ship inside the
+artifacts under META-INF/licenses/kiteplayer-libass/. FriBidi's LGPL terms
+apply to those artifacts; its source is the tagged upstream release, and the
+archives are built by KiteFFmpeg's buildAssChainFor* tasks and published as
+release assets of that repository.

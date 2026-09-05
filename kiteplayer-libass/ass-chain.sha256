@@ -1,0 +1,13 @@
+# SHA-256 pins of the ass-chain release assets, one per line: <sha256>  ass-chain-<target>.zip
+# The assets hang off the KiteFFmpeg release named in build.gradle.kts (assChainReleaseTag). A build
+# with no local chain for a target downloads the asset and refuses a digest that differs.
+# Produced by KiteFFmpeg's scripts/package-ass-chain.sh; a rebuilt chain means a new line here.
+1252e814863ff8a45bd848d3e6ebb06eb03dcafda9e7451e4dbbc41045c3c3dc  ass-chain-android-arm32.zip
+a7f38b50eecf7a174f3110b0f14d0c5beb5da584c8e4189084b7a9fafd70578e  ass-chain-android-arm64.zip
+b1a5fa54c6c4c623812a87f140761815c7ea5e10496b50331f1c832e20e7596d  ass-chain-android-x64.zip
+1b5f6c2dec0f5584f9e93545e0e5f2ba57f2cf6cec83f5a620b6adfb9fe59f57  ass-chain-ios-arm64.zip
+e24cbd36995b25802d3787409c4a4f4016b940bb3067c2c33586dc172d1dcd04  ass-chain-ios-simulator-arm64.zip
+0d70aa317556d4b9e4da2ac722638994a01a5c22291de498388d9db4719dc0a9  ass-chain-linux-arm64.zip
+374d6cae43eabc3f78b0099172fff4b41849eb14bde80a8ebb8f9169d8f4e6d9  ass-chain-linux-x64.zip
+6556ae0f147a458feda1777efa9c53c2fb5016037e81ff83f7ea3b76efddf173  ass-chain-macos-arm64.zip
+421f8a2fd10ae8b89eb4c08c88d3b2f9e2698da5688472dd2f73dae7157c721d  ass-chain-mingw-x64.zip

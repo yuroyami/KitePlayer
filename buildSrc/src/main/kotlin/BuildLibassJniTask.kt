@@ -1,10 +1,13 @@
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.provider.ListProperty
+import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -30,10 +33,23 @@ abstract class BuildLibassJniTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val sourceFile: org.gradle.api.file.RegularFileProperty
 
-    /** A KiteFFmpeg `native-libs/deps` tree holding `<target>/ass-chain` installs. */
-    @get:InputDirectory
+    /** `native/src`, for kite_ass.h and libass_pack_limits.h beside the adapter source. */
+    @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val assChainRoot: DirectoryProperty
+    abstract val driverHeaders: ConfigurableFileCollection
+
+    /** The ABI directory names to build, a subset of [ABIS]: only the ones whose chain exists. */
+    @get:Input
+    abstract val abis: ListProperty<String>
+
+    /** ABI directory name to the absolute path of that ABI's `ass-chain` directory. */
+    @get:Input
+    abstract val chainDirs: MapProperty<String, String>
+
+    /** The chain archives, so a rebuilt chain makes this task out of date. */
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val chainArchives: ConfigurableFileCollection
 
     /** The Android NDK, which supplies both the compiler and `jni.h`. */
     @get:Input
@@ -54,17 +70,21 @@ abstract class BuildLibassJniTask : DefaultTask() {
             .listFiles()?.firstOrNull { it.isDirectory }?.resolve("bin")
             ?: throw GradleException("No prebuilt NDK toolchain under ${ndkDirectory.get()}")
         val source = sourceFile.get().asFile
-        val depsRoot = assChainRoot.get().asFile
         val output = outputDir.get().asFile
         output.deleteRecursively()
+        val wanted = abis.get().toSet()
+        if (wanted.isEmpty()) throw GradleException("BuildLibassJniTask was given no ABI to build.")
 
-        ABIS.forEach { abi ->
-            val chain = depsRoot.resolve("${abi.depsDirName}/ass-chain")
+        ABIS.filter { it.abiDirName in wanted }.forEach { abi ->
+            val chain = File(
+                chainDirs.get()[abi.abiDirName]
+                    ?: throw GradleException("No ass chain directory was given for ${abi.abiDirName}."),
+            )
             val chainLib = chain.resolve("lib")
             if (!chainLib.resolve("libass.a").isFile) {
                 throw GradleException(
                     "No ass chain for ${abi.depsDirName}: ${chainLib}/libass.a is missing. Run " +
-                        "KiteFFmpeg's :kiteffmpeg-core:buildAssChainFor${abi.gradleSuffix} first.",
+                        "KiteFFmpeg's :kiteffmpeg:buildAssChainFor${abi.gradleSuffix} first.",
                 )
             }
             // clang++ rather than clang, because harfbuzz is C++ and something has to carry the
@@ -85,6 +105,7 @@ abstract class BuildLibassJniTask : DefaultTask() {
                 // infer the language from the extension, clang++ would compile this file as C++,
                 // where `JNIEnv` is a class and every `(*env)->Call(env, ...)` stops compiling.
                 "-x", "c", source.absolutePath, "-x", "none",
+                "-I", source.parentFile.absolutePath,
                 "-I", chain.resolve("include").absolutePath,
                 // The chain, dependents first, in a group: harfbuzz and freetype reference each
                 // other and one left-to-right pass cannot close that cycle.
@@ -124,12 +145,14 @@ abstract class BuildLibassJniTask : DefaultTask() {
 
     companion object {
         /**
-         * The two ABIs this project builds an ass chain for. armeabi-v7a and x86 are absent for the
-         * same reason they are absent from the chain: nothing has cross-built them, and an ABI
-         * directory with no library in it is worse than no ABI directory at all.
+         * Every ABI an ass chain can exist for. Which of them a build actually produces is decided
+         * by the build script from the chains it finds: an ABI directory with no library in it is
+         * worse than no ABI directory at all. x86 is absent because the sibling has no cross-build
+         * target for it.
          */
         val ABIS: List<AndroidAbi> = listOf(
             AndroidAbi("arm64-v8a", "aarch64-linux-android24", "android-arm64", "AndroidArm64"),
+            AndroidAbi("armeabi-v7a", "armv7a-linux-androideabi24", "android-arm32", "AndroidArm32"),
             AndroidAbi("x86_64", "x86_64-linux-android24", "android-x64", "AndroidX64"),
         )
 

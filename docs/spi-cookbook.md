@@ -91,6 +91,21 @@ assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
 A new backend can be developed the same way: point the harness at yours, keep the ledger at
 zero, and the engine's own suites become your conformance tests.
 
+## A subtitle typesetter
+
+`SubtitleTypesetter` is the other optional seam, and `kiteplayer-libass` is its one implementation.
+Implement the interface, wrap it in a `SubtitleTypesetterProvider` with a stable id, and install
+the provider the way the transport providers install: a `META-INF/services` entry on the JVM and
+Android, an eagerly initialised `SubtitleTypesetters.register(...)` on native and the web.
+
+The engine calls every member from one lane and never concurrently, so hold no lock. It opens a
+track from the container header or a whole script, adds one event per packet in the Matroska
+form, clears events on a seek, and renders once per video frame while playing. Answer `null` from
+`render` when the picture is what it was; the engine republishes nothing for that answer, which is
+what keeps the cadence cheap. Answer an empty list when the picture became nothing. The images you
+return are positioned in the output surface's pixels and are owned by the engine from then on, so
+never reuse their byte arrays.
+
 ## Diagnostics
 
 Implement `describeForDiagnostics()` to echo whatever configuration your backend carries; the

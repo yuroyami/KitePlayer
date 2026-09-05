@@ -10,7 +10,85 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
-Nothing yet.
+The 0.0.23 changes below are prepared but have not been published.
+
+## [0.0.23] - Unreleased
+
+The default playback packages now include HTTP/HTTPS transport and the libass subtitle
+typesetter. Compose applications can use one complete dependency, while custom applications can
+select presentation independently. KiteFFmpeg stays at 0.2.0.
+
+ASS and SSA subtitles now render through libass on Android, iOS, macOS, Linux, Windows and the
+desktop JVM: moving signs, animated transforms, karaoke fills, clips and drawings all draw as
+authored, and they re-render every video frame while they move. Fonts attached to a Matroska file
+are loaded for the track, and an application can add its own. The built-in Kotlin styling remains
+the fallback where no typesetter is installed, and for the web, whose libass build is tracked
+separately.
+
+### Upgrading from 0.0.22
+
+- For complete Compose playback, use `io.github.yuroyami:kiteplayer-compose:0.0.23`.
+  `kiteplayer-compose-ui` now supplies presentation only. Existing consumers that also use the
+  default factory must switch to `kiteplayer-compose` or add `kiteplayer` alongside the UI module.
+- `kiteplayer-mobile` remains a convenience alias. Default factory and renderer binding package
+  names are preserved even though their implementations moved into dedicated modules.
+- `NetworkConfig` gains `autoResolve`, default true, changing generated data-class method
+  signatures. Recompile consumers. Set it false to preserve backend-only URI handling when no
+  explicit resolver is configured.
+- `MediaIoResolver` keeps its original abstract method and gains a default overload accepting
+  per-item headers. Existing Kotlin implementations remain source compatible; recompile them.
+- Installed transport providers are selected automatically by both default and direct core
+  factories. Explicit byte sources and resolvers retain precedence. Native/web discovery depends
+  on the pinned Kotlin toolchain and its initialization behavior.
+- `kiteplayer-libass` is now published and included by `kiteplayer`, `kiteplayer-mobile` and
+  `kiteplayer-compose`. An ASS or SSA track is typeset by libass when the module is present.
+  `SubtitleConfig.typesetting = false` keeps the built-in styling. `SubtitleConfig` also gains
+  `fonts`, and `PlayerSnapshot` gains `subtitleTypesetter`; both change generated data-class
+  method signatures, so recompile consumers.
+- `SubtitleStyleOverride` does not apply to a typeset ASS track. The authored typesetting is drawn
+  as written; the viewer's size (`setSubtitleScale`) and position (`setSubtitlePosition`) still apply.
+- The desktop JVM jar bundles the libass adapter for macOS arm64, Linux x64, Linux arm64 and
+  Windows x64. On another desktop the player warns once with `TypesetterUnavailable` and keeps
+  the built-in styling.
+
+### Added
+
+- `kiteplayer`, the complete non-Compose playback entry point, and `kiteplayer-view-bindings`,
+  which supplies renderer adapters without depending on playback construction or networking.
+- Publishable `kiteplayer-network` artifacts and automatic HTTP/HTTPS provider registration.
+- An opt-out for automatic transport discovery and per-item header forwarding to resolvers.
+- `kiteplayer-libass`, published for Android (arm64-v8a, armeabi-v7a, x86_64), iOS, macOS,
+  Linux, Windows and the desktop JVM, with libass 0.17.4, HarfBuzz, FreeType and FriBidi linked
+  in. Typeset ASS tracks re-render per video frame, so animated typesetting moves (#37, #38, #39).
+- `SubtitleTypesetter`, `SubtitleTypesetterProvider` and `SubtitleTypesetters` in the core
+  service interfaces, so another typesetting engine can be installed the same way.
+- `PlayerMediaSource.attachments` and `MediaAttachment`: the FFmpeg source exposes Matroska
+  attachments, and attached fonts reach the typesetter before the track opens.
+- `SubtitleConfig.typesetting`, `SubtitleConfig.fonts` and `SubtitleFont` for opting out of
+  typesetting and for supplying fonts from the application.
+- `PlayerSnapshot.subtitleTypesetter` names the engine drawing the selected subtitle track.
+- A typesetting corpus test that renders each script whole and streamed and requires identical
+  bytes, the exit criterion of the libass work (#40).
+
+### Changed
+
+- `kiteplayer-compose` is the recommended complete Compose entry point, including playback,
+  networking, both renderers and their switcher. Android apps can still use XML views alongside it.
+- `kiteplayer-compose-ui` no longer pulls in the default player factory or network stack.
+- Automatic HTTP readers own their clients, including cleanup after a failed open.
+- Installation examples identify alternative entry points and explain the subtitle dependency path.
+- The libass module's C driver is shared by every binding, so the Kotlin/Native, JNI and future
+  web paths cannot disagree about a pixel; the change detection now also notices a picture that
+  emptied or came back, which libass' own verdict does not report after a cleared track.
+- API documentation still builds on push; website deployment now requires an explicit workflow run.
+
+### Fixed
+
+- URLs without a path hide their hostname and embedded credentials in diagnostic output (#115).
+- Replacing a sleep timer during its fade restores normal volume (#121).
+- SRT/WebVTT files with many zero or reversed duration cues avoid quadratic processing while
+  preserving their repaired cue timing (#120).
+- Per-item HTTP headers reach the automatically selected HTTPS transport (#49).
 
 ## [0.0.22] - 2026-09-04
 

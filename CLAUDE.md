@@ -281,3 +281,17 @@ Do not reopen these without new evidence.
   offers it on a home-screen selector; another engine is its default on Android.
 - Pulling logs off an iPhone for that application uses the device control command with the
   application data container domain, and an in-room setting adds one statistics line per tick.
+
+## The 0.0.23 module boundary
+
+The agreed entry-point and automatic-transport contract is in `docs/module-contract.md`.
+`kiteplayer` owns default construction; `kiteplayer-mobile` reexports it. The complete Compose
+entry point is `kiteplayer-compose`; `kiteplayer-compose-ui` only supplies presentation.
+FFmpeg/native view adapters live in `kiteplayer-view-bindings`, below both construction and
+Compose. Their existing package names stay compatible.
+
+Network provider discovery lives below direct core creation. Explicit item IO and configured
+resolvers win, including a configured resolver that returns null. `NetworkConfig.autoResolve`
+turns automatic discovery off. The automatic provider uses reader-owned clients; merely creating
+a player allocates no HTTP client. Native/web eager registration is toolchain-sensitive, so test
+optimized consumers that reference no network symbol. Libass remains separate unfinished work.

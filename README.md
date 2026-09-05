@@ -4,8 +4,8 @@ A media player for Kotlin Multiplatform, written in Kotlin from the ground up.
 
 It does not wrap ExoPlayer, AVPlayer or libmpv. The playback engine is pure Kotlin in `commonMain`,
 so it behaves the same wherever it runs: the same seek logic, the same A/V sync, the same state
-machine on every platform. Only three things are platform-specific: the audio device, the video
-surface, and the decoder.
+machine on every platform. Platform code supplies the audio devices, video surfaces, decoders
+and optional network transport.
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
@@ -16,57 +16,95 @@ surface, and the decoder.
 
 ## Install
 
-Everything is on Maven Central under `io.github.yuroyami`, and goes in `commonMain.dependencies`.
+This branch prepares **0.0.23**. It has not been published yet; Maven Central currently serves
+0.0.22. The declarations below describe the prepared 0.0.23 module contract.
+
+Choose one entry point under `io.github.yuroyami`. KMP applications put it in
+`commonMain.dependencies`; Android-only applications use their normal `dependencies` block.
 
 ```kotlin
-// Android + iOS, the default stack: player, decoders, audio, native video view.
-implementation("io.github.yuroyami:kiteplayer-mobile:0.0.22")
+// Complete Compose setup: player, codecs, audio, HTTP/HTTPS and both video rendering paths.
+implementation("io.github.yuroyami:kiteplayer-compose:0.0.23")
+```
+
+For native views without Compose, choose one of these alternatives:
+
+```kotlin
+// General default playback stack, including native views and HTTP/HTTPS.
+implementation("io.github.yuroyami:kiteplayer:0.0.23")
 ```
 
 ```kotlin
-// Building your UI in Compose? This adds the video composable on top, and lets
-// you switch between native-surface and Compose-drawn rendering at runtime.
-implementation("io.github.yuroyami:kiteplayer-compose-ui:0.0.22")
+// Mobile convenience entry point using that same stack.
+implementation("io.github.yuroyami:kiteplayer-mobile:0.0.23")
 ```
 
-```kotlin
-// Just the engine, bring your own decoder and output. Depends only on coroutines.
-implementation("io.github.yuroyami:kiteplayer-core:0.0.22")
-```
+A Compose application can also use `KitePlayerView` in Android XML. A Compose-only application
+can use the native-surface path through `AndroidView` without writing XML. Both paths remain
+available through `KitePlayerVideo(path = ...)`; choosing an entry point does not force a renderer.
+Gradle selects the platform artifacts needed by the application.
 
-Twelve modules publish in total, two of them the deprecated umbrellas named at the end of
-[Modules](#modules); that section maps each one to what it is for.
+Advanced consumers can choose `kiteplayer-core` and supply backends, or combine `kiteplayer`
+with `kiteplayer-compose-ui` to declare playback and presentation separately. The UI-only module
+includes both renderers and their required frame adapters, but does not include the default player
+factory or HTTP transport. Core stays transitively available because its types occur in renderer APIs.
 
-The API reference for every published module is at https://yuroyami.github.io/KitePlayer/.
+See [Modules](#modules) for the components and [the migration notes](CHANGELOG.md#0023---unreleased)
+when upgrading. The published API reference is at https://yuroyami.github.io/KitePlayer/.
 
 ## Playing a file
 
-```kotlin
-val player = KitePlayer.create(
-    PlayerConfig(
-        backends = Backends(
-            backend = KiteFFmpegMediaBackend(),  // reads and decodes, over KiteFFmpeg
-            output  = AppleOutputBackend,        // the clock and the audio device, paired so they cannot mismatch
-        ),
-    ),
-)
+The complete entry points provide the default factory:
 
-player.attachRenderer(AppKitVideoRenderer(window) { SoftwareConverter.toRgba(it as KiteFFmpegVideoFrame) })
-player.open(MediaItem(path))   // suspends, returns paused with the first frame drawn
-player.play()
-player.seek(5.seconds)         // suspends, completes on the position it landed on
-player.closeAndAwait()         // suspends until teardown is final
+```kotlin
+val player = requireNotNull(KitePlayerPlatform.createOrNull()) {
+    "KitePlayer is unavailable: ${KitePlayerPlatform.availability}"
+}
 ```
 
-That is the whole playback path. Everything else, meaning the demux pump, both decoders, the audio
-feeder, the presentation schedule, the seek machine and the state it publishes, belongs to the
-player.
+In a Compose screen, display that player and open media once its renderer is attached. Opening
+and closing are suspend operations and belong to the screen's playback owner, not to recomposition:
 
-On Android and iOS, `kiteplayer-mobile` builds those backends for you with `mobileBackends()`.
+```kotlin
+KitePlayerVideo(
+    player = player,
+    onRendererAttached = { attached -> /* Signal the owner that media can now be opened. */ },
+)
 
-Backends are named rather than discovered. Kotlin/Native has no classpath service lookup, so the
-alternative would be a reflective search that fails differently on every platform. Naming them
-makes a missing backend a typed configuration error instead of a surprise at the first frame.
+// In the playback owner's coroutine, after the first attachment:
+player.open(MediaItem(pathOrUrl))
+player.play()
+player.seek(5.seconds)
+// When the owner is finished:
+player.closeAndAwait()
+```
+
+For a native view, assign the player and install the provided view renderer binding before opening
+media. The Android binding is `view.installMobileRenderer()`; the view itself can come from XML
+or Kotlin. The same public binding names remain available after moving the implementation out of
+`kiteplayer-mobile`.
+
+Custom assemblies use `KitePlayer.create(PlayerConfig(backends = Backends(backend, output)))`.
+Backend and output selection stay explicit there. Optional transport discovery applies to both
+that factory and the default factory.
+
+## Network transport
+
+The standard playback entry points include `kiteplayer-network`. Adding the network module to a
+custom core assembly enables HTTP/HTTPS automatically; callers do not need to construct a Ktor
+resolver. Android/JVM use the platform trust stack through OkHttp, Apple uses NSURLSession,
+and the browser handles web transport. The Android network artifact supplies the normal internet
+permission through manifest merging. The embedded FFmpeg binary itself has no TLS backend.
+
+The item's own `io` source takes precedence, then an explicitly configured `NetworkConfig.ioResolver`,
+then installed providers when `NetworkConfig.autoResolve` is true. An explicit resolver returning
+null leaves the URI to the backend; it does not activate an automatic replacement. Set
+`autoResolve = false` to disable discovery. Per-item headers reach the selected transport.
+
+Automatic HTTP readers own and close their clients. No client is created merely by constructing a
+player or opening a local file. Custom resolvers retain their documented ownership rules.
+Provider discovery uses platform registration rather than a single portable reflection mechanism;
+the pinned Kotlin toolchain and optimized consumer checks are part of that contract.
 
 ## What you can control
 
@@ -112,7 +150,8 @@ and closing one leaves the other running.
 |---|---|
 | **Plays real media** | macOS arm64, Android (device and emulator), iOS (device and simulator), desktop JVM on macOS arm64, Linux x64 and arm64 |
 | **Builds and links, nothing has run** | Windows x64 |
-| **Compiles only** | iOS x64, tvOS, watchOS, Android native, `js`, `wasmJs`. No playback path exists |
+| **Web implementation** | `wasmJs`: FFmpeg, browser audio and canvas video. Load the codec module before creating a player; browser qualification remains limited. |
+| **Compiles only** | iOS x64, tvOS, watchOS, Android native and `js`. These variants have no default playback assembly. |
 
 Android and iOS are the platforms in daily use: KitePlayer is the engine inside a shipping app, and
 device work goes down to per-frame GPU timings on real handsets. macOS arm64 is the development
@@ -121,6 +160,8 @@ BT.709 and BT.2020 within 2/255 against an independent reference.
 
 Linux plays through Kotlin/Native but has **no audio device sink yet**, so nothing comes out of the
 speakers. Windows cross-compiles and links a complete binary; nobody has run it.
+The pinned KiteFFmpeg 0.2.0 JVM artifact bundles only macOS arm64 JNI. Other desktop JVM
+platforms need a separately supplied native library; the umbrella cannot fill that packaging gap.
 
 Two honest limits on all of it: there is no automated device farm, so device evidence is
 hand-verified rather than green on every push, and no platform has a performance budget or a
@@ -132,8 +173,8 @@ summary. It lists each clip, what was asked of it, and what happened.
 
 ## What is missing
 
-- **Adaptive streaming.** No HLS, no DASH ABR, no caching layer. HTTP and HTTPS playback of a
-  single file works; `kiteplayer-network` is written but unpublished while its API settles.
+- **Adaptive streaming.** HTTP/HTTPS single-file transport and an in-memory byte cache are part
+  of the default stack. Complete HLS/DASH adaptive playback and persistent caching are not.
 - **Audio resampling is interim quality.** Rate conversion is linear interpolation, which dulls the
   top end of music. libswresample replaces it before 1.0. The downmix has no normalisation either,
   so a source loud in several channels at once can clip.
@@ -141,9 +182,9 @@ summary. It lists each clip, what was asked of it, and what happened.
 - **A stable API.** 0.0.x. Public declarations are explicit and checked against committed ABI dumps
   by `checkKotlinAbi`, so a change fails a build here rather than surprising you. That is
   visibility, not a promise.
-- **libass subtitles.** `kiteplayer-libass` gives typesetting-grade ASS rendering and is built for
-  seven target families, but it needs a native chain a consumer cannot easily obtain, so it stays
-  unpublished. The built-in SubStation Alpha support covers dialogue-grade styling.
+- **libass subtitles.** The standalone ASS renderer exists, but normal playback does not call it.
+  Native packaging is incomplete, desktop JVM and web bindings are missing, and the module stays
+  unpublished. The built-in ASS parser supports dialogue styling, not full animated typesetting.
 - **AV1 on the web.** Every native target cross-builds dav1d 1.5.4 with full SIMD, and hardware AV1
   is used where it exists. The wasm build is single-threaded and dav1d requires pthreads, so the
   web has no software AV1.
@@ -152,47 +193,49 @@ summary. It lists each clip, what was asked of it, and what happened.
 
 ## Modules
 
-Take the whole default stack, or one piece.
-
-| Module | What it is for |
+| Module | What it supplies |
 |---|---|
-| `kiteplayer-mobile` | **Start here on Android and iOS.** The default stack: player, decoders, audio, native view, all assembled. `mobileBackends()` builds it. |
-| `kiteplayer-compose-interop` | Compose hosting the *native* view through `AndroidView` or `UIKitView`. Keeps the fast native surface path. |
-| `kiteplayer-compose-video` | Compose drawing the video pixels *itself*, so Compose clip, alpha, transforms and effects apply to them. |
-| `kiteplayer-compose-ui` | Both of the above, chosen at runtime. `KitePlayerVideo(path = ...)` can swap rendering model while media plays. |
-| `kiteplayer-view` | The native widgets alone, no Compose: `KitePlayerView` (Android, XML or code) and `KitePlayerUIView` (UIKit). |
-| `kiteplayer-core` | The engine on its own: player, clock, sync, queues, seek machine, and the interfaces a backend implements. |
-| `kiteplayer-ffmpeg` | The source and decoders over KiteFFmpeg, plus CPU colour conversion. |
-| `kiteplayer-output` | Audio sinks and renderers that talk to an operating system. |
-| `kiteplayer-subtitles` | SubRip, WebVTT and SubStation Alpha parsers, in pure common Kotlin. |
-| `kiteplayer-rt` | The real-time audio core in C: the lock-free ring and the device render callback. |
+| `kiteplayer` | Default construction, core, FFmpeg, output, native view bindings and network. |
+| `kiteplayer-mobile` | Convenience/compatibility alias for that assembly. |
+| `kiteplayer-compose` | Complete playback plus both Compose renderers and the runtime switcher. |
+| `kiteplayer-compose-ui` | Both Compose renderers and switcher, accepting an existing player. |
+| `kiteplayer-compose-interop` | Compose hosting a native video view. |
+| `kiteplayer-compose-video` | Video pixels drawn through Compose, including its FFmpeg frame adapters. |
+| `kiteplayer-view` | Native view widgets and binding contracts, usable without Compose. |
+| `kiteplayer-view-bindings` | FFmpeg/platform adapters for those widgets, without a player factory or networking. |
+| `kiteplayer-core` | Engine, clock, synchronization, selection and service contracts. |
+| `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg; includes the Kotlin subtitle parsers. |
+| `kiteplayer-network` | HTTP/HTTPS byte transport, automatic provider registration and range-based reads. |
+| `kiteplayer-output` | Platform audio output, rendering support and subtitle rasterizers. |
+| `kiteplayer-subtitles` | Kotlin SRT, WebVTT and dialogue-level ASS parsers. |
+| `kiteplayer-rt` | The C real-time audio ring and device callback support. |
 
-Every consumable module publishes a JVM variant so a `commonMain` can depend on it even when the
-consumer also builds a desktop target. On JVM, JS and Wasm those variants are honest placeholders:
-`KitePlayerPlatform.isAvailable` is false and `createOrNull()` returns null, rather than failing at
-the first frame.
+`kiteplayer-phone` remains a deprecated compatibility coordinate. `kiteplayer-compose` is the
+recommended complete Compose entry point again in 0.0.23, rather than a deprecated alias.
 
-`kiteplayer-phone` and `kiteplayer-compose` are deprecated 0.0.2 umbrellas. New code should not use
-them.
+Compose presentation targets Android, iOS arm64/simulator arm64 and desktop JVM. The general
+assembly also retains its Wasm implementation and unavailable JavaScript facade. A resolving
+variant does not by itself establish playback support. Kotlin/Native Linux and Windows have no
+default HTTPS transport in this stack; desktop applications use the JVM target.
 
-**The dependency arrow never points into `kiteplayer-core`.** The core declares interfaces and
-backends implement them, which is what would let a completely different backend, WebCodecs in a
-browser for instance, work without the engine noticing.
+## How subtitles reach the picture
 
-## Why the engine has no platform code
+The FFmpeg backend extracts embedded text subtitle packets and includes `kiteplayer-subtitles`
+for parsing, including external subtitle files. Core selects tracks and schedules the cues.
+The output backend rasterizes text; the native or Compose presentation composites the resulting
+transparent overlays. Applications using a standard entry point do not add the parser separately.
 
-`kiteplayer-core` depends on kotlinx-coroutines and atomicfu, and nothing else. It calls no
-platform API and holds exactly one `expect` declaration: an internal one asking each target for the
-threads the player confines its workers to, because a single-thread dispatcher is not something a
-target-free source set can build.
+The optional libass work will supply typesetting-grade ASS images to that same overlay path.
+It still needs persistent clock-driven playback integration, seeking, track/font handling and
+self-contained artifacts. Adding its current unpublished module does not enable full ASS playback.
+That integration is separate from 0.0.23.
 
-Three things follow:
+## How the core stays independent
 
-1. It compiles for all 21 targets its build file declares.
-2. Its whole behaviour is testable against a clock the test controls, so the engine suite runs in
-   milliseconds and runs identically on JVM and Kotlin/Native.
-3. A new platform is reached by implementing four interfaces, not by adding an `actual` to the
-   engine.
+The core declares the interfaces implemented by codecs, output and optional transport providers.
+It does not depend on FFmpeg, Ktor or Compose. Its target-specific pieces supply worker dispatchers
+and transport discovery; playback decisions remain common Kotlin. Native builds also consume the
+small real-time C ring module through the existing explicit boundary.
 
 Time enters through one interface, which is what makes the second point possible:
 

@@ -14,7 +14,7 @@
 #     SIGNING_IN_MEMORY_KEY / SIGNING_IN_MEMORY_KEY_ID / SIGNING_IN_MEMORY_KEY_PASSWORD
 #       ASCII-armored GPG key, its id, and the passphrase
 #
-# WHAT IS PUBLISHED. The twelve modules that apply the publish plugin. FFmpeg is NOT built here:
+# WHAT IS PUBLISHED. Every library module that applies the publish plugin. FFmpeg is NOT built here:
 # KitePlayer resolves io.github.yuroyami:kiteffmpeg from Central and that artifact carries FFmpeg
 # inside it, so this workflow needs no vendored tree and no emscripten.
 #
@@ -66,7 +66,7 @@ jobs:
           echo "Publishing version ${gradle_version}"
 
   publish:
-    name: 12 modules → Maven Central
+    name: Publishing modules → Maven Central
     needs: check-version
     runs-on: macos-latest
     timeout-minutes: 90

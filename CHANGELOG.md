@@ -10,7 +10,53 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
-Nothing yet.
+The 0.0.23 changes below are prepared but have not been published.
+
+## [0.0.23] - Unreleased
+
+The default playback packages now include HTTP/HTTPS transport. Compose applications can use
+one complete dependency, while custom applications can select presentation independently.
+KiteFFmpeg stays at 0.2.0. No libass integration or publication is part of this version.
+
+### Upgrading from 0.0.22
+
+- For complete Compose playback, use `io.github.yuroyami:kiteplayer-compose:0.0.23`.
+  `kiteplayer-compose-ui` now supplies presentation only. Existing consumers that also use the
+  default factory must switch to `kiteplayer-compose` or add `kiteplayer` alongside the UI module.
+- `kiteplayer-mobile` remains a convenience alias. Default factory and renderer binding package
+  names are preserved even though their implementations moved into dedicated modules.
+- `NetworkConfig` gains `autoResolve`, default true, changing generated data-class method
+  signatures. Recompile consumers. Set it false to preserve backend-only URI handling when no
+  explicit resolver is configured.
+- `MediaIoResolver` keeps its original abstract method and gains a default overload accepting
+  per-item headers. Existing Kotlin implementations remain source compatible; recompile them.
+- Installed transport providers are selected automatically by both default and direct core
+  factories. Explicit byte sources and resolvers retain precedence. Native/web discovery depends
+  on the pinned Kotlin toolchain and its initialization behavior.
+
+### Added
+
+- `kiteplayer`, the complete non-Compose playback entry point, and `kiteplayer-view-bindings`,
+  which supplies renderer adapters without depending on playback construction or networking.
+- Publishable `kiteplayer-network` artifacts and automatic HTTP/HTTPS provider registration.
+- An opt-out for automatic transport discovery and per-item header forwarding to resolvers.
+
+### Changed
+
+- `kiteplayer-compose` is the recommended complete Compose entry point, including playback,
+  networking, both renderers and their switcher. Android apps can still use XML views alongside it.
+- `kiteplayer-compose-ui` no longer pulls in the default player factory or network stack.
+- Automatic HTTP readers own their clients, including cleanup after a failed open.
+- Installation examples identify alternative entry points and explain the subtitle dependency path.
+- API documentation builds on push; deployment requires an explicit manual workflow dispatch.
+
+### Fixed
+
+- URLs without a path hide their hostname and embedded credentials in diagnostic output (#115).
+- Replacing a sleep timer during its fade restores normal volume (#121).
+- SRT/WebVTT files with many zero or reversed duration cues avoid quadratic processing while
+  preserving their repaired cue timing (#120).
+- Per-item HTTP headers reach the automatically selected HTTPS transport (#49).
 
 ## [0.0.22] - 2026-09-04
 

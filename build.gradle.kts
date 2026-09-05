@@ -13,7 +13,7 @@ plugins {
     alias(libs.plugins.android.kmp.library).apply(false)
     // The plain application plugin, for :kiteplayer-sample-android only (S1.c.6 step 1).
     alias(libs.plugins.android.application).apply(false)
-    // Shared by the native-view interop and true Compose-rendering artifacts. The deprecated
+    // Shared by the native-view interop and true Compose-rendering artifacts. The complete
     // :kiteplayer-compose umbrella applies neither plugin because it only re-exports them.
     alias(libs.plugins.kotlin.compose).apply(false)
     alias(libs.plugins.compose.multiplatform).apply(false)
@@ -169,9 +169,13 @@ dependencies {
     dokka(project(":kiteplayer-output"))
     dokka(project(":kiteplayer-subtitles"))
     dokka(project(":kiteplayer-view"))
+    dokka(project(":kiteplayer-view-bindings"))
+    dokka(project(":kiteplayer"))
     dokka(project(":kiteplayer-mobile"))
     dokka(project(":kiteplayer-compose-interop"))
     dokka(project(":kiteplayer-compose-video"))
+    dokka(project(":kiteplayer-compose-ui"))
+    dokka(project(":kiteplayer-network"))
     dokka(project(":kiteplayer-phone"))
     dokka(project(":kiteplayer-compose"))
 }

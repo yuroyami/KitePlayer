@@ -8,12 +8,11 @@ plugins {
 /*
  * :kiteplayer-view owns the native presentation widgets. KitePlayerView is a normal Android View
  * usable from XML, Java/Kotlin, or AndroidView; KitePlayerUIView is the UIKit twin. Compose-free
- * by construction. Renderer adapters are injected by :kiteplayer-mobile or by the application,
+ * by construction. Renderer adapters are injected by :kiteplayer-view-bindings or by the application,
  * so custom media backends never encounter a hidden KiteFFmpeg frame cast in this module.
  *
- * The JVM target publishes the common surface only, no widget: it exists so a consumer whose
- * commonMain depends on this module (directly or through an umbrella) still resolves when that
- * consumer also compiles a desktop target.
+ * The JVM target owns the AWT video view. All widgets accept renderer adapters, keeping this
+ * module independent of the media backend and automatic network transport.
  */
 kotlin {
     explicitApi()

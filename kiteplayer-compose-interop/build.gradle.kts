@@ -12,9 +12,9 @@ plugins {
 
 /*
  * :kiteplayer-compose-interop is deliberately tiny: AndroidView over KitePlayerView and UIKitView
- * over KitePlayerUIView. JVM, JS and Wasm publish an empty layout-preserving surface while
- * KitePlayerPlatform reports playback unavailable. The native views remain usable without
- * Compose, including Android XML; true Compose drawing lives in compose-video.
+ * over KitePlayerUIView, with SwingPanel hosting the desktop view. JS and Wasm keep an empty
+ * layout-preserving surface. The adapter dependency contains no player factory or transport;
+ * native views remain usable without Compose and true Compose drawing lives in compose-video.
  */
 kotlin {
     explicitApi()
@@ -52,9 +52,15 @@ kotlin {
             api(project(":kiteplayer-core"))
             api(compose.runtime)
             api(compose.ui)
-            // Re-export the matching default platform facade: Compose consumers need one
-            // coordinate for availability, construction and presentation.
-            api(project(":kiteplayer-mobile"))
+        }
+        androidMain.dependencies {
+            implementation(project(":kiteplayer-view-bindings"))
+        }
+        iosMain.dependencies {
+            implementation(project(":kiteplayer-view-bindings"))
+        }
+        jvmMain.dependencies {
+            implementation(project(":kiteplayer-view-bindings"))
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

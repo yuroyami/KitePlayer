@@ -38,8 +38,8 @@ kotlin {
             implementation(project(":kiteplayer-output"))
         }
         iosMain.dependencies {
-            // The mobile aggregate carries the default backend, output and native view.
-            implementation(project(":kiteplayer-mobile"))
+            // The standard runtime carries the default backend, output, network and native view.
+            implementation(project(":kiteplayer"))
         }
     }
 }

@@ -80,26 +80,25 @@ include(":kiteplayer-rt")
 include(":kiteplayer-ffmpeg")
 include(":kiteplayer-output")
 
-// The mobile stack is split by capability. Native views remain Compose-free and work from Android
-// XML/UIKit directly; mobile assembles the default FFmpeg/output/view stack; Compose interop only
-// hosts those views; Compose video draws frames through Compose itself.
+// Native views remain Compose-free. Their FFmpeg adapters stay below the standard runtime so
+// Compose UI can present caller-owned players without selecting a factory or network transport.
 include(":kiteplayer-view")
+include(":kiteplayer-view-bindings")
+include(":kiteplayer")
 include(":kiteplayer-mobile")
 include(":kiteplayer-compose-interop")
 include(":kiteplayer-compose-video")
 include(":kiteplayer-compose-ui")
 
-// Source-compatibility umbrellas for the local 0.0.2 coordinates. New modules never depend on
-// these leaves, so the old packaging cannot dictate the clean target matrices.
+// The legacy phone API remains available; Compose is the complete runtime + UI entry point.
 include(":kiteplayer-phone")
 include(":kiteplayer-compose")
 include(":kiteplayer-libass")        // optional full ASS renderer (phase L, owner-pulled 2026-08-16)
 // Ktor byte suppliers and the Kotlin adaptive layer (17.12 M1's network half): https with the
 // OS supplying TLS, and DASH manifests parsed in commonMain. Optional; pure Kotlin.
 include(":kiteplayer-network")
-// include(":kiteplayer")            // umbrella artifact
 include(":kiteplayer-sample")
-// The Android assembly and XML-inflation proof for :kiteplayer-mobile and :kiteplayer-view.
+// The Android assembly and XML-inflation proof using the complete Compose entry point.
 include(":kiteplayer-sample-android")
 // The Compose Desktop assembly and the upload measurement harness. It is the only
 // place where the desktop JVM backend, the desktop output half and KiteVideo all run at once,

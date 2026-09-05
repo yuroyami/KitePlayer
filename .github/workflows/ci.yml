@@ -28,7 +28,7 @@
 #   - `:kiteplayer-ffmpeg` on the iOS simulator: RealMediaSeekTest cannot see the host's testmedia
 #     tree through the simctl spawn boundary, and VideoToolboxDecodeTest needs hardware the
 #     simulator does not have. Four failures, all environment.
-#   - `:kiteplayer-mobile` on wasmJs. Not a gap in the runner: that module has NO shared test
+#   - `:kiteplayer` on wasmJs. Not a gap in the runner: that module has NO shared test
 #     sources at all, only jvmTest and androidHostTest, so its wasmJs test task is NO-SOURCE and
 #     naming it here would widen the job on paper and not in fact. It is tracked with the other
 #     source-less modules. Its wasmJs MAIN code is compiled by the build job.
@@ -187,7 +187,7 @@ jobs:
           ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
           ./scripts/check-dependency-hygiene.sh
 
-      # Every module that HAS jvm tests. The three that need the clips (ffmpeg, mobile,
+      # Every module that HAS jvm tests. The three that need the clips (ffmpeg, kiteplayer,
       # compose-video) are here rather than on Linux for the generator reason above.
       #
       # `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` were in this
@@ -204,8 +204,9 @@ jobs:
             :kiteplayer-view:jvmTest \
             :kiteplayer-network:jvmTest \
             :kiteplayer-ffmpeg:jvmTest \
-            :kiteplayer-mobile:jvmTest \
-            :kiteplayer-compose-video:jvmTest
+            :kiteplayer:jvmTest \
+            :kiteplayer-compose-video:jvmTest \
+            :kiteplayer-compose-ui:jvmTest
 
       # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the 17.5 format matrix against
       # real clips.

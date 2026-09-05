@@ -12,7 +12,7 @@ import io.github.yuroyami.kiteplayer.KitePlayer
  * `AndroidView`; on iOS an `io.github.yuroyami.kiteplayer.view.KitePlayerUIView` through
  * `UIKitView`. The picture is presented by the platform's own compositor, which is why this is
  * the path for sustained fullscreen playback: the display controller shows the video while the
- * GPU idles. The default renderer adapter is installed from `kiteplayer-mobile`; the widget
+ * GPU idles. The default renderer adapter is installed from `kiteplayer-view-bindings`; the widget
  * itself remains backend-agnostic in `kiteplayer-view`.
  *
  * The trade is the classic interop hole: the video is not Compose content, so Compose clip,

@@ -181,8 +181,9 @@ summary. It lists each clip, what was asked of it, and what happened.
 - **A stable API.** 0.0.x. Public declarations are explicit and checked against committed ABI dumps
   by `checkKotlinAbi`, so a change fails a build here rather than surprising you. That is
   visibility, not a promise.
-- **libass on the web.** Every other target typesets ASS through libass. The browser build of the
-  chain is separate work, tracked in the issue tracker; the web keeps the built-in styling.
+- **Subtitles on the web without fonts.** libass typesets there too, but a browser has no system
+  font: a track renders only with fonts the container attaches, the script embeds, or the
+  application supplies through `SubtitleConfig.fonts`.
 - **AV1 on the web.** Every native target cross-builds dav1d 1.5.4 with full SIMD, and hardware AV1
   is used where it exists. The wasm build is single-threaded and dav1d requires pthreads, so the
   web has no software AV1.
@@ -235,6 +236,11 @@ Android and Linux the module also loads a bounded set of the system's font files
 no font provider there. `SubtitleConfig.typesetting = false` keeps the built-in styling, and
 `PlayerSnapshot.subtitleTypesetter` says which engine is drawing. Only the primary subtitle track
 is typeset; a secondary track rides the built-in styling at the top of the picture.
+
+On the web libass is a separate module, `kiteass.mjs` with `kiteass.wasm`, hosted by the page like
+the codec module. The two files come as the `web` zip attached to the wasmJs artifact; unpack them
+beside `index.html`. The first ASS track loads `./kiteass.mjs`; a page that hosts it elsewhere calls
+`KiteLibassWeb.load(url)` first.
 
 ## How the core stays independent
 

@@ -56,3 +56,15 @@ final object io.github.yuroyami.kiteplayer.libass/KiteLibass { // io.github.yuro
     final fun isAvailable(): kotlin/Boolean // io.github.yuroyami.kiteplayer.libass/KiteLibass.isAvailable|isAvailable(){}[0]
     final fun libraryVersion(): kotlin/Int // io.github.yuroyami.kiteplayer.libass/KiteLibass.libraryVersion|libraryVersion(){}[0]
 }
+
+// Targets: [wasmJs]
+final object io.github.yuroyami.kiteplayer.libass/KiteLibassWeb { // io.github.yuroyami.kiteplayer.libass/KiteLibassWeb|null[0]
+    final const val DEFAULT_URL // io.github.yuroyami.kiteplayer.libass/KiteLibassWeb.DEFAULT_URL|{}DEFAULT_URL[0]
+        final fun <get-DEFAULT_URL>(): kotlin/String // io.github.yuroyami.kiteplayer.libass/KiteLibassWeb.DEFAULT_URL.<get-DEFAULT_URL>|<get-DEFAULT_URL>(){}[0]
+
+    final val isLoaded // io.github.yuroyami.kiteplayer.libass/KiteLibassWeb.isLoaded|{}isLoaded[0]
+        final fun <get-isLoaded>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.libass/KiteLibassWeb.isLoaded.<get-isLoaded>|<get-isLoaded>(){}[0]
+
+    final fun attach(kotlin.js/JsAny) // io.github.yuroyami.kiteplayer.libass/KiteLibassWeb.attach|attach(kotlin.js.JsAny){}[0]
+    final suspend fun load(kotlin/String = ...) // io.github.yuroyami.kiteplayer.libass/KiteLibassWeb.load|load(kotlin.String){}[0]
+}

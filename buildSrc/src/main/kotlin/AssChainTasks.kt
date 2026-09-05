@@ -409,3 +409,87 @@ abstract class BuildLibassHostJniTask @Inject constructor(
         )
     }
 }
+
+/**
+ * Links the web module, `kiteass.mjs` plus `kiteass.wasm`, from the shared C driver's export table
+ * and the wasm32 chain, with emscripten.
+ *
+ * The module is what a page hosts beside the codec module; the Kotlin/Wasm binding imports it at
+ * run time and never bundles it. Single-threaded, no SIMD, no cross-origin isolation requirement,
+ * exactly the codec's default artifact policy: a module that hangs on an embedder's site is worse
+ * than a slower one. Every 64-bit quantity crosses as a double, so the big-integer flag is not
+ * needed and cannot be forgotten.
+ */
+abstract class BuildLibassWasmModuleTask @Inject constructor(
+    private val execOperations: ExecOperations,
+) : DefaultTask() {
+
+    /** `native/src/kite_ass_wasm.c`. */
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sourceFile: RegularFileProperty
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val driverDir: DirectoryProperty
+
+    /** The wasm32 chain's `ass-chain` directory, holding `include` and `lib`. */
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val chainDir: DirectoryProperty
+
+    @get:Input
+    abstract val emcc: Property<String>
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    init {
+        group = "kiteplayer"
+        description = "Link the libass web module (kiteass.mjs and kiteass.wasm) with emscripten."
+    }
+
+    @TaskAction
+    fun link() {
+        val out = outputDir.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        val chain = chainDir.get().asFile
+        val lib = chain.resolve("lib")
+        MergeAssChainTask.MEMBERS.forEach { member ->
+            if (!lib.resolve("$member.a").isFile) throw GradleException("The wasm32 chain at $chain has no lib/$member.a.")
+        }
+        val command = listOf(
+            emcc.get(), "-O2",
+            "-I${driverDir.get().asFile.absolutePath}",
+            "-I${chain.resolve("include").absolutePath}",
+            "-x", "c", sourceFile.get().asFile.absolutePath, "-x", "none",
+        ) + MergeAssChainTask.MEMBERS.map { lib.resolve("$it.a").absolutePath } + listOf(
+            "-sMODULARIZE=1", "-sEXPORT_ES6=1", "-sENVIRONMENT=web,worker,node",
+            "-sALLOW_MEMORY_GROWTH=1", "-sSTACK_SIZE=1048576",
+            "-sEXPORTED_FUNCTIONS=${EXPORTS.joinToString(",")}",
+            "-sEXPORTED_RUNTIME_METHODS=HEAPU8",
+            "-o", out.resolve(MODULE_NAME).absolutePath,
+        )
+        logger.info("[kiteplayer-libass] " + command.joinToString(" "))
+        execOperations.exec { commandLine(command) }
+        val wasm = out.resolve(WASM_NAME)
+        if (!out.resolve(MODULE_NAME).isFile || !wasm.isFile) {
+            throw GradleException("emcc reported success but produced no $MODULE_NAME and $WASM_NAME in $out.")
+        }
+        logger.lifecycle("[kiteplayer-libass] web: $MODULE_NAME + $WASM_NAME (${wasm.length()} bytes)")
+    }
+
+    companion object {
+        const val MODULE_NAME: String = "kiteass.mjs"
+        const val WASM_NAME: String = "kiteass.wasm"
+
+        /** Every export the Kotlin/Wasm binding calls, plus the allocator it fills buffers with. */
+        val EXPORTS: List<String> = listOf(
+            "_kass_library_version", "_kass_open", "_kass_close", "_kass_alloc", "_kass_free",
+            "_kass_open_track", "_kass_open_document", "_kass_add_event", "_kass_clear_events",
+            "_kass_add_font", "_kass_set_frame", "_kass_render", "_kass_packed_ptr", "_kass_packed_size",
+            "_malloc", "_free",
+        )
+    }
+}

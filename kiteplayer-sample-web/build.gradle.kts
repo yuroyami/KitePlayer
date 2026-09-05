@@ -11,6 +11,14 @@ plugins {
  *
  * An application, not a library: no explicitApi, no ABI dump, nothing published.
  */
+// The libass web module is hosted by the page, not inherited from the library: copy the two files
+// this build produced beside index.html, where the first ASS track looks for ./kiteass.mjs.
+val libassModuleDir = project(":kiteplayer-libass").layout.buildDirectory.dir("kiteass")
+tasks.matching { it.name == "wasmJsProcessResources" }.configureEach {
+    (this as ProcessResources).from(libassModuleDir)
+    project(":kiteplayer-libass").tasks.matching { it.name == "buildLibassWasmModule" }.forEach { dependsOn(it) }
+}
+
 kotlin {
     wasmJs {
         browser()

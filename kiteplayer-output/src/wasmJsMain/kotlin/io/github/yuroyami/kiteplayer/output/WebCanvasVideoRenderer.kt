@@ -158,10 +158,11 @@ public class WebCanvasVideoRenderer(
      * They are laid out for the viewport already, which is what `SubtitleOverlay` carrying its own
      * viewport size means, so rotating or zooming them with the video would rotate the text too.
      *
-     * Uploaded only when [SubtitleOverlay.contentHash] changes. That is not an optimisation to skip
-     * later, it is what makes overlays affordable here: their pixels are a Kotlin `ByteArray`, so
-     * they cross one byte per JS call, and a cue redrawn every frame would cost more than the video.
-     * Cues change about once a second and frames arrive sixty times a second.
+     * Uploaded only when [SubtitleOverlay.contentHash] changes, and each image crosses in ONE call:
+     * its pixels are a Kotlin `ByteArray`, and Kotlin/Wasm has no typed-array bridge, so the bytes
+     * travel as a Latin-1 string and one JS loop writes them into the ImageData. This used to cross
+     * one byte per JS call, which was tolerable for a cue a second and not for typesetting that
+     * re-renders every frame while a sign moves.
      */
     private fun drawOverlay(s: JsAny) {
         val current = overlay
@@ -178,7 +179,9 @@ public class WebCanvasVideoRenderer(
                 val bitmap = image.bitmap
                 val handle = webOverlayImage(s, bitmap.width, bitmap.height, image.x, image.y)
                 val bytes = bitmap.width * bitmap.height * 4
-                for (i in 0 until bytes) webOverlayByte(handle, i, bitmap.pixels[i].toInt() and 0xFF)
+                val packed = StringBuilder(bytes)
+                for (i in 0 until bytes) packed.append((bitmap.pixels[i].toInt() and 0xFF).toChar())
+                webOverlayBytes(handle, packed.toString())
                 webOverlayCommit(s, handle)
             }
             overlayHash = current.contentHash
@@ -336,8 +339,9 @@ private external fun webBeginOverlay(state: JsAny, count: Int)
 )
 private external fun webOverlayImage(state: JsAny, width: Int, height: Int, x: Int, y: Int): JsAny?
 
-@JsFun("(h, i, v) => { if (h) h.image.data[i] = v; }")
-private external fun webOverlayByte(handle: JsAny?, index: Int, value: Int)
+// Latin-1 by construction: every byte is one code unit below 0x100, so no encoding step can touch it.
+@JsFun("(h, s) => { if (h) { const d = h.image.data; const n = Math.min(s.length, d.length); for (let i = 0; i < n; i++) d[i] = s.charCodeAt(i); } }")
+private external fun webOverlayBytes(handle: JsAny?, packed: String)
 
 @JsFun("(s, h) => { if (h) { h.ctx.putImageData(h.image, 0, 0); s.overlay.push(h); } }")
 private external fun webOverlayCommit(state: JsAny, handle: JsAny?)

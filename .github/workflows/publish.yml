@@ -106,6 +106,10 @@ jobs:
       # C tasks in kiteplayer-rt compile with that same LLVM, so on a cold runner they can get
       # there first and die with "No LLVM package with a usable clang". One warmup provisions it.
       # `|| true` because this exists for its side effect; the publish below reports the real result.
+      # kiteplayer-libass links its web module with emscripten; without it the publish below fails
+      # on purpose (requireAllHostJni) rather than shipping a wasmJs artifact with no module.
+      - name: Install emscripten
+        run: brew install emscripten
       - name: Warm the Kotlin/Native toolchain
         run: ./gradlew :kiteplayer-core:compileKotlinMacosArm64 --stacktrace || true
 

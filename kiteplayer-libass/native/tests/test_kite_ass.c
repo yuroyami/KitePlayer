@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static const char *HEADER =
@@ -157,6 +158,39 @@ int main(void) {
         }
         KT_CHECKF(lowest_bottom <= 720 - 90 + 2, "text reached y=%d, past the video area's bottom bar", lowest_bottom);
         KT_CHECKF(lowest_bottom > 360, "text sat at y=%d, above the middle of a bottom-aligned frame", lowest_bottom);
+    }
+
+    kt_case("the family of a real font file is read from its own name table");
+    {
+        FILE *f = fopen("/System/Library/Fonts/Supplemental/Arial.ttf", "rb");
+        if (!f) {
+            kt_note("no Arial.ttf on this host, skipping the name table read");
+        } else {
+            fseek(f, 0, SEEK_END);
+            long n = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            unsigned char *bytes = (unsigned char *) malloc((size_t) n);
+            size_t got = fread(bytes, 1, (size_t) n, f);
+            fclose(f);
+            char family[128] = { 0 };
+            KT_EQ_INT(kite_ass_family_of(bytes, got, family, sizeof(family)), 1);
+            KT_CHECKF(strcmp(family, "Arial") == 0, "read family '%s' from Arial.ttf", family);
+            /* The driver adopts the first loaded family as libass' default family. */
+            kite_ass *fallback = kite_ass_open();
+            kite_ass_add_font(fallback, "Arial.ttf", (const char *) bytes, (int) got);
+            KT_CHECKF(fallback->fallback_family && strcmp(fallback->fallback_family, "Arial") == 0,
+                      "fallback family is '%s'", fallback->fallback_family ? fallback->fallback_family : "(none)");
+            kite_ass_close(fallback);
+            free(bytes);
+        }
+    }
+
+    kt_case("bytes that are not a font yield no family and no crash");
+    {
+        char family[16] = { 0 };
+        const char *junk = "not a font at all, and long enough to be read";
+        KT_EQ_INT(kite_ass_family_of((const unsigned char *) junk, strlen(junk), family, sizeof(family)), 0);
+        KT_EQ_INT(kite_ass_family_of(NULL, 0, family, sizeof(family)), 0);
     }
 
     kt_case("a font added from memory is taken up without a crash");

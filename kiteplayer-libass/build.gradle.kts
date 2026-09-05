@@ -332,6 +332,57 @@ run {
 }
 
 /*
+ * ── The web module: kiteass.mjs and kiteass.wasm, linked with emscripten ──
+ *
+ * The page hosts the two files, the way it hosts the codec module; a browser distribution does
+ * NOT inherit a library's resources, which is why they also travel as the `web` zip attached to
+ * the wasmJs publication (kiteplayer-libass-wasm-js-<version>-web.zip) for a consumer to unpack
+ * beside its own files. They are kept as wasmJs resources too, so this module's own web tests
+ * find them beside the compiled test. Needs emcc on PATH and the wasm32 chain; without either,
+ * the wasmJs variant still resolves and the provider's background load simply finds no module,
+ * which the engine reports as TypesetterUnavailable. -Pkiteplayer.libass.requireAllHostJni=true
+ * turns that skip into a failure, as for the desktops.
+ */
+run {
+    // Through a value source, not ProcessBuilder: the configuration cache refuses an external
+    // process at configuration time, and a value source is re-evaluated when its answer changes.
+    val emcc: String? = providers.exec {
+        commandLine("sh", "-c", "command -v emcc || true")
+    }.standardOutput.asText.get().trim().takeIf { it.isNotEmpty() }
+    val chain = if (emcc != null) chainFor("wasm32") else null
+    val requireAll = providers.gradleProperty("kiteplayer.libass.requireAllHostJni").orNull == "true"
+    if (emcc == null || chain == null) {
+        val why = if (emcc == null) "no emcc on PATH (brew install emscripten)" else "no ass chain for wasm32"
+        if (requireAll) throw GradleException("kiteplayer.libass.requireAllHostJni: cannot link the web module, $why.")
+        logger.lifecycle("[kiteplayer-libass] wasmJs ships NO libass module: $why.")
+    } else {
+        val buildWasm = tasks.register<io.github.yuroyami.kiteplayer.buildtools.BuildLibassWasmModuleTask>("buildLibassWasmModule") {
+            sourceFile.set(project.file("native/src/kite_ass_wasm.c"))
+            driverDir.set(project.file("native/src"))
+            chainDir.set(chain.root)
+            chain.producer?.let { dependsOn(it) }
+            this.emcc.set(emcc)
+            outputDir.set(layout.buildDirectory.dir("kiteass"))
+        }
+        kotlin.sourceSets.getByName("wasmJsMain").resources.srcDir(buildWasm.map { it.outputDir })
+        val webZip = tasks.register<Zip>("kiteassWebZip") {
+            group = "kiteplayer"
+            description = "The libass web module as one zip, attached to the wasmJs publication."
+            from(buildWasm.map { it.outputDir })
+            archiveBaseName.set("kiteplayer-libass-wasm-js")
+            archiveClassifier.set("web")
+            destinationDirectory.set(layout.buildDirectory.dir("kiteass-zip"))
+        }
+        // Attached once the publications exist; the wasmJs one is named after the target.
+        afterEvaluate {
+            extensions.findByType<PublishingExtension>()?.publications
+                ?.matching { it.name == "wasmJs" }
+                ?.configureEach { (this as MavenPublication).artifact(webZip) }
+        }
+    }
+}
+
+/*
  * ── Desktop JVM: one adapter per host whose toolchain this machine has ───
  *
  * macOS links with the host clang, Linux and Windows are cross-linked with konan's clang and

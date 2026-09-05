@@ -48,6 +48,11 @@ typedef struct kite_ass {
 
     /* Fonts arrived since the font selector was built; the next render rebuilds it. */
     int fonts_dirty;
+    /* The family of the first font handed to kite_ass_add_font, read from its own name table.
+     * libass without a system font provider has NO last-resort fallback: a style naming a family
+     * nobody loaded draws nothing, "failed to find any fallback". Passing a loaded family as the
+     * default family is what turns "nothing" into "the first font we were given". */
+    char *fallback_family;
     /* The geometry changed or a track was opened since the last render, so libass' "unchanged"
      * verdict is not to be trusted: it compares against a frame drawn for another world. */
     int force_next;
@@ -67,11 +72,86 @@ static void kite_ass_quiet(int level, const char *fmt, va_list args, void *data)
 
 static inline void kite_ass_apply_fonts(kite_ass *self) {
     /* Provider 1 is ASS_FONTPROVIDER_AUTODETECT: CoreText on Apple, DirectWrite on Windows,
-     * nothing on Android and the Linux chain, which is why fonts arrive through kite_ass_add_font
-     * there. Memory fonts are taken up by this call, so it runs again after a batch of them. */
-    ass_set_fonts(self->renderer, NULL, "sans-serif", ASS_FONTPROVIDER_AUTODETECT, NULL, 1);
+     * nothing on Android, Linux and the web, which is why fonts arrive through kite_ass_add_font
+     * there. Memory fonts are taken up by this call, so it runs again after a batch of them. The
+     * default family is the first loaded font's own family where one exists, "sans-serif" (which
+     * only a system provider can resolve) otherwise. */
+    ass_set_fonts(self->renderer, NULL, self->fallback_family ? self->fallback_family : "sans-serif",
+                  ASS_FONTPROVIDER_AUTODETECT, NULL, 1);
     self->fonts_dirty = 0;
     self->force_next = 1;
+}
+
+static inline uint32_t kite_be32(const unsigned char *p) {
+    return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) | ((uint32_t) p[2] << 8) | (uint32_t) p[3];
+}
+
+static inline uint16_t kite_be16(const unsigned char *p) {
+    return (uint16_t) (((uint16_t) p[0] << 8) | (uint16_t) p[1]);
+}
+
+/*
+ * The family name (name ID 1) of a TrueType, OpenType or collection font, from its own 'name'
+ * table, into out (NUL terminated, ASCII only). Returns 0 when the bytes carry none that this
+ * reader understands. Windows/Unicode English first, Macintosh Roman second; other platforms and
+ * languages are skipped, and a UTF-16 unit above 0xFF is skipped rather than mangled, because the
+ * result is matched against the ASCII family names ASS styles carry.
+ */
+static inline int kite_ass_family_of(const unsigned char *font, size_t size, char *out, size_t out_size) {
+    if (!font || size < 12 || out_size < 2) return 0;
+    size_t base = 0;
+    if (memcmp(font, "ttcf", 4) == 0) {
+        if (size < 16) return 0;
+        base = kite_be32(font + 12);
+        if (base + 12 > size) return 0;
+    }
+    uint16_t tables = kite_be16(font + base + 4);
+    size_t directory = base + 12;
+    size_t name_offset = 0, name_length = 0;
+    for (uint16_t i = 0; i < tables; i++) {
+        size_t record = directory + (size_t) i * 16;
+        if (record + 16 > size) return 0;
+        if (memcmp(font + record, "name", 4) == 0) {
+            name_offset = kite_be32(font + record + 8);
+            name_length = kite_be32(font + record + 12);
+            break;
+        }
+    }
+    if (name_offset == 0 || name_offset + 6 > size || name_length < 6) return 0;
+    const unsigned char *name = font + name_offset;
+    uint16_t count = kite_be16(name + 2);
+    size_t strings = name_offset + kite_be16(name + 4);
+    int best = 0;
+    for (uint16_t i = 0; i < count; i++) {
+        size_t record = name_offset + 6 + (size_t) i * 12;
+        if (record + 12 > size) break;
+        uint16_t platform = kite_be16(name + 6 + (size_t) i * 12);
+        uint16_t encoding = kite_be16(name + 8 + (size_t) i * 12);
+        uint16_t language = kite_be16(name + 10 + (size_t) i * 12);
+        uint16_t name_id = kite_be16(name + 12 + (size_t) i * 12);
+        uint16_t length = kite_be16(name + 14 + (size_t) i * 12);
+        size_t offset = strings + kite_be16(name + 16 + (size_t) i * 12);
+        if (name_id != 1 || offset + length > size || length == 0) continue;
+        int rank = 0;
+        if (platform == 3 && (encoding == 1 || encoding == 0) && (language & 0xFF) == 0x09) rank = 2;
+        else if (platform == 1 && encoding == 0) rank = 1;
+        if (rank <= best) continue;
+        size_t at = 0;
+        const unsigned char *text = font + offset;
+        if (platform == 3) {
+            for (uint16_t u = 0; u + 1 < length && at + 1 < out_size; u += 2) {
+                if (text[u] == 0 && text[u + 1] >= 0x20 && text[u + 1] < 0x7F) out[at++] = (char) text[u + 1];
+            }
+        } else {
+            for (uint16_t u = 0; u < length && at + 1 < out_size; u++) {
+                if (text[u] >= 0x20 && text[u] < 0x7F) out[at++] = (char) text[u];
+            }
+        }
+        if (at == 0) continue;
+        out[at] = '\0';
+        best = rank;
+    }
+    return best > 0;
 }
 
 static inline kite_ass *kite_ass_open(void) {
@@ -95,6 +175,7 @@ static inline void kite_ass_close(kite_ass *self) {
     if (self->track) ass_free_track(self->track);
     if (self->renderer) ass_renderer_done(self->renderer);
     if (self->library) ass_library_done(self->library);
+    free(self->fallback_family);
     free(self->packed);
     free(self);
 }
@@ -149,6 +230,13 @@ static inline void kite_ass_clear_events(kite_ass *self) {
 static inline void kite_ass_add_font(kite_ass *self, const char *name, const char *data, int size) {
     if (!self || !data || size <= 0) return;
     ass_add_font(self->library, name ? name : "", data, size);
+    if (!self->fallback_family) {
+        char family[128];
+        if (kite_ass_family_of((const unsigned char *) data, (size_t) size, family, sizeof(family))) {
+            self->fallback_family = (char *) malloc(strlen(family) + 1);
+            if (self->fallback_family) memcpy(self->fallback_family, family, strlen(family) + 1);
+        }
+    }
     self->fonts_dirty = 1;
 }
 

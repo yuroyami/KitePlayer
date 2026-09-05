@@ -108,7 +108,9 @@ driver suite needs Homebrew's libass and says SKIPPED without it). Docker must b
 simulator runtime must be installed, and the sibling KiteFFmpeg checkout must contain its
 cross-built native libraries for the Linux execution check and its `native-libs/deps/*/ass-chain`
 installs for the libass module; without the sibling, the module downloads the chains from the
-KiteFFmpeg release pinned in `kiteplayer-libass/ass-chain.sha256`.
+KiteFFmpeg release pinned in `kiteplayer-libass/ass-chain.sha256`. The module's web half links
+`kiteass.mjs` with emscripten, so `emcc` must be on PATH (`brew install emscripten`) for the web
+step and for a publish.
 The sample smoke uses the four original house clips; the format-matrix suites cover the wider set.
 The Node gate does not claim browser execution, and Windows links do not claim Windows execution.
 CI runs those environments separately. Distribution-only integration checks remain additional

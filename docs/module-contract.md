@@ -66,8 +66,9 @@ transport providers exactly: `SubtitleTypesetterProvider` through service metada
 Android, eager registration on native, and `SubtitleTypesetters.register` for anyone else. The
 engine routes the primary ASS or SSA track to the installed typesetter, on the raster lane, at
 video frame cadence; `SubtitleConfig.typesetting` turns that off, and a provider that cannot start
-warns once and leaves the Kotlin tier in charge. The module's web variants resolve and install
-nothing, which is the honest answer until the browser chain exists.
+warns once and leaves the Kotlin tier in charge. On the web the engine is a separate wasm module
+the page hosts, delivered as the `web` zip on the wasmJs publication and loaded on first use; the
+js variant resolves and installs nothing.
 
 The existing broad `kiteplayer-compose` coordinate becomes the recommended complete Compose
 entry point. A `kiteplayer-compose-ui` consumer that also needs default construction switches to

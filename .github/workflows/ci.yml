@@ -531,6 +531,11 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      # :kiteplayer-libass's web tests import the real kiteass.mjs, which this job links with
+      # emscripten from the wasm32 chain (downloaded from the KiteFFmpeg release like the others).
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
       # Kotlin/JS and Kotlin/Wasm fetch their own node and yarn into ~/.gradle, then populate
       # node_modules from the committed lockfile. Uncached that is a download plus an install on
       # every single run of this job, which was the largest fixed cost here.
@@ -558,7 +563,8 @@ jobs:
             :kiteplayer-core:wasmJsTest \
             :kiteplayer-subtitles:wasmJsTest \
             :kiteplayer-output:wasmJsTest \
-            :kiteplayer-ffmpeg:wasmJsTest
+            :kiteplayer-ffmpeg:wasmJsTest \
+            :kiteplayer-libass:wasmJsTest
 
       # This was NODE ONLY until 2026-08-30, because the browser half used to abort inside webpack
       # with "RangeError: Invalid array length" while it timestamped a context directory. It no

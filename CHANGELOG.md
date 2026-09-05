@@ -18,12 +18,11 @@ The default playback packages now include HTTP/HTTPS transport and the libass su
 typesetter. Compose applications can use one complete dependency, while custom applications can
 select presentation independently. KiteFFmpeg stays at 0.2.0.
 
-ASS and SSA subtitles now render through libass on Android, iOS, macOS, Linux, Windows and the
-desktop JVM: moving signs, animated transforms, karaoke fills, clips and drawings all draw as
-authored, and they re-render every video frame while they move. Fonts attached to a Matroska file
-are loaded for the track, and an application can add its own. The built-in Kotlin styling remains
-the fallback where no typesetter is installed, and for the web, whose libass build is tracked
-separately.
+ASS and SSA subtitles now render through libass on Android, iOS, macOS, Linux, Windows, the
+desktop JVM and the web: moving signs, animated transforms, karaoke fills, clips and drawings all
+draw as authored, and they re-render every video frame while they move. Fonts attached to a
+Matroska file are loaded for the track, and an application can add its own. The built-in Kotlin
+styling remains the fallback where no typesetter is installed.
 
 ### Upgrading from 0.0.22
 
@@ -50,6 +49,12 @@ separately.
 - The desktop JVM jar bundles the libass adapter for macOS arm64, Linux x64, Linux arm64 and
   Windows x64. On another desktop the player warns once with `TypesetterUnavailable` and keeps
   the built-in styling.
+- On the web, libass is a separate module, `kiteass.mjs` beside `kiteass.wasm`, hosted by the
+  page the way the codec module is. Both files come as the `web` zip attached to the wasmJs
+  artifact (`kiteplayer-libass-wasm-js-0.0.23-web.zip`); unpack it beside `index.html`. The first
+  ASS track loads `./kiteass.mjs` on its own; `KiteLibassWeb.load(url)` or
+  `KiteLibassWeb.attach(module)` covers a page that hosts it elsewhere. There is no system font in
+  a browser: supply fonts as container attachments or through `SubtitleConfig.fonts`.
 
 ### Added
 
@@ -58,8 +63,9 @@ separately.
 - Publishable `kiteplayer-network` artifacts and automatic HTTP/HTTPS provider registration.
 - An opt-out for automatic transport discovery and per-item header forwarding to resolvers.
 - `kiteplayer-libass`, published for Android (arm64-v8a, armeabi-v7a, x86_64), iOS, macOS,
-  Linux, Windows and the desktop JVM, with libass 0.17.4, HarfBuzz, FreeType and FriBidi linked
-  in. Typeset ASS tracks re-render per video frame, so animated typesetting moves (#37, #38, #39).
+  Linux, Windows, the desktop JVM and the web, with libass 0.17.4, HarfBuzz, FreeType and FriBidi
+  linked in. Typeset ASS tracks re-render per video frame, so animated typesetting moves (#37,
+  #38, #39, #124).
 - `SubtitleTypesetter`, `SubtitleTypesetterProvider` and `SubtitleTypesetters` in the core
   service interfaces, so another typesetting engine can be installed the same way.
 - `PlayerMediaSource.attachments` and `MediaAttachment`: the FFmpeg source exposes Matroska
@@ -77,9 +83,11 @@ separately.
 - `kiteplayer-compose-ui` no longer pulls in the default player factory or network stack.
 - Automatic HTTP readers own their clients, including cleanup after a failed open.
 - Installation examples identify alternative entry points and explain the subtitle dependency path.
-- The libass module's C driver is shared by every binding, so the Kotlin/Native, JNI and future
-  web paths cannot disagree about a pixel; the change detection now also notices a picture that
+- The libass module's C driver is shared by every binding, so the Kotlin/Native, JNI and web
+  paths cannot disagree about a pixel; the change detection now also notices a picture that
   emptied or came back, which libass' own verdict does not report after a cleared track.
+- The web renderer uploads a subtitle overlay in one crossing per image instead of one JavaScript
+  call per byte, which is what makes per-frame typesetting affordable there.
 - API documentation still builds on push; website deployment now requires an explicit workflow run.
 
 ### Fixed

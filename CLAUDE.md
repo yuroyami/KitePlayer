@@ -169,6 +169,8 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - Every typesetter call happens on the raster lane, including close, and requests coalesce: the
   actor posts the newest and a CAS on the lane's running flag decides who renders it. Bypassing
   that to call libass from the actor is a data race with the render in flight.
+- Overlay pixels cross into the web renderer as one Latin-1 string per image, never one byte per
+  JavaScript call. The per-byte form cost more than the video once typesetting redrew every frame.
 
 ### The web target
 
@@ -308,8 +310,10 @@ optimized consumers that reference no network symbol.
 
 `kiteplayer-libass` rides `kiteplayer` the same way and is discovered the same way, through
 `SubtitleTypesetterProvider`. The engine typesets only the primary ASS/SSA track, on the raster
-lane, at video frame cadence, and publishes only when libass reports a change. The web variants of
-the module install nothing until the browser chain exists.
+lane, at video frame cadence, and publishes only when libass reports a change. On the web the
+engine is a separate `kiteass.mjs` module the page hosts (delivered as the `web` zip on the wasmJs
+publication; a browser distribution does not inherit library resources); the first ASS track loads
+it from `./kiteass.mjs` and the typesetter stays pending, replaying what it was told, until it lands.
 
 ## The libass chain
 
@@ -327,5 +331,13 @@ the module install nothing until the browser chain exists.
 - Cross-linking a Linux shared object with konan's clang needs the gcc runtime directory passed
   with `-B` as well as `-L`, or lld cannot find `crtbeginS.o`.
 - The publish path must pass `-Pkiteplayer.libass.requireAllHostJni=true`, which turns a desktop
-  adapter this machine cannot link into a failure. Without it the jar quietly ships without that
-  desktop and the player there warns `TypesetterUnavailable` and keeps the Kotlin tier.
+  adapter this machine cannot link, or a web module this machine cannot link (no `emcc`), into a
+  failure. Without it the artifact quietly ships without that half and the player there warns
+  `TypesetterUnavailable` and keeps the Kotlin tier.
+- The wasm32 chain is built by the sibling's `buildAssChainForWasm32` with emscripten. HarfBuzz
+  promotes warnings to errors through pragmas in `hb.hh`, which no `-Wno-` flag and no
+  `-Dwerror=false` can undo; `-DHB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR` is its own switch for that, and
+  emscripten's newer clang needs it. Times cross the module boundary as doubles, never 64-bit
+  integers, so the big-integer flag is not needed; keep it that way.
+- A `which` at Gradle configuration time breaks the configuration cache. Probe a tool through
+  `providers.exec` instead.

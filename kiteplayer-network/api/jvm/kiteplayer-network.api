@@ -21,6 +21,7 @@ public final class io/github/yuroyami/kiteplayer/network/KtorMediaIoResolver : i
 	public fun <init> (Lio/ktor/client/HttpClient;Ljava/util/Map;)V
 	public synthetic fun <init> (Lio/ktor/client/HttpClient;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
+	public fun resolve (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun resolve (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 

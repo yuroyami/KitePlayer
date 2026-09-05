@@ -114,13 +114,19 @@ public sealed class HwdecPolicy {
  */
 public data class NetworkConfig(
     /**
-     * Consulted at open for a [MediaItem] that carries a URI and no [MediaItem.io]. Null (the
-     * default) means URIs go to the backend untouched. kiteplayer-network ships the Ktor
-     * resolver that makes http and https play with the OS supplying TLS.
+     * Consulted at open for a [MediaItem] with no [MediaItem.io]. An explicit resolver takes
+     * precedence over automatic providers, even when it returns null to select the backend.
+     * With null, [autoResolve] controls whether installed providers may supply a reader.
      */
     val ioResolver: MediaIoResolver? = null,
     /** The engine-owned byte cache every [MediaIo]-fed open gets. */
     val ioCache: IoCachePolicy = IoCachePolicy(),
+    /**
+     * Consult installed optional transport providers when [ioResolver] and [MediaItem.io] are
+     * absent. Adding kiteplayer-network supplies HTTP/HTTPS without configuring a resolver.
+     * False preserves the backend's URI handling. Explicit readers and resolvers still apply.
+     */
+    val autoResolve: Boolean = true,
 )
 
 /**

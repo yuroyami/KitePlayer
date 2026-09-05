@@ -449,6 +449,7 @@ abstract fun interface io.github.yuroyami.kiteplayer.spi/SubtitleFileParser { //
 
 abstract fun interface io.github.yuroyami.kiteplayer/MediaIoResolver { // io.github.yuroyami.kiteplayer/MediaIoResolver|null[0]
     abstract suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIoResolver.resolve|resolve(kotlin.String){}[0]
+    open suspend fun resolve(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer/MediaIoResolver.resolve|resolve(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/AudioBuffer : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.spi/AudioBuffer|null[0]
@@ -533,6 +534,13 @@ abstract interface io.github.yuroyami.kiteplayer.spi/MediaBackend { // io.github
     abstract suspend fun open(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.spi/BackendSession // io.github.yuroyami.kiteplayer.spi/MediaBackend.open|open(io.github.yuroyami.kiteplayer.MediaItem){}[0]
     open fun describeForDiagnostics(): kotlin/String // io.github.yuroyami.kiteplayer.spi/MediaBackend.describeForDiagnostics|describeForDiagnostics(){}[0]
     open fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi/SubtitleFileParser? // io.github.yuroyami.kiteplayer.spi/MediaBackend.subtitleFileParser|subtitleFileParser(){}[0]
+}
+
+abstract interface io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider { // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider|null[0]
+    abstract val id // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider.id|{}id[0]
+        abstract fun <get-id>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider.id.<get-id>|<get-id>(){}[0]
+
+    abstract fun create(): io.github.yuroyami.kiteplayer/MediaIoResolver // io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider.create|create(){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer.spi/MediaSourceFactory { // io.github.yuroyami.kiteplayer.spi/MediaSourceFactory|null[0]
@@ -1946,8 +1954,10 @@ final class io.github.yuroyami.kiteplayer/MediaItem { // io.github.yuroyami.kite
 }
 
 final class io.github.yuroyami.kiteplayer/NetworkConfig { // io.github.yuroyami.kiteplayer/NetworkConfig|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ...) // io.github.yuroyami.kiteplayer/NetworkConfig.<init>|<init>(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy){}[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/NetworkConfig.<init>|<init>(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy;kotlin.Boolean){}[0]
 
+    final val autoResolve // io.github.yuroyami.kiteplayer/NetworkConfig.autoResolve|{}autoResolve[0]
+        final fun <get-autoResolve>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/NetworkConfig.autoResolve.<get-autoResolve>|<get-autoResolve>(){}[0]
     final val ioCache // io.github.yuroyami.kiteplayer/NetworkConfig.ioCache|{}ioCache[0]
         final fun <get-ioCache>(): io.github.yuroyami.kiteplayer/IoCachePolicy // io.github.yuroyami.kiteplayer/NetworkConfig.ioCache.<get-ioCache>|<get-ioCache>(){}[0]
     final val ioResolver // io.github.yuroyami.kiteplayer/NetworkConfig.ioResolver|{}ioResolver[0]
@@ -1955,7 +1965,8 @@ final class io.github.yuroyami.kiteplayer/NetworkConfig { // io.github.yuroyami.
 
     final fun component1(): io.github.yuroyami.kiteplayer/MediaIoResolver? // io.github.yuroyami.kiteplayer/NetworkConfig.component1|component1(){}[0]
     final fun component2(): io.github.yuroyami.kiteplayer/IoCachePolicy // io.github.yuroyami.kiteplayer/NetworkConfig.component2|component2(){}[0]
-    final fun copy(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ...): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/NetworkConfig.copy|copy(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy){}[0]
+    final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/NetworkConfig.component3|component3(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/MediaIoResolver? = ..., io.github.yuroyami.kiteplayer/IoCachePolicy = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/NetworkConfig // io.github.yuroyami.kiteplayer/NetworkConfig.copy|copy(io.github.yuroyami.kiteplayer.MediaIoResolver?;io.github.yuroyami.kiteplayer.IoCachePolicy;kotlin.Boolean){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/NetworkConfig.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/NetworkConfig.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/NetworkConfig.toString|toString(){}[0]
@@ -3323,6 +3334,10 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.TrackDeselected.toString|toString(){}[0]
     }
+}
+
+final object io.github.yuroyami.kiteplayer.spi/MediaIoProviders { // io.github.yuroyami.kiteplayer.spi/MediaIoProviders|null[0]
+    final fun register(io.github.yuroyami.kiteplayer.spi/MediaIoResolverProvider) // io.github.yuroyami.kiteplayer.spi/MediaIoProviders.register|register(io.github.yuroyami.kiteplayer.spi.MediaIoResolverProvider){}[0]
 }
 
 final object io.github.yuroyami.kiteplayer.subtitle/CueSelector { // io.github.yuroyami.kiteplayer.subtitle/CueSelector|null[0]

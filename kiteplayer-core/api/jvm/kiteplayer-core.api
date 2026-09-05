@@ -452,7 +452,12 @@ public abstract interface class io/github/yuroyami/kiteplayer/MediaIo : java/lan
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/MediaIoResolver {
+	public fun resolve (Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun resolve (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaIoResolver$DefaultImpls {
+	public static fun resolve (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaItem {
@@ -493,13 +498,15 @@ public final class io/github/yuroyami/kiteplayer/MonotonicClock$Companion {
 
 public final class io/github/yuroyami/kiteplayer/NetworkConfig {
 	public fun <init> ()V
-	public fun <init> (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;)V
-	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;Z)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Lio/github/yuroyami/kiteplayer/MediaIoResolver;
 	public final fun component2 ()Lio/github/yuroyami/kiteplayer/IoCachePolicy;
-	public final fun copy (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;)Lio/github/yuroyami/kiteplayer/NetworkConfig;
-	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/NetworkConfig;Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/NetworkConfig;
+	public final fun component3 ()Z
+	public final fun copy (Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;Z)Lio/github/yuroyami/kiteplayer/NetworkConfig;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/NetworkConfig;Lio/github/yuroyami/kiteplayer/MediaIoResolver;Lio/github/yuroyami/kiteplayer/IoCachePolicy;ZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/NetworkConfig;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAutoResolve ()Z
 	public final fun getIoCache ()Lio/github/yuroyami/kiteplayer/IoCachePolicy;
 	public final fun getIoResolver ()Lio/github/yuroyami/kiteplayer/MediaIoResolver;
 	public fun hashCode ()I
@@ -2081,6 +2088,16 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaBackend {
 public final class io/github/yuroyami/kiteplayer/spi/MediaBackend$DefaultImpls {
 	public static fun describeForDiagnostics (Lio/github/yuroyami/kiteplayer/spi/MediaBackend;)Ljava/lang/String;
 	public static fun subtitleFileParser (Lio/github/yuroyami/kiteplayer/spi/MediaBackend;)Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/MediaIoProviders {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/spi/MediaIoProviders;
+	public final fun register (Lio/github/yuroyami/kiteplayer/spi/MediaIoResolverProvider;)V
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaIoResolverProvider {
+	public abstract fun create ()Lio/github/yuroyami/kiteplayer/MediaIoResolver;
+	public abstract fun getId ()Ljava/lang/String;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/MediaSourceFactory {

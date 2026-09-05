@@ -10,11 +10,13 @@ public data class MediaItem(
      */
     val uri: String,
     /**
-     * Request headers, for the http and https protocols.
+     * Request headers, for the http and https protocols. Passed to a configured or automatic
+     * [MediaIoResolver] when it supplies the transport.
      *
      * Respelled by the FFmpeg backend as the http protocol's own `headers` option, one
-     * CRLF-joined block, through the same pre-open funnel [openOptions] uses; an explicit
-     * `headers` key there wins over this field. On media no http protocol opens (a local
+     * CRLF-joined block, through the same pre-open funnel [openOptions] uses. When the backend
+     * handles the URI itself, an explicit `headers` key there wins over this field. On media
+     * no http protocol opens (a local
      * file), the unused-option warning reports them, typed.
      */
     val headers: Map<String, String> = emptyMap(),
@@ -129,8 +131,9 @@ public interface MediaIo : AutoCloseable {
 
 /**
  * Turns a URI into a [MediaIo] when it knows how, at open time (the Ktor
- * half). Installed through [PlayerConfig.network]; the engine consults it exactly when a
- * [MediaItem] carries a URI and no [MediaItem.io] of its own. Returning null passes the URI
+ * half). Explicitly configured through [PlayerConfig.network] or supplied by an installed
+ * optional provider. The engine consults it when a [MediaItem] has no [MediaItem.io] of its own.
+ * Returning null from an explicit resolver passes the URI
  * through to the backend untouched, which is what keeps local files on FFmpeg's own fast
  * path.
  *
@@ -141,6 +144,13 @@ public interface MediaIo : AutoCloseable {
 public fun interface MediaIoResolver {
     /** A new [MediaIo] for [uri], or null when this resolver does not handle it. */
     public suspend fun resolve(uri: String): MediaIo?
+
+    /**
+     * Resolves [uri] with this item's HTTP request [headers]. Existing resolvers keep their
+     * one-argument behavior unless they override this overload. Returning null deliberately
+     * selects backend URI handling when this resolver was explicitly configured.
+     */
+    public suspend fun resolve(uri: String, headers: Map<String, String>): MediaIo? = resolve(uri)
 }
 
 /**

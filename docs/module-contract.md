@@ -42,6 +42,8 @@ caller-supplied resources remain caller-owned. Do not silently share mutable pla
 an extension registry. Competing providers must have deterministic selection.
 
 JVM and Android use service metadata; Native and web use target initialization/registration.
+The Android network artifact supplies the normal `android.permission.INTERNET` permission through
+manifest merging, so consumers do not need a separate permission declaration.
 Kotlin's eager initialization is experimental/deprecated, so dependency-presence activation must
 be verified against this pinned toolchain in optimized consumers before being claimed. A consumer
 proof references only core APIs: touching a network symbol would hide a missing registration root.

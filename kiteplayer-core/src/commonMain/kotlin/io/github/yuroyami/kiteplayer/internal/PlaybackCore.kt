@@ -2053,7 +2053,7 @@ internal class PlaybackCore(
         // a live reader precisely because this line runs again for every rebuild: a track switch, a
         // decoder recovery, a loop and a queue returning to the same item all come back through it,
         // and the reader the previous session was given has been closed since.
-        val suppliedIo = item.io?.invoke() ?: config.network.ioResolver?.resolve(item.uri)
+        val suppliedIo = resolveMediaIo(item, config.network)
         val cachingIo = if (suppliedIo != null && config.network.ioCache.enabled) {
             CachingMediaIo(suppliedIo, config.network.ioCache)
         } else {

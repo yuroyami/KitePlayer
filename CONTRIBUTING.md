@@ -60,8 +60,8 @@ Style is guidance. It is never a task of its own.
 - A clean clone needs `local.properties` with an Android SDK path, or the `ANDROID_HOME`
   environment variable, before the Android targets have a task graph at all.
 - Test fixtures are generated, not committed: run `./scripts/testmedia.sh` before any real-media
-  suite. It refuses an `ffmpeg` outside its pinned version, on purpose. When the pin needs to move,
-  move the pin line and regenerate in the same commit.
+  suite. It records the encoder version in the manifest and warns when it differs from the recorded
+  series. `TESTMEDIA_STRICT_FFMPEG=1` turns that warning into a refusal for version-sensitive work.
 
 ## The gate before every commit
 
@@ -71,17 +71,13 @@ ran and which rule selected it.
 ### Tier 1, every change without exception, seconds
 
 ```bash
-./gradlew checkKitertCoupling
-./gradlew checkKotlinAbi
-./gradlew :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest
-kiteplayer-rt/native/scripts/run-c-tests.sh plain
-kiteplayer-rt/native/scripts/render-audit.sh
-kiteplayer-rt/native/scripts/source-discipline.sh
-git ls-files -z | xargs -0 grep -n $'\u2014'   # em dash scan: printing nothing is the pass
+./scripts/check-gate.sh tier1
 ```
 
-The em dash scan's `grep` exits 1 when it finds nothing, which is the passing outcome. Do not wrap
-it in a shell that reads that exit as a failure.
+The aggregate runs the coupling and ABI checks and the core and subtitle JVM tests, builds and
+executes plain C tests, then runs the render audit, source discipline and tracked-file em dash scan.
+Stage new files before the final gate so the scan includes them. It handles the scan's expected
+no-match exit code without suppressing errors.
 
 Tier 1 cannot catch data races, wrong-architecture archives, real-media regressions, or anything
 about a target it did not build.
@@ -97,7 +93,22 @@ suites, the iOS simulator view suite, the sanitizer and interpose C runs, the de
 the web Node suite, `./scripts/linux-tests.sh`, `./scripts/linux-jvm-tests.sh`, the Windows link
 check, cross-compile spot checks, and the sample run over the house clips plus a nonexistent path.
 
-Run the aggregate task, not a hand-written list of modules.
+```bash
+./scripts/check-gate.sh tier2
+```
+
+Run the aggregate script, not a hand-written list of modules. It is the maintained command list
+for a local macOS arm64 host and stops on the first failure. `--dry-run` prints the steps without
+running them. After resolving an environment failure, `--from=STEP` resumes at that step; retain
+earlier successful logs and rerun affected steps if sources changed. A resumed run reports its
+partial coverage. Gradle reuses unchanged outputs. Tier 2 also checks publication metadata and
+dependency hygiene, and runs the libass C packing suite in plain and sanitizer configurations.
+Docker must be running, an iOS simulator runtime must be installed, and the sibling
+KiteFFmpeg checkout must contain its cross-built native libraries for the Linux execution check.
+The sample smoke uses the four original house clips; the format-matrix suites cover the wider set.
+The Node gate does not claim browser execution, and Windows links do not claim Windows execution.
+CI runs those environments separately. Distribution-only integration checks remain additional
+checks for changes to published dependency metadata or automatic provider discovery.
 
 ### Tier 3
 

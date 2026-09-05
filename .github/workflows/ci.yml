@@ -181,7 +181,7 @@ jobs:
       # The ratchets first, because a surface change should fail before a two-minute test suite
       # does. checkKotlinAbi is Kotlin's own ABI validation (checkLegacyAbi is its deprecated
       # spelling); checkKitertCoupling holds the kitert boundary against a committed baseline;
-      # checkPublicationReadiness reads all 116 generated POMs and the project dependency edges.
+      # checkPublicationReadiness reads the generated POMs and the project dependency edges.
       - name: The ratchets
         run: |
           ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
@@ -229,6 +229,13 @@ jobs:
             :kiteplayer-libass:macosArm64Test \
             :kiteplayer-network:macosArm64Test \
             :kiteplayer-ffmpeg:macosArm64Test
+
+      # An isolated consumer verifies provider retention after Native release optimization.
+      # Staging writes only build/verification-maven; these tasks never upload a release.
+      - name: Published-format Native consumer and HTTPS
+        run: |
+          ./scripts/verify-network-distribution.sh --stage
+          ./scripts/verify-network-distribution.sh --run --target macos --url https://example.com
 
       # The conformance table, which is the answer "green" does not carry: which clip played on
       # this platform and what happened when one did not. Written by the matrix run itself, before

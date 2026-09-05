@@ -9,7 +9,7 @@ kiteffmpeg = "0.2.0"
 ktor = "3.5.2"
 
 coroutines = "1.11.0"
-atomicfu = "0.31.0"
+atomicfu = "0.33.0"
 # Compose Multiplatform, for :kiteplayer-compose-interop and :kiteplayer-compose-video. The
 # compatibility :kiteplayer-compose artifact only re-exports those modules. The Compose compiler
 # ships inside the Kotlin distribution since Kotlin 2.0, so its plugin below rides the Kotlin version.

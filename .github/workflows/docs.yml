@@ -33,7 +33,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    # macOS, not Ubuntu: Dokka resolves every target's dependencies, and the iOS half of the audio
+    # ring is a C archive konan's clang compiles against an Apple SDK found through xcrun. On an
+    # Ubuntu runner that task cannot start and the reference never generated.
+    runs-on: macos-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -47,9 +50,9 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.konan
-          key: konan-docs-${{ hashFiles('gradle/libs.versions.toml') }}
+          key: konan-docs-macos-${{ hashFiles('gradle/libs.versions.toml') }}
           restore-keys: |
-            konan-docs-
+            konan-docs-macos-
       - name: Warm the Kotlin/Native toolchain
         run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
 

@@ -102,7 +102,7 @@ run_probe() {
     local probe_log="$1"
     shift
     "$@" 2>&1 | tee "$probe_log"
-    rg -q "^NETWORK_PROBE_OK expectedIo=$probe_enabled observedIo=$probe_enabled bytes=" "$probe_log"
+    grep -q "^NETWORK_PROBE_OK expectedIo=$probe_enabled observedIo=$probe_enabled bytes=" "$probe_log"
 }
 
 for probe_enabled in false true; do
@@ -135,8 +135,8 @@ for probe_enabled in false true; do
         # actual startup call; imported helpers and library modules are not runnable entry points.
         probe_entries=()
         while IFS= read -r probe_entry; do probe_entries+=("$probe_entry"); done < <(
-            rg -l 'exports\._start\(\)' \
-                "$probe_build/compileSync/wasmJs/main/productionExecutable/optimized" --glob '*.mjs'
+            grep -rl --include='*.mjs' 'exports\._start()' \
+                "$probe_build/compileSync/wasmJs/main/productionExecutable/optimized"
         )
         [[ ${#probe_entries[@]} -eq 1 ]] || { echo 'Expected one optimized Wasm entry point' >&2; exit 1; }
         run_probe "$probe_build/probe-logs/wasm.log" "$probe_node" "${probe_entries[0]}" \
@@ -162,10 +162,10 @@ for probe_enabled in false true; do
         probe_android_passed=false
         for probe_attempt in {1..45}; do
             "$probe_adb" -s "$probe_android_serial" logcat -d -v raw -s KiteNetworkProbe:I > "$probe_log"
-            if rg -q "NETWORK_PROBE_ANDROID_FAILED run=$probe_run_id " "$probe_log"; then
+            if grep -q "NETWORK_PROBE_ANDROID_FAILED run=$probe_run_id " "$probe_log"; then
                 cat "$probe_log"; exit 1
             fi
-            if rg -q "NETWORK_PROBE_ANDROID_OK run=$probe_run_id expectedIo=$probe_enabled" "$probe_log"; then
+            if grep -q "NETWORK_PROBE_ANDROID_OK run=$probe_run_id expectedIo=$probe_enabled" "$probe_log"; then
                 probe_android_passed=true
                 break
             fi

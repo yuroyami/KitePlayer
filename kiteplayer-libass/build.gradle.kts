@@ -386,15 +386,16 @@ run {
 /*
  * ── Desktop JVM: one adapter per host whose toolchain this machine has ───
  *
- * macOS links with the host clang, Linux and Windows are cross-linked with konan's clang and
+ * macOS links with the host clang; Linux and Windows are cross-linked with konan's clang, lld and
  * sysroots, which arrive with the Kotlin/Native distribution once those targets have compiled once.
- * -Pkiteplayer.libass.requireAllHostJni=true turns a skipped host into a failure; the publish
- * path passes it, so a jar cannot ship missing a desktop it promises.
+ * That recipe reads nothing from the build host but the konan packages, so a Linux or Windows
+ * build host links the same adapters the same way. -Pkiteplayer.libass.requireAllHostJni=true
+ * turns a skipped host into a failure; the publish path passes it, so a jar cannot ship missing a
+ * desktop it promises.
  */
 run {
     val osName = System.getProperty("os.name").orEmpty().lowercase()
     val hostIsMac = "mac" in osName || "darwin" in osName
-    val hostIsLinux = !hostIsMac && "win" !in osName
     val requireAll = providers.gradleProperty("kiteplayer.libass.requireAllHostJni").orNull == "true"
     val konanDependencies = konanDataDirProvider.get().resolve("dependencies")
     fun sysrootPresent(konanTargetName: String): Boolean {
@@ -410,13 +411,18 @@ run {
         val toolchainReady = when (hostTriple) {
             "macos-arm64" -> hostIsMac && File("/usr/bin/clang").canExecute()
             "macos-x64" -> false // The sibling builds no macos-x64 chain; Intel Macs fall back to the Kotlin tier.
-            "linux-x64", "linux-arm64", "windows-x64" -> konanTargetName != null && sysrootPresent(konanTargetName) && !hostIsLinux
+            "linux-x64", "linux-arm64", "windows-x64" -> konanTargetName != null && sysrootPresent(konanTargetName)
             else -> false
         }
         val chain = if (toolchainReady) chainFor(chainDirName) else null
         if (!toolchainReady || chain == null) {
             if (hostTriple == "macos-x64") return@forEach
-            val why = if (!toolchainReady) "no toolchain for it on this machine" else "no ass chain for $chainDirName"
+            val why = when {
+                chain == null && toolchainReady -> "no ass chain for $chainDirName"
+                hostTriple == "macos-arm64" -> "this host is not a Mac with /usr/bin/clang"
+                else -> "no konan sysroot for $konanTargetName under $konanDependencies yet; compiling any " +
+                    "Kotlin/Native code for that target provisions it"
+            }
             if (requireAll) throw GradleException("kiteplayer.libass.requireAllHostJni: cannot build the $hostTriple adapter, $why.")
             logger.lifecycle("[kiteplayer-libass] jvm jar skips the $hostTriple adapter: $why.")
             return@forEach

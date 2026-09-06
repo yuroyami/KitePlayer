@@ -34,6 +34,9 @@ styling remains the fallback where no typesetter is installed.
 - `NetworkConfig` gains `autoResolve`, default true, changing generated data-class method
   signatures. Recompile consumers. Set it false to preserve backend-only URI handling when no
   explicit resolver is configured.
+- `AndroidPlayerViewRendererFactory.create` takes a third callback, `onScaleMode`, so a renderer
+  adapter can tell the view which scale mode is ruling. A custom Android adapter must add the
+  parameter; the bundled one already does.
 - `MediaIoResolver` keeps its original abstract method and gains a default overload accepting
   per-item headers. Existing Kotlin implementations remain source compatible; recompile them.
 - Installed transport providers are selected automatically by both default and direct core
@@ -97,6 +100,10 @@ styling remains the fallback where no typesetter is installed.
 - SRT/WebVTT files with many zero or reversed duration cues avoid quadratic processing while
   preserving their repaired cue timing (#120).
 - Per-item HTTP headers reach the automatically selected HTTPS transport (#49).
+- `setVideoScale` changes the picture on the Android `KitePlayerView`. The view sized its
+  Surface from the video's own shape, so fill and stretch looked like fit, and with a hardware
+  decoder writing straight into that Surface there was nothing else to change. The view now
+  sizes the Surface from the mode and crops the overhang, and subtitles stay inside the view.
 
 ## [0.0.22] - 2026-09-04
 

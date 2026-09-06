@@ -11,9 +11,11 @@ import android.util.Rational
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.View
 import android.widget.FrameLayout
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.PlaybackStatus
+import io.github.yuroyami.kiteplayer.VideoScale
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import kotlin.math.roundToInt
@@ -47,6 +49,7 @@ public open class KitePlayerView @JvmOverloads constructor(
     private val subtitleView = SubtitleOverlayView(context)
     private var videoAspect: Float = 0f
     private var videoRotation: Int = 0
+    private var videoScale: VideoScale = VideoScale.Fit
     private var rendererGeneration: Long = 0L
 
     /**
@@ -69,6 +72,9 @@ public open class KitePlayerView @JvmOverloads constructor(
                         runForRenderer(generation) {
                             setVideoGeometry(size.displayAspect, rotationDegrees)
                         }
+                    },
+                    onScaleMode = { mode ->
+                        runForRenderer(generation) { setVideoScale(mode) }
                     },
                 )
                 try {
@@ -238,6 +244,9 @@ public open class KitePlayerView @JvmOverloads constructor(
         // decoration and stay out of the reader's way.
         contentDescription = DEFAULT_VIDEO_ACCESSIBILITY_LABEL
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        // Fill lays the surface out larger than this view; the crop is what makes it Fill and
+        // not an overflow onto whatever sits next to the video.
+        clipChildren = true
         addView(surfaceView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(subtitleView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
@@ -271,25 +280,31 @@ public open class KitePlayerView @JvmOverloads constructor(
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
-        val aspect = videoAspect
         val availableWidth = width - paddingLeft - paddingRight
         val availableHeight = height - paddingTop - paddingBottom
-        if (!aspect.isFinite() || aspect <= 0f || availableWidth <= 0 || availableHeight <= 0) return
+        val picture = videoBounds(availableWidth, availableHeight, videoAspect, videoScale) ?: return
 
-        val availableAspect = availableWidth.toFloat() / availableHeight.toFloat()
-        val videoWidth: Int
-        val videoHeight: Int
-        if (availableAspect > aspect) {
-            videoHeight = availableHeight
-            videoWidth = (videoHeight * aspect).roundToInt().coerceIn(1, availableWidth)
-        } else {
-            videoWidth = availableWidth
-            videoHeight = (videoWidth / aspect).roundToInt().coerceIn(1, availableHeight)
-        }
-        val videoLeft = paddingLeft + (availableWidth - videoWidth) / 2
-        val videoTop = paddingTop + (availableHeight - videoHeight) / 2
-        surfaceView.layout(videoLeft, videoTop, videoLeft + videoWidth, videoTop + videoHeight)
-        subtitleView.layout(videoLeft, videoTop, videoLeft + videoWidth, videoTop + videoHeight)
+        val videoLeft = paddingLeft + picture.left
+        val videoTop = paddingTop + picture.top
+        // Measured again at the size it is about to get: Fill lays the Surface out LARGER than
+        // this view measured it, and a child laid out past its measurement is not a contract.
+        layoutChild(surfaceView, videoLeft, videoTop, picture.width, picture.height)
+
+        // Fill and Stretch push the picture past this view, and the clip crops it. Text must not
+        // go over the edge with it, so subtitles take the part of the picture that stays visible.
+        val textLeft = videoLeft.coerceAtLeast(paddingLeft)
+        val textTop = videoTop.coerceAtLeast(paddingTop)
+        val textRight = (videoLeft + picture.width).coerceAtMost(paddingLeft + availableWidth)
+        val textBottom = (videoTop + picture.height).coerceAtMost(paddingTop + availableHeight)
+        layoutChild(subtitleView, textLeft, textTop, textRight - textLeft, textBottom - textTop)
+    }
+
+    private fun layoutChild(child: View, x: Int, y: Int, childWidth: Int, childHeight: Int) {
+        child.measure(
+            MeasureSpec.makeMeasureSpec(childWidth.coerceAtLeast(0), MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(childHeight.coerceAtLeast(0), MeasureSpec.EXACTLY),
+        )
+        child.layout(x, y, x + childWidth, y + childHeight)
     }
 
     private fun setVideoGeometry(displayAspect: Float, rotationDegrees: Int) {
@@ -301,6 +316,16 @@ public open class KitePlayerView @JvmOverloads constructor(
         }
         videoRotation = turn
         subtitleView.setVideoRotation(turn)
+        requestLayout()
+    }
+
+    /**
+     * The mode the player is in, which decides how much of this view the picture covers. Kept
+     * across a surface bounce because the player tells every new renderer generation its mode.
+     */
+    private fun setVideoScale(mode: VideoScale) {
+        if (videoScale == mode) return
+        videoScale = mode
         requestLayout()
     }
 
@@ -335,5 +360,49 @@ public fun interface AndroidPlayerViewRendererFactory {
     public fun create(
         onOverlay: (SubtitleOverlay?) -> Unit,
         onVideoGeometry: (VideoSize, rotationDegrees: Int) -> Unit,
+        onScaleMode: (VideoScale) -> Unit,
     ): AndroidPlayerViewRenderer
+}
+
+/** The rectangle the picture occupies, relative to the padded content box. */
+internal data class VideoBounds(val left: Int, val top: Int, val width: Int, val height: Int)
+
+/**
+ * Where the video surface goes for a scale mode.
+ *
+ * Android is the one platform whose picture is not drawn into a canvas the library owns: with a
+ * hardware decoder, MediaCodec writes straight into the Surface, so the only lever left is how
+ * big that Surface is. Fit keeps the whole picture and letterboxes it, Fill covers the view and
+ * lets the view crop the overhang, Stretch takes the view as it is. Null means there is nothing
+ * to lay out yet.
+ */
+internal fun videoBounds(
+    availableWidth: Int,
+    availableHeight: Int,
+    aspect: Float,
+    mode: VideoScale,
+): VideoBounds? {
+    if (!aspect.isFinite() || aspect <= 0f || availableWidth <= 0 || availableHeight <= 0) return null
+    if (mode == VideoScale.Stretch) return VideoBounds(0, 0, availableWidth, availableHeight)
+
+    // True when the view is wider than the picture, so Fit pins the height and Fill pins the width.
+    val viewIsWider = availableWidth.toFloat() / availableHeight.toFloat() > aspect
+    val pinHeight = if (mode == VideoScale.Fill) !viewIsWider else viewIsWider
+    val width: Int
+    val height: Int
+    if (pinHeight) {
+        height = availableHeight
+        val derived = (height * aspect).roundToInt()
+        width = if (mode == VideoScale.Fit) derived.coerceIn(1, availableWidth) else derived.coerceAtLeast(1)
+    } else {
+        width = availableWidth
+        val derived = (width / aspect).roundToInt()
+        height = if (mode == VideoScale.Fit) derived.coerceIn(1, availableHeight) else derived.coerceAtLeast(1)
+    }
+    return VideoBounds(
+        left = (availableWidth - width) / 2,
+        top = (availableHeight - height) / 2,
+        width = width,
+        height = height,
+    )
 }

@@ -156,8 +156,12 @@ jobs:
       # earlier lesson still holds too: 8.1.2 interleaves the subtitle packet in multitrack.mkv
       # later than 8.0, which is why the matrix reads until it has the cue it asked for.
       # When KiteFFmpeg moves to the next major, move the formula and EXPECTED_FFMPEG_SERIES together.
+      # brew update first: the runner image ships a formula index from the day it was built, and a
+      # versioned formula younger than the image does not exist as far as that index is concerned
+      # (the first run here answered "No available formula with the name ffmpeg@8").
       - name: Install the ffmpeg CLI the clips are recorded against
         run: |
+          brew update --quiet
           brew install ffmpeg@8
           echo "$(brew --prefix ffmpeg@8)/bin" >> "$GITHUB_PATH"
 

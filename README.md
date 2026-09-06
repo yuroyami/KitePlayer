@@ -44,19 +44,7 @@ Put the line in `commonMain.dependencies`, or in the `dependencies` block of an 
 Every artifact lives under `io.github.yuroyami`. Gradle picks the platform pieces for each target
 you declare.
 
-### Convenience coordinates
-
-`kiteplayer-compose` contains everything. Pick one of these only when you want less.
-
-| Coordinate | Use it when |
-|---|---|
-| `kiteplayer` | You use native views. No Compose. |
-| `kiteplayer-compose` | You use Compose. |
-| `kiteplayer-mobile` | You already use this older name of `kiteplayer`. |
-| `kiteplayer-compose-ui` | You want the Compose UI only and create the player yourself. |
-| `kiteplayer-core` | You want the engine only and bring your own decoders and output. |
-
-### Every coordinate
+What each line pulls in:
 
 ```text
 kiteplayer-compose

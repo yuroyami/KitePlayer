@@ -98,9 +98,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
   depending on a class-compilation task the Android plugin's multiplatform library variant does not
   create. The library dependency itself is fine. This is the trap most likely to be re-triggered by
   tidying a build file.
-- The one remaining Gradle deprecation in both repositories belongs to the Android plugin, proven
-  by Gradle's own problems report. Nothing here is workable. Re-measure at the next Android plugin
-  bump and not before.
+- The one remaining Gradle deprecation here belongs to the Kotlin Gradle plugin, not the Android
+  plugin: its web target wiring (`addDependsOnTaskInOtherProjects`) calls
+  `Configuration.getTaskDependencyFromProjectDependency`, which Gradle 10 removes. Proven with
+  `--warning-mode all --stacktrace` on Gradle 9.7.1 with AGP 9.4.0; `help` alone shows nothing,
+  a wasmJs task must be in the graph. Nothing here is workable. Re-measure at the next Kotlin bump.
 - Kotlin's ABI validation currently emits only JVM and klib dumps, so the Android public API is in
   no dump and ships unguarded. A hand-rolled checker was refused as overbuild. Re-measure at each
   Kotlin bump.

@@ -10,6 +10,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
+### Changed
+
+- The Compose artifacts depend on Compose Multiplatform 1.12.0 instead of 1.12.0-rc01. The
+  build moves to Gradle 9.7.1 and the Android Gradle Plugin 9.4.0.
+
 ## [0.0.23] - 2026-09-06
 
 The default playback packages now include HTTP/HTTPS transport and the libass subtitle

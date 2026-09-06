@@ -2,7 +2,7 @@
 # Toolchain. Kept in lock-step with KiteImage / KiteAudio / KiteFFmpeg / KitePDF so the Kite
 # lineage builds with one shared stack. Values are pushed here by KiteVersions.
 kotlin = "2.4.10"
-agp = "9.2.1"
+agp = "9.4.0"
 vanniktechPublish = "0.36.0"
 dokka = "2.2.0"
 kiteffmpeg = "0.2.0"
@@ -13,7 +13,7 @@ atomicfu = "0.31.0"
 # Compose Multiplatform, for :kiteplayer-compose-interop and :kiteplayer-compose-video. The
 # compatibility :kiteplayer-compose artifact only re-exports those modules. The Compose compiler
 # ships inside the Kotlin distribution since Kotlin 2.0, so its plugin below rides the Kotlin version.
-composeMultiplatform = "1.12.0-rc01"
+composeMultiplatform = "1.12.0"
 androidxTestCore = "1.7.0"
 androidxTestRunner = "1.7.0"
 androidxTestExtJunit = "1.3.0"

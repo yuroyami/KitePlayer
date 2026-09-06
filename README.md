@@ -1,313 +1,291 @@
 # KitePlayer
 
-A media player for Kotlin Multiplatform, written in Kotlin from the ground up.
+<p align="center">
+  <img src="art/final/kiteplayer-logo.svg" width="180" alt="KitePlayer logo">
+</p>
 
-It does not wrap ExoPlayer, AVPlayer or libmpv. The playback engine is pure Kotlin in `commonMain`,
-so it behaves the same wherever it runs: the same seek logic, the same A/V sync, the same state
-machine on every platform. Platform adapters supply the audio device, video surface, decoder
-and network transport.
+A media player for Kotlin Multiplatform, with a Kotlin engine and FFmpeg decoding compiled into
+the artifacts.
 
+[![CI](https://img.shields.io/github/actions/workflow/status/yuroyami/KitePlayer/ci.yml?label=CI)](https://github.com/yuroyami/KitePlayer/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.yuroyami/kiteplayer?label=Maven%20Central)](https://central.sonatype.com/artifact/io.github.yuroyami/kiteplayer)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
-> **This is early software.** It plays real media on macOS, Android and iOS, and it is used in a
-> shipping app. What it does not have is broad device qualification, a performance budget, or a
-> stable API. Read [What is missing](#what-is-missing) before you plan around it.
+**[Documentation](docs/)** · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
+
+Things people build with it:
+
+- A video screen in a Compose Multiplatform app, on Android, iOS and desktop
+- A player inside an Android XML layout or a UIKit view, with no Compose at all
+- An audio player with a ten band equaliser, ReplayGain, balance and a sleep timer
+- A player for subtitle heavy content: SSA and ASS drawn by libass, plus SubRip and WebVTT
+
+KitePlayer does not wrap ExoPlayer, AVPlayer or libmpv. Seeking, audio and video sync and the
+state machine live in one Kotlin engine, so they behave the same on every platform. FFmpeg comes
+through [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg) and is compiled into the artifacts.
+You do not install FFmpeg, add a Gradle plugin or touch linker settings.
+
+> **Early software.** KitePlayer is 0.0.x. It plays real media on Android, iOS, macOS and the
+> desktop JVM, and it runs inside a shipping app. The public API will still change. Read
+> [What is missing](#what-is-missing) before you plan around it.
 
 ## Install
 
-Choose one entry point under `io.github.yuroyami`. KMP applications put it in
-`commonMain.dependencies`; Android-only applications use their normal `dependencies` block.
+Pick one line. Put it in `commonMain.dependencies` for a Kotlin Multiplatform app, or in the normal
+`dependencies` block of an Android-only app.
+
+Compose app, everything included:
 
 ```kotlin
-// Complete Compose setup: player, codecs, audio, HTTP/HTTPS and both video rendering paths.
 implementation("io.github.yuroyami:kiteplayer-compose:0.0.23")
 ```
 
-For native views without Compose, choose one of these alternatives:
+Native views, no Compose:
 
 ```kotlin
-// General default playback stack, including native views and HTTP/HTTPS.
 implementation("io.github.yuroyami:kiteplayer:0.0.23")
 ```
 
+Only the engine. You bring the decoders and the output:
+
 ```kotlin
-// Mobile convenience entry point using that same stack.
-implementation("io.github.yuroyami:kiteplayer-mobile:0.0.23")
+implementation("io.github.yuroyami:kiteplayer-core:0.0.23")
 ```
 
-A Compose application can also use `KitePlayerView` in Android XML. A Compose-only application
-can use the native-surface path through `AndroidView` without writing XML. Both paths remain
-available through `KitePlayerVideo(path = ...)`; choosing an entry point does not force a renderer.
-Gradle selects the platform artifacts needed by the application.
+What the first line pulls in. The second line is the `kiteplayer` branch of this tree:
 
-Advanced consumers can choose `kiteplayer-core` and supply backends, or combine `kiteplayer`
-with `kiteplayer-compose-ui` to declare playback and presentation separately. The UI-only module
-includes both renderers and their required frame adapters, but does not include the default player
-factory or HTTP transport. Core stays transitively available because its types occur in renderer APIs.
-
-See [Modules](#modules) for the components and [the migration notes](CHANGELOG.md#0023---2026-09-06)
-when upgrading. The published API reference is at https://yuroyami.github.io/KitePlayer/.
-
-## Playing a file
-
-The complete entry points provide the default factory:
-
-```kotlin
-val player = requireNotNull(KitePlayerPlatform.createOrNull()) {
-    "KitePlayer is unavailable: ${KitePlayerPlatform.availability}"
-}
+```text
+kiteplayer-compose
+├── kiteplayer
+│   ├── kiteplayer-core
+│   ├── kiteplayer-ffmpeg             decoders over KiteFFmpeg, subtitle parsers
+│   ├── kiteplayer-output             audio output, subtitle rasterisers
+│   ├── kiteplayer-view-bindings      adapters for the native views
+│   │   └── kiteplayer-view           the native views themselves
+│   ├── kiteplayer-network            HTTP and HTTPS
+│   └── kiteplayer-libass             ASS and SSA typesetting
+├── kiteplayer-compose-ui
+│   ├── kiteplayer-compose-interop    Compose hosting the native view
+│   └── kiteplayer-compose-video      Compose drawing the frames itself
+└── kiteplayer-phone                  old package names, kept for compatibility
 ```
 
-In a Compose screen, display that player and open media once its renderer is attached. Opening
-and closing are suspend operations and belong to the screen's playback owner, not to recomposition:
+Every artifact lives under `io.github.yuroyami`. Gradle picks the platform pieces for each target
+you declare. `kiteplayer-mobile` is the older name of `kiteplayer` and still works.
+[Modules](#modules) lists every artifact with what it is for.
+
+## Play something
+
+Three steps: create a player, show it, open something.
 
 ```kotlin
-KitePlayerVideo(
-    player = player,
-    onRendererAttached = { attached -> /* Signal the owner that media can now be opened. */ },
-)
+val player = KitePlayerPlatform.createOrNull()
+    ?: error("KitePlayer cannot run here: ${KitePlayerPlatform.availability}")
+```
 
-// In the playback owner's coroutine, after the first attachment:
-player.open(MediaItem(pathOrUrl))
+In Compose, show the player with `KitePlayerVideo`:
+
+```kotlin
+KitePlayerVideo(player = player, modifier = Modifier.fillMaxSize())
+```
+
+For a native view, create the view, install its renderer binding and hand it the player:
+
+| Platform | View | Binding |
+|---|---|---|
+| Android | `KitePlayerView`, from XML or code | `view.installMobileRenderer()` |
+| iOS | `KitePlayerUIView` | `view.installMobileRenderer()` |
+| Desktop JVM | `KitePlayerAwtView` | `view.installDesktopRenderer()` |
+
+```kotlin
+view.installMobileRenderer()
+view.player = player
+```
+
+Then open media from a coroutine you own, once the view or composable is on screen. `open`,
+`seek` and `closeAndAwait` suspend. `play` and `pause` do not.
+
+```kotlin
+player.open(MediaItem("https://example.com/movie.mkv"))
 player.play()
-player.seek(5.seconds)
-// When the owner is finished:
+player.seek(90.seconds)
+
+// When the screen goes away:
 player.closeAndAwait()
 ```
 
-For a native view, assign the player and install the provided view renderer binding before opening
-media. The Android binding is `view.installMobileRenderer()`; the view itself can come from XML
-or Kotlin. The same public binding names remain available after moving the implementation out of
-`kiteplayer-mobile`.
+`KitePlayerVideo` has two ways to draw. `KiteRenderPath.NativeView` hosts the platform's video
+view: the system compositor presents the frames and the GPU stays idle, which is the right default
+for long playback. `KiteRenderPath.ComposeCanvas` draws the frames inside Compose, so the video
+takes clipping, alpha and shared element transitions. The default, `Auto`, picks the native view.
+You can switch at runtime; the Android sample app has a button for it.
 
-Custom assemblies use `KitePlayer.create(PlayerConfig(backends = Backends(backend, output)))`.
-Backend and output selection stay explicit there. Optional transport discovery applies to both
-that factory and the default factory.
-
-## Network transport
-
-The standard playback entry points include `kiteplayer-network`. Adding the network module to a
-custom core assembly enables HTTP/HTTPS automatically; callers do not need to construct a Ktor
-resolver. Android/JVM use the platform trust stack through OkHttp, Apple uses NSURLSession,
-and the browser handles web transport. The Android network artifact supplies the normal
-`INTERNET` permission; the app controls its cleartext HTTP policy. The embedded FFmpeg binary
-itself has no TLS backend.
-
-The item's own `io` source takes precedence, then an explicitly configured `NetworkConfig.ioResolver`,
-then installed providers when `NetworkConfig.autoResolve` is true. An explicit resolver returning
-null leaves the URI to the backend; it does not activate an automatic replacement. Set
-`autoResolve = false` to disable discovery. Per-item headers reach the selected transport.
-
-Automatic HTTP readers own and close their clients. No client is created merely by constructing a
-player or opening a local file. Custom resolvers retain their documented ownership rules.
-Provider discovery uses platform registration rather than a single portable reflection mechanism;
-the pinned Kotlin toolchain and optimized consumer checks are part of that contract.
+One desktop detail: macOS gives a click to the topmost native view, so Compose controls drawn over
+a native view video are painted but never pressed. Use the canvas path there, or keep the controls
+beside the video.
 
 ## What you can control
 
-Everything below is live: call it during playback and it takes effect. Everything is published on
-the state snapshot, so your UI can read it back.
+Everything here works during playback. Everything is published on `player.state`, so your UI can
+read it back.
 
 | | |
 |---|---|
-| **Playback** | `open`, `play`, `pause`, `stop`, `seek`, `stepFrame`, `close` / `closeAndAwait` |
-| **Playlists** | `openQueue` with `next` and `previous`, `setLoop` (looping one item or wrapping the whole queue), and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` to edit it while it plays |
-| **Shuffle** | `setShuffle`. The items in the queue never move, so the list you show stays the list your user built. What changes is `queueOrder`, which is published so you can show what is coming next |
-| **Speed** | `setSpeed` from 0.25x to 4x with the pitch preserved, or `setPreservePitch(false)` to let it change like a tape |
-| **Sound** | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), and `setVideoEnabled(false)` to keep only the audio without reopening anything |
-| **Volume above 100%** | Raise `PlayerConfig.audio.volumeCeiling` to as much as 2. Past unity every sample is folded through a saturator, so a loud passage compresses instead of squaring off. At or below unity nothing is folded and the samples are untouched, bit for bit |
-| **Loudness** | ReplayGain from the container's own tags, off by default because a player changing the level unasked is a surprise. `PlayerConfig.audio.replayGain` turns it on |
-| **Picture** | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
-| **Subtitles** | `selectTrack`, `addExternalSubtitle` (load a `.srt` or `.vtt` mid-playback), `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, and `subtitleCues` to read the lines showing right now and draw them yourself |
-| **Looping a section** | `setAbLoop`, which repeats between two points and wraps B back to A |
-| **Chapters** | `chapterAt`, `seekToChapter` |
-| **Screenshots** | `captureFrame` |
-| **Rendering** | `attachRenderer`, `detachRenderer`, swappable while media is playing |
-| **Diagnosis** | `diagnosticsDump`, `warningHistory`, `supportBundle`, and `KiteLog` as the one logging seam (silent by default). `KiteLog.installStructured` gives you fields instead of a sentence, and URIs are stripped of their query strings before they reach any sink |
+| Playback | `open`, `play`, `pause`, `stop`, `seek`, `stepFrame`, `close`, `closeAndAwait` |
+| Queue | `openQueue`, `next`, `previous`, `setLoop`, and `addToQueue`, `removeFromQueue`, `moveInQueue`, `clearQueue` while it plays |
+| Shuffle | `setShuffle`. The items never move. `queueOrder` tells you what plays next |
+| Speed | `setSpeed`, 0.25x to 4x with pitch preserved. `setPreservePitch(false)` lets the pitch change like a tape |
+| Sound | `setVolume`, `setMuted`, `setBalance`, `setEqualizer` (ten bands and a preamp), `setAudioDelay`, `setSleepTimer` (with a fade), `setVideoEnabled(false)` for audio only |
+| Loudness | `PlayerConfig.audio.volumeCeiling` allows volume up to 2.0 through a limiter. `PlayerConfig.audio.replayGain` applies the file's own ReplayGain tags, off by default |
+| Picture | `setVideoScale` (fit, fill, stretch), `setVideoAdjustments` (brightness, contrast, saturation, hue), `setVideoTransform` (forced aspect, zoom, pan) |
+| Subtitles | `selectTrack`, `selectSecondarySubtitle`, `addExternalSubtitle`, `setSubtitleScale`, `setSubtitleDelay`, `setSubtitlePosition`, `setSubtitleStyle`, and `subtitleCues` for drawing the lines yourself |
+| Sections | `setAbLoop` repeats between two points. `setMarkers` fires an event when playback crosses a position |
+| Chapters | `chapterAt`, `seekToChapter`, `nextChapter`, `previousChapter` |
+| Resume | `memento()` saves item, position, tracks and speed. `restore(memento)` puts them back |
+| Screenshots | `captureFrame`. `kiteplayer-ffmpeg` encodes the frame to PNG or JPEG, and makes thumbnails and waveforms |
+| Rendering | `attachRenderer`, `detachRenderer`, swappable while media plays |
+| Diagnosis | `diagnosticsDump`, `warningHistory`, `supportBundle`, and `KiteLog` as the one logging seam, silent by default |
 
-Five `Flow`s publish what is happening: `state`, `progress`, `stats`, `events` and
+Five flows tell your UI what is happening: `state`, `progress`, `stats`, `events` and
 `subtitleCues`. `position()` reads the current time without collecting anything.
 
-Two seek modes. The default is exact. `SeekMode.KeyframeThenRefine` is genuinely two-phase: the
-nearest keyframe appears immediately, then the exact frame replaces it, which is what makes
-scrubbing feel responsive on large files.
+Two seek modes matter. `SeekMode.Precise` is the default. `SeekMode.KeyframeThenRefine` shows the
+nearest keyframe at once and replaces it with the exact frame a moment later, which is what makes
+scrubbing feel instant on large files.
 
-Set up at open time through `MediaItem`: `videoFilter` for an FFmpeg filter chain,
-`startPosition` to begin partway in without showing the beginning, `externalSubtitles`, `headers`
-for HTTP requests, and `formatHint` when a container needs naming.
+`MediaItem` carries the per-item settings: `headers` for HTTP, `startPosition` to begin partway in,
+`externalSubtitles`, `videoFilter` for an FFmpeg filter chain, and `formatHint` when a container
+needs naming.
 
-Anything the player cannot honour is refused with a typed error rather than accepted and ignored.
+Anything the player cannot do is refused with a typed error, never accepted and ignored. Two
+players in one process work and are tested.
 
-More than one player per process is supported and tested: two players play two files at once,
-and closing one leaves the other running.
+## Subtitles
+
+- SubRip, WebVTT and SubStation Alpha, from the container or from an external file. External
+  files load in the middle of playback.
+- ASS and SSA tracks are drawn by libass, as authored: moving signs, animated transforms, karaoke
+  fills, clips and vector drawings. They re-render every video frame while they move.
+- Fonts attached to a Matroska file are loaded for the track. `SubtitleConfig.fonts` adds your own.
+  On Android and Linux the module also loads a bounded set of system font files.
+- `SubtitleConfig.typesetting = false` keeps the built-in Kotlin styling instead of libass.
+  `PlayerSnapshot.subtitleTypesetter` says which engine is drawing.
+- A typeset ASS track ignores `SubtitleStyleOverride`. Scale and position still apply. Only the
+  primary track is typeset; a secondary track uses the built-in styling at the top of the picture.
+- On the web, libass is a separate module. `kiteass.mjs` and `kiteass.wasm` come as the `web` zip
+  attached to the wasmJs artifact; unpack them beside `index.html`. A browser has no system font,
+  so supply fonts as attachments or through `SubtitleConfig.fonts`.
+
+## Network
+
+HTTP and HTTPS work as soon as `kiteplayer-network` is on the classpath, and every standard entry
+point includes it. You do not build a resolver or a Ktor client.
+
+- Android and the JVM use OkHttp with the platform trust store. Apple uses NSURLSession. The
+  browser uses its own HTTP stack.
+- The Android artifact declares the `INTERNET` permission for you. Cleartext HTTP follows your
+  app's own policy.
+- Order of precedence: the item's own `io` source, then a resolver you set in
+  `NetworkConfig.ioResolver`, then the automatic provider. `NetworkConfig.autoResolve = false`
+  turns the automatic provider off.
+- `MediaItem.headers` reach whichever transport is selected.
+- No HTTP client exists until network media is opened, and the reader that created one closes it.
 
 ## Where it runs
 
 | | |
 |---|---|
-| **Plays real media** | macOS arm64, Android (device and emulator), iOS (device and simulator), desktop JVM on macOS arm64, Linux x64 and arm64 |
-| **Builds and links, nothing has run** | Windows x64 |
-| **Compiles only** | iOS x64, tvOS, watchOS and Android native lower-level targets. The JavaScript facade reports unavailable. |
-| **Wasm web path** | FFmpeg Wasm playback and browser audio exist; initialize KiteFFmpegWeb before creating a player. This is not evidence of broad browser qualification. |
+| Plays real media | Android (device and emulator), iOS (device and simulator), macOS arm64, desktop JVM on macOS arm64, Linux x64 and arm64 |
+| Builds and links, nothing has run | Windows x64 |
+| Compiles only | iOS x64, tvOS, watchOS, Android native. The JavaScript facade reports unavailable |
+| Web | wasmJs plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. This is not broad browser qualification |
 
-Android and iOS are the platforms in daily use: KitePlayer is the engine inside a shipping app, and
-device work goes down to per-frame GPU timings on real handsets. macOS arm64 is the development
-machine and has the deepest automated coverage, including a colour instrument that proves BT.601,
-BT.709 and BT.2020 within 2/255 against an independent reference.
+Android and iOS are the platforms in daily use. macOS arm64 is the development machine and has the
+deepest automated coverage. Linux plays through Kotlin/Native but has no audio device sink yet.
+The desktop JVM works on macOS arm64 only for now: the KiteFFmpeg 0.2.0 JVM artifact bundles only
+that native library, and the player cannot fill that gap.
 
-Linux plays through Kotlin/Native but has **no audio device sink yet**, so nothing comes out of the
-speakers. Windows cross-compiles and links a complete binary; nobody has run it.
-The pinned KiteFFmpeg 0.2.0 JVM artifact bundles only macOS arm64 JNI. Other desktop JVM
-platforms need a separately supplied native library; the standard entry point cannot fill that
-packaging gap.
-
-Two honest limits on all of it: there is no automated device farm, so device evidence is
-hand-verified rather than green on every push, and no platform has a performance budget or a
-documented OS support range.
-
-Which clip plays where is measured rather than claimed: every CI run of the format matrix writes a
-conformance table, uploaded as the `conformance-macos-host` artifact and printed in the run's
-summary. It lists each clip, what was asked of it, and what happened.
+Every CI run of the format matrix writes a conformance table, uploaded as the
+`conformance-macos-host` artifact and printed in the run summary. It lists each clip, what was
+asked of it, and what happened.
 
 ## What is missing
 
-- **Adaptive streaming.** HTTP/HTTPS single-file transport and an in-memory byte cache are part
-  of the default stack. Complete HLS/DASH adaptive playback and persistent caching are not.
-- **Audio resampling is interim quality.** Rate conversion is linear interpolation, which dulls the
-  top end of music. libswresample replaces it before 1.0. The downmix has no normalisation either,
-  so a source loud in several channels at once can clip.
-- **Linux audio output.** The engine plays; there is no ALSA sink.
-- **A stable API.** 0.0.x. Public declarations are explicit and checked against committed ABI dumps
-  by `checkKotlinAbi`, so a change fails a build here rather than surprising you. That is
-  visibility, not a promise.
-- **Subtitles on the web without fonts.** libass typesets there too, but a browser has no system
-  font: a track renders only with fonts the container attaches, the script embeds, or the
-  application supplies through `SubtitleConfig.fonts`.
-- **AV1 on the web.** Every native target cross-builds dav1d 1.5.4 with full SIMD, and hardware AV1
-  is used where it exists. The wasm build is single-threaded and dav1d requires pthreads, so the
-  web has no software AV1.
-- **Everything else that is left** is in [GitHub Issues](https://github.com/yuroyami/KitePlayer/issues),
-  grouped by plan labels. How the project works and how to run its gate: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Adaptive streaming. Single file HTTP and HTTPS with an in-memory byte cache is there. HLS and
+  DASH with bitrate switching and persistent caching are not.
+- Audio resampling quality. Rate conversion is linear interpolation, which dulls the top end of
+  music. libswresample replaces it before 1.0.
+- Linux audio output. The engine plays; there is no ALSA sink.
+- Desktop JVM outside macOS arm64, see above.
+- A stable API. Public declarations are checked against committed ABI dumps, so a change fails
+  the build here rather than surprising you. That is visibility, not a promise.
+- AV1 on the web. Native targets have dav1d with full SIMD, and hardware AV1 where it exists. The
+  Wasm build is single threaded and dav1d needs threads, so the web has no software AV1.
+- An automated device farm. Device results are checked by hand, not on every push.
+
+Everything else that is open lives in [GitHub Issues](https://github.com/yuroyami/KitePlayer/issues).
 
 ## Modules
 
-| Module | What it supplies |
+| Artifact | What it is |
 |---|---|
-| `kiteplayer` | Default construction, core, FFmpeg, output, native view bindings and network. |
-| `kiteplayer-mobile` | Convenience/compatibility alias for that assembly. |
-| `kiteplayer-compose` | Complete playback plus both Compose renderers and the runtime switcher. |
-| `kiteplayer-compose-ui` | Both Compose renderers and switcher, accepting an existing player. |
-| `kiteplayer-compose-interop` | Compose hosting a native video view. |
-| `kiteplayer-compose-video` | Video pixels drawn through Compose, including its FFmpeg frame adapters. |
-| `kiteplayer-view` | Native view widgets and binding contracts, usable without Compose. |
-| `kiteplayer-view-bindings` | FFmpeg/platform adapters for those widgets, without a player factory or networking. |
-| `kiteplayer-core` | Engine, clock, synchronization, selection and service contracts. |
-| `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg; includes the Kotlin subtitle parsers. |
-| `kiteplayer-network` | HTTP/HTTPS byte transport, automatic provider registration and range-based reads. |
-| `kiteplayer-libass` | The libass subtitle typesetter, installed automatically; ASS and SSA tracks render as authored. |
-| `kiteplayer-output` | Platform audio output, rendering support and subtitle rasterizers. |
-| `kiteplayer-subtitles` | Kotlin SRT, WebVTT and dialogue-level ASS parsers. |
-| `kiteplayer-rt` | The C real-time audio ring and device callback support. |
+| `kiteplayer-compose` | Everything in `kiteplayer`, plus both Compose video paths and the switch between them. The complete Compose entry point. |
+| `kiteplayer` | The default playback stack for native views: engine, FFmpeg decoders, audio output, view adapters, HTTP and HTTPS, libass. |
+| `kiteplayer-mobile` | The same stack under its older name. |
+| `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
+| `kiteplayer-compose-interop` | Compose hosting the platform's native video view. |
+| `kiteplayer-compose-video` | Video drawn by Compose itself. |
+| `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |
+| `kiteplayer-view-bindings` | The FFmpeg adapters those views need. |
+| `kiteplayer-core` | The engine and its service interfaces. Depends on coroutines only. |
+| `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg. Also snapshots, thumbnails, waveforms and the subtitle parsers. |
+| `kiteplayer-network` | HTTP and HTTPS transport through Ktor. Registers itself. |
+| `kiteplayer-libass` | The libass typesetter for ASS and SSA. Registers itself. |
+| `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |
+| `kiteplayer-subtitles` | SubRip, WebVTT and ASS dialogue parsers, in Kotlin. |
+| `kiteplayer-rt` | The real-time audio ring, in C. Comes with `kiteplayer-core` on native targets. Never add it yourself. |
+| `kiteplayer-phone` | Deprecated. `kiteplayer-mobile` plus `kiteplayer-view`. |
 
-`kiteplayer-phone` remains a deprecated compatibility coordinate. `kiteplayer-compose` is the
-recommended complete Compose entry point again in 0.0.23, rather than a deprecated alias.
+Compose presentation targets Android, iOS arm64, the iOS simulator and the desktop JVM.
 
-Compose presentation targets Android, iOS arm64/simulator arm64 and desktop JVM. The general
-assembly also retains its Wasm implementation and unavailable JavaScript facade. A resolving
-variant does not by itself establish playback support. Kotlin/Native Linux and Windows have no
-default HTTPS transport in this stack; desktop applications use the JVM target.
+Custom assemblies start from `kiteplayer-core` and supply their own backends through
+`KitePlayer.create(PlayerConfig(backends = Backends(backend, output)))`. The
+[SPI cookbook](docs/spi-cookbook.md) walks through one, and the
+[module contract](docs/module-contract.md) says what each entry point promises.
 
-## How subtitles reach the picture
+## Samples
 
-The FFmpeg backend extracts embedded text subtitle packets and includes `kiteplayer-subtitles`
-for parsing, including external subtitle files. Core selects tracks and schedules the cues.
-On Android, Apple and desktop JVM, the output backend rasterizes text; native or Compose
-presentation composites the resulting transparent overlays. Web presentation uses its text path.
-Applications using a standard entry point do not add the parser separately.
+Four sample apps live in this repository. None of them is published.
 
-ASS and SSA tracks take a second road. `kiteplayer-libass` installs a typesetter the core
-discovers on its own, and the engine feeds it the track's header and every event as the demuxer
-hands them over, then renders once per video frame while the picture moves. libass draws moving
-signs, animated transforms, karaoke fills, clips and vector drawings as their author wrote them,
-and the images travel the same overlay path, so every renderer shows them. Fonts attached to a
-Matroska file are loaded for the track; `SubtitleConfig.fonts` adds an application's own. On
-Android and Linux the module also loads a bounded set of the system's font files, since libass has
-no font provider there. `SubtitleConfig.typesetting = false` keeps the built-in styling, and
-`PlayerSnapshot.subtitleTypesetter` says which engine is drawing. Only the primary subtitle track
-is typeset; a secondary track rides the built-in styling at the top of the picture.
+| Module | What it shows | Run it |
+|---|---|---|
+| `kiteplayer-sample` | A macOS window and an iOS app on the native views | `./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64`, then `kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe testmedia/sync1080p30.mp4 --window`. For iOS, `./gradlew :kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64` and open `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj` |
+| `kiteplayer-sample-android` | The XML view, Compose hosting the native view, Compose drawing the frames, and a button that swaps between the two | `./gradlew :kiteplayer-sample-android:installDebug` |
+| `kiteplayer-sample-desktop` | Compose Desktop with the Compose drawn path, clipped and animated | `./gradlew :kiteplayer-sample-desktop:run` |
+| `kiteplayer-sample-web` | The wasmJs measurement harness, not a demo | `./gradlew :kiteplayer-sample-web:wasmJsBrowserDistribution`, then read `kiteplayer-sample-web/MEASUREMENTS.md` |
 
-On the web libass is a separate module, `kiteass.mjs` with `kiteass.wasm`, hosted by the page like
-the codec module. The two files come as the `web` zip attached to the wasmJs artifact; unpack them
-beside `index.html`. The first ASS track loads `./kiteass.mjs`; a page that hosts it elsewhere calls
-`KiteLibassWeb.load(url)` first.
+The test clips come from `./scripts/testmedia.sh`, which needs `ffmpeg` on your PATH. No media is
+committed to this repository.
 
-## How the core stays independent
+## Working on KitePlayer
 
-The core declares the interfaces implemented by codecs, output and optional transport providers.
-It does not depend on FFmpeg, Ktor or Compose. Its target-specific pieces supply worker dispatchers
-and transport discovery; playback decisions remain common Kotlin. Native builds also consume the
-small real-time C ring module through the existing explicit boundary.
-
-Time enters through one interface, which is what makes the second point possible:
-
-```kotlin
-public interface MonotonicClock {
-    /** Nanoseconds since an arbitrary fixed origin. Must never go backwards. */
-    public fun nanos(): Long
-}
-```
-
-## Run it here
-
-A development loop, not an installation.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the ground rules, the build prerequisites and the test gate.
+The short version:
 
 ```bash
-# Generate test clips. Needs ffmpeg on PATH; no media is committed to this repository.
-./scripts/testmedia.sh
-
-# Build the macOS sample and play a clip in a window.
-./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64
-BIN=kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe
-$BIN testmedia/sync1080p30.mp4 --window
-
-# Build the iOS simulator framework, then open the sample app in Xcode.
-./gradlew :kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64
-open kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj
-```
-
-The macOS sample prints position, drift against the master clock, and frame accounting from the
-player's own flows. Without `--window` frames go to a counting renderer; `--no-video` plays audio
-only; `--seek=<seconds>` seeks once playback is under way.
-
-## Build and test it here
-
-```bash
-./gradlew :kiteplayer-core:jvmTest            # the engine, in virtual time
-./gradlew :kiteplayer-core:macosArm64Test     # plus platform and real-thread cases
-./gradlew :kiteplayer-output:macosArm64Test   # the real audio device and the renderer
-./gradlew :kiteplayer-ffmpeg:macosArm64Test   # real decode, real seeking, colour against a reference
-./gradlew :kiteplayer-subtitles:jvmTest       # the subtitle parsers
-./gradlew :kiteplayer-rt:macosArm64Test       # the C audio ring
-./gradlew checkKotlinAbi                      # the public API against its committed dumps
-```
-
-The C audio ring has its own build and tests outside Gradle:
-
-```bash
-cd kiteplayer-rt/native
-./scripts/build-host.sh plain && ./scripts/run-c-tests.sh plain   # also asan, tsan
-./scripts/render-audit.sh          # what the real-time render unit is allowed to call
+./scripts/testmedia.sh          # generate the test clips, needs ffmpeg on PATH
+./scripts/check-gate.sh tier1   # the checks every change runs
 ```
 
 ## License
 
 Apache-2.0. See [NOTICE](NOTICE).
 
-Decoding is done by [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), which compiles FFmpeg into
-its own artifacts under the LGPL. There is no GPL build and nothing to configure. Shipping LGPL code
-obliges you to say your app uses FFmpeg and to keep its source available; KiteFFmpeg's `NOTICE`
-states this precisely.
+Decoding is done by [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg), which compiles FFmpeg
+into its own artifacts under the LGPL. Shipping LGPL code obliges you to say your app uses FFmpeg
+and to keep its source available; KiteFFmpeg's `NOTICE` states this precisely. `kiteplayer-libass`
+links libass, HarfBuzz, FreeType and FriBidi; their licence texts ship inside the artifact.
 
 Part of the Kite family: [KiteFFmpeg](https://github.com/yuroyami/KiteFFmpeg),
 [KiteCore](https://github.com/yuroyami/KiteCore), [KitePDF](https://github.com/yuroyami/KitePDF),

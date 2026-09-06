@@ -32,48 +32,49 @@ You do not install FFmpeg, add a Gradle plugin or touch linker settings.
 
 ## Install
 
-Pick one line. Put it in `commonMain.dependencies` for a Kotlin Multiplatform app, or in the normal
-`dependencies` block of an Android-only app.
-
-Compose app, everything included:
-
 ```kotlin
+/** Native views, no Compose. The default stack. */
+implementation("io.github.yuroyami:kiteplayer:0.0.23")
+
+/** Compose. Everything above, plus both Compose video paths. */
 implementation("io.github.yuroyami:kiteplayer-compose:0.0.23")
 ```
 
-Native views, no Compose:
+Put the line in `commonMain.dependencies`, or in the `dependencies` block of an Android-only app.
+Every artifact lives under `io.github.yuroyami`. Gradle picks the platform pieces for each target
+you declare.
 
-```kotlin
-implementation("io.github.yuroyami:kiteplayer:0.0.23")
-```
+### Convenience coordinates
 
-Only the engine. You bring the decoders and the output:
+| Coordinate | Use it when |
+|---|---|
+| `kiteplayer` | You use native views. No Compose. |
+| `kiteplayer-compose` | You use Compose. |
+| `kiteplayer-mobile` | You already use this older name of `kiteplayer`. |
+| `kiteplayer-compose-ui` | You want the Compose UI only and create the player yourself. |
+| `kiteplayer-core` | You want the engine only and bring your own decoders and output. |
 
-```kotlin
-implementation("io.github.yuroyami:kiteplayer-core:0.0.23")
-```
-
-What the first line pulls in. The second line is the `kiteplayer` branch of this tree:
+### Every coordinate
 
 ```text
 kiteplayer-compose
-├── kiteplayer
+├── kiteplayer                       also kiteplayer-mobile
 │   ├── kiteplayer-core
-│   ├── kiteplayer-ffmpeg             decoders over KiteFFmpeg, subtitle parsers
-│   ├── kiteplayer-output             audio output, subtitle rasterisers
-│   ├── kiteplayer-view-bindings      adapters for the native views
-│   │   └── kiteplayer-view           the native views themselves
-│   ├── kiteplayer-network            HTTP and HTTPS
-│   └── kiteplayer-libass             ASS and SSA typesetting
+│   │   └── kiteplayer-rt            native targets only
+│   ├── kiteplayer-ffmpeg            decoders over KiteFFmpeg
+│   │   └── kiteplayer-subtitles
+│   ├── kiteplayer-output            audio output, subtitle rasterisers
+│   ├── kiteplayer-view-bindings     adapters for the native views
+│   │   └── kiteplayer-view
+│   ├── kiteplayer-network           HTTP and HTTPS
+│   └── kiteplayer-libass            ASS and SSA typesetting
 ├── kiteplayer-compose-ui
-│   ├── kiteplayer-compose-interop    Compose hosting the native view
-│   └── kiteplayer-compose-video      Compose drawing the frames itself
-└── kiteplayer-phone                  old package names, kept for compatibility
+│   ├── kiteplayer-compose-interop   Compose hosting the native view
+│   └── kiteplayer-compose-video     Compose drawing the frames itself
+└── kiteplayer-phone                 deprecated
 ```
 
-Every artifact lives under `io.github.yuroyami`. Gradle picks the platform pieces for each target
-you declare. `kiteplayer-mobile` is the older name of `kiteplayer` and still works.
-[Modules](#modules) lists every artifact with what it is for.
+[Modules](#modules) says what each one is for.
 
 ## Play something
 

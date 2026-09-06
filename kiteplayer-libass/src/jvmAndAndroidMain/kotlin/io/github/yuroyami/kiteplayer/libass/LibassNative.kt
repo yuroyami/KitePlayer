@@ -8,7 +8,11 @@ package io.github.yuroyami.kiteplayer.libass
  * expect: Android's loader finds the packaged `.so` by name, the desktop unpacks the jar's copy.
  */
 internal object LibassNative {
-    /** Null once loading has failed, so a missing library is reported once and never retried. */
+    /**
+     * The reason loading failed, or null once it succeeded. Computed once: a library that cannot
+     * load is reported once and never retried, and the desktop loader's temp-directory extraction
+     * counts as a load failure too, not as a crash.
+     */
     val loadFailure: Throwable? by lazy {
         try {
             loadLibassJni()
@@ -16,6 +20,8 @@ internal object LibassNative {
         } catch (failure: UnsatisfiedLinkError) {
             failure
         } catch (failure: SecurityException) {
+            failure
+        } catch (failure: java.io.IOException) {
             failure
         }
     }

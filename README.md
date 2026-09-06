@@ -46,6 +46,8 @@ you declare.
 
 ### Convenience coordinates
 
+`kiteplayer-compose` contains everything. Pick one of these only when you want less.
+
 | Coordinate | Use it when |
 |---|---|
 | `kiteplayer` | You use native views. No Compose. |

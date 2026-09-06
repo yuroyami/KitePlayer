@@ -719,14 +719,6 @@ internal class PlaybackCore(
     /** The declared order, for the test that asserts it against the design. */
     val handlerOrder: List<String> = handlers.map { it.name }
 
-    private val actor: Job = scope.async { runLoop() }.also { job ->
-        job.invokeOnCompletion { cause ->
-            // This hook runs only after the actor body has returned. Closing its dispatcher from inside
-            // runClose would make the native WorkerDispatcher wait on its own termination forever.
-            launchCloseFinalizer(cause)
-        }
-    }
-
     // ---------------------------------------------------------------------------------------------
     // The commands, as the facade calls them.
     // ---------------------------------------------------------------------------------------------
@@ -7507,6 +7499,24 @@ internal class PlaybackCore(
         const val AUDIO_DECODE_WORKER = "audio decode"
         const val AUDIO_FEED_WORKER = "audio feed"
         const val VIDEO_SCHEDULE_WORKER = "video schedule"
+    }
+    // ---------------------------------------------------------------------------------------------
+    // The actor, started LAST.
+    //
+    // Kotlin runs property initializers in declaration order, and this one starts a coroutine on
+    // another thread that reads fields declared thousands of lines above. When it sat near the top
+    // of the class the actor could run before the constructor had initialised the rest, and on a
+    // three-core CI runner it did: the first pass touched a still-null atomic, the actor died inside
+    // <init>, and its completion hook reported a compromised close before open was ever called.
+    // Nothing below this declaration may start work on another thread.
+    // ---------------------------------------------------------------------------------------------
+
+    private val actor: Job = scope.async { runLoop() }.also { job ->
+        job.invokeOnCompletion { cause ->
+            // This hook runs only after the actor body has returned. Closing its dispatcher from inside
+            // runClose would make the native WorkerDispatcher wait on its own termination forever.
+            launchCloseFinalizer(cause)
+        }
     }
 }
 

@@ -145,25 +145,33 @@ jobs:
       # red is about the player rather than about which runner made the clips. Ubuntu's apt ffmpeg
       # is a different release again.
       #
-      # AND THIS DOES NOT PIN THE GENERATOR, which the first version of this comment claimed it did.
-      # Homebrew's ffmpeg is a MOVING formula: the proving Mac has 8.0 and the first CI run
-      # installed 8.1.2. That difference immediately mattered, and the way it mattered is worth
-      # keeping: 8.1.2 interleaves the subtitle packet in multitrack.mkv later than 8.0 does, so a
-      # matrix row that stopped reading at its video quota stopped before the first cue and reported
-      # a well-formed file as broken. The TEST was fixed to read until it has the cue it asked for,
-      # which is the right fix, and the unpinned generator has its own plan row.
-      # KiteFFmpeg learned the same lesson from the other direction and its ci.yml says it in one
-      # line: a pin against a moving formula is a calendar, not a gate.
-      - name: Install the ffmpeg CLI
-        run: brew install ffmpeg
+      # THE GENERATOR IS PINNED TO A SERIES, through Homebrew's versioned formula, and the series
+      # is the one the clips are recorded against (EXPECTED_FFMPEG_SERIES in testmedia.sh) and the
+      # one the player's own library is on: KiteFFmpeg carries FFmpeg 8.x. Both halves matter,
+      # because some fixtures are oracles that FFmpeg itself produces, and an oracle from another
+      # major is a different answer. Measured the day the unversioned formula moved to 9.0: the
+      # 5.1 reference PCM came out 384 sample frames shorter, since FFmpeg 9 trims the trailing
+      # AAC padding and FFmpeg 8 does not, and the player, decoding through its own FFmpeg 8,
+      # answered what FFmpeg 8 answers. Same clip, same bytes, one version of the oracle. The
+      # earlier lesson still holds too: 8.1.2 interleaves the subtitle packet in multitrack.mkv
+      # later than 8.0, which is why the matrix reads until it has the cue it asked for.
+      # When KiteFFmpeg moves to the next major, move the formula and EXPECTED_FFMPEG_SERIES together.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          brew install ffmpeg@8
+          echo "$(brew --prefix ffmpeg@8)/bin" >> "$GITHUB_PATH"
 
       # One line in the log so the next fixture divergence is diagnosable by reading rather than by
       # bisecting. This is what turned "multitrack.mkv decoded no subtitle cue" into an answer.
-      # The version is CHECKED here, not just printed, and it costs a second.
+      # The version is CHECKED here, strictly: a series that differs from the recorded one is a
+      # refusal on this runner, not the warning a developer's machine gets, because a red that says
+      # "wrong ffmpeg" beats a red that says "384 frames" an hour later.
       # The same check runs inside testmedia.sh below, but that is after the Kotlin/Native warmup
       # and 27 seconds of encoding, and a toolchain move should not be paid for twice.
       - name: Check the ffmpeg the clips are pinned to
         run: ./scripts/testmedia.sh --check-only
+        env:
+          TESTMEDIA_STRICT_FFMPEG: "1"
 
       # BEFORE any Gradle task that could reach compileKiteRtCFor<Target>. See the file header.
       - name: Warm the Kotlin/Native toolchain

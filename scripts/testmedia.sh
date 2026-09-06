@@ -23,14 +23,18 @@ set -euo pipefail
 # TESTMEDIA_STRICT_FFMPEG=1 to make it a refusal again, which is worth doing while bisecting a
 # version-sensitive failure.
 #
-# Compared at MAJOR.MINOR, so a patch build like 8.0.1 or a distro's "n8.0-static" is the same series.
-EXPECTED_FFMPEG_SERIES=8.0
+# Compared at the MAJOR, because that is the boundary the oracles move on: 8.0 and 8.1.2 produce the
+# same reference PCM, and 9.0 trims 384 trailing AAC frames that 8.x keeps. The player decodes
+# through KiteFFmpeg's own FFmpeg 8.x, so an oracle from another major is a different answer, and
+# a minor bump that once changed packet interleaving was answered by making that test robust. When
+# KiteFFmpeg moves to the next major, this number and CI's versioned formula move with it.
+EXPECTED_FFMPEG_SERIES=8
 
-# Field 3 of ffmpeg's first line, reduced to major.minor. The regex tolerates a leading "n" and any
-# build suffix, so "8.0", "8.1.2" and "n8.0-static" answer 8.0, 8.1 and 8.0.
+# Field 3 of ffmpeg's first line, reduced to the major. The regex tolerates a leading "n" and any
+# build suffix, so "8.0", "8.1.2" and "n8.0-static" all answer 8.
 ffmpeg_series() {
     ffmpeg -version 2>/dev/null | head -1 | awk '{print $3}' \
-        | grep -oE '[0-9]+\.[0-9]+' | head -1
+        | grep -oE '[0-9]+' | head -1
 }
 
 check_ffmpeg() {

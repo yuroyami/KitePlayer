@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # A stale gradle.properties must never publish under the version someone asked for. This is
       # the whole reason the version is an input rather than being read from the file: the two are
       # compared, so a mismatch is a failure instead of a surprise on the portal.
@@ -71,7 +71,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

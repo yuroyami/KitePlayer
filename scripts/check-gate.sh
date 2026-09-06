@@ -76,8 +76,8 @@ fi
 
 fixtures() { run ./scripts/testmedia.sh; }
 base() {
-    # Force the foundational gate once. Later groups reuse unchanged compilation outputs.
-    gradle --rerun-tasks checkKitertCoupling checkKotlinAbi \
+    # Gradle validates declared inputs and reuses unchanged compilation outputs.
+    gradle checkKitertCoupling checkKotlinAbi \
         :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest
     run kiteplayer-rt/native/scripts/build-host.sh plain
     run kiteplayer-rt/native/scripts/run-c-tests.sh plain

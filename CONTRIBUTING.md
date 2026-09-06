@@ -74,8 +74,8 @@ ran and which rule selected it.
 ./scripts/check-gate.sh tier1
 ```
 
-The aggregate reruns the coupling and ABI checks, core and subtitle JVM tests, builds and executes
-plain C tests, then runs the render audit, source discipline and tracked-file em dash scan.
+The aggregate runs the coupling and ABI checks and the core and subtitle JVM tests, builds and
+executes plain C tests, then runs the render audit, source discipline and tracked-file em dash scan.
 Stage new files before the final gate so the scan includes them. It handles the scan's expected
 no-match exit code without suppressing errors.
 
@@ -101,10 +101,10 @@ Run the aggregate script, not a hand-written list of modules. It is the maintain
 for a local macOS arm64 host and stops on the first failure. `--dry-run` prints the steps and
 commands without running checks. After resolving an environment failure, `--from=STEP` resumes at
 that named step; retain the earlier successful logs and rerun affected steps if sources changed.
-A resumed run reports its partial coverage. Gradle compilation is forced once in the base step;
-subsequent groups reuse unchanged outputs. Tier 2 also checks publication metadata and dependency
-hygiene, and builds and runs the libass C suites in plain and sanitizer configurations (the
-driver suite needs Homebrew's libass and says SKIPPED without it). Docker must be running, an iOS
+A resumed run reports its partial coverage. Gradle reuses unchanged outputs. Tier 2 also checks
+publication metadata and dependency hygiene, and builds and runs the libass C suites in plain and
+sanitizer configurations (the driver suite needs Homebrew's libass and says SKIPPED without it).
+Docker must be running, an iOS
 simulator runtime must be installed, and the sibling KiteFFmpeg checkout must contain its
 cross-built native libraries for the Linux execution check and its `native-libs/deps/*/ass-chain`
 installs for the libass module; without the sibling, the module downloads the chains from the

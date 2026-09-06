@@ -9,7 +9,8 @@ Prerequisites: JDK 21, the repository's normal Kotlin/Native prerequisites for A
 compatible Node for Wasm, and an HTTP or HTTPS endpoint that returns nonempty bytes. Android also
 needs the configured Android SDK and an explicitly selected running device. The runner reuses
 `sdk.dir` from the repository's `local.properties`. iOS needs an explicitly selected simulator UDID.
-The script does not start a server, emulator, or simulator.
+The script does not start a server or Android emulator. It boots only the explicitly selected
+iOS simulator.
 
 Stage only the core, network, and required native ring publications:
 

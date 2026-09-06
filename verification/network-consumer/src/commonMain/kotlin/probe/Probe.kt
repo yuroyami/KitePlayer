@@ -59,6 +59,8 @@ suspend fun runProbe(args: Array<String>) = withTimeout(20_000) {
         check((observedIo != null) == expectedIo) {
             "expected automatic IO=$expectedIo but observed IO=${observedIo != null}"
         }
+        // A failed body read is also an open failure; it must not satisfy the deliberate-stop check.
+        check(!expectedIo || received > 0) { "automatic reader delivered no response bytes: $failure" }
         observedIo?.let { reader ->
             check(runCatching { reader.read(ByteArray(1), 0, 1) }.isFailure) {
                 "the failed open left its automatic reader alive"

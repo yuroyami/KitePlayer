@@ -161,6 +161,9 @@ BT.709 and BT.2020 within 2/255 against an independent reference.
 
 Linux plays through Kotlin/Native but has **no audio device sink yet**, so nothing comes out of the
 speakers. Windows cross-compiles and links a complete binary; nobody has run it.
+The pinned KiteFFmpeg 0.2.0 JVM artifact bundles only macOS arm64 JNI. Other desktop JVM
+platforms need a separately supplied native library; the standard entry point cannot fill that
+packaging gap.
 
 Two honest limits on all of it: there is no automated device farm, so device evidence is
 hand-verified rather than green on every push, and no platform has a performance budget or a

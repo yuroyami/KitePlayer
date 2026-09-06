@@ -309,9 +309,12 @@ abstract class BuildLibassHostJniTask @Inject constructor(
                     "-I${jniMd.absolutePath}",
                 ) + konan.libraryDirs.map { "-L$it" } + common + listOf(
                     // libass' font provider is GDI plus DirectWrite here, and those are OS
-                    // libraries; the C++ runtime is linked in so the DLL depends on no MinGW one.
+                    // libraries. Everything MinGW-flavoured is linked in: the C++ runtime through the
+                    // driver flags, and iconv explicitly static, because -liconv alone resolves to
+                    // the import library and the DLL then needs a libiconv-2.dll no user has.
                     "-static-libstdc++", "-static-libgcc",
-                    "-lstdc++", "-lgdi32", "-ldwrite", "-lole32", "-luuid", "-luser32", "-liconv",
+                    "-Wl,-Bstatic", "-liconv", "-Wl,-Bdynamic",
+                    "-lgdi32", "-ldwrite", "-lole32", "-luuid", "-luser32",
                 )
             }
             else -> throw GradleException("BuildLibassHostJniTask knows no host triple '$triple'.")

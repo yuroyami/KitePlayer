@@ -23,5 +23,9 @@ linkerOpts.linux_x64 = -lz -lstdc++ -lm
 linkerOpts.linux_arm64 = -lz -lstdc++ -lm
 # Windows is the one platform where libass HAS a system font provider: GDI enumerates and
 # DirectWrite shapes, and those are OS libraries. libass recodes legacy scripts through GNU
-# libiconv there; FreeType took its own bundled zlib, so no -lz.
-linkerOpts.mingw_x64 = -lstdc++ -lgdi32 -ldwrite -lole32 -luuid -luser32 -liconv
+# libiconv there; FreeType took its own bundled zlib, so no -lz. The C++ runtime and iconv are
+# linked STATIC: a bare -lstdc++ or -liconv resolves to the import library first, and the binary
+# then needs libstdc++-6.dll and libiconv-2.dll at run time, which no user's machine supplies.
+# Kotlin/Native drives this link through the clang driver (its own mingw flags are -Wl, prefixed),
+# so the mode switches must be -Wl, too; a bare -Bstatic never reaches lld.
+linkerOpts.mingw_x64 = -Wl,-Bstatic -lstdc++ -liconv -Wl,-Bdynamic -lgdi32 -ldwrite -lole32 -luuid -luser32

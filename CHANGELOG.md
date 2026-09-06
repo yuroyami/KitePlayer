@@ -10,9 +10,7 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
-The 0.0.23 changes below are prepared but have not been published.
-
-## [0.0.23] - Unreleased
+## [0.0.23] - 2026-09-06
 
 The default playback packages now include HTTP/HTTPS transport and the libass subtitle
 typesetter. Compose applications can use one complete dependency, while custom applications can

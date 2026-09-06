@@ -49,11 +49,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
   Central only. Raising the catalog's kiteffmpeg version to one Central does not serve yet turns
   CI red on the next push and makes the publish fail. The sibling reaches Central first, then this
   repository is pushed and published.
-- This repository has no Actions secrets, so `publish.yml` builds everything and then fails at
-  the upload with "Invalid token". Every release so far went out from the maintainer's machine
-  with `./gradlew publishAndReleaseToMavenCentral --no-configuration-cache`, where Gradle reads
-  the same five credentials from `~/.gradle/gradle.properties`. Set the five secrets named in the
-  workflow before expecting the run to publish.
+- The five Actions secrets are set, so `publish.yml` can upload. Dispatch it with the version as
+  an input; it is compared against `VERSION` in `gradle.properties` and a mismatch fails before any
+  work. Leave the `release` input off to land the deployment as USER_MANAGED and press Publish on
+  the portal yourself. Publishing from the maintainer's machine still works the same way, with the
+  same five credentials read from `~/.gradle/gradle.properties`.
 
 ### Tests that fail for reasons that are not bugs
 

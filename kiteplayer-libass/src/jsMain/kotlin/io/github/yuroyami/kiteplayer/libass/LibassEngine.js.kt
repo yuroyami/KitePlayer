@@ -3,9 +3,9 @@ package io.github.yuroyami.kiteplayer.libass
 import io.github.yuroyami.kiteplayer.spi.TypesetFrame
 
 /**
- * No engine on this target yet: the browser build of the chain is its own piece of work, tracked
- * in the issue tracker. The module resolves here so the standard entry points keep one dependency
- * graph across targets, and the provider is honest: [open] answers null and nothing registers.
+ * No engine on this target, by design. The web engine lives in the wasmJs variant; the JavaScript
+ * variant is the unavailable facade the standard entry points keep so one dependency graph
+ * resolves on every target. The provider is honest: [open] answers null and nothing registers.
  */
 internal actual class LibassEngine private constructor() : AutoCloseable {
     actual fun openTrack(header: ByteArray): Boolean = false

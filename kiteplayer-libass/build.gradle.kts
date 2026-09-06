@@ -25,8 +25,9 @@ plugins {
  *
  * One C driver, three bindings. native/src/kite_ass.h owns every libass call and the packed-buffer
  * conversion; Kotlin/Native includes it through cinterop, Android and the desktop JVM through the
- * JNI adapter beside it. The web build of the chain is separate work and this module's wasmJs and
- * js variants carry an honest "no engine" provider until it lands.
+ * JNI adapter beside it, and the web through the export table linked into kiteass.mjs (see the web
+ * module section below). Only the js variant carries no engine, by design: it is the unavailable
+ * facade that lets the standard entry points keep one dependency graph on every target.
  *
  * THE CHAIN. Cross-built in the sibling repository as static archives, one install per target.
  * A build finds a target's chain in this order, and says which it used:

@@ -13,9 +13,11 @@ import kotlinx.coroutines.await
  * `kiteass.mjs` beside `kiteass.wasm`, which the page hosts the way it hosts the codec module. The
  * two files come as the `web` zip attached to this module's wasmJs artifact; unpack them beside
  * the page. The first ASS track a player meets starts loading [DEFAULT_URL] on its own, so a page
- * that serves the two files needs no code here; typesetting begins when the module arrives, and
- * the built-in styling draws until then. A page that keeps the files elsewhere calls [load] with
- * the URL, or [attach] with a module it instantiated itself, before it creates a player.
+ * that serves the two files needs no code here. Until the module arrives the track draws nothing:
+ * the engine records every call and replays it the moment the module lands, and typesetting
+ * begins there. Only a load that fails hands the track to the built-in styling, with a warning.
+ * A page that wants no blank first seconds calls [load] (or [attach] with a module it instantiated
+ * itself) before it creates a player; a page that keeps the files elsewhere must.
  *
  * There is no system font on the web. Fonts reach libass as container attachments, through
  * `SubtitleConfig.fonts`, or from the script's own `[Fonts]` section; a track that names a font

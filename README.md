@@ -16,9 +16,6 @@ and network transport.
 
 ## Install
 
-This branch prepares **0.0.23**. It has not been published yet; Maven Central currently serves
-0.0.22. The declarations below describe the prepared 0.0.23 module contract.
-
 Choose one entry point under `io.github.yuroyami`. KMP applications put it in
 `commonMain.dependencies`; Android-only applications use their normal `dependencies` block.
 
@@ -49,7 +46,7 @@ with `kiteplayer-compose-ui` to declare playback and presentation separately. Th
 includes both renderers and their required frame adapters, but does not include the default player
 factory or HTTP transport. Core stays transitively available because its types occur in renderer APIs.
 
-See [Modules](#modules) for the components and [the migration notes](CHANGELOG.md#0023---unreleased)
+See [Modules](#modules) for the components and [the migration notes](CHANGELOG.md#0023---2026-09-06)
 when upgrading. The published API reference is at https://yuroyami.github.io/KitePlayer/.
 
 ## Playing a file

@@ -151,6 +151,20 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
     override val containerBitrateBps: Long? = source.bitrateBps
 
     /**
+     * Read on every call rather than cached: the library fills this in as decoders produce their
+     * first output, so a value read at open would always be empty.
+     */
+    override val streamDivergences: List<io.github.yuroyami.kiteplayer.spi.StreamDivergence>
+        get() = source.streamDivergences.map { divergence ->
+            io.github.yuroyami.kiteplayer.spi.StreamDivergence(
+                streamIndex = divergence.streamIndex,
+                field = divergence.field.name,
+                declared = divergence.declared,
+                decoded = divergence.decoded,
+            )
+        }
+
+    /**
      * The container's chapters, empty only when the file declares none.
      *
      * Mapped from the container's own table (S4.b, KD-5). KiteFFmpeg reports ABSOLUTE microsecond

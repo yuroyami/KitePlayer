@@ -165,6 +165,8 @@ internal class MediaScript(
     val subtitleProbe: ScriptedSubtitleProbe = ScriptedSubtitleProbe(),
     /** Extra container audio tracks. Explicit indices make identity assertions unambiguous. */
     val additionalAudioTracks: List<ScriptedAudioTrack> = emptyList(),
+    /** Fields the container declares one way and the decoder answers another. */
+    val streamDivergences: List<io.github.yuroyami.kiteplayer.spi.StreamDivergence> = emptyList(),
     /** Extra container subtitle tracks. Explicit indices make identity assertions unambiguous. */
     val additionalSubtitleTracks: List<ScriptedSubtitleTrack> = emptyList(),
 ) {
@@ -659,6 +661,10 @@ internal class ScriptedSource(
     override val metadata: Map<String, String> =
         mapOf("title" to "scripted", "artist" to "the harness", "encoder" to "none") + script.containerTags
     override val chapters: List<Chapter> = script.chapters
+
+    /** What the script says the container and the decoder disagree about. Empty unless asked. */
+    override val streamDivergences: List<io.github.yuroyami.kiteplayer.spi.StreamDivergence> =
+        script.streamDivergences
 
     override val attachments: List<io.github.yuroyami.kiteplayer.spi.MediaAttachment> = script.attachments
     override val timestampsMayJump: Boolean = false

@@ -203,6 +203,9 @@ internal class PlaybackCore(
     private var status: PlaybackStatus = PlaybackStatus.Idle
     private var media: MediaItem? = null
 
+    /** Told once per open: the same disagreement does not become a warning per seek. */
+    private var divergencesReported: Boolean = false
+
     /** The queue (S4.e): the items and the cursor. Empty and -1 outside queue playback. */
     private var queueItems: List<MediaItem> = emptyList()
     private var queueIndex: Int = -1
@@ -1984,6 +1987,7 @@ internal class PlaybackCore(
         publishedPositionMicros.value = 0L
         progressState.value = Progress(position = Duration.ZERO, bufferedAhead = Duration.ZERO)
         firstFrameSeen = false
+        divergencesReported = false
         endOfStream.reset()
         demuxUnderrunSeen = false
         stillImageFinished = false
@@ -2696,6 +2700,34 @@ internal class PlaybackCore(
     }
 
     /**
+     * Says where the container's declaration and the decoder disagree, once per open.
+     *
+     * Read after the first frames rather than at open, because the comparison only exists once a
+     * decoder has produced something: before that the container is the only voice and there is
+     * nothing to disagree with.
+     *
+     * Not a failure. The file plays and the decoded value is the one in force. It is worth saying
+     * because this is exactly what a viewer meets as a wrong-sized picture, or as an audio device
+     * opened for a rate nothing feeds, with no other clue as to why.
+     */
+    private fun reportContainerDivergences(session: OpenSession) {
+        if (divergencesReported) return
+        val divergences = session.source.streamDivergences
+        if (divergences.isEmpty()) return
+        divergencesReported = true
+        divergences.forEach { divergence ->
+            warn(
+                PlaybackWarning.ContainerDeclarationDiverged(
+                    streamIndex = divergence.streamIndex,
+                    field = divergence.field,
+                    declared = divergence.declared,
+                    decoded = divergence.decoded,
+                ),
+            )
+        }
+    }
+
+    /**
      * Presents one frame with the clock stopped, so opening ends on a picture rather than on nothing.
      *
      * The scheduler worker does the presenting, because a renderer is documented to be called from it.
@@ -2754,6 +2786,7 @@ internal class PlaybackCore(
      */
     private suspend fun reportFirstFrame(session: OpenSession, what: String): FirstFrame {
         val outcome = presentFirstFrame(session)
+        reportContainerDivergences(session)
         when (outcome) {
             FirstFrame.Submitted, FirstFrame.Headless, FirstFrame.NoVideo -> Unit
             FirstFrame.Refused -> warn(

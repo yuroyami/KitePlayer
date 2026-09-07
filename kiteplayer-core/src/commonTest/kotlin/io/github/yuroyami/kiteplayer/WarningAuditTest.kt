@@ -38,6 +38,7 @@ class WarningAuditTest {
         PlaybackWarning.ResourcesNotReleased("x"),
         PlaybackWarning.SubtitleCharsetGuessed("subs.srt", "windows-1252"),
         PlaybackWarning.SubtitleSourceUnreadable("subs.srt", "x"),
+        PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
     )
 
@@ -45,6 +46,10 @@ class WarningAuditTest {
         is PlaybackWarning.TypesetterUnavailable -> listOf(
             "PlaybackCore.refuseTypesetting, when the installed typesetter provider returns no engine " +
                 "or throws while starting, and from abandonTypesetting when a render threw on its lane",
+        )
+        is PlaybackWarning.ContainerDeclarationDiverged -> listOf(
+            "PlaybackCore.reportContainerDivergences, after the first frames of an open, for every " +
+                "field where the container's declaration and the decoder disagree",
         )
         is PlaybackWarning.SubtitleSourceUnreadable -> listOf(
             "PlaybackCore.parseExternalSubtitles, when an external subtitle could not be reached, " +

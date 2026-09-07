@@ -37,6 +37,22 @@ public interface PlayerMediaSource : AutoCloseable {
      */
     public val containerBitrateBps: Long? get() = null
 
+    /**
+     * Fields where the container's declaration and the decoder disagree.
+     *
+     * Not an error, and not a reason to refuse anything: the file plays and the decoded numbers
+     * are the ones to trust. It is worth telling, because a container that declares one picture
+     * size and decodes another is exactly what a viewer sees as a wrong-sized picture, and an
+     * audio device opened for a rate nothing feeds sounds like a broken player.
+     *
+     * Only fields the container ACTUALLY declared belong here. A container that says nothing is
+     * not disagreeing, and most say nothing about audio sample format.
+     *
+     * Populated once the decoders have produced something, so it is empty before the first frame.
+     * Defaulted so a source that cannot compare it keeps compiling and keeps saying nothing.
+     */
+    public val streamDivergences: List<StreamDivergence> get() = emptyList()
+
     public val chapters: List<Chapter>
 
     /**
@@ -317,3 +333,19 @@ public class MediaAttachment(
         val FONT_EXTENSIONS: Set<String> = setOf("ttf", "otf", "ttc", "otc", "sfnt")
     }
 }
+
+/**
+ * One field where a container's declaration and its decoder disagree.
+ *
+ * A core type rather than the media library's own, so a backend's dependency does not become part
+ * of this project's public surface.
+ */
+public data class StreamDivergence(
+    val streamIndex: Int,
+    /** The field that disagrees, for example `Width` or `SampleRate`. */
+    val field: String,
+    /** What the container said, formatted for reading. */
+    val declared: String,
+    /** What the decoder actually produced. */
+    val decoded: String,
+)

@@ -364,6 +364,27 @@ public sealed class PlaybackWarning {
      * that does not play. This says which file and why, in a shape an application can act on,
      * rather than the free-text deselection it used to arrive as.
      */
+    /**
+     * The container declared one thing about a stream and its decoder produced another.
+     *
+     * Not an error: the file plays, and the decoded value is the one in force. It is told because
+     * this disagreement is what a viewer meets as a wrong-sized picture, or as an audio device
+     * opened for a rate nothing feeds. One warning per disagreeing field, once per open.
+     */
+    public data class ContainerDeclarationDiverged(
+        val streamIndex: Int,
+        val field: String,
+        val declared: String,
+        val decoded: String,
+    ) : PlaybackWarning() {
+        // `this.field` is spelled out because inside an accessor the bare name `field` is
+        // Kotlin's backing-field keyword. Written bare, the compiler reads this property as having
+        // a backing field it never initialises, and reports that against a DIFFERENT property.
+        override val message: String
+            get() = "stream $streamIndex: the container declared ${this.field} $declared, " +
+                "the decoder produced $decoded"
+    }
+
     public data class SubtitleSourceUnreadable(
         val uri: String,
         val reason: String,

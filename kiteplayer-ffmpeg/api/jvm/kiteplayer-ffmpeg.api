@@ -34,6 +34,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun getMetadata ()Ljava/util/Map;
 	public final fun getOnWarning ()Lkotlin/jvm/functions/Function1;
 	public fun getSeekable ()Z
+	public fun getStreamDivergences ()Ljava/util/List;
 	public fun getStreams ()Ljava/util/List;
 	public fun getTimestampsMayJump ()Z
 	public fun interrupt ()Z

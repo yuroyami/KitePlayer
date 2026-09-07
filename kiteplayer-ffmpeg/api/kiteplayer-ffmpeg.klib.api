@@ -50,6 +50,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-metadata>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.metadata.<get-metadata>|<get-metadata>(){}[0]
     final val seekable // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekable|{}seekable[0]
         final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekable.<get-seekable>|<get-seekable>(){}[0]
+    final val streamDivergences // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streamDivergences|{}streamDivergences[0]
+        final fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
     final val streams // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streams|{}streams[0]
         final fun <get-streams>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streams.<get-streams>|<get-streams>(){}[0]
     final val timestampsMayJump // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.timestampsMayJump|{}timestampsMayJump[0]

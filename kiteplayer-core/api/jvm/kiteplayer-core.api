@@ -905,6 +905,24 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$CommandRefused 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ContainerDeclarationDiverged : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()I
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ContainerDeclarationDiverged;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$ContainerDeclarationDiverged;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ContainerDeclarationDiverged;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDeclared ()Ljava/lang/String;
+	public final fun getDecoded ()Ljava/lang/String;
+	public final fun getField ()Ljava/lang/String;
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getStreamIndex ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$FrameDropping : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (I)V
 	public final fun component1 ()I
@@ -2237,6 +2255,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerMediaSou
 	public abstract fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public abstract fun getMetadata ()Ljava/util/Map;
 	public abstract fun getSeekable ()Z
+	public fun getStreamDivergences ()Ljava/util/List;
 	public abstract fun getStreams ()Ljava/util/List;
 	public abstract fun getTimestampsMayJump ()Z
 	public fun interrupt ()Z
@@ -2248,6 +2267,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/PlayerMediaSou
 public final class io/github/yuroyami/kiteplayer/spi/PlayerMediaSource$DefaultImpls {
 	public static fun getAttachments (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;
 	public static fun getContainerBitrateBps (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/lang/Long;
+	public static fun getStreamDivergences (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Ljava/util/List;
 	public static fun interrupt (Lio/github/yuroyami/kiteplayer/spi/PlayerMediaSource;)Z
 }
 
@@ -2430,6 +2450,23 @@ public abstract interface class io/github/yuroyami/kiteplayer/spi/SoftwareReadab
 public final class io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame$DefaultImpls {
 	public static synthetic fun copyPlane$default (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;I[BIILjava/lang/Object;)V
 	public static fun getRotationDegrees (Lio/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame;)I
+}
+
+public final class io/github/yuroyami/kiteplayer/spi/StreamDivergence {
+	public fun <init> (ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()I
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/spi/StreamDivergence;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/spi/StreamDivergence;ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/spi/StreamDivergence;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDeclared ()Ljava/lang/String;
+	public final fun getDecoded ()Ljava/lang/String;
+	public final fun getField ()Ljava/lang/String;
+	public final fun getStreamIndex ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/SubtitleDecoder : java/lang/AutoCloseable {

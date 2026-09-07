@@ -579,6 +579,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
         open fun <get-attachments>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/MediaAttachment> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.attachments.<get-attachments>|<get-attachments>(){}[0]
     open val containerBitrateBps // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps|{}containerBitrateBps[0]
         open fun <get-containerBitrateBps>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps.<get-containerBitrateBps>|<get-containerBitrateBps>(){}[0]
+    open val streamDivergences // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences|{}streamDivergences[0]
+        open fun <get-streamDivergences>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/StreamDivergence> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.streamDivergences.<get-streamDivergences>|<get-streamDivergences>(){}[0]
 
     abstract fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
     abstract suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.readPacket|readPacket(){}[0]
@@ -1370,6 +1372,28 @@ final class io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo { // io.github.yu
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.spi/StreamDivergence { // io.github.yuroyami.kiteplayer.spi/StreamDivergence|null[0]
+    constructor <init>(kotlin/Int, kotlin/String, kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer.spi/StreamDivergence.<init>|<init>(kotlin.Int;kotlin.String;kotlin.String;kotlin.String){}[0]
+
+    final val declared // io.github.yuroyami.kiteplayer.spi/StreamDivergence.declared|{}declared[0]
+        final fun <get-declared>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.declared.<get-declared>|<get-declared>(){}[0]
+    final val decoded // io.github.yuroyami.kiteplayer.spi/StreamDivergence.decoded|{}decoded[0]
+        final fun <get-decoded>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.decoded.<get-decoded>|<get-decoded>(){}[0]
+    final val field // io.github.yuroyami.kiteplayer.spi/StreamDivergence.field|{}field[0]
+        final fun <get-field>(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.field.<get-field>|<get-field>(){}[0]
+    final val streamIndex // io.github.yuroyami.kiteplayer.spi/StreamDivergence.streamIndex|{}streamIndex[0]
+        final fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/StreamDivergence.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]
+
+    final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/StreamDivergence.component1|component1(){}[0]
+    final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.component2|component2(){}[0]
+    final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.component3|component3(){}[0]
+    final fun component4(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.component4|component4(){}[0]
+    final fun copy(kotlin/Int = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer.spi/StreamDivergence // io.github.yuroyami.kiteplayer.spi/StreamDivergence.copy|copy(kotlin.Int;kotlin.String;kotlin.String;kotlin.String){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/StreamDivergence.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/StreamDivergence.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.spi/StreamDivergence.toString|toString(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.spi/SubtitleOverlay { // io.github.yuroyami.kiteplayer.spi/SubtitleOverlay|null[0]
@@ -3278,6 +3302,30 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.CommandRefused.toString|toString(){}[0]
+    }
+
+    final class ContainerDeclarationDiverged : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged|null[0]
+        constructor <init>(kotlin/Int, kotlin/String, kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.<init>|<init>(kotlin.Int;kotlin.String;kotlin.String;kotlin.String){}[0]
+
+        final val declared // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.declared|{}declared[0]
+            final fun <get-declared>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.declared.<get-declared>|<get-declared>(){}[0]
+        final val decoded // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.decoded|{}decoded[0]
+            final fun <get-decoded>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.decoded.<get-decoded>|<get-decoded>(){}[0]
+        final val field // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.field|{}field[0]
+            final fun <get-field>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.field.<get-field>|<get-field>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.message.<get-message>|<get-message>(){}[0]
+        final val streamIndex // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.streamIndex|{}streamIndex[0]
+            final fun <get-streamIndex>(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.streamIndex.<get-streamIndex>|<get-streamIndex>(){}[0]
+
+        final fun component1(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.component2|component2(){}[0]
+        final fun component3(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.component3|component3(){}[0]
+        final fun component4(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.component4|component4(){}[0]
+        final fun copy(kotlin/Int = ..., kotlin/String = ..., kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.copy|copy(kotlin.Int;kotlin.String;kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.ContainerDeclarationDiverged.toString|toString(){}[0]
     }
 
     final class FrameDropping : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.FrameDropping|null[0]

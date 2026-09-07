@@ -191,6 +191,9 @@ public open class KitePlayerView @JvmOverloads constructor(
             surfaceView.setSecure(value)
         }
 
+    /** The turn last reported for the picture, for the parameter keeper beside this class. */
+    internal val videoRotationDegrees: Int get() = videoRotation
+
     /**
      * Parameters for `Activity.enterPictureInPictureMode`: the video's own aspect, turned with its
      * rotation and clamped to what the OS accepts, this view's video area as the source rectangle

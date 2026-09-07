@@ -19,6 +19,25 @@ abstract interface io.github.yuroyami.kiteplayer.view/PlayerViewRenderer : io.gi
         abstract fun <get-supersededFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.supersededFrames.<get-supersededFrames>|<get-supersededFrames>(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture|null[0]
+    final val isActive // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isActive|{}isActive[0]
+        final fun <get-isActive>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isActive.<get-isActive>|<get-isActive>(){}[0]
+    final val isPossible // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isPossible|{}isPossible[0]
+        final fun <get-isPossible>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isPossible.<get-isPossible>|<get-isPossible>(){}[0]
+
+    final var startsAutomatically // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically|{}startsAutomatically[0]
+        final fun <get-startsAutomatically>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically.<get-startsAutomatically>|<get-startsAutomatically>(){}[0]
+        final fun <set-startsAutomatically>(kotlin/Boolean) // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically.<set-startsAutomatically>|<set-startsAutomatically>(kotlin.Boolean){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.close|close(){}[0]
+    final fun start() // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.start|start(){}[0]
+    final fun stop() // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.stop|stop(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.Companion|null[0]
+        final fun createOrNull(io.github.yuroyami.kiteplayer/KitePlayer, platform.AVFoundation/AVSampleBufferDisplayLayer, kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture? // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.Companion.createOrNull|createOrNull(io.github.yuroyami.kiteplayer.KitePlayer;platform.AVFoundation.AVSampleBufferDisplayLayer;kotlin.time.Duration){}[0]
+    }
+}
+
 final class io.github.yuroyami.kiteplayer.view/KitePlayerUIView : platform.UIKit/UIView { // io.github.yuroyami.kiteplayer.view/KitePlayerUIView|null[0]
     constructor <init>() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.<init>|<init>(){}[0]
 

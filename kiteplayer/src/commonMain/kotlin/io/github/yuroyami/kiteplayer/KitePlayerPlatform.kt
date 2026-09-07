@@ -39,10 +39,15 @@ public object KitePlayerPlatform {
         get() = availability.isAvailable
 
     /**
-     * Whether a player can be built here at all, which is the floor for putting one in a
-     * picture-in-picture window. It does NOT ask the device: on Android,
-     * `KitePlayerPlatform.supportsPictureInPicture(context)` asks the package manager, and the
-     * host application still owns its Activity, its manifest and the user's per-app permission.
+     * Whether this platform can put a player in a picture-in-picture window at all.
+     *
+     * iOS answers the system's own static, which needs nothing passed to it. Android cannot answer
+     * properly here because the real question needs a context, so it stays a floor and
+     * `KitePlayerPlatform.supportsPictureInPicture(context)` asks the package manager instead.
+     * Everywhere else it is false.
+     *
+     * The host application still owns its Activity, its manifest and the viewer's per-app
+     * permission, on both platforms.
      */
     public val supportsPictureInPicture: Boolean
         get() = platformKitePlayerDefaults.supportsPictureInPicture

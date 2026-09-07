@@ -526,7 +526,7 @@ internal class ScriptedBackend(
         // carries a reader it drains a little from it per packet, so the engine's byte path is
         // exercised rather than assumed: without this, anything measuring what a source delivered
         // measures a reader nobody ever called.
-        val io = media.io?.invoke()
+        val io = media.io?.open()
         return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus, io)
             .also { sessions += it }
     }

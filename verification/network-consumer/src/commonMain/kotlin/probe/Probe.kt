@@ -27,7 +27,7 @@ suspend fun runProbe(args: Array<String>) = withTimeout(20_000) {
         override suspend fun open(media: MediaItem): BackendSession {
             opened = true
             println("NETWORK_PROBE_STAGE backend")
-            val reader = media.io?.invoke()
+            val reader = media.io?.open()
             observedIo = reader
             if (reader != null) {
                 println("NETWORK_PROBE_STAGE read")

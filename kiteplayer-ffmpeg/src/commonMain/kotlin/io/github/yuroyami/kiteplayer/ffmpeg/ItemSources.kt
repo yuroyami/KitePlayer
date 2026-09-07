@@ -11,7 +11,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 internal suspend fun openSource(item: MediaItem): MediaSource {
     val factory = item.io
     return if (factory != null) {
-        MediaSource.open(BlockingMediaIo(factory()), item.openOptions)
+        MediaSource.open(BlockingMediaIo(factory.open()), item.openOptions)
     } else {
         MediaSource.open(item.uri, item.openOptions)
     }

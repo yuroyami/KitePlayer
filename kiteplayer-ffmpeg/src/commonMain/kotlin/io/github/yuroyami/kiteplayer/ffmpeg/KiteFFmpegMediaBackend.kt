@@ -66,7 +66,7 @@ public class KiteFFmpegMediaBackend(
         rewindFdOption(options)
         // Invoked exactly once: the item carries a factory, and the reader it makes belongs to this
         // session and is closed with it.
-        val io = media.io?.invoke()
+        val io = media.io?.open()
         val source = mappingFFmpegRuntimeRejection {
             KiteFFmpegSource(
                 when {

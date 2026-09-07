@@ -60,7 +60,7 @@ public data class MediaItem(
      * plays through its own HTTP client with its own TLS and auth, from an encrypted store, a
      * torrent, a cache, or bytes it already holds.
      */
-    val io: (suspend () -> MediaIo)? = null,
+    val io: MediaIoFactory? = null,
     /**
      * A hint for the demuxer, for example "mpegts", when the bytes have no recognisable header.
      * Almost never needed. Probing is reliable.
@@ -82,8 +82,38 @@ public data class MediaItem(
      */
     val openOptions: Map<String, String> = emptyMap(),
 ) {
+    init {
+        // MP3 seeking is only correct when the table of contents is used AND fast seek is unset.
+        // Either key on its own gives seeking that lands in the wrong place, looks like a player
+        // bug, and is invisible until somebody compares against another player. The engine owns
+        // that strategy, so these two are refused rather than accepted and quietly ignored.
+        openOptions["fflags"]?.let { flags ->
+            require(flags.split(',', '+').none { it.trim() == "fastseek" }) {
+                "openOptions fflags=$flags: fastseek breaks exact seeking and is never applied"
+            }
+        }
+        require("usetoc" !in openOptions) {
+            "openOptions usetoc: the engine owns MP3 seek strategy and this key is never applied"
+        }
+    }
+
     /** A short label for logs and for a UI that has nothing better to show. */
     val label: String get() = uri.substringAfterLast('/').ifEmpty { uri }
+}
+
+/**
+ * Makes a fresh [MediaIo] for one playback session.
+ *
+ * Called once per open, and opens happen more than once: a track switch, a loop, a recovery and a
+ * queue wrap all reopen. Handing back the same reader every time means the second open is given
+ * the one the first session already closed, and the media simply stops.
+ *
+ * A named interface rather than a bare lambda so a door can return one and this contract has
+ * somewhere to be written down. Kotlin converts a lambda at the call site, so `io = { reader }`
+ * keeps compiling exactly as it did.
+ */
+public fun interface MediaIoFactory {
+    public suspend fun open(): MediaIo
 }
 
 /**

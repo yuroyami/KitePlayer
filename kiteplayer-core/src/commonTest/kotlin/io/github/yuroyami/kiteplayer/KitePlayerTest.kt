@@ -87,7 +87,7 @@ class KitePlayerTest {
         val opened = harness.backend.lastOpenedItem
         // The item carries a FACTORY now, and the engine's answers with the one
         // reader it made for this session, so invoking it is how a test sees what the backend saw.
-        val delivered = assertNotNull(opened?.io, "the resolved reader never reached the backend").invoke()
+        val delivered = assertNotNull(opened?.io, "the resolved reader never reached the backend").open()
         assertNotSame(supplied, delivered, "the engine must interpose the M5 cache, not pass the reader raw")
 
         // A uri the resolver declines passes through untouched: local files stay on the

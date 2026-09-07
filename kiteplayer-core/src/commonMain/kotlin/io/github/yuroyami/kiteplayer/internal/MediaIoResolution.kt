@@ -13,7 +13,7 @@ internal suspend fun resolveMediaIo(
     config: NetworkConfig,
     automatic: suspend (String, Map<String, String>) -> MediaIo? = MediaIoProviders::resolve,
 ): MediaIo? = when {
-    item.io != null -> item.io.invoke()
+    item.io != null -> item.io.open()
     config.ioResolver != null -> config.ioResolver.resolve(item.uri, item.headers)
     config.autoResolve -> automatic(item.uri, item.headers)
     else -> null

@@ -7,7 +7,7 @@ plugins {
 
 /*
  * Compatibility umbrella for 0.0.2 source consumers. New code should depend on
- * :kiteplayer-mobile for the default stack or :kiteplayer-view for native views alone. This
+ * :kiteplayer for the default stack or :kiteplayer-view for native views alone. This
  * module owns no implementation and must never become a dependency of either clean module.
  */
 kotlin {
@@ -31,7 +31,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            api(project(":kiteplayer-mobile"))
+            api(project(":kiteplayer"))
             api(project(":kiteplayer-view"))
         }
         // This module is PUBLISHED and had no test source set at all, so its

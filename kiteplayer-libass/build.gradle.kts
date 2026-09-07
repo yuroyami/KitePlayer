@@ -20,7 +20,7 @@ plugins {
  * :kiteplayer-libass is the typesetting engine: libass and its chain (HarfBuzz, FreeType, FriBidi)
  * behind the engine's SubtitleTypesetter interface. Adding it installs a provider the core
  * discovers, and every ASS and SSA track is then typeset instead of drawn by the Kotlin dialogue
- * tier. The standard entry points (:kiteplayer, :kiteplayer-compose, :kiteplayer-mobile) include
+ * tier. The standard entry points (:kiteplayer and :kiteplayer-compose) include
  * it, so most applications never name this module.
  *
  * One C driver, three bindings. native/src/kite_ass.h owns every libass call and the packed-buffer

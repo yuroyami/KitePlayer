@@ -48,7 +48,7 @@ What each line pulls in:
 
 ```text
 kiteplayer-compose
-├── kiteplayer                       also kiteplayer-mobile
+├── kiteplayer
 │   ├── kiteplayer-core
 │   │   └── kiteplayer-rt            native targets only
 │   ├── kiteplayer-ffmpeg            decoders over KiteFFmpeg
@@ -223,7 +223,6 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 |---|---|
 | `kiteplayer-compose` | Everything in `kiteplayer`, plus both Compose video paths and the switch between them. The complete Compose entry point. |
 | `kiteplayer` | The default playback stack for native views: engine, FFmpeg decoders, audio output, view adapters, HTTP and HTTPS, libass. |
-| `kiteplayer-mobile` | The same stack under its older name. |
 | `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
 | `kiteplayer-compose-interop` | Compose hosting the platform's native video view. |
 | `kiteplayer-compose-video` | Video drawn by Compose itself. |
@@ -236,7 +235,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |
 | `kiteplayer-subtitles` | SubRip, WebVTT and ASS dialogue parsers, in Kotlin. |
 | `kiteplayer-rt` | The real-time audio ring, in C. Comes with `kiteplayer-core` on native targets. Never add it yourself. |
-| `kiteplayer-phone` | Deprecated. `kiteplayer-mobile` plus `kiteplayer-view`. |
+| `kiteplayer-phone` | Deprecated. `kiteplayer` plus `kiteplayer-view`. |
 
 Compose presentation targets Android, iOS arm64, the iOS simulator and the desktop JVM.
 

@@ -171,7 +171,6 @@ dependencies {
     dokka(project(":kiteplayer-view"))
     dokka(project(":kiteplayer-view-bindings"))
     dokka(project(":kiteplayer"))
-    dokka(project(":kiteplayer-mobile"))
     dokka(project(":kiteplayer-compose-interop"))
     dokka(project(":kiteplayer-compose-video"))
     dokka(project(":kiteplayer-compose-ui"))

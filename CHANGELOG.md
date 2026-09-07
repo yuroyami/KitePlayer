@@ -12,6 +12,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Changed
 
+- Breaking: `kiteplayer-mobile` is gone. It held no code of its own and only re-exported
+  `kiteplayer`, so two coordinates named one artifact. Depend on `kiteplayer` instead; the
+  package `io.github.yuroyami.kiteplayer.mobile` and everything in it are unchanged and still
+  resolve. The versions already on Maven Central stay there.
+
 - The Compose artifacts depend on Compose Multiplatform 1.12.0 instead of 1.12.0-rc01. The
   build moves to Gradle 9.7.1 and the Android Gradle Plugin 9.4.0.
 

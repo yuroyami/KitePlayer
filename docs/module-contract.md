@@ -10,7 +10,6 @@ document was agreed and is described under Subtitles below.
 | Module | Contract |
 |---|---|
 | `kiteplayer` | Default playback assembly: core, FFmpeg, output, native view bindings and HTTP/HTTPS transport. No Compose dependency. |
-| `kiteplayer-mobile` | Compatibility and convenience entry point using the same assembly. No second player implementation. |
 | `kiteplayer-compose` | Complete playback plus both Compose video paths and the runtime path switcher. One dependency for a Compose app, including apps also using XML. |
 | `kiteplayer-compose-ui` | Both Compose presentation paths accepting an existing player. Does not depend on the playback assembly or automatically add networking. |
 | `kiteplayer-core` | Engine and service contracts. Does not depend on FFmpeg, Ktor or Compose. |
@@ -60,7 +59,7 @@ lazy-created client, so reader close also releases the client.
 
 Default playback continues to include the Kotlin subtitle parsers through the FFmpeg backend,
 with cue timing in core and text rasterization in output. `kiteplayer-libass` joins the default
-assembly the way the network module does: `kiteplayer` depends on it, so `kiteplayer-mobile` and
+assembly the way the network module does: `kiteplayer` depends on it, so
 `kiteplayer-compose` inherit it, and `kiteplayer-compose-ui` does not. Discovery mirrors the
 transport providers exactly: `SubtitleTypesetterProvider` through service metadata on the JVM and
 Android, eager registration on native, and `SubtitleTypesetters.register` for anyone else. The

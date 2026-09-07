@@ -33,7 +33,7 @@ import platform.UIKit.UIView
  * playback, because a backgrounded view should not stop the sound.
  *
  * A renderer adapter must be installed before assigning [player]. The default adapter in
- * `kiteplayer-mobile` uses Metal: VideoToolbox frames wrap into textures with no copy and software
+ * `kiteplayer` uses Metal: VideoToolbox frames wrap into textures with no copy and software
  * frames upload in their native format. [preferMetal] set false before the view enters a window
  * asks that adapter for its CPU-converter CALayer fallback. A custom backend can install its own
  * adapter without this view depending on KiteFFmpeg or the output implementation.

@@ -299,7 +299,7 @@ Do not reopen these without new evidence.
 ## The 0.0.23 module boundary
 
 The agreed entry-point and automatic-transport contract is in `docs/module-contract.md`.
-`kiteplayer` owns default construction; `kiteplayer-mobile` reexports it. The complete Compose
+`kiteplayer` owns default construction. The complete Compose
 entry point is `kiteplayer-compose`; `kiteplayer-compose-ui` only supplies presentation.
 FFmpeg/native view adapters live in `kiteplayer-view-bindings`, below both construction and
 Compose. Their existing package names stay compatible.

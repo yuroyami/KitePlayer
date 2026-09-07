@@ -18,6 +18,6 @@ lifecycle; the Activity owns no `SurfaceHolder`, renderer, or `Surface`. Explici
 `.MainActivity --ez s1c_smoke true` still writes the same eleven-key JSON oracle. Debug-signed
 release exists solely so the local `run-as` oracle can read that result; R8 still runs.
 
-The app depends directly on `:kiteplayer-mobile`, `:kiteplayer-compose-interop`, and
+The app depends directly on `:kiteplayer`, `:kiteplayer-compose-interop`, and
 `:kiteplayer-compose-video` because demonstrating the product split is its purpose. It is sample
 glue, not a recommendation that ordinary applications need all three presentation artifacts.

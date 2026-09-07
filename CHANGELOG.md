@@ -10,6 +10,46 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ## [Unreleased]
 
+### Added
+
+- Playback now behaves when the platform takes the sound away. A call, another app, or the
+  headphones coming out pauses or lowers the volume, and playback resumes afterwards only when
+  this policy was the one that paused it. Attach it with
+  `KitePlayerPlatform.attachInterruptionHandling`.
+- Video decoding stops while the application is in the background, through
+  `KitePlayerPlatform.attachBackgroundHandling`. Three policies: keep the sound and park the
+  picture, pause everything, or do nothing.
+- `KitePlayerMediaSession` mirrors the player into the platform's own media session, so the lock
+  screen, the headset buttons, the car and the iOS now playing card all work. Android hands out a
+  session token for the application's own notification.
+- iOS picture in picture works. `SampleBufferVideoRenderer` draws into the layer a controller can
+  take, and `KitePlayerPictureInPicture` drives the small window.
+- On Android, `keepPictureInPictureParamsCurrent` keeps the window's parameters matching what is
+  playing, and `enterPictureInPicture` opens it. Auto-enter used to stay off for a whole session
+  when the parameters were built while paused.
+- `inspect(media, backend)` reads a file's length, tracks, chapters and metadata without opening
+  playback, and without an output device.
+- `captureFrame(withSubtitles = true)` returns a screenshot carrying the subtitles that were on
+  screen, laid out for the frame's own size. `SubtitleOverlay.drawOver` burns them in.
+- A memento now carries balance, the equaliser, and every picture and subtitle setting. Its text
+  form is version 2 and still reads version 1.
+- The playback stats report the bit rate the container declares, beside the measured throughput.
+- The player says when a container's header disagrees with its own decoder, naming the stream, the
+  field, and both values.
+- An external subtitle can be read from an http or https address, or through a reader the caller
+  supplies as `SubtitleSource.io`. The parent item's headers travel with the request.
+
+### Fixed
+
+- A stereo file played silent on a mono device, and 5.1 content lost its dialogue on a quad
+  device. Every channel now reaches a speaker when folding to a smaller layout.
+- YCgCo video was converted with the BT.709 matrix, so its colours were wrong on every path.
+- On Metal, turning debanding on also moved the chroma planes, and turning it off applied no
+  siting correction at all. Chroma is now placed from the container's declared siting.
+- The last subtitle of a file is no longer cut off: the session waits for a cue that outlives the
+  last frame, bounded at ten seconds.
+- WebVTT `position`, `line` and `size` settings are honoured instead of being read and discarded.
+
 ### Changed
 
 - Breaking: `kiteplayer-mobile` is gone. It held no code of its own and only re-exported
@@ -19,6 +59,15 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 - The Compose artifacts depend on Compose Multiplatform 1.12.0 instead of 1.12.0-rc01. The
   build moves to Gradle 9.7.1 and the Android Gradle Plugin 9.4.0.
+
+- Breaking: `MediaItem.io` is typed `MediaIoFactory` rather than a bare lambda. A lambda at the
+  call site still converts, so existing code compiles unchanged.
+
+- Breaking: an item carrying the `fflags=fastseek` or `usetoc` demuxer options is refused where it
+  is built. Both break exact seeking on MP3, and the engine owns that strategy.
+
+- An external subtitle that cannot be read now warns `SubtitleSourceUnreadable`, naming the
+  address and the reason, instead of arriving as a track deselection with a sentence in it.
 
 ## [0.0.23] - 2026-09-06
 

@@ -87,6 +87,46 @@ final class io.github.yuroyami.kiteplayer.session/InterruptionPolicy { // io.git
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.session/InterruptionPolicy.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.session/MediaSessionState { // io.github.yuroyami.kiteplayer.session/MediaSessionState|null[0]
+    constructor <init>(kotlin/Boolean, kotlin.time/Duration, kotlin.time/Duration?, kotlin/Double, kotlin/Boolean, kotlin/String?, kotlin/String?, kotlin/String?, kotlin/Boolean, kotlin/Boolean) // io.github.yuroyami.kiteplayer.session/MediaSessionState.<init>|<init>(kotlin.Boolean;kotlin.time.Duration;kotlin.time.Duration?;kotlin.Double;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean){}[0]
+
+    final val album // io.github.yuroyami.kiteplayer.session/MediaSessionState.album|{}album[0]
+        final fun <get-album>(): kotlin/String? // io.github.yuroyami.kiteplayer.session/MediaSessionState.album.<get-album>|<get-album>(){}[0]
+    final val artist // io.github.yuroyami.kiteplayer.session/MediaSessionState.artist|{}artist[0]
+        final fun <get-artist>(): kotlin/String? // io.github.yuroyami.kiteplayer.session/MediaSessionState.artist.<get-artist>|<get-artist>(){}[0]
+    final val canSeek // io.github.yuroyami.kiteplayer.session/MediaSessionState.canSeek|{}canSeek[0]
+        final fun <get-canSeek>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.canSeek.<get-canSeek>|<get-canSeek>(){}[0]
+    final val duration // io.github.yuroyami.kiteplayer.session/MediaSessionState.duration|{}duration[0]
+        final fun <get-duration>(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer.session/MediaSessionState.duration.<get-duration>|<get-duration>(){}[0]
+    final val hasNext // io.github.yuroyami.kiteplayer.session/MediaSessionState.hasNext|{}hasNext[0]
+        final fun <get-hasNext>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.hasNext.<get-hasNext>|<get-hasNext>(){}[0]
+    final val hasPrevious // io.github.yuroyami.kiteplayer.session/MediaSessionState.hasPrevious|{}hasPrevious[0]
+        final fun <get-hasPrevious>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.hasPrevious.<get-hasPrevious>|<get-hasPrevious>(){}[0]
+    final val playing // io.github.yuroyami.kiteplayer.session/MediaSessionState.playing|{}playing[0]
+        final fun <get-playing>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.playing.<get-playing>|<get-playing>(){}[0]
+    final val position // io.github.yuroyami.kiteplayer.session/MediaSessionState.position|{}position[0]
+        final fun <get-position>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.session/MediaSessionState.position.<get-position>|<get-position>(){}[0]
+    final val speed // io.github.yuroyami.kiteplayer.session/MediaSessionState.speed|{}speed[0]
+        final fun <get-speed>(): kotlin/Double // io.github.yuroyami.kiteplayer.session/MediaSessionState.speed.<get-speed>|<get-speed>(){}[0]
+    final val title // io.github.yuroyami.kiteplayer.session/MediaSessionState.title|{}title[0]
+        final fun <get-title>(): kotlin/String? // io.github.yuroyami.kiteplayer.session/MediaSessionState.title.<get-title>|<get-title>(){}[0]
+
+    final fun component1(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.component1|component1(){}[0]
+    final fun component10(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.component10|component10(){}[0]
+    final fun component2(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.session/MediaSessionState.component2|component2(){}[0]
+    final fun component3(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer.session/MediaSessionState.component3|component3(){}[0]
+    final fun component4(): kotlin/Double // io.github.yuroyami.kiteplayer.session/MediaSessionState.component4|component4(){}[0]
+    final fun component5(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.component5|component5(){}[0]
+    final fun component6(): kotlin/String? // io.github.yuroyami.kiteplayer.session/MediaSessionState.component6|component6(){}[0]
+    final fun component7(): kotlin/String? // io.github.yuroyami.kiteplayer.session/MediaSessionState.component7|component7(){}[0]
+    final fun component8(): kotlin/String? // io.github.yuroyami.kiteplayer.session/MediaSessionState.component8|component8(){}[0]
+    final fun component9(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.component9|component9(){}[0]
+    final fun copy(kotlin/Boolean = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., kotlin/Double = ..., kotlin/Boolean = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/String? = ..., kotlin/Boolean = ..., kotlin/Boolean = ...): io.github.yuroyami.kiteplayer.session/MediaSessionState // io.github.yuroyami.kiteplayer.session/MediaSessionState.copy|copy(kotlin.Boolean;kotlin.time.Duration;kotlin.time.Duration?;kotlin.Double;kotlin.Boolean;kotlin.String?;kotlin.String?;kotlin.String?;kotlin.Boolean;kotlin.Boolean){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/MediaSessionState.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.session/MediaSessionState.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.session/MediaSessionState.toString|toString(){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer/KitePlayerPlatform { // io.github.yuroyami.kiteplayer/KitePlayerPlatform|null[0]
     final val availability // io.github.yuroyami.kiteplayer/KitePlayerPlatform.availability|{}availability[0]
         final fun <get-availability>(): io.github.yuroyami.kiteplayer/KitePlayerAvailability // io.github.yuroyami.kiteplayer/KitePlayerPlatform.availability.<get-availability>|<get-availability>(){}[0]
@@ -98,7 +138,19 @@ final object io.github.yuroyami.kiteplayer/KitePlayerPlatform { // io.github.yur
     final fun createOrNull(io.github.yuroyami.kiteplayer/PlayerConfig = ...): io.github.yuroyami.kiteplayer/KitePlayer? // io.github.yuroyami.kiteplayer/KitePlayerPlatform.createOrNull|createOrNull(io.github.yuroyami.kiteplayer.PlayerConfig){}[0]
 }
 
+final fun (io.github.yuroyami.kiteplayer/PlayerSnapshot).io.github.yuroyami.kiteplayer.session/toMediaSessionState(io.github.yuroyami.kiteplayer/Progress): io.github.yuroyami.kiteplayer.session/MediaSessionState // io.github.yuroyami.kiteplayer.session/toMediaSessionState|toMediaSessionState@io.github.yuroyami.kiteplayer.PlayerSnapshot(io.github.yuroyami.kiteplayer.Progress){}[0]
 final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer.mobile/mobileBackends|mobileBackends(){}[0]
+
+// Targets: [ios]
+final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer){}[0]
+
+    final val platformToken // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.platformToken|{}platformToken[0]
+        final fun <get-platformToken>(): kotlin/Any? // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.platformToken.<get-platformToken>|<get-platformToken>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.close|close(){}[0]
+    final fun setArtwork(platform.UIKit/UIImage?) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.setArtwork|setArtwork(platform.UIKit.UIImage?){}[0]
+}
 
 // Targets: [ios]
 final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachBackgroundHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/BackgroundPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachBackgroundHandling|attachBackgroundHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.BackgroundPolicy){}[0]

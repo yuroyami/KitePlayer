@@ -4061,6 +4061,23 @@ internal class PlaybackCore(
         session.subtitle2Cues.removeAll { it.endMicros < cutoff }
     }
 
+    /**
+     * How much longer the last cue still has to run, measured once when every other lane is done.
+     *
+     * Both lanes, because a second subtitle track can outlast the first. Zero for every file whose
+     * subtitles end before its pictures do, which is almost all of them, so this costs one pass
+     * over a small list at the very end of a session and nothing at all during playback.
+     */
+    private fun subtitleTailOverrun(session: OpenSession): Duration {
+        val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
+        val primary = session.subtitleCues.maxOfOrNull { it.endMicros }
+        val secondary = session.subtitle2Cues.maxOfOrNull { it.endMicros }
+        val latestEnd = maxOf(primary ?: Long.MIN_VALUE, secondary ?: Long.MIN_VALUE)
+        if (latestEnd == Long.MIN_VALUE) return Duration.ZERO
+        val remainingUs = latestEnd - positionUs
+        return if (remainingUs <= 0) Duration.ZERO else remainingUs.microseconds
+    }
+
     /** The timing half of handleSubtitles, shared by container and external cue tables (S4.e). */
     private suspend fun timeAndPublishCues(session: OpenSession) {
         val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
@@ -4617,6 +4634,27 @@ internal class PlaybackCore(
         // the media for a viewer who asked for a still picture.
         if (!playRequested) return
         if (status == PlaybackStatus.Ended) return
+
+        // The subtitle lane's own end. Every other lane has said "no more data"; this one finishes
+        // when its last cue stops being shown, which is later than the last frame whenever a
+        // closing line outlives the picture it belongs to. Ending here is how the last line of
+        // dialogue in a film used to vanish a moment early.
+        if (!endOfStream.subtitleTailDone) {
+            if (endOfStream.subtitleTailUntilNanos == 0L) {
+                val overrun = subtitleTailOverrun(session)
+                endOfStream.subtitleTailUntilNanos = if (overrun <= Duration.ZERO) {
+                    -1L
+                } else {
+                    clock.nanos() + minOf(overrun, SUBTITLE_TAIL_MAX).inWholeNanoseconds
+                }
+            }
+            if (endOfStream.subtitleTailUntilNanos > 0 && clock.nanos() < endOfStream.subtitleTailUntilNanos) {
+                wakeIn(WORKER_POLL)
+                return
+            }
+            endOfStream.subtitleTailDone = true
+        }
+
         session.schedulerMode.value = SCHEDULER_IDLE
         // The timeline stops where the media does. A clock left running reads on from wall time, so a
         // player sitting on its last frame would report a position further past the duration the longer
@@ -7417,6 +7455,15 @@ internal class PlaybackCore(
         val WORKER_POLL: Duration = 50.milliseconds
 
         /**
+         * The most the end of a session waits for a cue that outlives the last frame.
+         *
+         * A real closing caption runs a second or two past the pictures. A cue whose end is
+         * further out than this is a malformed file, and holding a finished player open on its
+         * word would be worse than cutting the line short.
+         */
+        val SUBTITLE_TAIL_MAX: Duration = 10.seconds
+
+        /**
          * How far behind the clock a packet has to be before FrameDropPolicy.LateAndDecode throws
          * it away undecoded.
          *
@@ -7630,6 +7677,12 @@ internal class EndOfStreamState {
     /** The last frame stays on the screen, so a finished file looks finished rather than black. */
     var keepOpen: Boolean = false
 
+    /** When the last cue stops being due, worked out once. Zero before that, and bounded. */
+    var subtitleTailUntilNanos: Long = 0
+
+    /** The subtitle lane has had its time, so the end is not held for it again. */
+    var subtitleTailDone: Boolean = false
+
     fun reset() {
         demuxerEnded = false
         audioDecoderDrained = false
@@ -7641,6 +7694,8 @@ internal class EndOfStreamState {
         sinkDrained = false
         drainFailed = false
         keepOpen = false
+        subtitleTailUntilNanos = 0
+        subtitleTailDone = false
     }
 }
 

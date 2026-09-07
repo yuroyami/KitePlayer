@@ -260,9 +260,9 @@ public object SoftwareConverter {
         val cb = (chromaB - 128) * c.chromaScale
         val cr = (chromaR - 128) * c.chromaScale
 
-        val red = y + c.rCr * cr
-        val green = y - c.gCb * cb - c.gCr * cr
-        val blue = y + c.bCb * cb
+        val red = y + c.rCb * cb + c.rCr * cr
+        val green = y + c.gCb * cb + c.gCr * cr
+        val blue = y + c.bCb * cb + c.bCr * cr
 
         var at = index
         out[at++] = red.clampToByte()
@@ -335,10 +335,19 @@ public object SoftwareConverter {
         val lumaOffset: Int,
         val lumaScale: Double,
         val chromaScale: Double,
+        /**
+         * The chroma half of the inverse matrix, all six terms.
+         *
+         * Four were enough while every matrix was a YCbCr one, where red never reads Cb and blue
+         * never reads Cr. YCgCo needs both in both, so it could not be written as four constants
+         * and silently came out as BT.709.
+         */
+        val rCb: Double,
         val rCr: Double,
         val gCb: Double,
         val gCr: Double,
         val bCb: Double,
+        val bCr: Double,
     ) {
         companion object {
             /**
@@ -360,14 +369,14 @@ public object SoftwareConverter {
                 return when (colorSpace.matrix) {
                     ColorMatrix.Bt601, ColorMatrix.Bt470bg, ColorMatrix.Smpte170m -> Coefficients(
                         offset, lumaScale, chromaScale,
-                        rCr = 1.402, gCb = 0.344136, gCr = 0.714136, bCb = 1.772,
+                        rCb = 0.0, rCr = 1.402, gCb = -0.344136, gCr = -0.714136, bCb = 1.772, bCr = 0.0,
                     )
                     // SMPTE 240M is its own matrix and not BT.601 under another name. Its luma
                     // weights are 0.212 and 0.087, between BT.601's and BT.709's, so borrowing
                     // BT.601's row shifts every hue on this content by a mean of 7.7 of 255.
                     ColorMatrix.Smpte240m -> Coefficients(
                         offset, lumaScale, chromaScale,
-                        rCr = 1.576, gCb = 0.2266, gCr = 0.4769, bCb = 1.826,
+                        rCb = 0.0, rCr = 1.576, gCb = -0.2266, gCr = -0.4769, bCb = 1.826, bCr = 0.0,
                     )
                     // Constant luminance is converted with the non-constant luminance row, which is
                     // an approximation: a correct path needs the whole transfer function, not just a
@@ -375,13 +384,24 @@ public object SoftwareConverter {
                     // for the same reason as it warns about HDR.
                     ColorMatrix.Bt2020Ncl, ColorMatrix.Bt2020Cl -> Coefficients(
                         offset, lumaScale, chromaScale,
-                        rCr = 1.4746, gCb = 0.164553, gCr = 0.571353, bCb = 1.8814,
+                        rCb = 0.0, rCr = 1.4746, gCb = -0.164553, gCr = -0.571353, bCb = 1.8814, bCr = 0.0,
+                    )
+                    // R = Y - Cg + Co, G = Y + Cg, B = Y - Cg - Co, with Cg in the Cb slot and
+                    // Co in the Cr slot. Only expressible now that red and blue may read both.
+                    ColorMatrix.YCgCo -> Coefficients(
+                        offset, lumaScale, chromaScale,
+                        rCb = -1.0, rCr = 1.0, gCb = 1.0, gCr = 0.0, bCb = -1.0, bCr = -1.0,
                     )
                     // BT.709, and the right default for anything unspecified above standard
                     // definition. See ColorInfo.guessFor, which KiteFFmpeg applies before this.
-                    else -> Coefficients(
+                    // Listed rather than caught by an else, so a new entry in the enum is a compile
+                    // error here instead of silently becoming BT.709. ICtCp and Identity are NOT
+                    // this transform and are approximated; see #129.
+                    ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc,
+                    ColorMatrix.ICtCp, ColorMatrix.Identity,
+                    -> Coefficients(
                         offset, lumaScale, chromaScale,
-                        rCr = 1.5748, gCb = 0.187324, gCr = 0.468124, bCb = 1.8556,
+                        rCb = 0.0, rCr = 1.5748, gCb = -0.187324, gCr = -0.468124, bCb = 1.8556, bCr = 0.0,
                     )
                 }
             }

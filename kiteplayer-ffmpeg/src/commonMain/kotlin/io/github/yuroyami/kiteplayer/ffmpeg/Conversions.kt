@@ -339,9 +339,9 @@ private fun writePackedRgba(
     val cb = (chromaB - 128) * coefficients.chromaScale
     val cr = (chromaR - 128) * coefficients.chromaScale
     var at = index
-    out[at++] = (y + coefficients.rCr * cr).packedByte()
-    out[at++] = (y - coefficients.gCb * cb - coefficients.gCr * cr).packedByte()
-    out[at++] = (y + coefficients.bCb * cb).packedByte()
+    out[at++] = (y + coefficients.rCb * cb + coefficients.rCr * cr).packedByte()
+    out[at++] = (y + coefficients.gCb * cb + coefficients.gCr * cr).packedByte()
+    out[at++] = (y + coefficients.bCb * cb + coefficients.bCr * cr).packedByte()
     out[at++] = -1
     return at
 }
@@ -369,10 +369,19 @@ private class PackedCoefficients(
     val lumaOffset: Int,
     val lumaScale: Double,
     val chromaScale: Double,
+    /**
+     * The chroma half of the inverse matrix, all six terms.
+     *
+     * Four were enough while every matrix was a YCbCr one, where red never reads Cb and blue never
+     * reads Cr. YCgCo needs both in both, so it could not be written as four constants at all and
+     * silently came out as BT.709.
+     */
+    val rCb: Double,
     val rCr: Double,
     val gCb: Double,
     val gCr: Double,
     val bCb: Double,
+    val bCr: Double,
 ) {
     companion object {
         fun of(colorSpace: ColorSpaceInfo): PackedCoefficients {
@@ -382,19 +391,31 @@ private class PackedCoefficients(
             return when (colorSpace.matrix) {
                 ColorMatrix.Bt601, ColorMatrix.Bt470bg, ColorMatrix.Smpte170m -> PackedCoefficients(
                     offset, lumaScale, chromaScale,
-                    rCr = 1.402, gCb = 0.344136, gCr = 0.714136, bCb = 1.772,
+                    rCb = 0.0, rCr = 1.402, gCb = -0.344136, gCr = -0.714136, bCb = 1.772, bCr = 0.0,
                 )
                 ColorMatrix.Smpte240m -> PackedCoefficients(
                     offset, lumaScale, chromaScale,
-                    rCr = 1.576, gCb = 0.2266, gCr = 0.4769, bCb = 1.826,
+                    rCb = 0.0, rCr = 1.576, gCb = -0.2266, gCr = -0.4769, bCb = 1.826, bCr = 0.0,
                 )
                 ColorMatrix.Bt2020Ncl, ColorMatrix.Bt2020Cl -> PackedCoefficients(
                     offset, lumaScale, chromaScale,
-                    rCr = 1.4746, gCb = 0.164553, gCr = 0.571353, bCb = 1.8814,
+                    rCb = 0.0, rCr = 1.4746, gCb = -0.164553, gCr = -0.571353, bCb = 1.8814, bCr = 0.0,
                 )
-                else -> PackedCoefficients(
+                // R = Y - Cg + Co, G = Y + Cg, B = Y - Cg - Co, with Cg in the Cb slot and Co in
+                // the Cr slot. Only reachable at all because red and blue may read Cb and Cr both.
+                ColorMatrix.YCgCo -> PackedCoefficients(
                     offset, lumaScale, chromaScale,
-                    rCr = 1.5748, gCb = 0.187324, gCr = 0.468124, bCb = 1.8556,
+                    rCb = -1.0, rCr = 1.0, gCb = 1.0, gCr = 0.0, bCb = -1.0, bCr = -1.0,
+                )
+                // BT.709 and the two that carry no usable answer of their own. Listed rather than
+                // caught by an else, so a new entry in the enum is a compile error here instead of
+                // silently becoming BT.709. ICtCp and Identity are NOT this transform and are
+                // approximated; see #129.
+                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc,
+                ColorMatrix.ICtCp, ColorMatrix.Identity,
+                -> PackedCoefficients(
+                    offset, lumaScale, chromaScale,
+                    rCb = 0.0, rCr = 1.5748, gCb = -0.187324, gCr = -0.468124, bCb = 1.8556, bCr = 0.0,
                 )
             }
         }

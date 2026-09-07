@@ -38,6 +38,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-attachments>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/MediaAttachment> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.attachments.<get-attachments>|<get-attachments>(){}[0]
     final val chapters // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.chapters|{}chapters[0]
         final fun <get-chapters>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.chapters.<get-chapters>|<get-chapters>(){}[0]
+    final val containerBitrateBps // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.containerBitrateBps|{}containerBitrateBps[0]
+        final fun <get-containerBitrateBps>(): kotlin/Long? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.containerBitrateBps.<get-containerBitrateBps>|<get-containerBitrateBps>(){}[0]
     final val duration // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.duration|{}duration[0]
         final fun <get-duration>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.duration.<get-duration>|<get-duration>(){}[0]
     final val firstAudio // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.firstAudio|{}firstAudio[0]

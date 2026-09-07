@@ -319,11 +319,14 @@ public data class PlaybackStats(
      */
     val presentLatenessP95: Duration = ZERO,
     /**
-     * The container's overall bitrate.
+     * What the container declares as its overall bit rate, in bits per second.
      *
-     * Always null. A source reports a bitrate per stream and none reports one for the container,
-     * because no backend binds an entry point for it; adding one is C surface across every target
-     * and is grouped with the others waiting on that.
+     * The container's own claim, and deliberately not the same number as the measured throughput
+     * beside it: on variable-bit-rate media the two differ, and which one a reader wants depends
+     * on whether they are asking what the file says or what actually flowed.
+     *
+     * Null when the container declares none, which is normal for a live stream, and for a source
+     * that does not report it.
      */
     val containerBitrate: Long? = null,
     val syncMode: SyncMode = SyncMode.Auto,

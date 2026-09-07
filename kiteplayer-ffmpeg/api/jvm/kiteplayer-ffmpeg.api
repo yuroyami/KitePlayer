@@ -27,6 +27,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun close ()V
 	public fun getAttachments ()Ljava/util/List;
 	public fun getChapters ()Ljava/util/List;
+	public fun getContainerBitrateBps ()Ljava/lang/Long;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public final fun getFirstAudio ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public final fun getFirstVideo ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;

@@ -573,6 +573,8 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerMediaSource : kotlin/
         abstract fun <get-timestampsMayJump>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.timestampsMayJump.<get-timestampsMayJump>|<get-timestampsMayJump>(){}[0]
     open val attachments // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.attachments|{}attachments[0]
         open fun <get-attachments>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/MediaAttachment> // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.attachments.<get-attachments>|<get-attachments>(){}[0]
+    open val containerBitrateBps // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps|{}containerBitrateBps[0]
+        open fun <get-containerBitrateBps>(): kotlin/Long? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.containerBitrateBps.<get-containerBitrateBps>|<get-containerBitrateBps>(){}[0]
 
     abstract fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
     abstract suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.spi/PlayerMediaSource.readPacket|readPacket(){}[0]

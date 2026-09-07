@@ -6178,6 +6178,7 @@ internal class PlaybackCore(
                 decodeTimeP50 = (session?.decodeTimes?.p(0.5) ?: 0L).nanoseconds,
                 decodeTimeP95 = (session?.decodeTimes?.p(0.95) ?: 0L).nanoseconds,
                 presentLatenessP95 = (session?.video?.presentLatenessP95Nanos() ?: 0L).nanoseconds,
+                containerBitrate = session?.source?.containerBitrateBps,
                 syncMode = config.syncMode,
                 masterClock = masterClockKind(session),
             )

@@ -28,6 +28,15 @@ public interface PlayerMediaSource : AutoCloseable {
     /** Container-level tags. Never trusted, always reported. */
     public val metadata: Map<String, String>
 
+    /**
+     * What the container declares as its overall bit rate, in bits per second.
+     *
+     * The container's own claim, not a measurement: the stats report both, and they disagree on
+     * variable-bit-rate media by design. Null when the container declares none, which is normal
+     * for a live stream. Defaulted so an existing source keeps compiling and keeps saying nothing.
+     */
+    public val containerBitrateBps: Long? get() = null
+
     public val chapters: List<Chapter>
 
     /**

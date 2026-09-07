@@ -147,6 +147,9 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
 
     override val metadata: Map<String, String> = source.metadata
 
+    /** The container's own claim, read once at open. Null when it declares none. */
+    override val containerBitrateBps: Long? = source.bitrateBps
+
     /**
      * The container's chapters, empty only when the file declares none.
      *

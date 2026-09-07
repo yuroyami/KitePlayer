@@ -242,8 +242,12 @@ Do not reopen these without new evidence.
   from the operating system through the HTTP client's engines; a GPU video processing library
   rejected as a dependency, because its viewer-visible value is roughly 150 lines of shader we can
   author, its correctness core already ships, and it cannot follow the engine to the web.
-- Native Linux and Windows have no https: those targets have no operating-system TLS to delegate to
-  and no output backend. Desktop rides the JVM, which has https.
+- Native Linux and Windows have no https and no output backend, and both are decisions rather than
+  gaps. Those targets have no operating-system TLS to delegate to, and writing native sinks for
+  them would duplicate what the JVM already does: desktop rides the JVM, which has an audio device,
+  a video view, https, and the whole conformance matrix passing. The targets stay declared and
+  empty so the real-media tests resolve on Linux and so a native consumer has the common types to
+  implement the output SPI against.
 - Every Android ABI stays supported, and the minimum SDK stays where it is. "The minimum SDK
   excludes 32-bit" is true for phones and false for television: the common streaming sticks are
   32-bit only and budget boxes ship a 32-bit userspace.

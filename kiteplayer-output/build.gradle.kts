@@ -32,10 +32,16 @@ kotlin {
     macosArm64()
     iosArm64()
     iosSimulatorArm64()
-    // The Kotlin/Native desktops (phase W). They publish the common surface plus whatever backend
-    // exists for them, which today is none: a Kotlin/Native desktop consumer has the engine and
-    // the FFmpeg backend but no device sink yet. Declaring the targets is what lets :kiteplayer-ffmpeg's real-media tests resolve this
-    // module on Linux at all.
+    // The Kotlin/Native desktops carry the common surface and NO output backend, and that is the
+    // decision rather than a gap waiting to be filled. Desktop is the JVM here: it has an audio
+    // device, a video view and https, and it already plays the whole conformance matrix. Writing
+    // native sinks for Linux and Windows would duplicate all of that for the one consumer who
+    // wanted no JVM, and such a consumer can bring their own output through the SPI, which is
+    // exactly what the SPI is for.
+    //
+    // The targets are still declared, for two reasons: :kiteplayer-ffmpeg's real-media tests
+    // resolve this module on Linux through them, and a native consumer needs the common types to
+    // implement the SPI against. So they are deliberately empty, not accidentally empty.
     linuxX64()
     linuxArm64()
     mingwX64()

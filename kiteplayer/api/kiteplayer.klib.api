@@ -7,6 +7,18 @@
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer>
+final enum class io.github.yuroyami.kiteplayer.session/BackgroundPolicy : kotlin/Enum<io.github.yuroyami.kiteplayer.session/BackgroundPolicy> { // io.github.yuroyami.kiteplayer.session/BackgroundPolicy|null[0]
+    enum entry ContinueAudio // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.ContinueAudio|null[0]
+    enum entry Ignore // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.Ignore|null[0]
+    enum entry PauseAll // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.PauseAll|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.session/BackgroundPolicy> // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.session/BackgroundPolicy // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.session/BackgroundPolicy> // io.github.yuroyami.kiteplayer.session/BackgroundPolicy.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.session/InterruptionEvent : kotlin/Enum<io.github.yuroyami.kiteplayer.session/InterruptionEvent> { // io.github.yuroyami.kiteplayer.session/InterruptionEvent|null[0]
     enum entry BecameNoisy // io.github.yuroyami.kiteplayer.session/InterruptionEvent.BecameNoisy|null[0]
     enum entry Gained // io.github.yuroyami.kiteplayer.session/InterruptionEvent.Gained|null[0]
@@ -87,6 +99,9 @@ final object io.github.yuroyami.kiteplayer/KitePlayerPlatform { // io.github.yur
 }
 
 final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer.mobile/mobileBackends|mobileBackends(){}[0]
+
+// Targets: [ios]
+final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachBackgroundHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/BackgroundPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachBackgroundHandling|attachBackgroundHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.BackgroundPolicy){}[0]
 
 // Targets: [ios]
 final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachInterruptionHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/InterruptionPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachInterruptionHandling|attachInterruptionHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.InterruptionPolicy){}[0]

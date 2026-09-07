@@ -35,6 +35,15 @@ public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {
 	public static final fun mobileBackends ()Lio/github/yuroyami/kiteplayer/Backends;
 }
 
+public final class io/github/yuroyami/kiteplayer/session/BackgroundPolicy : java/lang/Enum {
+	public static final field ContinueAudio Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;
+	public static final field Ignore Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;
+	public static final field PauseAll Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/session/BackgroundPolicy;
+}
+
 public final class io/github/yuroyami/kiteplayer/session/InterruptionEvent : java/lang/Enum {
 	public static final field BecameNoisy Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
 	public static final field Gained Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;

@@ -87,6 +87,94 @@ class ChannelMixerTest {
     }
 
     @Test
+    fun `stereo into a mono device is heard rather than silent`() {
+        // Mono has one speaker and it is the centre, which stereo does not name. Every source
+        // channel was therefore dropped and the device played nothing at all.
+        val mixer = ChannelMixer(
+            source = format(channels = 2, mask = MixLayout.Stereo.mask),
+            target = format(channels = 1, mask = MixLayout.Mono.mask),
+            policy = RAW,
+        )
+        val output = FloatArray(1)
+        mixer.mix(floatArrayOf(0.5f, 0.5f), output, 1)
+        assertEquals(0.5f * M + 0.5f * M, output[0], TOLERANCE, "a stereo file played silent on a mono device")
+    }
+
+    @Test
+    fun `each stereo channel reaches a mono device on its own`() {
+        val mixer = ChannelMixer(
+            source = format(channels = 2, mask = MixLayout.Stereo.mask),
+            target = format(channels = 1, mask = MixLayout.Mono.mask),
+            policy = RAW,
+        )
+        // One at a time, so a silent channel cannot hide behind a loud one in a mixed fixture.
+        for (channel in 0 until 2) {
+            val output = FloatArray(1)
+            mixer.mix(FloatArray(2).also { it[channel] = 1f }, output, 1)
+            assertEquals(M, output[0], TOLERANCE, "channel $channel never reached the mono speaker")
+        }
+    }
+
+    @Test
+    fun `five point one into a quad device keeps the dialogue`() {
+        // Quad is FL FR BL BR and names no centre, so the centre channel was dropped and the
+        // speech went with it. Splitting it across the front pair is what a downmix means.
+        val mixer = ChannelMixer(
+            source = format(channels = 6, mask = MixLayout.Surround51.mask),
+            target = format(channels = 4, mask = MixLayout.Quad.mask),
+            policy = RAW,
+        )
+        val output = FloatArray(4)
+        mixer.mix(floatArrayOf(0f, 0f, 0.5f, 0f, 0f, 0f), output, 1)
+        assertEquals(0.5f * M, output[0], TOLERANCE, "the centre never reached the front left")
+        assertEquals(0.5f * M, output[1], TOLERANCE, "the centre never reached the front right")
+        assertTrue(abs(output[2]) < TOLERANCE, "the centre leaked into a back speaker")
+        assertTrue(abs(output[3]) < TOLERANCE, "the centre leaked into a back speaker")
+    }
+
+    @Test
+    fun `every channel of five point one reaches a quad device`() {
+        val mixer = ChannelMixer(
+            source = format(channels = 6, mask = MixLayout.Surround51.mask),
+            target = format(channels = 4, mask = MixLayout.Quad.mask),
+            policy = RAW,
+        )
+        for (channel in 0 until 6) {
+            val output = FloatArray(4)
+            mixer.mix(FloatArray(6).also { it[channel] = 1f }, output, 1)
+            val total = output.sumOf { abs(it).toDouble() }
+            assertTrue(total > TOLERANCE, "channel $channel of 5.1 was silent on a quad device")
+        }
+    }
+
+    @Test
+    fun `every channel of five point one reaches a mono device`() {
+        val mixer = ChannelMixer(
+            source = format(channels = 6, mask = MixLayout.Surround51.mask),
+            target = format(channels = 1, mask = MixLayout.Mono.mask),
+            policy = RAW,
+        )
+        for (channel in 0 until 6) {
+            val output = FloatArray(1)
+            mixer.mix(FloatArray(6).also { it[channel] = 1f }, output, 1)
+            assertTrue(abs(output[0]) > TOLERANCE, "channel $channel of 5.1 was silent on a mono device")
+        }
+    }
+
+    @Test
+    fun `the low frequency channel stays droppable when folding to a smaller target`() {
+        // The one channel a policy is allowed to leave out. Everything else must be heard.
+        val without = ChannelMixer(
+            source = format(channels = 6, mask = MixLayout.Surround51.mask),
+            target = format(channels = 1, mask = MixLayout.Mono.mask),
+            policy = DownmixConfig(normalize = false, includeLfe = false),
+        )
+        val output = FloatArray(1)
+        without.mix(FloatArray(6).also { it[3] = 1f }, output, 1)
+        assertTrue(abs(output[0]) < TOLERANCE, "the low frequency channel was folded in against the policy")
+    }
+
+    @Test
     fun `normalize bounds a folded output exactly as it bounds the stereo downmix`() {
         // The DEFAULT policy deliberately does not normalize (FFmpeg and mpv parity; the float
         // pipeline cannot clip). When a caller asks for the bound, the fold must honour it the

@@ -366,6 +366,7 @@ internal class ChannelMixer(
 
         private const val FRONT_LEFT_BIT: Int = 0
         private const val FRONT_RIGHT_BIT: Int = 1
+        private const val FRONT_CENTER_BIT: Int = 2
         private const val BACK_CENTER_BIT: Int = 8
         private const val BACK_LEFT_BIT: Int = 4
         private const val BACK_RIGHT_BIT: Int = 5
@@ -433,12 +434,36 @@ internal class ChannelMixer(
             fun route(out: Int, sourceChannel: Int, gain: Float) {
                 rows[out * source.channels + sourceChannel] += gain
             }
+            /**
+             * Sends a channel the target has no speaker for towards the front.
+             *
+             * The front pair when there is one, and a lone centre otherwise, which is the mono
+             * case. Routing a channel into a speaker it does not name is what a downmix IS; leaving
+             * it out is how front left and right came to be silent on a mono device.
+             */
+            fun spreadForward(sourceChannel: Int) {
+                val left = targetSpeakers.indexOf(FRONT_LEFT_BIT)
+                val right = targetSpeakers.indexOf(FRONT_RIGHT_BIT)
+                if (left >= 0 && right >= 0) {
+                    route(left, sourceChannel, MINUS_3_DB)
+                    route(right, sourceChannel, MINUS_3_DB)
+                    return
+                }
+                val centre = targetSpeakers.indexOf(FRONT_CENTER_BIT)
+                if (centre >= 0) route(centre, sourceChannel, MINUS_3_DB)
+            }
+
             for (sourceChannel in sourceSpeakers.indices) {
                 val speaker = sourceSpeakers[sourceChannel]
                 var out = targetSpeakers.indexOf(speaker)
                 if (out < 0) out = targetSpeakers.indexOf(equivalentOf(speaker))
                 if (out >= 0) {
                     route(out, sourceChannel, 1f)
+                    continue
+                }
+                // The only channel a policy is allowed to drop entirely.
+                if (speaker == LFE_BIT) {
+                    if (policy.includeLfe) spreadForward(sourceChannel)
                     continue
                 }
                 if (speaker == BACK_CENTER_BIT) {
@@ -452,14 +477,7 @@ internal class ChannelMixer(
                         continue
                     }
                 }
-                if (speaker == LFE_BIT && policy.includeLfe) {
-                    val left = targetSpeakers.indexOf(FRONT_LEFT_BIT)
-                    val right = targetSpeakers.indexOf(FRONT_RIGHT_BIT)
-                    if (left >= 0 && right >= 0) {
-                        route(left, sourceChannel, MINUS_3_DB)
-                        route(right, sourceChannel, MINUS_3_DB)
-                    }
-                }
+                spreadForward(sourceChannel)
             }
             if (policy.normalize) normalizeAgainstClipping(rows, target.channels, source.channels)
             return rows

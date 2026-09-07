@@ -733,7 +733,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
     /**
      * Where playback is, as one value: the queue, the item, the position and every setting the
-     * player holds. Store it however you like and hand it back to [restore]. A player that opened
+     * player holds, including balance, the equaliser, and every picture and subtitle setting.
+     * Store it however you like and hand it back to [restore]. A player that opened
      * a single item reports a queue of one; a player with nothing open reports an empty queue and
      * an index of -1, which [restore] refuses.
      */
@@ -757,6 +758,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
             audioLanguage = tracks.selectedAudio?.let { tracks.find(it) }?.language,
             subtitleLanguage = tracks.selectedSubtitle?.let { tracks.find(it) }?.language,
             subtitlesOff = tracks.selectedSubtitle == null && tracks.subtitles.isNotEmpty(),
+            secondarySubtitleLanguage = tracks.selectedSecondarySubtitle?.let { tracks.find(it) }?.language,
+            balance = snapshot.balance,
+            equalizer = snapshot.equalizer,
+            subtitleScale = snapshot.subtitleScale,
+            subtitlePosition = snapshot.subtitlePosition,
+            subtitleStyle = snapshot.subtitleStyle,
+            videoScale = snapshot.videoScale,
+            videoTransform = snapshot.videoTransform,
+            videoAdjustments = snapshot.videoAdjustments,
+            renderQuality = snapshot.renderQuality,
+            videoEnabled = snapshot.videoEnabled,
         )
     }
 
@@ -782,6 +794,16 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         setShuffle(memento.shuffle)
         setSubtitleDelay(memento.subtitleDelay)
         setAudioDelay(memento.audioDelay)
+        setBalance(memento.balance)
+        setEqualizer(memento.equalizer)
+        setSubtitleScale(memento.subtitleScale)
+        setSubtitlePosition(memento.subtitlePosition)
+        setSubtitleStyle(memento.subtitleStyle)
+        setVideoScale(memento.videoScale)
+        setVideoTransform(memento.videoTransform)
+        setVideoAdjustments(memento.videoAdjustments)
+        setRenderQuality(memento.renderQuality)
+        setVideoEnabled(memento.videoEnabled)
         if (memento.position > Duration.ZERO) seek(memento.position)
 
         val tracks = state.value.tracks
@@ -796,6 +818,12 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
                 val wanted = tracks.subtitles.firstOrNull { it.language == language } ?: return@let
                 if (tracks.selectedSubtitle != wanted.id) selectTrack(TrackKind.Subtitle, wanted.id)
             }
+        }
+        memento.secondarySubtitleLanguage?.let { language ->
+            // Read again: picking the primary track above may have reopened the container.
+            val now = state.value.tracks
+            val wanted = now.subtitles.firstOrNull { it.language == language } ?: return@let
+            if (now.selectedSecondarySubtitle != wanted.id) selectSecondarySubtitle(wanted.id)
         }
     }
 

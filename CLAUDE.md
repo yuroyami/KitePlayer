@@ -55,6 +55,14 @@ Each line is something that bit someone. Delete a line when it stops being true.
   the portal yourself. Publishing from the maintainer's machine still works the same way, with the
   same five credentials read from `~/.gradle/gradle.properties`.
 
+- `updateKotlinAbi` is per module, and the module you edited is often not the only one that moved.
+  Adding a member to an interface in one module changes the dump of every published module that
+  implements it, because the override joins their public surface too. The host gate catches it, one
+  commit later than the change.
+- The Linux JVM step fails 19 of 91 with `kitecodec_jni is neither on java.library.path nor bundled
+  at /kiteffmpeg-native/linux-arm64`. The published kiteffmpeg carries no linux-arm64 JNI library.
+  Nothing in this repository can fix it; resume with `--from=windows` and say so.
+
 ### Tests that fail for reasons that are not bugs
 
 - The real-media suites fail under load with messages that read like correctness bugs, for example
@@ -106,6 +114,19 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - Kotlin's ABI validation currently emits only JVM and klib dumps, so the Android public API is in
   no dump and ships unguarded. A hand-rolled checker was refused as overbuild. Re-measure at each
   Kotlin bump.
+
+- An Objective-C category member is not on the Kotlin class: it is a package-level extension and
+  needs its own import. `AVSampleBufferDisplayLayer.enqueueSampleBuffer`, its `status` and `error`,
+  and `AVPictureInPictureControllerContentSource.create` all read as unresolved until imported by
+  name, which looks like the binding missing the API rather than an import missing.
+- A Kotlin class that extends an Objective-C type cannot hold constants in its companion: that
+  companion maps onto the Objective-C metaclass, which has no storage for them. The compiler says
+  "Fields are not supported for Companion of subclass of ObjC type". Put them at file scope.
+- Apple notification names and userInfo keys arrive as `String?`, not `String`. Keep the
+  nullability rather than asserting it away; the interop calls that take them accept null too.
+- ExplicitBackingFields only buys something when the field's TYPE differs from the property's, as
+  with a `MutableList` behind a `List`. For a Boolean or a Float there is no such pair, and a
+  private var with a `get()` is the honest form.
 
 ### Engine invariants, each of which caused a real bug when violated
 

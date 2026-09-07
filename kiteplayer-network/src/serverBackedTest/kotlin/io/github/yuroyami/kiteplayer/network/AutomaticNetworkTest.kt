@@ -47,7 +47,7 @@ class AutomaticNetworkTest {
             var received: ByteArray? = null
             val backend = object : MediaBackend {
                 override suspend fun open(media: MediaItem): BackendSession {
-                    reader = media.io?.invoke()
+                    reader = media.io?.open()
                     reader?.let { io ->
                         val bytes = ByteArray(expected.size)
                         var at = 0

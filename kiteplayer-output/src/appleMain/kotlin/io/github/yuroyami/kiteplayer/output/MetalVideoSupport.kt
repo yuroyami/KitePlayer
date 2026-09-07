@@ -3,6 +3,7 @@
 package io.github.yuroyami.kiteplayer.output
 
 import io.github.yuroyami.kiteplayer.VideoScale
+import io.github.yuroyami.kiteplayer.spi.ChromaLocation
 import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.OverlayImage
@@ -121,6 +122,11 @@ struct ColorUniforms {
     float gCr;
     float bCb;
     float bCr;
+    // Where the chroma sample sits relative to the luma one, in NORMALIZED texture coordinates,
+    // worked out from the declared siting and the format's own subsampling. Zero on any axis that
+    // is not subsampled, which is what makes 4:4:4 correct.
+    float chromaOffsetX;
+    float chromaOffsetY;
     float sampleScale;  // normalizes 10-bit payloads to 0..1
     int   mode;         // 0 = three planes, 1 = biplanar, 2 = packed rgba
 };
@@ -392,16 +398,12 @@ fragment float4 kp_picture(
         float rawY;
         float rawCb;
         float rawCr;
-        /* 4:2:0 chroma is sited half a LUMA texel to the left of the luma sample in every format
-         * this player decodes. Sampling both planes at the same coordinate therefore shifts colour
-         * a quarter of a chroma texel right, which shows as a coloured seam on hard vertical edges.
-         * The shift is applied to the chroma coordinate only, and only when debanding is on: it is
-         * part of the same correctness rung and must not move pixels in a build that asked for
-         * nothing. */
-        float2 chromaCoord = in.texcoord;
-        if ((q.flags & 2) != 0) {
-            chromaCoord.x -= q.lumaTexelX * 0.5;
-        }
+        /* The chroma texture is half size, so its texel centres sit between luma columns. Where
+         * the chroma sample actually belongs is the container's business, and it says so: this
+         * offset comes from the declared siting and the format's own subsampling, so 4:4:4 moves
+         * nothing and centre-sited content moves nothing horizontally. It is geometry, not an
+         * image effect, so it is applied on every frame rather than riding the debanding flag. */
+        float2 chromaCoord = in.texcoord + float2(c.chromaOffsetX, c.chromaOffsetY);
         bool deband = (q.flags & 2) != 0;
         bool bicubic = (q.flags & 4) != 0 && q.lumaTexelX > 0.0;
         /* The luma sample, by whichever rule is in force. Debanding wins when both are asked for:
@@ -591,8 +593,14 @@ internal class MetalColorUniforms private constructor(
 ) {
     // The order here IS the shader's struct layout. Adding a field in the wrong place reads a
     // neighbouring one and answers something plausible.
-    fun packWith(sampleScale: Float, mode: Int): FloatArray = floatArrayOf(
-        lumaOffset, lumaScale, chromaScale, rCb, rCr, gCb, gCr, bCb, bCr, sampleScale,
+    fun packWith(
+        sampleScale: Float,
+        mode: Int,
+        chromaOffsetX: Float = 0f,
+        chromaOffsetY: Float = 0f,
+    ): FloatArray = floatArrayOf(
+        lumaOffset, lumaScale, chromaScale, rCb, rCr, gCb, gCr, bCb, bCr,
+        chromaOffsetX, chromaOffsetY, sampleScale,
         Float.fromBits(mode), // reinterpreted as int in the shader's layout
     )
 
@@ -747,6 +755,50 @@ internal fun MTLDeviceProtocol.makeTargetTexture(
  * The per-format plane recipe: which Metal formats hold each plane, how chroma dimensions derive
  * from the picture's, the 10-bit normalization, and the shader mode.
  */
+/**
+ * Where the chroma sample sits relative to the luma one, in normalized texture coordinates.
+ *
+ * A subsampled chroma plane has half as many texels, so sampling it at the luma's own coordinate
+ * lands on a texel centre that sits BETWEEN two luma columns. Left-sited 4:2:0, which is MPEG-2's
+ * rule and what almost every file this player opens carries, puts the chroma sample on the even
+ * luma column instead, so the coordinate moves half a luma texel left. Centre siting is already
+ * where the texel centre is and moves nothing.
+ *
+ * Vertically only the top and bottom sitings move anything, and only when the format subsamples
+ * vertically at all: 4:2:2 is horizontal-only and 4:4:4 is neither, so both come back zero on the
+ * axes they do not subsample.
+ *
+ * Unspecified reads as left, which is the MPEG-2 convention and the one this player meets.
+ */
+internal fun chromaSampleOffset(
+    location: ChromaLocation,
+    chromaShiftX: Int,
+    chromaShiftY: Int,
+    width: Int,
+    height: Int,
+): Pair<Float, Float> {
+    val x = if (chromaShiftX == 0 || width <= 0) {
+        0f
+    } else {
+        when (location) {
+            ChromaLocation.Unspecified, ChromaLocation.Left,
+            ChromaLocation.TopLeft, ChromaLocation.BottomLeft,
+            -> -0.5f / width.toFloat()
+            ChromaLocation.Center, ChromaLocation.Top, ChromaLocation.Bottom -> 0f
+        }
+    }
+    val y = if (chromaShiftY == 0 || height <= 0) {
+        0f
+    } else {
+        when (location) {
+            ChromaLocation.TopLeft, ChromaLocation.Top -> -0.5f / height.toFloat()
+            ChromaLocation.BottomLeft, ChromaLocation.Bottom -> 0.5f / height.toFloat()
+            ChromaLocation.Unspecified, ChromaLocation.Left, ChromaLocation.Center -> 0f
+        }
+    }
+    return x to y
+}
+
 internal data class PlaneRecipe(
     val formats: List<ULong>,
     val chromaShiftX: Int,

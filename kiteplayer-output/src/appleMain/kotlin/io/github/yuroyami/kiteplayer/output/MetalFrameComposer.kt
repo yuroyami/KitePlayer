@@ -256,7 +256,17 @@ internal class MetalFrameComposer(
         }
         planeTextures.forEachIndexed { index, texture -> texture.uploadPlane(picture.planes[index]) }
         val frameColor = MetalColorUniforms.of(pictureColor)
-        return PictureInputs(planeTextures, frameColor.packWith(recipe.sampleScale, recipe.mode))
+        val (offsetX, offsetY) = chromaSampleOffset(
+            location = pictureColor.chromaLocation,
+            chromaShiftX = recipe.chromaShiftX,
+            chromaShiftY = recipe.chromaShiftY,
+            width = picture.width,
+            height = picture.height,
+        )
+        return PictureInputs(
+            planeTextures,
+            frameColor.packWith(recipe.sampleScale, recipe.mode, offsetX, offsetY),
+        )
     }
 
     /** The colour of the picture being encoded; set by [encode]'s caller through the frame. */
@@ -337,9 +347,18 @@ internal class MetalFrameComposer(
             throw failure
         }
         val frameColor = MetalColorUniforms.of(pictureColor)
+        // Every planar buffer VideoToolbox hands back is 4:2:0; packed BGRA subsamples nothing.
+        val subsampled = if (mode == 2) 0 else 1
+        val (offsetX, offsetY) = chromaSampleOffset(
+            location = pictureColor.chromaLocation,
+            chromaShiftX = subsampled,
+            chromaShiftY = subsampled,
+            width = CVPixelBufferGetWidth(buffer).toInt(),
+            height = CVPixelBufferGetHeight(buffer).toInt(),
+        )
         return PictureInputs(
             textures = wrapped.map { it.second },
-            uniforms = frameColor.packWith(sampleScale, mode),
+            uniforms = frameColor.packWith(sampleScale, mode, offsetX, offsetY),
             // No cache flush here: flushing after every frame defeated the cache's whole point
             // The cache is flushed once, at close, or by CoreVideo itself on
             // real invalidation.

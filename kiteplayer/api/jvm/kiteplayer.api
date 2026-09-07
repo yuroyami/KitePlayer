@@ -35,3 +35,35 @@ public final class io/github/yuroyami/kiteplayer/mobile/MobileBackendsKt {
 	public static final fun mobileBackends ()Lio/github/yuroyami/kiteplayer/Backends;
 }
 
+public final class io/github/yuroyami/kiteplayer/session/InterruptionEvent : java/lang/Enum {
+	public static final field BecameNoisy Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
+	public static final field Gained Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
+	public static final field Lost Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
+	public static final field LostTransient Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
+	public static final field LostTransientCanDuck Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/session/InterruptionEvent;
+}
+
+public final class io/github/yuroyami/kiteplayer/session/InterruptionPolicy {
+	public fun <init> ()V
+	public fun <init> (ZZFZZ)V
+	public synthetic fun <init> (ZZFZZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Z
+	public final fun component2 ()Z
+	public final fun component3 ()F
+	public final fun component4 ()Z
+	public final fun component5 ()Z
+	public final fun copy (ZZFZZ)Lio/github/yuroyami/kiteplayer/session/InterruptionPolicy;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/session/InterruptionPolicy;ZZFZZILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/session/InterruptionPolicy;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDuckOnTransient ()Z
+	public final fun getDuckVolume ()F
+	public final fun getPauseOnLoss ()Z
+	public final fun getPauseWhenBecomingNoisy ()Z
+	public final fun getResumeAfterTransient ()Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

@@ -1961,6 +1961,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun captureFrame(): io.github.yuroyami.kiteplayer/CapturedFrame // io.github.yuroyami.kiteplayer/KitePlayer.captureFrame|captureFrame(){}[0]
     final suspend fun clearQueue() // io.github.yuroyami.kiteplayer/KitePlayer.clearQueue|clearQueue(){}[0]
     final suspend fun closeAndAwait() // io.github.yuroyami.kiteplayer/KitePlayer.closeAndAwait|closeAndAwait(){}[0]
+    final suspend fun inspect(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/KitePlayer.inspect|inspect(io.github.yuroyami.kiteplayer.MediaItem){}[0]
     final suspend fun moveInQueue(kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.moveInQueue|moveInQueue(kotlin.Int;kotlin.Int){}[0]
     final suspend fun next() // io.github.yuroyami.kiteplayer/KitePlayer.next|next(){}[0]
     final suspend fun nextChapter() // io.github.yuroyami.kiteplayer/KitePlayer.nextChapter|nextChapter(){}[0]
@@ -2004,6 +2005,34 @@ final class io.github.yuroyami.kiteplayer/Marker { // io.github.yuroyami.kitepla
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/Marker.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/Marker.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/Marker.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer/MediaInspection { // io.github.yuroyami.kiteplayer/MediaInspection|null[0]
+    constructor <init>(kotlin.time/Duration?, io.github.yuroyami.kiteplayer/Tracks, kotlin.collections/Map<kotlin/String, kotlin/String>, kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter>, kotlin/Boolean, kotlin/Long? = ...) // io.github.yuroyami.kiteplayer/MediaInspection.<init>|<init>(kotlin.time.Duration?;io.github.yuroyami.kiteplayer.Tracks;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.Chapter>;kotlin.Boolean;kotlin.Long?){}[0]
+
+    final val chapters // io.github.yuroyami.kiteplayer/MediaInspection.chapters|{}chapters[0]
+        final fun <get-chapters>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> // io.github.yuroyami.kiteplayer/MediaInspection.chapters.<get-chapters>|<get-chapters>(){}[0]
+    final val containerBitrateBps // io.github.yuroyami.kiteplayer/MediaInspection.containerBitrateBps|{}containerBitrateBps[0]
+        final fun <get-containerBitrateBps>(): kotlin/Long? // io.github.yuroyami.kiteplayer/MediaInspection.containerBitrateBps.<get-containerBitrateBps>|<get-containerBitrateBps>(){}[0]
+    final val duration // io.github.yuroyami.kiteplayer/MediaInspection.duration|{}duration[0]
+        final fun <get-duration>(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer/MediaInspection.duration.<get-duration>|<get-duration>(){}[0]
+    final val metadata // io.github.yuroyami.kiteplayer/MediaInspection.metadata|{}metadata[0]
+        final fun <get-metadata>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/MediaInspection.metadata.<get-metadata>|<get-metadata>(){}[0]
+    final val seekable // io.github.yuroyami.kiteplayer/MediaInspection.seekable|{}seekable[0]
+        final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaInspection.seekable.<get-seekable>|<get-seekable>(){}[0]
+    final val tracks // io.github.yuroyami.kiteplayer/MediaInspection.tracks|{}tracks[0]
+        final fun <get-tracks>(): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/MediaInspection.tracks.<get-tracks>|<get-tracks>(){}[0]
+
+    final fun component1(): kotlin.time/Duration? // io.github.yuroyami.kiteplayer/MediaInspection.component1|component1(){}[0]
+    final fun component2(): io.github.yuroyami.kiteplayer/Tracks // io.github.yuroyami.kiteplayer/MediaInspection.component2|component2(){}[0]
+    final fun component3(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/MediaInspection.component3|component3(){}[0]
+    final fun component4(): kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> // io.github.yuroyami.kiteplayer/MediaInspection.component4|component4(){}[0]
+    final fun component5(): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaInspection.component5|component5(){}[0]
+    final fun component6(): kotlin/Long? // io.github.yuroyami.kiteplayer/MediaInspection.component6|component6(){}[0]
+    final fun copy(kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/Tracks = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/Chapter> = ..., kotlin/Boolean = ..., kotlin/Long? = ...): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/MediaInspection.copy|copy(kotlin.time.Duration?;io.github.yuroyami.kiteplayer.Tracks;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.Chapter>;kotlin.Boolean;kotlin.Long?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaInspection.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/MediaInspection.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/MediaInspection.toString|toString(){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer/MediaItem { // io.github.yuroyami.kiteplayer/MediaItem|null[0]
@@ -3517,6 +3546,8 @@ final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kitep
         abstract fun event(kotlin/String, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteLog.StructuredSink.event|event(kotlin.String;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     }
 }
+
+final suspend fun io.github.yuroyami.kiteplayer/inspect(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/inspect|inspect(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend){}[0]
 
 // Targets: [native]
 open annotation class io.github.yuroyami.kiteplayer.spi/RawRingApi : kotlin/Annotation { // io.github.yuroyami.kiteplayer.spi/RawRingApi|null[0]

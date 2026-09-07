@@ -828,6 +828,21 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Reads what [open] would publish about [media], and plays nothing.
+     *
+     * For a library screen that wants the length, the tracks and the chapters of a great many
+     * files. It touches nothing this player already has open: the session it makes to read the
+     * container is closed before this returns, so calling it while something is playing is safe.
+     *
+     * It reads the container, so it costs what reaching and parsing a header costs. That is far
+     * less than an open, and it is not free.
+     *
+     * @throws PlaybackException when the media cannot be reached or is not media.
+     * @throws UnsupportedOperationException when this player was built with no media backend.
+     */
+    public suspend fun inspect(media: MediaItem): MediaInspection = core.inspect(media)
+
+    /**
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
      * Switching a CONTAINER track reopens the container and seeks back to where playback was,

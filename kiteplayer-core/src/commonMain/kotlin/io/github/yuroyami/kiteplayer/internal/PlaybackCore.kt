@@ -13,6 +13,7 @@ import io.github.yuroyami.kiteplayer.HwdecStatus
 import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
+import io.github.yuroyami.kiteplayer.MediaInspection
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Marker
 import io.github.yuroyami.kiteplayer.SubtitleSource
@@ -739,6 +740,13 @@ internal class PlaybackCore(
         val reply = CompletableDeferred<Unit>()
         send(CoreCommand.OpenQueue(items, startIndex, reply))
         awaitReply(reply, stopOnCancellation = true)
+    }
+
+    /** Reads a file's own facts without opening playback. See [KitePlayer.inspect]. */
+    suspend fun inspect(media: MediaItem): MediaInspection {
+        val backend = config.backends.backend
+            ?: throw UnsupportedOperationException("this player was built with no media backend, so it cannot inspect media")
+        return inspectMedia(backend, media)
     }
 
     suspend fun queueNext() {
@@ -7923,6 +7931,30 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
 }
 
 /** The tracks a source declares, as the player's own value type. */
+/**
+ * Reads what an open would publish, and plays nothing.
+ *
+ * Opening a backend session builds no decoder: the session carries decoder FACTORIES, which are
+ * lists rather than devices, so opening and closing one straight away is exactly a probe and costs
+ * a container read. That is why this needs nothing new from a backend.
+ */
+internal suspend fun inspectMedia(backend: MediaBackend, media: MediaItem): MediaInspection {
+    val session = backend.open(media)
+    try {
+        val source = session.source
+        return MediaInspection(
+            duration = source.duration?.let { it.micros.microseconds },
+            tracks = source.streams.toTracks(),
+            metadata = source.metadata,
+            chapters = source.chapters,
+            seekable = source.seekable,
+            containerBitrateBps = source.containerBitrateBps,
+        )
+    } finally {
+        session.close()
+    }
+}
+
 private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
     all = map { stream ->
         TrackInfo(

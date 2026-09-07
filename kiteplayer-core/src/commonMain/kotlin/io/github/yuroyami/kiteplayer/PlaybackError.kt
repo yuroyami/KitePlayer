@@ -357,6 +357,20 @@ public sealed class PlaybackWarning {
      * The track still loads. Imperfect subtitles beat absent ones, and an application that shows
      * this can offer the viewer an override rather than leaving them with mojibake and no reason.
      */
+    /**
+     * An external subtitle could not be read or parsed, so it was skipped.
+     *
+     * The open never fails over a subtitle: a film that plays without its captions beats a film
+     * that does not play. This says which file and why, in a shape an application can act on,
+     * rather than the free-text deselection it used to arrive as.
+     */
+    public data class SubtitleSourceUnreadable(
+        val uri: String,
+        val reason: String,
+    ) : PlaybackWarning() {
+        override val message: String get() = "the external subtitle $uri was skipped: $reason"
+    }
+
     public data class SubtitleCharsetGuessed(
         val uri: String,
         val charset: String,

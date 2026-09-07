@@ -37,6 +37,7 @@ class WarningAuditTest {
         PlaybackWarning.CommandRefused("setSpeed", "x"),
         PlaybackWarning.ResourcesNotReleased("x"),
         PlaybackWarning.SubtitleCharsetGuessed("subs.srt", "windows-1252"),
+        PlaybackWarning.SubtitleSourceUnreadable("subs.srt", "x"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
     )
 
@@ -44,6 +45,10 @@ class WarningAuditTest {
         is PlaybackWarning.TypesetterUnavailable -> listOf(
             "PlaybackCore.refuseTypesetting, when the installed typesetter provider returns no engine " +
                 "or throws while starting, and from abandonTypesetting when a render threw on its lane",
+        )
+        is PlaybackWarning.SubtitleSourceUnreadable -> listOf(
+            "PlaybackCore.parseExternalSubtitles, when an external subtitle could not be reached, " +
+                "read or parsed, so the track was skipped and the open carried on without it",
         )
         is PlaybackWarning.SubtitleCharsetGuessed -> listOf(
             "PlaybackCore.parseExternalSubtitle, when an external subtitle file carries no " +

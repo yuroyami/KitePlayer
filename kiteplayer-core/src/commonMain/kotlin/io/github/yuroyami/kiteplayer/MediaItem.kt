@@ -126,9 +126,8 @@ public fun interface MediaIoFactory {
  * Threading: called from the demux worker only, one call at a time, never concurrently.
  * Implementations do not need to be thread safe. They may suspend.
  *
- * Implemented by the FFmpeg backend since the custom AVIO bridge, and [MediaItem.io] is the one
- * place it is accepted: [SubtitleSource] has no reader of its own, so an external subtitle is read
- * as a local path and a network URL is skipped with a warning. The demux worker blocks on [read],
+ * Implemented by the FFmpeg backend since the custom AVIO bridge, and accepted at both
+ * [MediaItem.io] and [SubtitleSource.io]. The demux worker blocks on [read],
  * so a source that never produces a byte and never returns -1 stalls playback; that is the
  * contract, not a defect.
  */
@@ -186,12 +185,14 @@ public fun interface MediaIoResolver {
 /**
  * An external subtitle file added alongside a media item (S4.e).
  *
- * LOCAL SubRip and WebVTT files load at open: each becomes a selectable synthetic subtitle
- * track (a negative [io.github.yuroyami.kiteplayer.TrackId], labelled by [title] or the file
- * name) whose cues run through the same engine timing path container cues use. A file that
- * cannot be read or parsed warns typed and is skipped rather than failing the open. A network
- * URL warns typed and is skipped: external subtitles read local paths, and the network side
- * arrives with the streaming work.
+ * SubRip, WebVTT and ASS files load at open: each becomes a selectable synthetic subtitle track
+ * (a negative [io.github.yuroyami.kiteplayer.TrackId], labelled by [title] or the file name)
+ * whose cues run through the same engine timing path container cues use. A file that cannot be
+ * read or parsed warns typed and is skipped rather than failing the open.
+ *
+ * Where the bytes come from, in order: [io] when set; then, for an http or https [uri], the
+ * network resolver, carrying the parent item's own headers so a signed URL works; then [uri] as
+ * a local path.
  */
 public data class SubtitleSource(
     val uri: String,
@@ -200,6 +201,14 @@ public data class SubtitleSource(
     val language: String? = null,
     /** Selected as soon as it is loaded. */
     val selectImmediately: Boolean = false,
+    /**
+     * Read the subtitle bytes through your own code.
+     *
+     * When null, [uri] is read through the network resolver for http and https, and as a local
+     * path otherwise. Subtitle files are small and are read whole, so this reader is asked for
+     * everything at once and closed.
+     */
+    val io: MediaIoFactory? = null,
 )
 
 /** How exact a seek needs to be, traded against how long it takes. */

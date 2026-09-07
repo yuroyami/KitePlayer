@@ -191,7 +191,7 @@ class ExternalSubtitleTest {
         assertEquals(PlaybackStatus.Paused, harness.core.snapshots.value.status, "the open survives")
         assertTrue(
             harness.core.warningHistory().any {
-                it.warning is PlaybackWarning.TrackDeselected && "could not be read" in it.warning.message
+                it.warning is PlaybackWarning.SubtitleSourceUnreadable && "could not be read" in it.warning.message
             },
             "the unreadable file must warn typed: ${harness.core.warningHistory().map { it.warning.message }}",
         )

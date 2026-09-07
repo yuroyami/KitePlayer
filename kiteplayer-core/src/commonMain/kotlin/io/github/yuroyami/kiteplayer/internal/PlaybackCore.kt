@@ -14,6 +14,7 @@ import io.github.yuroyami.kiteplayer.LatencyQuality
 import io.github.yuroyami.kiteplayer.LoopMode
 import io.github.yuroyami.kiteplayer.MasterClock
 import io.github.yuroyami.kiteplayer.MediaInspection
+import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.Marker
 import io.github.yuroyami.kiteplayer.SubtitleSource
@@ -265,14 +266,14 @@ internal class PlaybackCore(
      * file that turned out to be unreadable left the viewer with no subtitles at all, which is
      * worse than the defect it was fixing. Nothing here touches the session.
      */
-    private fun parseExternalSubtitles(item: MediaItem): List<ExternalSubtitleTrack> =
+    private suspend fun parseExternalSubtitles(item: MediaItem): List<ExternalSubtitleTrack> =
         item.externalSubtitles.mapIndexedNotNull { index, sourceFile ->
             // TrackId's own convention: external ids are negative, printed external1, external2...
             val id = TrackId(-(index + 1))
-            when (val parsed = parseExternalSubtitle(sourceFile, id)) {
+            when (val parsed = parseExternalSubtitle(sourceFile, id, item.headers)) {
                 is ExternalSubtitleParse.Loaded -> parsed.track
                 is ExternalSubtitleParse.Failed -> {
-                    warn(PlaybackWarning.TrackDeselected(id, parsed.reason))
+                    warn(PlaybackWarning.SubtitleSourceUnreadable(sourceFile.uri, parsed.reason))
                     null
                 }
             }
@@ -290,21 +291,99 @@ internal class PlaybackCore(
         }
     }
 
+    private sealed interface SubtitleBytes {
+        class Read(val bytes: ByteArray) : SubtitleBytes
+        class Refused(val reason: String) : SubtitleBytes
+    }
+
+    /**
+     * The bytes of one external subtitle file, from whichever door it has.
+     *
+     * The caller's own reader first, then the network resolver for an http or https address, then
+     * the local path. The network road carries the PARENT item's headers, which is what makes a
+     * subtitle beside a signed URL load at all: the two are almost always served by the same host
+     * under the same authorization.
+     */
+    private suspend fun readSubtitleBytes(
+        source: SubtitleSource,
+        parentHeaders: Map<String, String>,
+    ): SubtitleBytes {
+        val factory = source.io
+        if (factory != null) {
+            return runCatching { readWholly(factory.open(), source.uri) }
+                .getOrElse { SubtitleBytes.Refused("its reader failed${causeDetail(it)}") }
+        }
+        if (source.uri.startsWith("http://", true) || source.uri.startsWith("https://", true)) {
+            val reader = runCatching {
+                resolveMediaIo(MediaItem(source.uri, headers = parentHeaders), config.network)
+            }.getOrElse { return SubtitleBytes.Refused("the address could not be reached${causeDetail(it)}") }
+                ?: return SubtitleBytes.Refused(
+                    "nothing here can fetch an address; add the network module or give the source its own reader",
+                )
+            return runCatching { readWholly(reader, source.uri) }
+                .getOrElse { SubtitleBytes.Refused("the address could not be read${causeDetail(it)}") }
+        }
+        val bytes = readExternalBytesOrNull(source.uri)
+            ?: return SubtitleBytes.Refused("the file could not be read")
+        return SubtitleBytes.Read(bytes)
+    }
+
+    /**
+     * Reads a whole subtitle file, and refuses one that is not a subtitle file.
+     *
+     * Subtitles are small. The cap is what stops a wrong address, or a server answering with a
+     * film, from being pulled entirely into memory before anything notices it is not text.
+     */
+    private suspend fun readWholly(reader: MediaIo, uri: String): SubtitleBytes = reader.use { io ->
+        val declared = io.size
+        if (declared != null && declared > MAX_SUBTITLE_BYTES) {
+            return@use SubtitleBytes.Refused(
+                "it declares $declared bytes, and a subtitle file over $MAX_SUBTITLE_BYTES is not one",
+            )
+        }
+        val collected = mutableListOf<ByteArray>()
+        var total = 0
+        val chunk = ByteArray(SUBTITLE_READ_CHUNK)
+        while (true) {
+            val read = io.read(chunk, 0, chunk.size)
+            if (read <= 0) break
+            total += read
+            if (total > MAX_SUBTITLE_BYTES) {
+                return@use SubtitleBytes.Refused(
+                    "it is over $MAX_SUBTITLE_BYTES bytes, which no subtitle file is",
+                )
+            }
+            collected += chunk.copyOf(read)
+        }
+        if (total == 0) return@use SubtitleBytes.Refused("it is empty")
+        val bytes = ByteArray(total)
+        var at = 0
+        collected.forEach { part ->
+            part.copyInto(bytes, at)
+            at += part.size
+        }
+        SubtitleBytes.Read(bytes)
+    }
+
     private sealed interface ExternalSubtitleParse {
         class Loaded(val track: ExternalSubtitleTrack) : ExternalSubtitleParse
         class Failed(val reason: String) : ExternalSubtitleParse
     }
 
     /** One external subtitle file to one synthetic track, or the sentence saying why not. */
-    private fun parseExternalSubtitle(sourceFile: SubtitleSource, id: TrackId): ExternalSubtitleParse {
+    private suspend fun parseExternalSubtitle(
+        sourceFile: SubtitleSource,
+        id: TrackId,
+        parentHeaders: Map<String, String>,
+    ): ExternalSubtitleParse {
         val parser = backend.subtitleFileParser()
             ?: return ExternalSubtitleParse.Failed(
                 "this backend supplies no subtitle file parser, so external files cannot load",
             )
-        val bytes = readExternalBytesOrNull(sourceFile.uri)
-            ?: return ExternalSubtitleParse.Failed(
-                "the external subtitle file could not be read: ${sourceFile.uri}",
-            )
+        val bytes = when (val read = readSubtitleBytes(sourceFile, parentHeaders)) {
+            is SubtitleBytes.Read -> read.bytes
+            is SubtitleBytes.Refused -> return ExternalSubtitleParse.Failed(read.reason)
+        }
         // The encoding is decided from the bytes, not assumed. A file that needed a guess says so,
         // because a viewer looking at mojibake can act on "I read this as windows-1252" and cannot
         // act on silence.
@@ -369,7 +448,7 @@ internal class PlaybackCore(
         }
         externalSubtitleIdsMinted++
         val id = TrackId(-externalSubtitleIdsMinted)
-        when (val parsed = parseExternalSubtitle(command.source, id)) {
+        when (val parsed = parseExternalSubtitle(command.source, id, media?.headers.orEmpty())) {
             is ExternalSubtitleParse.Failed -> command.reply.completeExceptionally(
                 IllegalArgumentException(parsed.reason),
             )
@@ -7471,6 +7550,18 @@ internal class PlaybackCore(
          * word would be worse than cutting the line short.
          */
         val SUBTITLE_TAIL_MAX: Duration = 10.seconds
+
+        /**
+         * The most an external subtitle file may be.
+         *
+         * Sixteen mebibytes. The largest real subtitle files are a few hundred kilobytes, so this
+         * is not a limit anybody meets; it is what stops a wrong address, or a server answering
+         * with a film, from being pulled whole into memory before anything notices.
+         */
+        const val MAX_SUBTITLE_BYTES: Int = 16 * 1024 * 1024
+
+        /** Read in blocks rather than one call, because a reader may answer short. */
+        const val SUBTITLE_READ_CHUNK: Int = 64 * 1024
 
         /**
          * How far behind the clock a packet has to be before FrameDropPolicy.LateAndDecode throws

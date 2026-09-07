@@ -824,6 +824,36 @@ internal class PlaybackCore(
         awaitReply(reply, stopOnCancellation = true)
     }
 
+    /**
+     * Draws whatever subtitles were showing, at the captured frame's own size.
+     *
+     * Null when nothing was showing, when this build has no platform rasterizer, or when the
+     * frame's size is not a size. A screenshot without its subtitles is half a screenshot, and a
+     * screenshot with the text laid out for a screen of a different shape is worse than either.
+     */
+    private suspend fun rasterizeOverlayFor(
+        captured: io.github.yuroyami.kiteplayer.CapturedFrame,
+    ): io.github.yuroyami.kiteplayer.spi.SubtitleOverlay? {
+        val rasterizer = output.subtitleRasterizer ?: return null
+        val cues = subtitleCues.value
+        if (cues.isEmpty()) return null
+        val width = captured.size.displayWidth
+        val height = captured.size.height
+        if (width <= 0 || height <= 0) return null
+        val images = withContext(dispatchers.raster) {
+            rasterizer.rasterize(
+                applyOverride(cues, subtitleStyle), width, height, subtitleScale, subtitlePosition,
+            )
+        }
+        if (images.isEmpty()) return null
+        return io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(
+            images = images,
+            viewportWidth = width,
+            viewportHeight = height,
+            contentHash = captured.pts.micros,
+        )
+    }
+
     /** Reads a file's own facts without opening playback. See [KitePlayer.inspect]. */
     suspend fun inspect(media: MediaItem): MediaInspection {
         val backend = config.backends.backend
@@ -885,11 +915,16 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
-    suspend fun captureFrame(): io.github.yuroyami.kiteplayer.CapturedFrame {
+    suspend fun captureFrame(withSubtitles: Boolean = false): io.github.yuroyami.kiteplayer.CapturedFrame {
         val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
         send(CoreCommand.CaptureFrame(reply))
         try {
-            return reply.await()
+            val captured = reply.await()
+            if (!withSubtitles) return captured
+            // Drawn AFTER the frame is in hand, because the layout depends on the frame's own
+            // size, which nothing knows until the frame arrives. The raster lane owns every
+            // typesetter call, so this goes through the same door the on-screen overlay does.
+            return captured.withOverlay(rasterizeOverlayFor(captured))
         } catch (cancellation: CancellationException) {
             // A cancelled capture withdraws ITS OWN arm and nothing else. Posting Stop here, the
             // way the session-owning commands do, meant abandoning a screenshot killed playback

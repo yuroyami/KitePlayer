@@ -1835,6 +1835,8 @@ final class io.github.yuroyami.kiteplayer/CapturedFrame : io.github.yuroyami.kit
         final fun <get-generation>(): io.github.yuroyami.kiteplayer/Generation // io.github.yuroyami.kiteplayer/CapturedFrame.generation.<get-generation>|<get-generation>(){}[0]
     final val hardwareSurface // io.github.yuroyami.kiteplayer/CapturedFrame.hardwareSurface|{}hardwareSurface[0]
         final fun <get-hardwareSurface>(): io.github.yuroyami.kiteplayer.spi/HwSurfaceKind? // io.github.yuroyami.kiteplayer/CapturedFrame.hardwareSurface.<get-hardwareSurface>|<get-hardwareSurface>(){}[0]
+    final val overlay // io.github.yuroyami.kiteplayer/CapturedFrame.overlay|{}overlay[0]
+        final fun <get-overlay>(): io.github.yuroyami.kiteplayer.spi/SubtitleOverlay? // io.github.yuroyami.kiteplayer/CapturedFrame.overlay.<get-overlay>|<get-overlay>(){}[0]
     final val pixelFormat // io.github.yuroyami.kiteplayer/CapturedFrame.pixelFormat|{}pixelFormat[0]
         final fun <get-pixelFormat>(): io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat // io.github.yuroyami.kiteplayer/CapturedFrame.pixelFormat.<get-pixelFormat>|<get-pixelFormat>(){}[0]
     final val planeCount // io.github.yuroyami.kiteplayer/CapturedFrame.planeCount|{}planeCount[0]
@@ -1986,7 +1988,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun addExternalSubtitle(io.github.yuroyami.kiteplayer/SubtitleSource): io.github.yuroyami.kiteplayer/TrackId // io.github.yuroyami.kiteplayer/KitePlayer.addExternalSubtitle|addExternalSubtitle(io.github.yuroyami.kiteplayer.SubtitleSource){}[0]
     final suspend fun addToQueue(io.github.yuroyami.kiteplayer/MediaItem, kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.addToQueue|addToQueue(io.github.yuroyami.kiteplayer.MediaItem;kotlin.Int?){}[0]
     final suspend fun addToQueue(kotlin.collections/List<io.github.yuroyami.kiteplayer/MediaItem>, kotlin/Int? = ...) // io.github.yuroyami.kiteplayer/KitePlayer.addToQueue|addToQueue(kotlin.collections.List<io.github.yuroyami.kiteplayer.MediaItem>;kotlin.Int?){}[0]
-    final suspend fun captureFrame(): io.github.yuroyami.kiteplayer/CapturedFrame // io.github.yuroyami.kiteplayer/KitePlayer.captureFrame|captureFrame(){}[0]
+    final suspend fun captureFrame(kotlin/Boolean = ...): io.github.yuroyami.kiteplayer/CapturedFrame // io.github.yuroyami.kiteplayer/KitePlayer.captureFrame|captureFrame(kotlin.Boolean){}[0]
     final suspend fun clearQueue() // io.github.yuroyami.kiteplayer/KitePlayer.clearQueue|clearQueue(){}[0]
     final suspend fun closeAndAwait() // io.github.yuroyami.kiteplayer/KitePlayer.closeAndAwait|closeAndAwait(){}[0]
     final suspend fun inspect(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/KitePlayer.inspect|inspect(io.github.yuroyami.kiteplayer.MediaItem){}[0]
@@ -3620,6 +3622,7 @@ final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kitep
     }
 }
 
+final fun (io.github.yuroyami.kiteplayer.spi/SubtitleOverlay).io.github.yuroyami.kiteplayer/drawOver(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/drawOver|drawOver@io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
 final suspend fun io.github.yuroyami.kiteplayer/inspect(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/inspect|inspect(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend){}[0]
 
 // Targets: [native]

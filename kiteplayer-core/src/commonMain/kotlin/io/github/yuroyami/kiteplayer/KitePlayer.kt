@@ -663,12 +663,20 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      * current frame is re-presented through a precise seek and copied at the same boundary. The
      * copy is taken before the renderer ever owns the frame, so it is always coherent.
      *
+     * With [withSubtitles], the result also carries [CapturedFrame.overlay]: whatever text was on
+     * screen, laid out for the FRAME's own size rather than for the display's. A screenshot of a
+     * subtitled film without its subtitles is half a screenshot, and one carrying text laid out
+     * for a screen of a different shape is worse than either. Null there means nothing was showing
+     * or this build has no platform rasterizer; the pixels are unaffected either way, so a caller
+     * composites when it wants them burned in.
+     *
      * @throws IllegalStateException when nothing is open.
      * @throws UnsupportedOperationException with no selected video track, when a paused source
      *         cannot seek, or when the presented frame is hardware-opaque with no readable
      *         planes (the direct MediaCodec tier; the software and download paths both capture).
      */
-    public suspend fun captureFrame(): CapturedFrame = core.captureFrame()
+    public suspend fun captureFrame(withSubtitles: Boolean = false): CapturedFrame =
+        core.captureFrame(withSubtitles)
 
     /**
      * The chapter whose span holds [position], or null before the first chapter or in media with

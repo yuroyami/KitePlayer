@@ -104,12 +104,14 @@ public final class io/github/yuroyami/kiteplayer/BufferPolicy {
 }
 
 public final class io/github/yuroyami/kiteplayer/CapturedFrame : io/github/yuroyami/kiteplayer/spi/SoftwareReadableFrame {
+	public synthetic fun <init> (JLio/github/yuroyami/kiteplayer/VideoSize;Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;IJ[I[I[[BLio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun close ()V
 	public fun copyPlane (I[BI)V
 	public fun getColorSpace ()Lio/github/yuroyami/kiteplayer/spi/ColorSpaceInfo;
 	public fun getDuration-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
 	public fun getGeneration-exH1Oj8 ()J
 	public fun getHardwareSurface ()Lio/github/yuroyami/kiteplayer/spi/HwSurfaceKind;
+	public final fun getOverlay ()Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;
 	public fun getPixelFormat ()Lio/github/yuroyami/kiteplayer/spi/PlayerPixelFormat;
 	public fun getPlaneCount ()I
 	public fun getPts-BBkgT00 ()J
@@ -329,7 +331,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/util/List;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun attachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
-	public final fun captureFrame (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun captureFrame (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun captureFrame$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun chapterAt-LRDsOJo (J)Lio/github/yuroyami/kiteplayer/Chapter;
 	public final fun clearQueue (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun close ()V
@@ -1571,6 +1574,10 @@ public final class io/github/yuroyami/kiteplayer/SleepTimer$EndOfItem : io/githu
 	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/SubtitleCompositorKt {
+	public static final fun drawOver (Lio/github/yuroyami/kiteplayer/spi/SubtitleOverlay;[BII)V
 }
 
 public final class io/github/yuroyami/kiteplayer/SubtitleConfig {

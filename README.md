@@ -189,6 +189,35 @@ point includes it. You do not build a resolver or a Ktor client.
 - `MediaItem.headers` reach whichever transport is selected.
 - No HTTP client exists until network media is opened, and the reader that created one closes it.
 
+## Audio visualiser
+
+`kiteplayer-audioviz` draws the sound when the media has no picture. Add it next to your KitePlayer
+line and show it in place of the video when `isAudioOnly` says so:
+
+```kotlin
+val viz = rememberAudioVizState(player)
+val snapshot by player.state.collectAsState()
+
+if (snapshot.isAudioOnly) {
+    KiteAudioViz(viz, Modifier.fillMaxSize())
+} else {
+    KitePlayerVideo(player = player, modifier = Modifier.fillMaxSize())
+}
+```
+
+- The state listens to the decoded audio through `KitePlayer.attachAudioTap`, so the picture
+  follows the sound, through seeks and track changes too. Create it where you create the player's
+  screen, not inside the audio-only branch, so it is already listening when a song starts.
+- Album art does not count as a picture. The player selects it as the video track when a file has
+  nothing else.
+- `viz.drawing`, `viz.palette` and `viz.directed` choose what is drawn. With `directed` on, the
+  director changes drawings on the song's phrases. `viz.mutate()` changes the current drawing's
+  recipe now.
+- `AudioVizBrowser(viz)` shows every drawing live in a searchable grid. `AudioVizSettings(viz)`
+  holds the drawing's own settings, the palette and the finishing pass.
+- `VizPalette.fromImage` builds a palette from a picture, such as an album cover.
+- The toolkit the drawings are written with is public behind `@AudioVizAuthoringApi`.
+
 ## Where it runs
 
 | | |

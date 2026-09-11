@@ -1,4 +1,42 @@
+public final class io/github/yuroyami/kiteplayer/audioviz/AudioOnlyKt {
+	public static final fun isAudioOnly (Lio/github/yuroyami/kiteplayer/PlayerSnapshot;)Z
+}
+
 public abstract interface annotation class io/github/yuroyami/kiteplayer/audioviz/AudioVizAuthoringApi : java/lang/annotation/Annotation {
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizBrowserKt {
+	public static final fun AudioVizBrowser (Lio/github/yuroyami/kiteplayer/audioviz/AudioVizState;Landroidx/compose/ui/Modifier;Lkotlin/jvm/functions/Function1;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizSettingsKt {
+	public static final fun AudioVizSettings (Lio/github/yuroyami/kiteplayer/audioviz/AudioVizState;Landroidx/compose/ui/Modifier;Ljava/util/List;Landroidx/compose/runtime/Composer;II)V
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizState {
+	public static final field $stable I
+	public final fun getCatalogue ()Ljava/util/List;
+	public final fun getDirected ()Z
+	public final fun getDirector ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDirector;
+	public final fun getDrawing ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
+	public final fun getPalette ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;
+	public final fun getQuality ()Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;
+	public final fun getShowing ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
+	public final fun getStats ()Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;
+	public final fun getSwitches ()Lio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;
+	public final fun mutate ()V
+	public final fun setDirected (Z)V
+	public final fun setDrawing (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)V
+	public final fun setPalette (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;)V
+	public final fun setSwitches (Lio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;)V
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizStateKt {
+	public static final fun rememberAudioVizState (Lio/github/yuroyami/kiteplayer/KitePlayer;Landroidx/compose/runtime/Composer;I)Lio/github/yuroyami/kiteplayer/audioviz/AudioVizState;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/KiteAudioVizKt {
+	public static final fun KiteAudioViz (Lio/github/yuroyami/kiteplayer/audioviz/AudioVizState;Landroidx/compose/ui/Modifier;ZLandroidx/compose/runtime/Composer;II)V
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumAnalyzer {

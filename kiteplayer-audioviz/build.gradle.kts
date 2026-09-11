@@ -64,6 +64,8 @@ kotlin {
         jvmTest.dependencies {
             // Skia's native library, which is what actually rasterises in these tests.
             implementation(compose.desktop.currentOs)
+            // The default desktop player, for the probe that times the analysis against real playback.
+            implementation(project(":kiteplayer"))
         }
     }
 }

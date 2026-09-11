@@ -202,8 +202,8 @@ jobs:
           ./gradlew checkKotlinAbi checkKitertCoupling checkPublicationReadiness --stacktrace
           ./scripts/check-dependency-hygiene.sh
 
-      # Every module that HAS jvm tests. The three that need the clips (ffmpeg, kiteplayer,
-      # compose-video) are here rather than on Linux for the generator reason above.
+      # Every module that HAS jvm tests. The four that need the clips (ffmpeg, kiteplayer,
+      # compose-video, audioviz) are here rather than on Linux for the generator reason above.
       #
       # `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone` were in this
       # list for the first run and came back NO-SOURCE: they have a jvmTest TASK and no test

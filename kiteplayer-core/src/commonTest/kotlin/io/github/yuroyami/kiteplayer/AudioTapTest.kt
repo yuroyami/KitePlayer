@@ -54,7 +54,7 @@ class AudioTapTest {
     }
 
     @Test
-    fun `a tap sees each decoded block with its time, size, format and samples`() = runTest {
+    fun `a tap sees each decoded block with its time and its samples`() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 2_000_000, sampleRate = 44_100, channels = 2))
         val tap = RecordingTap()
         playing(harness, tap)
@@ -70,7 +70,7 @@ class AudioTapTest {
     }
 
     @Test
-    fun `a seek tells the tap to let go, and the next block starts at the target`() = runTest {
+    fun `a seek tells the tap to let go and the next block starts at the target`() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 4_000_000))
         val tap = RecordingTap()
         val player = playing(harness, tap)
@@ -96,7 +96,7 @@ class AudioTapTest {
     }
 
     @Test
-    fun `a tap that throws is detached, warned about, and the sound carries on`() = runTest {
+    fun `a tap that throws is detached and warned about while the sound carries on`() = runTest {
         val harness = CoreHarness(this, script = MediaScript(durationUs = 2_000_000))
         var calls = 0
         val broken = object : AudioTap {

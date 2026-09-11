@@ -927,6 +927,22 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
+     * Hands every block of decoded audio to [tap] on its way to the speaker. Legal at any time,
+     * including before anything is open and while playing, and the tap stays attached across opens
+     * until [detachAudioTap]. Attaching the same tap twice changes nothing.
+     *
+     * The call returns as soon as the request is queued. [AudioTap] says when and where it is called.
+     */
+    public fun attachAudioTap(tap: AudioTap) {
+        core.post(CoreCommand.AttachAudioTap(tap, CompletableDeferred()))
+    }
+
+    /** Stops handing audio to [tap]. A tap that is not attached is ignored. */
+    public fun detachAudioTap(tap: AudioTap) {
+        core.post(CoreCommand.DetachAudioTap(tap, CompletableDeferred()))
+    }
+
+    /**
      * Requests terminal close. Idempotent, and returns at once without proving teardown completed.
      *
      * The request immediately rejects later commands and starts the same close observed by

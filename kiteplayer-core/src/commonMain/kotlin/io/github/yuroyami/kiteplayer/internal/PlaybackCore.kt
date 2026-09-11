@@ -32,6 +32,7 @@ import io.github.yuroyami.kiteplayer.Progress
 import io.github.yuroyami.kiteplayer.EqualizerSettings
 import io.github.yuroyami.kiteplayer.ReplayGainMode
 import io.github.yuroyami.kiteplayer.SleepTimer
+import io.github.yuroyami.kiteplayer.AudioTap
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.FrameDropPolicy
@@ -62,6 +63,7 @@ import io.github.yuroyami.kiteplayer.spi.SubtitleOverlay
 import io.github.yuroyami.kiteplayer.subtitle.CueSelector
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
 import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineName
@@ -1586,6 +1588,14 @@ internal class PlaybackCore(
                     )
                 }
             }
+            is CoreCommand.AttachAudioTap -> {
+                audioTaps.update { taps -> if (taps.any { it === command.tap }) taps else taps + command.tap }
+                command.reply.complete(Unit)
+            }
+            is CoreCommand.DetachAudioTap -> {
+                audioTaps.update { taps -> taps.filter { it !== command.tap } }
+                command.reply.complete(Unit)
+            }
             is CoreCommand.SetSpeed -> {
                 val active = session
                 // The refusal is decided BEFORE any pipeline sees the value: the
@@ -1862,6 +1872,45 @@ internal class PlaybackCore(
 
     /** A renderer attached before anything was open, kept for the session that follows. */
     private var pendingRenderer: VideoRenderer? = null
+
+    /**
+     * The attached audio taps. The actor adds and removes them and the feed worker drops one that
+     * throws, so every change replaces the whole list and the worker reads it once per block.
+     */
+    private val audioTaps = atomic<List<AudioTap>>(emptyList())
+
+    /** Hands one block to every attached tap and detaches any tap that throws. Runs on the feed worker. */
+    private fun deliverToTaps(pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {
+        val taps = audioTaps.value
+        if (taps.isEmpty()) return
+        for (tap in taps) {
+            try {
+                tap.onAudio(pts, interleaved, frames, format)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                dropTap(tap, failure)
+            }
+        }
+    }
+
+    /** Tells every attached tap that what it holds is stale. Called wherever the engine flushes the ring. */
+    private fun tapsDiscontinuous() {
+        for (tap in audioTaps.value) {
+            try {
+                tap.onDiscontinuity()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                dropTap(tap, failure)
+            }
+        }
+    }
+
+    private fun dropTap(tap: AudioTap, failure: Throwable) {
+        audioTaps.update { taps -> taps.filter { it !== tap } }
+        warn(PlaybackWarning.AudioTapFailed(failure.message ?: failure::class.simpleName ?: "an exception with no message"))
+    }
 
     /**
      * The renderer's event feed, finally collected: surface loss and hard
@@ -3160,6 +3209,7 @@ internal class PlaybackCore(
             playback.balance = balance
             playback.equalizer = equalizer
             playback.flush(requestedEpoch)
+            tapsDiscontinuous()
             return PreparedAudioPath(playback, createdSink, negotiated)
         } catch (cancellation: CancellationException) {
             if (createdPlayback != null) createdPlayback.close() else createdSink.close()
@@ -3323,6 +3373,7 @@ internal class PlaybackCore(
         try {
             drainDecodedAudio(session)
             playback?.flush(requestedEpoch)
+            tapsDiscontinuous()
         } catch (cancellation: CancellationException) {
             audioWorkers.forEach { it.release(requestedEpoch) }
             preparedPath?.playback?.close()
@@ -5655,6 +5706,7 @@ internal class PlaybackCore(
         // Stops the device again, harmlessly, and then clears the ring: the callback is already out, and
         // the ring's own contract requires exactly that before its counters are written.
         session.audio?.flush(epoch)
+        tapsDiscontinuous()
     }
 
     private fun releaseWorkers(session: OpenSession, epoch: Generation) {
@@ -7191,6 +7243,8 @@ internal class PlaybackCore(
                     }
                 }
                 if (frames == 0) continue
+                // The trimmed block goes to the taps first, then to the device.
+                deliverToTaps(pts, interleaved, frames, buffer.format)
                 // One call, no external timeout, no retry. The old shape cancelled submitDecoded
                 // mid-buffer on a deadline and called it again with the same input, which replayed
                 // samples the ring had already accepted and ran the stateful conversion twice
@@ -8084,6 +8138,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
         val expected: VideoRenderer?,
         val reply: CompletableDeferred<Unit>,
     ) : CoreCommand("detachRenderer", reply)
+
+    class AttachAudioTap(val tap: AudioTap, val reply: CompletableDeferred<Unit>) : CoreCommand("attachAudioTap", reply)
+
+    class DetachAudioTap(val tap: AudioTap, val reply: CompletableDeferred<Unit>) : CoreCommand("detachAudioTap", reply)
 
     /** Fire and forget by contract, so its reply is complete before it is sent. */
     class SeekLater(val request: SeekRequest) : CoreCommand("seekLater", CompletableDeferred(Unit))

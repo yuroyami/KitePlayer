@@ -196,6 +196,11 @@ public sealed class PlaybackWarning {
         override val message: String get() = "audio underrun, $totalSoFar so far"
     }
 
+    /** An [AudioTap] threw. It was detached so the sound could carry on, and [detail] is what it threw. */
+    public data class AudioTapFailed(val detail: String) : PlaybackWarning() {
+        override val message: String get() = "an audio tap failed and was detached: $detail"
+    }
+
     /**
      * The DEVICE reported that it ran dry, through the sink's own event feed.
      *

@@ -66,6 +66,15 @@ public final class io/github/yuroyami/kiteplayer/AudioPlayback : java/lang/AutoC
 	public static synthetic fun submitDecoded-rkBLMoA$default (Lio/github/yuroyami/kiteplayer/AudioPlayback;Lio/github/yuroyami/kiteplayer/Pts;[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;Lkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
+public abstract interface class io/github/yuroyami/kiteplayer/AudioTap {
+	public abstract fun onAudio-9yvNpTU (J[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
+	public fun onDiscontinuity ()V
+}
+
+public final class io/github/yuroyami/kiteplayer/AudioTap$DefaultImpls {
+	public static fun onDiscontinuity (Lio/github/yuroyami/kiteplayer/AudioTap;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/Backends {
 	public fun <init> ()V
 	public fun <init> (Lio/github/yuroyami/kiteplayer/spi/MediaBackend;Lio/github/yuroyami/kiteplayer/spi/OutputBackend;)V
@@ -330,6 +339,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun addToQueue (Ljava/util/List;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/util/List;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun attachAudioTap (Lio/github/yuroyami/kiteplayer/AudioTap;)V
 	public final fun attachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public final fun captureFrame (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun captureFrame$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
@@ -337,6 +347,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun clearQueue (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun close ()V
 	public final fun closeAndAwait (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun detachAudioTap (Lio/github/yuroyami/kiteplayer/AudioTap;)V
 	public final fun detachRenderer ()V
 	public final fun detachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
 	public final fun diagnosticsDump ()Ljava/lang/String;
@@ -840,6 +851,18 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioSourceForm
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getToChannels ()I
 	public final fun getToSampleRate ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$AudioTapFailed : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$AudioTapFailed;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$AudioTapFailed;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$AudioTapFailed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getMessage ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

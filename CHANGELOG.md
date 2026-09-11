@@ -12,6 +12,11 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Added
 
+- `KitePlayer.attachAudioTap` hands every block of decoded audio to an `AudioTap` on its way to the
+  speaker, with the time it plays at, so a level meter or a visualiser can show the sound that is
+  actually playing. A seek, an audio track change or a new audio path arrives as
+  `onDiscontinuity`, and a tap that throws is detached and reported as
+  `PlaybackWarning.AudioTapFailed`; playback carries on.
 - Playback now behaves when the platform takes the sound away. A call, another app, or the
   headphones coming out pauses or lowers the volume, and playback resumes afterwards only when
   this policy was the one that paused it. Attach it with

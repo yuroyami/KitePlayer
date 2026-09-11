@@ -713,6 +713,11 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // i
     abstract suspend fun create(): io.github.yuroyami.kiteplayer.spi/VideoRenderer // io.github.yuroyami.kiteplayer.spi/VideoRendererFactory.create|create(){}[0]
 }
 
+abstract interface io.github.yuroyami.kiteplayer/AudioTap { // io.github.yuroyami.kiteplayer/AudioTap|null[0]
+    abstract fun onAudio(io.github.yuroyami.kiteplayer/Pts, kotlin/FloatArray, kotlin/Int, io.github.yuroyami.kiteplayer.spi/AudioFormat) // io.github.yuroyami.kiteplayer/AudioTap.onAudio|onAudio(io.github.yuroyami.kiteplayer.Pts;kotlin.FloatArray;kotlin.Int;io.github.yuroyami.kiteplayer.spi.AudioFormat){}[0]
+    open fun onDiscontinuity() // io.github.yuroyami.kiteplayer/AudioTap.onDiscontinuity|onDiscontinuity(){}[0]
+}
+
 abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/MediaIo|null[0]
     abstract val seekable // io.github.yuroyami.kiteplayer/MediaIo.seekable|{}seekable[0]
         abstract fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
@@ -1951,9 +1956,11 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final val subtitleCues // io.github.yuroyami.kiteplayer/KitePlayer.subtitleCues|{}subtitleCues[0]
         final fun <get-subtitleCues>(): kotlinx.coroutines.flow/StateFlow<kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>> // io.github.yuroyami.kiteplayer/KitePlayer.subtitleCues.<get-subtitleCues>|<get-subtitleCues>(){}[0]
 
+    final fun attachAudioTap(io.github.yuroyami.kiteplayer/AudioTap) // io.github.yuroyami.kiteplayer/KitePlayer.attachAudioTap|attachAudioTap(io.github.yuroyami.kiteplayer.AudioTap){}[0]
     final fun attachRenderer(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.attachRenderer|attachRenderer(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]
     final fun chapterAt(kotlin.time/Duration): io.github.yuroyami.kiteplayer/Chapter? // io.github.yuroyami.kiteplayer/KitePlayer.chapterAt|chapterAt(kotlin.time.Duration){}[0]
     final fun close() // io.github.yuroyami.kiteplayer/KitePlayer.close|close(){}[0]
+    final fun detachAudioTap(io.github.yuroyami.kiteplayer/AudioTap) // io.github.yuroyami.kiteplayer/KitePlayer.detachAudioTap|detachAudioTap(io.github.yuroyami.kiteplayer.AudioTap){}[0]
     final fun detachRenderer() // io.github.yuroyami.kiteplayer/KitePlayer.detachRenderer|detachRenderer(){}[0]
     final fun detachRenderer(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.detachRenderer|detachRenderer(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]
     final fun diagnosticsDump(): kotlin/String // io.github.yuroyami.kiteplayer/KitePlayer.diagnosticsDump|diagnosticsDump(){}[0]
@@ -3223,6 +3230,21 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioSourceFormatChanged.toString|toString(){}[0]
+    }
+
+    final class AudioTapFailed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed|null[0]
+        constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.<init>|<init>(kotlin.String){}[0]
+
+        final val detail // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.detail|{}detail[0]
+            final fun <get-detail>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.detail.<get-detail>|<get-detail>(){}[0]
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.message.<get-message>|<get-message>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.component1|component1(){}[0]
+        final fun copy(kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.copy|copy(kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioTapFailed.toString|toString(){}[0]
     }
 
     final class AudioUnderrun : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.AudioUnderrun|null[0]

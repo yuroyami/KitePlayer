@@ -40,9 +40,14 @@ class WarningAuditTest {
         PlaybackWarning.SubtitleSourceUnreadable("subs.srt", "x"),
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
+        PlaybackWarning.AudioTapFailed("x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.AudioTapFailed -> listOf(
+            "PlaybackCore.dropTap, when an attached AudioTap throws from onAudio on the feed worker " +
+                "or from onDiscontinuity where the ring is flushed; the tap is detached first",
+        )
         is PlaybackWarning.TypesetterUnavailable -> listOf(
             "PlaybackCore.refuseTypesetting, when the installed typesetter provider returns no engine " +
                 "or throws while starting, and from abandonTypesetting when a render threw on its lane",

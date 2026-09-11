@@ -7,6 +7,8 @@ vanniktechPublish = "0.36.0"
 dokka = "2.2.0"
 kiteffmpeg = "0.2.0"
 ktor = "3.5.2"
+# 3D maths for the audio visualiser's perspective camera. A sibling Kite library.
+kite3d = "0.2.0"
 
 coroutines = "1.11.0"
 atomicfu = "0.31.0"
@@ -21,6 +23,7 @@ androidxTestExtJunit = "1.3.0"
 androidxActivityCompose = "1.13.0"
 
 [libraries]
+kite3d = { module = "io.github.yuroyami:kite3d", version.ref = "kite3d" }
 # The codec backend. One entry so the library coordinate and the Gradle plugin below cannot drift
 # to different versions: they are the same release and a mismatch resolves two FFmpeg bindings.
 kiteffmpeg = { module = "io.github.yuroyami:kiteffmpeg", version.ref = "kiteffmpeg" }

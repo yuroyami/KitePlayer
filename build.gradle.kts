@@ -177,6 +177,7 @@ dependencies {
     dokka(project(":kiteplayer-network"))
     dokka(project(":kiteplayer-phone"))
     dokka(project(":kiteplayer-compose"))
+    dokka(project(":kiteplayer-audioviz"))
 }
 
 dokka {

@@ -96,7 +96,7 @@ macos() {
         :kiteplayer-libass:macosArm64Test :kiteplayer-network:macosArm64Test \
         :kiteplayer-ffmpeg:macosArm64Test
 }
-ios_simulator() { gradle :kiteplayer-view:iosSimulatorArm64Test; }
+ios_simulator() { gradle :kiteplayer-view:iosSimulatorArm64Test :kiteplayer-audioviz:iosSimulatorArm64Test; }
 c_sanitizers() {
     # This reuses the plain build from base. When resuming here, that earlier build must exist.
     run kiteplayer-rt/native/scripts/run-c-tests.sh interpose
@@ -111,7 +111,7 @@ c_sanitizers() {
 jvm() {
     gradle :kiteplayer-output:jvmTest :kiteplayer-view:jvmTest :kiteplayer-network:jvmTest \
         :kiteplayer-ffmpeg:jvmTest :kiteplayer:jvmTest \
-        :kiteplayer-compose-video:jvmTest :kiteplayer-compose-ui:jvmTest
+        :kiteplayer-compose-video:jvmTest :kiteplayer-compose-ui:jvmTest :kiteplayer-audioviz:jvmTest
 }
 web() {
     gradle :kiteplayer-core:wasmJsNodeTest :kiteplayer-subtitles:wasmJsNodeTest \
@@ -133,6 +133,7 @@ cross_compile() {
     gradle :kiteplayer-core:compileKotlinIosArm64 :kiteplayer-output:compileKotlinIosArm64 \
         :kiteplayer-view:compileKotlinIosArm64 :kiteplayer-network:compileKotlinIosArm64 \
         :kiteplayer:compileKotlinIosArm64 :kiteplayer-compose-ui:compileKotlinIosArm64 \
+        :kiteplayer-audioviz:compileKotlinIosArm64 :kiteplayer-audioviz:compileAndroidMain \
         :kiteplayer-core:compileKotlinAndroidNativeArm32 :kiteplayer-sample-android:assembleDebug
 }
 sample() {

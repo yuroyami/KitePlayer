@@ -38,6 +38,9 @@ implementation("io.github.yuroyami:kiteplayer:0.0.23")
 
 /** Compose. Everything above, plus both Compose video paths. */
 implementation("io.github.yuroyami:kiteplayer-compose:0.0.23")
+
+/** Optional, next to either line: an audio visualiser for files with no picture, in Compose. */
+implementation("io.github.yuroyami:kiteplayer-audioviz:0.0.23")
 ```
 
 Put the line in `commonMain.dependencies`, or in the `dependencies` block of an Android-only app.
@@ -62,6 +65,9 @@ kiteplayer-compose
 │   ├── kiteplayer-compose-interop   Compose hosting the native view
 │   └── kiteplayer-compose-video     Compose drawing the frames itself
 └── kiteplayer-phone                 deprecated
+
+kiteplayer-audioviz                  optional audio visualiser over Kite3D
+└── kiteplayer-core
 ```
 
 [Modules](#modules) says what each one is for.
@@ -226,6 +232,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
 | `kiteplayer-compose-interop` | Compose hosting the platform's native video view. |
 | `kiteplayer-compose-video` | Video drawn by Compose itself. |
+| `kiteplayer-audioviz` | Optional. An audio visualiser for files with no picture: 78 drawings, palettes, and a director that changes drawings with the music. |
 | `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |
 | `kiteplayer-view-bindings` | The FFmpeg adapters those views need. |
 | `kiteplayer-core` | The engine and its service interfaces. Depends on coroutines only. |
@@ -237,7 +244,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-rt` | The real-time audio ring, in C. Comes with `kiteplayer-core` on native targets. Never add it yourself. |
 | `kiteplayer-phone` | Deprecated. `kiteplayer` plus `kiteplayer-view`. |
 
-Compose presentation targets Android, iOS arm64, the iOS simulator and the desktop JVM.
+Compose presentation and the visualiser target Android, iOS arm64, the iOS simulator and the desktop JVM.
 
 Custom assemblies start from `kiteplayer-core` and supply their own backends through
 `KitePlayer.create(PlayerConfig(backends = Backends(backend, output)))`. The

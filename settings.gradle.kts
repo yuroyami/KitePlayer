@@ -96,6 +96,7 @@ include(":kiteplayer-libass")        // optional full ASS renderer (phase L, own
 // Ktor byte suppliers and the Kotlin adaptive layer (17.12 M1's network half): https with the
 // OS supplying TLS, and DASH manifests parsed in commonMain. Optional; pure Kotlin.
 include(":kiteplayer-network")
+include(":kiteplayer-audioviz")     // optional audio visualiser for media with no picture
 include(":kiteplayer-sample")
 // The Android assembly and XML-inflation proof using the complete Compose entry point.
 include(":kiteplayer-sample-android")

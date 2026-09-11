@@ -12,6 +12,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Added
 
+- `kiteplayer-audioviz` is a new, optional audio visualiser for files with no picture: 78 drawings
+  in 11 families, palettes, and a director that changes drawings on the song's phrases. It draws on
+  Android, iOS and the desktop JVM. The toolkit the drawings are written with is public behind
+  `@AudioVizAuthoringApi`, so you can write your own.
 - `KitePlayer.attachAudioTap` hands every block of decoded audio to an `AudioTap` on its way to the
   speaker, with the time it plays at, so a level meter or a visualiser can show the sound that is
   actually playing. A seek, an audio track change or a new audio path arrives as

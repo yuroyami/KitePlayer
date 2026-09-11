@@ -13,6 +13,7 @@ import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.SeekMode
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
 import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
+import io.github.yuroyami.kiteplayer.sample.shared.visualizerViewController
 import io.github.yuroyami.kiteplayer.view.KitePlayerUIView
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -59,8 +60,15 @@ import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/** The one Swift-facing entry point of the private iOS sample framework. */
-public fun sampleViewController(): UIViewController = SampleController()
+/**
+ * The one Swift-facing entry point of the private iOS sample framework: the shared visualiser screen,
+ * or the UIKit host for the smoke, a scenario or `--uikit`.
+ */
+public fun sampleViewController(): UIViewController {
+    val arguments = NSProcessInfo.processInfo.arguments
+    val uikit = arguments.any { it == SMOKE_ARGUMENT || it == SCENARIO_ARGUMENT || it == UIKIT_ARGUMENT }
+    return if (uikit) SampleController() else visualizerViewController()
+}
 
 /**
  * Re-consumed through the phone coordinate at S1.e.2: the hand-built CALayer and renderer are
@@ -650,6 +658,7 @@ private fun SmokeResult.toJson(): String = buildString {
 
 private const val SMOKE_ARGUMENT = "--s1b-smoke"
 private const val SCENARIO_ARGUMENT = "--scenario"
+private const val UIKIT_ARGUMENT = "--uikit"
 private const val HWDEC_OFF_ARGUMENT = "--hwdec-off"
 private const val DITHER_ARGUMENT = "--dither"
 private const val DEBAND_ARGUMENT = "--deband"

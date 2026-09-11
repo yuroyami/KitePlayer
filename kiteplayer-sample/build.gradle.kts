@@ -9,8 +9,9 @@ plugins {
 
 /*
  * The sample is how a claim of working playback is checked rather than asserted. macOS keeps its
- * command-line player; the iOS targets provide the private UIKit host used by the named simulator
- * smoke, without turning that host into a reusable application surface.
+ * command-line player. The iOS targets open on the shared visualiser screen, and keep the private
+ * UIKit host for the named simulator smoke, a scenario and `--uikit`, without turning that host into
+ * a reusable application surface.
  */
 kotlin {
     jvmToolchain(21)
@@ -40,6 +41,8 @@ kotlin {
         iosMain.dependencies {
             // The standard runtime carries the default backend, output, network and native view.
             implementation(project(":kiteplayer"))
+            // The shared Compose screen, with the audio visualiser.
+            implementation(project(":kiteplayer-sample-shared"))
         }
     }
 }

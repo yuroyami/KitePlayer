@@ -98,6 +98,7 @@ include(":kiteplayer-libass")        // optional full ASS renderer (phase L, own
 include(":kiteplayer-network")
 include(":kiteplayer-audioviz")     // optional audio visualiser for media with no picture
 include(":kiteplayer-sample")
+include(":kiteplayer-sample-shared") // the samples' shared screen: a song and the visualiser
 // The Android assembly and XML-inflation proof using the complete Compose entry point.
 include(":kiteplayer-sample-android")
 // The Compose Desktop assembly and the upload measurement harness. It is the only

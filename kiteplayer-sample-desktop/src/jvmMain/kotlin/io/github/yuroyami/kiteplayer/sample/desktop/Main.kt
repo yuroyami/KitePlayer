@@ -9,15 +9,22 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import io.github.yuroyami.kiteplayer.sample.shared.sampleMedia
 import java.io.File
 
 /**
- * How this run was asked for. Everything has a default, so a bare `run` plays the conformance
- * clip in a window.
+ * How this run was asked for. Everything has a default, so a bare `run` opens the visualiser on the
+ * song from local.properties, or on the conformance clip when there is none.
  */
 internal data class SampleOptions(
-    /** The media to open. */
+    /** The media the video screen opens: the one asked for, else the conformance clip. */
     val media: String,
+    /** The media asked for by argument or property, or null. */
+    val requested: String?,
+    /** The song from `kiteplayer.sample.song`, or null. */
+    val song: String?,
+    /** True shows the video screen with its modifier toggle instead of the visualiser. */
+    val classic: Boolean,
     /** True runs the upload measurement and exits when it is written. */
     val measure: Boolean,
     /** Published frames to collect per measurement phase. */
@@ -30,14 +37,18 @@ internal data class SampleOptions(
     companion object {
         fun from(args: Array<String>): SampleOptions {
             val flags = args.filter { it.startsWith("--") }
-            val path = args.firstOrNull { !it.startsWith("--") }
-                ?: property("kiteplayer.sample.media")
+            val requested = args.firstOrNull { !it.startsWith("--") } ?: property("kiteplayer.sample.media")
+            val path = requested
                 ?: property("kiteplayer.sample.media.default")
                 ?: "testmedia/sync1080p30.mp4"
             val reportPath = flagValue(flags, "--report") ?: property("kiteplayer.sample.report")
+            val measure = flags.contains("--measure") || property("kiteplayer.sample.measure") != null
             return SampleOptions(
                 media = File(path).absolutePath,
-                measure = flags.contains("--measure") || property("kiteplayer.sample.measure") != null,
+                requested = requested?.let { File(it).absolutePath },
+                song = property("kiteplayer.sample.song"),
+                classic = measure || flags.contains("--modifiers"),
+                measure = measure,
                 frames = (flagValue(flags, "--frames") ?: property("kiteplayer.sample.frames"))
                     ?.toIntOrNull()?.coerceAtLeast(30) ?: 300,
                 repeats = (flagValue(flags, "--repeats") ?: property("kiteplayer.sample.repeats"))
@@ -56,8 +67,9 @@ internal data class SampleOptions(
 }
 
 /**
- * The Compose Desktop sample. Pass a media path, or nothing for the conformance
- * clip; pass `--measure` to take the upload numbers and exit.
+ * The Compose Desktop sample. It opens on the audio visualiser with the song from
+ * `kiteplayer.sample.song`, or plays a path given as the first argument. `--modifiers` shows the
+ * video screen with its clip, alpha and rotation toggle; `--measure` takes the upload numbers and exits.
  */
 fun main(args: Array<String>) {
     val options = SampleOptions.from(args)
@@ -69,7 +81,7 @@ fun main(args: Array<String>) {
         Window(
             onCloseRequest = ::exitApplication,
             state = windowState,
-            title = "KitePlayer on Compose Desktop",
+            title = if (options.classic) "KitePlayer on Compose Desktop" else "KitePlayer",
         ) {
             // The launch proof, printed once the window is really on screen.
             LaunchedEffect(window) {
@@ -80,7 +92,11 @@ fun main(args: Array<String>) {
                 }
                 println("window showing=${window.isShowing} bounds=${window.bounds}")
             }
-            DesktopSample(options, onMeasurementDone = ::exitApplication)
+            if (options.classic) {
+                DesktopSample(options, onMeasurementDone = ::exitApplication)
+            } else {
+                VisualizerSample(sampleMedia(options.requested, options.song, options.media) { File(it).isFile })
+            }
         }
     }
 }

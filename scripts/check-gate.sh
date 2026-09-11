@@ -111,7 +111,8 @@ c_sanitizers() {
 jvm() {
     gradle :kiteplayer-output:jvmTest :kiteplayer-view:jvmTest :kiteplayer-network:jvmTest \
         :kiteplayer-ffmpeg:jvmTest :kiteplayer:jvmTest \
-        :kiteplayer-compose-video:jvmTest :kiteplayer-compose-ui:jvmTest :kiteplayer-audioviz:jvmTest
+        :kiteplayer-compose-video:jvmTest :kiteplayer-compose-ui:jvmTest :kiteplayer-audioviz:jvmTest \
+        :kiteplayer-sample-shared:jvmTest
 }
 web() {
     gradle :kiteplayer-core:wasmJsNodeTest :kiteplayer-subtitles:wasmJsNodeTest \

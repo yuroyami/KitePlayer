@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
@@ -10,6 +12,9 @@ plugins {
  * content. The modifier toggle is the whole point of D-6: clip, alpha, rotation and scale apply
  * to the video pixels, which a platform-view player cannot do.
  *
+ * A bare `run` opens on the audio visualiser instead, with the song from kiteplayer.sample.song;
+ * `--modifiers` or the measurement flags bring back the video screen above.
+ *
  * An application, not a library: no explicitApi, no ABI dump, nothing published.
  */
 kotlin {
@@ -20,6 +25,7 @@ kotlin {
         jvmMain.dependencies {
             // One dependency supplies the standard player and both presentation paths.
             implementation(project(":kiteplayer-compose"))
+            implementation(project(":kiteplayer-sample-shared"))
             implementation(compose.desktop.currentOs)
             implementation(compose.foundation)
         }
@@ -43,6 +49,16 @@ val measureFlags = listOf(
     providers.gradleProperty(key).orNull?.let { value -> "-D$key=$value" }
 }
 
+// The song the visualiser opens on: -Pkiteplayer.sample.song, or kiteplayer.sample.song in the root
+// local.properties. Never committed: the one the owner uses is under a non-commercial licence.
+val sampleSong: String? = providers.gradleProperty("kiteplayer.sample.song")
+    .orElse(
+        providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText.map { text ->
+            Properties().apply { load(text.reader()) }.getProperty("kiteplayer.sample.song").orEmpty()
+        },
+    )
+    .orNull?.takeIf { it.isNotBlank() }
+
 // The run classpath, printed so the measurement can be repeated with no Gradle daemon in the
 // picture: `java -cp "$(./gradlew -q :kiteplayer-sample-desktop:printRunClasspath)" ... MainKt`.
 val runFiles = kotlin.jvm().compilations.getByName("main")
@@ -59,5 +75,6 @@ compose.desktop {
         mainClass = "io.github.yuroyami.kiteplayer.sample.desktop.MainKt"
         jvmArgs += "-Dkiteplayer.sample.media.default=$defaultMedia"
         jvmArgs += measureFlags
+        sampleSong?.let { jvmArgs += "-Dkiteplayer.sample.song=$it" }
     }
 }

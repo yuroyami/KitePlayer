@@ -6,19 +6,24 @@ contains no decoder or platform media path of its own. Swift creates the control
 Swift module name `KitePlayerSampleHost`, so importing the framework module named `KitePlayerSample`
 is unambiguous.
 
-The Kotlin sample consumes `kiteplayer` for the default iOS backend stack and presents through
-the `KitePlayerUIView` owned by `kiteplayer-view`. Compose is not involved. `kiteplayer-phone` is only
-the deprecated 0.0.2 source-migration umbrella and is not part of this sample.
+The app opens on the shared Compose screen from `kiteplayer-sample-shared`: the audio visualiser,
+playing the song named by `kiteplayer.sample.song` in the root `local.properties`. Without one it
+plays the test clip as video and says how to set one up. The build phase copies that song into the
+bundle as `sample-song`; it is never committed. `--s1b-smoke`, `--scenario` and `--uikit` start the
+UIKit host instead, which presents through the `KitePlayerUIView` owned by `kiteplayer-view` with
+no Compose involved.
+`Info.plist` sets `CADisableMinimumFrameDurationOnPhone`, which Compose's view controller needs.
+`kiteplayer-phone` is only the deprecated 0.0.2 source-migration umbrella and is not part of this
+sample.
 
 Nothing here is an installation or distribution path. KiteFFmpeg and its FFmpeg trees are local,
 there is no CocoaPods or downloaded framework, the framework is linked statically and is not embedded,
 and no artifact is publicly published. The simulator result is not physical-iPhone qualification or
 T3-Full support. The unsigned device build below proves linking only; it does not install or run.
 
-Run every command from the KitePlayer repository root. The Xcode build phase resolves
-`../KiteFFmpeg/native-libs` to an absolute path, passes it as `kiteffmpeg.ffmpeg.localRoot`, runs Gradle
-offline, maps `iphonesimulator` to the debug simulator framework and `iphoneos` to the release arm64
-framework, and rejects every other platform.
+Run every command from the KitePlayer repository root. The Xcode build phase runs Gradle offline,
+links the debug simulator framework for `iphonesimulator` and the arm64 framework of the build's
+configuration for `iphoneos`, rejects every other platform, and copies in the song.
 
 KiteFFmpeg resolves from Maven Central, so no local publication step is needed.
 

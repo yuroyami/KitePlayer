@@ -223,7 +223,8 @@ jobs:
             :kiteplayer:jvmTest \
             :kiteplayer-compose-video:jvmTest \
             :kiteplayer-compose-ui:jvmTest \
-            :kiteplayer-audioviz:jvmTest
+            :kiteplayer-audioviz:jvmTest \
+            :kiteplayer-sample-shared:jvmTest
 
       # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the 17.5 format matrix against
       # real clips.

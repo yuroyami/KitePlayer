@@ -14,9 +14,12 @@ Local verification ran on macOS arm64 on 2026-09-12.
 - Android output: 143 host tests passed, including Surface replacement during a blocked draw,
   bounded destruction waits and picture adjustments surviving Surface changes.
 - Audio visualisation: 124 JVM tests and 97 iOS simulator tests passed. The clock probe measured
-  a median analysis offset of -4 ms. Its clock-step check accounts for actual elapsed time:
-  deliberately delaying each probe by 70 ms fails the old measurement and passes the corrected
-  measurement. The two-frame tolerance is unchanged.
+  a median analysis offset of -4 ms. A subsequent macOS CI run measured -6 ms but rejected a
+  clock-step assertion: device position updates can re-anchor the clock behind extrapolated time,
+  so subtracting wall-clock delay still does not make that assertion valid. The real-device probe
+  retains its two-frame analysis-alignment check. The seven controlled `SmoothClockTest` cases
+  check interpolation, updates, pause/resume, speed, the extrapolation limit and backward seeks.
+  Disabling interpolation makes six of those seven tests fail.
 
 ## Platform gate
 

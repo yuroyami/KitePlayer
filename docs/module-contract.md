@@ -84,3 +84,16 @@ explicit overrides, disabled discovery, missing providers and cleanup on success
 The 0.0.23 notes include the URL redaction, sleep timer and subtitle parser fixes committed after
 0.0.22, plus these packaging and transport changes. Installation examples present alternatives
 rather than a list of dependencies that appears to require all of them.
+# In-memory media input
+
+`MediaIo.ofBytes(bytes)` returns a `MediaIoFactory` in `kiteplayer-core`. Each open owns
+an independent cursor and close state over the original array. No copy is made; the caller
+must keep the bytes unchanged while a reader is open. The reader is seekable, reports its
+size, accepts positions from zero through size, and rejects reads and seeks after close.
+Invalid destination slices and seek positions throw `IllegalArgumentException` without
+moving the cursor. Empty reads return zero, including at EOF; other EOF reads return -1.
+
+`MediaItem.from(io, label)` constructs an item using that factory, with the label as its
+URI for probing and display. Both functions are companion extensions in the core package,
+so future platform input factories can use the same entry point without platform dependencies
+in core. Existing constructors and custom reader factories remain source compatible.

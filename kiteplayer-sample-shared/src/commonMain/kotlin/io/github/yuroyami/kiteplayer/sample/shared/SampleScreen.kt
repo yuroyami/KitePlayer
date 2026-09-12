@@ -60,8 +60,8 @@ import kotlin.time.Duration
 /**
  * The sample's front screen: [media] playing on repeat, drawn by the audio visualiser when it has no
  * picture and shown as video when it has one. The drawing browser, the settings and the transport sit
- * over it, and the director chooses the drawings until someone picks one by hand. When the song is
- * missing, a note says how to set one up.
+ * over it, and the director chooses the drawings until someone picks one by hand. The file's
+ * copyright tag shows as a credit. When the song file is missing, a note says so.
  *
  * [videoPath] is how media with a picture is drawn. The controls sit over it, so a platform whose
  * native view hides Compose content needs [KiteRenderPath.ComposeCanvas]. [extra] adds a host's own
@@ -117,6 +117,8 @@ fun SampleScreen(
                 Panel.None -> Unit
             }
             if (media.songMissing && panel == Panel.None) SongHint(Modifier.align(Alignment.BottomCenter))
+            val credit = snapshot.metadata["copyright"]
+            if (credit != null && panel == Panel.None) Credit(credit, Modifier.align(Alignment.BottomStart))
             TopBar(
                 title = snapshot.metadata["title"] ?: media.path.substringAfterLast('/').substringBeforeLast('.'),
                 detail = listOfNotNull(snapshot.metadata["artist"], showing.takeIf { snapshot.isAudioOnly })
@@ -214,16 +216,22 @@ private fun BoxScope.Transport(player: KitePlayer, duration: Duration?) {
     }
 }
 
-/** How to give the sample a song, shown while the clip plays in its place. */
+/** Shown while the clip plays because the song file is missing. */
 @Composable
 private fun SongHint(modifier: Modifier) {
     BasicText(
-        "No song is set up, so this is the test clip. To play a song, set kiteplayer.sample.song in the " +
-            "root local.properties to an audio file, then build again.",
+        "The song file is missing, so the test clip plays instead. Check kiteplayer.sample.song in the " +
+            "root local.properties, then build again.",
         modifier.padding(start = 12.dp, end = 12.dp, bottom = BAR_HEIGHT + 12.dp)
             .clip(RoundedCornerShape(6.dp)).background(Color(0x99000000)).padding(horizontal = 12.dp, vertical = 8.dp),
         style = TextStyle(color = Color(0xFFE8EEF8), fontSize = 13.sp),
     )
+}
+
+/** The song's copyright tag, such as the licence a shared song comes under, above the transport. */
+@Composable
+private fun Credit(text: String, modifier: Modifier) {
+    Label(text, modifier.padding(start = 12.dp, end = 12.dp, bottom = BAR_HEIGHT + 8.dp), small = true)
 }
 
 /** A rounded text button, filled while [on]. Hosts use it for their own buttons in the top bar. */

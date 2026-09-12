@@ -1,10 +1,9 @@
 # kiteplayer-sample-android
 
-One comparison APK. It opens on `VisualizerActivity`: the shared visualiser screen, playing the song
-set as `kiteplayer.sample.song` in the root `local.properties`. Without one it plays the test clip as
-video and says how to set one up. The song is copied into the APK's assets at build time and never
-committed. Its Other samples button opens a small launcher with four deliberately separate playback
-Activities:
+One comparison APK. It opens on `VisualizerActivity`: the shared visualiser screen, playing the
+sample song, or the song set as `kiteplayer.sample.song` in the root `local.properties`. The song is
+copied into the APK's assets at build time. Its Other samples button opens a small launcher with
+four deliberately separate playback Activities:
 
 - `MainActivity`: direct native View, inflating
   `io.github.yuroyami.kiteplayer.view.KitePlayerView` from `activity_main.xml`.

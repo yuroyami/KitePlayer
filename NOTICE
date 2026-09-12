@@ -32,3 +32,12 @@ artifacts under META-INF/licenses/kiteplayer-libass/. FriBidi's LGPL terms
 apply to those artifacts; its source is the tagged upstream release, and the
 archives are built by KiteFFmpeg's buildAssChainFor* tasks and published as
 release assets of that repository.
+
+Sample media
+------------
+kiteplayer-sample-shared/media/bad-cat.mp3 is "Bad Cat [Master Version]" by
+Skullbeatz (https://www.newgrounds.com/audio/listen/376737), licensed under
+Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+(https://creativecommons.org/licenses/by-nc-sa/3.0/). It is not covered by
+KitePlayer's Apache-2.0 license. Only the sample apps use it, and no published
+artifact contains it.

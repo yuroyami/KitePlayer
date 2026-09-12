@@ -14,14 +14,14 @@ import java.io.File
 
 /**
  * How this run was asked for. Everything has a default, so a bare `run` opens the visualiser on the
- * song from local.properties, or on the conformance clip when there is none.
+ * sample song, or on the conformance clip when the song file is missing.
  */
 internal data class SampleOptions(
     /** The media the video screen opens: the one asked for, else the conformance clip. */
     val media: String,
     /** The media asked for by argument or property, or null. */
     val requested: String?,
-    /** The song from `kiteplayer.sample.song`, or null. */
+    /** The song the build passes in as `kiteplayer.sample.song`, or null. */
     val song: String?,
     /** True shows the video screen with its modifier toggle instead of the visualiser. */
     val classic: Boolean,
@@ -67,8 +67,8 @@ internal data class SampleOptions(
 }
 
 /**
- * The Compose Desktop sample. It opens on the audio visualiser with the song from
- * `kiteplayer.sample.song`, or plays a path given as the first argument. `--modifiers` shows the
+ * The Compose Desktop sample. It opens on the audio visualiser playing the sample song, or plays a
+ * path given as the first argument. `--modifiers` shows the
  * video screen with its clip, alpha and rotation toggle; `--measure` takes the upload numbers and exits.
  */
 fun main(args: Array<String>) {

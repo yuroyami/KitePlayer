@@ -13,8 +13,7 @@ import platform.UIKit.UIViewController
 
 /**
  * The sample screen for iOS, with a player of its own. It plays the song the app was built with,
- * copied in as `sample-song` from local.properties, or the conformance clip with a note on setting
- * one up.
+ * copied into the bundle as `sample-song`, or the conformance clip when the song is missing.
  */
 fun visualizerViewController(): UIViewController = ComposeUIViewController {
     val player = remember { KitePlayerPlatform.createOrNull() }

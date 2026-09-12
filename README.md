@@ -283,9 +283,10 @@ Custom assemblies start from `kiteplayer-core` and supply their own backends thr
 ## Samples
 
 Four sample apps live in this repository, and three of them share one screen. None of them is
-published. The desktop, Android and iOS apps open on the audio visualiser, playing the song set as
-`kiteplayer.sample.song` in `local.properties`. No song is committed; without one they play the
-test clip as video and say how to set one up.
+published. The desktop, Android and iOS apps open on the audio visualiser, playing *Bad Cat* by
+Skullbeatz, from the [Newgrounds Audio Portal](https://www.newgrounds.com/audio/listen/376737), under
+[CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/). To play your own song, set
+`kiteplayer.sample.song=/path/to/song.mp3` in `local.properties`.
 
 | Module | What it shows | Run it |
 |---|---|---|
@@ -295,9 +296,8 @@ test clip as video and say how to set one up.
 | `kiteplayer-sample-shared` | The screen the three apps share: the visualiser, the drawing browser, the settings and the transport | Used by the three above |
 | `kiteplayer-sample-web` | The wasmJs measurement harness, not a demo | `./gradlew :kiteplayer-sample-web:wasmJsBrowserDistribution`, then read `kiteplayer-sample-web/MEASUREMENTS.md` |
 
-The test clips come from `./scripts/testmedia.sh`, which needs `ffmpeg` on your PATH. No media is
-committed to this repository. For the visualiser, put `kiteplayer.sample.song=/path/to/song.mp3`
-in `local.properties`.
+The test clips come from `./scripts/testmedia.sh`, which needs `ffmpeg` on your PATH, and are not
+committed. The only committed media is the sample song, in `kiteplayer-sample-shared/media`.
 
 ## Working on KitePlayer
 

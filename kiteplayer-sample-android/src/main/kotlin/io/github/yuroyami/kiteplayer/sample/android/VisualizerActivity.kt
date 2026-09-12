@@ -15,9 +15,9 @@ import io.github.yuroyami.kiteplayer.sample.shared.SampleScreen
 import java.io.File
 
 /**
- * The app's front screen: the song built in from `kiteplayer.sample.song`, drawn by the audio
- * visualiser, or the conformance clip as video with a note on setting a song up. "Other samples"
- * opens the launcher with the presentation comparisons.
+ * The app's front screen: the song built into the APK, drawn by the audio visualiser, or the
+ * conformance clip as video when the song is missing. "Other samples" opens the launcher with the
+ * presentation comparisons.
  */
 internal class VisualizerActivity : ComponentActivity() {
     private var player: KitePlayer? = null

@@ -9,11 +9,11 @@ plugins {
 /*
  * The Compose Desktop proof for the upload measurement. One window, one player built by
  * KitePlayerPlatform.createOrNull(), and KiteVideo drawing its frames as ordinary Compose
- * content. The modifier toggle is the whole point of D-6: clip, alpha, rotation and scale apply
+ * content. The modifier toggle is the point of that screen: clip, alpha, rotation and scale apply
  * to the video pixels, which a platform-view player cannot do.
  *
- * A bare `run` opens on the audio visualiser instead, with the song from kiteplayer.sample.song;
- * `--modifiers` or the measurement flags bring back the video screen above.
+ * A bare `run` opens on the audio visualiser instead, playing the sample song; `--modifiers` or
+ * the measurement flags bring back the video screen above.
  *
  * An application, not a library: no explicitApi, no ABI dump, nothing published.
  */
@@ -49,15 +49,16 @@ val measureFlags = listOf(
     providers.gradleProperty(key).orNull?.let { value -> "-D$key=$value" }
 }
 
-// The song the visualiser opens on: -Pkiteplayer.sample.song, or kiteplayer.sample.song in the root
-// local.properties. Never committed: the one the owner uses is under a non-commercial licence.
-val sampleSong: String? = providers.gradleProperty("kiteplayer.sample.song")
+// The song the visualiser opens on: -Pkiteplayer.sample.song, else kiteplayer.sample.song in the root
+// local.properties, else the committed one in kiteplayer-sample-shared/media.
+val sampleSong: String = providers.gradleProperty("kiteplayer.sample.song")
     .orElse(
         providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText.map { text ->
             Properties().apply { load(text.reader()) }.getProperty("kiteplayer.sample.song").orEmpty()
         },
     )
     .orNull?.takeIf { it.isNotBlank() }
+    ?: rootProject.layout.projectDirectory.file("kiteplayer-sample-shared/media/bad-cat.mp3").asFile.absolutePath
 
 // The run classpath, printed so the measurement can be repeated with no Gradle daemon in the
 // picture: `java -cp "$(./gradlew -q :kiteplayer-sample-desktop:printRunClasspath)" ... MainKt`.
@@ -75,6 +76,6 @@ compose.desktop {
         mainClass = "io.github.yuroyami.kiteplayer.sample.desktop.MainKt"
         jvmArgs += "-Dkiteplayer.sample.media.default=$defaultMedia"
         jvmArgs += measureFlags
-        sampleSong?.let { jvmArgs += "-Dkiteplayer.sample.song=$it" }
+        jvmArgs += "-Dkiteplayer.sample.song=$sampleSong"
     }
 }

@@ -101,8 +101,8 @@ dependencies {
     implementation(compose.foundation)
     implementation(libs.androidx.activity.compose)
     // Dispatchers.Main's factory. The view's members are main-thread only, and the controller
-    // hops threads the way any ordinary app does. Found by the S1.d.4 smoke: without this the
-    // hop throws before open() and the oracle reports Idle.
+    // hops threads the way any ordinary app does. Without this the hop throws before open() and
+    // the player stays Idle.
     implementation(libs.kotlinx.coroutines.android)
 }
 
@@ -113,30 +113,24 @@ val prepareSampleMedia = tasks.register<PrepareAndroidSampleMediaTask>("prepareA
     outputDirectory.set(layout.buildDirectory.dir("generated/s1cAssets"))
 }
 
-// The song the visualiser opens on: -Pkiteplayer.sample.song, or kiteplayer.sample.song in the root
-// local.properties. Never committed: the one the owner uses is under a non-commercial licence.
-val sampleSong: String? = providers.gradleProperty("kiteplayer.sample.song")
+// The song the visualiser opens on: -Pkiteplayer.sample.song, else kiteplayer.sample.song in the root
+// local.properties, else the committed one in kiteplayer-sample-shared/media.
+val sampleSong: String = providers.gradleProperty("kiteplayer.sample.song")
     .orElse(
         providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText.map { text ->
             Properties().apply { load(text.reader()) }.getProperty("kiteplayer.sample.song").orEmpty()
         },
     )
     .orNull?.takeIf { it.isNotBlank() }
+    ?: rootProject.layout.projectDirectory.file("kiteplayer-sample-shared/media/bad-cat.mp3").asFile.absolutePath
 
 // The song goes in beside the clip, under its own name, and the visualiser screen opens it.
-val prepareSampleSong = sampleSong?.let { song ->
-    tasks.register<PrepareAndroidSampleMediaTask>("prepareAndroidSampleSong") {
-        sourceMedia.set(file(song))
-        outputDirectory.set(layout.buildDirectory.dir("generated/songAssets"))
-    }
+val prepareSampleSong = tasks.register<PrepareAndroidSampleMediaTask>("prepareAndroidSampleSong") {
+    sourceMedia.set(file(sampleSong))
+    outputDirectory.set(layout.buildDirectory.dir("generated/songAssets"))
 }
 
 androidComponents.onVariants { variant ->
-    variant.sources.assets?.addGeneratedSourceDirectory(
-        prepareSampleMedia,
-        PrepareAndroidSampleMediaTask::outputDirectory,
-    )
-    prepareSampleSong?.let {
-        variant.sources.assets?.addGeneratedSourceDirectory(it, PrepareAndroidSampleMediaTask::outputDirectory)
-    }
+    variant.sources.assets?.addGeneratedSourceDirectory(prepareSampleMedia, PrepareAndroidSampleMediaTask::outputDirectory)
+    variant.sources.assets?.addGeneratedSourceDirectory(prepareSampleSong, PrepareAndroidSampleMediaTask::outputDirectory)
 }

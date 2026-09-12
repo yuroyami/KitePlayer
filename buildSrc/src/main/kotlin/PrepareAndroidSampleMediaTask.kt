@@ -13,13 +13,13 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Copies the conformance sync clip into the sample's generated assets (S1.c.6 step 3).
+ * Copies one media file, the conformance clip or the sample song, into the sample's generated assets.
  *
  * The copy is transactional: bytes land in a sibling `.tmp` and are renamed into place, so an
- * interrupted build never leaves a partial clip an APK could bundle. The task never invokes
- * ffmpeg and never touches a network; `scripts/testmedia.sh` is the producer and runs first,
- * which is why a missing or empty input is a loud failure naming it. The SHA-256 of the copied
- * bytes is logged so a smoke result can be tied to the exact clip it played.
+ * interrupted build never leaves a partial file an APK could bundle. Other files in the output
+ * directory are deleted first, so a song swapped for another never ships beside the old one. The
+ * task never invokes ffmpeg and never touches a network. The SHA-256 of the copied bytes is logged
+ * so a smoke result can be tied to the exact file it played.
  */
 abstract class PrepareAndroidSampleMediaTask : DefaultTask() {
 
@@ -35,10 +35,12 @@ abstract class PrepareAndroidSampleMediaTask : DefaultTask() {
         val source = sourceMedia.get().asFile
         if (!source.isFile || source.length() == 0L) {
             throw GradleException(
-                "sample media missing or empty at ${source.absolutePath}; run scripts/testmedia.sh first",
+                "sample media missing or empty at ${source.absolutePath}; the test clip comes from " +
+                    "scripts/testmedia.sh, and the song from kiteplayer.sample.song",
             )
         }
         val outDir = outputDirectory.get().asFile.also(File::mkdirs)
+        outDir.listFiles()?.filter { it.name != source.name }?.forEach(File::delete)
         val destination = outDir.resolve(source.name)
         val tmp = outDir.resolve("${source.name}.tmp")
         try {

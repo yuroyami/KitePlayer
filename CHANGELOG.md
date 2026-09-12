@@ -8,10 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
 
-## [Unreleased]
+## [0.0.24] - 2026-09-12
 
 ### Added
 
+- `MediaIo.ofBytes(bytes)` opens media held in memory without copying the array. Each open gets
+  an independent, seekable reader. `MediaItem.from(io, label)` builds the item in one call. Fixes #43.
 - `kiteplayer-audioviz` is a new, optional audio visualiser for files with no picture: 78 drawings
   in 11 families, palettes, and a director that changes drawings on the song's phrases. Show
   `KiteAudioViz` in place of the video when `PlayerSnapshot.isAudioOnly` says so;
@@ -53,6 +55,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 
 ### Fixed
 
+- Backward seeks initially ask FFmpeg to land within two seconds of the target. If the container
+  refuses that window, one unrestricted retry preserves playback across sparse keyframes. Fixes #35.
 - A stereo file played silent on a mono device, and 5.1 content lost its dialogue on a quad
   device. Every channel now reaches a speaker when folding to a smaller layout.
 - YCgCo video was converted with the BT.709 matrix, so its colours were wrong on every path.
@@ -61,9 +65,18 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - The last subtitle of a file is no longer cut off: the session waits for a cue that outlives the
   last frame, bounded at ten seconds.
 - WebVTT `position`, `line` and `size` settings are honoured instead of being read and discarded.
+- On Android, a playing `KitePlayerView` could freeze the app long enough for Android to report it
+  as not responding when the view changed size, for example as the next file opened. A new or
+  resized Surface no longer waits for the frame being drawn, and a destroyed one waits one second
+  at most.
+- On Android, `KitePlayerView` ignored brightness, contrast, saturation and hue when the video was
+  decoded in software. They now apply to every frame it draws.
 
 ### Changed
 
+- The audio visualiser reuses scene pixels, texture uploads and drawing buffers, and adapts trail
+  resolution to frame cost. Bloom uses a filtered image pyramid. The measured desktop results and
+  their limits are recorded in `kiteplayer-audioviz/PERFORMANCE.md`.
 - Breaking: `kiteplayer-mobile` is gone. It held no code of its own and only re-exported
   `kiteplayer`, so two coordinates named one artifact. Depend on `kiteplayer` instead; the
   package `io.github.yuroyami.kiteplayer.mobile` and everything in it are unchanged and still

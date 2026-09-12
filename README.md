@@ -34,13 +34,13 @@ You do not install FFmpeg, add a Gradle plugin or touch linker settings.
 
 ```kotlin
 /** Native views, no Compose. The default stack. */
-implementation("io.github.yuroyami:kiteplayer:0.0.23")
+implementation("io.github.yuroyami:kiteplayer:0.0.24")
 
 /** Compose. Everything above, plus both Compose video paths. */
-implementation("io.github.yuroyami:kiteplayer-compose:0.0.23")
+implementation("io.github.yuroyami:kiteplayer-compose:0.0.24")
 
 /** Optional, next to either line: an audio visualiser for files with no picture, in Compose. */
-implementation("io.github.yuroyami:kiteplayer-audioviz:0.0.23")
+implementation("io.github.yuroyami:kiteplayer-audioviz:0.0.24")
 ```
 
 Put the line in `commonMain.dependencies`, or in the `dependencies` block of an Android-only app.
@@ -111,6 +111,18 @@ player.seek(90.seconds)
 // When the screen goes away:
 player.closeAndAwait()
 ```
+
+For a file already held in memory, use a factory that gives each open its own reader:
+
+```kotlin
+import io.github.yuroyami.kiteplayer.from
+import io.github.yuroyami.kiteplayer.ofBytes
+
+player.open(MediaItem.from(MediaIo.ofBytes(bytes), label = "song.flac"))
+player.play()
+```
+
+The bytes are not copied. Keep the array unchanged while playback can read it.
 
 `KitePlayerVideo` has two ways to draw. `KiteRenderPath.NativeView` hosts the platform's video
 view: the system compositor presents the frames and the GPU stays idle, which is the right default

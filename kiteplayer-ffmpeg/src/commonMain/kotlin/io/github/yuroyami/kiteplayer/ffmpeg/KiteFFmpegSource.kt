@@ -220,7 +220,9 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
         val reader = reader ?: error("selectStreams must be called before seeking")
         // [target] needs no conversion. KiteFFmpeg's seek already speaks the content-relative
         // timeline, and every timestamp this class produces is now on that same timeline.
-        reader.seek(target.micros, SeekDirection.Backward)
+        seekBackward(target.micros) { micros, floor ->
+            reader.seek(micros, SeekDirection.Backward, notEarlierThan = floor)
+        }
         // The container reader does not report where it landed. The engine finds out from the first decoded
         // frame, which is also how it detects an overshoot and decides whether to retry.
         return null

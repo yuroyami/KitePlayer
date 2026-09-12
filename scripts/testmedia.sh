@@ -97,6 +97,11 @@ ffmpeg -v error -y \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 30 \
   -c:a aac -b:a 128k -shortest sync1080p30.mp4
 
+echo "Sparse keyframes, five seconds apart, for bounded backward seeking"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=160x90:rate=10:duration=12" \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p -g 50 -keyint_min 50 -sc_threshold 0 sparse-keyframes.mp4
+
 echo "720p variable frame rate h264 + aac, 8s, five frame durations in a repeating cycle"
 # Genuinely variable, not a fractional constant rate: no two neighbouring frames last the same
 # time. settb pins the timebase at 1/90000, then setpts rewrites every presentation timestamp

@@ -46,6 +46,33 @@ class BackendSeekStressTest {
         ?: "testmedia"
 
     @Test
+    fun `a bounded seek still decodes when the preceding keyframe is outside the window`() = runBlocking {
+        val session = KiteFFmpegMediaBackend().open(MediaItem("$mediaDir/sparse-keyframes.mp4"))
+        try {
+            val source = session.source
+            val video = source.streams.first { it.kind == io.github.yuroyami.kiteplayer.TrackKind.Video }
+            val decoder = assertNotNull(session.videoDecoders.first().create(video, HwdecPolicy.Off))
+            try {
+                source.selectStreams(setOf(video.index))
+                var generation = Generation.Initial
+                for (target in listOf(8_000_000L, 1_000_000L, 11_000_000L)) {
+                    generation = generation.next()
+                    decoder.flush(generation)
+                    source.seekToKeyframe(Pts(target))
+                    val landing = assertNotNull(firstVideoFrameAfterSeek(source, video.index, coroutineContext, decoder))
+                    assertEquals(generation, landing.generation)
+                    assertTrue(landing.pts.micros in 0L..target, "seek to $target landed at ${landing.pts.micros}")
+                    assertEquals(target / 5_000_000L * 5_000_000L, landing.pts.micros)
+                }
+            } finally {
+                decoder.close()
+            }
+        } finally {
+            session.close()
+        }
+    }
+
+    @Test
     fun `seeking and closing the real backend on real threads keeps every timestamp honest`() = runBlocking {
         val demuxContext = newSingleThreadContext("stress-ffmpeg-demux")
         val videoContext = newSingleThreadContext("stress-ffmpeg-video")

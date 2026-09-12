@@ -61,9 +61,10 @@ public class RenderStats {
  * How much of the canvas the feedback buffers cover, and whether that may drop while frames run slow.
  *
  * Only drawings with a trail render into a buffer; the rest draw straight onto the canvas and are not
- * affected. The finishing pass always runs at full size, so edges stay sharp. With [dynamic] on, five
- * slow frames in a row take the buffers down by a tenth, and they climb back two percent a second
- * while frames are quick again.
+ * affected. With [dynamic] on, five moderately slow frames take the buffers down by a tenth. A
+ * severe stall reduces the pixel count immediately using its measured cost, including below quarter
+ * scale on a large display. Buffers climb back two percent a second while frames are quick again.
+ * The foreground remains at full size. Set [dynamic] to false to insist on the requested resolution.
  */
 public class RenderQuality(scale: Float = 1f, public var dynamic: Boolean = true) {
 
@@ -85,24 +86,31 @@ public class RenderQuality(scale: Float = 1f, public var dynamic: Boolean = true
             current = scale
             return
         }
-        if (millis > SLOW_MILLIS) {
+        if (millis > SLOW_MILLIS * 2f) {
+            // Raster cost grows with area. Avoid spending several more half-second frames making
+            // tiny reductions, and leave the foreground and finishing pass part of the frame budget.
+            current = (current * kotlin.math.sqrt(TARGET_MILLIS / millis)).coerceAtLeast(DYNAMIC_SMALLEST)
+            slowFrames = 0
+        } else if (millis > SLOW_MILLIS) {
             slowFrames++
             if (slowFrames >= SLOW_RUN) {
-                current = (current * 0.9f).coerceAtLeast(SMALLEST)
+                current = (current * 0.9f).coerceAtLeast(DYNAMIC_SMALLEST)
                 slowFrames = 0
             }
         } else {
             slowFrames = 0
             if (millis < QUICK_MILLIS) current += 0.02f * deltaSeconds
         }
-        current = current.coerceIn(SMALLEST, scale)
+        current = current.coerceIn(DYNAMIC_SMALLEST, scale)
     }
 
     /** [current] in steps of five percent, so the buffers are not rebuilt on every tiny change. */
-    internal val stepped: Float get() = (kotlin.math.floor(current * 20f) / 20f).coerceAtLeast(SMALLEST)
+    internal val stepped: Float get() = (kotlin.math.floor(current * 20f) / 20f).coerceAtLeast(DYNAMIC_SMALLEST)
 
     private companion object {
         const val SMALLEST = 0.25f
+        const val DYNAMIC_SMALLEST = 0.05f
+        const val TARGET_MILLIS = 8f
         const val SLOW_MILLIS = 14f
         const val QUICK_MILLIS = 10f
         const val SLOW_RUN = 5

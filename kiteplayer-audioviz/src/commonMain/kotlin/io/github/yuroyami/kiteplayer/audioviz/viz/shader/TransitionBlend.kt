@@ -1,7 +1,9 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.SolidColor
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizTransition
 
 /**
@@ -13,11 +15,37 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizTransition
  */
 internal class TransitionBlend {
 
-    private val program = ShaderProgram(ShaderLibrary.HEADER + SOURCE)
+    private val program by lazy { ShaderProgram(ShaderLibrary.HEADER + SOURCE) }
+    private val maskProgram by lazy { ShaderProgram(ShaderLibrary.HEADER + MASK_SOURCE) }
 
     val available: Boolean get() = program.available
 
     val error: String? get() = program.error
+
+    fun canDrawLayers(transition: VizTransition): Boolean =
+        transition == VizTransition.Crossfade || transition == VizTransition.StrobeCut ||
+            (transition != VizTransition.ZoomThrough && transition != VizTransition.WarpHandoff && maskProgram.available)
+
+    /** A mask for a recorded layer. The drawing stays on the destination canvas, including its GPU. */
+    fun mask(transition: VizTransition, progress: Float, width: Float, height: Float, incoming: Boolean): Brush? {
+        val t = progress.coerceIn(0f, 1f)
+        val constant = when (transition) {
+            VizTransition.Crossfade -> t
+            VizTransition.StrobeCut -> when {
+                t > 0.8f -> 1f
+                t < 0.2f -> 0f
+                (t * 6f) % 1f >= 0.5f -> 1f
+                else -> 0f
+            }
+            else -> null
+        }
+        if (constant != null) return SolidColor(Color.White.copy(alpha = if (incoming) constant else 1f - constant))
+        maskProgram.uniform("uResolution", width, height)
+        maskProgram.uniform("uProgress", t)
+        maskProgram.uniform("uKind", transition.ordinal.toFloat())
+        maskProgram.uniform("uIncoming", if (incoming) 1f else 0f)
+        return maskProgram.brush()
+    }
 
     fun prepare(
         from: ImageBitmap,
@@ -41,14 +69,38 @@ internal class TransitionBlend {
     }
 
     private companion object {
-        const val SOURCE = """
-uniform shader uFrom;
-uniform shader uTo;
+        const val MASK = """
 uniform float uProgress;
 uniform float uKind;
+float transitionMask(float2 uv) {
+    float t = uProgress;
+    if (uKind < 0.5) return t;
+    if (uKind < 1.5) {
+        float edge = fbm(uv * 3.0) * 0.6 + uv.x * 0.4;
+        return smoothstep(edge - 0.18, edge + 0.18, t * 1.4 - 0.2);
+    }
+    if (uKind < 2.5) {
+        float reach = length(uv - 0.5) * 1.42;
+        return smoothstep(reach + 0.12, reach - 0.12, t * 1.3);
+    }
+    float flicker = step(0.5, fract(t * 6.0));
+    return t > 0.8 ? 1.0 : (t < 0.2 ? 0.0 : flicker);
+}
+"""
+
+        const val MASK_SOURCE = MASK + """
+uniform float uIncoming;
+half4 main(float2 position) {
+    float mask = transitionMask(position / uResolution);
+    return half4(uIncoming > 0.5 ? mask : 1.0 - mask);
+}
+"""
+
+        const val SOURCE = MASK + """
+uniform shader uFrom;
+uniform shader uTo;
 uniform float2 uFromScale;
 uniform float2 uToScale;
-
 half4 readFrom(float2 position) { return uFrom.eval(position * uFromScale); }
 half4 readTo(float2 position) { return uTo.eval(position * uToScale); }
 
@@ -56,27 +108,8 @@ half4 main(float2 position) {
     float2 uv = position / uResolution;
     float t = uProgress;
 
-    // Crossfade.
-    if (uKind < 0.5) {
-        return mix(readFrom(position), readTo(position), t);
-    }
-
-    // A ragged edge, shaped by noise, sweeping across.
-    if (uKind < 1.5) {
-        float edge = fbm(uv * 3.0) * 0.6 + uv.x * 0.4;
-        float mask = smoothstep(edge - 0.18, edge + 0.18, t * 1.4 - 0.2);
-        return mix(readFrom(position), readTo(position), mask);
-    }
-
-    // The new picture opening out of the middle.
-    if (uKind < 2.5) {
-        float reach = length(uv - 0.5) * 1.42;
-        float mask = smoothstep(reach + 0.12, reach - 0.12, t * 1.3);
-        return mix(readFrom(position), readTo(position), mask);
-    }
-
     // The old one rushes past and the new one arrives from a long way off.
-    if (uKind < 3.5) {
+    if (uKind > 2.5 && uKind < 3.5) {
         float2 middle = uv - 0.5;
         float2 leaving = middle / max(1.0 - t * 0.85, 0.05) + 0.5;
         float2 arriving = middle / (0.15 + t * 0.85) + 0.5;
@@ -90,10 +123,7 @@ half4 main(float2 position) {
         return readTo(position);
     }
 
-    // Three hard alternations, then it is done. Loud music only.
-    float flicker = step(0.5, fract(t * 6.0));
-    float mask = t > 0.8 ? 1.0 : (t < 0.2 ? 0.0 : flicker);
-    return mix(readFrom(position), readTo(position), mask);
+    return mix(readFrom(position), readTo(position), transitionMask(uv));
 }
 """
     }

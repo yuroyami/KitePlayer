@@ -13,6 +13,7 @@ import org.jetbrains.skia.Image
 import org.jetbrains.skia.RuntimeEffect
 import org.jetbrains.skia.RuntimeShaderBuilder
 import org.jetbrains.skia.SamplingMode
+import org.jetbrains.skia.impl.use
 
 internal actual val runtimeShadersSupported: Boolean = true
 
@@ -90,15 +91,17 @@ public actual class ShaderProgram actual constructor(source: String) {
         // Skia wants an image rather than a bitmap, and a shader rather than an image. Clamped at
         // the edges and sampled smoothly, which is what every one of these small lookup pictures
         // wants: a spectrum read between two bars should blend, not step.
-        val skiaImage = Image.makeFromBitmap(image.asSkiaBitmap())
-        try {
-            holder.child(
-                name,
-                if (tiled) skiaImage.makeShader(FilterTileMode.REPEAT, FilterTileMode.REPEAT, SamplingMode.LINEAR)
-                else skiaImage.makeShader(FilterTileMode.CLAMP, FilterTileMode.CLAMP, SamplingMode.LINEAR),
-            )
-        } catch (ignored: Throwable) {
-            absent += name
+        Image.makeFromBitmap(image.asSkiaBitmap()).use { skiaImage ->
+            try {
+                val mode = if (tiled) FilterTileMode.REPEAT else FilterTileMode.CLAMP
+                skiaImage.makeShader(mode, mode, SamplingMode.LINEAR).use { child ->
+                    // The builder retains its own native reference. Release the temporary wrappers
+                    // here instead of retaining their pixel copies until a garbage collection.
+                    holder.child(name, child)
+                }
+            } catch (ignored: Throwable) {
+                absent += name
+            }
         }
     }
 

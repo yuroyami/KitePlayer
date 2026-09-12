@@ -11,11 +11,14 @@ import androidx.compose.ui.graphics.ImageBitmap
 internal class PixelImage(val width: Int, val height: Int) {
     val pixels: IntArray = IntArray(width * height)
     val image: ImageBitmap = ImageBitmap(width, height)
+    private val uploader = PixelUpload(image)
 
     fun upload() {
-        image.writePixels(pixels)
+        uploader.write(pixels)
     }
 }
 
 /** Copies [pixels], opaque ARGB and row by row, into this picture. */
-internal expect fun ImageBitmap.writePixels(pixels: IntArray)
+internal expect class PixelUpload(image: ImageBitmap) {
+    fun write(pixels: IntArray)
+}

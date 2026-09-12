@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +28,33 @@ class PostProcessTest {
 
     private val width = 240
     private val height = 160
+
+    @Test
+    fun cachedBloomFollowsNewScenePixelsAndCanBeDisabled() {
+        val colour = mutableStateOf(Color.Red)
+        val spec = mutableStateOf(PostSpec(bloom = 1f, bloomRadius = 0.06f, threshold = 0.3f, vignette = 0f, grain = 0f, glitch = false, aberration = 0f))
+        val scene = ImageComposeScene(width, height, Density(1f), content = {
+            PostProcessedBox(spec = { spec.value }, frame = { SpectrumFrame.silent(8, 16) }, modifier = Modifier.fillMaxSize()) {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawRect(Color.Black)
+                    drawCircle(colour.value, 6f, center)
+                }
+            }
+        })
+        fun pixels(time: Long) = scene.render(time).use { it.toComposeImageBitmap().toPixelMap() }
+        try {
+            val red = pixels(0L)[width / 2 + 10, height / 2]
+            colour.value = Color.Blue
+            val blue = pixels(16_666_667L)[width / 2 + 10, height / 2]
+            assertTrue(red.red > 0.02f && red.blue < 0.01f, "the first halo must be red")
+            assertTrue(blue.blue > 0.02f && blue.red < 0.01f, "cached filters must use the new blue scene")
+            spec.value = PostSpec.Off
+            val plain = pixels(33_333_334L)[width / 2 + 10, height / 2]
+            assertTrue(plain.red < 0.01f && plain.blue < 0.01f, "disabling post must remove the cached halo")
+        } finally {
+            scene.close()
+        }
+    }
 
     private fun render(spec: PostSpec, fill: Color = Color.Black, dot: Boolean = true): PixelMap {
         val scene = ImageComposeScene(width, height, Density(1f), content = {

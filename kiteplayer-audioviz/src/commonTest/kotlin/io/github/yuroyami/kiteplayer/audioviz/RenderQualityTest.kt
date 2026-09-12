@@ -36,4 +36,20 @@ class RenderQualityTest {
         repeat(20) { fixed.afterFrame(millis = 40f, deltaSeconds = 1f / 60f) }
         assertEquals(1f, fixed.current, "with dynamic off it should never move")
     }
+
+    @Test
+    fun aSeverelyOverBudgetFrameReducesWorkImmediately() {
+        val quality = RenderQuality()
+        quality.afterFrame(millis = 500f, deltaSeconds = 0.1f)
+        assertTrue(quality.current < 0.2f, "a half-second frame must not wait for four more stalls")
+        assertTrue(quality.stepped < 0.25f, "dynamic feedback must be able to go below quarter scale")
+        assertTrue(500f * quality.stepped * quality.stepped < 14f, "the next frame's estimated pixel work should fit")
+    }
+
+    @Test
+    fun explicitFullResolutionStillWinsOverTheBudget() {
+        val quality = RenderQuality(scale = 1f, dynamic = false)
+        quality.afterFrame(millis = 500f, deltaSeconds = 0.1f)
+        assertEquals(1f, quality.stepped)
+    }
 }

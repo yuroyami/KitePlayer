@@ -65,13 +65,18 @@ public fun VisualizerSurface(
     /** Frames a second to redraw at, or 0 for every display frame. For thumbnails and previews. */
     framesPerSecond: Int = 0,
 ) {
+    val renderQuality = quality ?: remember { RenderQuality() }
+    if (!post) {
+        VisualizerCanvas(visualization, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond)
+        return
+    }
     PostProcessedBox(
         spec = { if (post) visualization.post.masked(switches) else PostSpec.Off },
         frame = frame,
         modifier = modifier,
         stats = stats,
     ) {
-        VisualizerCanvas(visualization, frame, palette, Modifier.fillMaxSize(), future, stats, quality, framesPerSecond)
+        VisualizerCanvas(visualization, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond)
     }
 }
 
@@ -93,7 +98,7 @@ private fun VisualizerCanvas(
     var musicTime by remember { mutableFloatStateOf(0f) }
     var deltaSeconds by remember { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(visualization) {
+    LaunchedEffect(visualization, framesPerSecond) {
         visualization.restart()
         buffers.discard()
         var previousNanos = 0L
@@ -146,7 +151,7 @@ private fun VisualizerCanvas(
             return@Canvas
         }
         val bufferSize = Size(target.width.toFloat(), target.height.toFloat())
-        buffers.scope.draw(this, layoutDirection, GraphicsCanvas(target), bufferSize) {
+        buffers.scope.draw(this, layoutDirection, buffers.canvas, bufferSize) {
             drawEchoLayer(visualization, state, previous, stats)
         }
         quality?.let {
@@ -344,7 +349,12 @@ internal class VizRenderer {
         quality: Float = 1f,
         stats: RenderStats? = null,
     ): ImageBitmap? {
-        val scale = (if (visualization.bloom > 0) SOFT_BUFFER_SCALE else 1f) * quality
+        val requestedScale = (if (visualization.bloom > 0) SOFT_BUFFER_SCALE else 1f) * quality
+        // A shader normally draws directly on the GPU. The occasional snapshot needed to seed
+        // another drawing's history must not turn it into a full-resolution CPU shader frame.
+        val scale = if (visualization.paintsWholeScreen && visualization.trailAt(state.mood) <= 0f) {
+            minOf(requestedScale, 256f / into.size.maxDimension.coerceAtLeast(1f))
+        } else requestedScale
         val target = buffers.next(into.size, scale) ?: return null
         inherited?.let {
             buffers.seed(it)
@@ -352,7 +362,7 @@ internal class VizRenderer {
         }
         val previous = buffers.previous()
         val size = Size(target.width.toFloat(), target.height.toFloat())
-        scope.draw(into, into.layoutDirection, GraphicsCanvas(target), size) {
+        scope.draw(into, into.layoutDirection, buffers.canvas, size) {
             drawEchoLayer(visualization, state, previous, stats)
         }
         buffers.swap()
@@ -372,8 +382,12 @@ private class FeedbackBuffers {
     val scope = CanvasDrawScope()
     private var front: ImageBitmap? = null
     private var back: ImageBitmap? = null
+    private var frontCanvas: GraphicsCanvas? = null
+    private var backCanvas: GraphicsCanvas? = null
+    private var hasPrevious = false
     private var width = 0
     private var height = 0
+    val canvas: GraphicsCanvas get() = checkNotNull(frontCanvas)
 
     /** The bitmap to draw this frame into, or null when the canvas has no area yet. */
     fun next(size: Size, scale: Float): ImageBitmap? {
@@ -381,9 +395,10 @@ private class FeedbackBuffers {
         val tall = (size.height * scale).toInt()
         if (wanted <= 0 || tall <= 0) return null
         if (front == null || width != wanted || height != tall) {
-            val before = if (width > 0) back else null
-            front = ImageBitmap(wanted, tall)
-            back = ImageBitmap(wanted, tall)
+            val before = previous()
+            front = ImageBitmap(wanted, tall).also { frontCanvas = GraphicsCanvas(it) }
+            back = ImageBitmap(wanted, tall).also { backCanvas = GraphicsCanvas(it) }
+            hasPrevious = false
             width = wanted
             height = tall
             // A new size keeps the picture that was there, stretched, so the trail carries on.
@@ -393,13 +408,13 @@ private class FeedbackBuffers {
     }
 
     /** The bitmap from last frame, or null on the first frame after a resize or a change. */
-    fun previous(): ImageBitmap? = if (width == 0) null else back
+    fun previous(): ImageBitmap? = if (hasPrevious) back else null
 
     /** Paints [picture] in as last frame, stretched to fit, so the next frame builds on it. */
     fun seed(picture: ImageBitmap) {
-        val into = back ?: return
+        val canvas = backCanvas ?: return
         val area = Size(width.toFloat(), height.toFloat())
-        scope.draw(Density(1f), LayoutDirection.Ltr, GraphicsCanvas(into), area) {
+        scope.draw(Density(1f), LayoutDirection.Ltr, canvas, area) {
             drawRect(Color.Transparent, blendMode = BlendMode.Clear)
             drawImage(
                 image = picture,
@@ -409,17 +424,25 @@ private class FeedbackBuffers {
                 dstSize = IntSize(width, height),
             )
         }
+        hasPrevious = true
     }
 
     fun swap() {
         val held = front
         front = back
         back = held
+        val heldCanvas = frontCanvas
+        frontCanvas = backCanvas
+        backCanvas = heldCanvas
+        hasPrevious = true
     }
 
     fun discard() {
         front = null
         back = null
+        frontCanvas = null
+        backCanvas = null
+        hasPrevious = false
         width = 0
         height = 0
     }
@@ -436,9 +459,9 @@ internal const val SOFT_BUFFER_SCALE: Float = 0.45f
 /**
  * The same surface, with a director deciding what to show and how to change to it.
  *
- * During a change both echo layers are rendered, each into its own bitmap so neither loses its
- * trail, and mixed by a program that decides pixel by pixel which one wins. The two grounds and the
- * two fronts are faded into each other on the canvas.
+ * During a change drawings with history keep their own feedback buffers. Other drawings stay on
+ * the destination canvas, including its GPU, and layer masks mix them without CPU snapshots.
+ * The two grounds and the two fronts are faded into each other on the canvas.
  */
 @Composable
 @AudioVizAuthoringApi
@@ -457,13 +480,18 @@ public fun DirectedVisualizerSurface(
     /** How much of the canvas trailing drawings render at, and whether that may drop when slow. */
     quality: RenderQuality? = null,
 ) {
+    val renderQuality = quality ?: remember { RenderQuality() }
+    if (!post) {
+        DirectedCanvas(director, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality)
+        return
+    }
     PostProcessedBox(
         spec = { if (post) director.current.post.masked(switches) else PostSpec.Off },
         frame = frame,
         modifier = modifier,
         stats = stats,
     ) {
-        DirectedCanvas(director, frame, palette, Modifier.fillMaxSize(), future, stats, quality)
+        DirectedCanvas(director, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality)
     }
 }
 
@@ -523,6 +551,7 @@ private fun DirectedCanvas(
             return@Canvas
         }
 
+        val transitionStarted = TimeSource.Monotonic.markNow()
         val progress = director.progress
         drawRect(shown.background)
         showing.ground?.let { drawGround(it, state, if (next.ground == null) 1f - progress else 1f) }
@@ -539,24 +568,48 @@ private fun DirectedCanvas(
             withAlpha(progress) { with(next) { drawFront(state) } }
             showing.detail?.let { drawDetail(it, state, 1f - progress) }
             next.detail?.let { drawDetail(it, state, progress) }
+            quality?.afterFrame(transitionStarted.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
             return@Canvas
         }
 
-        val from = stage.steady.render(this, showing, state, scale, stats)
-        val to = stage.arriving.render(this, next, state, scale, stats)
-        if (from == null || to == null) return@Canvas
-        val brush = blend.prepare(from, to, director.transition, progress, size.width, size.height)
-        if (brush != null) {
-            drawRect(brush)
+        if (blend.canDrawLayers(director.transition)) {
+            drawTransitionLayers(
+                blend, director.transition, progress,
+                from = { drawTransitionEcho(stage.steady, showing, state, scale, stats) },
+                to = { drawTransitionEcho(stage.arriving, next, state, scale, stats) },
+            )
         } else {
-            // No way to run a program here, so the plain mix it is.
-            stretch(from, 1f - progress)
-            stretch(to, progress)
+            val from = stage.steady.render(this, showing, state, scale, stats)
+            val to = stage.arriving.render(this, next, state, scale, stats)
+            if (from == null || to == null) return@Canvas
+            val brush = blend.prepare(from, to, director.transition, progress, size.width, size.height)
+            if (brush != null) {
+                drawRect(brush)
+            } else {
+                stretch(from, 1f - progress)
+                stretch(to, progress)
+            }
         }
         withAlpha(1f - progress) { with(showing) { drawFront(state) } }
         withAlpha(progress) { with(next) { drawFront(state) } }
         showing.detail?.let { drawDetail(it, state, 1f - progress) }
         next.detail?.let { drawDetail(it, state, progress) }
+        quality?.afterFrame(transitionStarted.elapsedNow().inWholeMicroseconds / 1000f, deltaSeconds)
+    }
+}
+
+/** Only history needs a bitmap. A full-screen shader keeps executing on the window's GPU. */
+private fun DrawScope.drawTransitionEcho(
+    renderer: VizRenderer,
+    visualization: Visualization,
+    state: VizRenderState,
+    scale: Float,
+    stats: RenderStats?,
+) {
+    if (visualization.trailAt(state.mood) > 0f) {
+        renderer.render(this, visualization, state, scale, stats)?.let { stretch(it) }
+    } else {
+        with(visualization) { draw(state) }
     }
 }
 

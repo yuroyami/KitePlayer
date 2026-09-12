@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -127,14 +128,13 @@ internal expect val blurAvailable: Boolean
 /**
  * Draws [content] and then finishes it according to [spec].
  *
- * The drawing is recorded once and the recording is replayed, rather than the drawing being run
- * again. That matters: a drawing moves its particles and advances its springs when it draws, so
- * drawing it twice for a glow pass would move everything twice as fast.
+ * The drawing is recorded once. The normal finishing pass rasterizes that recording once and shares
+ * the result between its effects. Replaying the recording independently for each glow and colour
+ * channel would run full-screen scene shaders again for every pass.
  *
- * The glow is a pyramid. The recording is replayed through a filter that keeps only what is brighter
- * than the threshold, and that is blurred four times, each twice as wide and half as strong as the
- * last, and added on top. All of it happens on the graphics card. A kick makes the glow flare, and a
- * quiet passage lets it sink back.
+ * The glow keeps only highlights above the threshold and spreads them over four widths. On Skia,
+ * successive levels use smaller images with filtering between reductions to preserve tiny sparks.
+ * A kick makes the glow flare. Older Android devices and the brief tearing effect use separate layers.
  */
 @Composable
 internal fun PostProcessedBox(
@@ -150,11 +150,13 @@ internal fun PostProcessedBox(
     val fringe = List(3) { rememberGraphicsLayer() }
     val redSplit = rememberGraphicsLayer()
     val blueSplit = rememberGraphicsLayer()
-    val grain = remember { ShaderBrush(ImageShader(grainTile(), TileMode.Repeated, TileMode.Repeated)) }
-    val lines = remember { ShaderBrush(ImageShader(scanlineTile(), TileMode.Repeated, TileMode.Repeated)) }
+    val grain = remember { lazy { ShaderBrush(ImageShader(grainTile(), TileMode.Repeated, TileMode.Repeated)) } }
+    val lines = remember { lazy { ShaderBrush(ImageShader(scanlineTile(), TileMode.Repeated, TileMode.Repeated)) } }
     val random = remember { Rng(4_096L) }
     val filters = remember { HashMap<Float, ColorFilter>() }
     val hold = remember { Hold() }
+    val effect = remember { lazy { ScenePostEffect() } }
+    DisposableEffect(effect) { onDispose { if (effect.isInitialized()) effect.value.close() } }
 
     Box(
         modifier.drawWithContent {
@@ -173,7 +175,17 @@ internal fun PostProcessedBox(
             val started = if (stats != null) TimeSource.Monotonic.markNow() else null
 
             val split = post.aberration * (0.25f + 0.75f * current.trebleRel + current.kick)
-            if (split > MIN_SPLIT) drawFringed(scene, fringe, split) else drawLayer(scene)
+            val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.5f * current.kick)).coerceIn(0f, 1f)
+            val tearing = post.glitch && current.dropPulse > 0.02f
+            val combined = if (!tearing && (post.bloom > 0f || split > MIN_SPLIT)) {
+                effect.value.prepare(post, size.width, size.height, strength, if (split > MIN_SPLIT) split else 0f)
+            } else null
+            scene.renderEffect = combined
+            if (combined != null) {
+                drawLayer(scene)
+            } else {
+                if (split > MIN_SPLIT) drawFringed(scene, fringe, split) else drawLayer(scene)
+            }
 
             // The tear. Only in the second after a drop, and fading with it: the red and blue parts
             // of the picture pulled apart, and a few strips slid sideways the way a signal breaks.
@@ -200,8 +212,7 @@ internal fun PostProcessedBox(
                 }
             }
 
-            if (post.bloom > 0f && blurAvailable) {
-                val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.5f * current.kick)).coerceIn(0f, 1f)
+            if (combined == null && post.bloom > 0f && blurAvailable) {
                 bright.colorFilter = filters.getOrPut(post.threshold) { thresholdFilter(post.threshold) }
                 bright.record { drawLayer(scene) }
                 // Four widths, each twice the last and half as strong. One blur reads as a soft edge;
@@ -231,7 +242,7 @@ internal fun PostProcessedBox(
             }
 
             if (post.scanlines > 0f) {
-                drawRect(lines, alpha = post.scanlines.coerceIn(0f, 1f), blendMode = BlendMode.Multiply)
+                drawRect(lines.value, alpha = post.scanlines.coerceIn(0f, 1f), blendMode = BlendMode.Multiply)
             }
 
             if (post.grain > 0f) {
@@ -241,7 +252,7 @@ internal fun PostProcessedBox(
                 val shiftY = -random.next() * GRAIN_SIZE
                 translate(shiftX, shiftY) {
                     drawRect(
-                        brush = grain,
+                        brush = grain.value,
                         size = Size(size.width + GRAIN_SIZE, size.height + GRAIN_SIZE),
                         alpha = (post.grain * 6f).coerceIn(0f, 1f),
                         blendMode = BlendMode.Overlay,
@@ -302,7 +313,7 @@ private class Hold {
  * A straight line through the colour values: everything below the threshold lands below zero and
  * is clamped away, and the threshold itself maps to black while full white stays full white.
  */
-private fun thresholdFilter(threshold: Float): ColorFilter {
+internal fun thresholdFilter(threshold: Float): ColorFilter {
     val cut = threshold.coerceIn(0f, 0.95f)
     val gain = 1f / (1f - cut)
     // The last column is an offset measured on the 0 to 255 scale, which is the convention here.

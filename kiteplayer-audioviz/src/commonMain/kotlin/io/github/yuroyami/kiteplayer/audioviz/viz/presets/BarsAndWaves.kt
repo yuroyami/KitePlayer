@@ -309,6 +309,8 @@ internal class Equaliser : Layered(
     private val rule = genes.choice("Colour rule", 2)
 
     private val past = Array(PAST) { FloatArray(PAST_ROWS) }
+    private val pastLitColours = Array(PAST_ROWS) { Color.Black }
+    private val pastDimColours = Array(PAST_ROWS) { Color.Black }
     private var newestPast = 0
     private var lastBeat = -1
     private var beatFraction = 0f
@@ -369,6 +371,13 @@ internal class Equaliser : Layered(
         val toLeft = !backwards.on
         // Lit where a band was louder than most of this frame's spectrum, whatever the song's level.
         val litLevel = state.percentile(0.45f)
+        // Each row has just two hues shared by every history column. Converting them through
+        // OKLCH per cell repeated the same expensive gamut mapping forty-eight times.
+        for (row in 0 until PAST_ROWS) {
+            val position = row.toFloat() / PAST_ROWS + walk
+            pastLitColours[row] = state.palette.cycled(position, value = 0.9f)
+            pastDimColours[row] = state.palette.cycled(position, value = 0.4f)
+        }
         for (age in 0 until PAST) {
             val column = past[(newestPast - age + PAST) % PAST]
             val along = (age + beatFraction) / (PAST - 2)
@@ -377,7 +386,7 @@ internal class Equaliser : Layered(
                 val value = column[row]
                 val lit = value > litLevel
                 val alpha = if (lit) 0.16f + 0.3f * value else 0.03f
-                val colour = state.palette.argb(row.toFloat() / PAST_ROWS + walk, value = if (lit) 0.9f else 0.4f, alpha = alpha)
+                val colour = (if (lit) pastLitColours[row] else pastDimColours[row]).copy(alpha = alpha).toArgb()
                 val top = size.height - (row + 1) * rowHeight
                 back.bar(x + columnWidth * 0.1f, x + columnWidth * 0.9f, top + rowHeight * 0.15f, top + rowHeight * 0.85f, colour, colour)
             }
@@ -452,7 +461,15 @@ internal class Equaliser : Layered(
             for (row in 0 until count) {
                 val on = row < lit
                 val glow = if (on) 1f else maxOf(0.08f, allLit)
-                val colour = lerp(state.palette.ramp(row.toFloat() / count), columnColour, perColumn).copy(alpha = (glow * share).coerceIn(0f, 1f)).toArgb()
+                val rowColour = state.palette.ramp(row.toFloat() / count)
+                // Most frames use one rule outright. Avoid converting both colours to another
+                // colour space and back just to return one unchanged endpoint.
+                val mixed = when {
+                    perColumn <= 0f -> rowColour
+                    perColumn >= 1f -> columnColour
+                    else -> lerp(rowColour, columnColour, perColumn)
+                }
+                val colour = mixed.copy(alpha = (glow * share).coerceIn(0f, 1f)).toArgb()
                 val bottom = size.height - row * rowHeight - if (on) lift else 0f
                 wall.bar(left, right, bottom - block, bottom, colour, colour)
             }

@@ -85,6 +85,8 @@ val renderingSuites = listOf(
     "*.ContactSheetTest",
     "*.FamilySheetTest",
     "*.PostSheetTest",
+    "*.RenderPerformanceTest",
+    "*.DesktopRenderPerformanceTest",
 )
 
 val jvmTest = tasks.named<Test>("jvmTest") {
@@ -96,7 +98,27 @@ tasks.register<Test>("audiovizSurvey") {
     description = "Runs the audio visualiser's rendering suites: motion, density, change, mood, cost and the contact sheets."
     testClassesDirs = files(jvmTest.map { it.testClassesDirs })
     classpath = files(jvmTest.map { it.classpath })
-    filter { renderingSuites.forEach { includeTestsMatching(it) } }
+    filter { renderingSuites.filterNot { it == "*.DesktopRenderPerformanceTest" }.forEach { includeTestsMatching(it) } }
     // Every run renders for real; a cached pass would prove nothing about the drawings.
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Test>("audiovizBenchmark") {
+    group = "verification"
+    description = "Measures the complete visualizer pipeline including the finishing pass at window resolution."
+    testClassesDirs = files(jvmTest.map { it.testClassesDirs })
+    classpath = files(jvmTest.map { it.classpath })
+    filter { includeTestsMatching("*.RenderPerformanceTest") }
+    testLogging.showStandardStreams = true
+    outputs.upToDateWhen { false }
+}
+
+tasks.register<Test>("audiovizDesktopBenchmark") {
+    group = "verification"
+    description = "Opens a desktop window and measures visualizer frame cadence on its actual graphics backend."
+    testClassesDirs = files(jvmTest.map { it.testClassesDirs })
+    classpath = files(jvmTest.map { it.classpath })
+    filter { includeTestsMatching("*.DesktopRenderPerformanceTest") }
+    testLogging.showStandardStreams = true
     outputs.upToDateWhen { false }
 }

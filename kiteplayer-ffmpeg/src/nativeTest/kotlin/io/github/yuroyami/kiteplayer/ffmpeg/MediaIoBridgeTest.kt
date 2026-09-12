@@ -4,7 +4,10 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.TrackKind
+import io.github.yuroyami.kiteplayer.from
+import io.github.yuroyami.kiteplayer.ofBytes
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
@@ -17,6 +20,8 @@ import platform.posix.fread
 import platform.posix.fseek
 import platform.posix.ftell
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -48,31 +53,24 @@ class MediaIoBridgeTest {
         }
     }
 
-    private class SuspendingMemoryIo(private val bytes: ByteArray) : MediaIo {
-        var position = 0
+    private class SuspendingMemoryIo(private val delegate: MediaIo) : MediaIo by delegate {
         var reads = 0
         var closed = false
-        override val size: Long get() = bytes.size.toLong()
-        override val seekable: Boolean = true
         override suspend fun read(into: ByteArray, offset: Int, length: Int): Int {
             yield()  // a genuine suspension point on every call
             reads++
-            if (position >= bytes.size) return -1
-            val count = minOf(length, bytes.size - position)
-            bytes.copyInto(into, offset, position, position + count)
-            position += count
-            return count
+            return delegate.read(into, offset, length)
         }
         override suspend fun seek(position: Long) {
             yield()
-            this.position = position.toInt()
+            delegate.seek(position)
         }
-        override fun close() { closed = true }
+        override fun close() { closed = true; delegate.close() }
     }
 
     @Test
     fun `a media item whose bytes come from MediaIo opens demuxes and closes`() = runBlocking {
-        val io = SuspendingMemoryIo(readFile("$mediaDir/subbed.mkv"))
+        val io = SuspendingMemoryIo(MediaIo.ofBytes(readFile("$mediaDir/subbed.mkv")).open())
         // A factory, because the item carries one now. This test keeps a handle
         // on the reader it makes so it can assert the bridge read through it and closed it.
         val session = KiteFFmpegSourceFactory().open(MediaItem("mem://subbed.mkv", io = { io }))
@@ -92,5 +90,55 @@ class MediaIoBridgeTest {
             source.close()
         }
         assertTrue(io.closed, "closing the source must close the MediaIo it owns")
+    }
+
+    @Test
+    fun `byte array input decodes the same subtitled media as disk`() = runBlocking {
+        val path = "$mediaDir/subbed.mkv"
+        val factory = MediaIo.ofBytes(readFile(path))
+        val disk = KiteFFmpegSourceFactory().open(MediaItem(path)) as KiteFFmpegSource
+        val backend = KiteFFmpegMediaBackend().open(MediaItem.from(factory, "subbed.mkv"))
+        try {
+            val source = backend.source
+            assertEquals(disk.streams, source.streams)
+            assertTrue(source.streams.any { it.kind == TrackKind.Subtitle })
+            val video = source.streams.first { it.kind == TrackKind.Video }
+            val audio = source.streams.first { it.kind == TrackKind.Audio }
+            val decoder = assertNotNull(backend.videoDecoders.first().create(video, HwdecPolicy.Off))
+            val audioDecoder = assertNotNull(backend.audioDecoders.first().create(audio))
+            try {
+                source.selectStreams(setOf(video.index, audio.index))
+                var frames = 0
+                var buffers = 0
+                while (true) {
+                    val packet = source.readPacket() ?: break
+                    packet.use {
+                        if (packet.streamIndex == video.index) {
+                            assertTrue(decoder.send(packet))
+                            while (true) {
+                                val frame = decoder.receive() ?: break
+                                frame.close()
+                                frames++
+                            }
+                        } else {
+                            assertTrue(audioDecoder.send(packet))
+                            while (true) {
+                                val buffer = audioDecoder.receive() ?: break
+                                buffer.close()
+                                buffers++
+                            }
+                        }
+                    }
+                }
+                assertTrue(frames >= 290, "only $frames video frames decoded")
+                assertTrue(buffers > 100, "only $buffers audio buffers decoded")
+            } finally {
+                audioDecoder.close()
+                decoder.close()
+            }
+        } finally {
+            backend.close()
+            disk.close()
+        }
     }
 }

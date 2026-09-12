@@ -84,7 +84,8 @@ explicit overrides, disabled discovery, missing providers and cleanup on success
 The 0.0.23 notes include the URL redaction, sleep timer and subtitle parser fixes committed after
 0.0.22, plus these packaging and transport changes. Installation examples present alternatives
 rather than a list of dependencies that appears to require all of them.
-# In-memory media input
+
+## In-memory media input, 0.0.24
 
 `MediaIo.ofBytes(bytes)` returns a `MediaIoFactory` in `kiteplayer-core`. Each open owns
 an independent cursor and close state over the original array. No copy is made; the caller

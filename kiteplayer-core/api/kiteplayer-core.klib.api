@@ -727,6 +727,8 @@ abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable 
     abstract fun close() // io.github.yuroyami.kiteplayer/MediaIo.close|close(){}[0]
     abstract suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer/MediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
     abstract suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer/MediaIo.seek|seek(kotlin.Long){}[0]
+
+    final object Companion // io.github.yuroyami.kiteplayer/MediaIo.Companion|null[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer/MonotonicClock { // io.github.yuroyami.kiteplayer/MonotonicClock|null[0]
@@ -2106,6 +2108,8 @@ final class io.github.yuroyami.kiteplayer/MediaItem { // io.github.yuroyami.kite
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaItem.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/MediaItem.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/MediaItem.toString|toString(){}[0]
+
+    final object Companion // io.github.yuroyami.kiteplayer/MediaItem.Companion|null[0]
 }
 
 final class io.github.yuroyami.kiteplayer/NetworkConfig { // io.github.yuroyami.kiteplayer/NetworkConfig|null[0]
@@ -3645,6 +3649,8 @@ final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kitep
 }
 
 final fun (io.github.yuroyami.kiteplayer.spi/SubtitleOverlay).io.github.yuroyami.kiteplayer/drawOver(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/drawOver|drawOver@io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+final fun (io.github.yuroyami.kiteplayer/MediaIo.Companion).io.github.yuroyami.kiteplayer/ofBytes(kotlin/ByteArray): io.github.yuroyami.kiteplayer/MediaIoFactory // io.github.yuroyami.kiteplayer/ofBytes|ofBytes@io.github.yuroyami.kiteplayer.MediaIo.Companion(kotlin.ByteArray){}[0]
+final fun (io.github.yuroyami.kiteplayer/MediaItem.Companion).io.github.yuroyami.kiteplayer/from(io.github.yuroyami.kiteplayer/MediaIoFactory, kotlin/String): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/from|from@io.github.yuroyami.kiteplayer.MediaItem.Companion(io.github.yuroyami.kiteplayer.MediaIoFactory;kotlin.String){}[0]
 final suspend fun io.github.yuroyami.kiteplayer/inspect(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/inspect|inspect(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend){}[0]
 
 // Targets: [native]

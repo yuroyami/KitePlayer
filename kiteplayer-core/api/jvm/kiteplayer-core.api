@@ -485,11 +485,20 @@ public final class io/github/yuroyami/kiteplayer/MediaInspectionKt {
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/MediaIo : java/lang/AutoCloseable {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/MediaIo$Companion;
 	public abstract fun close ()V
 	public abstract fun getSeekable ()Z
 	public abstract fun getSize ()Ljava/lang/Long;
 	public abstract fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaIo$Companion {
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaIoDoorsKt {
+	public static final fun from (Lio/github/yuroyami/kiteplayer/MediaItem$Companion;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public static final fun ofBytes (Lio/github/yuroyami/kiteplayer/MediaIo$Companion;[B)Lio/github/yuroyami/kiteplayer/MediaIoFactory;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/MediaIoFactory {
@@ -506,6 +515,7 @@ public final class io/github/yuroyami/kiteplayer/MediaIoResolver$DefaultImpls {
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaItem {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/MediaItem$Companion;
 	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -530,6 +540,9 @@ public final class io/github/yuroyami/kiteplayer/MediaItem {
 	public final fun getVideoFilter ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaItem$Companion {
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/MonotonicClock {

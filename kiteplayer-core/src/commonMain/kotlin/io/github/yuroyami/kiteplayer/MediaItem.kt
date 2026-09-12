@@ -82,6 +82,8 @@ public data class MediaItem(
      */
     val openOptions: Map<String, String> = emptyMap(),
 ) {
+    public companion object {}
+
     init {
         // MP3 seeking is only correct when the table of contents is used AND fast seek is unset.
         // Either key on its own gives seeking that lands in the wrong place, looks like a player
@@ -132,6 +134,8 @@ public fun interface MediaIoFactory {
  * contract, not a defect.
  */
 public interface MediaIo : AutoCloseable {
+    public companion object {}
+
     /** Total size in bytes, or null when unknown, for example a live stream. */
     public val size: Long?
 

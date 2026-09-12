@@ -19,8 +19,8 @@ import kotlin.time.Duration.Companion.seconds
  *
  * Each analysis carries the time its audio plays at, and the picture asks the player where it is.
  * This plays a clip, reads the picture's clock at twice the display rate, and checks two things: the
- * analysis for that moment is within two frames of it, and the clock moves in small steps rather
- * than in the player's own coarse ones, which would show as stutter. It opens a real device, so it
+ * analysis for that moment is within two frames of it, and the clock advances with elapsed time
+ * rather than in the player's own coarse steps. It opens a real device, so it
  * skips itself where there is no mixer or no clip.
  */
 class ClockProbeTest {
@@ -57,17 +57,27 @@ class ClockProbeTest {
             val leads = mutableListOf<Long>()
             val playerSteps = mutableListOf<Long>()
             val clockSteps = mutableListOf<Long>()
+            val clockErrors = mutableListOf<Long>()
             var lastPlayer = -1L
             var lastClock = -1L
+            var lastSampleNanos = -1L
             val until = System.nanoTime() + READ_SECONDS * 1_000_000_000L
             while (System.nanoTime() < until) {
                 delay(8)
                 val raw = player.position().inWholeMicroseconds
                 val now = clock.micros()
+                val sampledAt = System.nanoTime()
                 if (lastPlayer >= 0 && raw != lastPlayer) playerSteps += raw - lastPlayer
-                if (lastClock >= 0) clockSteps += now - lastClock
+                if (lastClock >= 0) {
+                    val step = now - lastClock
+                    clockSteps += step
+                    // A loaded CI runner may resume delay(8) after 100 ms. Its clock should advance too.
+                    val elapsedMicros = (sampledAt - lastSampleNanos) / 1_000
+                    clockErrors += abs(step - elapsedMicros)
+                }
                 lastPlayer = raw
                 lastClock = now
+                lastSampleNanos = sampledAt
                 val aligned = feed.timeline.at(now) ?: continue
                 gaps += aligned.ptsMicros - now
                 feed.timeline.newest()?.let { leads += it.ptsMicros - now }
@@ -77,11 +87,12 @@ class ClockProbeTest {
             println("newest analysis, against the clock (the tap's head start): ${summary(leads)}")
             println("the player's position moves in steps of ${summary(playerSteps)}")
             println("the picture's clock moves in steps of ${summary(clockSteps)}")
+            println("clock step error after accounting for elapsed time: ${summary(clockErrors)}")
             assertTrue(gaps.isNotEmpty(), "no analysis ever matched the clock")
             val median = gaps.sorted()[gaps.size / 2]
             assertTrue(abs(median) <= BOUND_MICROS, "the picture's analysis sits ${median / 1000} ms from the sound")
-            val coarsest = clockSteps.sorted()[clockSteps.size * 9 / 10]
-            assertTrue(coarsest <= BOUND_MICROS, "the picture's clock moves in steps of ${coarsest / 1000} ms")
+            val coarsest = clockErrors.sorted()[clockErrors.size * 9 / 10]
+            assertTrue(coarsest <= BOUND_MICROS, "the picture's clock differs from elapsed time by ${coarsest / 1000} ms")
         } finally {
             player.detachAudioTap(feed)
             player.closeAndAwait()

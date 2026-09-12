@@ -7,6 +7,9 @@ import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.RectF
 import android.view.Surface
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
 import kotlin.math.roundToInt
@@ -34,7 +37,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.newSingleThreadContext
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 
 /**
  * Draws frames into a [Surface] the caller owns.
@@ -512,6 +514,11 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /** Counts the frame and reports the loss, once per transition. */
     private fun failWithLostSurface(detail: String) {
         failed.incrementAndGet()
+        reportSurfaceLost(detail)
+    }
+
+    /** Reports the loss once per transition, without counting a frame. */
+    private fun reportSurfaceLost(detail: String) {
         if (surfaceIsLost.compareAndSet(expect = false, update = true)) {
             eventFlow.tryEmit(RendererEvent.SurfaceLost(detail))
         }
@@ -632,8 +639,11 @@ public class AndroidSurfaceVideoRenderer internal constructor(
     /**
      * Replaces the display Surface without replacing this renderer or its paired decoder.
      *
-     * Passing null synchronously fences software canvas work and MediaCodec output release before it
-     * returns, which makes it safe to call from `SurfaceHolder.Callback.surfaceDestroyed`.
+     * Replacing a non-null Surface never waits for a frame to finish drawing. The drawing thread
+     * picks it up at its next lock. Passing null waits until no canvas
+     * is locked on the old Surface, which `SurfaceHolder.Callback.surfaceDestroyed` requires, but for
+     * one second at most: a lock can itself be waiting on the main thread, and then the wait would
+     * never end. Giving up is reported as [RendererEvent.SurfaceLost].
      */
     public fun setSurface(surface: Surface?) {
         val directTarget = codecTarget
@@ -651,9 +661,12 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                     ),
                 )
             }
+        // A hop onto the drawing thread here once waited behind every frame still to be drawn,
+        // for as long as frames kept coming, and Android reported the app as not responding.
+        if (surface != null) return
         val switching = target as? SwitchingSurfaceCanvasTarget ?: return
-        runBlocking {
-            withContext(dispatcher) { switching.refresh() }
+        if (!switching.fence(SURFACE_FENCE_TIMEOUT_MS)) {
+            reportSurfaceLost("a draw still held the Surface $SURFACE_FENCE_TIMEOUT_MS ms after it was destroyed")
         }
     }
 
@@ -690,6 +703,9 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         private const val RGBA_BYTES_PER_PIXEL: Long = 4L
         private const val OPAQUE_ALPHA: Int = 0xFF shl 24
         private val EMPTY_ARGB: IntArray = IntArray(0)
+
+        /** A draw holds its canvas for tens of milliseconds, so only a stuck one outlasts this. */
+        private const val SURFACE_FENCE_TIMEOUT_MS: Long = 1_000L
     }
 }
 
@@ -705,25 +721,48 @@ private class AndroidSurfaceTargets(
 /**
  * Lazily swaps the software fallback's Canvas target on the renderer worker.
  *
- * [isValid] only reads the shared lifecycle state. Delegate creation and release happen in [lock] or
- * [refresh], both serialized on the renderer dispatcher, so a Surface callback cannot recycle a
- * bitmap or replace a delegate underneath an active draw.
+ * [isValid] only reads the shared lifecycle state. Every delegate change happens under [inUse],
+ * which the drawing thread holds from [lock] to [post], so a Surface callback cannot recycle a
+ * bitmap or replace a delegate underneath an active draw. [fence] waits on that lock and nothing
+ * else, never on the drawing thread's queue of frames.
  */
-private class SwitchingSurfaceCanvasTarget(
+internal class SwitchingSurfaceCanvasTarget(
     private val source: MediaCodecSurfaceTarget,
+    /** Production wraps the real Surface; a host test passes a scripted target. */
+    private val createDelegate: (Surface) -> CanvasTarget = ::SurfaceCanvasTarget,
 ) : CanvasTarget {
+    /** Fair, so a waiting [fence] goes next instead of being overtaken by the next frame's lock. */
+    private val inUse = ReentrantLock(true)
     private var version: Long = Long.MIN_VALUE
-    private var delegate: SurfaceCanvasTarget? = null
-    private var lockedDelegate: SurfaceCanvasTarget? = null
+    private var delegate: CanvasTarget? = null
+    private var lockedDelegate: CanvasTarget? = null
+
+    /** Kept here because every Surface gets a fresh delegate, and each one must be told. */
+    private var videoColorMatrix: FloatArray? = null
 
     override fun isValid(): Boolean = source.snapshot().isDisplayable
 
+    override fun setVideoColorMatrix(matrix: FloatArray?) {
+        inUse.withLock {
+            videoColorMatrix = matrix
+            (lockedDelegate ?: delegate)?.setVideoColorMatrix(matrix)
+        }
+    }
+
     override fun lock(): TargetCanvas? {
-        refresh()
-        val active = delegate ?: return null
-        val canvas = active.lock() ?: return null
-        check(lockedDelegate == null) { "a Canvas is already locked" }
-        lockedDelegate = active
+        inUse.lock()
+        val canvas = try {
+            refresh()
+            delegate?.let { active ->
+                active.setVideoColorMatrix(videoColorMatrix)
+                active.lock()?.also { lockedDelegate = active }
+            }
+        } catch (failure: Throwable) {
+            inUse.unlock()
+            throw failure
+        }
+        // A canvas handed out keeps the lock until post gives it back.
+        if (canvas == null) inUse.unlock()
         return canvas
     }
 
@@ -733,23 +772,41 @@ private class SwitchingSurfaceCanvasTarget(
             active.post(canvas)
         } finally {
             lockedDelegate = null
+            inUse.unlock()
         }
     }
 
-    fun refresh() {
+    /**
+     * Waits up to [timeoutMillis] until no canvas is locked, then follows the published Surface.
+     * False means a draw still holds one; the drawing thread follows at its next lock instead.
+     */
+    fun fence(timeoutMillis: Long): Boolean {
+        if (!inUse.tryLock(timeoutMillis, TimeUnit.MILLISECONDS)) return false
+        try {
+            refresh()
+        } finally {
+            inUse.unlock()
+        }
+        return true
+    }
+
+    /** Only with [inUse] held. */
+    private fun refresh() {
         check(lockedDelegate == null) { "cannot replace a Surface while its Canvas is locked" }
         val snapshot = source.snapshot()
         if (snapshot.version == version) return
         delegate?.release()
-        delegate = snapshot.surface?.takeIf { snapshot.isDisplayable }?.let(::SurfaceCanvasTarget)
+        delegate = snapshot.surface?.takeIf { snapshot.isDisplayable }?.let(createDelegate)
         version = snapshot.version
     }
 
     override fun release() {
-        check(lockedDelegate == null) { "cannot release a Surface while its Canvas is locked" }
-        delegate?.release()
-        delegate = null
-        version = Long.MIN_VALUE
+        inUse.withLock {
+            check(lockedDelegate == null) { "cannot release a Surface while its Canvas is locked" }
+            delegate?.release()
+            delegate = null
+            version = Long.MIN_VALUE
+        }
     }
 }
 

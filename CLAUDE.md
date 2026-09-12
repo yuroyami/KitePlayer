@@ -149,6 +149,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
   session fields from another coroutine.
 - A decoder belongs to its worker's dispatcher. Park the worker, mutate, release. A refusal to park
   means fall back, never force.
+- Never wait on a drawing thread's dispatcher from Android's main thread. A channel's `receive`
+  returns without suspending when a signal is already waiting, so a worker that is behind never
+  gives its thread back, and a task queued behind it waits for as long as frames keep coming. The
+  Android surface renderer did that in `surfaceChanged` and froze an app past the 5 second limit.
+  The fence for a destroyed Surface is a lock held only from canvas lock to post, with a time limit.
 - Epochs: an in-place track swap does not bump the epoch, because video work must stay valid. A
   fresh queue is flushed to the current epoch or the demux worker's offers are rejected. A fresh
   component is aligned to the epoch the world is already at. Missing one of those resets is why

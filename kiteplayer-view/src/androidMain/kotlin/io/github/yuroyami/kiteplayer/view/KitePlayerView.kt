@@ -266,7 +266,8 @@ public open class KitePlayerView @JvmOverloads constructor(
             }
 
             override fun surfaceDestroyed(holder: SurfaceHolder) {
-                // setSurface(null) fences both Canvas and codec releases before this callback returns.
+                // setSurface(null) fences both Canvas and codec use before this callback returns,
+                // with a time limit, so a stuck draw cannot hang the main thread.
                 binding.activeRenderer?.setSurface(null)
                 binding.surfaceGone()
             }
@@ -342,7 +343,10 @@ public open class KitePlayerView @JvmOverloads constructor(
  * A renderer that can follow the [SurfaceView] owned by [KitePlayerView].
  *
  * The view owns the [android.view.Surface] and the renderer must not release it. Passing null fences
- * all use of the previous Surface before returning.
+ * use of the previous Surface with a bounded wait; an unfinished draw must be reported as a failure.
+ * Every call comes from the main thread, so an
+ * implementation must never wait on work that needs that thread, and should not wait at all for a
+ * non-null Surface.
  */
 public interface AndroidPlayerViewRenderer : PlayerViewRenderer {
     public fun setSurface(surface: Surface?)

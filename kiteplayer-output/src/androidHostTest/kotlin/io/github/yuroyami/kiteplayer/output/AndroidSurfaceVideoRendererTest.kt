@@ -1,7 +1,10 @@
 package io.github.yuroyami.kiteplayer.output
 
+import android.graphics.SurfaceTexture
+import android.view.Surface
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.Pts
+import io.github.yuroyami.kiteplayer.VideoAdjustments
 import io.github.yuroyami.kiteplayer.VideoSize
 import io.github.yuroyami.kiteplayer.spi.ColorSpaceInfo
 import io.github.yuroyami.kiteplayer.spi.HwSurfaceKind
@@ -17,9 +20,12 @@ import kotlinx.coroutines.withTimeout
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -199,15 +205,25 @@ private class FakeTarget(
     @Volatile var valid = true
     @Volatile var refuseLock = false
     @Volatile var throwOnLock: Throwable? = null
+    /** Runs on the drawing thread at the start of every lock, so a test can hold it there. */
+    @Volatile var onLock: (() -> Unit)? = null
     var throwOnDraw: Throwable? = null
     val posts = AtomicInteger()
     var released = 0
     val canvases = mutableListOf<FakeCanvas>()
     val postedAfterDrawThrew = AtomicInteger()
 
+    /** The colour matrix this target was last told to draw video through. */
+    @Volatile var drawnColorMatrix: FloatArray? = null
+
     override fun isValid(): Boolean = valid
 
+    override fun setVideoColorMatrix(matrix: FloatArray?) {
+        drawnColorMatrix = matrix
+    }
+
     override fun lock(): TargetCanvas? {
+        onLock?.invoke()
         throwOnLock?.let { throw it }
         if (refuseLock) return null
         val canvas = FakeCanvas(canvasWidth, canvasHeight)
@@ -459,5 +475,182 @@ class AndroidSurfaceVideoRendererTest {
         assertEquals(8_333_333L, renderer.vsyncIntervalNanos())
         renderer.setDisplayRefreshRate(0f)
         assertEquals(null, renderer.vsyncIntervalNanos(), "a detached view feeds zero, which is unknown")
+    }
+}
+
+/** A Surface the host stubs report as live. Its other methods are never reached here. */
+private fun liveSurface(): Surface = object : Surface(null as SurfaceTexture?) {
+    override fun isValid(): Boolean = true
+}
+
+/**
+ * The Surface callbacks run on Android's main thread, so [AndroidSurfaceVideoRenderer.setSurface]
+ * must never wait for the drawing thread to get around to it. A phone once sat 5 seconds in
+ * `surfaceChanged` waiting for exactly that, and Android reported the app as not responding.
+ */
+class AndroidSurfaceSetSurfaceTest {
+
+    private class Rig(convert: (VideoFrame) -> ByteArray = exactConverter()) {
+        val codec = MediaCodecSurfaceTarget()
+        val screen = FakeTarget()
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = convert,
+            target = SwitchingSurfaceCanvasTarget(codec) { screen },
+            codecTarget = codec,
+        )
+    }
+
+    /** Calls setSurface on its own thread and says whether it came back within [waitMs]. */
+    private fun setSurfaceReturns(renderer: AndroidSurfaceVideoRenderer, surface: Surface?, waitMs: Long): Boolean {
+        val returned = CountDownLatch(1)
+        thread(name = "fake-main-thread") {
+            renderer.setSurface(surface)
+            returned.countDown()
+        }
+        return returned.await(waitMs, TimeUnit.MILLISECONDS)
+    }
+
+    @Test
+    fun `a surface change returns while the drawing thread is busy`() {
+        val drawing = CountDownLatch(1)
+        val finishDrawing = CountDownLatch(1)
+        val rig = Rig(convert = { frame ->
+            drawing.countDown()
+            finishDrawing.await(10, TimeUnit.SECONDS)
+            exactConverter()(frame)
+        })
+        val surface = liveSurface()
+        try {
+            rig.renderer.setSurface(surface)
+            assertTrue(runBlocking { rig.renderer.present(TestFrame(), 0) })
+            assertTrue(drawing.await(5, TimeUnit.SECONDS), "the drawing thread never took the frame")
+            // surfaceChanged hands over the same Surface object with a new size.
+            assertTrue(
+                setSurfaceReturns(rig.renderer, surface, waitMs = 2_000),
+                "setSurface waited for a frame that was still being drawn",
+            )
+        } finally {
+            finishDrawing.countDown()
+            rig.renderer.close()
+        }
+    }
+
+    @Test
+    fun `a surface change does not wait for a canvas being locked`() {
+        val locking = CountDownLatch(1)
+        val finishLock = CountDownLatch(1)
+        val rig = Rig()
+        rig.screen.onLock = {
+            locking.countDown()
+            finishLock.await(10, TimeUnit.SECONDS)
+        }
+        val surface = liveSurface()
+        try {
+            rig.renderer.setSurface(surface)
+            assertTrue(runBlocking { rig.renderer.present(TestFrame(), 0) })
+            assertTrue(locking.await(5, TimeUnit.SECONDS), "the drawing thread never locked a canvas")
+            // Well under the one second a destroyed Surface is allowed to wait.
+            assertTrue(
+                setSurfaceReturns(rig.renderer, surface, waitMs = 500),
+                "setSurface waited for a canvas that was still being locked",
+            )
+        } finally {
+            finishLock.countDown()
+            rig.renderer.close()
+        }
+    }
+
+    @Test
+    fun `a destroyed surface waits for the canvas already locked to be posted`() {
+        val locking = CountDownLatch(1)
+        val finishLock = CountDownLatch(1)
+        val rig = Rig()
+        rig.screen.onLock = {
+            locking.countDown()
+            finishLock.await(10, TimeUnit.SECONDS)
+        }
+        try {
+            rig.renderer.setSurface(liveSurface())
+            assertTrue(runBlocking { rig.renderer.present(TestFrame(), 0) })
+            assertTrue(locking.await(5, TimeUnit.SECONDS), "the drawing thread never locked a canvas")
+            val returned = CountDownLatch(1)
+            val postsWhenReturned = AtomicInteger(-1)
+            thread(name = "fake-main-thread") {
+                rig.renderer.setSurface(null)
+                postsWhenReturned.set(rig.screen.posts.get())
+                returned.countDown()
+            }
+            assertFalse(returned.await(200, TimeUnit.MILLISECONDS), "surfaceDestroyed returned with a canvas still out")
+            finishLock.countDown()
+            assertTrue(returned.await(5, TimeUnit.SECONDS))
+            assertEquals(1, postsWhenReturned.get(), "the canvas was posted before surfaceDestroyed returned")
+        } finally {
+            finishLock.countDown()
+            rig.renderer.close()
+        }
+    }
+
+    @Test
+    fun `a destroyed surface stops waiting when the draw cannot finish`() {
+        val locking = CountDownLatch(1)
+        val finishLock = CountDownLatch(1)
+        val rig = Rig()
+        // A lock that only finishes when the main thread moves on, like a buffer the platform
+        // cannot hand back until the main thread draws.
+        rig.screen.onLock = {
+            locking.countDown()
+            finishLock.await(20, TimeUnit.SECONDS)
+        }
+        try {
+            rig.renderer.setSurface(liveSurface())
+            assertTrue(runBlocking { rig.renderer.present(TestFrame(), 0) })
+            assertTrue(locking.await(5, TimeUnit.SECONDS), "the drawing thread never locked a canvas")
+            assertTrue(
+                setSurfaceReturns(rig.renderer, null, waitMs = 4_000),
+                "surfaceDestroyed waited on a draw that needs the main thread",
+            )
+            val lost = runBlocking {
+                withTimeout(5_000) { rig.renderer.events.filterIsInstance<RendererEvent.SurfaceLost>().first() }
+            }
+            assertTrue(lost.detail.isNotEmpty())
+        } finally {
+            finishLock.countDown()
+            rig.renderer.close()
+        }
+    }
+}
+
+/** Brightness, contrast, saturation and hue must reach whichever Surface the view draws into. */
+class AndroidSurfaceAdjustmentsTest {
+
+    @Test
+    fun `picture adjustments reach every surface the view draws into`() {
+        val codec = MediaCodecSurfaceTarget()
+        val screens = mutableListOf<FakeTarget>()
+        val renderer = AndroidSurfaceVideoRenderer(
+            convert = exactConverter(),
+            target = SwitchingSurfaceCanvasTarget(codec) { FakeTarget().also { synchronized(screens) { screens += it } } },
+            codecTarget = codec,
+        )
+        try {
+            renderer.setAdjustments(VideoAdjustments(brightness = 0.2f))
+            renderer.setSurface(liveSurface())
+            assertTrue(runBlocking { renderer.present(TestFrame(), 0) })
+            awaitPresented(renderer, 1)
+            // A new Surface gets a new drawing target, which must be told too.
+            renderer.setSurface(liveSurface())
+            assertTrue(runBlocking { renderer.present(TestFrame(), 0) })
+            awaitPresented(renderer, 2)
+            val drawnWith = synchronized(screens) { screens.map { it.drawnColorMatrix } }
+            assertEquals(2, drawnWith.size, "each Surface gets its own drawing target")
+            drawnWith.forEach { assertNotNull(it, "the picture controls never reached the Surface") }
+
+            renderer.setAdjustments(VideoAdjustments.Identity)
+            assertTrue(runBlocking { renderer.present(TestFrame(), 0) })
+            awaitPresented(renderer, 3)
+            assertNull(synchronized(screens) { screens.last() }.drawnColorMatrix, "neutral controls clear the filter")
+        } finally {
+            renderer.close()
+        }
     }
 }

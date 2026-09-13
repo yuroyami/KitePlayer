@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * What the platform's media session should show and accept, as one value.
@@ -96,3 +97,37 @@ internal data class MediaSessionMetadata(
 
 internal fun MediaSessionState.metadata(): MediaSessionMetadata =
     MediaSessionMetadata(title, artist, album, duration, hasVideo)
+
+/** The part of the state that sets the buttons and the rate. Any change here is pushed at once. */
+internal data class MediaSessionTransport(
+    val phase: MediaSessionPhase,
+    val speed: Double,
+    val canSeek: Boolean,
+    val hasNext: Boolean,
+    val hasPrevious: Boolean,
+    val duration: Duration?,
+)
+
+internal fun MediaSessionState.transport(): MediaSessionTransport =
+    MediaSessionTransport(phase, speed, canSeek, hasNext, hasPrevious, duration)
+
+/**
+ * Whether a platform must be told about this state, [elapsed] after it was told about [previous].
+ *
+ * Every platform walks the position on by itself from the last position and rate it was given, so
+ * steady playback is no news. A change of phase, rate, buttons or length is. So is a position that
+ * no longer matches what the platform shows by now: a seek, or a stall it cannot see.
+ */
+internal fun MediaSessionState.needsPush(previous: MediaSessionState?, elapsed: Duration): Boolean {
+    if (previous == null) return true
+    if (transport() != previous.transport()) return true
+    if (!playing) return position != previous.position
+    val shown = previous.position + elapsed * speed
+    return (position - shown).absoluteValue > driftTolerance(speed)
+}
+
+/**
+ * How far the truth may sit from what the platform shows before it is corrected. A progress sample
+ * can be up to one interval old, so the allowance grows with the rate.
+ */
+internal fun driftTolerance(speed: Double): Duration = 1.seconds * maxOf(speed, 1.0)

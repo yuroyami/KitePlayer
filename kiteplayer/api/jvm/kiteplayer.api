@@ -76,6 +76,14 @@ public final class io/github/yuroyami/kiteplayer/session/InterruptionPolicy {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/session/KitePlayerMediaSession : java/lang/AutoCloseable {
+	public fun <init> (Lio/github/yuroyami/kiteplayer/KitePlayer;)V
+	public fun close ()V
+	public final fun getPlatformToken ()Ljava/lang/Object;
+	public final fun isAvailable ()Z
+	public final fun setArtwork (Ljava/awt/Image;)V
+}
+
 public final class io/github/yuroyami/kiteplayer/session/MediaSessionPhase : java/lang/Enum {
 	public static final field Buffering Lio/github/yuroyami/kiteplayer/session/MediaSessionPhase;
 	public static final field Paused Lio/github/yuroyami/kiteplayer/session/MediaSessionPhase;

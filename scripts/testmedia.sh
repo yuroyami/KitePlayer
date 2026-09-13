@@ -386,7 +386,7 @@ rm -f chapters.ffmeta
 # could not open or could not decode; each one ran RED against the narrow trees before the wide
 # trees existed, which is the whole evidentiary point. All are synthesizable with a stock
 # ffmpeg CLI; VC-1 and RealVideo have no FFmpeg encoders, so those two wait for real sample
-# files and are a named absence in the plan rather than rows here.
+# files and are a named absence rather than rows here.
 
 echo "AVI with MPEG-4 part 2 video and MP3 audio, the classic downloaded file of 2005"
 ffmpeg -v error -y \

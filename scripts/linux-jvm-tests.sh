@@ -11,7 +11,7 @@
 #   ./scripts/linux-jvm-tests.sh linux/arm64 --falsify   # must FAIL: truncated JNI library
 #
 # Honest bound: a container has no audio device, so this proves DECODE only. The desktop
-# javax.sound.sampled sink stays proved against a fake device seam, exactly as W.3 recorded.
+# javax.sound.sampled sink stays proved against a fake device seam, exactly as recorded when that sink was built.
 set -euo pipefail
 
 PLATFORM="${1:-linux/arm64}"

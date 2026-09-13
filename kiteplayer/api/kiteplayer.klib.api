@@ -163,6 +163,8 @@ final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroy
 final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer){}[0]
 
+    final val isAvailable // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.isAvailable|{}isAvailable[0]
+        final fun <get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.isAvailable.<get-isAvailable>|<get-isAvailable>(){}[0]
     final val platformToken // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.platformToken|{}platformToken[0]
         final fun <get-platformToken>(): kotlin/Any? // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.platformToken.<get-platformToken>|<get-platformToken>(){}[0]
 

@@ -1,15 +1,18 @@
 package io.github.yuroyami.kiteplayer.session
 
 import io.github.yuroyami.kiteplayer.KitePlayer
+import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import platform.Foundation.NSNumber
+import platform.Foundation.numberWithBool
 import platform.Foundation.numberWithDouble
+import platform.Foundation.numberWithUnsignedLong
 import platform.MediaPlayer.MPChangePlaybackPositionCommandEvent
 import platform.MediaPlayer.MPMediaItemArtwork
 import platform.MediaPlayer.MPMediaItemPropertyAlbumTitle
@@ -18,16 +21,22 @@ import platform.MediaPlayer.MPMediaItemPropertyArtwork
 import platform.MediaPlayer.MPMediaItemPropertyPlaybackDuration
 import platform.MediaPlayer.MPMediaItemPropertyTitle
 import platform.MediaPlayer.MPNowPlayingInfoCenter
+import platform.MediaPlayer.MPNowPlayingInfoMediaTypeAudio
+import platform.MediaPlayer.MPNowPlayingInfoMediaTypeVideo
 import platform.MediaPlayer.MPNowPlayingInfoPropertyElapsedPlaybackTime
+import platform.MediaPlayer.MPNowPlayingInfoPropertyIsLiveStream
+import platform.MediaPlayer.MPNowPlayingInfoPropertyMediaType
 import platform.MediaPlayer.MPNowPlayingInfoPropertyPlaybackRate
 import platform.MediaPlayer.MPRemoteCommand
 import platform.MediaPlayer.MPRemoteCommandCenter
+import platform.MediaPlayer.MPRemoteCommandEvent
 import platform.MediaPlayer.MPRemoteCommandHandlerStatus
 import platform.MediaPlayer.MPRemoteCommandHandlerStatusCommandFailed
 import platform.MediaPlayer.MPRemoteCommandHandlerStatusSuccess
 import platform.UIKit.UIImage
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 
 /**
  * Mirrors [player] into the iOS now playing card and routes its buttons back.
@@ -48,18 +57,30 @@ public class KitePlayerMediaSession(
     private val commands = MPRemoteCommandCenter.sharedCommandCenter()
     private val infoCenter = MPNowPlayingInfoCenter.defaultCenter()
     private val handlers = mutableListOf<Pair<MPRemoteCommand, Any>>()
-    private var artwork: MPMediaItemArtwork? = null
-    private var last: MediaSessionState? = null
+    private val artwork = MutableStateFlow<MPMediaItemArtwork?>(null)
+
+    /** The dictionary the card reads. Both halves live in it, so every write sends it whole. */
+    private val info = mutableMapOf<Any?, Any?>()
+
+    /** The newest state seen, whether or not it was pushed. */
+    private var latest: MediaSessionState? = null
+    private val mirror = MediaSessionMirror<MPMediaItemArtwork>(::pushMetadata, ::pushPlayback)
 
     /** Apple has no token to hand out; the card is process-wide. Always null. */
     public val platformToken: Any? = null
 
+    /** Always true here. Other platforms answer false when they have no session, so one check works everywhere. */
+    public val isAvailable: Boolean = true
+
     init {
         wireCommands()
         scope.launch {
-            combine(player.state, player.progress) { snapshot, progress ->
-                snapshot.toMediaSessionState(progress)
-            }.distinctUntilChanged().collect(::push)
+            combine(player.state, player.progress, artwork) { snapshot, progress, picture ->
+                snapshot.toMediaSessionState(progress) to picture
+            }.collect { (state, picture) ->
+                latest = state
+                mirror.update(state, picture)
+            }
         }
     }
 
@@ -67,37 +88,53 @@ public class KitePlayerMediaSession(
      * The picture the card shows. The application supplies it: the engine reads a file's cover art
      * but does not decode it, so there is nothing here to hand over on its own.
      */
+    @OptIn(ExperimentalForeignApi::class)
     public fun setArtwork(image: UIImage?) {
-        artwork = image?.let { MPMediaItemArtwork(it) }
-        last?.let(::push)
+        artwork.value = image?.let { picture -> MPMediaItemArtwork(boundsSize = picture.size) { _ -> picture } }
     }
 
-    private fun push(state: MediaSessionState) {
-        last = state
-        val info = mutableMapOf<Any?, Any?>(
-            MPMediaItemPropertyTitle to (state.title ?: ""),
-            MPNowPlayingInfoPropertyElapsedPlaybackTime to
-                NSNumber.numberWithDouble(state.position.toDouble(kotlin.time.DurationUnit.SECONDS)),
-            // The card extrapolates from this rate, so a paused player must report zero or its
-            // position walks on while nothing is playing.
-            MPNowPlayingInfoPropertyPlaybackRate to
-                NSNumber.numberWithDouble(if (state.playing) state.speed else 0.0),
+    /** The slow half: title, artist, album, length, kind and picture. */
+    private fun pushMetadata(metadata: MediaSessionMetadata, picture: MPMediaItemArtwork?) {
+        info[MPMediaItemPropertyTitle] = metadata.title ?: ""
+        info[MPMediaItemPropertyArtist] = metadata.artist
+        info[MPMediaItemPropertyAlbumTitle] = metadata.album
+        // A live stream has no length. The live flag tells the card to draw no scrub bar at all.
+        info[MPMediaItemPropertyPlaybackDuration] =
+            metadata.duration?.let { NSNumber.numberWithDouble(it.toDouble(DurationUnit.SECONDS)) }
+        info[MPNowPlayingInfoPropertyIsLiveStream] = NSNumber.numberWithBool(metadata.duration == null)
+        info[MPNowPlayingInfoPropertyMediaType] = NSNumber.numberWithUnsignedLong(
+            if (metadata.hasVideo) MPNowPlayingInfoMediaTypeVideo else MPNowPlayingInfoMediaTypeAudio,
         )
-        state.artist?.let { info[MPMediaItemPropertyArtist] = it }
-        state.album?.let { info[MPMediaItemPropertyAlbumTitle] = it }
-        // A live stream has no length. Sending zero would draw a scrub bar with nowhere to go.
-        state.duration?.let {
-            info[MPMediaItemPropertyPlaybackDuration] =
-                NSNumber.numberWithDouble(it.toDouble(kotlin.time.DurationUnit.SECONDS))
-        }
-        artwork?.let { info[MPMediaItemPropertyArtwork] = it }
-        infoCenter.nowPlayingInfo = info
+        info[MPMediaItemPropertyArtwork] = picture
+        // The card walks the position on from the moment the dictionary is set, so this write must
+        // carry the position of now and not the one from the last playback push.
+        latest?.let(::putPosition)
+        writeInfo()
+    }
 
+    /** The fast half: position and rate, and the buttons they decide. */
+    private fun pushPlayback(state: MediaSessionState) {
+        putPosition(state)
+        writeInfo()
         commands.nextTrackCommand.enabled = state.hasNext
         commands.previousTrackCommand.enabled = state.hasPrevious
         commands.changePlaybackPositionCommand.enabled = state.canSeek
         commands.skipForwardCommand.enabled = state.canSeek
         commands.skipBackwardCommand.enabled = state.canSeek
+    }
+
+    private fun putPosition(state: MediaSessionState) {
+        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] =
+            NSNumber.numberWithDouble(state.position.toDouble(DurationUnit.SECONDS))
+        // The card walks the position on at this rate, so anything but playing must report zero
+        // or its position moves while nothing plays. That includes buffering, which it cannot show.
+        info[MPNowPlayingInfoPropertyPlaybackRate] =
+            NSNumber.numberWithDouble(if (state.playing) state.speed else 0.0)
+    }
+
+    /** Null values are dropped: a missing key is how the card spells "not known". */
+    private fun writeInfo() {
+        infoCenter.nowPlayingInfo = info.filterValues { it != null }
     }
 
     private fun wireCommands() {
@@ -106,12 +143,9 @@ public class KitePlayerMediaSession(
 
         handle(commands.playCommand) { player.play() }
         handle(commands.pauseCommand) { player.pause() }
+        // Buffering counts as playing here: the listener asked for sound, so a toggle means stop.
         handle(commands.togglePlayPauseCommand) {
-            if (player.state.value.status == io.github.yuroyami.kiteplayer.PlaybackStatus.Playing) {
-                player.pause()
-            } else {
-                player.play()
-            }
+            if (player.state.value.status.isActive) player.pause() else player.play()
         }
         handle(commands.stopCommand) { player.pause() }
         handle(commands.nextTrackCommand) { scope.launch { runCatching { player.next() } } }
@@ -120,7 +154,7 @@ public class KitePlayerMediaSession(
         handle(commands.skipBackwardCommand) { skipBy(-SKIP_SECONDS.seconds) }
 
         val seek = commands.changePlaybackPositionCommand
-        val seekHandler: (platform.MediaPlayer.MPRemoteCommandEvent?) -> MPRemoteCommandHandlerStatus = { event ->
+        val seekHandler: (MPRemoteCommandEvent?) -> MPRemoteCommandHandlerStatus = { event ->
             val at = (event as? MPChangePlaybackPositionCommandEvent)?.positionTime
             if (at == null) {
                 MPRemoteCommandHandlerStatusCommandFailed
@@ -150,6 +184,7 @@ public class KitePlayerMediaSession(
         scope.cancel()
         handlers.forEach { (command, target) -> command.removeTarget(target) }
         handlers.clear()
+        info.clear()
         infoCenter.nowPlayingInfo = null
     }
 

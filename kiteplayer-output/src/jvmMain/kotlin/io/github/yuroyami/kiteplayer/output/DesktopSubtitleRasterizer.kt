@@ -153,7 +153,7 @@ internal class DesktopSubtitleRasterizer : SubtitleRasterizer {
         // below subtracts the origin back off. See CueShadow.
         val shadow = cueShadow(firstStyle, fontScale)
 
-        // The viewer's box (T1): drawn under everything, padded past the glyphs, and the bitmap
+        // The viewer's box: drawn under everything, padded past the glyphs, and the bitmap
         // grows by the padding on every side so the box is never clipped. Transparent draws
         // nothing and costs nothing, which is every cue no override touched.
         val boxPad = if (firstStyle.backgroundColor ushr 24 != 0) {

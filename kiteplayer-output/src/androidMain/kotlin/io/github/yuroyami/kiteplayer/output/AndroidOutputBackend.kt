@@ -8,7 +8,7 @@ import io.github.yuroyami.kiteplayer.spi.VideoRendererFactory
 
 /**
  * The Android output half: [AndroidMonotonicClock] paired with [AudioTrackSinkFactory], and null
- * for video (S1.c.4 step 2).
+ * for video.
  *
  * The pairing is the contract, not a convenience: `AudioTimestamp.nanoTime` reports on the
  * `System.nanoTime` (CLOCK_MONOTONIC) base, the sink anchors the master clock to deadlines computed from it,

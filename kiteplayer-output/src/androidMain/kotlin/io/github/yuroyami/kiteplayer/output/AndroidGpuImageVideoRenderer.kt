@@ -90,7 +90,7 @@ public class AndroidGpuImageVideoRenderer(
     private val bridge = OesRgbaBridge(::publishImage, ::recordSuperseded, ::bridgeFailed)
 
     /**
-     * The render-quality passes (17.21). This tier blits OES to an RGBA8 image, so eight bits is
+     * The render-quality passes. This tier blits OES to an RGBA8 image, so eight bits is
      * what the dither spreads across; anything it cannot do it ignores, as the SPI allows.
      *
      * Asking for a kernel also changes the SIZE of that image. The blit normally refuses to
@@ -1070,7 +1070,7 @@ internal class GlState private constructor(
              * weights to be non-negative so the sample lands inside the pair. Catmull-Rom's lobes
              * go negative, the sample lands past the pair, and the kernel silently degrades to the
              * bilinear it exists to replace. It compiles, it costs four taps, it sharpens nothing.
-             * Sixteen exact taps are the honest price (17.21 keeps the numbers). */
+             * Sixteen exact taps are the honest price. */
             vec4 kpBicubic() {
                 vec2 f = fract(vSourceCoord - 0.5);
                 vec2 first = -1.0 - f;
@@ -1092,7 +1092,7 @@ internal class GlState private constructor(
             void main() {
                 /* Debanding and the kernel are exclusive, and deband wins, which is exactly what
                  * the Metal body does. Keeping the two renderers identical is worth more than
-                 * either of them being individually richer; 17.21 records the combination as open. */
+                 * either of them being individually richer; the combination stays open. */
                 vec4 c;
                 if (uDebandThreshold > 0.0) {
                     /* One difference from the Metal body, stated rather than hidden: there the
@@ -1136,7 +1136,7 @@ internal class GlState private constructor(
                 }
                 /* Last, and only when asked: one output step of centred ordered noise, the same
                  * amplitude and the same centring law as the Metal path. Zero is the
-                 * pre-17.21 write, bit for bit. */
+                 * plain write, bit for bit. */
                 if (uDitherStep > 0.0) {
                     float pattern = (kpBayer8(gl_FragCoord.xy) + 0.5) / 64.0 - 0.5;
                     c.rgb = clamp(c.rgb + pattern * uDitherStep, 0.0, 1.0);

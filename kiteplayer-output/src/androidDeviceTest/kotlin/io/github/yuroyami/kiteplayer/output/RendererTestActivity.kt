@@ -7,8 +7,8 @@ import android.view.SurfaceView
 import java.util.concurrent.CountDownLatch
 
 /**
- * The one SurfaceView host of the renderer device test (S1.c.5 step 8). Test-private: it is not
- * a reusable view and never becomes one; S1.d owns the reusable phone host. The latch hands the
+ * The one SurfaceView host of the renderer device test. Test-private: it is not
+ * a reusable view and never becomes one; the view module owns the reusable phone host. The latch hands the
  * created Surface to the test thread; destruction is driven by the test removing the view.
  */
 internal class RendererTestActivity : Activity() {

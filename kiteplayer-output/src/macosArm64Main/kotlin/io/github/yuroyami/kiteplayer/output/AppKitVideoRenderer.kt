@@ -418,7 +418,7 @@ public class AppKitVideoRenderer internal constructor(
                         )
                         // The unrotated fast path is only a fast path while there is nothing to
                         // composite; an active overlay routes through the drawing pass at every
-                        // rotation (S2.c, the S4.c Apple half), and so does zoom or pan.
+                        // rotation, and so does zoom or pan.
                         if (rotationDegrees == 0 && overlaySlot.value == null && !transform.needsDrawingPass()) {
                             NSImage(cGImage = stored, size = size)
                         } else {
@@ -511,8 +511,8 @@ public class AppKitVideoRenderer internal constructor(
 
 
     /**
-     * Draws the active overlay above the picture, in DISPLAY space with identity CTM (S2.c,
-     * carrying S4.c's Apple half): overlay coordinates are authored top-down against the
+     * Draws the active overlay above the picture, in DISPLAY space with identity CTM: overlay
+     * coordinates are authored top-down against the
      * overlay's own viewport, Core Graphics draws bottom-up, and the scale maps one onto the
      * other, the same law the Android compositor and the Metal renderer obey.
      */

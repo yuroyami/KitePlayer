@@ -50,7 +50,7 @@ import platform.Metal.MTLStoreActionStore
 import platform.Metal.MTLTextureProtocol
 
 /**
- * Everything between a resolved picture and a finished render target (S2.c): pipeline states,
+ * Everything between a resolved picture and a finished render target: pipeline states,
  * plane texture reuse, the CVMetalTextureCache for zero-copy hardware frames, and one encode
  * routine that draws the letterboxed picture and the overlay quads above it.
  *

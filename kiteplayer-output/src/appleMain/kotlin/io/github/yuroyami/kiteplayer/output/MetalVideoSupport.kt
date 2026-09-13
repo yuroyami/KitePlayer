@@ -38,7 +38,7 @@ import platform.Metal.MTLTextureUsageRenderTarget
 import platform.Metal.MTLTextureUsageShaderRead
 
 /**
- * How a Metal renderer reads a frame's pixels (S2.c). The output module never depends on the
+ * How a Metal renderer reads a frame's pixels. The output module never depends on the
  * FFmpeg backend, so a consumer that owns both sides supplies this resolver, exactly the way the
  * CG renderers take their `convert` lambda. The two shapes are the two truths a frame can have:
  * a CVPixelBuffer straight from VideoToolbox (zero copies), or software planes read out of the
@@ -87,8 +87,8 @@ public sealed class MetalPicture {
 }
 
 /**
- * The Metal shading language source, compiled at runtime through the Metal API (an owner-fixed
- * point of 17.4.8: no .metallib toolchain enters the build).
+ * The Metal shading language source, compiled at runtime through the Metal API (a fixed
+ * decision: no .metallib toolchain enters the build).
  *
  * The colour math is DELIBERATELY the same arithmetic as SoftwareConverter's Coefficients, in
  * the same 0..255 working space, so the GPU and CPU paths can be compared pixel for pixel by the
@@ -138,7 +138,7 @@ struct AdjustUniforms {
 };
 
 struct QualityUniforms {
-    int   flags;          // bit 0 dither, bit 1 deband, bit 2 bicubic. 0 is the pre-17.21 write.
+    int   flags;          // bit 0 dither, bit 1 deband, bit 2 bicubic. 0 is the plain write.
     float ditherScale;    // one output step, so the pattern is exactly +/- half a step
     float debandThreshold;// how flat a neighbourhood must be to count as a band, in 0..1
     float debandRange;    // ring radius at the first iteration, in source pixels
@@ -524,7 +524,7 @@ internal fun packQualityUniforms(
     )
 }
 
-/** QualityUniforms with every flag clear: the pre-17.21 write, bit for bit. */
+/** QualityUniforms with every flag clear: the plain write, bit for bit. */
 internal val DISABLED_QUALITY_UNIFORMS: FloatArray = packQualityUniforms(
     io.github.yuroyami.kiteplayer.RenderQuality.Off,
 )

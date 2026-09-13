@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Two live audio devices in one process (S9): both open, both start, and the shared session
+ * Two live audio devices in one process: both open, both start, and the shared session
  * lease counts two while they live and zero when they are gone. This is the macOS half of the
  * two-players proof; the JVM half plays two real files through two whole players.
  */

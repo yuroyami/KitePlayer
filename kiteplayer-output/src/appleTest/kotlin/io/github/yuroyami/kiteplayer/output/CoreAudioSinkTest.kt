@@ -35,14 +35,14 @@ import kotlin.time.TimeSource
  * result. The assertion the design rests on is common to both: the instant the output unit says a buffer
  * will be heard must land slightly ahead of now on the engine's own clock.
  *
- * ### What B1.8 changed about this file
+ * ### What moving the callback into C changed about this file
  *
  * Every case that used to hand the sink an [AudioRenderCallback] over a small Kotlin ring of its own now
  * feeds the C ring the sink owns, through the same three C calls the engine's feeder uses (see
  * `CRingSupport.kt`). The sink has no Kotlin callback to hand anything to any more: its render callback
  * is a `static` C function it installs itself. Keeping a Kotlin ring here
- * would have left these tests exercising a path no Apple-backend user runs, which is exactly the substitution
- * plan section 2 forbids.
+ * would have left these tests exercising a path no Apple-backend user runs, which would prove nothing
+ * about the shipped one.
  *
  * Two cases moved out of Kotlin rather than being rewritten, because their subject moved: the
  * absent-callback fill and the clamp on a render longer than the device asked for are now properties of
@@ -243,7 +243,7 @@ class CoreAudioSinkTest {
     @Test
     fun `the callback body stays well inside the device period`() = runBlocking {
         // The worst callback body, measured in C from a mach_absolute_time pair around it. This is the
-        // number the supervised device run of plan section 15.2 B1.8 assertion 3 judges, and asserting it
+        // number the supervised device run judges, and asserting it
         // here as well means a regression shows up in the ordinary gate rather than only in a run
         // somebody has to remember to make.
         val sink = CoreAudioSink()

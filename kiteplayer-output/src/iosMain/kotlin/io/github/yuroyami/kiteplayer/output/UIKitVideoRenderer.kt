@@ -455,8 +455,8 @@ public class UIKitVideoRenderer internal constructor(
 
 
     /**
-     * Draws the active overlay above the picture, in DISPLAY space with identity CTM (S2.c,
-     * carrying S4.c's Apple half): overlay coordinates are authored top-down against the
+     * Draws the active overlay above the picture, in DISPLAY space with identity CTM: overlay
+     * coordinates are authored top-down against the
      * overlay's own viewport, Core Graphics draws bottom-up, and the scale maps one onto the
      * other, the same law the Android compositor and the Metal renderer obey.
      */

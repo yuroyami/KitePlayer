@@ -253,7 +253,7 @@ class AndroidGlRenderQualityDeviceTest {
         return high
     }
 
-    /** RQ's first law: everything off writes the pre-17.21 pixels, and here that is bit for bit. */
+    /** The render-quality first law: everything off writes the plain pixels, and here that is bit for bit. */
     @Test
     fun neutralQualityIsBitExact() = harness { gl ->
         val source = IntArray(16 * 16) { grey((it * 7 + 3) % 256) }

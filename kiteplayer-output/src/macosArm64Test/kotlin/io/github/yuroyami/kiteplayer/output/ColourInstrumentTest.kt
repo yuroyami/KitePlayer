@@ -34,7 +34,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The S2.e colour instrument: programmatic frames at known YUV values, decoded by nothing and
+ * The colour instrument: programmatic frames at known YUV values, decoded by nothing and
  * rendered offscreen through REAL Metal on this host, pixels read back and judged against an
  * INDEPENDENT reference (the coefficients are written here by hand, never read from the
  * production tables, so a wrong production coefficient cannot agree with its own echo). One
@@ -47,7 +47,7 @@ import kotlin.test.assertTrue
 class ColourInstrumentTest {
 
     private companion object {
-        /** The stated per-channel tolerance, in 8-bit steps, same as the S2.c proofs. */
+        /** The stated per-channel tolerance, in 8-bit steps, same as the Metal composer proofs. */
         const val TOLERANCE = 2
     }
 

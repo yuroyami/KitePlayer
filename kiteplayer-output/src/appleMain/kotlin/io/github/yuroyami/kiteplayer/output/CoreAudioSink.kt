@@ -73,8 +73,8 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  * Audio output through CoreAudio, owned in C.
  *
  * The device pulls. Its render callback runs on a real-time thread CoreAudio owns, and that thread must
- * never be made to wait: it cannot allocate, cannot take a contended lock and cannot suspend. Since
- * B1.8 it also cannot enter Kotlin, and that is what this file is about.
+ * never be made to wait: it cannot allocate, cannot take a contended lock and cannot suspend. It
+ * also cannot enter Kotlin, and that is what this file is about.
  *
  * ### What changed, and why it had to
  *
@@ -137,7 +137,7 @@ private object PlatformCoreAudioSinkDestroyer : CoreAudioSinkDestroyer {
  * [openWithRing], [start], [stop], [drain] and [setPaused] belong to the session owner, which is the
  * same confinement `AudioPlayback` documents for the calls it makes into a sink. [close] belongs to the
  * owner as well but additionally takes an internal lock, and [latencyNanos] and the diagnostic counters
- * take it too, because those are the members another thread may call: after B1.8 the two fields they
+ * take it too, because those are the members another thread may call: the two fields they
  * read are C pointers that [close] frees, and the lock is what orders the free after the read. See the
  * note on the lock itself for the AddressSanitizer report that made this necessary rather than tidy.
  */
@@ -185,11 +185,11 @@ public class CoreAudioSink private constructor(
      * Orders [close] against the members that read the two handles, and nothing else.
      *
      * The device's callback never takes it and never could: it is a C function in `kiteplayer-rt`
-     * that does not enter this module. What it guards is the seam the independent verification of
-     * B1.8 found: [close] calls `kprt_sink_destroy`, which frees the C sink and the C ring, while
+     * that does not enter this module. What it guards is the seam an independent review
+     * found: [close] calls `kprt_sink_destroy`, which frees the C sink and the C ring, while
      * [latencyNanos] and the diagnostic counters read them. Proved with AddressSanitizer over the
      * equivalent pair of C calls: `heap-use-after-free ... in kprt_ring_anchor ... freed by ...
-     * kprt_sink_destroy`. Before B1.8 those reads went to managed Kotlin objects and the same
+     * kprt_sink_destroy`. When those reads went to managed Kotlin objects, the same
      * interleaving was harmless.
      *
      * The lock costs one wrapper object at construction and is taken only on the lifecycle and

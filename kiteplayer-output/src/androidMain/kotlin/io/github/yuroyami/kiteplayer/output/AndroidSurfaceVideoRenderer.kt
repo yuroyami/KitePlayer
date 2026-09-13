@@ -280,7 +280,7 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                     presented.incrementAndGet()
                     noteSurfaceAvailable()
                     // Best effort: the codec released the buffer toward the surface. The EXACT
-                    // report is MediaCodec's own rendered listener, still owed (V3 remainder).
+                    // report is MediaCodec's own rendered listener, still owed.
                     eventFlow.tryEmit(
                         RendererEvent.FramePresented(Pts(framePtsUs), atNanos = System.nanoTime(), exact = false),
                     )

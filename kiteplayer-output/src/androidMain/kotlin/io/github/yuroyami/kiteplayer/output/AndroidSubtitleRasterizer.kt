@@ -24,7 +24,7 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import java.nio.ByteBuffer
 
 /**
- * The Android text raster engine (S4.c): each active text cue becomes one image through
+ * The Android text raster engine: each active text cue becomes one image through
  * [StaticLayout], the platform's own line breaker, so wrapping, bidi and shaping are Android's
  * and not this project's. Bitmap cues pass their pixels through untouched.
  *
@@ -177,7 +177,7 @@ internal class AndroidSubtitleRasterizer : SubtitleRasterizer {
         val shadow = firstStyle?.let { cueShadow(it, fontScale) } ?: NO_CUE_SHADOW
         val anyOutline = runs.any { it.style.outlineWidthPx > 0f }
 
-        // The viewer's box (T1): the bitmap grows by the padding on every side so the box is
+        // The viewer's box: the bitmap grows by the padding on every side so the box is
         // never clipped, and the placement subtracts it back off. Transparent draws nothing.
         val boxColor = firstStyle?.backgroundColor ?: 0
         val boxPad = if (boxColor ushr 24 != 0) {

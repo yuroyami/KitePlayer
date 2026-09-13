@@ -29,7 +29,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Ownership, validation, swizzle and event arms of S1.c.5 step 7, over the [CanvasTarget] seam
+ * Ownership, validation, swizzle and event arms of the surface renderer, over the [CanvasTarget] seam
  * with no Android graphics anywhere. The frame ledger ends at zero in every arm, exactly like
  * the fallback suite's, and pending work never exceeds one frame by construction of the slot.
  */
@@ -463,7 +463,7 @@ class AndroidSurfaceVideoRendererTest {
         assertEquals(1, target.released)
     }
 
-    /** The display's interval is fed by the view; 120 Hz must answer as nanoseconds (V2). */
+    /** The display's interval is fed by the view; 120 Hz must answer as nanoseconds. */
     @Test
     fun theFedRefreshRateAnswersAsAnInterval() {
         val renderer = AndroidSurfaceVideoRenderer(

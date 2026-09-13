@@ -29,7 +29,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * S1.c.5 step 8, on the named emulator: a real SurfaceView hosted only by [RendererTestActivity],
+ * On the named emulator: a real SurfaceView hosted only by [RendererTestActivity],
  * one asymmetric red-left/blue-right frame observed through PixelCopy with black letterbox, the
  * same frame at 90 degrees with the axes swapped, then Surface destruction with the next present
  * refusing plus one SurfaceLost, without touching audio. The renderer is closed before the
@@ -95,7 +95,7 @@ class AndroidSurfaceVideoRendererDeviceTest {
     }
 
     /**
-     * S4.c's Android device proof, returned from the S2 pause: a white cue composites ABOVE the
+     * The Android device proof for subtitles: a white cue composites ABOVE the
      * picture with non-black pixels at its spot, while the picture beside it stays the picture.
      */
     @Test

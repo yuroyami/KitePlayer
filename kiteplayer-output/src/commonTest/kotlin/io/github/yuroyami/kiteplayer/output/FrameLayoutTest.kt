@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * The geometry arms of S1.c.5 step 7: aspect fit both ways, non-square pixels, every quarter
+ * The geometry arms of frame layout: aspect fit both ways, non-square pixels, every quarter
  * turn, and the draw-rectangle exchange that makes a turned picture land on its own letterbox.
  * All pure functions, no renderer instance and no platform anywhere.
  *

@@ -8,8 +8,8 @@ import android.os.Process
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
 
 /**
- * The ONE internal boundary holding every `android.media` call the audio path makes (S1.c.4
- * step 3). `AudioTrackSink` is written entirely against this seam, which is what lets the host
+ * The ONE internal boundary holding every `android.media` call the audio path makes.
+ * `AudioTrackSink` is written entirely against this seam, which is what lets the host
  * suite drive every lifecycle and arithmetic arm with a fake and no device, exactly the way the
  * decoder-fallback seam works in the FFmpeg backend module. Production is [PlatformAudioTrackDriver];
  * nothing else in this module may name `AudioTrack`.
@@ -47,7 +47,7 @@ internal interface AudioTrackDriver {
     /**
      * Blocking interleaved float write. Returns the number of FLOATS written, which the platform
      * may make smaller than requested when it is interrupted by pause or stop. Zero or negative
-     * is a device failure and never a reason to spin (S1.c.4 step 5).
+     * is a device failure and never a reason to spin.
      */
     fun write(source: FloatArray, offsetFloats: Int, sizeFloats: Int): Int
 
@@ -76,7 +76,7 @@ internal fun interface AudioTrackDriverFactory {
 
 /**
  * The production driver: MODE_STREAM, PCM float, USAGE_MEDIA / CONTENT_TYPE_MOVIE, buffer at
- * least `getMinBufferSize` (S1.c.4 step 3). `AudioTimestamp` nanoTime is on the
+ * least `getMinBufferSize`. `AudioTimestamp` nanoTime is on the
  * `System.nanoTime` (CLOCK_MONOTONIC) base, which is why [AndroidMonotonicClock] reads that exact clock and
  * why the internal sink constructor exists: production cannot accidentally pair the timestamp
  * with another time base.

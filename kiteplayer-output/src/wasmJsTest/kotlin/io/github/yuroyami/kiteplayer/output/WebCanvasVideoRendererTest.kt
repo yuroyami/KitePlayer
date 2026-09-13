@@ -85,7 +85,7 @@ class WebCanvasVideoRendererTest {
      * Opaque is the engine's name for a frame that lives in hardware memory, and this renderer is
      * software by construction. It used to answer true for every format including that one, so a
      * mis-wired decoder was refused once per frame by `present` instead of once at attach, which is
-     * what the KDoc promised all along (audit S-W5).
+     * what the KDoc promised all along.
      */
     @Test
     fun supportsIsFalseForOpaqueEvenWithAContext() {

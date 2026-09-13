@@ -20,12 +20,12 @@ import kotlin.time.TimeSource
  *
  * ### What this file used to do, and why it cannot any more
  *
- * Before B1.8 the sink's real-time body was a Kotlin method, `fillDeviceBuffer(callback, timeStamp,
+ * The sink's real-time body used to be a Kotlin method, `fillDeviceBuffer(callback, timeStamp,
  * frames, bufferList)`, and this file called it directly over memory the test allocated. That made three
  * awkward cases into plain assertions: a callback that filled less than it was handed, no callback at
  * all, and a timestamp whose host time CoreAudio marked meaningless.
  *
- * That method is gone, and its absence is the point of the sub-phase. The body is now `kprt_render_into`
+ * That method is gone, and its absence is the point of the change. The body is now `kprt_render_into`
  * in `kiteplayer-rt/native/src/kite_rt_render.c`, reached from a `static` C function that
  * `include/kite_rt.h` does not name, so the cinterop bindings do not contain it and Kotlin has no way to
  * call it. A callback Kotlin can reach is a callback the garbage collector has to

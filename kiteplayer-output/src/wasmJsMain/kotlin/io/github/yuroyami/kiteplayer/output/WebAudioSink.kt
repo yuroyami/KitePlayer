@@ -28,8 +28,8 @@ import kotlin.coroutines.coroutineContext
  * structural rather than temporary. The worklet runs in its own realm with its own globals, the
  * engine's samples live in Kotlin/Wasm linear memory on the main thread, and without
  * `SharedArrayBuffer` those two memories cannot be the same memory. `SharedArrayBuffer` needs COOP
- * and COEP headers on whoever embeds the player, which is exactly the requirement 17.14 refused to
- * impose on the default artifact.
+ * and COEP headers on whoever embeds the player, which is exactly the requirement the default
+ * artifact refuses to impose.
  *
  * So this is the other shape the contract names: a push device wrapped by one writer coroutine that
  * turns "the device has room" into a pull. The worklet holds a queue and plays it gaplessly; this

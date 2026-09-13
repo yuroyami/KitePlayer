@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The regression this file exists for (S6-D7 finding 1).
+ * The regression this file exists for.
  *
  * The first version of this sink stored the render callback and never called it. It compiled, it
  * satisfied the interface, and `KitePlayerPlatform.createOrNull()` returned a player, so every

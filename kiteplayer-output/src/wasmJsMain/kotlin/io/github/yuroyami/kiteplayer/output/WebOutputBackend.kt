@@ -69,7 +69,7 @@ private external fun performanceNow(): Double
  *
  * It PUMPS, and that is the whole of why it works. The engine's clock anchors when the render
  * callback consumes the audio ring, so a sink that merely holds the callback would leave playback
- * frozen at position zero with the ring backing up behind it. The S6-D7 review caught exactly that
+ * frozen at position zero with the ring backing up behind it. A review caught exactly that
  * in the first version of this class. So a coroutine calls [AudioRenderCallback.onRender] for one
  * [deviceBufferFrames] block at a time, on a wall-clock schedule, and throws the samples away.
  *

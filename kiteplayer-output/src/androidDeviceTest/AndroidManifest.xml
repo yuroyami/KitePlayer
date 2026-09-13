@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The instrumentation APK for kiteplayer-output's device tests (S1.c.4 and S1.c.5). The one
+<!-- The instrumentation APK for kiteplayer-output's device tests. The one
      declared component is the renderer test's SurfaceView host; the audio test needs none. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:usesCleartextTraffic="false">

@@ -76,7 +76,7 @@ import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
- * The Apple text raster engine (S2.c, carrying S4.c landing 4's Apple half): each active text
+ * The Apple text raster engine: each active text
  * cue becomes one image through CoreText, the platform's own shaper and line breaker, so
  * wrapping, bidi and shaping are Apple's and not this project's. Bitmap cues pass their pixels
  * through untouched. The placement arithmetic mirrors AndroidSubtitleRasterizer line for line,
@@ -85,7 +85,7 @@ import kotlin.math.roundToInt
  * The outline is CoreText's own fill-stroke text mode rather than a second pass: CG strokes and
  * fills glyphs in one draw, which is the same cheap legibility trick.
  *
- * Two honest limits, both S4.f's to lift: strikethrough is not rendered (CTFrameDraw ignores
+ * Two honest limits, both still open: strikethrough is not rendered (CTFrameDraw ignores
  * the attribute; only libass owns full decoration), and the bitmap comes out of CGBitmapContext
  * PREMULTIPLIED, which the straight-alpha overlay blend reads with slightly darker antialiased
  * edges. Solid glyph cores are exact.
@@ -218,7 +218,7 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
             // The shadow lands outside the text box, so the bitmap grows for it and the placement
             // below subtracts the origin back off. See CueShadow.
             val shadow = cueShadow(firstStyle, fontScale)
-            // The viewer's box (T1): the bitmap grows by the padding on every side so the box is
+            // The viewer's box: the bitmap grows by the padding on every side so the box is
             // never clipped, and the placement subtracts it back off. Transparent draws nothing.
             val boxPad = if (firstStyle.backgroundColor shr 24 and 0xFF != 0) {
                 ceil((firstStyle.backgroundPaddingPx * fontScale).toDouble()).toInt()
@@ -315,7 +315,7 @@ internal class AppleSubtitleRasterizer : SubtitleRasterizer {
     }
 
     /**
-     * The viewer's box, one padded rectangle per laid-out line (T1), drawn BEFORE the context's
+     * The viewer's box, one padded rectangle per laid-out line, drawn BEFORE the context's
      * shadow is set so the box never casts one. A throwaway frame is laid out to measure the
      * lines; CoreText frames are cheap next to the draw, and the real frame follows.
      */

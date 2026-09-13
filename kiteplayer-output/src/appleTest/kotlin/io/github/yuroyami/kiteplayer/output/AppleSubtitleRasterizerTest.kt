@@ -13,7 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * The CoreText rasterizer proved with real text (S2.c carrying S4.c's Apple half): a cue
+ * The CoreText rasterizer proved with real text: a cue
  * becomes pixels, lands where the Android arithmetic would put it, and the outline colour is
  * present beside the fill. Placement equality with Android is BY CONSTRUCTION (the same code,
  * mirrored); these arms hold the Apple half to it.
@@ -377,7 +377,7 @@ class AppleSubtitleRasterizerTest {
         }
     }
 
-    // The background box (T1), the same pixel arms as the desktop test.
+    // The background box, the same pixel arms as the desktop test.
 
     @Test
     fun aBackgroundBoxPaintsBehindTheGlyphsAndGrowsTheBitmap() {

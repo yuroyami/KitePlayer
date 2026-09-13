@@ -294,7 +294,7 @@ class AwtCanvasVideoRendererTest {
     }
 
     /**
-     * The refresh interval never throws (V2). On a machine with a display it is a plausible
+     * The refresh interval never throws. On a machine with a display it is a plausible
      * interval; on a headless CI JVM it is an honest null. Both are legal, an exception is not.
      */
     @Test

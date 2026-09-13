@@ -56,7 +56,7 @@ public fun interface WebFramePainter {
  *
  * ### What it does not do
  *
- * This is S6-D6 tier one: a canvas under the Compose controls, not the single Compose surface where
+ * This is the first web renderer tier: a canvas under the Compose controls, not the single Compose surface where
  * clip, alpha and rotation apply to the video pixels themselves. That is tier two and is not this.
  * There is also no hardware path: the wasm decoder is software by construction, so
  * [supportedHardwareSurfaces] is empty and always will be on this renderer.
@@ -94,7 +94,7 @@ public class WebCanvasVideoRenderer(
     /**
      * Any software format, because the painter converts rather than this class. [PlayerPixelFormat.Opaque]
      * is refused: it means a hardware frame, nothing on the web produces one for this renderer, and
-     * answering true would let a mis-wired decoder fail per frame instead of at attach (audit S-W5).
+     * answering true would let a mis-wired decoder fail per frame instead of at attach.
      */
     override fun supports(format: PlayerPixelFormat): Boolean =
         state != null && format != PlayerPixelFormat.Opaque

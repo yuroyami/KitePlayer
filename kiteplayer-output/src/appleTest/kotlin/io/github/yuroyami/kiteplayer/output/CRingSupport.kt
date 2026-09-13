@@ -33,11 +33,11 @@ import kotlinx.cinterop.set
  *
  * ### Why the tests do it this way now
  *
- * Before B1.8 these suites drove a naive Kotlin ring of their own through an `AudioRenderCallback`,
+ * These suites once drove a naive Kotlin ring of their own through an `AudioRenderCallback`,
  * because that was the shape the sink had. The sink no longer has that shape: its callback is a
  * `static` C function and the samples live in a C ring the sink itself owns. A
- * test that kept a Kotlin ring would be testing a path no Apple-backend user runs, which is the substitution
- * plan section 2 forbids. So the samples go in through the same three
+ * test that kept a Kotlin ring would be testing a path no Apple-backend user runs, which proves nothing
+ * about the shipped one. So the samples go in through the same three
  * C calls the engine's feeder uses, and what comes out is judged by what the device consumed.
  *
  * `NativeAudioRing` in `kiteplayer-core` is `internal`, so this module cannot use it and does not need

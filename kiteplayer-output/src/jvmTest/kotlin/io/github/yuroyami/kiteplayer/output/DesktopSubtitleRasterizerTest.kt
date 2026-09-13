@@ -593,7 +593,7 @@ class DesktopSubtitleRasterizerTest {
         }
     }
 
-    // ── the background box (T1) ─────────────────────────────────────
+    // ── the background box ──────────────────────────────────────────────────────────────────
 
     /**
      * The viewer's box: an opaque red rectangle behind the glyphs, padded past them, under the

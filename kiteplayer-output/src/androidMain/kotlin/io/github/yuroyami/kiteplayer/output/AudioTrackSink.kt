@@ -74,7 +74,7 @@ public class AudioTrackSink internal constructor(
     /** Set by the writer on device failure, cleared by the recovery arm of start. */
     private var writerFailed = false
 
-    /* Timestamp acceptance state (S1.c.4 step 6), written only by the writer thread. */
+    /* Timestamp acceptance state, written only by the writer thread. */
     @Volatile private var lastAcceptedTimestampFrames = -1L
     @Volatile private var lastAcceptedTimestampNanos = Long.MIN_VALUE
 

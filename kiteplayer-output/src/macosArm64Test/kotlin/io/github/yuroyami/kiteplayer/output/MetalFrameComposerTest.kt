@@ -39,10 +39,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The composer proved offscreen with REAL Metal on the host (S2.c): known YUV values render to
+ * The composer proved offscreen with REAL Metal on the host: known YUV values render to
  * known sRGB within tolerance, the colour matrix uniform is demonstrably live, the letterbox
  * clears what it does not cover, and an overlay draws above the picture. This suite is the seed
- * the S2.e colour instrument grows from.
+ * the colour instrument grows from.
  */
 class MetalFrameComposerTest {
 
@@ -360,7 +360,7 @@ class MetalFrameComposerTest {
     // The Kotlin mirror of the shader's tone-mapping law, for expected values.
     @Test
     fun `dithering off writes exactly the pixels it always did`() {
-        // The ladder's first law (17.21): a build that turns nothing on must be bit-exact against
+        // The ladder's first law: a build that turns nothing on must be bit-exact against
         // the pipeline that existed before the pass was written. Same picture, both uniform blocks.
         val device = MTLCreateSystemDefaultDevice() ?: error("this host has no Metal device")
         val composer = MetalFrameComposer(device)

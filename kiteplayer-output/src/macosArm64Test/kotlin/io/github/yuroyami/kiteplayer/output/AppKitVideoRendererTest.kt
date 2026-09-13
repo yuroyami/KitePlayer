@@ -319,7 +319,7 @@ class AppKitVideoRendererTest {
         // file: 320x240 stored, and a display matrix that arrives as 270 clockwise degrees. That test
         // cannot drive this renderer, because the constructor a test can inject into is internal and
         // `internal` does not cross a Gradle module boundary, so the two halves of the claim meet here,
-        // on the fixture's own geometry. This half is the one the register words as the output
+        // on the fixture's own geometry. This half is the one described as the output
         // dimensions swapping.
         val storedWidth = 320
         val storedHeight = 240
@@ -384,7 +384,7 @@ class AppKitVideoRendererTest {
      * bytes that were drawn.
      */
     /**
-     * The CG compositor's transform math (S2.c, the Apple twin of the Android 885ccc0 arm): an
+     * The CG compositor's transform math (the Apple twin of the Android 885ccc0 arm): an
      * overlay authored against a 4x2 viewport lands on the drawn image at the same spot, above
      * the picture. Red carries proof the picture is underneath; white proves the overlay won.
      */
@@ -694,7 +694,7 @@ class AppKitVideoRendererTest {
         }
     }
 
-    // The M4 surge's headline finally pinned: a cue arriving while
+    // Pinned here: a cue arriving while
     // the picture is paused must redraw the retained frame with no new present() at all.
     @Test
     fun `an overlay set after the last frame redraws the retained picture`() = runBlocking {
@@ -1005,7 +1005,7 @@ private fun liveThreadCount(): Int = memScoped {
     total
 }
 
-/** The refresh interval is plausible on a machine with a screen, and honest null without one (V2). */
+/** The refresh interval is plausible on a machine with a screen, and honest null without one. */
 class AppKitVsyncTest {
     @Test
     fun theRefreshIntervalIsPlausibleOrHonestlyUnknown() {

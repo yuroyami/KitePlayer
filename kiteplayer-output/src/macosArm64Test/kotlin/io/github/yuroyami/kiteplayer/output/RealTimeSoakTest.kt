@@ -65,25 +65,24 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The supervised device run: assertion 3 of plan section 15.2 B1.8, with the negative control that has
- * to fail, plus assertion 4 as corroboration.
+ * The supervised device run: the third of the four real-time assertions, with the negative control that
+ * has to fail, plus the fourth as corroboration.
  *
  * ### These cases do not run in the ordinary gate, on purpose
  *
  * Each one opens a real device, makes sound and takes minutes. They are gated on KPRT_DEVICE_SOAK being
  * set, and the reason it matters is that this is a serial
  * human-supervised run on one machine, and a gate that silently spent twenty five minutes in the middle
- * of an ordinary test run would be turned off within a week. The gate command is in the report and in
- * the plan.
+ * of an ordinary test run would be turned off within a week. The gate command is in the report.
  *
  *     KPRT_DEVICE_SOAK=1 KPRT_DEVICE_SOAK_MINUTES=10 \
  *       ./gradlew :kiteplayer-output:macosArm64Test --tests '*RealTimeSoakTest*' --rerun-tasks -i
  *
  * ### Where the strength of this evidence sits, and where it does not
  *
- * Plan section 15.3 grades this level 1 for macOS arm64 in debug, on one machine, with its numbers
- * recorded, and nothing more. It is NOT release-mode performance qualification; B10 owns that. It is
- * also the third of the four assertions in the order of authority the plan fixes, behind the render
+ * This is evidence for macOS arm64 in debug, on one machine, with its numbers
+ * recorded, and nothing more. It is NOT release-mode performance qualification, which is separate work.
+ * It is also the third of the four assertions in their order of authority, behind the render
  * audit and the interposed C test, because both of those are deterministic and this one is a
  * measurement of one run on one machine. No report may present it as the strongest of the four.
  *
@@ -97,7 +96,7 @@ import kotlin.test.assertTrue
  * worst callback body in the same two runs was 9,083 ns and 10,458 ns against a 5,333,333 ns budget,
  * which is the number that did not vary.
  *
- * That asymmetry is what B1.8 built on purpose. A late feeder costs nothing until the ring's half second
+ * That asymmetry is what the C callback was built for. A late feeder costs nothing until the ring's half second
  * of audio runs out; a late callback is an audible gap with no recovery. So the callback's three numbers
  * are asserted exactly, the underrun count is bounded as a ratio because zero holds on one run in two,
  * and the zero-underrun promise is carried where it belongs: `RealTimeMediaSoakTest`, which played real
@@ -106,12 +105,12 @@ import kotlin.test.assertTrue
  * ### What the negative control is for, and what it does NOT attribute
  *
  * An assertion suite that has never rejected anything is not evidence. The control here is the
- * arrangement B1.8 removed: a real device whose render callback is a Kotlin lambda reached through a
+ * arrangement the C callback replaced: a real device whose render callback is a Kotlin lambda reached through a
  * `StableRef`, allocating on the real-time thread. It must break the property the positive case
  * asserts, and it does.
  *
  * What it must not be read as is an attribution to the garbage collector, and that correction came from
- * the independent verification of B1.8, which decomposed the control on this machine. Measured, four
+ * an independent review, which decomposed the control on this machine. Measured, four
  * arrangements of 0.4 minutes each against the same 5,333,333 ns budget: allocating and pressured
  * 11,613,208 ns worst over 76 callbacks, allocating and unpressured 10,541,834 over 2, non-allocating
  * and pressured 18,691,250 over 80, non-allocating and unpressured 10,467,500 over 11. So the
@@ -186,7 +185,7 @@ class RealTimeSoakTest {
                 "the worst callback body was ${sink.worstCallbackNanos} ns against a budget of $budgetNanos ns",
             )
 
-            // The underrun counter is NOT one of them, and the difference is the whole point of B1.8.
+            // The underrun counter is NOT one of them, and the difference is the whole point of the C callback.
             // An underrun says the ring was empty when the device asked, which says the FEEDER was
             // late. The feeder here is managed Kotlin doing a scalar copy through cinterop, so it is a
             // mutator this test has deliberately arranged to be stopped hundreds of times a second,
@@ -234,8 +233,8 @@ class RealTimeSoakTest {
             return@runBlocking
         }
 
-        // Two arms of the same arrangement, and the second one is the correction the independent
-        // verification asked for. Both are the shape B1.8 removed: a real device, a Kotlin lambda reached
+        // Two arms of the same arrangement, and the second one is the correction an independent
+        // review asked for. Both are the shape the C callback replaced: a real device, a Kotlin lambda reached
         // through a StableRef on the real-time thread, and an allocation per callback. They differ only in
         // whether the collector is under manufactured pressure, so the pair says how much of the deadline
         // miss the pressure accounts for instead of leaving that to be assumed.
@@ -340,7 +339,7 @@ class RealTimeSoakTest {
             return@runBlocking
         }
 
-        // Assertion 4, and corroboration only. Plan section 15.2 B1.8 is explicit that this is level 5 and
+        // The fourth assertion, and corroboration only. It is weak evidence and
         // never the gate, for a reason this test cannot escape: it cannot attribute growth to the callback
         // rather than to anything else alive in the process. A flat heap here is consistent with a callback
         // that allocates nothing and equally consistent with one that allocates and is collected.
@@ -404,7 +403,7 @@ class RealTimeSoakTest {
      * A Kotlin thread allocating hard with the collector's target heap pinned low, so collections happen
      * hundreds of times a second.
      *
-     * This is the pressure plan section 15.2 B1.8 assertion 3 asks for. `GC.autotune = false` is what
+     * This is the pressure the third assertion asks for. `GC.autotune = false` is what
      * makes `targetHeapBytes` stick; with autotuning on, the runtime raises the target as the process
      * allocates and the pressure disappears halfway through the run.
      */
@@ -465,7 +464,7 @@ class RealTimeSoakTest {
     /**
      * The negative control's device: a real AudioUnit whose render callback is a Kotlin lambda.
      *
-     * This is deliberately the shape `CoreAudioSink` had before B1.8, including the `StableRef` the
+     * This is deliberately the shape `CoreAudioSink` had before the C callback, including the `StableRef` the
      * callback dereferences on its first instruction and an allocation inside the callback body. It is
      * test-only and nothing in the library links it.
      */
@@ -539,7 +538,7 @@ class RealTimeSoakTest {
             val entered = AppleHostClock.nanos()
             if (destination != null) {
                 // A managed allocation on the real-time thread, which is what a Kotlin callback does
-                // whether it means to or not: before B1.8 the shipped one made up to five transient
+                // whether it means to or not: before the C callback the shipped one made up to five transient
                 // cinterop view objects per call, and a debug build allocated every one of them.
                 val scratch = FloatArray(frames * format.channels)
                 for (i in scratch.indices) destination[i] = scratch[i]

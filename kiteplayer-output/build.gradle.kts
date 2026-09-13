@@ -15,8 +15,8 @@ plugins {
  *
  * Targets are added as backends land. Apple first, because CoreAudio and Metal are reachable and
  * testable on the development machine, and because iOS then shares the same code. The desktop JVM
- * came next in phase W: SourceDataLine for audio and the JDK's own text engine for subtitles, which
- * is decision W-D2, Kotlin first under D-7. The Kotlin/Native desktops publish the common surface
+ * came next: SourceDataLine for audio and the JDK's own text engine for subtitles, which
+ * keeps to the Kotlin-first rule. The Kotlin/Native desktops publish the common surface
  * only for now, so a consumer that compiles them still resolves; their C device sinks are not
  * built.
  */
@@ -53,9 +53,9 @@ kotlin {
         nodejs()
     }
 
-    /* S1.c.4 step 1. Output depends only on core and its existing portable libraries: no
-     * KiteFFmpeg, no FFmpeg, no NDK, no Android media support library (the boundary scans of
-     * S1.c.5 step 10 enforce it). Host tests drive the fake AudioTrack/canvas seams; device
+    /* Output depends only on core and its existing portable libraries: no
+     * KiteFFmpeg, no FFmpeg, no NDK, no Android media support library (the boundary scans
+     * enforce it). Host tests drive the fake AudioTrack/canvas seams; device
      * tests drive the real ones on the named emulator. */
     android {
         namespace = "io.github.yuroyami.kiteplayer.output"

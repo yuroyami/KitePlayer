@@ -6,7 +6,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * The deadline and head-extension arithmetic of S1.c.4 step 6, pinned as pure functions, plus
+ * The deadline and head-extension arithmetic of the audio clock, pinned as pure functions, plus
  * the one pairing rule that makes the arithmetic meaningful. `SystemClock` itself cannot run on
  * a host JVM, which is exactly why the sink reads time through the seam and why these tests need
  * no device.

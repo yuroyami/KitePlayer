@@ -12,7 +12,7 @@ import io.github.yuroyami.kiteplayer.MonotonicClock
  * `AudioTimestamp.nanoTime` as being on the `System.nanoTime()` base, and the platform's own
  * players compare it against `System.nanoTime()`.
  *
- * This pairing is the whole point of the object (S1.c.4 step 2). The sink anchors the engine's
+ * This pairing is the whole point of the object. The sink anchors the engine's
  * master clock to the deadline its render callback carries, and that deadline is computed from
  * an `AudioTimestamp`. Measure the rest of the engine's time from any other source and audio and
  * video sit at a constant offset no correction can find, because both sides believe they are

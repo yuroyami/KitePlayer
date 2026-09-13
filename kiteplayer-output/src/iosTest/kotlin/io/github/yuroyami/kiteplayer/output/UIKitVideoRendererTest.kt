@@ -194,7 +194,7 @@ class UIKitVideoRendererTest {
     }
 
     /**
-     * S4.c's simulator proof, returned from the S2 pause: a white cue composites ABOVE the red
+     * The simulator proof for subtitles: a white cue composites ABOVE the red
      * picture in the delivered image, in display space, and the picture survives beside it.
      */
     @Test

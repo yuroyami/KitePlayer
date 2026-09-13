@@ -49,7 +49,7 @@ public class AppKitWindow(
     height: Int,
     /**
      * True hosts a [platform.QuartzCore.CAMetalLayer] instead of the image view, for
-     * [MetalVideoRenderer] (S2.c). The image view stays the CG fallback's home.
+     * [MetalVideoRenderer]. The image view stays the CG fallback's home.
      */
     useMetalLayer: Boolean = false,
 ) {

@@ -13,7 +13,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * S1.c.4 step 9, on the named emulator: a real `AudioTrack` opens 48 kHz stereo float, renders a
+ * On the named emulator: a real `AudioTrack` opens 48 kHz stereo float, renders a
  * bounded sine, advances its playback head by at least 256 frames within five seconds, reports
  * monotonically increasing callback deadlines, stops, closes twice, reopens and repeats once.
  * The observed deadline source (timestamp or the documented playback-head fallback) is recorded

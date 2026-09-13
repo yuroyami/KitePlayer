@@ -32,7 +32,7 @@ import platform.Metal.MTLCreateSystemDefaultDevice
 import platform.QuartzCore.CAMetalLayer
 
 /**
- * The GPU renderer of S2.c: one Metal core for macOS and iOS, drawing into a caller-owned
+ * The GPU renderer: one Metal core for macOS and iOS, drawing into a caller-owned
  * [CAMetalLayer].
  *
  * The division of labour is exactly the CG renderers': the engine hands frames to [present],
@@ -152,7 +152,7 @@ public class MetalVideoRenderer public constructor(
     /** Frames that reached no drawable: resolver refusal, encode failure, or a closed renderer. */
     public val failedFrames: Long get() = failed.value
 
-    /** The zero-copy claim of this renderer, and the reason S2.b's download twin goes unused here. */
+    /** The zero-copy claim of this renderer, and the reason the download twin goes unused here. */
     override fun supportedHardwareSurfaces(): Set<HwSurfaceKind> = setOf(HwSurfaceKind.CoreVideoPixelBuffer)
 
     /** Opaque is drawable exactly when the frame carries a surface this renderer wraps. */
@@ -327,7 +327,7 @@ public class MetalVideoRenderer public constructor(
     }
 
     /**
-     * The render-quality passes (17.21). The target is `BGRA8Unorm`, so eight bits is what the
+     * The render-quality passes. The target is `BGRA8Unorm`, so eight bits is what the
      * dither spreads a value across; a paused picture re-encodes so a change is visible at once.
      */
     override fun setRenderQuality(quality: io.github.yuroyami.kiteplayer.RenderQuality) {

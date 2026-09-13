@@ -5,6 +5,7 @@ import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerSnapshot
 import io.github.yuroyami.kiteplayer.Progress
+import io.github.yuroyami.kiteplayer.VideoSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -103,12 +104,37 @@ class MediaSessionStateTest {
         assertEquals("A Band", state.artist)
     }
 
+    private fun phaseOf(status: PlaybackStatus) = snapshot(status = status).toMediaSessionState(Progress()).phase
+
     @Test
-    fun `playing is the playing status and nothing else`() {
+    fun `playing and paused are their own phases`() {
+        assertEquals(MediaSessionPhase.Playing, phaseOf(PlaybackStatus.Playing))
+        assertEquals(MediaSessionPhase.Paused, phaseOf(PlaybackStatus.Paused))
         assertTrue(snapshot(status = PlaybackStatus.Playing).toMediaSessionState(Progress()).playing)
-        for (status in listOf(PlaybackStatus.Buffering, PlaybackStatus.Ended, PlaybackStatus.Opening)) {
+        assertFalse(snapshot(status = PlaybackStatus.Paused).toMediaSessionState(Progress()).playing)
+    }
+
+    @Test
+    fun `opening and buffering are the buffering phase and neither is playing`() {
+        for (status in listOf(PlaybackStatus.Opening, PlaybackStatus.Buffering)) {
+            assertEquals(MediaSessionPhase.Buffering, phaseOf(status), "$status")
             assertFalse(snapshot(status = status).toMediaSessionState(Progress()).playing, "$status")
         }
+    }
+
+    @Test
+    fun `idle ended and failed are all stopped`() {
+        for (status in listOf(PlaybackStatus.Idle, PlaybackStatus.Ended, PlaybackStatus.Failed)) {
+            assertEquals(MediaSessionPhase.Stopped, phaseOf(status), "$status")
+        }
+    }
+
+    @Test
+    fun `a file with a picture says so and a song does not`() {
+        assertFalse(snapshot().toMediaSessionState(Progress()).hasVideo)
+        val film = snapshot().copy(videoSize = VideoSize(1920, 1080))
+        assertTrue(film.toMediaSessionState(Progress()).hasVideo)
+        assertTrue(film.toMediaSessionState(Progress()).metadata().hasVideo)
     }
 
     @Test

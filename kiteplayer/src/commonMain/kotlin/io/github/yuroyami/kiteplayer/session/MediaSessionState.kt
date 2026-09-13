@@ -15,18 +15,29 @@ import kotlin.time.Duration
  * testable on any target.
  */
 public data class MediaSessionState(
-    val playing: Boolean,
+    val phase: MediaSessionPhase,
     val position: Duration,
     /** Null for a live stream, where a scrub bar has nothing to scrub along. */
     val duration: Duration?,
     val speed: Double,
     val canSeek: Boolean,
+    /** False for a song. iOS names the media type on its card from this. */
+    val hasVideo: Boolean,
     val title: String?,
     val artist: String?,
     val album: String?,
     val hasNext: Boolean,
     val hasPrevious: Boolean,
-)
+) {
+    /** True only while sound is moving. */
+    public val playing: Boolean get() = phase == MediaSessionPhase.Playing
+}
+
+/**
+ * The four things a lock screen can show. Buffering is kept apart from paused, because a stalled
+ * stream that looks paused invites a press of play that does nothing.
+ */
+public enum class MediaSessionPhase { Playing, Paused, Buffering, Stopped }
 
 /**
  * Reads a snapshot and a progress sample into the state a platform session wants.
@@ -34,14 +45,21 @@ public data class MediaSessionState(
  * [PlayerSnapshot.metadata] carries the container's own tags, and the file name stands in when it
  * has no title. Next and previous follow the play order, so they answer for what the listener is
  * actually hearing rather than for the list order, and looping the whole queue makes both true.
+ * Opening counts as buffering, and idle, ended and failed all count as stopped.
  */
 public fun PlayerSnapshot.toMediaSessionState(progress: Progress): MediaSessionState =
     MediaSessionState(
-        playing = status == PlaybackStatus.Playing,
+        phase = when (status) {
+            PlaybackStatus.Playing -> MediaSessionPhase.Playing
+            PlaybackStatus.Paused -> MediaSessionPhase.Paused
+            PlaybackStatus.Opening, PlaybackStatus.Buffering -> MediaSessionPhase.Buffering
+            PlaybackStatus.Idle, PlaybackStatus.Ended, PlaybackStatus.Failed -> MediaSessionPhase.Stopped
+        },
         position = progress.position,
         duration = duration,
         speed = speed,
         canSeek = seekable,
+        hasVideo = videoSize != null,
         title = metadata.tag("title") ?: media?.label,
         artist = metadata.tag("artist") ?: metadata.tag("album_artist"),
         album = metadata.tag("album"),
@@ -73,7 +91,8 @@ internal data class MediaSessionMetadata(
     val artist: String?,
     val album: String?,
     val duration: Duration?,
+    val hasVideo: Boolean,
 )
 
 internal fun MediaSessionState.metadata(): MediaSessionMetadata =
-    MediaSessionMetadata(title, artist, album, duration)
+    MediaSessionMetadata(title, artist, album, duration, hasVideo)

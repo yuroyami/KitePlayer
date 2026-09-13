@@ -18,11 +18,12 @@ class AndroidMediaSessionActionsTest {
         hasNext: Boolean = false,
         hasPrevious: Boolean = false,
     ) = MediaSessionState(
-        playing = true,
+        phase = MediaSessionPhase.Playing,
         position = 5.seconds,
         duration = 60.seconds,
         speed = 1.0,
         canSeek = canSeek,
+        hasVideo = false,
         title = "A Holiday",
         artist = null,
         album = null,

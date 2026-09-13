@@ -100,7 +100,7 @@ private class ReplayFallbackDecoder(
 
     /**
      * Every hardware output ever handed to the caller this epoch, confirmed or not. Zero is the
-     * S2.b head-replay licence: an hwaccel can accept its attach and refuse the very first send
+     * head-replay licence: an hwaccel can accept its attach and refuse the very first send
      * (VideoToolbox on a stream it dislikes), and with nothing delivered the retained window is
      * the COMPLETE history since open or flush, so software replay from the head loses nothing.
      */
@@ -265,7 +265,7 @@ private class ReplayFallbackDecoder(
      * The flag is the first-class proof. The timestamp is the fallback for decoders that never
      * set it: FFmpeg's mediacodec wrapper marks no output frame as a keyframe, which without
      * this made the window grow until the 16 MiB cap failed EVERY Android playback longer than
-     * that with no seek in between (found by the 17.4.6 A3 measured run; the earlier smokes
+     * that with no seek in between (found by a measured Android device run; the earlier smokes
      * seeked mid-run, which resets the window, and dodged it). A decoded output at or past the
      * boundary packet's presentation time cannot exist unless the boundary keyframe itself was
      * decoded: frames later in presentation reference it, and frames decoded before it sit
@@ -281,7 +281,7 @@ private class ReplayFallbackDecoder(
     private suspend fun demote(reason: String, failure: Throwable?, replayDrain: Boolean) {
         // Terminal only when outputs already crossed to the caller WITHOUT a confirmed keyframe
         // boundary: replaying then risks duplicating them. With nothing delivered this epoch the
-        // window is the complete history and the head replay below is exact (the S2.b licence).
+        // window is the complete history and the head replay below is exact (the head-replay licence).
         if (!hasConfirmedBoundary && deliveredThisEpoch > 0) {
             failTerminal(
                 PlaybackException(

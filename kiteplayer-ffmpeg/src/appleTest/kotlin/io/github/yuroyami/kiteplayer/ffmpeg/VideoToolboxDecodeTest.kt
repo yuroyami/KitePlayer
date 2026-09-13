@@ -18,9 +18,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The S2.b hardware arm, Apple only.
+ * The hardware decode arm, Apple only.
  *
- * It lived in the shared native test set until phase W added the Kotlin/Native desktop targets,
+ * It lived in the shared native test set until the Kotlin/Native desktop targets were added,
  * where it failed for the right reason: Linux and Windows have no VideoToolbox and their decoder
  * selection says so honestly. A test that names one platform's hwaccel belongs to that platform.
  */
@@ -48,7 +48,7 @@ class VideoToolboxDecodeTest {
         }
     }
 
-    /** Decodes the first frame with the platform's own hwdec policy, for the S2.b hardware arm. */
+    /** Decodes the first frame with the platform's own hwdec policy, for the hardware decode arm. */
     private suspend fun firstVideoFrameAuto(file: String): Triple<KiteFFmpegSource, VideoDecoder, KiteFFmpegVideoFrame> {
         val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteFFmpegSource
         val stream = assertNotNull(source.firstVideo, "no video stream in $file")

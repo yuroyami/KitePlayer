@@ -25,7 +25,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * MediaItem.io end to end (M1): a real container's bytes flow through a SUSPENDING MediaIo
+ * MediaItem.io end to end: a real container's bytes flow through a SUSPENDING MediaIo
  * into the FFmpeg backend, with no path and no FFmpeg protocol. The suspension is real
  * (yield before every read), so this also proves the blocking adapter parks the demux thread
  * correctly instead of deadlocking or dropping the continuation.

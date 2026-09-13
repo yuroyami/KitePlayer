@@ -15,7 +15,7 @@ plugins {
  * the web, a platform decoder, a test fake) take its place without the engine noticing.
  *
  * Kotlin/Native links KiteFFmpeg directly, while Android and the desktop JVM consume the JNI
- * adapter from KiteFFmpeg's published artifacts. The JVM was a placeholder until phase W: it now
+ * adapter from KiteFFmpeg's published artifacts. The JVM was once a placeholder: it now
  * carries a real FFmpeg backend and runs the same real-media suites the native targets run.
  */
 // The media fixtures live at the repo root and a native test's working directory is not something
@@ -23,7 +23,7 @@ plugins {
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
     // `simctl spawn` forwards only SIMCTL_CHILD_-prefixed variables to the spawned binary, so a
-    // simulator test sees the plain name only through this twin (S1.e.3).
+    // simulator test sees the plain name only through this twin.
     environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
 
@@ -61,8 +61,8 @@ kotlin {
     macosArm64()
     iosArm64()
     iosSimulatorArm64()
-    // The Kotlin/Native desktops (phase W). They link the cross-built FFmpeg that KiteFFmpeg's
-    // W.5 tasks vendor and the desktop variants it publishes; without both, nothing here resolves.
+    // The Kotlin/Native desktops. They link the cross-built FFmpeg that KiteFFmpeg's
+    // build tasks vendor and the desktop variants it publishes; without both, nothing here resolves.
     linuxX64()
     linuxArm64()
     mingwX64()
@@ -89,7 +89,7 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
-            // The text subtitle parsers (S4.c). Pure Kotlin; the decoder below is a thin shim
+            // The text subtitle parsers. Pure Kotlin; the decoder below is a thin shim
             // from packet payloads onto them.
             implementation(project(":kiteplayer-subtitles"))
             // api, not implementation: KiteFFmpegVideoFrame publicly exposes kiteffmpeg.Frame, and
@@ -117,7 +117,7 @@ kotlin {
         getByName("androidMain").dependsOn(jvmAndAndroidMain)
 
         // Real-media and FFmpeg-runtime tests belong to every source set that reaches a REAL
-        // backend. That is direct-link native and, since phase W gave KiteFFmpeg's jvm variant its
+        // backend. That is direct-link native and, since KiteFFmpeg's jvm variant gained its
         // JNI adapter, the desktop JVM as well. Android host tests stay out: they use fake drivers
         // and never load a device JNI library.
         val commonTest = getByName("commonTest")
@@ -130,9 +130,9 @@ kotlin {
         // Test only, and only for the tests that drive the whole player: those need an output
         // backend to have a clock and an audio device, and this module is the one place where real
         // media, the real FFmpeg backend and a real device can all be reached at once. APPLE only,
-        // because the backend they name is CoreAudio's: phase W added the Kotlin/Native desktop
-        // targets, where no device sink exists yet, and a
-        // nativeTest-wide dependency made those targets fail to compile on an Apple type name.
+        // because the backend they name is CoreAudio's: the Kotlin/Native desktop targets have no
+        // device sink yet, and a nativeTest-wide dependency made them fail to compile on an Apple
+        // type name.
         getByName("appleTest").dependencies {
             implementation(project(":kiteplayer-output"))
         }

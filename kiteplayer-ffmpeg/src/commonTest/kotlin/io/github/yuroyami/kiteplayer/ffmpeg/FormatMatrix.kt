@@ -9,16 +9,16 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 
 /**
- * The 17.5 format conformance matrix: one table, one runner, run on every platform that claims a
+ * The format conformance matrix: one table, one runner, run on every platform that claims a
  * playback tier. The table IS the claim "plays all formats"; a platform's claim is exactly the
  * transcript this runner leaves.
  *
  * The runner drives the MediaBackend SPI directly (source, decoders, seekToKeyframe) rather than
  * the whole player, deliberately: it needs no output backend, so it runs on a bare iOS simulator
- * spawn host where no audio device can be opened (the S1.b lesson), and on an Android device
+ * spawn host where no audio device can be opened, and on an Android device
  * test without an Activity.
  *
- * Two verdict classes, because capability is measured rather than assumed (D-5):
+ * Two verdict classes, because capability is measured rather than assumed:
  * - [MatrixVerdict.MustPlay]: the clip opens, its expected stream kinds are present, frames
  *   decode, a keyframe seek lands and decoding resumes, close is clean. Anything else fails.
  * - [MatrixVerdict.MustSurvive]: every step either succeeds or fails with a typed exception.
@@ -43,7 +43,7 @@ internal class MatrixRow(
     val expectRotation: Boolean = false,
     /** Exact chapter round-trip: (startMicros, endMicros, title) per chapter, in order. */
     val expectChapters: List<Triple<Long, Long, String>>? = null,
-    /** Decode the first subtitle stream and require at least one non-empty text cue (S4.c). */
+    /** Decode the first subtitle stream and require at least one non-empty text cue. */
     val decodeSubtitleCue: Boolean = false,
 )
 
@@ -84,7 +84,7 @@ internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
     MatrixRow("torture-truncated.mp4", MatrixVerdict.MustSurvive, hasAudio = false),
     MatrixRow("torture-garbage.mp4", MatrixVerdict.MustSurvive, hasVideo = false, hasAudio = false),
 
-    // The wide-profile rows (17.4.9 W.b): formats real files arrive in that the narrow
+    // The wide-profile rows: formats real files arrive in that the narrow
     // editor-era profile could not open or could not decode. Every row below ran RED against
     // the narrow trees before the wide trees existed; the red transcript is in the log. VC-1
     // and RealVideo are the named absences: FFmpeg has no encoders for them, so their rows
@@ -97,7 +97,7 @@ internal val FORMAT_MATRIX: List<MatrixRow> = listOf(
     MatrixRow("audio-dts.mkv", MatrixVerdict.MustPlay, hasVideo = false),
     MatrixRow("audio-truehd.mkv", MatrixVerdict.MustPlay, hasVideo = false),
     MatrixRow("audio-alac.m4a", MatrixVerdict.MustPlay, hasVideo = false),
-    // The ass row asserts the subtitle STREAM is seen; decoding its cues is S4.f's, because
+    // The ass row asserts the subtitle STREAM is seen; decoding its cues is left for later, because
     // the text path deliberately speaks SubRip and WebVTT only today.
     MatrixRow("asssubbed.mkv", MatrixVerdict.MustPlay, hasAudio = false, expectSubtitleStreams = 1),
 )

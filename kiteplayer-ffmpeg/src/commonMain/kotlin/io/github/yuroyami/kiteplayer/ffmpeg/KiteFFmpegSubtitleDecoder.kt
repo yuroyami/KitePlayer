@@ -15,10 +15,10 @@ import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 import io.github.yuroyami.kiteplayer.subtitle.WebVttParser
 
 /**
- * Text subtitle decode over the packet path (S4.c): a Matroska SubRip, WebVTT or ASS track's
+ * Text subtitle decode over the packet path: a Matroska SubRip, WebVTT or ASS track's
  * packets carry the cue BODY as bytes and the timing as pts/duration, so decoding is UTF-8
  * plus the pure parsers in kiteplayer-subtitles. No C is involved, which is the whole point of
- * the text path. ASS decodes at the DIALOGUE tier (17.12 M2): styles, colours, positioning and
+ * the text path. ASS decodes at the DIALOGUE tier: styles, colours, positioning and
  * the common override subset; typesetting-grade rendering is the optional libass module's.
  * Bitmap formats still need real engines.
  */
@@ -34,7 +34,7 @@ internal class KiteFFmpegSubtitleDecoderFactory : SubtitleDecoderFactory {
         // dropped for now; the text is exact.
         "mov_text" -> KiteFFmpegTextSubtitleDecoder(SubRipParser::parseCueBody, extractBody = ::tx3gText)
         "webvtt" -> KiteFFmpegTextSubtitleDecoder(WebVttParser::parseCueBody)
-        // The Kotlin ASS dialogue tier (M2). The track header, styles included, travels as
+        // The Kotlin ASS dialogue tier. The track header, styles included, travels as
         // codec extradata; each packet is one FFmpeg-normalised event line.
         "ass", "ssa" -> KiteFFmpegAssSubtitleDecoder(
             AssParser.trackParser(stream.codecExtradata?.decodeToString() ?: ""),

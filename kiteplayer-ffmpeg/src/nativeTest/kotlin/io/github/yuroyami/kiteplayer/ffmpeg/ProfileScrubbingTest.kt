@@ -16,7 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * KD-6's real-media proof: the Scrubbing profile's decoder options, threaded through the
+ * The real-media proof for profiles: the Scrubbing profile's decoder options, threaded through the
  * backend's constructor exactly as a consumer threads them, measurably change what the decoder
  * delivers on the conformance clip (keyframes only, so far fewer frames than the full decode).
  */

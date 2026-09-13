@@ -6,7 +6,7 @@ import io.github.yuroyami.kiteffmpeg.CodecId
 import io.github.yuroyami.kiteffmpeg.HardwareAccel
 
 /**
- * The Apple native axis is VideoToolbox (S2.b): an
+ * The Apple native axis is VideoToolbox: an
  * HWACCEL behind the ordinary decoders, eligible for exactly the codecs whose hwaccels the
  * FFmpeg build carries. Whether THIS machine honours the attach is FFmpeg's runtime answer, and
  * a refusal is one more cause the measured fallback path already handles.

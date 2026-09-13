@@ -57,7 +57,7 @@ class DecoderFallbackTest {
     }
 
     /**
-     * The S2.b arm, found red by the first VideoToolbox matrix run (tsoffset1400.ts): an hwaccel
+     * The head-replay arm, found red by the first VideoToolbox matrix run (tsoffset1400.ts): an hwaccel
      * attach succeeds cheaply and the hardware then refuses the very FIRST send, before any
      * output exists. Before the first confirmation the retained window still holds every packet
      * since open, so falling back and replaying from the head is complete and safe; failing
@@ -129,7 +129,7 @@ class DecoderFallbackTest {
 
     @Test
     fun flaglessOutputsReleaseTheWindowBeforeTheCap() = runTest {
-        // The A3 device shape: keyframed 8 MiB packets, outputs never flagged. Without the
+        // The shape a measured Android device run showed: keyframed 8 MiB packets, outputs never flagged. Without the
         // timestamp confirmation the window kept every packet, hit the 16 MiB cap mid-file and
         // failed terminally with no seek to save it.
         val flagless: (TestPacket) -> List<FrameSpec> = { packet ->

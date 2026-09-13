@@ -12,7 +12,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.readBytes
 
 /**
- * What a GPU renderer needs from a frame, in the backend's own words (S2.c). The output module
+ * What a GPU renderer needs from a frame, in the backend's own words. The output module
  * defines the renderer seam and never sees this backend; a consumer that owns both maps these
  * two answers onto it in a handful of lines. The memcpy discipline lives HERE, once: a hardware
  * frame crosses as its CVPixelBuffer with no copy at all, and a software frame crosses as its

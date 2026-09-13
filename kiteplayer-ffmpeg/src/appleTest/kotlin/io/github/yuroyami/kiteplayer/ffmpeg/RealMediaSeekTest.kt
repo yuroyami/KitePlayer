@@ -111,13 +111,13 @@ class RealMediaSeekTest {
             }
             // Waited for with a bound, and this is the whole correction. `seek` returning does not mean
             // the event announcing it has reached a collector on another dispatcher, so the twentieth
-            // completion can still be in flight when the last `seek` returns. Measured during the B1
+            // completion can still be in flight when the last `seek` returns. Measured during a
             // closing gate: this assertion failed once with "19 of 20" in a full-suite run under load,
             // and passed eight out of eight times when the test ran alone, which is the signature of a
             // delivery race and not of a lost event. The wait does not weaken the assertion by one bit:
             // it still requires exactly SEEKS completions, and a player that really emitted nineteen
-            // fails the same way five seconds later. The file itself is untouched by B1; the race dates
-            // from A5, and a faster seek return only makes it easier to see.
+            // fails the same way five seconds later. The file itself was untouched by that work; the
+            // race is older, and a faster seek return only makes it easier to see.
             withTimeoutOrNull(5.seconds) {
                 while (completions.value < SEEKS) delay(5.milliseconds)
             }

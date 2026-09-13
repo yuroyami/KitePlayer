@@ -12,7 +12,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Typed filter attachment on open (S4.e): a chain set on the source runs every decoded frame
+ * Typed filter attachment on open: a chain set on the source runs every decoded frame
  * through KiteFFmpeg's graph, built lazily from the first frame's own geometry; hardware stands
  * down for it with a warning under Auto. Real media, so this runs where the matrix runs.
  */

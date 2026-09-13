@@ -14,7 +14,7 @@ public object SoftwareConverter {
     /**
      * Converts [frame] to `width * height * 4` RGBA bytes with no row padding.
      *
-     * A VideoToolbox frame converts through its downloaded software twin (S2.b), one measured
+     * A VideoToolbox frame converts through its downloaded software twin, one measured
      * copy per frame, which is exactly what HardwareWithDownload reports upstream. Hardware
      * kinds that cannot be read back still refuse inside [KiteFFmpegVideoFrame.readableFrame].
      */

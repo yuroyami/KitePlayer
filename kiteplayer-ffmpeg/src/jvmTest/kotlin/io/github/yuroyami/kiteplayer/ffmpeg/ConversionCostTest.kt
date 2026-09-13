@@ -12,8 +12,8 @@ import kotlin.test.assertEquals
 /**
  * The REAL baseline for the conversion cost, not the mirror the shader benchmark used.
  *
- * It lives here because `tightlyPackedToRgba` is internal to this module, and W.4's 9.4 ms was
- * measured through a whole draw phase under load. This times the function itself, so the next
+ * It lives here because `tightlyPackedToRgba` is internal to this module, and the earlier 9.4 ms
+ * was measured through a whole draw phase under load. This times the function itself, so the next
  * decision rests on the function's own number.
  *
  * Not an assertion, a measurement: it prints and always passes. Run it with
@@ -60,7 +60,7 @@ class ConversionCostTest {
     }
 
     /**
-     * The SPLIT of what W.4 measured as one 9.4 ms number, on a real decoded frame.
+     * The SPLIT of what was first measured as one 9.4 ms number, on a real decoded frame.
      *
      * `SoftwareConverter.toRgba` is two costs stacked: a JNI copy of the packed planes out of
      * native memory, and the conversion loop over them. Optimising the wrong one buys nothing, so

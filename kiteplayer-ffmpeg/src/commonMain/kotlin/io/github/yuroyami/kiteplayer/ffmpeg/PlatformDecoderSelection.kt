@@ -7,7 +7,7 @@ import io.github.yuroyami.kiteffmpeg.HardwareAccel
 
 /**
  * How a platform reaches its hardware decoder, because FFmpeg has two shapes and they open
- * differently (S2.b). A [NamedDecoder] IS the hardware path under its own decoder name
+ * differently. A [NamedDecoder] IS the hardware path under its own decoder name
  * (`h264_mediacodec`); an [Accel] is an HWACCEL attached behind the ordinary decoder before open
  * (VideoToolbox). The policy table below cares only about [kind]; the factory cares which shape
  * it must hand to KiteFFmpeg.

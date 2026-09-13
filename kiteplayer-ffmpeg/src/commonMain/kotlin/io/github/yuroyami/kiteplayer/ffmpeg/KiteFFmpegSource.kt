@@ -76,7 +76,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
         val source = mappingFFmpegRuntimeRejection {
             KiteFFmpegSource(
                 when {
-                    // M1, the custom AVIO bridge: an item's own byte reader carries the media.
+                    // The custom AVIO bridge: an item's own byte reader carries the media.
                     io != null -> MediaSource.open(BlockingMediaIo(io), options)
                     options.isEmpty() -> MediaSource.open(media.uri)
                     else -> MediaSource.open(media.uri, options)
@@ -167,7 +167,7 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
     /**
      * The container's chapters, empty only when the file declares none.
      *
-     * Mapped from the container's own table (S4.b, KD-5). KiteFFmpeg reports ABSOLUTE microsecond
+     * Mapped from the container's own table. KiteFFmpeg reports ABSOLUTE microsecond
      * bounds; the engine's timeline starts at zero, so the same mapper every timestamp crosses
      * moves them, and a chapter whose start maps before zero is clamped rather than dropped.
      */
@@ -247,11 +247,11 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
                 "Pass a stream from this source's own stream list.",
         )
 
-    /** KD-6: the backend's profile knobs, applied to every VIDEO decoder opened here. */
+    /** The backend's profile knobs, applied to every VIDEO decoder opened here. */
     internal var videoDecoderOptions: Map<String, String> = emptyMap()
     internal var videoLowDelay: Boolean = false
 
-    /** S4.e: the media item's compiled KD-1 video filter chain, or null for none. */
+    /** The media item's compiled video filter chain, or null for none. */
     internal var videoFilterDescription: String? = null
 
     /**
@@ -264,7 +264,7 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
      */
     internal var preferPlatformAudioDecoder: Boolean = true
 
-    /** S4.e: the pre-open keys the demuxer never consumed, straight from KiteFFmpeg's funnel. */
+    /** The pre-open keys the demuxer never consumed, straight from KiteFFmpeg's funnel. */
     internal val unusedOpenOptions: List<String> get() = source.unusedOpenOptions
 
     internal fun openDecoder(
@@ -307,7 +307,7 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
         hardware = hardware,
         continuity = continuity,
         warn = { onWarning(it) },
-        // The graph runs on software frames only; the factory stands hardware down first (S4.e).
+        // The graph runs on software frames only; the factory stands hardware down first.
         filterDescription = if (hardware == HwdecStatus.Software) videoFilterDescription else null,
     )
 
@@ -528,7 +528,7 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
         val selection = platformDecoderSelection(stream.codec, hwdec)
         if (selection.requiresHardware && selection.hardware == null) return null
 
-        // A video filter runs on software frames (S4.e): under Auto and Prefer the hardware
+        // A video filter runs on software frames: under Auto and Prefer the hardware
         // route stands down with a warning; under Require the two demands cannot both hold and
         // the refusal is this factory's null, which the engine reports typed.
         if (source.videoFilterDescription != null && selection.hardware != null) {
@@ -553,9 +553,9 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
                     stream = stream,
                     decoder = (route as? HardwareRoute.NamedDecoder)?.decoder,
                     hardwareAccel = (route as? HardwareRoute.Accel)?.accel,
-                    // HardwareWithDownload is the honest S2.b status for BOTH shapes: mediacodec
+                    // HardwareWithDownload is the honest status for BOTH shapes: mediacodec
                     // downloads inside FFmpeg's wrapper, and every current renderer reads a
-                    // VideoToolbox frame through the download twin. S2.c revisits this when the
+                    // VideoToolbox frame through the download twin. This changes when the
                     // Metal renderer makes zero-copy real.
                     hardware = if (route == null) {
                         HwdecStatus.Software
@@ -580,13 +580,13 @@ private class KiteFFmpegVideoDecoder(
     override val hardware: HwdecStatus,
     private val continuity: VideoDecoderContinuity,
     private val warn: (PlaybackWarning) -> Unit,
-    /** S4.e: the compiled KD-1 chain every decoded frame runs through, or null for none. */
+    /** The compiled filter chain every decoded frame runs through, or null for none. */
     private val filterDescription: String? = null,
 ) : VideoDecoder {
 
     private var generation: Generation = Generation.Initial
 
-    /** The graph, built lazily from the FIRST decoded frame's own geometry and format (S4.e). */
+    /** The graph, built lazily from the FIRST decoded frame's own geometry and format. */
     private var filterGraph: io.github.yuroyami.kiteffmpeg.FilterGraph? = null
     private val filteredPending = ArrayDeque<KiteFrame>()
     private var filterFlushed = false
@@ -625,7 +625,7 @@ private class KiteFFmpegVideoDecoder(
     }
 
     /**
-     * The decoder's next frame, run through the attached graph when one is attached (S4.e).
+     * The decoder's next frame, run through the attached graph when one is attached.
      *
      * The graph is built from the first frame's own width, height, format, time base and rate,
      * which is the only honest moment to build it: the container's declared parameters can lie
@@ -917,7 +917,7 @@ public class KiteFFmpegVideoFrame internal constructor(
 
     /**
      * The software twin of a VideoToolbox frame, downloaded ONCE on first need and owned by this
-     * wrapper (S2.b). Lazy on purpose: a newest-wins renderer supersedes most frames without ever
+     * wrapper. Lazy on purpose: a newest-wins renderer supersedes most frames without ever
      * reading pixels, and an eager download would pay 3 to 25 MB of copying for every one of
      * them. A renderer that can draw the CVPixelBuffer itself never triggers this.
      */

@@ -7,9 +7,9 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The 17.5 matrix on a real Android runtime (S1.e.4). Same table, same runner; only where the
- * clips live differs. Rows are logged to logcat under the MATRIX tag so the run leaves the
- * transcript the plan's exit criteria quote.
+ * The format matrix on a real Android runtime. Same table, same runner; only where the
+ * clips live differs. Rows are logged to logcat under the MATRIX tag so the run leaves a
+ * transcript to quote.
  */
 class FormatMatrixDeviceTest {
 

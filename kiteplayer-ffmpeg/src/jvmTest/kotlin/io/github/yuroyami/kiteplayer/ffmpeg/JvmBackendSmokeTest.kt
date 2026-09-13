@@ -5,8 +5,8 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The one-line proof that the desktop JVM has a REAL backend, not the placeholder it carried
- * until phase W.
+ * The one-line proof that the desktop JVM has a REAL backend, not the placeholder it once
+ * carried.
  *
  * It is deliberately separate from the matrix: if the JNI library ever stops loading, this fails
  * with the identity's own refusal message instead of twenty-seven confusing matrix rows.

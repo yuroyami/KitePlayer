@@ -32,19 +32,19 @@ public class KiteFFmpegMediaBackend(
     private val onWarning: (PlaybackWarning) -> Unit = {},
     /**
      * Decoder configuration as `av_opt_set` strings, applied to every video decoder this backend
-     * opens (KD-6). `PlaybackProfile.decoderOptions` is the intended producer; a
+     * opens. `PlaybackProfile.decoderOptions` is the intended producer; a
      * wrong key fails the decoder open with the funnel's own typed error.
      */
     private val decoderOptions: Map<String, String> = emptyMap(),
-    /** Open video decoders in low-delay shape (KD-6's LowLatency profile). */
+    /** Open video decoders in low-delay shape (the LowLatency profile). */
     private val lowDelayDecode: Boolean = false,
 ) : MediaBackend {
 
-    /** KD-7's echo: the option pairs exactly as configured, printed by the diagnostics dump. */
+    /** The option pairs exactly as configured, printed by the diagnostics dump. */
     override fun describeForDiagnostics(): String =
         "KiteFFmpegMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
-    /** External subtitle files (S4.e, ASS since 17.12 M2): the pure parsers this module ships. */
+    /** External subtitle files, ASS included: the pure parsers this module ships. */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
         io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, vttHint ->
             when {
@@ -70,11 +70,11 @@ public class KiteFFmpegMediaBackend(
         val source = mappingFFmpegRuntimeRejection {
             KiteFFmpegSource(
                 when {
-                    // M1, the custom AVIO bridge: the item's own byte reader carries the media,
+                    // The custom AVIO bridge: the item's own byte reader carries the media,
                     // demuxed by FFmpeg with no path and no FFmpeg protocol involved.
                     io != null -> MediaSource.open(BlockingMediaIo(io), options)
                     options.isEmpty() -> MediaSource.open(media.uri)
-                    // KD-4's pre-open funnel. Unconsumed keys are reported by KiteFFmpeg rather
+                    // The pre-open funnel. Unconsumed keys are reported by KiteFFmpeg rather
                     // than dropped, so a typo surfaces instead of quietly doing nothing.
                     else -> MediaSource.open(media.uri, options)
                 },
@@ -82,7 +82,7 @@ public class KiteFFmpegMediaBackend(
         }
         source.onWarning = onWarning
         source.videoFilterDescription = media.videoFilter
-        // The option echo's honest half (S4.e): a key the demuxer never consumed did nothing,
+        // The option echo's honest half: a key the demuxer never consumed did nothing,
         // and the caller hears that once, typed, instead of discovering it by measurement.
         if (source.unusedOpenOptions.isNotEmpty()) {
             onWarning(PlaybackWarning.OptionsUnused(source.unusedOpenOptions))
@@ -98,8 +98,8 @@ public class KiteFFmpegMediaBackend(
  *
  * The lists come from the source itself, because a KiteFFmpeg decoder is opened against the very
  * container context the packets are read from. The subtitle factory decodes the TEXT formats
- * (SubRip, WebVTT, and ASS at the M2 dialogue tier) over the packet path with no C involved
- * (S4.c); bitmap formats still need a real engine, and a stream the factory refuses is
+ * (SubRip, WebVTT, and ASS at the dialogue tier) over the packet path with no C involved;
+ * bitmap formats still need a real engine, and a stream the factory refuses is
  * deselected by the engine rather than failing the open.
  */
 private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) : BackendSession {

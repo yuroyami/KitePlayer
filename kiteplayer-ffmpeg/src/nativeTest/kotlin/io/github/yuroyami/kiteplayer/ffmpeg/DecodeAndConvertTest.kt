@@ -67,7 +67,7 @@ class DecodeAndConvertTest {
     /**
      * Opens a source with only its video stream selected, and decodes the first frame.
      *
-     * Hwdec is OFF deliberately (S2.b): this suite's subject is the SOFTWARE pixel path, plane
+     * Hwdec is OFF deliberately: this suite's subject is the SOFTWARE pixel path, plane
      * layouts included, and Auto now selects VideoToolbox on Apple, whose frames are opaque.
      */
     private suspend fun firstVideoFrame(file: String): Pair<KiteFFmpegSource, KiteFFmpegVideoFrame> {

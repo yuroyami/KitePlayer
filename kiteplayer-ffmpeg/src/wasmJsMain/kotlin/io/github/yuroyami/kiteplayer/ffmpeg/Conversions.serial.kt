@@ -4,7 +4,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
  * The web has one thread, so the "parallel" slices are one slice.
  *
  * Not a stub and not a regression to hide: the threaded web artifact needs `SharedArrayBuffer`,
- * which needs COOP and COEP headers on whoever embeds the player, and the S6 spike proved the
+ * which needs COOP and COEP headers on whoever embeds the player, and the web spike proved the
  * module HANGS rather than erroring without them. A default artifact that cannot be embedded is
  * worse than one that converts serially.
  *

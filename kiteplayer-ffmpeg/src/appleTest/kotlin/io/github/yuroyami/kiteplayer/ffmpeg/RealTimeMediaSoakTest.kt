@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 /**
  * The whole shipped audio path, on a real device, with real media, for as long as the gate asks.
  *
- * This is the other half of assertion 3 of plan section 15.2 B1.8. The half in
+ * This is the other half of the third real-time assertion. The half in
  * `kiteplayer-output`'s `RealTimeSoakTest` holds the callback's own instruments and its negative control,
  * because that module can see the sink's counters; this one holds the real decoder, the real conversion
  * stage, the real backpressure and the real clock, because this is the only module where FFmpeg, the

@@ -53,7 +53,7 @@ public object SoftwareConverter {
         val height = frame.size.height
         require(width > 0 && height > 0) { "frame has no dimensions: ${width}x$height" }
 
-        // A VideoToolbox frame converts through its downloaded software twin (S2.b): the twin
+        // A VideoToolbox frame converts through its downloaded software twin: the twin
         // carries the REAL pixel format (nv12) where the wrapper honestly says Opaque, and
         // av_frame_copy_props preserved the colour metadata, so the wrapper's colorSpace holds.
         // Hardware kinds that cannot be read back refuse inside readableFrame.
@@ -85,7 +85,7 @@ public object SoftwareConverter {
                     "renderer, and an unusual software format needs a filter graph first.",
             )
         }
-        // The software half of the HDR-to-SDR law (17.12 M3), the same hook the packed common
+        // The software half of the HDR-to-SDR law, the same hook the packed common
         // path runs: this converter used to skip it, so the same public API
         // returned washed-out pixels here and tone-mapped ones on the JVM. SDR frames answer
         // null and stay bit-exact.

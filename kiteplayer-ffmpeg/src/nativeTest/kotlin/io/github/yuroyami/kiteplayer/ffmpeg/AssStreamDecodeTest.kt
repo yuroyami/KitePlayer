@@ -11,7 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The Kotlin ASS dialogue tier end to end (17.12 M2): a real Matroska ASS track opens, the
+ * The Kotlin ASS dialogue tier end to end: a real Matroska ASS track opens, the
  * factory accepts it (it refused ASS until this tier), the header rides the codec extradata,
  * and packets decode into styled text cues over the packet path with no C engine involved.
  */

@@ -167,7 +167,7 @@ class CompileKiteRtTaskTest {
         assertContains(flags, "-fvisibility=hidden")
         assertContains(flags, "-Werror")
         // A variable length array on a real-time path is an allocation no symbol audit would show,
-        // and B1.8's render audit relies on this flag being in force for the shipped archive too.
+        // and the render audit relies on this flag being in force for the shipped archive too.
         assertContains(flags, "-Werror=vla")
         assertContains(flags, "-fPIC")
     }
@@ -332,7 +332,7 @@ class CompileKiteRtTaskTest {
 
     @Test
     fun `a Windows shaped dependencies tree resolves clang and llvm-ar by their exe names`() {
-        // Interlude item I-20. A Windows konan package ships clang.exe and llvm-ar.exe, and the
+        // A Windows konan package ships clang.exe and llvm-ar.exe, and the
         // review measured File("bin/clang").canExecute() false against a Windows shaped tree, so
         // every candidate was rejected and the windows-x64 CI job could not pass. Resolution now
         // tries the bare name and then the .exe name.
@@ -349,7 +349,7 @@ class CompileKiteRtTaskTest {
 
     @Test
     fun `the Android toolchain package is named after the build host`() {
-        // Interlude item I-20. The sysroot path hardcoded the osx infix, and on an Ubuntu runner
+        // The sysroot path hardcoded the osx infix, and on an Ubuntu runner
         // the osx package never exists, so the C compile threw before cinterop and the three
         // android CI jobs could not pass. The infix now follows the host, the way konan's own
         // konan.properties names the packages.

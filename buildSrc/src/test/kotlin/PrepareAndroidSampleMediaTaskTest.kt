@@ -10,7 +10,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * S1.c.6 step 3's pins: missing input, byte equality, rerun after a content change, and no
+ * The copy task's guarantees: missing input, byte equality, rerun after a content change, and no
  * partial destination after an injected failure. The SHA line is a lifecycle log, proved by the
  * digest of the copied bytes matching the source rather than by scraping logger output.
  */

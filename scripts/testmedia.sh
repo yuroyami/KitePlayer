@@ -299,7 +299,7 @@ ffmpeg -v error -y \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -shortest soak30min.mp4
 
 # ---------------------------------------------------------------------------------------------
-# The 17.5 format conformance matrix, grown once at S1.e. Every clip below is a matrix row; the
+# The format conformance matrix. Every clip below is a matrix row; the
 # table itself is FormatMatrix.kt in kiteplayer-ffmpeg. Small and short on purpose: the matrix
 # proves formats open, decode, seek and close, not that they look good for minutes.
 # ---------------------------------------------------------------------------------------------

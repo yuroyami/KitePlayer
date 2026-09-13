@@ -92,8 +92,8 @@ include(":kiteplayer-compose-ui")
 // The legacy phone API remains available; Compose is the complete runtime + UI entry point.
 include(":kiteplayer-phone")
 include(":kiteplayer-compose")
-include(":kiteplayer-libass")        // optional full ASS renderer (phase L, owner-pulled 2026-08-16)
-// Ktor byte suppliers and the Kotlin adaptive layer (17.12 M1's network half): https with the
+include(":kiteplayer-libass")        // optional full ASS renderer
+// Ktor byte suppliers and the Kotlin adaptive layer: https with the
 // OS supplying TLS, and DASH manifests parsed in commonMain. Optional; pure Kotlin.
 include(":kiteplayer-network")
 include(":kiteplayer-audioviz")     // optional audio visualiser for media with no picture

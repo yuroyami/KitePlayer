@@ -11,7 +11,7 @@ plugins {
     alias(libs.plugins.vanniktech.publish).apply(false)
     alias(libs.plugins.kotlin.multiplatform).apply(false)
     alias(libs.plugins.android.kmp.library).apply(false)
-    // The plain application plugin, for :kiteplayer-sample-android only (S1.c.6 step 1).
+    // The plain application plugin, for :kiteplayer-sample-android only.
     alias(libs.plugins.android.application).apply(false)
     // Shared by the native-view interop and true Compose-rendering artifacts. The complete
     // :kiteplayer-compose umbrella applies neither plugin because it only re-exports them.

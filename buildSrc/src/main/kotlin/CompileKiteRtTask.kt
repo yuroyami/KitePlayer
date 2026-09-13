@@ -22,9 +22,9 @@ import javax.inject.Inject
  * picks it up through the `staticLibraries = libkiteplayerrt.a` line of `kitert.def` plus a
  * `-libraryPath` pointing here.
  *
- * **This is a deliberate copy of KiteFFmpeg's `CompileKiteFFmpegCTask`, not a shared class.** Plan
- * section 15.2 B1.7 step 1 states the rule: "the same shape as KiteFFmpeg's, and the two must not be
- * shared across repositories". KiteFFmpeg is a public FFmpeg binding and KitePlayer is a private
+ * **This is a deliberate copy of KiteFFmpeg's `CompileKiteFFmpegCTask`, not a shared class.** The
+ * rule is "the same shape as KiteFFmpeg's, and the two must not be shared across repositories".
+ * KiteFFmpeg is a public FFmpeg binding and KitePlayer is a private
  * player. Sharing the build task would make one a build dependency of the other, in the direction
  * that turns KitePlayer's real-time audio core into a transitive consequence of a codec dependency,
  * which is the same argument that put the ring in `kiteplayer-rt` rather than in `kitecodec-c`. The
@@ -271,7 +271,7 @@ abstract class CompileKiteRtTask @Inject constructor(
          *    warning nobody reads.
          *  - `-Werror=vla` because a variable length array on a real-time path is a stack overflow
          *    waiting for a large frame count, and it is an allocation no symbol audit would show.
-         *    B1.8's render audit depends on this flag being in force here as well as in the host
+         *    The render audit depends on this flag being in force here as well as in the host
          *    build, so it is not a host-only nicety.
          */
         val COMPILER_FLAGS: List<String> = listOf(
@@ -293,8 +293,8 @@ abstract class CompileKiteRtTask @Inject constructor(
          * All 17 were measured on this host by compiling `native/src/kite_rt_ring.c` itself, not a
          * placeholder translation unit: every row produced an object, and none of them needed a
          * `__atomic_*` library call, which was checked because the ring uses 64 bit atomics and four
-         * of these targets are 32 bit. Compiling is level 7 evidence in the terms of plan section 2
-         * and says nothing about behaviour on any of these targets.
+         * of these targets are 32 bit. Compiling proves only that each target builds, and says
+         * nothing about behaviour on any of them.
          *
          * Two traps are worth naming rather than rediscovering. The Android sysroot has to come
          * from the `target-toolchain-*-android_ndk` package, not from `target-sysroot-*-android_ndk`,
@@ -304,8 +304,8 @@ abstract class CompileKiteRtTask @Inject constructor(
          * ordinary 64 bit `arm64`.
          */
         /*
-         * A NEW TARGET'S POINTER WIDTH MUST BE CHECKED against kprt_ring_create's byte-count guard
-         * (interlude item I-01): the guard bounds the PRODUCT against SIZE_MAX, and three
+         * A NEW TARGET'S POINTER WIDTH MUST BE CHECKED against kprt_ring_create's byte-count guard:
+         * the guard bounds the PRODUCT against SIZE_MAX, and three
          * _Static_asserts beside it prove the arithmetic at each width the seventeen current targets
          * have. A width neither 32 nor 64 bit would fail those asserts at compile time, which is the
          * check working; extend the asserts with the new width's expectation rather than deleting them.
@@ -351,8 +351,8 @@ abstract class CompileKiteRtTask @Inject constructor(
          * instead fails with `'stdlib.h' file not found`.
          */
         /**
-         * Resolves a konan LLVM tool by its bare name and then by its `.exe` name (interlude item
-         * I-20): a Windows konan package ships `clang.exe`, so `File("bin/clang").canExecute()`
+         * Resolves a konan LLVM tool by its bare name and then by its `.exe` name: a Windows konan
+         * package ships `clang.exe`, so `File("bin/clang").canExecute()`
          * is false there and every candidate used to be rejected. Null when neither exists.
          */
         internal fun resolveTool(binDir: File, name: String): File? =
@@ -362,8 +362,8 @@ abstract class CompileKiteRtTask @Inject constructor(
          * The konan HOST infix, the word konan itself uses to name per-host dependency packages:
          * the authoritative konan.properties reads `targetToolchain.linux_x64-android_arm64 =
          * target-toolchain-2-linux-android_ndk` and `targetToolchain.mingw_x64-... =
-         * target-toolchain-2-windows-...` beside the osx one. Hardcoding `osx` here was interlude
-         * item I-20: on an Ubuntu or Windows runner the osx package never exists, so the C compile
+         * target-toolchain-2-windows-...` beside the osx one. Hardcoding `osx` here was a bug:
+         * on an Ubuntu or Windows runner the osx package never exists, so the C compile
          * threw before cinterop and four CI jobs could not pass. Parameterised on the os.name so a
          * test can drive every host shape from one machine.
          */

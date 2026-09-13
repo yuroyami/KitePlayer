@@ -3,7 +3,7 @@
 #
 # Why this and not a probe: an earlier run proved the jar's Linux JNI library LOADS (identity acceptable,
 # h264 and hevc present). Nothing had DECODED on Linux through the JVM path, while macOS runs all
-# 27 rows of the 17.5 matrix. A hand-written decode probe would be a second, weaker definition of
+# 27 rows of the format matrix. A hand-written decode probe would be a second, weaker definition of
 # "plays all formats", so this ships the real suite instead: same FormatMatrixTest, other kernel.
 #
 #   ./scripts/linux-jvm-tests.sh                 # linux/arm64, native speed on Apple silicon

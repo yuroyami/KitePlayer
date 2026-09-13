@@ -4,8 +4,8 @@ import io.github.yuroyami.kiteplayer.network.xml.XmlElement
 import io.github.yuroyami.kiteplayer.network.xml.XmlMini
 
 /**
- * A DASH MPD parsed in pure commonMain Kotlin (the un-parked D-4 work; libxml2's verdict was
- * NEVER). The model keeps what segment resolution needs and nothing else:
+ * A DASH MPD parsed in pure commonMain Kotlin, because libxml2 was refused as a dependency.
+ * The model keeps what segment resolution needs and nothing else:
  * periods, adaptation sets, representations, the three segment addressing forms (template
  * with number or timeline, and an explicit list), and BaseURL chains.
  *

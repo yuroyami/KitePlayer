@@ -50,13 +50,13 @@ internal actual fun kiteCodecFrameToRgba(frame: VideoFrame): ByteArray {
     // route from a CVPixelBuffer to bytes. Software planes used to ride the same path, which
     // was upload plus readback plus Skia's re-upload for pixels the CPU converter produces in
     // ONE pass with the same arithmetic (the shader is written to match it), tone mapping
-    // included since M3. The GPU roundtrip for software frames was strictly waste.
+    // included. The GPU roundtrip for software frames was strictly waste.
     val reader = GpuFrameReader.reader
     if (reader != null) {
         val hardware = decoded.corePixelBufferOrNull()
             ?.let { io.github.yuroyami.kiteplayer.output.MetalPicture.CorePixelBuffer(it) }
         // toneMapped: this is the DISPLAY path, so an HDR CVPixelBuffer reads back as the SDR
-        // the viewer should see (M3's law); SDR frames stay bit-exact through the same flag.
+        // the viewer should see (the tone-mapping rule); SDR frames stay bit-exact through the same flag.
         if (hardware != null) return reader.readRgba(frame, hardware, toneMapped = true)
     }
     return SoftwareConverter.toRgba(decoded)

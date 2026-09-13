@@ -84,7 +84,7 @@ public object SubRipParser {
 
     /**
      * Parses ONE cue's body, the shape a Matroska SubRip track's packets carry: the text alone,
-     * timing already on the packet (S4.c). Same markup rules as whole-file parsing.
+     * timing already on the packet. Same markup rules as whole-file parsing.
      */
     public fun parseCueBody(body: String): List<StyledSpan> =
         InlineMarkup.parse(body.trim()).decodeSpanEntities()

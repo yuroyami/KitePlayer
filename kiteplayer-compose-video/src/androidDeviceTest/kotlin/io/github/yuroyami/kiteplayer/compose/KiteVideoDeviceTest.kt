@@ -27,7 +27,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The measured KiteVideo run of the 17.4.6 rider (A3): real playback, hardware-decoded through
+ * The measured KiteVideo run on a device: real playback, hardware-decoded through
  * the renderer-coupled MediaCodec/OES bridge, presented through Compose's own pipeline under a
  * clip and a rotation. The KV4-tagged logcat lines name the device and the applied performance
  * profile. Emulator numbers remain provisional; the tighter physical profile is device evidence.

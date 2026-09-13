@@ -13,7 +13,7 @@ import kotlin.test.assertNull
  * protocol list is `file` and nothing else. https plays because media bytes never reach FFmpeg's
  * protocol layer at all, arriving instead through the custom AVIO bridge from this reader, whose
  * engine on the web is `fetch`. So the browser terminates TLS, exactly as the OS does on every
- * other target, and D-7's "no vendored crypto" verdict costs the web nothing.
+ * other target, and the "no vendored crypto" rule costs the web nothing.
  *
  * What is checked is the WIRING, not the network: that an engine exists to be selected at all, and
  * that the resolver claims the schemes it should. Ktor's no-argument `HttpClient()` throws when no

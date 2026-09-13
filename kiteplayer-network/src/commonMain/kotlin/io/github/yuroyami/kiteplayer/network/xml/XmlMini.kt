@@ -1,10 +1,9 @@
 package io.github.yuroyami.kiteplayer.network.xml
 
 /**
- * The smallest XML reader that parses real DASH manifests (the un-parked D-4
- * work): elements, attributes, text, CDATA, comments and character entities, in pure
- * commonMain with zero dependencies, exactly as decision D-7's Kotlin-first rule wants
- * (libxml2's verdict was NEVER).
+ * The smallest XML reader that parses real DASH manifests: elements, attributes, text,
+ * CDATA, comments and character entities, in pure commonMain with zero dependencies,
+ * exactly as the Kotlin-first rule wants (libxml2 was refused as a dependency).
  *
  * Deliberately NOT a general XML processor: namespaces are handled by stripping prefixes
  * (DASH manifests are single-namespace in practice), DOCTYPE internal subsets are skipped

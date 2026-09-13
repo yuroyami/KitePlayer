@@ -6,7 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * SEC-2: an MPD is attacker-supplied input, and the player fetched whatever it named with the
+ * An MPD is attacker-supplied input, and the player once fetched whatever it named with the
  * CALLER'S HttpClient, cookie jar included.
  *
  * The old rule was one line: `reference.contains("://") -> reference`. Anything with those three

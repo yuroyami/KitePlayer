@@ -41,7 +41,7 @@ import kotlin.test.assertTrue
  * The adaptive layer's first tier, executed whole: a REAL transport stream is cut into REAL
  * segments behind a REAL local HTTP server, described by an MPD this module's own XML parser
  * reads, fetched by Ktor in plan order, and demuxed by REAL FFmpeg across every segment
- * boundary as one stream. This is the media3 shape D-4's un-parking chose: Kotlin segment
+ * boundary as one stream. This is the media3 shape chosen here: Kotlin segment
  * logic feeding the decoder, never FFmpeg's dash demuxer.
  */
 class DashEndToEndTest {

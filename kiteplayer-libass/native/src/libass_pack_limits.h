@@ -2,7 +2,7 @@
  * The size arithmetic of the packed subtitle buffer, in a header so a host test can compile it
  * without jni.h and without libass.
  *
- * SEC-1: region dimensions come out of the subtitle file, which is untrusted input. The packed
+ * Region dimensions come out of the subtitle file, which is untrusted input. The packed
  * buffer's total was accumulated with no check at all, and `size_t` is 32 bit on armeabi-v7a and
  * x86, so a large enough cue wrapped the total, under-allocated, and the fill loop then wrote the
  * full un-wrapped amount past the end of the heap block.

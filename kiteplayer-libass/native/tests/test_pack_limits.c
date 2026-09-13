@@ -1,5 +1,5 @@
 /*
- * SEC-1: a subtitle must not be able to overflow the heap through the packed-buffer arithmetic.
+ * A subtitle must not be able to overflow the heap through the packed-buffer arithmetic.
  *
  * `libass_jni.c` accumulated the buffer size with no check. On armeabi-v7a and x86 `size_t` is 32
  * bit, so a large enough cue wrapped the total, `malloc` under-allocated, and the fill loop wrote

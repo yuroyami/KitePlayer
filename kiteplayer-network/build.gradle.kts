@@ -7,13 +7,13 @@ plugins {
 
 /*
  * :kiteplayer-network is the Ktor half of the custom AVIO bridge plus the
- * Kotlin adaptive layer's manifest parsing (the un-parked D-4 work): a MediaIoResolver that
+ * Kotlin adaptive layer's manifest parsing: a MediaIoResolver that
  * makes http and https play with the OS supplying TLS (OkHttp on Android and the JVM,
  * NSURLSession on Apple, the browser itself on the web), and a zero-dependency DASH manifest
  * parser in commonMain.
  *
  * Optional by construction: an app that plays files only never depends on this module and
- * ships no Ktor. Pure Kotlin throughout; decision D-7's no-new-native-libraries rule is not
+ * ships no Ktor. Pure Kotlin throughout; the no-new-native-libraries rule is not
  * even approached.
  */
 kotlin {
@@ -44,7 +44,7 @@ kotlin {
         nodejs()
         binaries.library()
     }
-    // The web (17.14). Ktor's js engine issues `fetch`, so the BROWSER terminates TLS: the same
+    // The web. Ktor's js engine issues `fetch`, so the BROWSER terminates TLS: the same
     // arrangement every other target has, with the one TLS implementation nobody has to maintain.
     // It is also the target where https matters most, since loading media over the network is
     // what a web player does.
@@ -112,7 +112,7 @@ kotlin {
         val macosArm64Test = getByName("macosArm64Test")
         macosArm64Test.dependencies {
             // The end-to-end proof: real FFmpeg demuxes real bytes served by a real local
-            // HTTP server through the Ktor reader and the M5 cache. Test-only dependency,
+            // HTTP server through the Ktor reader and the byte cache. Test-only dependency,
             // so the shipped module stays backend-free.
             implementation(project(":kiteplayer-ffmpeg"))
         }

@@ -9,7 +9,7 @@ internal actual val platformKitePlayerDefaults: KitePlayerPlatformDefaults =
 
 /**
  * The desktop JVM stack: the FFmpeg backend over KiteFFmpeg's JNI adapter, paired with the
- * SourceDataLine sink and the AWT subtitle rasterizer (phase W).
+ * SourceDataLine sink and the AWT subtitle rasterizer.
  *
  * Availability is answered by FFmpeg's own identity gate rather than by looking for a file. That
  * is the same question the backend will ask at the first open, so a consumer never gets an

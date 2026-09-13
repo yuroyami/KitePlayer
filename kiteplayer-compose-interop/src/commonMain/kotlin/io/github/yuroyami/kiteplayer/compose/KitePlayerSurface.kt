@@ -6,7 +6,7 @@ import androidx.compose.ui.layout.Layout
 import io.github.yuroyami.kiteplayer.KitePlayer
 
 /**
- * The BASELINE Compose path (D-6): the platform player view, wrapped once.
+ * The BASELINE Compose path: the platform player view, wrapped once.
  *
  * On Android this hosts an `io.github.yuroyami.kiteplayer.view.KitePlayerView` through
  * `AndroidView`; on iOS an `io.github.yuroyami.kiteplayer.view.KitePlayerUIView` through

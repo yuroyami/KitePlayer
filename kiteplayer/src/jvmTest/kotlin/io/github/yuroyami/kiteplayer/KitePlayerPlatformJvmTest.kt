@@ -6,7 +6,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The desktop JVM stopped being a placeholder in phase W. It answers Available, and the default
+ * The desktop JVM is no longer a placeholder. It answers Available, and the default
  * stack it builds is a real one, which is what a Compose Desktop consumer gets from one dependency
  * line.
  */

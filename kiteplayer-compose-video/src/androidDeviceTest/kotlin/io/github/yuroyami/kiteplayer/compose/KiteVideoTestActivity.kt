@@ -15,7 +15,7 @@ import java.util.concurrent.CountDownLatch
 
 /**
  * Hosts KiteVideo under real Compose modifiers, because modifiers applying to the video itself
- * is the whole D-6 flagship claim: the picture below is clipped to rounded corners and rotated
+ * is the whole flagship claim: the picture below is clipped to rounded corners and rotated
  * a few degrees by graphicsLayer, with no platform view anywhere.
  */
 internal class KiteVideoTestActivity : ComponentActivity() {

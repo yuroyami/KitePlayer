@@ -6,7 +6,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
- * SEC-6: `parseElement` recursed once per nesting level, so a deep manifest raised
+ * `parseElement` used to recurse once per nesting level, so a deep manifest raised
  * `StackOverflowError`. That is an `Error`, so every `catch (Exception)` in this module missed it
  * and the player crashed instead of refusing.
  */

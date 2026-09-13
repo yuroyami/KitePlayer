@@ -162,7 +162,7 @@ class KtorMediaIoTest {
 
     @Test
     fun aReadAfterCloseRefusesInsteadOfHangingForEver() = runBlocking {
-        // SEC-6. close() cancels the scope, so a later read reached openAt, whose scope.launch
+        // close() cancels the scope, so a later read once reached openAt, whose scope.launch
         // body never ran. Nothing wrote to the pipe and readAvailable suspended FOR EVER: no
         // error, no timeout, no thread to blame. This test would not finish before the fix.
         val bytes = content(4096)

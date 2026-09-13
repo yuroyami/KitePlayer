@@ -4,13 +4,13 @@ package io.github.yuroyami.kiteplayer.subtitle
  * The Kotlin ASS dialogue tier: SubStation Alpha (.ssa) and Advanced
  * SubStation Alpha (.ass) parsed in pure commonMain onto the engine's own cue model.
  *
- * What it maps, per the register: styles and the dialogue-grade override subset. Fonts,
+ * What it maps: styles and the dialogue-grade override subset. Fonts,
  * colours, outline and shadow, positioning (`\pos`, and `\move`'s start point), alignment
  * (`\an` and legacy `\a`), margins, bold, italic, underline, strike-out, and basic fades
  * (`\fad`). Line breaks (`\N`, `\n`, `\h`), style resets (`\r`) and wrap style (`\q`) are
  * honoured; karaoke timing tags are stripped with their text kept; vector drawings (`\p`)
  * are dropped whole. Everything beyond that (rotation, shear, clipping, animated `\t`,
- * `\fade`'s seven-argument form) is phase L's libass module, and unknown override tags are
+ * `\fade`'s seven-argument form) is the optional libass module's job, and unknown override tags are
  * ignored rather than shown.
  *
  * Two entries, one grammar. [parse] takes a whole document, the external-file case.
@@ -261,7 +261,7 @@ private fun parseOverrideText(
                             tag.drop(1).toIntOrNull()?.let { alignment = legacyAlignment(it) }
                         tag.startsWith("pos(") -> parsePair(tag, "pos(")?.let { (x, y) -> posX = x; posY = y }
                         tag.startsWith("move(") -> parsePair(tag, "move(")?.let { (x, y) ->
-                            // The dialogue tier shows the start point; motion is phase L's.
+                            // The dialogue tier shows the start point; motion is libass's job.
                             posX = x; posY = y
                         }
                         tag.startsWith("fad(") -> parsePair(tag, "fad(")?.let { (a, b) ->

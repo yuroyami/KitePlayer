@@ -9,8 +9,8 @@ import kotlinx.atomicfu.atomic
  * What this is not: it is not the draw cost (Compose draws on its own schedule), not a GPU
  * number, and not a device claim when it was measured on an emulator. Failed and superseded
  * frames contribute no sample, so the average is the average of frames a viewer could have
- * seen. These are the numbers 17.9 said would replace its ASSUMED physics; S3's exit re-takes
- * them on real hardware.
+ * seen. These measured numbers replace the ones that were assumed before; real hardware re-takes
+ * them before any device claim.
  */
 public class KiteVideoFrameCost internal constructor(
     public val samples: Long,

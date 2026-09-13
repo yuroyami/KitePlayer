@@ -30,7 +30,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The ownership, validation and publish arms of the KiteVideo renderer (S1.d.3 step 6), with
+ * The ownership, validation and publish arms of the KiteVideo renderer, with
  * the image seam faked so no real bitmap exists anywhere. The frame ledger ends closed-exactly-
  * once in every arm, like its three sibling suites.
  */
@@ -227,7 +227,7 @@ class KiteVideoRendererTest {
             contentHash = hash,
         )
 
-    /** The S2.d overlay arms, the KiteVideo half of S4.c landing 4. */
+    /** The overlay arms: the KiteVideo half of the subtitle overlay work. */
     @Test
     fun anOverlayIsConvertedOncePerHashAndClearedExactlyOnce() = runBlocking {
         val h = Harness()

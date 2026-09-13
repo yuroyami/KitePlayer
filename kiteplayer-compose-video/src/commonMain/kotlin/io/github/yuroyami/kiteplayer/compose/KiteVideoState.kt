@@ -45,7 +45,7 @@ public class KiteVideoState internal constructor(
     )
 
     /**
-     * The newest finished frame. LAW 1 OF 17.9 LIVES HERE: this state is read at exactly one
+     * The newest finished frame. THE DRAW-PHASE RULE LIVES HERE: this state is read at exactly one
      * site, inside the draw phase of [KiteVideo]. Reading it during composition or layout turns
      * every video frame into a recomposition, which is the difference between smooth and
      * slideshow. Writes come from the renderer's worker thread; the snapshot system carries the
@@ -325,7 +325,7 @@ public class KiteVideoState internal constructor(
 
     /**
      * The measured CPU cost of the software path per published frame. On an emulator this is
-     * provisional stage evidence; the numbers that count are re-taken on devices at S3's exit.
+     * provisional evidence; the numbers that count are re-taken on devices.
      */
     public val frameCost: KiteVideoFrameCost get() = videoRenderer.costSnapshot()
 

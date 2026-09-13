@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Two players in one process, proven rather than assumed (S9). A preview beside the main
+ * Two players in one process, proven rather than assumed. A preview beside the main
  * picture, a second stream in a corner, a crossfade someday: nothing in the engine is a
  * singleton except the log, so this should work, and this is the test that says it does.
  */

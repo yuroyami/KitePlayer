@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.IntSize
 import kotlin.math.roundToInt
 
 /**
- * The FLAGSHIP Compose path (D-6, 17.9): video as a true Compose primitive.
+ * The FLAGSHIP Compose path: video as a true Compose primitive.
  *
  * The frames are drawn through Compose's own pipeline, so every Compose modifier applies to the
  * video itself: clip it to a shape, animate its alpha and scale, rotate it, put it in a shared
@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
  * Other states/platforms retain their software or platform-specific fallback.
  *
  * Per frame, the UI tree does nothing: the frame state is read only inside the draw phase, so a
- * new frame invalidates drawing alone, never composition or layout (law 1 of 17.9).
+ * new frame invalidates drawing alone, never composition or layout.
  */
 @Composable
 public fun KiteVideo(state: KiteVideoState, modifier: Modifier = Modifier) {

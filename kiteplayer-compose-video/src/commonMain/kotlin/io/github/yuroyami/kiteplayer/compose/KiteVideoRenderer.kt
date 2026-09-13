@@ -52,8 +52,8 @@ internal class KiteVideoFrame(
 }
 
 /**
- * The subtitle overlay published for [KiteVideo] to draw above the picture (S2.d, carrying
- * S4.c's KiteVideo half): each item keeps its authored position in the OVERLAY's own viewport
+ * The subtitle overlay published for [KiteVideo] to draw above the picture: each item keeps its
+ * authored position in the OVERLAY's own viewport
  * units, and the draw phase scales that viewport onto the component, the same output-space law
  * the Metal renderer obeys.
  */
@@ -75,7 +75,7 @@ internal class KiteVideoOverlay(
  * The renderer that feeds [KiteVideoState]: the fourth instance of the proven newest-wins shape
  * (Apple CALayer, AppKit, Android Surface, now Compose), differing only in where a finished
  * picture goes: not to a platform surface but into snapshot state, whose one reader is the draw
- * phase of [KiteVideo] (law 1 of 17.9).
+ * phase of [KiteVideo].
  *
  * The ownership rules are identical to its three siblings: the frame belongs to this renderer
  * from the moment [present] is called and is closed exactly once, including when superseded,
@@ -83,7 +83,7 @@ internal class KiteVideoOverlay(
  * frame to the worker and returns at once. Only the newest frame is kept, and the displaced one
  * is closed and counted here because nothing else will ever see it.
  *
- * The S1 conversion is honest CPU work (17.9's stated last-resort): RGBA bytes, then one
+ * The software conversion is honest CPU work, and a stated last resort: RGBA bytes, then one
  * ImageBitmap per published frame. The YUV image path replaces that and owns
  * measuring both.
  */
@@ -129,7 +129,7 @@ internal class KiteVideoRenderer(
     }
 
     /**
-     * The render-quality ladder reaches TWO places from here, and it has to reach both (17.21).
+     * The render-quality ladder reaches TWO places from here, and it has to reach both.
      *
      * The scaler is Compose's own: the draw phase enlarges the published image, so the kernel is
      * a `filterQuality` on that one call. Dithering and debanding are not Compose's to do, so
@@ -346,7 +346,7 @@ internal class KiteVideoRenderer(
         }
 
     /**
-     * Converts and publishes the overlay (S2.d). Inline rather than on the worker: cues change
+     * Converts and publishes the overlay. Inline rather than on the worker: cues change
      * about once a second, the images are small, and the engine already calls this off the UI
      * thread. An unchanged contentHash republishes nothing, which keeps a paused picture's draw
      * state untouched.

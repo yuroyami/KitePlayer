@@ -213,7 +213,7 @@ class DashManifestParserTest {
 
     @Test
     fun `a zero timescale is refused typed rather than dividing by it`() {
-        // SEC-6: `duration * 1_000_000 / timescale` ran BEFORE the guard on the next line, so
+        // `duration * 1_000_000 / timescale` once ran BEFORE the guard on the next line, so
         // timescale="0" came out as an uncaught ArithmeticException.
         val mpd = """
             <?xml version="1.0"?>

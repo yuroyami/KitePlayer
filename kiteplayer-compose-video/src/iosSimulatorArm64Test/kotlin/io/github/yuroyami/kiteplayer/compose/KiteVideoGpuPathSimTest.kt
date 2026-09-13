@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 /**
  * The measured exit on the iOS simulator, real media,
  * the platform decoder policy, the production convert and image seams, and the frame cost
- * instrument read at the end. The number lands in the log beside A3's Android software
+ * instrument read at the end. The number lands in the log beside the Android device run's software
  * baseline; simulator numbers are provisional by the standing rule.
  */
 @OptIn(ExperimentalForeignApi::class)

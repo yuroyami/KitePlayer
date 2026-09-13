@@ -106,7 +106,7 @@ public open class KitePlayerView @JvmOverloads constructor(
             } catch (_: IllegalStateException) {
                 // The ordinary teardown order is close-the-player-then-clear-the-view, and a
                 // closed player refuses every command, including this one. Closing already
-                // detached everything, so there is nothing left to undo. Found by the S1.e.2
+                // detached everything, so there is nothing left to undo. Found by the sample
                 // smoke's teardownCompleted key; the same latent throw existed here.
             }
         },

@@ -8,8 +8,8 @@ package io.github.yuroyami.kiteplayer.subtitle
  *
  * - The `WEBVTT` signature line, optionally after a byte order mark, optionally with a trailing
  *   description. A file without it is still read, because files without it exist.
- * - `NOTE`, `STYLE` and `REGION` blocks are skipped whole. Styling by stylesheet is an S4.f
- *   concern, never silently half-applied.
+ * - `NOTE`, `STYLE` and `REGION` blocks are skipped whole. Styling by stylesheet is left
+ *   out, never silently half-applied.
  * - The millisecond separator is a full stop and hours are optional, which the shared timestamp
  *   grammar already accepts.
  * - Cue identifiers (the line before a timing line) are ignored, like SubRip's indices.
@@ -19,7 +19,7 @@ package io.github.yuroyami.kiteplayer.subtitle
  * - Inline `<b>`, `<i>`, `<u>`, `<c>` classes and `<v Speaker>` voice tags: bold, italic and
  *   underline map to styles, the class and voice wrappers contribute their text and drop their
  *   decoration, and timestamps tags (`<00:00:01.000>`, karaoke) are stripped, because painting
- *   karaoke honestly is libass's job (S4.f).
+ *   karaoke honestly is libass's job.
  */
 public object WebVttParser {
 
@@ -69,7 +69,7 @@ public object WebVttParser {
         return cues.sortedBy { it.startMicros }.closingOpenEnds(SubRipParser.OPEN_CUE_DEFAULT_MICROS)
     }
 
-    /** One cue's body from a container track, timing already on the packet (S4.c). */
+    /** One cue's body from a container track, timing already on the packet. */
     public fun parseCueBody(body: String): List<StyledSpan> =
         InlineMarkup.parse(stripVttOnlyTags(body.trim())).decodeSpanEntities()
 

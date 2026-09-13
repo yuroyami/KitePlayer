@@ -117,7 +117,8 @@ jvm() {
 web() {
     gradle :kiteplayer-core:wasmJsNodeTest :kiteplayer-subtitles:wasmJsNodeTest \
         :kiteplayer-output:wasmJsNodeTest :kiteplayer-ffmpeg:wasmJsNodeTest \
-        :kiteplayer-network:wasmJsNodeTest :kiteplayer-libass:wasmJsNodeTest
+        :kiteplayer-network:wasmJsNodeTest :kiteplayer-libass:wasmJsNodeTest \
+        :kiteplayer:wasmJsNodeTest
 }
 linux() {
     run ./scripts/linux-tests.sh

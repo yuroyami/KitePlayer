@@ -159,17 +159,26 @@ final object io.github.yuroyami.kiteplayer/KitePlayerPlatform { // io.github.yur
 final fun (io.github.yuroyami.kiteplayer/PlayerSnapshot).io.github.yuroyami.kiteplayer.session/toMediaSessionState(io.github.yuroyami.kiteplayer/Progress): io.github.yuroyami.kiteplayer.session/MediaSessionState // io.github.yuroyami.kiteplayer.session/toMediaSessionState|toMediaSessionState@io.github.yuroyami.kiteplayer.PlayerSnapshot(io.github.yuroyami.kiteplayer.Progress){}[0]
 final fun io.github.yuroyami.kiteplayer.mobile/mobileBackends(): io.github.yuroyami.kiteplayer/Backends // io.github.yuroyami.kiteplayer.mobile/mobileBackends|mobileBackends(){}[0]
 
-// Targets: [ios]
+// Targets: [ios, wasmJs]
 final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession|null[0]
-    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer){}[0]
-
     final val isAvailable // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.isAvailable|{}isAvailable[0]
         final fun <get-isAvailable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.isAvailable.<get-isAvailable>|<get-isAvailable>(){}[0]
     final val platformToken // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.platformToken|{}platformToken[0]
         final fun <get-platformToken>(): kotlin/Any? // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.platformToken.<get-platformToken>|<get-platformToken>(){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.close|close(){}[0]
+
+    // Targets: [ios]
+    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer){}[0]
+
+    // Targets: [ios]
     final fun setArtwork(platform.UIKit/UIImage?) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.setArtwork|setArtwork(platform.UIKit.UIImage?){}[0]
+
+    // Targets: [wasmJs]
+    constructor <init>(io.github.yuroyami.kiteplayer/KitePlayer, kotlin.js/JsAny? = ...) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.<init>|<init>(io.github.yuroyami.kiteplayer.KitePlayer;kotlin.js.JsAny?){}[0]
+
+    // Targets: [wasmJs]
+    final fun setArtwork(kotlin/String?) // io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession.setArtwork|setArtwork(kotlin.String?){}[0]
 }
 
 // Targets: [ios]

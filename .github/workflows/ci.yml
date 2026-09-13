@@ -28,10 +28,6 @@
 #   - `:kiteplayer-ffmpeg` on the iOS simulator: RealMediaSeekTest cannot see the host's testmedia
 #     tree through the simctl spawn boundary, and VideoToolboxDecodeTest needs hardware the
 #     simulator does not have. Four failures, all environment.
-#   - `:kiteplayer` on wasmJs. Not a gap in the runner: that module has NO shared test
-#     sources at all, only jvmTest and androidHostTest, so its wasmJs test task is NO-SOURCE and
-#     naming it here would widen the job on paper and not in fact. It is tracked with the other
-#     source-less modules. Its wasmJs MAIN code is compiled by the build job.
 #   - Android DEVICE tests (`connectedAndroidTest`) and the physical-device rows. Those need
 #     hardware and stay owner-gated, tracked in the hardware verification plan.
 #   - `:kiteplayer-compose`, `:kiteplayer-compose-interop` and `:kiteplayer-phone`, which have test
@@ -573,6 +569,9 @@ jobs:
       # clips live in its `realBackendTest` source set, which only the JVM and native targets take,
       # because a browser has no filesystem to read the clips from. What runs here is the shared
       # decoder logic, which is most of it: 29 of the 46 are `DecoderFallbackTest`.
+      #
+      # `:kiteplayer` runs its shared session tests here, and drives the web media session against a
+      # fake session object, so nothing in it needs a browser's real media session.
       - name: wasmJs tests, node and browser
         run: |
           ./gradlew --stacktrace \
@@ -580,6 +579,7 @@ jobs:
             :kiteplayer-subtitles:wasmJsTest \
             :kiteplayer-output:wasmJsTest \
             :kiteplayer-ffmpeg:wasmJsTest \
+            :kiteplayer:wasmJsTest \
             :kiteplayer-libass:wasmJsTest
 
       # This was NODE ONLY until 2026-08-30, because the browser half used to abort inside webpack

@@ -2,7 +2,7 @@
  *
  * The consumer side is NOT here. `kprt_ring_render` and the anchor it publishes live in
  * `kite_rt_render.c`, together with the device callback's body, and that file explains why the split
- * exists: the render unit's undefined symbol list is an assertion of plan section 15.2 B1.8, and a
+ * exists: the render unit's undefined symbol list is a real-time assertion, and a
  * unit holding `kprt_ring_create` has `_malloc` in that list. So this file is the one that may
  * allocate and the other is the one that may run on the device's thread, and no file is both.
  *
@@ -26,8 +26,8 @@
  * rule, the boundary convention and the back-dating of a silence tail, is the same decision made
  * the same way, because the oracle would catch it if it were not.
  *
- * "Would catch it" is a claim about the oracle's rows and not about its existence, and the
- * independent verification of B1.8 proved that by finding two places where it would not have. A
+ * "Would catch it" is a claim about the oracle's rows and not about its existence, and an
+ * independent review proved that by finding two places where it would not have. A
  * tolerance boundary of exactly 1000 microseconds was driven by no row, so `<` becoming `<=` here
  * passed all seven of its tests; and a zero-frame write with a timestamp spent a segment slot in the
  * Kotlin ring and not here, because that ring recorded the timestamp before it looked at the frame
@@ -65,7 +65,7 @@ kprt_ring *kprt_ring_create(int32_t sample_rate, int32_t channels, int32_t capac
         return NULL;
     /* Cheap sanity bounds on the factors. 1 << 27 frames is over 46 minutes of 48 kHz audio, so
      * neither bound costs anything real. What these do NOT do, and were wrongly documented as
-     * doing until the interlude, is remove the overflow of the byte-count multiply: that
+     * doing until a later fix, is remove the overflow of the byte-count multiply: that
      * reasoning held only for a 64 bit size_t, and four of the seventeen shipped targets have a
      * 32 bit one, where an admitted pair like (1 << 27 frames, 32 channels) wraps the byte count
      * and the first ordinary fill writes past the allocation. The PRODUCT bound below is the
@@ -246,7 +246,7 @@ static int append_segment(kprt_ring *ring, int64_t pts_us, int64_t at_frame)
  * Written as its own function because of the overflow, which is the whole reason it is not one
  * expression. Both the sum and the difference are checked with `__builtin_*_overflow` rather than
  * computed and hoped for: signed overflow is undefined behaviour, and UBSan named this exact line
- * during the independent verification of B1.8 with
+ * during an independent review with
  * `-9223372036854774474 - 9223372036854775807 cannot be represented in type 'int64_t'`. Negating
  * the difference is checked too, because `-INT64_MIN` is undefined as well and an unchecked
  * negation there would return a negative "distance" that compares below every tolerance.
@@ -322,7 +322,7 @@ int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_w
     out->start_frame = 0;
     if (ring == NULL || frames <= 0)
         return 0;
-    /* Interlude item I-04: a second begin while a reservation is outstanding is REFUSED, with
+    /* A second begin while a reservation is outstanding is REFUSED, with
      * the outstanding reservation untouched. The old behaviour recomputed the grant, and was
      * measured publishing 768 samples of ring poison the caller never wrote when the second
      * grant was larger, and losing a filled buffer to KPRT_COMMIT_BAD_ARGUMENT when it was

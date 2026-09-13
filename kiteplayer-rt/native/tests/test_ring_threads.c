@@ -1,6 +1,6 @@
 /* A real producer and a real consumer, which is the pair the ring exists for.
  *
- * This suite is written to be run under ThreadSanitizer above all. Plan section 15.3 says why TSan
+ * This suite is written to be run under ThreadSanitizer above all. TSan
  * earns its keep here: the ring is two seqlocks and two lock-free counters, and a seqlock written
  * with plain or `volatile` fields instead of C11 atomics with explicit fences is a genuine data
  * race that TSan reports. A green run under `-fsanitize=thread` is therefore evidence about the
@@ -208,7 +208,7 @@ static int wait_for_anchor_reads(run_state *state, int64_t wanted, long max_mill
     return atomic_load_explicit(&state->anchor_reads, memory_order_relaxed) >= wanted;
 }
 
-/* ---- Interlude item I-06: the flush-versus-feeder scaffolding ---- */
+/* ---- The flush-versus-feeder scaffolding ---- */
 typedef struct flush_race_state {
     kprt_ring *ring;
     atomic_int stop;
@@ -347,7 +347,7 @@ int main(void)
     KT_EQ_INT(kprt_test_feed(state.ring, 64, 0, 1, 0), 64);
 
     kprt_ring_destroy(state.ring);
-    /* ---- Interlude item I-06: a flusher racing a live feeder is DEFINED, not clean-by-luck ----
+    /* ---- A flusher racing a live feeder is DEFINED, not clean-by-luck ----
      *
      * The engine reaches this interleaving on purpose: runSeek warns BadTimestamps when its
      * quiesce times out and then continues to the flush, so a flush CAN land between a feeder's

@@ -3,10 +3,10 @@
 # The ordering decisions in this library that no runtime instrument fully covers, checked against
 # the source text.
 #
-# WHAT THIS IS AND WHAT IT IS NOT. This is a level 4 instrument under plan section 2: a source level
+# WHAT THIS IS AND WHAT IT IS NOT. This is a source level
 # check with the ownership and ordering invariant written out. It is deliberately weaker than
-# scripts/render-audit.sh, which reads a compiled object and is level 2. It exists because the
-# independent verification of B1.8 planted two defects that the whole gate passed:
+# scripts/render-audit.sh, which reads a compiled object. It exists because
+# an independent review planted two defects that the whole gate passed:
 #
 #   1. `kprt_sink_destroy` freeing the ring BEFORE it stops and disposes the audio unit. That is the
 #      classic use-after-free in an audio teardown. With the defect in place all eight C suites passed
@@ -27,7 +27,7 @@
 #
 # EIGHTEEN ordering decisions are pinned below, and eighteen is the total the design took, so the
 # check count can be read as coverage of the ordering front for the first time: five checks landed
-# at B1.9 and thirteen more at the interlude, after the whole-B1 review planted three
+# first and thirteen more later, after a review of the whole real-time audio work planted three
 # mutants on then-unpinned decisions and every one passed the full gate, including TSan, which
 # grades atomicity and not ordering strength. Two of those three were worse than untested: the
 # `consumed` release/acquire pair is the only happens-before edge that stops the feeder
@@ -128,7 +128,7 @@ check_teardown_order() {
 
 # ---- Rule 2. The publication edge ----
 #
-# Plan section 15.2 B1.7 step 3: fill the segment slot, then its own sequence with a release store,
+# The publication order: fill the segment slot, then its own sequence with a release store,
 # then `written` with release. The consumer loads `written` with acquire first, so that one release
 # publishes both the samples and the segment. Relaxed on either end is still atomic, so no sanitizer
 # complains, and the guarantee is gone.
@@ -334,7 +334,7 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     plant_and_check "written-load-relaxed" publication kite_rt_render.c \
         's|written = atomic_load_explicit(&ring->written, memory_order_acquire)|written = atomic_load_explicit(\&ring->written, memory_order_relaxed)|'
 
-    # 4 to 16. One planted mutant per interlude-pinned decision, line-targeted so the
+    # 4 to 16. One planted mutant per pinned decision, line-targeted so the
     # identical fence text in another function is not touched. The three mutants the review
     # planted are among them: begin_write's consumed acquire, render's consumed release, and
     # attach's sink->ring release, each of which passed the WHOLE gate including TSan before

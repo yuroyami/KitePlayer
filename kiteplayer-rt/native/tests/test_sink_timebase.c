@@ -1,6 +1,6 @@
 /* Host ticks to nanoseconds, checked against CoreAudio's own conversion rather than trusted.
  *
- * WHY THIS SUITE EXISTS. Plan section 15.2 B1.8 step 1 requires the callback to convert host ticks
+ * WHY THIS SUITE EXISTS. The real-time rules require the callback to convert host ticks
  * "with a `mach_timebase_info` cached at create rather than calling `AudioConvertHostTimeToNanos`
  * inside the callback", and `scripts/render-audit.sh` enforces the second half by forbidding that
  * symbol in the render unit. That leaves an obligation nobody can discharge by reading the code: the

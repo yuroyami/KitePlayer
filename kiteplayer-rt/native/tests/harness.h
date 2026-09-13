@@ -1,6 +1,6 @@
 /* Assertion and reporting API for the kiteplayer-rt C test suites.
  *
- * Contract, from plan section 15.3: every suite is table driven, prints one line per case, and
+ * Contract: every suite is table driven, prints one line per case, and
  * returns non-zero on the first failure.
  *
  * Deliberately a SEPARATE file from KiteFFmpeg's `native/kitecodec-c/tests/harness.h`, and with a
@@ -157,7 +157,7 @@ long kt_first_nonzero_f32(const float *start, size_t count);
  *
  * mmap and munmap are counted separately and kept out of live_blocks: libmalloc maps its own
  * regions, so those counts carry allocator noise rather than test-owned lifetime. They are
- * reported because plan section 15.2 B1.7's gate asks for zero mmap between create and destroy
+ * reported because the ring's gate asks for zero mmap between create and destroy
  * too, and because a Kotlin/Native heap grows by mmap rather than by malloc, which is the exact
  * reason a malloc interposer is refused as evidence about Kotlin allocation. */
 typedef struct {

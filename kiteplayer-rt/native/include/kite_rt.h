@@ -3,8 +3,8 @@
  * This header is the whole public surface of `kiteplayer-rt`. It has two subjects. First, a
  * single-producer single-consumer ring of interleaved float samples that also dates those samples
  * on the media timeline and publishes the audio clock's anchor; that part includes only
- * <stdint.h>, so it compiles for every Kotlin/Native target KitePlayer declares. Second, added in
- * B1.8, the audio device itself: the render callback and the whole AudioUnit lifecycle, so that no
+ * <stdint.h>, so it compiles for every Kotlin/Native target KitePlayer declares. Second, added
+ * later, the audio device itself: the render callback and the whole AudioUnit lifecycle, so that no
  * Kotlin code is on the device's real-time thread and no Kotlin code touches an `AudioUnit`. The
  * device half is declared unconditionally and implemented on macOS and iOS; everywhere else its
  * entry points answer KPRT_SINK_UNSUPPORTED_PLATFORM rather than failing to link, and a declaration
@@ -14,10 +14,10 @@
  * `internal/KotlinAudioRing.kt`. The problem it cannot solve is that on macOS the device's
  * real-time thread entered managed Kotlin on its first instruction, so it became a mutator the
  * garbage collector had to stop at a safepoint. The fix is a callback that
- * never leaves C on either supported Apple target, and that callback needs a ring that lives in C. In B1.7 this
+ * never leaves C on either supported Apple target, and that callback needs a ring that lives in C. First this
  * library was built, tested and proved against the Kotlin ring while deliberately NOT on the
- * device path. B1.8 moved the shipped macOS path onto it; S1.b.3 carries that same C callback and
- * lifecycle to iOS without putting managed code back on the device thread.
+ * device path. Then the shipped macOS path moved onto it, and iOS carries that same C callback and
+ * lifecycle without putting managed code back on the device thread.
  *
  * WHAT REPLACES THE KOTLIN RING, AND WHAT NEVER WILL. Nothing deletes `KotlinAudioRing`.
  * `kiteplayer-core`'s `commonMain` targets js and wasmJs, which can never contain C, and the
@@ -38,15 +38,15 @@
  *    ALIVE. In KitePlayer the anchor reader is serialised by `AudioPlayback`'s own lock, and the same
  *    lock is what orders those readers against the teardown that frees the ring: reading a ring
  *    another thread is destroying is a use-after-free that no amount of atomics inside the ring can
- *    prevent, and the B1.8 verification proved it with AddressSanitizer rather than arguing it.
+ *    prevent, and an independent review proved it with AddressSanitizer rather than arguing it.
  *  - `kprt_ring_flush` and `kprt_ring_destroy` require both sides quiescent: the callback is
  *    provably out of `kprt_ring_render` and the feeder is not between a begin and a commit. The
- *    ANCHOR READER is part of that quiescence too (interlude, I-06): flush clears the anchor and
+ *    ANCHOR READER is part of that quiescence too: flush clears the anchor and
  *    both caches, so a concurrent `kprt_ring_anchor` may observe the cleared state, and the
  *    caller who wants a coherent answer serialises the two, which is what `AudioPlayback`'s lock
  *    does. This is a precondition and not advice, because flush writes the consumer's own
  *    counter and drops the segments the consumer dates its anchor from. A flush that races a
- *    feeder mid-reservation is DEFINED since the interlude (the reservation fields are atomic;
+ *    feeder mid-reservation is DEFINED (the reservation fields are atomic;
  *    the racing commit answers KPRT_COMMIT_BAD_ARGUMENT), but it is still the precondition
  *    being violated, and the engine treats that commit verdict as the loud programming error it
  *    is.
@@ -76,9 +76,9 @@
  *
  * ARITHMETIC. Frame counts become microseconds through `kprt_frames_to_micros`, which divides
  * before it multiplies. The obvious form, `frames * 1000000 / rate`, overflows a 64 bit
- * intermediate at large frame deltas, the same shape recorded
- * against KiteFFmpeg's timestamp helpers as defect D9. The Kotlin ring had it too and was
- * corrected in the same sub-phase, so the differential oracle compares two correct
+ * intermediate at large frame deltas, the same defect once found in
+ * KiteFFmpeg's timestamp helpers. The Kotlin ring had it too and was
+ * corrected in the same change, so the differential oracle compares two correct
  * implementations rather than two matching bugs.
  */
 
@@ -216,7 +216,7 @@ KPRT_API void kprt_ring_destroy(kprt_ring *ring);
  *
  * Calling this twice without a commit in between is REFUSED: the second call returns 0, grants
  * nothing, and leaves the outstanding reservation untouched, so the first commit still
- * publishes exactly what was written into the first window. (Until the interlude, I-04, the
+ * publishes exactly what was written into the first window. (Before a fix, the
  * second call recomputed the grant, which was measured publishing ring storage the caller
  * never wrote when room had grown, and losing a filled buffer when it had shrunk.) */
 KPRT_API int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_ring_write_window *out);
@@ -234,7 +234,7 @@ KPRT_API int32_t kprt_ring_begin_write(kprt_ring *ring, int32_t frames, kprt_rin
  *         published and the reservation stays outstanding, so the caller may simply retry the
  *         commit after the device has consumed something. A caller that gives up instead MUST
  *         release the reservation with a zero-frame commit (`frames == 0` publishes nothing and
- *         clears it): since the interlude `kprt_ring_begin_write` refuses while a
+ *         clears it): `kprt_ring_begin_write` refuses while a
  *         reservation is outstanding, so abandoning without releasing wedges the producer. */
 KPRT_API int32_t kprt_ring_commit_write(kprt_ring *ring, int32_t frames, int32_t has_pts, int64_t pts_us);
 
@@ -370,8 +370,8 @@ KPRT_API int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate);
  * the session owner. `kprt_sink_read_stats` and `kprt_sink_ring` are safe from any thread WHILE THE
  * SINK IS ALIVE, and that clause is not a formality: `kprt_sink_destroy` frees the sink and the ring,
  * so a caller that may read from another thread has to order those reads against the destroy itself.
- * Nothing in C can do that ordering for it, because the free is what the caller asked for. The
- * independent verification of B1.8 found the Kotlin side of this unordered and proved it with
+ * Nothing in C can do that ordering for it, because the free is what the caller asked for. An
+ * independent review found the Kotlin side of this unordered and proved it with
  * AddressSanitizer, and `CoreAudioSink` now holds one lock across both, which is where the ordering
  * belongs. The device's real-time thread calls none of these functions.
  */

@@ -324,7 +324,7 @@ int main(void)
         kprt_ring_write_window second_window;
         int32_t i;
         kt_case("a second begin without a commit is refused with the first reservation intact");
-        /* Interlude item I-04. Before the fix a second begin recomputed the grant: measured
+        /* Before a fix, a second begin recomputed the grant: measured
          * through this surface, grant1=128 grant2=512 with the ring poisoned, a commit of the
          * second grant published 1024 samples of which 768 were the poison the reservation never
          * wrote; and the mirror case, a smaller second grant, made the FIRST commit answer
@@ -351,7 +351,7 @@ int main(void)
     {
         kprt_ring *ring = make_ring(48000, 100);
         kt_case("renders against INT64_MIN and INT64_MAX deadlines stay defined");
-        /* Interlude item I-05. The silence back-dating in kprt_ring_render subtracts from the
+        /* The silence back-dating in kprt_ring_render subtracts from the
          * deadline, and UBSan measured `INT64_MIN - 1333333 cannot be represented` through this
          * exact call before the subtraction went saturating. The asan variant carries UBSan, so
          * this case is the regression trap: it needs no assertion beyond survival and a sane
@@ -554,11 +554,11 @@ int main(void)
 
     /* ---- The tolerance boundary, and the arithmetic at the ends of the range ----
      *
-     * These four cases exist because of the independent verification of B1.8, and each one is a
+     * These four cases exist because of an independent review, and each one is a
      * regression test for something it found rather than a case anyone wrote first.
      *
      * The boundary: the tolerance is a strict `<`, and turning that one character into `<=` in this
-     * ring alone passed every test in the whole B1.7 and B1.8 gate, because nothing drove a drift of
+     * ring alone passed every test in the whole gate, because nothing drove a drift of
      * exactly 1000 microseconds. A pseudo-random session does not find a boundary; only a row on it
      * does.
      *
@@ -661,7 +661,7 @@ int main(void)
         kprt_ring_destroy(ring);
     }
 
-    /* ---- Every anchor shape, at every rate the plan names ---- */
+    /* ---- Every anchor shape, at every rate the ring must support ---- */
     for (r = 0; r < sizeof(rates) / sizeof(rates[0]); r++) {
         for (i = 0; i < sizeof(anchor_cases) / sizeof(anchor_cases[0]); i++)
             run_anchor_case(&anchor_cases[i], rates[r]);

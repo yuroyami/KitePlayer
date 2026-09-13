@@ -4,8 +4,8 @@
  * symbol for one measurable reason: `kiteplayer-core` declares seventeen native targets and its
  * `nativeMain` is shared across all of them, so a link error here would be a link error for a
  * target nobody had built yet. It is also better than silence, because KPRT_SINK_UNSUPPORTED_PLATFORM
- * says which of the two possible things went wrong. Compiling on a target is level 7 evidence in the
- * terms of plan section 2 and this file makes no claim beyond it.
+ * says which of the two possible things went wrong. Compiling on a target proves only that it
+ * compiles, and this file makes no claim beyond that.
  *
  * WHY IT IS ITS OWN FILE. It used to be the `#else` arm of
  * `kite_rt_coreaudio.c`, which meant every non-Apple target linked its device layer out of a file
@@ -18,7 +18,7 @@
 #include "kite_rt.h"
 
 /* TARGET_OS_* only exist on Apple, and the guard below reads them, so the header that defines them
- * has to come first there. Interlude item I-19's lesson in the CoreAudio file applies here too. */
+ * has to come first there. The same lesson from the CoreAudio file applies here too. */
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
 #endif

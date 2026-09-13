@@ -1,7 +1,7 @@
 /* The real-time translation unit: everything the audio device's own thread executes, and nothing
  * else.
  *
- * WHY THIS IS A SEPARATE FILE FROM kite_rt_ring.c. Plan section 15.2 B1.8's first assertion is a
+ * WHY THIS IS A SEPARATE FILE FROM kite_rt_ring.c. The first real-time assertion is a
  * symbol audit: "`nm -u` on the object must yield nothing outside a fixed allowlist". That property
  * is only meaningful, and only achievable, for a unit that CANNOT allocate. `kite_rt_ring.c` holds
  * `kprt_ring_create` and `kprt_ring_destroy`, so its undefined set contains `_malloc` and `_free`,
@@ -44,8 +44,8 @@ int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate)
         return 0;
 
     /* Divide first. The naive `frames * 1000000 / rate` overflows a signed 64 bit intermediate
-     * once frames exceeds about 9.2e12, the same shape as
-     * KiteFFmpeg defect D9. This form only overflows once `frames / rate` alone exceeds 9.2e12,
+     * once frames exceeds about 9.2e12, the same defect once found in
+     * KiteFFmpeg. This form only overflows once `frames / rate` alone exceeds 9.2e12,
      * which at 48 kHz is a frame count no clock in this universe reaches.
      *
      * Exactness: with frames = whole * rate + rest, the true value is
@@ -57,7 +57,7 @@ int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate)
     whole = frames / rate;
     rest = frames % rate;
     /* Saturate instead of overflowing, matching the decision add_saturating already took for
-     * the anchor (interlude item I-05): `whole * 1000000` was measured overflowing under UBSan
+     * the anchor: `whole * 1000000` was measured overflowing under UBSan
      * through this exported entry point at INT64_MAX frames. A duration that does not fit int64
      * microseconds is already meaningless; what matters is that both implementations of the
      * contract produce the SAME meaningless number, and the differential oracle carries a row
@@ -74,7 +74,7 @@ int64_t kprt_frames_to_micros(int64_t frames, int32_t sample_rate)
  * Signed overflow is undefined behaviour, and this addition dates every anchor the media clock is
  * built from, so it is checked rather than assumed. A base timestamp within a few milliseconds of
  * INT64_MAX is not reachable from any real container, and "unreachable" is not an argument about
- * definedness: the independent verification of B1.8 found the sibling site in `record_timestamp` with
+ * definedness: an independent review found the sibling site in `record_timestamp` with
  * UBSan, and the differential oracle now carries a row at each end of the range which would otherwise
  * be comparing two wraps and calling the agreement a proof.
  *
@@ -95,7 +95,7 @@ static int64_t add_saturating(int64_t a, int64_t b)
 
 /* `a - b`, saturating, the mirror of add_saturating for the one subtraction on the render path:
  * the silence back-dating below, where UBSan measured `INT64_MIN - 1333333 cannot be
- * represented` through the public surface (interlude item I-05). Same cost, same reasoning, and
+ * represented` through the public surface. Same cost, same reasoning, and
  * with it the anchor path holds no unchecked signed arithmetic at all. */
 static int64_t sub_saturating(int64_t a, int64_t b)
 {

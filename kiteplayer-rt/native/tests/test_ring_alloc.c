@@ -8,11 +8,11 @@
  * allocator's lock while the device is waiting for samples. So the instrument is the interposer in
  * tests/interpose_alloc.c and the assertion is `no calls`, not `balanced calls`.
  *
- * WHAT THIS DOES NOT PROVE, stated here because plan section 15.2 B1.8 refuses it explicitly. It
+ * WHAT THIS DOES NOT PROVE, stated here because this suite is refused as evidence for it. It
  * says nothing whatsoever about Kotlin allocation. Kotlin/Native takes pages by `mmap` and hands
  * objects out of them, so an interposer measured 229 mallocs before and 230 after one million
  * Kotlin object allocations and would read zero for a callback allocating millions of objects. The
- * evidence that the SHIPPED callback does not allocate is B1.8's business: a symbol and instruction
+ * evidence that the SHIPPED callback does not allocate comes from elsewhere: a symbol and instruction
  * audit of the render translation unit, then a GC-pressure differential with a negative control
  * that must fail. This suite is the C half, and only the C half.
  *
@@ -207,7 +207,7 @@ int main(void)
     KT_NULL(kprt_ring_create(48000, 2, 0));
     KT_ALLOC_SILENT(&before);
 
-    /* ---- a create the size guard refuses allocates nothing (interlude item I-01) ---- */
+    /* ---- a create the size guard refuses allocates nothing ---- */
     /* The factor bounds are cheap sanity checks; the PRODUCT bound is the memory safety. On the
      * four 32-bit targets an admitted factor pair can wrap the byte count to a tiny number and
      * kprt_ring_create would return a ring whose storage is smaller than its capacity claims,

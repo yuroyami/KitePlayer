@@ -6,8 +6,8 @@
  * is stronger than "no leak" anyway: it is "one malloc at create, one free at destroy, and
  * nothing in between", which no leak checker can express. This file is the instrument for it.
  *
- * WHAT IT CAN AND CANNOT PROVE, stated here because plan section 15.2 B1.8 refuses one specific
- * use of it as evidence. It is exactly correct for C allocation, which does go through these
+ * WHAT IT CAN AND CANNOT PROVE, stated here because one specific
+ * use of it is refused as evidence. It is exactly correct for C allocation, which does go through these
  * entry points. It is exactly WRONG for Kotlin/Native allocation, which takes pages by `mmap`
  * and hands objects out of them: measured, an interposer read 229 mallocs before and 230 after
  * one million Kotlin object allocations. So a zero from this instrument says nothing whatsoever

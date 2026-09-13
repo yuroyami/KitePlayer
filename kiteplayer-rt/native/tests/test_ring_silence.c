@@ -2,7 +2,7 @@
  *
  * When this suite was written the same two things happened at two levels: `CoreAudioSink` filled the
  * buffer when the render callback was absent, and the Kotlin ring filled it when the ring ran dry,
- * and a comment in the sink called that duplication deliberate. B1.8 removed the sink's copy, because
+ * and a comment in the sink called that duplication deliberate. The sink's copy was then removed, because
  * a C callback installed for the life of the sink cannot be absent, so there was no case left for it
  * to cover. This suite is what made the surviving copy trustworthy enough for the other one to go
  * away, and it is why the C ring's tail is `memset` rather than a scalar loop. `KotlinAudioRing`

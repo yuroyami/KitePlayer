@@ -10,7 +10,7 @@
 # Usage:  ./scripts/build-host.sh <variant>
 #         variant is one of: plain asan tsan
 #
-# Variants, per plan section 15.3. ASan and TSan are mutually exclusive, which is why there are
+# Variants. ASan and TSan are mutually exclusive, which is why there are
 # three of them rather than one:
 #
 #   plain  -O2, no runtime instrumentation. The compile-fidelity and correctness variant. It is
@@ -77,7 +77,7 @@ INTERPOSE_LIB="$LIB/libkprt_interpose_alloc.dylib"
 
 # The suites. Keep this list and run-c-tests.sh in agreement.
 #
-# B1.7 built the first six, over the ring. B1.8 adds the two that cover the device callback:
+# The first six cover the ring. The last two cover the device callback:
 # test_sink_callback drives the shipped callback body five million times with no device at all and
 # also compiles a host-only seam around the actual CoreAudio entry point for malformed buffer-list
 # fixtures. KPRT_TESTING is never set by CompileKiteRtTask, so that seam cannot enter a shipped

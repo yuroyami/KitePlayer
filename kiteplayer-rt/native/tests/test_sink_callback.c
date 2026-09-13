@@ -1,7 +1,7 @@
 /* The device callback, including malformed CoreAudio buffers, with no device.
  *
- * This suite is the second of the four assertions of plan section 15.2 B1.8, in the order of
- * authority the plan fixes: the render audit is first because it needs no runtime at all, this is
+ * This suite is the second of the four real-time assertions, in their order of
+ * authority: the render audit is first because it needs no runtime at all, this is
  * second, the supervised device run is third, and the Kotlin heap drift check is corroboration only.
  * Nothing in this file says anything about Kotlin allocation, and the interposer it uses would read
  * zero for a Kotlin callback allocating millions of objects (measured: 229 mallocs before and 230
@@ -46,7 +46,7 @@
 
 /* How many synthetic callbacks the long case makes.
  *
- * Five million, which is what plan section 15.2 B1.8 assertion 2 asks for, in EVERY variant. That was
+ * Five million, which is what this assertion asks for, in EVERY variant. That was
  * worth measuring before deciding: the full count takes 0.6 seconds wall in plain, 3.9 under ASan and
  * UBSan and 2.9 under TSan on the development machine, so there is no reason to run a smaller number
  * anywhere and no need for the scaling an earlier draft of this file had. KPRT_SINK_CALLBACKS
@@ -556,7 +556,7 @@ int main(void)
         /* Wait for the feeder's first commit before the window opens.
          *
          * This is what makes `segment_giveups == 0` a sound assertion rather than a lucky one, and
-         * B1.7 measured why: the feeder dates one continuous stream, so it opens exactly ONE
+         * a measurement showed why: the feeder dates one continuous stream, so it opens exactly ONE
          * timestamp segment, inside its first commit. Once that commit has returned, the only slot
          * update of the whole run is finished and its sequence number is even again, so no render can
          * catch a slot in flight and a give-up would mean the protocol is broken rather than

@@ -9,8 +9,8 @@
  *
  * WHY THIS HEADER INCLUDES NO PLATFORM HEADER, WHICH IS THE LOAD BEARING PART. The audio unit is
  * held as a `void *` rather than as an `AudioComponentInstance`. That is what lets
- * `kite_rt_render.c` stay portable and, more importantly, what lets it be AUDITED: plan section
- * 15.2 B1.8's first assertion requires a translation unit whose undefined symbols are a short fixed
+ * `kite_rt_render.c` stay portable and, more importantly, what lets it be AUDITED: the first
+ * real-time assertion requires a translation unit whose undefined symbols are a short fixed
  * allowlist, and a unit that included AudioToolbox to spell one field type would be free to call
  * into it. The cast lives in `kite_rt_coreaudio.c`, which is the only file in this library that
  * knows CoreAudio exists.
@@ -41,14 +41,14 @@ struct kprt_sink {
 
     /* The device clock's tick-to-nanosecond ratio, read once at create.
      *
-     * A RATIO rather than a platform type, and that is what makes the field portable (phase W,
-     * a Linux backend). Apple fills it from `mach_timebase_info`. A Linux backend would fill it
+     * A RATIO rather than a platform type, and that is what makes the field portable (for a
+     * Linux backend). Apple fills it from `mach_timebase_info`. A Linux backend would fill it
      * 1 over 1, because `clock_gettime(CLOCK_MONOTONIC)` already counts nanoseconds. A Windows one
      * would fill it 1000000000 over `QueryPerformanceFrequency`. `kprt_sink_ticks_to_nanos` needs
      * nothing else from any of them, so a new backend brings its clock and no new arithmetic.
      *
      * Cached rather than converted through `AudioConvertHostTimeToNanos` in the callback, which is
-     * what plan section 15.2 B1.8 step 1 asks for and what `scripts/render-audit.sh` enforces by
+     * what the real-time rules ask for and what `scripts/render-audit.sh` enforces by
      * forbidding that symbol in the render unit.
      *
      * The ratio is not the identity here and must not be assumed to be: measured on the development
@@ -67,7 +67,7 @@ struct kprt_sink {
 
     /* Release-stored by `kprt_sink_attach_ring` and by teardown, acquire-loaded by the callback. A
      * callback that sees a non-NULL value here sees a fully constructed ring; one that sees NULL
-     * zeroes its whole buffer, which after B1.8 happens during teardown and at no other time. */
+     * zeroes its whole buffer, which happens during teardown and at no other time. */
     _Atomic(kprt_ring *) ring;
 
     /* 1 when this sink created the ring and must therefore free it. Owner-thread only. */

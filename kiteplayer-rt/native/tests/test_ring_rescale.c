@@ -2,8 +2,8 @@
  *
  * The Kotlin ring computed `(atFrame - segmentStart) * 1_000_000L / sampleRate` at two places, and
  * that product overflows a signed 64 bit intermediate once the frame delta passes about 9.2e12.
- * It is the same shape KiteFFmpeg defect D9 records against the FFmpeg timestamp helpers. Both
- * rings were corrected in this sub-phase, so the differential oracle compares two correct
+ * It is the same defect once found in KiteFFmpeg's FFmpeg timestamp helpers. Both
+ * rings were corrected together, so the differential oracle compares two correct
  * implementations rather than two matching bugs; this suite is what says the correction is real.
  *
  * Each overflowing row asserts TWO things, and the second is the one that makes the row honest:
@@ -50,7 +50,7 @@ static const rescale_row rows[] = {
     { "a whole second at 48 kHz",             48000,                    48000,             1000000, 0 },
     { "zero frames",                              0,                    48000,                   0, 0 },
 
-    /* Interlude item I-05: the ends of the range, where the exact form's `whole * 1000000`
+    /* The ends of the range, where the exact form's `whole * 1000000`
      * multiply was measured overflowing under UBSan through the public surface
      * (kprt_frames_to_micros(INT64_MAX, 1)). The contract is saturation, matching the decision
      * add_saturating already took for the anchor: a duration that does not fit int64 microseconds
@@ -59,7 +59,7 @@ static const rescale_row rows[] = {
     { "INT64_MAX frames at 1 Hz saturates",     INT64_MAX,                  1,           INT64_MAX, 1 },
     { "INT64_MIN frames at 1 Hz saturates",     INT64_MIN,                  1,           INT64_MIN, 1 },
 
-    /* The register item's own vectors. 1e13 frames at 48 kHz is about 6.6 years of audio, which is
+    /* The original report's own vectors. 1e13 frames at 48 kHz is about 6.6 years of audio, which is
      * not a session anybody plays; the point is that the arithmetic is wrong there rather than
      * saturating, and a player that runs for a week is only three orders of magnitude away. */
     { "1e13 frames at 48 kHz overflows the naive product",

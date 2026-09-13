@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 #
-# The render audit: assertion 1 of plan section 15.2 B1.8, and the strongest evidence available for
+# The render audit: the first of the four real-time assertions, and the strongest evidence available for
 # the claim that nothing on the audio device's real-time path allocates, locks, logs or enters a
 # framework.
 #
 # WHY THIS IS THE FIRST ASSERTION AND NOT THE LAST. It needs no device, no thread and no runtime at
 # all: it reads the shipped object's own symbol table and its relocations. A test can only show that
 # something did not happen during the run it made; this shows that the code has no way to make it
-# happen, on any run. Plan section 15.3 grades it level 2 and says it is stronger than a runtime test
-# for what it covers.
+# happen, on any run. For what it covers, that is stronger than any runtime test.
 #
 # WHAT IS AUDITED, and why the ring renderer has its own translation unit. `src/kite_rt_render.c`
 # holds everything executed after the callback enters `kprt_render_into`: `kprt_ring_render`, the
@@ -30,7 +29,7 @@
 #
 # The second mode exists because an assertion that has never rejected anything is not evidence. It
 # compiles copies of the render unit with a malloc call, with a variable length array and with the one
-# framework call the plan names, and fails unless the audit refuses each of them.
+# framework call the rules forbid, and fails unless the audit refuses each of them.
 #
 set -uo pipefail
 
@@ -50,10 +49,10 @@ SHIPPED_FLAGS="-O2 -std=c11 -fvisibility=hidden -fPIC -Wall -Wextra -Werror -Wer
 
 # The only undefined symbols the real-time unit may have.
 #
-# `_memcpy` and `_memset` are what plan section 15.2 B1.8 lists. `_bzero` is here because Apple clang
-# on arm64 lowers `memset(dst, 0, n)` to `_bzero`, which B1.7 measured and recorded as a warning for
-# this sub-phase: an allowlist without it would fail a correct build. The unit is deliberately built
-# WITHOUT -fno-builtin-memcpy and -fno-builtin-memset, exactly as the plan says, so that these calls
+# `_memcpy` and `_memset` are the two allowed calls. `_bzero` is here because Apple clang
+# on arm64 lowers `memset(dst, 0, n)` to `_bzero`, which was measured when the ring was first built:
+# an allowlist without it would fail a correct build. The unit is deliberately built
+# WITHOUT -fno-builtin-memcpy and -fno-builtin-memset, so that these calls
 # stay visible as calls instead of being expanded into something the audit cannot see.
 # The leading underscore is Mach-O's, not C's. ELF spells the same symbol without it, so the
 # lists below are written in the SOURCE spelling and given the format's prefix at use. On Mach-O
@@ -90,7 +89,7 @@ RENDER_CB_ALLOWED_NAMES="mach_absolute_time kprt_render_into kprt_sink_note_span
 DEFAULT_OUTPUT_FOURCC="64656620"
 REMOTE_IO_FOURCC="72696f63"
 
-# The named scan of plan section 15.2 B1.8, applied to every symbol either unit's real-time code
+# The named scan of forbidden calls, applied to every symbol either unit's real-time code
 # refers to. The undefined-set check above already forbids all of these in the render unit by
 # construction; this list is what makes the intent explicit and what covers `kprt_render_cb`, whose
 # own unit is allowed to call the device.
@@ -187,8 +186,8 @@ in_list() {
 
 # NEVER call this on the right-hand side of a pipe. Bash runs that side in a subshell, so every
 # increment of CHECKS and FAILURES made there is discarded when the subshell exits, and a FAIL this
-# function printed would not reach the exit code. That is exactly what happened until the independent
-# verification of B1.8 measured it: the script printed 15 result lines and reported "12 checks, all
+# function printed would not reach the exit code. That is exactly what happened until an independent
+# review measured it: the script printed 15 result lines and reported "12 checks, all
 # passed", the three missing ones were the three `scan_forbidden` calls, and a planted `_malloc`
 # printed its FAIL line while the summary counted only the two checks that were not behind a pipe. The
 # call sites now use a here-string and a process substitution, both of which run the reader in this
@@ -461,7 +460,7 @@ fi
 #
 # Everything above compiles the sources again. This step audits the archive the cinterop klib
 # embeds, which is the only object a consumer ever runs. A clean clone may have none of the three
-# optional archives and says so. Once any one exists, all three are required: that makes the S1.b.3
+# optional archives and says so. Once any one exists, all three are required: that makes the iOS
 # gate incapable of silently auditing macOS while skipping either phone archive.
 
 SHIPPED_ROOT="$MODULE/build/kiteplayer-rt-c"
@@ -636,7 +635,7 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     # no malloc" when what it means is "the shipped object performs none".
     poison_and_audit "malloc-in-render" \
         's|int32_t to_read;|int32_t to_read; extern void *malloc(unsigned long); static void *volatile poison_sink; poison_sink = malloc(16); if (poison_sink == destination) return 0;|'
-    # 2. The framework call plan section 15.2 B1.8 step 1 names and forbids. Declared the same way and
+    # 2. The framework call the render path must never make. Declared the same way and
     #    for the same reason, so this too must be caught by the audit and not by the compiler.
     poison_and_audit "framework-call-in-render" \
         's|deadline = kprt_sink_ticks_to_nanos(sink, host_ticks) +|extern unsigned long long AudioConvertHostTimeToNanos(unsigned long long); deadline = (int64_t)AudioConvertHostTimeToNanos(host_ticks) +|'
@@ -646,7 +645,7 @@ if [ "${1:-}" = "--prove-it-can-fail" ]; then
     poison_and_audit "vla-in-render" \
         's|int32_t channels;|int32_t channels; float scratch[frames]; (void)scratch;|'
     # 4. A forbidden name DEFINED inside the audited unit and called from the render path. This control
-    #    exists because of two defects the independent verification of B1.8 found in this script, and it
+    #    exists because of two defects an independent review found in this script, and it
     #    is the only control that can prove either one is fixed. The name is not in the undefined set,
     #    because the unit defines it; the call is an intra-section direct branch, so it emits no
     #    relocation and the escape check skips it; and it is caught only by `scan_forbidden`, whose

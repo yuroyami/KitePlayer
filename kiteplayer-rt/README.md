@@ -25,7 +25,7 @@ a pause nobody had bounded. So the callback, the AudioUnit and the sample ring m
 | `native/tests/interpose_alloc.c` | The allocation interposer, through the Mach-O `__DATA,__interpose` section. |
 | `native/scripts/build-host.sh` | Builds the host test binaries for one variant. No make, no cmake, no ninja. |
 | `native/scripts/run-c-tests.sh` | Runs the eight suites in one of four modes. |
-| `native/scripts/render-audit.sh` | The symbol and instruction audit of both real-time objects in the macOS and two gated iOS archives. Assertion 1 of B1.8. |
+| `native/scripts/render-audit.sh` | The symbol and instruction audit of both real-time objects in the macOS and two gated iOS archives. The first of the four real-time assertions. |
 | `native/scripts/source-discipline.sh` | The eighteen ordering decisions no runtime instrument fully covers. Level 4, and it says so. |
 | `src/nativeInterop/cinterop/kitert.def` | The cinterop def. Names the archive and links AudioToolbox on macOS and iOS. |
 | `build.gradle.kts` | Registers the seventeen native targets and their C compile tasks. |
@@ -46,7 +46,7 @@ cd native
 The harness and the interposer exist twice, here and in KiteFFmpeg's `native/kitecodec-c/tests/`,
 and the two are a pair: the same mechanism under two prefixes (`KPRT_REQUIRE_ALLOC_ACCOUNTING`
 here, `KC_REQUIRE_ALLOC_ACCOUNTING` there), and a fix to either lands in both in the same change.
-The interlude ported this tree's require mechanism to KiteFFmpeg after measuring what the
+This tree's require mechanism was ported to KiteFFmpeg after measuring what the
 fork had already cost: a one-word blinding of KiteFFmpeg's interposer left its whole ownership gate
 green while observing nothing.
 
@@ -77,16 +77,18 @@ those two the interposer is inert and the cases that depend on it report a parti
 
 ## What each instrument can and cannot prove
 
-Plan section 15.2 B1.8 fixes an order of authority for the four assertions behind the claim that the
-callback does not allocate, and it fixes it because the obvious instrument does not exist here. There is
+Four assertions stand behind the claim that the callback does not allocate, in a fixed order of
+authority, because the obvious instrument does not exist here. There is
 no allocation hook in Kotlin/Native, LeakSanitizer is unsupported on macOS arm64, and a malloc
 interposer is a false negative for managed allocation: measured, 229 mallocs before and 230 after one
 million Kotlin objects, because the runtime takes pages by `mmap` and hands objects out of them. No
 report may present a weaker instrument here as a stronger one.
 
+Level is how strong the evidence is: 1 is the strongest, and 7 means the code only compiled.
+
 | Instrument | Level | Proves | Cannot prove |
 |---|---|---|---|
-| `render-audit.sh` | 2 | The shipped render and device-callback objects have no allocator, lock, log or forbidden framework symbol to call on the real-time path. It pins DefaultOutput on macOS, RemoteIO on both iOS archives and the callback call set, and rejects its seven negative controls. | Anything about an allocation the optimiser deleted, and anything about an optional target whose archive was never built. The S1.b.3 gate builds all three named archives and permits no skip. |
+| `render-audit.sh` | 2 | The shipped render and device-callback objects have no allocator, lock, log or forbidden framework symbol to call on the real-time path. It pins DefaultOutput on macOS, RemoteIO on both iOS archives and the callback call set, and rejects its seven negative controls. | Anything about an allocation the optimiser deleted, and anything about an optional target whose archive was never built. The iOS gate builds all three named archives and permits no skip. |
 | `run-c-tests.sh interpose` | 2 | Zero `malloc`, `calloc`, `realloc`, `free` and `mmap` across five million synthetic callbacks driving the shipped render body. | Anything at all about Kotlin allocation. See above. |
 | The supervised device run | 6, a manual observation with saved metrics (one machine, one debug binary, one operator; corrected from a wrongly claimed 1) | The worst callback body against half the device period, with the collector running thousands of times, on a named device. Its negative control fails. | Release-mode qualification, which is B10's, and any platform other than this one. Its authority rests on the two level 2 rows above. |
 | The Kotlin heap drift check | 5 | A gross leak would show. | Attribution. A flat heap is equally consistent with a callback that allocates nothing and one that allocates and is collected. |

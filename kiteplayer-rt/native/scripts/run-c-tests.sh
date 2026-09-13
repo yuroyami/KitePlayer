@@ -12,14 +12,14 @@
 #
 # THE `interpose` MODE IS NOT A BUILD VARIANT. It runs the `plain` binaries with
 # KPRT_REQUIRE_ALLOC_ACCOUNTING=1, which makes the harness fail rather than record a partial when
-# the allocation interposer is not effective. Plan section 15.2 B1.7's gate lists it as a separate
+# the allocation interposer is not effective. It runs as a separate
 # step because the claim it carries ("zero malloc, calloc, realloc, free and mmap between
 # kprt_ring_create returning and kprt_ring_destroy") is worthless unless the instrument is proven
 # live. Without the flag a variant where the counters read zero because nothing is counting looks
 # exactly like a variant where they read zero because nothing allocated.
 #
 # Each suite returns non-zero on its first failing case and prints one line per case, which is the
-# contract in plan section 15.3. This runner does not stop at the first failing suite: it runs all
+# suite contract. This runner does not stop at the first failing suite: it runs all
 # of them and then exits non-zero, because when three suites break at once the useful output is all
 # three.
 #

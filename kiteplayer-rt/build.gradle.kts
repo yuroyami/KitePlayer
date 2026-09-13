@@ -16,13 +16,13 @@ plugins {
  * WHY IT IS ITS OWN MODULE, AND WHY IT IS HERE RATHER THAN IN KiteFFmpeg. A lock-free audio ring has
  * nothing to do with FFmpeg. Putting it in `kitecodec-c` would make KitePlayer's real-time core a
  * transitive consequence of a codec dependency, and would make a private player's scheduling
- * decisions part of a public binding's surface. Plan section 15.2 B1.7 step 1 settles it: the
+ * decisions part of a public binding's surface. So the
  * library is `kiteplayer-rt`, in KitePlayer, with the symbol prefix `kprt_`.
  *
- * WHAT IT CONTAINS. B1.7 put the ring here, built and proved against the Kotlin ring and deliberately
- * off the device path. B1.8 added the CoreAudio device callback and the device glue beside it, which
- * was the one time in B1 that the shipped real-time audio path changed. S1.b.3 carries the same ring,
- * callback and lifecycle onto iOS: DefaultOutput on macOS, RemoteIO on iOS, and a `static` C function
+ * WHAT IT CONTAINS. The ring came first, built and proved against the Kotlin ring and deliberately
+ * off the device path. The CoreAudio device callback and the device glue came next, beside it, and
+ * that was the one time the shipped real-time audio path changed. iOS carries the same ring,
+ * callback and lifecycle: DefaultOutput on macOS, RemoteIO on iOS, and a `static` C function
  * rendering on both. Every other target's entry points refuse with
  * `KPRT_SINK_UNSUPPORTED_PLATFORM`.
  *
@@ -37,7 +37,7 @@ plugins {
  * EVERY NATIVE TARGET kiteplayer-core DECLARES. Seventeen of them, because `NativeAudioRing` sits in
  * a shared `nativeMain` source set and a Gradle dependency that resolves for only some targets is a
  * dependency that fails at whichever target nobody compiled. All 17 were measured compiling the real
- * ring source on this machine; that is level 7 evidence in the terms of plan section 2 and says
+ * ring source on this machine; compiling proves only that each target builds, and says
  * nothing at all about behaviour. Device evidence is recorded separately for macOS arm64 and the
  * named iOS simulator, and an iosArm64 link is not a physical-device result.
  */
@@ -100,8 +100,8 @@ kotlin {
          * cinterop embeds the archive, so it has to exist first AND be a declared input of the
          * cinterop task.
          *
-         * The dependency alone is not enough. Measured in KiteFFmpeg at B1.3 and recorded in plan
-         * section 15.0: editing only a C body re-executes the compile and writes a new archive, and
+         * The dependency alone is not enough. Measured in KiteFFmpeg: editing only a
+         * C body re-executes the compile and writes a new archive, and
          * the cinterop task then reports UP-TO-DATE and keeps the STALE archive inside the klib, with
          * the configuration cache on or off. Gradle says why under `--info`: "CInterop task uses
          * custom Up-To-Date check for content of headers instead of Gradle mechanisms", and that

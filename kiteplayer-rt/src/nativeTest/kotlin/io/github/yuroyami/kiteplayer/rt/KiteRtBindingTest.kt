@@ -314,7 +314,7 @@ class KiteRtBindingTest {
     fun `the unsupported platform verdict exists and is not the success value`() {
         // The device glue is implemented for macOS and iOS. Every other target compiles the same header
         // and answers this verdict, so a caller gets a refusal instead of a link error. Compiling for a
-        // target is level 7 evidence in the terms of plan section 2 and says nothing about behaviour
+        // target proves only that it compiles, and says nothing about behaviour
         // there; this case only proves the constant is real and distinct.
         assertTrue(KPRT_SINK_UNSUPPORTED_PLATFORM.toInt() != 0, "an unsupported platform is not a success")
     }

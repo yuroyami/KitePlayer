@@ -24,6 +24,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * Drives the platform's native output unit.
@@ -132,7 +134,7 @@ class CoreAudioSinkTest {
         try {
             feedRing(handoff.ringPointer(), 4_800, 0, pts = 0)
             sink.start()
-            delay(120)
+            awaitDevice { sink.callbacks > 0 }
 
             val latency = sink.latencyNanos()
             assertTrue(
@@ -153,10 +155,11 @@ class CoreAudioSinkTest {
         try {
             fillRing(ring, 0)
             sink.start()
-            delay(60)
+            awaitDevice { ringConsumed(ring) > 0 }
 
             assertTrue(sink.setPaused(true), "CoreAudio can pause without discarding")
             val whilePaused = ringBuffered(ring)
+            // A fixed window: this proves the paused device consumed nothing, and a poll cannot prove that.
             delay(100)
             assertEquals(
                 whilePaused,
@@ -165,7 +168,7 @@ class CoreAudioSinkTest {
             )
 
             assertTrue(sink.setPaused(false))
-            delay(60)
+            awaitDevice { ringBuffered(ring) < whilePaused }
             assertTrue(ringBuffered(ring) < whilePaused, "resuming must start consuming again")
         } finally {
             sink.stop()
@@ -179,14 +182,15 @@ class CoreAudioSinkTest {
         val handoff = sink.openWithRing(format) { 4_800 }
         try {
             sink.start()
-            delay(120)
+            awaitDevice { ringUnderruns(handoff.ringPointer()) > 0 }
             assertTrue(
                 ringUnderruns(handoff.ringPointer()) > 0,
                 "a device with nothing to play must be handed silence, and the underrun counted",
             )
-            // And the silence came from the ring, not from a second fill in the sink: register item
-            // Those two collapsed into one, and a zero-filled callback would mean the ring was
-            // gone rather than empty.
+            // And the silence came from the ring, not from a second fill in the sink. Those two fills
+            // collapsed into one, so a zero-filled callback would mean the ring was gone rather than empty.
+            // A fixed window: this proves something did not happen, and a poll cannot prove that.
+            delay(120)
             assertEquals(0, sink.zeroFilledCallbacks, "an empty ring is not a missing ring")
         } finally {
             sink.stop()
@@ -211,6 +215,8 @@ class CoreAudioSinkTest {
         try {
             fillRing(ring, 0)
             sink.start()
+            awaitDevice { ringAnchor(ring).valid }
+            // A fixed window: the offset is a bound over many readings, which a poll cannot give.
             repeat(25) {
                 delay(10)
                 val anchor = ringAnchor(ring)
@@ -245,6 +251,8 @@ class CoreAudioSinkTest {
         try {
             fillRing(handoff.ringPointer(), 0)
             sink.start()
+            awaitDevice { sink.callbacks > 1 }
+            // A fixed window: the worst callback is a bound over time, and a poll would stop at the first two.
             delay(250)
             val worst = sink.worstCallbackNanos
             val period = 512L * 1_000_000_000L / format.sampleRate
@@ -475,6 +483,15 @@ class CoreAudioSinkTest {
             assertTrue(message.contains("AppleHostClock"), "the message must name the clock to use: $message")
             assertTrue(message.contains("host time"), "the message must explain the shared time base: $message")
         }
+    }
+
+    /**
+     * Returns once [ready] holds, or after two seconds, and the assertion after it decides. A machine
+     * with no audio hardware can call back late, so a fixed sleep races the device.
+     */
+    private suspend fun awaitDevice(ready: () -> Boolean) {
+        val deadline = TimeSource.Monotonic.markNow() + 2.seconds
+        while (!ready() && deadline.hasNotPassedNow()) delay(10)
     }
 
     private companion object {

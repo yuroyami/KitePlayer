@@ -74,7 +74,7 @@ loop to wasm expecting desktop arithmetic to carry over.
 
 ## What it means for the web port
 
-The stage continues, but two register items are now constrained rather than open:
+The stage continues, but two pieces of work are now constrained rather than open:
 
 - **The web converter** cannot convert with a Kotlin per-pixel loop on wasm. FFmpeg's own `sws_scale`
   is already compiled for wasm with the codec build and lives on the correct side of the memory boundary.

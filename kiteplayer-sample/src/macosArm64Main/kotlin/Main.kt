@@ -129,7 +129,7 @@ fun main(args: Array<String>) {
             height = (size?.height ?: 720).coerceAtMost(1000),
             useMetalLayer = true,
         )
-        // The Metal renderer is the S2.c default; the CG image-view path stays one flag away as
+        // The Metal renderer is the default; the CG image-view path stays one flag away as
         // the measured software fallback. The resolver is the consumer-side mapping of the
         // backend's two frame truths onto the renderer's seam: a VideoToolbox CVPixelBuffer with
         // no copy, or native-format planes with one memcpy each.
@@ -156,7 +156,7 @@ fun main(args: Array<String>) {
         // Closing the window means the viewer is done. Without this the run loop keeps going with
         // nothing on screen and the file plays to its end headless, audio and all.
         window.onCloseRequested = { session.cancel() }
-        // The S2.e verdict, judged after the renderer closed so every frame is accounted for.
+        // The 4K hold verdict, judged after the renderer closed so every frame is accounted for.
         // The thresholds were committed before any measurement ran: zero frames failed at the
         // renderer, and late drops under one percent of decoded frames.
         var holdVerdict: Int? = null

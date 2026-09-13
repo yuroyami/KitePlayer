@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The provisional Android sample (S1.c.6). extractNativeLibs stays false so the two JNI
+<!-- The provisional Android sample. extractNativeLibs stays false so the two JNI
      libraries are loaded straight from the Stored, 16 KiB aligned APK entries. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The front screen posts the media notification the lock screen controls come from. -->

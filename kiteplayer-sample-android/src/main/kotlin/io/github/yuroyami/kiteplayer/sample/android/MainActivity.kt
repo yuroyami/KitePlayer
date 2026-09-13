@@ -54,7 +54,7 @@ internal class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
-        /* Backgrounding pauses; the sample invents no audio-focus policy (S1.c.6 step 4). */
+        /* Backgrounding pauses; the sample invents no audio-focus policy. */
         if (!smoke) controller.onBackground()
     }
 

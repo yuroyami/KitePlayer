@@ -16,8 +16,8 @@ import java.nio.ByteOrder
 /**
  * The decisive experiment: is Skia's SkSL actually faster than the scalar Kotlin loop?
  *
- * The register item assumed it is, and the amendment already showed one assumption in this area
- * was wrong. This settles the second one BEFORE the shared frame pipeline is touched, because a
+ * An earlier estimate assumed it is, and one assumption in this area was already shown
+ * wrong. This settles the second one BEFORE the shared frame pipeline is touched, because a
  * shader that is not faster is only more surface (18.2 rule 10: when you do not know, measure).
  *
  * Both paths run in one JVM, on the same synthetic 1080p yuv420p planes, with the same warmup.

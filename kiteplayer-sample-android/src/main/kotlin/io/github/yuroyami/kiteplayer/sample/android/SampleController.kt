@@ -30,7 +30,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Sample-private glue for the mobile stack: one Activity-scoped player assembled from
- * `mobileBackends()`, renderer-neutral controls, and the direct-view smoke workflow the plan's jq
+ * `mobileBackends()`, renderer-neutral controls, and the direct-view smoke workflow the jq
  * oracle reads. Each Activity deliberately owns and installs its own presentation API.
  */
 internal class SampleController(
@@ -154,7 +154,7 @@ internal class SampleController(
     }
 
     /**
-     * The S1.c.6 smoke, re-run through the view (S1.d.4 step 4): open, play, one precise seek to
+     * The Android smoke, re-run through the view: open, play, one precise seek to
      * 5000 ms confirmed inside 5000..5034 ms with a later presentation, Ended, teardown, and only
      * then the atomic eleven-key oracle. The presentation evidence now comes from the view's
      * cumulative counters instead of a hand-built renderer.
@@ -180,7 +180,7 @@ internal class SampleController(
                     val presentedAtSeek = withContext(Dispatchers.Main) { view.presentedFrames }
                     // position(), not progress.value: progress republishes on an interval, so its
                     // sample is stale for up to one interval after a seek. The iOS smoke always
-                    // read position(); the S1.c.6 Android smoke passed on sample-timing luck.
+                    // read position(); the first Android smoke passed on sample-timing luck.
                     val landed = p.position().inWholeMilliseconds
                     if (landed in 5_000..5_034) {
                         /* A later presentation proves the landed picture reached the view. */

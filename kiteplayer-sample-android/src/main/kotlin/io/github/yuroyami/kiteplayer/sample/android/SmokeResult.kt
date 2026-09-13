@@ -7,9 +7,9 @@ import java.io.File
 import java.io.FileOutputStream
 
 /**
- * The eleven-key smoke oracle of S1.c.6 step 6, written atomically: the temporary file is
+ * The eleven-key smoke oracle, written atomically: the temporary file is
  * flushed, fd-synced and renamed over `files/s1c-smoke.json`, so the polling harness never reads
- * a half-written object. The key set and every label are pinned by the jq predicate in the plan;
+ * a half-written object. The key set and every label are pinned by the smoke harness's jq predicate;
  * changing either here without changing there is a failed gate, on purpose.
  */
 internal data class SmokeResult(

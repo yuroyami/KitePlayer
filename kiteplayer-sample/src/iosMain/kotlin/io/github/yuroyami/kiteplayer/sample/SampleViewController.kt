@@ -71,9 +71,9 @@ public fun sampleViewController(): UIViewController {
 }
 
 /**
- * Re-consumed through the phone coordinate at S1.e.2: the hand-built CALayer and renderer are
+ * Re-consumed through the phone coordinate: the hand-built CALayer and renderer are
  * gone, one [KitePlayerUIView] owns the whole presentation lifecycle, and the smoke's oracle
- * keys keep exactly their S1.b meanings, now read from the view's own diagnostics.
+ * keys keep exactly their original meanings, now read from the view's own diagnostics.
  */
 private class SampleController : UIViewController(nibName = null, bundle = null) {
 

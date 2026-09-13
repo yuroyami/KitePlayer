@@ -5,7 +5,7 @@ one upload per frame; desktop bandwidth makes this cheap; measured anyway."*
 
 This file replaces that assumption with numbers. Short version: the upload is **not** cheap. It
 costs about **11.6 ms of CPU per 1080p frame**, and **80% of that is the CPU YUV to RGBA
-conversion**, which is exactly the last-resort fallback 17.9's law 2 warns about. It still keeps
+conversion**, which is exactly the last-resort fallback the design warns about. It still keeps
 up at 1080p30 with room to spare, and the Compose modifiers cost close to nothing.
 
 ## The machine
@@ -36,7 +36,7 @@ The sample application plays the clip on loop and alternates two phases:
 
 Phases alternate rather than run back to back, and the pair repeats 4 times, because this host
 drifts and only an interleaved order can separate a modifier cost from that drift. Each phase
-collects **320 published frames** (the register asks for at least 300), after a 60 frame warm-up.
+collects **320 published frames** (at least 300 were required), after a 60 frame warm-up.
 
 **What each number is.**
 
@@ -63,7 +63,7 @@ collects **320 published frames** (the register asks for at least 300), after a 
   evidence offered that it fits in the frame budget.
 
 **Instrumentation reused rather than rebuilt.** `KiteVideoFrameCost` and `FrameCostTracker`
-(commonMain, landed by expansion 17.4.6 A1 for Android) stay the authority for count, mean and
+(commonMain, first built for Android) stay the authority for count, mean and
 worst, and `presentedFrames` / `supersededFrames` / `failedFrames` are the existing renderer
 counters. The only thing added is `KiteVideoUploadProfiler` in the module's **jvmMain**, because a
 p95 needs a distribution and the four-number tracker deliberately keeps none. It records the same
@@ -155,22 +155,22 @@ roughly **340 MB/s of garbage** at 1080p30. That allocation rate, not the copy b
 the numbers blow up when the host is busy: the two contaminated phases in this dataset are also
 the ones with GC and load spikes.
 
-## What this says for the register
+## What this changes
 
-1. **KV-5's "desktop bandwidth makes this cheap" is wrong as stated, and the reason is law 2, not
-   bandwidth.** The copy is cheap; the *conversion* is not. A pure Kotlin per-pixel YUV to RGBA
-   loop over 2.07 million pixels costs about 9.4 ms on this machine. KV-2's YUV image path is
+1. **The claim that "desktop bandwidth makes this cheap" is wrong as stated, and the reason is the
+   CPU conversion, not bandwidth.** The copy is cheap; the *conversion* is not. A pure Kotlin per-pixel YUV to RGBA
+   loop over 2.07 million pixels costs about 9.4 ms on this machine. The YUV image path is
    therefore not a nicety on desktop, it is the single change that would return most of a CPU
    core at 1080p30, and it matters more at 4K where this path would not keep up at all.
 2. **KiteVideo on Compose Desktop is viable today.** 11.6 ms per frame at 30 fps is about 35% of
    one core out of eight, and the run held 60 fps with 0 to 6 dropped frames per 320.
-3. **17.9's flagship claim holds on desktop.** Clip, alpha, rotation and scale apply to the video
+3. **The flagship Compose claim holds on desktop.** Clip, alpha, rotation and scale apply to the video
    pixels, at a measured cost of roughly 10 microseconds of CPU per frame and no dropped frames.
    The demo shows it live; the toggle switches it in place.
 4. **Not measured here, still open.** GPU composite time (no Metal instrumentation on this path),
    4K, an idle host, Linux and Windows, and the `canDrawCommitFencedFrames = true` claim in
    `ImageBitmaps.jvm.kt`, which is inert today because the desktop pool never marks a frame as
-   needing a fence, but is still the wrong thing to declare. W-05's fix text asks for that
+   needing a fence, but is still the wrong thing to declare. An open finding asks for that
    correction and this work did not make it.
 
 ## The raw run
@@ -275,7 +275,7 @@ frames of the run including both warm-up phases and the JIT-cold first round. It
 sits between the cold rounds and the warm ones, which is what it should be if the new profiler and
 the old tracker are measuring the same window.
 
-## W-14's decisive experiment: is SkSL faster than the scalar loop?
+## The decisive experiment: is SkSL faster than the scalar loop?
 
 Run 2026-08-17, same machine as above, `ShaderBenchmark.kt` in this module. One JVM, identical
 synthetic 1080p yuv420p planes, 10 warmup iterations then 60 timed, both paths BT.709 limited
@@ -300,30 +300,30 @@ What this does and does not settle:
   `convert` seam, which would have needed no pipeline change. That idea is measured and rejected.
 - It does NOT settle the real design, where the shader draws to a GPU-backed surface in the draw
   phase and the pixels never come back to the CPU. That path cannot be measured without first
-  making the shared frame-pipeline change W-14's amendment describes, which is the point: the
+  making the shared frame-pipeline change the GPU conversion path needs, which is the point: the
   cheap probe was supposed to tell us whether that investment is worth starting, and it says the
   answer does not come for free.
-- It surfaced a THIRD option nobody had costed. The mirror runs at 5.56 ms while W.4 measured the
+- It surfaced a THIRD option nobody had costed. The mirror runs at 5.56 ms while an earlier run measured the
   real `SoftwareConverter.toRgba` at about 9.4 ms on the same size of frame. The mirror is not the
   real function (it handles one format, and it reuses its output buffer instead of allocating 8.3
   MB per call), so the gap is not a like-for-like claim. But it is large enough to be worth its own
   measurement: making the existing scalar path cheaper may buy more than a shader would, with no
   architecture change, and it would help Android too.
 
-## After W-19: what the upload actually costs now
+## After row parallelism: what the upload actually costs now
 
 Measured 2026-08-17, same machine, same benchmark harness.
 
 | half of the upload | before | after |
 |---|---|---|
-| YUV to RGBA conversion | 6.33 ms | **about 2.1 ms** (W-19 row parallelism) |
+| YUV to RGBA conversion | 6.33 ms | **about 2.1 ms** (row parallelism) |
 | Skia raster image build | assumed about 2.2 ms | **0.44 ms**, measured |
 | whole path | 11.6 ms under load | **about 2.5 ms** |
 
-The 2.2 ms figure was never measured. It came from applying W.4's 19 percent split to a number
+The 2.2 ms figure was never measured. It came from applying an earlier 19 percent split to a number
 taken on a loaded host, and it was wrong by a factor of five. The raster build was always cheap;
 the conversion was always the cost.
 
-This is why W-14, the desktop GPU conversion path, is closed as superseded rather than parked: at
+This is why the desktop GPU conversion path is closed as superseded rather than parked: at
 about 7 percent of a 33 ms frame budget, it does not justify moving FrameImage and the draw call in
 commonMain, shared with Android and iOS.

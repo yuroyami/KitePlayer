@@ -134,7 +134,7 @@ internal fun DesktopSample(options: SampleOptions, onMeasurementDone: () -> Unit
 }
 
 /**
- * The flagship claim of 17.9, made visible: the SAME composable, with and without ordinary
+ * The flagship Compose claim, made visible: the SAME composable, with and without ordinary
  * Compose modifiers on the video itself. No platform view can be clipped, faded, rotated and
  * scaled like this, because its pixels never enter the Compose pipeline.
  */
@@ -159,7 +159,7 @@ private fun VideoStage(video: KiteVideoState, modifiersOn: Boolean, drawCost: Dr
     } else {
         Modifier
             // Read inside the layer block, never in composition: an animated video frame must
-            // still invalidate drawing alone (law 1 of 17.9).
+            // still invalidate drawing alone.
             .graphicsLayer {
                 rotationZ = spin.value
                 scaleX = pulse.value

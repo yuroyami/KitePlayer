@@ -55,7 +55,7 @@ private external fun crossOriginIsolated(): Boolean
  * A mirror rather than the real function because that one is internal to `:kiteplayer-ffmpeg`,
  * which had no web target when this was written. The arithmetic is copied line for line from
  * `writePackedRgba` and `PackedCoefficients`: same offsets, same scales, same rounding, same
- * nearest-neighbour chroma lookup. SERIAL on purpose, per 17.14 S6-D2: `parallelRowSlices` cannot
+ * nearest-neighbour chroma lookup. SERIAL on purpose, the web being single-threaded: `parallelRowSlices` cannot
  * follow the engine here, so measuring the parallel path would flatter the number.
  */
 private fun yuv420ToRgbaSerial(planes: ByteArray, width: Int, height: Int, out: ByteArray) {
@@ -171,7 +171,7 @@ private fun Probe() {
         }
         report.add("hardwareConcurrency=${hardwareConcurrency()} crossOriginIsolated=${crossOriginIsolated()}")
 
-        // Phase 1, the conversion, serial per S6-D2.
+        // Phase 1, the conversion, serial like the web engine.
         repeat(5) { yuv420ToRgbaSerial(planes, WIDTH, HEIGHT, rgba) }
         val convert = DoubleArray(30)
         for (i in convert.indices) {

@@ -57,12 +57,12 @@ loop to wasm expecting desktop arithmetic to carry over.
 - **No end-to-end frame rate was measured.** The frame loop needs `requestAnimationFrame`, and the
   browser pane used here is hidden, so the clock never ticks. The probe reports
   `NOT MEASURED, the frame clock never ticked` rather than a number, and the totals above are the
-  sum of separately measured parts, which excludes the compositor exactly as KV-5's desktop
+  sum of separately measured parts, which excludes the compositor exactly as the desktop
   measurement excluded the GPU composite.
 - **No decoded frame was involved.** The frame is synthetic. That is honest for conversion cost,
   which does not depend on pixel values, and would not be honest for a decode measurement.
 - **No fix is proven.** That a Skiko path exists which avoids the Kotlin heap crossing is the
-  obvious next question and it is NOT answered here. It is X-11's first job and it is a named
+  obvious next question and it is NOT answered here. It is the web renderer's first job and it is a named
   risk, not a settled plan.
 - **The host was not idle.** Gradle and webpack ran during some samples, which is why every number
   is a range. Load average was between 2.7 and 3.3 for most of them. One convert sample came in at
@@ -72,12 +72,12 @@ loop to wasm expecting desktop arithmetic to carry over.
   against runs that later settled lower on the same build. Startup cost is a real number for a web
   player and nobody has budgeted it yet.
 
-## What it means for S6
+## What it means for the web port
 
 The stage continues, but two register items are now constrained rather than open:
 
-- **X-09** cannot convert with a Kotlin per-pixel loop on wasm. FFmpeg's own `sws_scale` is already
-  being compiled for wasm by X-02 and lives on the correct side of the memory boundary.
-- **X-11** cannot build a Skia raster from a Kotlin `ByteArray` per frame. The pixels must reach
+- **The web converter** cannot convert with a Kotlin per-pixel loop on wasm. FFmpeg's own `sws_scale`
+  is already compiled for wasm with the codec build and lives on the correct side of the memory boundary.
+- **The web renderer** cannot build a Skia raster from a Kotlin `ByteArray` per frame. The pixels must reach
   the drawable without crossing the Kotlin GC heap, and proving such a path exists is the first
-  thing X-11 does, before any renderer is written.
+  thing the renderer work does, before any renderer is written.

@@ -39,7 +39,7 @@ private class FakeAudioSink(
 }
 
 /**
- * The audio half of the engine, on the two things phase A4 changed about it: the rate is no longer a
+ * The audio half of the engine, on two things that changed about it: the rate is no longer a
  * lie, and decoded audio can reach the ring in a format the device never agreed to.
  */
 class AudioPlaybackTest {
@@ -158,8 +158,8 @@ class AudioPlaybackTest {
     // `Name contains illegal characters: ","`, which the JVM compiler accepts. This case is in
     // commonTest, so it is compiled for both and the stricter one decides.
     fun `close drops the ring before the sink releases it and every reader sees that`() = runTest {
-        // The teardown order the independent verification of B1.8 found broken, from the engine's own
-        // API. Before B1.8 the ring was a managed object and this ordering was cosmetic; now the ring
+        // The teardown order an independent review found broken, from the engine's own
+        // API. While the ring was always a managed object this ordering was cosmetic; now the ring
         // can be memory the sink frees inside `close`, and four public members that are documented safe
         // from any thread read it. What this case pins is the half a test can observe: at the instant the
         // sink releases the device, the reference is already gone and the readers answer their empty
@@ -209,7 +209,7 @@ class AudioPlaybackTest {
 
     @Test
     fun `a submit that races a close fails loudly instead of touching a cleared ring`() = runTest {
-        // Interlude item I-02. [submit] reads the ring FIELD under the same lock [close] clears it
+        // [submit] reads the ring FIELD under the same lock [close] clears it
         // under, so the two can interleave only in whole steps: a submit that loads the reference
         // before the clear writes into a ring the engine has not freed yet (the engine's join is
         // what guarantees that), and one that loads after the clear finds null and fails loudly.

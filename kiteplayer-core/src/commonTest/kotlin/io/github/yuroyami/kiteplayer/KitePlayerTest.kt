@@ -140,7 +140,7 @@ class KitePlayerTest {
         val player = player(harness)
         player.open(MediaItem("scripted://loop"))
 
-        // S4.e unlocked All: with a queue of one, or plain opened media, the whole queue IS the
+        // With a queue of one, or plain opened media, the whole queue IS the
         // current item, so the mode is accepted and repeats it rather than being refused.
         player.setLoop(LoopMode.All)
         harness.run(100.milliseconds)

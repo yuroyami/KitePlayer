@@ -13,7 +13,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * S4.e landing two: stepping a paused player advances exactly one frame period and presents it,
+ * Stepping a paused player advances exactly one frame period and presents it,
  * stepping a playing player refuses, and captureFrame copies the presented frame's own pixels at
  * the presentation boundary in both the paused and the playing shape.
  */

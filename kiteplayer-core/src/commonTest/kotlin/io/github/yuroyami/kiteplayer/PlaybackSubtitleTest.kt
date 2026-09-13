@@ -12,7 +12,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Cue timing in the engine loop (S4.c), in virtual time: a cue appears at its start, disappears
+ * Cue timing in the engine loop, in virtual time: a cue appears at its start, disappears
  * at its end, a seek rebuilds the visible set by redelivery, and nothing is published while the
  * set is unchanged.
  */

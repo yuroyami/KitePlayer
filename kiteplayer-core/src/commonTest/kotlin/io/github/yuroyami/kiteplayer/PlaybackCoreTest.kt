@@ -1358,7 +1358,7 @@ class PlaybackCoreTest {
     fun `loop all is accepted and stands beside one`() = runTest {
         val harness = CoreHarness(this)
         harness.open()
-        // S4.e unlocked All: with no larger queue it repeats the current item like One, so the
+        // With no larger queue, All repeats the current item like One, so the
         // mode is stored rather than refused. QueueTest owns the wrapping behaviour.
         harness.core.setLoop(LoopMode.All)
         assertEquals(LoopMode.All, harness.core.snapshots.value.loop)
@@ -1770,14 +1770,14 @@ class PlaybackCoreTest {
     }
 
     // ---------------------------------------------------------------------------------------------
-    // The interlude's real-time seam, Kotlin half.
+    // The real-time seam, Kotlin half.
     // ---------------------------------------------------------------------------------------------
 
     @Test
     fun `a failed selectStreams still closes the audio path it had opened`() = runTest {
-        // Interlude item I-03. buildSession opens the audio path, then selects streams; a throw
+        // buildSession opens the audio path, then selects streams; a throw
         // from selectStreams used to close only the backend session, leaking a live sink that
-        // since B1.8 owns a C sink, a C ring and an initialised AudioUnit, while
+        // owns a C sink, a C ring and an initialised AudioUnit, while
         // retainedResources() reported zero. The scripted sink records its close, so the leak is
         // one boolean here: remove the inner catch in buildSession and this is the test that
         // fails.
@@ -1792,7 +1792,7 @@ class PlaybackCoreTest {
 
     @Test
     fun `a close with a stalled worker still completes and closes the audio path exactly once`() = runTest(timeout = 150.seconds) {
-        // Interlude item I-02, the reachable half. The audio decoder parks on a cancellable
+        // The half of the close race a test can reach. The audio decoder parks on a cancellable
         // suspension and never reaches a quiescent boundary, so its quiesce burns a full
         // QUIESCE_DEADLINE; close must still complete, cancel the parked job, join it, and only
         // then close the audio path, exactly once.

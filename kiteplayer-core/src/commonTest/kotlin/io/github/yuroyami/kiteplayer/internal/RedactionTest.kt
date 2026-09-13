@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * SEC-3: the support bundle's redaction kept the query string, which is where credentials live.
+ * The support bundle's redaction once kept the query string, which is where credentials live.
  *
  * Every row below is a real shape a media URI takes. The point of the suite is that the redacted
  * form is the basename ALONE: no host, no path, no query, no fragment and no userinfo, because a

@@ -13,7 +13,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * External subtitle files (S4.e): a local SRT or VTT beside the media becomes a selectable
+ * External subtitle files: a local SRT or VTT beside the media becomes a selectable
  * synthetic track, its cues time through the engine's own path, seeks keep them, and a broken
  * file warns typed instead of failing the open. JVM-hosted because the files are real files.
  */

@@ -9,7 +9,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
-/** Regression coverage for HANDOFF Mission B: dense subtitles must never monopolise the actor. */
+/** Regression coverage: dense subtitles must never monopolise the actor. */
 class MissionBSubtitleRegressionTest {
 
     private val config = PlayerConfig(
@@ -57,8 +57,8 @@ class MissionBSubtitleRegressionTest {
         // PINS A KNOWN LIMITATION, NOT A DESIRED OUTCOME. The real source redelivers packets from
         // the seek landing forward in file order only, so a cue that STARTED before the landing
         // and still spans it is not reconstructed (open). The scripted source used to
-        // be more generous than the real one here, which made S16 unprovable; this test holds the
-        // honest contract in place. If S16 is ever fixed with a bounded replay or a retained cue
+        // be more generous than the real one here, which made this limit unprovable; this test holds the
+        // honest contract in place. If the limit is ever fixed with a bounded replay or a retained cue
         // cache, flip the first assertion.
         val harness = CoreHarness(
             this,

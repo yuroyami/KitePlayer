@@ -78,8 +78,8 @@ public data class Tracks(
     /**
      * The selected subtitle track: a container stream, or a negative id for an external file.
      *
-     * Null means no subtitles are showing. Real since S4.c gave the engine a text cue path and S4.e
-     * added external files; a container subtitle stream whose format no decoder in this build reads
+     * Null means no subtitles are showing. Text cues and external subtitle files both count; a
+     * container subtitle stream whose format no decoder in this build reads
      * is still refused with a typed error rather than selected and left silent.
      */
     val selectedSubtitle: TrackId? = null,

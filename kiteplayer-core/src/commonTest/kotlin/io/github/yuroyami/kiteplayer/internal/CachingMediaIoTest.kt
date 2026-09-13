@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * The M5 byte cache proved against a counting in-memory source: chunked upstream pulls, RAM
+ * The byte cache proved against a counting in-memory source: chunked upstream pulls, RAM
  * seek-back with zero upstream traffic, eviction that honours both budgets, and window
  * publication for the progress sampler.
  */

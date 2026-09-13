@@ -23,7 +23,7 @@ internal class OpenedAudioPath(
  * There are two arrangements now, and exactly one line of code has to know which one it is in. In the
  * portable arrangement the engine hands the sink an
  * [io.github.yuroyami.kiteplayer.spi.AudioRenderCallback] closure that reads a [KotlinAudioRing]. In
- * the native arrangement, from B1.8 onward, a sink may own its device callback in C, in which case it
+ * the native arrangement a sink may own its device callback in C, in which case it
  * owns the ring too and the engine only writes into it, and the reason is
  * that a Kotlin lambda on a real-time thread is a mutator the garbage collector has to stop.
  *
@@ -79,7 +79,7 @@ internal suspend fun openKotlinAudioPath(
     }
     // From here the sink is open and owns a device. capacityFrames is caller-supplied code and the
     // ring constructor validates its capacity, so either can throw; without the catch the opened
-    // sink would leak with no owner ever learning about it (audit P1-2, AudioPath leak).
+    // sink would leak with no owner ever learning about it.
     try {
         val ring = KotlinAudioRing(negotiated, capacityFrames = capacityFrames(negotiated))
         holder.value = ring

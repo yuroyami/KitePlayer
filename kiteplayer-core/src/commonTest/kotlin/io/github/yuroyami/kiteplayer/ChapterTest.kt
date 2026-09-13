@@ -10,7 +10,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Chapters on the facade (S4.e): the snapshot carries the container's table, boundary crossings
+ * Chapters on the facade: the snapshot carries the container's table, boundary crossings
  * emit ChapterChanged for playback and for seeks alike, and seekToChapter lands on the start.
  */
 class ChapterTest {

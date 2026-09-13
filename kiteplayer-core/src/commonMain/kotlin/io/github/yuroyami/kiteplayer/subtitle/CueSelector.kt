@@ -5,7 +5,7 @@ package io.github.yuroyami.kiteplayer.subtitle
  *
  * Purity is the whole design. Because the answer depends on nothing but (cues, time), a seek
  * needs no reconstruction machinery at all: asking for the new time IS the reconstruction, in
- * both directions, which old B3 demanded and stateful subtitle engines get wrong. The engine
+ * both directions, which stateful subtitle engines get wrong. The engine
  * keeps the sorted list and asks on every timing edge; nothing here remembers anything.
  *
  * Overlap policy: every cue whose window contains the instant is active, ordered by layer then

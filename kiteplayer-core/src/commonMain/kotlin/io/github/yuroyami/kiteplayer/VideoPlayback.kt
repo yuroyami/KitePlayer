@@ -345,7 +345,7 @@ public class VideoPlayback(
      * at a time (a display link, a present-time extension) needs the intended one: given the current
      * instant it draws every frame as late as the scheduler happened to be.
      */
-    /** One-shot: the next presented frame is plane-copied for captureFrame (S4.e). */
+    /** One-shot: the next presented frame is plane-copied for captureFrame. */
     internal val captureRequest: kotlinx.atomicfu.AtomicRef<kotlinx.coroutines.CompletableDeferred<CapturedFrame>?> =
         kotlinx.atomicfu.atomic(null)
 

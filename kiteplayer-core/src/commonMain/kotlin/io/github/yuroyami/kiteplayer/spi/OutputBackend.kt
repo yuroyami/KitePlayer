@@ -25,7 +25,7 @@ public interface OutputBackend {
      * The platform's text raster engine for subtitle cues, or null when the platform has none.
      *
      * Null costs drawn subtitles and nothing else: cue timing still runs, and the selection is
-     * still reported. The Android and Apple backends supply real ones (S4.c).
+     * still reported. The Android and Apple backends supply real ones.
      */
     public val subtitleRasterizer: SubtitleRasterizer? get() = null
 

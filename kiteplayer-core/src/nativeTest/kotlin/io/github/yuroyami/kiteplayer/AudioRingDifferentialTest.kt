@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 /**
  * The differential oracle: one input sequence, two implementations, everything compared exactly.
  *
- * ### Why this test is the load-bearing one of sub-phase B1.7
+ * ### Why this is the load-bearing test for the C ring
  *
  * There are two implementations of the audio ring contract and there always will be.
  * [KotlinAudioRing] is portable and is what js, wasmJs, jvm and Android use. [NativeAudioRing] wraps
@@ -49,7 +49,7 @@ import kotlin.test.assertTrue
  * ### Two things this test deliberately also asserts about the C ring alone
  *
  * `segment_giveups` and `anchor_giveups` must both stay zero. The C ring is allowed to answer a torn
- * seqlock read with a stale reading rather than by spinning, which is how it fixes register item
+ * seqlock read with a stale reading rather than by spinning. That is
  * deliberate, and that freedom is exercised on purpose by `kiteplayer-rt/native/tests/test_ring_bounded.c`
  * with a second thread. Here everything is single threaded, so a non-zero count would mean the C ring
  * agreed with the Kotlin ring by way of a degraded path, which is agreement that proves nothing.
@@ -96,13 +96,13 @@ class AudioRingDifferentialTest {
      * The feeder hands over [frames] frames stamped exactly [driftUs] microseconds away from what
      * continuity predicts.
      *
-     * This is the boundary case the independent verification of B1.8 found missing, and the finding is
+     * This is the boundary case an independent review found missing, and the finding is
      * worth restating because it is the whole reason this step type exists. The discontinuity tolerance
      * is a strict `<`, so a drift of 999 microseconds continues the segment and 1000 opens a new one.
      * Changing that one `<` into a `<=` in the C ring alone passed all seven of this file's original
      * tests, at all four rates, at one, six and eight channels, and through a four thousand iteration
      * pseudo-random session, because random sessions do not find boundaries. It also passed the whole
-     * rest of the B1.7 and B1.8 gate, while misdating the audio clock by up to a millisecond at every
+     * rest of the gate, while misdating the audio clock by up to a millisecond at every
      * discontinuity whose drift landed on the boundary. Only an explicit row at 999, 1000 and 1001, on
      * both signs, separates the two implementations.
      *
@@ -497,7 +497,7 @@ class AudioRingDifferentialTest {
             ),
         ),
         // The ends of the `Long` range. Both rows drive an arithmetic overflow that used to be
-        // undefined behaviour in C, named by UBSan during the independent verification of B1.8 as
+        // undefined behaviour in C, named by UBSan during an independent review as
         // `-9223372036854774474 - 9223372036854775807 cannot be represented in type 'int64_t'`. Both
         // rings now treat an unrepresentable distance as a discontinuity and saturate an
         // unrepresentable anchor, and these rows are what makes that a checked agreement rather than
@@ -567,7 +567,7 @@ class AudioRingDifferentialTest {
 
     @Test
     fun `both implementations of framesToMicros saturate identically at the ends`() {
-        // Interlude item I-05. `whole * 1000000` overflowed at the top of the range on both sides
+        // `whole * 1000000` overflowed at the top of the range on both sides
         // of the contract: DEFINED wrapping in Kotlin, UNDEFINED behaviour in C (measured under
         // UBSan through kprt_frames_to_micros(INT64_MAX, 1)), so up here the oracle used to
         // compare two different kinds of wrong. Both saturate now, and this row pins them to the
@@ -679,8 +679,8 @@ class AudioRingDifferentialTest {
     @Test
     fun `the rescale agrees between the two implementations at the overflow vectors`() {
         // The rescale, checked across the seam. Both rings date frames through the same split
-        // rescale, one written in Kotlin and one in C, and the whole reason both were corrected in the
-        // same sub-phase is so this comparison is between two correct answers rather than two matching
+        // rescale, one written in Kotlin and one in C, and the whole reason both were corrected
+        // together is so this comparison is between two correct answers rather than two matching
         // wrong ones. A frame delta this large cannot be reached through either ring's own API, so it
         // is checked at the function.
         val vectors = listOf(

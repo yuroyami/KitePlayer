@@ -221,8 +221,8 @@ internal class AudioPipeline(
      * Pushes out what the stages are still holding, for the end of the stream.
      *
      * TWO stages hold something now. The tempo stage keeps up to two pitch periods of lookahead
-     * that no further input will ever trigger, and dropping them loses the end of the media (audit
-     * P0-20). The rate conversion holds half a kernel, which is 0.36 ms at 44.1 kHz: small, but it
+     * that no further input will ever trigger, and dropping them loses the end of the media. The
+     * rate conversion holds half a kernel, which is 0.36 ms at 44.1 kHz: small, but it
      * is real audio and the old interpolator's excuse for skipping it (it held under one frame, and
      * producing that frame would have meant inventing the sample after the end of the stream) no
      * longer applies. Silence after the end of the media is not an invention, it is the truth, so

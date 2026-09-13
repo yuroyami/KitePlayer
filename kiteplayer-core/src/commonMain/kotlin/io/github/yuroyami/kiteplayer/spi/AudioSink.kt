@@ -159,7 +159,7 @@ public fun interface AudioRenderCallback {
  * The engine writes through this rather than returning an array so that a device callback can hand over
  * the buffer the OS gave it, with no copy anywhere in the path.
  *
- * CoreAudio no longer arrives here: since B1.8 its callback is C and writes the device's memory with
+ * CoreAudio no longer arrives here: its callback is C and writes the device's memory with
  * `memcpy` and `memset` inside `kprt_ring_render`. This stays because it is the shape every other sink
  * uses, including a future AAudio one, and because it is how the portable ring is tested.
  */

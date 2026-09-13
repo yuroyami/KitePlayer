@@ -16,7 +16,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * S4.d: the dump tells a scripted session's story, the warning history is bounded and replayed
+ * The dump tells a scripted session's story, the warning history is bounded and replayed
  * to late readers, renderer events become typed warnings, and the log seam stays silent until a
  * sink is installed.
  */

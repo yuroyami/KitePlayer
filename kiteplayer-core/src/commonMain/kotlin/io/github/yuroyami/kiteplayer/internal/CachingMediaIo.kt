@@ -5,7 +5,7 @@ import io.github.yuroyami.kiteplayer.MediaIo
 import kotlinx.atomicfu.atomic
 
 /**
- * The M5 byte cache: one contiguous RAM window over the wrapped [MediaIo].
+ * The byte cache: one contiguous RAM window over the wrapped [MediaIo].
  *
  * What it buys, in order of value on a network stream:
  *  - Chunked upstream reads: the demuxer's small nibbles become [IoCachePolicy.readChunkBytes]

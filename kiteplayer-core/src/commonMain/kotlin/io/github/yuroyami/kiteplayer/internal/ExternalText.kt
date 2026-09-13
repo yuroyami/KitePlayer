@@ -1,7 +1,7 @@
 package io.github.yuroyami.kiteplayer.internal
 
 /**
- * Reads a LOCAL text file whole, or answers null when it cannot (S4.e: external subtitle files).
+ * Reads a LOCAL text file whole, for external subtitle files, or answers null when it cannot.
  *
  * Local means a filesystem path. Network fetching is a separate open item, and the browser
  * targets have no filesystem, so their actuals answer null and the caller warns typed instead of
@@ -14,5 +14,5 @@ package io.github.yuroyami.kiteplayer.internal
  */
 internal expect fun readExternalBytesOrNull(path: String): ByteArray?
 
-/** One word for the support bundle's platform block (S4.e): jvm, android, native, js, wasm. */
+/** One word for the support bundle's platform block: jvm, android, native, js, wasm. */
 internal expect val playerPlatformName: String

@@ -20,9 +20,9 @@ import kotlin.time.Duration.Companion.seconds
  */
 public data class PlayerConfig(
     /**
-     * How much work renderers spend on the picture beyond decoding it correctly (17.21).
+     * How much work renderers spend on the picture beyond decoding it correctly.
      *
-     * Off by default, which is the pre-17.21 pipeline exactly. Change it live with
+     * Off by default, which is the plain decoded picture exactly. Change it live with
      * [KitePlayer.setRenderQuality]; this is only the value a fresh player starts at.
      */
     val renderQuality: RenderQuality = RenderQuality.Off,
@@ -70,8 +70,7 @@ public data class PlayerConfig(
 ) {
     init {
         // Validated at construction, before a player exists to be wedged by it: a nonpositive
-        // interval is a hot publication loop, and each nested policy carries its own checks
-        // (audit P1-19).
+        // interval is a hot publication loop, and each nested policy carries its own checks.
         require(progressInterval > Duration.ZERO) { "progressInterval must be positive, was $progressInterval" }
         require(statsInterval > Duration.ZERO) { "statsInterval must be positive, was $statsInterval" }
     }
@@ -110,7 +109,7 @@ public sealed class HwdecPolicy {
 }
 
 /**
- * How media bytes arrive over a network, and how the engine caches them (M1, M5).
+ * How media bytes arrive over a network, and how the engine caches them.
  */
 public data class NetworkConfig(
     /**
@@ -130,7 +129,7 @@ public data class NetworkConfig(
 )
 
 /**
- * The M5 byte cache: one contiguous RAM window over an [MediaIo]'s bytes. Reads pull
+ * The byte cache: one contiguous RAM window over an [MediaIo]'s bytes. Reads pull
  * [readChunkBytes] at a time and append to the window; a seek that lands inside the window is
  * served from RAM without touching the source, which is what makes a small seek-back free on a
  * network stream. The window keeps at least [backWindowBytes] behind the cursor before anything

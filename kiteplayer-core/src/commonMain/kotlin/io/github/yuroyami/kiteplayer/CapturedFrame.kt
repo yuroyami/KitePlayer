@@ -7,7 +7,7 @@ import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 
 /**
- * A screenshot (S4.e): the newest presented frame, plane-copied at the moment of presentation,
+ * A screenshot: the newest presented frame, plane-copied at the moment of presentation,
  * owned outright by the caller. This is the documented use of [SoftwareReadableFrame]: every
  * plane here is a copy taken before the renderer took ownership, so nothing the decoder or the
  * renderer does afterwards can touch it, and [close] has nothing to release.

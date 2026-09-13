@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer.spi
 import io.github.yuroyami.kiteplayer.subtitle.SubtitleCue
 
 /**
- * Turns active text cues into the positioned images a renderer composites (S4.c).
+ * Turns active text cues into the positioned images a renderer composites.
  *
  * This is a platform seam for one reason: text needs a font engine, and the engine has none.
  * Each platform's output backend supplies its own (StaticLayout on Android, CoreText on Apple)

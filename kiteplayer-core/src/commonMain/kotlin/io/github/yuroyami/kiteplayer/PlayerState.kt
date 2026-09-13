@@ -20,8 +20,8 @@ public data class PlayerSnapshot(
     val videoSize: VideoSize? = null,
     val tracks: Tracks = Tracks.Empty,
     /**
-     * The chapters of the current media item, in container order (S4.b read them, S4.e surfaced
-     * them). Empty for media with no chapter table.
+     * The chapters of the current media item, in container order. Empty for media with no chapter
+     * table.
      */
     val chapters: List<Chapter> = emptyList(),
     /** The markers set with [io.github.yuroyami.kiteplayer.KitePlayer.setMarkers], sorted by position. */
@@ -42,7 +42,7 @@ public data class PlayerSnapshot(
     val videoScale: VideoScale = VideoScale.Fit,
     /** The live picture controls (brightness, contrast, saturation, hue). Renderers honour them. */
     val videoAdjustments: VideoAdjustments = VideoAdjustments.Identity,
-    /** The render-quality passes in force (17.21). */
+    /** The render-quality passes in force. */
     val renderQuality: RenderQuality = RenderQuality.Off,
     /** The live framing controls (aspect override, zoom, pan). Renderers honour them. */
     val videoTransform: VideoTransform = VideoTransform.Identity,
@@ -80,7 +80,7 @@ public data class PlayerSnapshot(
     val error: PlaybackError? = null,
     /** Increments on every seek and every stream reconfiguration. */
     val generation: Generation = Generation.Initial,
-    /** The open queue's items (S4.e). Empty outside queue playback. */
+    /** The open queue's items. Empty outside queue playback. */
     val queue: List<MediaItem> = emptyList(),
     /** The index of [media] inside [queue], or -1 outside queue playback. */
     val queueIndex: Int = -1,
@@ -475,9 +475,9 @@ public enum class FrameDropPolicy {
 }
 
 /**
- * One chapter of the current media item, read from the container's own table (S4.b) and
+ * One chapter of the current media item, read from the container's own table and
  * surfaced on the facade with [io.github.yuroyami.kiteplayer.KitePlayer.chapterAt],
- * seekToChapter and [PlayerEvent.ChapterChanged] (S4.e).
+ * seekToChapter and [PlayerEvent.ChapterChanged].
  */
 public data class Chapter(
     val index: Int,

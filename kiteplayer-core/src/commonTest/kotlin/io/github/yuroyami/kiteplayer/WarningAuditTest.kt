@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 /**
- * The typed warning audit (S4.d): every [PlaybackWarning] is enumerated in ONE exhaustive table
+ * The typed warning audit: every [PlaybackWarning] is enumerated in ONE exhaustive table
  * naming where it is emitted. The audit is the compiler's: [documentedEmissionSites] has no else
  * branch, so a new warning type does not compile until its row exists here, which is exactly
  * "fails when a new warning ships undocumented" made mechanical.

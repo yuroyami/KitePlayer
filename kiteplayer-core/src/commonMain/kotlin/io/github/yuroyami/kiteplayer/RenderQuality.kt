@@ -14,7 +14,7 @@ package io.github.yuroyami.kiteplayer
  *
  * Not every renderer can honour these. A renderer applies what it can and ignores the rest; the
  * engine neither asks nor promises. On Android the shipping interop path decodes straight to a
- * Surface with no shader of its own, so nothing here reaches it (17.21 records why).
+ * Surface with no shader of its own, so nothing here reaches it.
  */
 public data class RenderQuality(
     /**
@@ -57,7 +57,7 @@ public data class RenderQuality(
      */
     public val linearLight: Boolean = false,
 ) {
-    /** True for the value that reproduces the pre-17.21 pipeline exactly, byte for byte. */
+    /** True for the value that reproduces the plain decoded picture exactly, byte for byte. */
     public val isNeutral: Boolean
         get() = !dither && !deband && scaler == VideoScaler.Bilinear && !linearLight
 
@@ -77,7 +77,7 @@ public data class RenderQuality(
 
 /** The kernel a renderer resamples the picture with when it is not drawn at its own size. */
 public enum class VideoScaler {
-    /** The sampler's own filtering. One fetch, and what every renderer did before 17.21. */
+    /** The sampler's own filtering. One fetch, and what every renderer did before these passes. */
     Bilinear,
 
     /**

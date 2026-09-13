@@ -4,7 +4,7 @@ import io.github.yuroyami.kiteplayer.internal.redactUrisIn
 import kotlinx.atomicfu.atomic
 
 /**
- * One warning, with the engine clock's reading when it was emitted (S4.d).
+ * One warning, with the engine clock's reading when it was emitted.
  *
  * The nanoseconds are the engine's own monotonic clock, comparable across one player's history and
  * meaningless across processes, which is all a bug report needs: the ORDER and the spacing.
@@ -15,7 +15,7 @@ public data class TimedWarning(
 )
 
 /**
- * The logging policy, as a contract rather than a framework (S4.d).
+ * The logging policy, as a contract rather than a framework.
  *
  * KitePlayer never prints on its own. Every line the engine would say goes through this one seam,
  * which is SILENT until an application installs a sink, and becomes silent again when the sink is

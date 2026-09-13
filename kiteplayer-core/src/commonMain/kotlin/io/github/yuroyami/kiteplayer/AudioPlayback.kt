@@ -43,15 +43,15 @@ import kotlin.time.Duration.Companion.milliseconds
  * internal lock. The first two write the media clock, which has one writer by design, and a player
  * reports progress from a thread that is not the one driving playback: two callers re-anchoring the
  * same clock at once is what the lock is for. [buffered] and [underruns] take it for a second reason
- * that arrived with B1.8: they read the ring, and the ring can now be memory [close] frees. Reading
+ * that came with the C callback: they read the ring, and the ring can now be memory [close] frees. Reading
  * [speed] is a plain read of one value and needs nothing.
  *
  * [open], [play], [pause], [flush], [drain], [endOfStream] and [close] are thread confined to the
  * session owner instead. [submit] and [submitDecoded] run on the feed worker, and each reads the
- * ring FIELD under the lock (interlude, I-02), so the rule is one sentence again: any member that
+ * ring FIELD under the lock, so the rule is one sentence again: any member that
  * may run beside another thread touches that field only under the lock. A lock cannot be held across a suspension point, so the suspending ones
- * could not be guarded even in principle, and their contract is confinement. In A5 the core's session
- * actor becomes that owner. The seek path already depends on this: the ring's own flush requires both
+ * could not be guarded even in principle, and their contract is confinement. The core's session
+ * actor is that owner. The seek path already depends on this: the ring's own flush requires both
  * of its sides to be quiescent first.
  *
  * [close] is the one member that is confined AND takes the lock, for one statement. Confinement says
@@ -164,7 +164,7 @@ public class AudioPlayback(
     /**
      * How much submitted audio has not yet been handed to the device.
      *
-     * Under the lock, like [position], and for the reason given on [close]: after B1.8 the ring can be
+     * Under the lock, like [position], and for the reason given on [close]: the ring can now be
      * a pointer into C that [close] frees, so every member that may be called from another thread
      * reads the field inside the lock that [close] clears it in.
      */
@@ -261,8 +261,8 @@ public class AudioPlayback(
         frames: Int,
         abort: () -> Boolean = { false },
     ) {
-        // The FIELD is read under the lock, extending the one-sentence rule to the producer
-        // (interlude item I-02): a member that may run beside [close] touches `ring` only under
+        // The FIELD is read under the lock, extending the one-sentence rule to the producer:
+        // a member that may run beside [close] touches `ring` only under
         // the lock, so a submit can never load the reference in the same instant close is
         // clearing and freeing it. What the lock cannot do is protect the rest of this loop; that
         // is [close]'s quiescence precondition, and the engine honours it by joining the feeder
@@ -458,7 +458,7 @@ public class AudioPlayback(
      */
     public suspend fun flush(newGeneration: Generation) {
         sink.stop()
-        // Under the lock since the interlude: the C ring's flush clears the anchor and both
+        // Under the lock: the C ring's flush clears the anchor and both
         // caches, and [position] and [anchorClock] read them under this same lock, so without it
         // nothing excluded a progress report from interleaving with the clearing. The C contract
         // now names the anchor reader in its quiescence sentence; this lock is how this class
@@ -720,7 +720,7 @@ public class AudioPlayback(
         }
 
     /**
-     * Quiescence precondition, stated in the same words [flush]'s is (interlude item I-02): the
+     * Quiescence precondition, stated in the same words [flush]'s is: the
      * feeder must not be between a [submit] call's start and its return when this runs. Confinement
      * alone does not give that, because [submit] runs on the feed worker rather than the session
      * owner; what gives it is the engine joining the feeder's job before teardown reaches this
@@ -736,9 +736,9 @@ public class AudioPlayback(
         // nothing, because a callback that finds no ring writes silence, which is what closing means.
         //
         // UNDER THE LOCK, and this is not tidiness. [position], [anchorClock], [buffered] and
-        // [underruns] are documented safe from any thread and all four read this field; before B1.8
-        // the ring was a managed object and a reader that had already loaded the reference was
-        // merely reading a ring nobody would use again. After B1.8 it can be a pointer that
+        // [underruns] are documented safe from any thread and all four read this field. While the
+        // ring was always a managed object, a reader that had already loaded the reference was
+        // merely reading a ring nobody would use again. Now it can be a pointer that
         // `sink.close()` frees, and clearing the field first narrows that window without closing
         // it: a reader already inside `anchor()` is still there. Proved rather than argued, with
         // AddressSanitizer over the two C calls in that order:

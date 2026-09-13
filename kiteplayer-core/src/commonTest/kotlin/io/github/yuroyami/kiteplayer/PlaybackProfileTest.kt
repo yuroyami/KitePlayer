@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/** KD-6 goldens: each profile's compiled configuration, pinned exactly. */
+/** Profile goldens: each profile's compiled configuration, pinned exactly. */
 class PlaybackProfileTest {
 
     @Test

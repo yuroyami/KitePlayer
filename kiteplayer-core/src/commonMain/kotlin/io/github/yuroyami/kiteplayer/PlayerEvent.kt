@@ -74,7 +74,7 @@ public sealed interface PlayerEvent {
     public data class Failed(val error: PlaybackError) : PlayerEvent
 
     /**
-     * A chapter boundary was crossed (S4.e).
+     * A chapter boundary was crossed.
      *
      * Emitted whenever the published position moves from one chapter's span into another's,
      * whether playback carried it there or a seek did. Null means the position sits before the

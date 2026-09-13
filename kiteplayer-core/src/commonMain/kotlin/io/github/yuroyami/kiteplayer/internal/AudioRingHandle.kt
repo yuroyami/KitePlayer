@@ -26,9 +26,9 @@ import io.github.yuroyami.kiteplayer.spi.AudioFormat
  * The members here are exactly the ones [io.github.yuroyami.kiteplayer.AudioPlayback] uses, and
  * `render` is deliberately not among them. Rendering belongs to whoever owns the device callback: in
  * the Kotlin case that is an `AudioRenderCallback` closure that `AudioPlayback` hands to the sink,
- * and in the C case, from B1.8 onward, it is a `static` C function the engine never calls and never
+ * and in the C case it is a `static` C function the engine never calls and never
  * sees. Putting `render` on this interface would have made the second arrangement look like the
- * first, which is the whole thing B1.8 is trying to stop being true.
+ * first, and the C callback exists precisely so that the two are not alike.
  */
 internal interface AudioRingHandle {
 
@@ -124,11 +124,11 @@ internal data class AudioAnchor(val pts: Pts, val audibleAtNanos: Long)
  * it. Kotlin's `Long` division truncates toward zero and its remainder takes the sign of the
  * dividend, which is exactly what C does, so `kprt_frames_to_micros` in `native/src/kite_rt_render.c`
  * agrees with this for negative deltas as well as positive ones. That file and not
- * `native/src/kite_rt_ring.c`, which is where B1.7 put it: B1.8 moved the function into the real-time
+ * `native/src/kite_rt_ring.c`, where it first lived: it moved into the real-time
  * translation unit with the rest of the render path, and that move is what makes the unit's undefined
  * symbol list auditable.
  *
- * ### Saturating at the ends of the range, since the interlude
+ * ### Saturating at the ends of the range
  *
  * `whole * 1_000_000L` overflows a Long once `whole` passes about 9.2e12. In Kotlin that wrap is
  * DEFINED behaviour and in the C twin it was UNDEFINED, so at the top of the range the oracle was

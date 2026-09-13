@@ -48,7 +48,7 @@ class TempoStageTest {
     }
 
     /**
-     * P0-20. The stage needs two periods of lookahead before it may splice, so at the end of a
+     * The stage needs two periods of lookahead before it may splice, so at the end of a
      * stream whatever is short of that has nothing to trigger it. `reset` used to be the only exit
      * and it dropped them, which is the end of a clip going missing. `finish` is the exit that
      * keeps them.

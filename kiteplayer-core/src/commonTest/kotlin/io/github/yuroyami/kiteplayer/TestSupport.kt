@@ -99,7 +99,7 @@ internal class FakeVideoFrame(
     }
 
     /**
-     * Readable planes for the captureFrame path (S4.e): tiny deterministic 2x2 content whose
+     * Readable planes for the captureFrame path: tiny deterministic 2x2 content whose
      * luma bytes derive from the pts, so a capture test can prove WHICH frame it copied.
      */
     override val planeCount: Int get() = 3

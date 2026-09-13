@@ -11,7 +11,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
-/** End-to-end acceptance for HANDOFF Mission A against a genuine multi-track container fake. */
+/** End-to-end acceptance for track switching against a genuine multi-track container fake. */
 class MissionATrackSwitchAcceptanceTest {
 
     private data class ContinuityBaseline(

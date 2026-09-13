@@ -21,12 +21,12 @@ public data class MediaItem(
      */
     val headers: Map<String, String> = emptyMap(),
     /**
-     * Subtitle files to load alongside the media (S4.e). Local SubRip and WebVTT files become
+     * Subtitle files to load alongside the media. Local SubRip and WebVTT files become
      * selectable synthetic subtitle tracks; see [SubtitleSource] for the exact contract.
      */
     val externalSubtitles: List<SubtitleSource> = emptyList(),
     /**
-     * A video filter chain attached at open (S4.e): KD-1's compiled description, or a raw
+     * A video filter chain attached at open: a compiled filter description, or a raw
      * FFmpeg chain like `scale=1280:720,eq=brightness=0.1`. Every decoded frame runs through
      * it before presentation. Filters run on SOFTWARE frames: under HwdecPolicy.Auto or Prefer
      * the hardware route stands down with a warning, and under Require the video track is
@@ -187,7 +187,7 @@ public fun interface MediaIoResolver {
 }
 
 /**
- * An external subtitle file added alongside a media item (S4.e).
+ * An external subtitle file added alongside a media item.
  *
  * SubRip, WebVTT and ASS files load at open: each becomes a selectable synthetic subtitle track
  * (a negative [io.github.yuroyami.kiteplayer.TrackId], labelled by [title] or the file name)
@@ -233,7 +233,7 @@ public enum class SeekMode {
      * Shows the keyframe at once and then refines to the exact frame, which is what a seek bar
      * drag wants: the picture responds immediately and settles a moment later.
      *
-     * Real since the S4.g surge: the seek machine lands and PRESENTS the keyframe at
+     * The seek machine lands and PRESENTS the keyframe at
      * or before the target first, then runs an ordinary precise landing on the exact frame. The
      * reported position and [io.github.yuroyami.kiteplayer.PlayerEvent.SeekCompleted] carry the
      * exact landing, never the intermediate keyframe, and a keyframe that already sits on the

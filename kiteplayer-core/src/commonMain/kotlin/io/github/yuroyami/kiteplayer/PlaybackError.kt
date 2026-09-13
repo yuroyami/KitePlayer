@@ -136,7 +136,7 @@ public sealed class PlaybackWarning {
         get() = mapOf("warning" to (this::class.simpleName ?: "PlaybackWarning"))
 
     /**
-     * The attached renderer reported an unrecoverable failure through its own event feed (S4.d).
+     * The attached renderer reported an unrecoverable failure through its own event feed.
      * Playback continues; the schedule keeps pacing and the renderer keeps refusing, so the
      * degradation is a black or frozen picture, which is exactly why it is worth a warning.
      */
@@ -145,7 +145,7 @@ public sealed class PlaybackWarning {
     }
 
     /**
-     * Open options the demuxer never consumed (S4.e): a typo'd key, or one this protocol does
+     * Open options the demuxer never consumed: a typo'd key, or one this protocol does
      * not take. The open succeeded; the option did nothing, and pretending otherwise is how a
      * configuration bug survives for months.
      */

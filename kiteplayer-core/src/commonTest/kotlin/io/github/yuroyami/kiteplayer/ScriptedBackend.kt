@@ -112,7 +112,7 @@ internal class MediaScript(
     val durationUs: Long = 4_000_000,
     val hasVideo: Boolean = true,
     val hasAudio: Boolean = true,
-    /** The chapter table the scripted container declares (S4.e). */
+    /** The chapter table the scripted container declares. */
     val chapters: List<Chapter> = emptyList(),
     /** 40 ms, which is 25 frames a second. */
     val videoFrameDurationUs: Long = 40_000,
@@ -475,7 +475,7 @@ internal class ScriptedBackend(
     var openFailure: Throwable? = null
 
     /**
-     * A ten-line SRT-only parser for the external-subtitle tests (S4.e). The real WebVTT and
+     * A ten-line SRT-only parser for the external-subtitle tests. The real WebVTT and
      * SubRip parsers live in kiteplayer-subtitles, above this module's dependency arrow; the
      * engine's contract only needs A parser here, and the format goldens live with the real ones.
      */

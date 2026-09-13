@@ -82,8 +82,8 @@ private class RingCase(val name: String, val steps: List<RingStep>)
  *
  * ### What these 18 tests cover, and what they do NOT cover
  *
- * They cover [KotlinAudioRing], which is the implementation js, wasmJs, jvm and Android use. From
- * B1.8 onward it is NOT the implementation the macOS device path uses: there the C ring in
+ * They cover [KotlinAudioRing], which is the implementation js, wasmJs, jvm and Android use. It
+ * is NOT the implementation the macOS device path uses: there the C ring in
  * `kiteplayer-rt` holds the samples and a `static` C function renders them. So on macOS these tests
  * exercise a ring no user runs, and letting a total test count quietly imply otherwise would be
  * exactly the substitution this project forbids. It is said in two places on purpose: here and
@@ -311,8 +311,8 @@ class AudioRingTest {
     fun `dating a frame delta divides before it multiplies`() {
         // Both places this ring dates a frame used to compute
         // `delta * 1_000_000L / sampleRate`, whose product overflows a signed 64 bit intermediate once
-        // the delta passes about 9.2e12: the same shape found in the media library's
-        // timestamp helpers as defect D9.
+        // the delta passes about 9.2e12: the same defect once found in the media library's
+        // timestamp helpers.
         //
         // The table has to go through `framesToMicros` rather than through `write` and `render`,
         // because reaching a delta of 1e13 frames through the ring's own API would mean actually

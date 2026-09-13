@@ -11,7 +11,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * The queue (S4.e): items play through in order, LoopMode.All wraps, explicit movement keeps the
+ * The queue: items play through in order, LoopMode.All wraps, explicit movement keeps the
  * play intent and refuses typed at the ends, and a plain open replaces the queue.
  */
 class QueueTest {

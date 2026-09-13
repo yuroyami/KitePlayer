@@ -10,8 +10,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * S4.e landing four: the support bundle redacts paths, the dump echoes open options and the
- * queue, and the unimplemented tables refuse typed with the ledger sentence.
+ * The support bundle redacts paths, the dump echoes open options and the
+ * queue, and the unimplemented tables refuse with their typed error.
  */
 class FacadeTruthTest {
 
@@ -34,7 +34,7 @@ class FacadeTruthTest {
 
     @Test
     fun `the bundle keeps no query string and no option value`() = runTest {
-        // SEC-3. The redaction was `substringAfterLast('/')`, so the token rode out in the one
+        // The redaction was once `substringAfterLast('/')`, so the token rode out in the one
         // artifact a user is most likely to paste in public, and `headers` carried the rest.
         val harness = CoreHarness(this)
         harness.attachRenderer()

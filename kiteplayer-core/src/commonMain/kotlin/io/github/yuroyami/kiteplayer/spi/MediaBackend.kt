@@ -34,15 +34,15 @@ public interface MediaBackend {
     public suspend fun open(media: MediaItem): BackendSession
 
     /**
-     * One line for the diagnostics dump (S4.d): the backend's name and whatever configuration it
+     * One line for the diagnostics dump: the backend's name and whatever configuration it
      * carries that a bug report would want. The default is the class name; a backend that takes
-     * options overrides this to echo them, which is how KD-7's "option pairs as configured" reach
+     * options overrides this to echo them, which is how its option pairs, as configured, reach
      * the dump without the engine knowing any backend's shape.
      */
     public fun describeForDiagnostics(): String = this::class.simpleName ?: "backend"
 
     /**
-     * The parser for external subtitle FILES (S4.e), or null when this backend brings none.
+     * The parser for external subtitle FILES, or null when this backend brings none.
      *
      * The engine owns reading the file and timing the cues; the parsing lives above the core
      * (the `kiteplayer-subtitles` module cannot be a core dependency, because it already depends

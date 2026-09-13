@@ -90,11 +90,11 @@ kotlin {
          * `kiteplayer-rt`, and publishing the module makes that cinterop klib consumable. The raw C
          * ring handed across the engine seam is marked `RawRingApi`, so callers cross it deliberately.
          *
-         * In B1.7 nothing on the shipped path constructed a `NativeAudioRing`: `AudioPlayback.open`
-         * built a `KotlinAudioRing` and the device callback was still a Kotlin closure. B1.8 changed
-         * that, once, and it is the only sub-phase in B1 that touched the real-time path. Since then a
-         * sink that owns a C callback is handed a C ring and every other sink is not, which is decided
-         * in `internal/AudioPath.kt` and nowhere else.
+         * At first nothing on the shipped path constructed a `NativeAudioRing`: `AudioPlayback.open`
+         * built a `KotlinAudioRing` and the device callback was still a Kotlin closure. Moving the
+         * device callback into C changed that, and it is the one change that touched the real-time
+         * path. Since then a sink that owns a C callback is handed a C ring and every other sink is
+         * not, which is decided in `internal/AudioPath.kt` and nowhere else.
          */
         nativeMain.dependencies {
             api(projects.kiteplayerRt)

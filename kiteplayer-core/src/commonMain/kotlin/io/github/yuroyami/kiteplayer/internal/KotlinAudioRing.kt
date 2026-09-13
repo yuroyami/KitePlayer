@@ -21,7 +21,7 @@ import kotlin.math.min
  *
  * ### Where this one runs, and where it does not
  *
- * This is the implementation for every target, and on macOS arm64 from B1.8 onward it is no longer
+ * This is the implementation for every target, and on macOS arm64 it is no longer
  * the one the device path uses; there the C ring in `kiteplayer-rt` is. It is not dead code and it
  * cannot be deleted: `commonMain` targets js and wasmJs, which can never contain C, and it is the
  * only oracle the C ring can be checked against. This must be stated
@@ -38,7 +38,7 @@ import kotlin.math.min
  * That is a priority inversion on a real-time thread. It is not fixed here: on
  * js and wasmJs there is no second thread for it to matter on, and changing the publication protocol
  * of the oracle would have meant changing the thing the C ring is measured against in the same
- * sub-phase that introduced the C ring. The C implementation inverts every such relationship and
+ * change that introduced the C ring. The C implementation inverts every such relationship and
  * counts its give-ups; see `kiteplayer-rt/native/include/kite_rt.h`.
  *
  * ### Why the anchor lives here
@@ -227,8 +227,8 @@ internal class KotlinAudioRing(
         // `kprt_ring_begin_write` returns zero for a non-positive frame count before it looks at
         // anything else, so a zero-frame write there spends no timestamp segment. This ring used to
         // call `recordTimestamp` first, so four zero-frame writes with four discontinuous timestamps
-        // spent all four segment slots and the fifth real write was refused. The independent
-        // verification of B1.8 measured both sides and found the difference; it is unreachable from
+        // spent all four segment slots and the fifth real write was refused. An independent
+        // review measured both sides and found the difference; it is unreachable from
         // `AudioPlayback.submit`, which never asks for fewer than one frame, and it was a real
         // divergence in a contract the differential oracle claims to pin, so the two now agree and
         // the oracle has a row for it.
@@ -279,8 +279,8 @@ internal class KotlinAudioRing(
         if (appended > segmentsRetired.value) {
             val newest = ((appended - 1) % MAX_SEGMENTS).toInt()
             // Through framesToMicros and not `delta * 1_000_000L / sampleRate`, which overflows.
-            // The naive product overflows a signed 64 bit intermediate at a large frame delta, which
-            // is the shape defect D9 records against KiteFFmpeg's timestamp helpers.
+            // The naive product overflows a signed 64 bit intermediate at a large frame delta, the
+            // same defect once found in KiteFFmpeg's timestamp helpers.
             val micros = framesToMicros(atFrame - segmentStartFrame[newest], format.sampleRate)
             if (driftWithinTolerance(segmentPtsUs[newest], micros, ptsUs)) return true
         }
@@ -295,7 +295,7 @@ internal class KotlinAudioRing(
      * where C's is undefined, so the naive form is not a crash here, but it is still wrong in the same
      * place and in a worse way for this library: a wrapped difference can land inside the tolerance,
      * and then the ring predicts the clock from a base an eternity away instead of opening a segment.
-     * UBSan named the C side of exactly this during the independent verification of B1.8, and the two
+     * UBSan named the C side of exactly this during an independent review, and the two
      * implementations have to agree at every input or the differential oracle is comparing behaviours
      * rather than checking one.
      *

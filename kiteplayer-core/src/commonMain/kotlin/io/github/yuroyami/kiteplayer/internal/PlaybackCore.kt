@@ -208,12 +208,12 @@ internal class PlaybackCore(
     /** Told once per open: the same disagreement does not become a warning per seek. */
     private var divergencesReported: Boolean = false
 
-    /** The queue (S4.e): the items and the cursor. Empty and -1 outside queue playback. */
+    /** The queue: the items and the cursor. Empty and -1 outside queue playback. */
     private var queueItems: List<MediaItem> = emptyList()
     private var queueIndex: Int = -1
 
     /**
-     * Shuffle as an order OVER the queue rather than a reorder OF it (S2).
+     * Shuffle as an order OVER the queue rather than a reorder OF it.
      *
      * [queueOrder] holds positions into [queueItems] in play order, and everything that walks the
      * queue walks it: next, previous, and the advance at the end of an item. With shuffle off it
@@ -234,7 +234,7 @@ internal class PlaybackCore(
     /** The chapter the last ChapterChanged named, as an index; MIN_VALUE forces the first emit. */
     private var lastChapterIndex: Int = Int.MIN_VALUE
 
-    /** One parsed external subtitle file (S4.e): a synthetic track and its ready cue table. */
+    /** One parsed external subtitle file: a synthetic track and its ready cue table. */
     private class ExternalSubtitleTrack(
         val id: TrackId,
         val info: TrackInfo,
@@ -257,7 +257,7 @@ internal class PlaybackCore(
         track != null && externalSubtitleTracks.any { it.id == track }
 
     /**
-     * Parses the media item's external subtitle files (S4.e): each becomes a selectable
+     * Parses the media item's external subtitle files: each becomes a selectable
      * synthetic subtitle track whose cues run through the SAME timing path container cues use.
      * A file that cannot be read or parsed warns typed and is skipped; the open never fails
      * over a subtitle.
@@ -532,7 +532,7 @@ internal class PlaybackCore(
         publishSnapshot()
     }
 
-    /** Swaps the timed cue table in place (S4.e): no container reopen, one publish. */
+    /** Swaps the timed cue table in place: no container reopen, one publish. */
     private suspend fun applyExternalSubtitle(target: TrackId?) {
         val active = session ?: return
         selectedExternalSubtitle = target
@@ -558,7 +558,7 @@ internal class PlaybackCore(
     private var externalSubtitleIdsMinted = 0
 
     /**
-     * The armed A-B loop (S4.g). A player property like [speed]: it survives seeks and reopen,
+     * The armed A-B loop. A player property like [speed]: it survives seeks and reopen,
      * because the caller armed the loop, not the media. With only A armed the loop wraps at the
      * end of the media; with both armed the crossing check in [handlePlaybackTime] owns B.
      */
@@ -712,7 +712,7 @@ internal class PlaybackCore(
         private set
     var seekFlushCycles: Long = 0
         private set
-    /** Mission B operation counters: monotonic, actor-owned, and intentionally internal. */
+    /** Subtitle operation counters: monotonic, actor-owned, and intentionally internal. */
     var subtitlePacketAttempts: Long = 0
         private set
     var subtitleMaxPacketAttemptsPerPass: Int = 0
@@ -876,7 +876,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * The four queue edits (S1).
+     * The four queue edits.
      *
      * Only a removal of the item that is playing owns the session, because only it opens
      * something; the other three rearrange a list and cancel on their own.
@@ -1445,7 +1445,7 @@ internal class PlaybackCore(
         }
     }
 
-    /** True when a subtitle change swaps cue tables in place, needing no container reopen (S4.e). */
+    /** True when a subtitle change swaps cue tables in place, needing no container reopen. */
     private fun inPlaceExternalSubtitleChange(command: CoreCommand.SelectTrack): Boolean =
         command.kind == TrackKind.Subtitle &&
             session?.subtitleStream == null &&
@@ -1538,7 +1538,7 @@ internal class PlaybackCore(
                 ) {
                     if (session?.subtitleStream != null) {
                         // A container stream is timing cues: the ordinary rebuild deselects it,
-                        // and the external table applies once the new graph stands (S4.e).
+                        // and the external table applies once the new graph stands.
                         pendingExternalSubtitle = externalTarget
                         queueSelection(command.kind, command.track, command.reply)
                     } else {
@@ -2154,7 +2154,7 @@ internal class PlaybackCore(
                 command.reply.completeExceptionally(preemptedByTeardown("open"))
                 return
             }
-            // External subtitle files (S4.e): read before the session was built, merged into the
+            // External subtitle files: read before the session was built, merged into the
             // container's table now that one exists, so a flagged one starts timing at once.
             adoptExternalSubtitles(command.media, parsedExternals)
             // Unconditional: when this is non-null the container's subtitle stream was left
@@ -2220,7 +2220,7 @@ internal class PlaybackCore(
             VideoDecoderSelection.Configured
         },
     ): OpenSession {
-        // M1's resolver and M5's cache, both at the one place every open passes. The resolver
+        // The network resolver and the byte cache, both at the one place every open passes. The resolver
         // answers only for an item with a URI and no reader of its own; the cache wraps every
         // reader-fed open. On an open FAILURE a resolver-produced reader is the engine's to
         // close (the item's own reader stays the caller's, matching the backend's contract).
@@ -3000,7 +3000,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * The secondary slot (T3). In place, like every subtitle change: the demuxer already routes
+     * The secondary slot. In place, like every subtitle change: the demuxer already routes
      * every subtitle stream to its own live queue, so a second stream needs a decoder and a cue
      * table, never a reopen. The spec predated that and said reopen; the tree is better.
      */
@@ -3470,7 +3470,7 @@ internal class PlaybackCore(
         val wasPlaying = playRequested
         val video = choiceFor(requested, TrackKind.Video, current.videoStream?.index)
         val audio = choiceFor(requested, TrackKind.Audio, current.audioStream?.index)
-        // An external subtitle target means NO container stream (S4.e): the rebuild deselects
+        // An external subtitle target means NO container stream: the rebuild deselects
         // whatever container track was timing cues, and the external table applies afterwards.
         val subtitleRequest = requested.firstOrNull { it.kind == TrackKind.Subtitle }
         val subtitle = if (subtitleRequest != null && isExternalSubtitle(subtitleRequest.track)) {
@@ -3520,7 +3520,7 @@ internal class PlaybackCore(
             }
             playRequested = wasPlaying
             // The rebuild replaced the track table; the synthetic external rows and any waiting
-            // external selection re-apply on top of it (S4.e).
+            // external selection re-apply on top of it.
             if (externalSubtitleTracks.isNotEmpty()) {
                 tracks = tracks.copy(all = tracks.all + externalSubtitleTracks.map { it.info })
             }
@@ -3958,7 +3958,7 @@ internal class PlaybackCore(
             maskedSeekTargetMicros.value = NO_SEEK_MASK
             publishedPositionMicros.value = currentPosition().micros
         }
-        // Chapter crossings (S4.e): compared on the published reading, so a seek and ordinary
+        // Chapter crossings: compared on the published reading, so a seek and ordinary
         // playback announce a boundary the same way. Media with no table emits nothing.
         val chapters = session.source.chapters
         if (chapters.isNotEmpty()) {
@@ -4004,7 +4004,7 @@ internal class PlaybackCore(
             if (shownFor >= STILL_IMAGE_DURATION) stillImageFinished = true
             else wakeIn(STILL_IMAGE_DURATION - shownFor)
         }
-        // The A-B loop's B crossing (S4.g): compared on the published reading like the chapters,
+        // The A-B loop's B crossing: compared on the published reading like the chapters,
         // so a wrap is impossible while a seek is in flight and the pass after one starts clean.
         // Playing only: a paused player may be seeked past B and inspected there. The wrap is an
         // ordinary precise seek, so an unseekable source cannot wrap; arming refused the live
@@ -4051,12 +4051,12 @@ internal class PlaybackCore(
     }
 
     /**
-     * Cue timing (S4.c). Decode work is actor-confined but explicitly budgeted: a dense ASS stream
+     * Cue timing. Decode work is actor-confined but explicitly budgeted: a dense ASS stream
      * cannot keep the pass inside this handler while pause, play, seek or a worker failure waits in
      * a mailbox. A hit budget reschedules immediately; a mailbox arrival returns at the next
      * decoder boundary and is drained at the start of the next pass.
      *
-     * Publishing on changes, never per frame, is 17.9's measured law applied to subtitles: cues
+     * Subtitles follow the measured rule of publishing on changes, never per frame: cues
      * change about once a second. The raster cost therefore sits on cue edges, and the renderer
      * skips re-uploading an unchanged overlay by contentHash.
      */
@@ -4066,7 +4066,7 @@ internal class PlaybackCore(
         val queue = session.subtitleQueue
 
         // The drain half needs a container stream; the timing half below does not: an external
-        // cue table (S4.e) times and publishes through the same selector with no decoder at all.
+        // cue table times and publishes through the same selector with no decoder at all.
         if (decoder == null || queue == null) {
             if (actorWorkWaiting()) {
                 wakeIn(Duration.ZERO)
@@ -4189,7 +4189,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * The secondary lane's half of [handleSubtitles] (T3): the same budgets, the same retained
+     * The secondary lane's half of [handleSubtitles]: the same budgets, the same retained
      * packet, the same back-pressure contract, against the lane-2 fields. Returns true when a
      * waiting command interrupted the pass.
      */
@@ -4284,7 +4284,7 @@ internal class PlaybackCore(
         return if (remainingUs <= 0) Duration.ZERO else remainingUs.microseconds
     }
 
-    /** The timing half of handleSubtitles, shared by container and external cue tables (S4.e). */
+    /** The timing half of handleSubtitles, shared by container and external cue tables. */
     private suspend fun timeAndPublishCues(session: OpenSession) {
         val positionUs = currentPosition().micros - subtitleDelay.inWholeMicroseconds
         // The index is a derived cache over the very same list; it extends on an append and
@@ -4293,7 +4293,7 @@ internal class PlaybackCore(
         session.cueIndex.syncTo(session.subtitleCues)
         val primaryActive = session.cueIndex.activeAt(positionUs)
         // The secondary lane rides the same clock and the same delay, forced to the top of the
-        // picture on the way out so the two tracks can never sit on each other (T3).
+        // picture on the way out so the two tracks can never sit on each other.
         session.cue2Index.syncTo(session.subtitle2Cues)
         val secondaryActive = if (session.subtitle2Cues.isEmpty()) {
             emptyList()
@@ -4874,7 +4874,7 @@ internal class PlaybackCore(
 
     private fun handleLoop() {
         if (status != PlaybackStatus.Ended) return
-        // The armed A-B loop owns the end of the media (S4.g): with no B, or a B past the end,
+        // The armed A-B loop owns the end of the media: with no B, or a B past the end,
         // the wrap point IS the end, and the jump back to A restarts playback like a repeat,
         // regardless of LoopMode. An A at or past the duration would land straight back on the
         // end and restart every pass for ever, so such an A is treated as unarmed rather than
@@ -4888,7 +4888,7 @@ internal class PlaybackCore(
             return
         }
         // One media item repeating is a seek to zero and nothing else. LoopMode.All with a queue
-        // of one or none means the same thing: the whole queue IS the current item (S4.e).
+        // of one or none means the same thing: the whole queue IS the current item.
         val repeatsCurrent = loop == LoopMode.One || (loop == LoopMode.All && queueItems.size <= 1)
         if (!repeatsCurrent) return
         // The same guard the A-B branch above has: the repeat is a precise seek,
@@ -4920,7 +4920,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * The queue's own advance (S4.e). At Ended with a queue behind it, the next item opens and
+     * The queue's own advance. At Ended with a queue behind it, the next item opens and
      * playback continues; LoopMode.All wraps past the last item. Runs after handleLoop, which
      * owns the repeat-current cases, and the Ended-to-Opening transition makes re-entry
      * impossible: by the time this pass ends the status has left Ended.
@@ -5036,7 +5036,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * Arms the schedule's one-shot capture (S4.e). Playing, the very next presented frame
+     * Arms the schedule's one-shot capture. Playing, the very next presented frame
      * fulfils it; paused, a precise seek to the current position pushes one frame through the
      * same gate, so the copy is always taken at the presentation boundary, before ownership
      * moves to the renderer.
@@ -5067,7 +5067,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * The queue index one step away in PLAY order, or null when there is no such item (S2).
+     * The queue index one step away in PLAY order, or null when there is no such item.
      *
      * Play order and list order are the same thing until shuffle is on, so this is the only place
      * that has to know which is which.
@@ -5085,7 +5085,7 @@ internal class PlaybackCore(
         }
     }
 
-    /** Explicit queue movement, refused typed when there is nowhere to go (S4.e). */
+    /** Explicit queue movement, refused typed when there is nowhere to go. */
     private suspend fun jumpQueue(target: Int?, reply: CompletableDeferred<Unit>, direction: String) {
         if (queueItems.isEmpty()) {
             reply.completeExceptionally(IllegalStateException("no queue is open; openQueue first"))
@@ -5110,14 +5110,14 @@ internal class PlaybackCore(
     }
 
     /**
-     * The queue as an edit sees it (S1).
+     * The queue as an edit sees it.
      *
      * A plain [open] is a queue of one that has not been written down, so an edit counts it as
      * one. Refusing an edit there would make an application call `openQueue` with the item it is
      * already playing just to add a second one, which reopens what is on screen for nothing.
      */
     /**
-     * Builds the play order from nothing (S2).
+     * Builds the play order from nothing.
      *
      * Shuffled, the item already playing comes first, because a shuffle that started somewhere
      * else would interrupt what is on screen to obey a setting.
@@ -5132,7 +5132,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * Carries the play order across an edit that renumbers the list (S2).
+     * Carries the play order across an edit that renumbers the list.
      *
      * Rebuilding instead would reshuffle what the listener has not heard yet, so adding one track
      * would change the order of every track after it.
@@ -5166,7 +5166,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * Applies one edit (S1).
+     * Applies one edit.
      *
      * The law all four follow: the item that was playing keeps playing, and the cursor goes
      * wherever that item went. Removing the playing item is the only edit that opens anything,
@@ -5659,7 +5659,7 @@ internal class PlaybackCore(
             ?.let { stream -> session.subtitleCueCaches.getValue(stream.index) }
             ?: mutableListOf()
         // External cues are position-independent facts about the file beside the media: a flush
-        // that empties the table must put them back, or every seek silences them (S4.e).
+        // that empties the table must put them back, or every seek silences them.
         selectedExternalSubtitle
             ?.let { id -> externalSubtitleTracks.firstOrNull { it.id == id } }
             ?.cues
@@ -5671,7 +5671,7 @@ internal class PlaybackCore(
             lane.stage(TypesetOp.Clear)
             lane.lastRequestMillis = Long.MIN_VALUE
         }
-        // The secondary lane's mirror of everything above (T3).
+        // The secondary lane's mirror of everything above.
         session.pendingSubtitle2Packet?.close()
         session.pendingSubtitle2Packet = null
         session.subtitle2DecoderMayHaveOutput = false
@@ -6393,7 +6393,7 @@ internal class PlaybackCore(
     }
 
     /**
-     * The M5 cache window as a time range, byte-to-time mapped PROPORTIONALLY (byte fraction
+     * The byte cache window as a time range, byte-to-time mapped PROPORTIONALLY (byte fraction
      * times duration). Exact for constant bitrate, approximate for variable, honest about both
      * in the Progress KDoc; empty whenever size or duration is unknown or no cache is running.
      */
@@ -6446,7 +6446,7 @@ internal class PlaybackCore(
     private val droppedEvents = atomic(0L)
 
     private fun warn(warning: PlaybackWarning) {
-        // The bounded history first (S4.d): the event feed replays nothing to a late collector,
+        // The bounded history first: the event feed replays nothing to a late collector,
         // and a bug report is exactly a late collector, so the record cannot live only there.
         kotlinx.atomicfu.locks.synchronized(warningFence) {
             warningLog.addLast(TimedWarning(clock.nanos(), warning))
@@ -6464,7 +6464,7 @@ internal class PlaybackCore(
     private val warningLog = ArrayDeque<TimedWarning>()
 
     /**
-     * Everything a bug report needs, in one string (S4.d, carrying KD-7): the resolved
+     * Everything a bug report needs, in one string: the resolved
      * configuration, the backends by name, the tracks and selections, the three published
      * snapshots, the KD artifacts attached to the session, and the warning history. Reads only
      * published state, so it is safe from any thread at any moment, including after failure,
@@ -7390,7 +7390,7 @@ internal class PlaybackCore(
         var sink: AudioSink?,
         val renderer: AttachableRenderer,
         var negotiatedFormat: AudioFormat?,
-        /** Non-null when this open reads through the M5 byte cache; progress reads its window. */
+        /** Non-null when this open reads through the byte cache; progress reads its window. */
         val cachingIo: CachingMediaIo? = null,
     ) {
         private val audioRouting = atomic(
@@ -7530,7 +7530,7 @@ internal class PlaybackCore(
         var subtitleCues: MutableList<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> =
             subtitleStream?.let { subtitleCueCaches.getValue(it.index) } ?: mutableListOf()
 
-        // The secondary subtitle lane (T3): the same shape as the primary fields above, driven by
+        // The secondary subtitle lane: the same shape as the primary fields above, driven by
         // its own budgeted pass and timed by its own index; its cues are forced to the top before
         // rasterising. One slot per direction, exactly mpv's secondary-sid.
         var subtitle2Stream: PlayerStreamInfo? = null
@@ -7634,7 +7634,7 @@ internal class PlaybackCore(
         /** A target beginning farther ahead would violate the user-visible switch latency bound. */
         const val AUDIO_SWITCH_MAX_START_GAP_US = 250_000L
 
-        /** Mission B: inline subtitle work yields the actor at these hard operation ceilings. */
+        /** Inline subtitle work yields the actor at these hard operation ceilings. */
         const val SUBTITLE_PACKETS_PER_PASS = 32
         const val SUBTITLE_RECEIVE_BATCHES_PER_PASS = 32
 
@@ -7759,7 +7759,7 @@ internal class PlaybackCore(
         const val SCHEDULER_ONE_FRAME = 1
         const val SCHEDULER_RUNNING = 2
 
-        /** Warnings kept for the dump (S4.d): enough for a session's story, bounded by contract. */
+        /** Warnings kept for the dump: enough for a session's story, bounded by contract. */
         const val WARNING_HISTORY_LIMIT = 64
 
 
@@ -8195,7 +8195,7 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
 )
 
 /**
- * One edit to the open queue (S1).
+ * One edit to the open queue.
  *
  * They travel as a single command so that the items and the cursor into them can only be read
  * together: a snapshot taken between the two halves of an edit would name the wrong item.

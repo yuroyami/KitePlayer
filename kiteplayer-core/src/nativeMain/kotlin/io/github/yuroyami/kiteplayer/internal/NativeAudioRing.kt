@@ -47,7 +47,7 @@ import platform.posix.memcpy
 /**
  * The C ring in `kiteplayer-rt`, behind [AudioRingHandle].
  *
- * ### What this is on the shipped path, since B1.8
+ * ### What this is on the shipped path
  *
  * On macOS this is the ring the audio device reads. `AudioPlayback.open` goes through
  * `openAudioPath`, whose native `actual` hands a sink that owns a C device callback
@@ -80,8 +80,8 @@ import platform.posix.memcpy
  * not the device's, so that is allowed. It is worth being precise about it rather than claiming the
  * reservation API removed all Kotlin allocation from the write path: it removed a copy, and the
  * remaining pin is unavoidable as long as the samples arrive in a Kotlin array. Removing it would
- * mean moving `AudioPipeline`'s output buffer into native memory, which is not this sub-phase's work
- * and is not in its plan.
+ * mean moving `AudioPipeline`'s output buffer into native memory, which is separate work
+ * that has not been done.
  */
 internal class NativeAudioRing private constructor(
     override val format: AudioFormat,
@@ -182,8 +182,8 @@ internal class NativeAudioRing private constructor(
                 KPRT_COMMIT_PUBLISHED.toInt() -> granted
                 // The same answer KotlinAudioRing gives: nothing was taken, the caller retries.
                 KPRT_COMMIT_NEEDS_SEGMENT.toInt() -> {
-                    // Release the reservation before reporting "try later": since the interlude
-                    // (I-04) a second begin is refused while one is outstanding, so returning 0
+                    // Release the reservation before reporting "try later": a second begin
+                    // is refused while one is outstanding, so returning 0
                     // with the reservation still held would make every retry of submit's loop
                     // begin-refuse forever, a livelock on the shipped feeder. A zero-frame commit
                     // publishes nothing and frees the reservation; the fill work is lost, which
@@ -202,7 +202,7 @@ internal class NativeAudioRing private constructor(
     /**
      * Fills [destination] from the ring, exactly as the device callback does.
      *
-     * Not on [AudioRingHandle], and not called by the engine. Since B1.8 the caller of the underlying
+     * Not on [AudioRingHandle], and not called by the engine. The caller of the underlying
      * `kprt_ring_render` on the shipped path is a `static` C function that Kotlin cannot reach and does
      * not install; this overload exists so the differential oracle can drive the same code path from a
      * test.

@@ -322,7 +322,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     /**
      * Sets what happens at the end of the media.
      *
-     * [LoopMode.All] repeats the open queue (S4.e), wrapping from the last item to the first.
+     * [LoopMode.All] repeats the open queue, wrapping from the last item to the first.
      * With a queue of one, or plain [open]-ed media, it repeats the current item exactly like
      * [LoopMode.One], which is what a whole queue of one means.
      */
@@ -412,13 +412,13 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Sets how much work the renderer spends on the picture beyond decoding it correctly (17.21):
+     * Sets how much work the renderer spends on the picture beyond decoding it correctly:
      * dithering, debanding, and which kernel resamples the frame.
      *
      * Delivered exactly like [setVideoAdjustments]: the value belongs to the player, every renderer
      * is told it on attach, and a change lands on the next drawn frame with no pipeline work. A
      * renderer honours what it can and ignores the rest, so this never fails and never blocks.
-     * [RenderQuality.Off] reproduces the pre-17.21 picture byte for byte.
+     * [RenderQuality.Off] reproduces the plain decoded picture byte for byte.
      *
      * @throws IllegalArgumentException on a non-finite or negative debanding parameter.
      */
@@ -541,7 +541,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
     /**
      * Opens [items] as the queue, starting at [startIndex], and returns paused on its first frame
-     * exactly like [open] (S4.e).
+     * exactly like [open].
      *
      * At each item's end the next opens and playback continues; [LoopMode.All] wraps the end back
      * to the start. [PlayerEvent.Ended] still fires per item, and the snapshot carries the queue
@@ -556,7 +556,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Opens the next queue item, keeping the play or pause intent (S4.e).
+     * Opens the next queue item, keeping the play or pause intent.
      *
      * @throws IllegalStateException with no queue, or at the last item unless [LoopMode.All]
      *         makes the ends meet.
@@ -566,7 +566,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Opens the previous queue item, keeping the play or pause intent (S4.e).
+     * Opens the previous queue item, keeping the play or pause intent.
      *
      * @throws IllegalStateException with no queue, or at the first item unless [LoopMode.All]
      *         makes the ends meet.
@@ -637,7 +637,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Steps a PAUSED player forward by exactly one frame and returns with it on screen (S4.e).
+     * Steps a PAUSED player forward by exactly one frame and returns with it on screen.
      *
      * One DECODED frame, and not one nominal frame period: the decoder has already filled the queue
      * ahead of the paused picture, so the schedule releases the next frame of the media whatever
@@ -656,7 +656,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Returns the newest presented frame as an owned, software-readable copy (S4.e): the
+     * Returns the newest presented frame as an owned, software-readable copy: the
      * documented use of [io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame].
      *
      * Playing, the copy is taken from the very next frame the schedule presents; paused, the
@@ -680,7 +680,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
     /**
      * The chapter whose span holds [position], or null before the first chapter or in media with
-     * no chapter table (S4.e). Pure over the published snapshot; pair it with [position] for the
+     * no chapter table. Pure over the published snapshot; pair it with [position] for the
      * chapter now playing.
      */
     public fun chapterAt(position: Duration): Chapter? =
@@ -688,7 +688,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
 
     /**
      * Seeks to the start of chapter [index] and returns when its first frame is on screen, with
-     * [seek]'s exact contract (S4.e).
+     * [seek]'s exact contract.
      *
      * @throws IllegalArgumentException when [index] is outside the chapter table, including for
      *         media with no chapters.
@@ -855,7 +855,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * Switching a CONTAINER track reopens the container and seeks back to where playback was,
      * because the demuxer permits its stream selection to be set once before the first read, so
-     * that path needs a seekable source. Selecting an EXTERNAL subtitle track (S4.e, a negative
+     * that path needs a seekable source. Selecting an EXTERNAL subtitle track (a negative
      * [TrackId] from [MediaItem.externalSubtitles]) while no container subtitle stream is
      * selected is an in-place cue-table swap: no reopen, no seek, any source. Seamless container
      * switching is tracked as an issue.
@@ -971,7 +971,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Everything a bug report needs, in one string (S4.d): the resolved configuration, the
+     * Everything a bug report needs, in one string: the resolved configuration, the
      * backends by name, tracks and selections, the three published snapshots, the KD artifacts
      * attached to the session, and the bounded warning history. Safe from any thread at any
      * moment, including after a failure, which is when it is usually wanted.
@@ -979,7 +979,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public fun diagnosticsDump(): String = core.diagnosticsDump()
 
     /**
-     * The last warnings this player emitted, oldest first, capped (S4.d).
+     * The last warnings this player emitted, oldest first, capped.
      *
      * [events] replays nothing to a late collector, and a bug report is exactly a late
      * collector: this history is how a warning that happened before anyone listened still
@@ -989,7 +989,7 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public fun warningHistory(): List<TimedWarning> = core.warningHistory()
 
     /**
-     * The dump plus a platform block, with every path trimmed to its basename (S4.e): what a
+     * The dump plus a platform block, with every path trimmed to its basename: what a
      * user pastes into a bug report without leaking their filesystem.
      */
     public fun supportBundle(): String = buildString {

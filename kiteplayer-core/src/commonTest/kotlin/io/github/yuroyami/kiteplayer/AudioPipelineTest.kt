@@ -40,7 +40,7 @@ class AudioPipelineTest {
     }
 
     /**
-     * P0-20. The pipeline's own end-of-stream exit. Only the tempo stage holds anything worth
+     * The pipeline's own end-of-stream exit. Only the tempo stage holds anything worth
      * recovering, and before this existed the only way out of it was a reset, which dropped it.
      */
     @Test

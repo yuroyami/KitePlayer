@@ -12,9 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -44,23 +43,24 @@ public class KitePlayerMediaSession(
 
     private val session = MediaSession(context.applicationContext, tag)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private var artwork: Bitmap? = null
-    private var lastMetadata: MediaSessionMetadata? = null
+    private val artwork = MutableStateFlow<Bitmap?>(null)
+    private val mirror = MediaSessionMirror<Bitmap>(::pushMetadata, ::pushPlaybackState)
 
     /** The token a `Notification.MediaStyle` needs. */
     public val platformToken: MediaSession.Token get() = session.sessionToken
 
+    /** Always true here. Other platforms answer false when they have no session, so one check works everywhere. */
+    public val isAvailable: Boolean = true
+
     init {
         session.setCallback(Callback(), Handler(Looper.getMainLooper()))
         session.isActive = true
-        val states = combine(player.state, player.progress) { snapshot, progress ->
-            snapshot.toMediaSessionState(progress)
-        }
+        // One collector writes both halves in order, so artwork a caller sets cannot be overwritten
+        // by a write that started before it.
         scope.launch {
-            states.map { it.metadata() }.distinctUntilChanged().collect(::pushMetadata)
-        }
-        scope.launch {
-            states.distinctUntilChanged().collect(::pushPlaybackState)
+            combine(player.state, player.progress, artwork) { snapshot, progress, image ->
+                snapshot.toMediaSessionState(progress) to image
+            }.collect { (state, image) -> mirror.update(state, image) }
         }
     }
 
@@ -69,12 +69,10 @@ public class KitePlayerMediaSession(
      * art but does not decode it, so there is nothing here to hand over on its own.
      */
     public fun setArtwork(image: Bitmap?) {
-        artwork = image
-        lastMetadata?.let(::pushMetadata)
+        artwork.value = image
     }
 
-    private fun pushMetadata(metadata: MediaSessionMetadata) {
-        lastMetadata = metadata
+    private fun pushMetadata(metadata: MediaSessionMetadata, image: Bitmap?) {
         session.setMetadata(
             MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, metadata.title)
@@ -83,7 +81,7 @@ public class KitePlayerMediaSession(
                 .putString(MediaMetadata.METADATA_KEY_ALBUM, metadata.album)
                 // Live media has no length, and -1 is how the platform spells that.
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, metadata.duration?.inWholeMilliseconds ?: -1L)
-                .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artwork)
+                .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, image)
                 .build(),
         )
     }
@@ -93,10 +91,10 @@ public class KitePlayerMediaSession(
             PlaybackState.Builder()
                 .setActions(actionsFor(state))
                 .setState(
-                    if (state.playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                    platformStateFor(state.phase),
                     state.position.inWholeMilliseconds,
-                    // The platform extrapolates from this rate, so a paused player must report
-                    // zero or the lock screen's position walks on while nothing is playing.
+                    // The platform walks the position on at this rate, so anything but playing must
+                    // report zero or the lock screen's position moves while nothing plays.
                     if (state.playing) state.speed.toFloat() else 0f,
                 )
                 .build(),
@@ -161,4 +159,12 @@ internal fun actionsFor(state: MediaSessionState): Long {
     if (state.hasNext) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT
     if (state.hasPrevious) actions = actions or PlaybackState.ACTION_SKIP_TO_PREVIOUS
     return actions
+}
+
+/** The platform's own word for each phase. Stopped rather than none, so the card stays up. */
+internal fun platformStateFor(phase: MediaSessionPhase): Int = when (phase) {
+    MediaSessionPhase.Playing -> PlaybackState.STATE_PLAYING
+    MediaSessionPhase.Paused -> PlaybackState.STATE_PAUSED
+    MediaSessionPhase.Buffering -> PlaybackState.STATE_BUFFERING
+    MediaSessionPhase.Stopped -> PlaybackState.STATE_STOPPED
 }

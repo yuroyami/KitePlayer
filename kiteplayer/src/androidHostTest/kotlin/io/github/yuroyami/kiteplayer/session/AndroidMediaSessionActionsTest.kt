@@ -68,4 +68,12 @@ class AndroidMediaSessionActionsTest {
             actionsFor(state(hasPrevious = true)).has(PlaybackState.ACTION_SKIP_TO_PREVIOUS),
         )
     }
+
+    @Test
+    fun `each phase maps to the platform's own state`() {
+        assertEquals(PlaybackState.STATE_PLAYING, platformStateFor(MediaSessionPhase.Playing))
+        assertEquals(PlaybackState.STATE_PAUSED, platformStateFor(MediaSessionPhase.Paused))
+        assertEquals(PlaybackState.STATE_BUFFERING, platformStateFor(MediaSessionPhase.Buffering))
+        assertEquals(PlaybackState.STATE_STOPPED, platformStateFor(MediaSessionPhase.Stopped))
+    }
 }

@@ -8,6 +8,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
 
+## [0.0.25] - 2026-09-15
+
+### Added
+
+- On the web, `KitePlayerMediaSession` mirrors the player into the browser's media session, so the
+  media keys, a headset and the system's media overlay can control playback. Browsers show it only
+  while a page plays through an audio or video element, and KitePlayer plays through Web Audio.
+- On the desktop JVM, `KitePlayerMediaSession` exists and reports `isAvailable` as false, so the
+  same session code compiles on every platform.
+- Both samples build the media session and attach the interruption and background handling. The
+  Android sample keeps the song playing when the screen locks. Fixes #77.
+
+### Fixed
+
+- On Android 13 and newer, the audio visualiser crashed with "Software rendering doesn't support
+  RuntimeShader" when a warp drawing or a shader drawing rendered into its echo buffer. On a
+  bitmap canvas those drawings now take the path Android 12 and older take: the warp becomes a
+  plain echo, and a shader drawing shows its fallback. Fixes #135.
+- On Android, a stalled stream showed as paused on the lock screen. It now shows buffering, and
+  the playback state is written only when the lock screen would otherwise be wrong.
+- On iOS, the now playing card was rebuilt five times a second. Its text and artwork are written
+  when they change, a live stream is marked live and gets no scrub bar, and a toggle while
+  buffering pauses.
+- Two CoreAudio sink tests failed in CI when the audio device started late. Fixes #133.
+
+### Changed
+
+- Breaking: `MediaSessionState` takes a `phase` (`Playing`, `Paused`, `Buffering` or `Stopped`)
+  in place of its playing flag, plus a new `hasVideo`. Code that builds or copies one needs the
+  new parameters. Reading `playing` works as before.
+- Code comments explain what the old planning codes meant instead of citing them. Fixes #134.
+
 ## [0.0.24] - 2026-09-12
 
 ### Added

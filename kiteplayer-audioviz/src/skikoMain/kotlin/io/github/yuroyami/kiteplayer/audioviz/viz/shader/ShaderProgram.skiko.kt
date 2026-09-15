@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asComposeShader
 import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 import org.jetbrains.skia.FilterTileMode
 import org.jetbrains.skia.Image
@@ -16,6 +17,8 @@ import org.jetbrains.skia.SamplingMode
 import org.jetbrains.skia.impl.use
 
 internal actual val runtimeShadersSupported: Boolean = true
+
+internal actual fun DrawScope.canDrawRuntimeShaders(): Boolean = true
 
 /**
  * Desktop and iOS both draw through Skia, so both get this one.

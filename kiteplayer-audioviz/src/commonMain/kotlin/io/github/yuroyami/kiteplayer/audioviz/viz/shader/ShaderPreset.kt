@@ -74,7 +74,8 @@ internal abstract class ShaderPreset(
     open fun DrawScope.drawFallback(state: VizRenderState) {}
 
     final override fun DrawScope.drawEcho(state: VizRenderState) {
-        if (!program.available) {
+        // A snapshot into a bitmap during a change of drawing lands here on Android.
+        if (!program.available || !canDrawRuntimeShaders()) {
             withCamera(camera, 1f) { drawFallback(state) }
             return
         }

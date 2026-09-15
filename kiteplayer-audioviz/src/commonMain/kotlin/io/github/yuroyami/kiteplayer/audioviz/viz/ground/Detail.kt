@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderInputs
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderLibrary
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
 
 /** The fine textures a drawing can wear on top. */
 @AudioVizAuthoringApi
@@ -41,7 +42,7 @@ public class Detail(
             advancedAt = state.timeSeconds
             phase += state.deltaSeconds * (0.3f + state.paced(2f))
         }
-        if (strength <= 0f || !program.available) return
+        if (strength <= 0f || !program.available || !canDrawRuntimeShaders()) return
         inputs.update(state)
         inputs.publish(program, state, size.width, size.height)
         val cam = camera

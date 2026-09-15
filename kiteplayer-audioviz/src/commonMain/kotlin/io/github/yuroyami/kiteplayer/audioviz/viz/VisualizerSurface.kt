@@ -31,6 +31,7 @@ import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.drawDetail
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.drawGround
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.TransitionBlend
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
 import kotlin.time.TimeSource
 
 /**
@@ -262,8 +263,9 @@ private fun DrawScope.replayPrevious(
     val bloomShare = if (copies > 0) visualization.bloomShareAt(mood).coerceIn(0f, 0.8f) else 0f
 
     // A per pixel warp replaces the lot: it scales, turns, shifts, copies and fades by itself.
+    // Where the buffer cannot take a shader, the plain replay below stands in for it.
     val spec = visualization.warp
-    if (spec != null) {
+    if (spec != null && canDrawRuntimeShaders()) {
         val runner = spec.runner
         val ready = runner.prepare(
             previous = previous,

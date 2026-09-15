@@ -9,10 +9,15 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.nativeCanvas
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 
 internal actual val runtimeShadersSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+internal actual fun DrawScope.canDrawRuntimeShaders(): Boolean =
+    runtimeShadersSupported && drawContext.canvas.nativeCanvas.isHardwareAccelerated
 
 /**
  * Android's own runtime shaders, which arrived in version 33.

@@ -8,6 +8,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderInputs
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderLibrary
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderProgram
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
 
 /** The full-screen fields a drawing can sit on. */
 @AudioVizAuthoringApi
@@ -82,7 +83,7 @@ public class Ground(
     }
 
     private fun DrawScope.paint(program: ShaderProgram, state: VizRenderState, alpha: Float) {
-        if (!program.available) return
+        if (!program.available || !canDrawRuntimeShaders()) return
         inputs.publish(program, state, size.width, size.height)
         val cam = camera
         if (cam != null) {

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 
 /**
@@ -63,3 +64,9 @@ public expect class ShaderProgram(source: String) {
 
 /** Whether this device can run shaders at all. False on Android before version 13. */
 internal expect val runtimeShadersSupported: Boolean
+
+/**
+ * Whether a shader brush may be drawn on this canvas. Android refuses one on a bitmap-backed canvas
+ * and throws, and every echo buffer is one; Skia draws it anywhere.
+ */
+internal expect fun DrawScope.canDrawRuntimeShaders(): Boolean

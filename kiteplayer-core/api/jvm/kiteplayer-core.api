@@ -75,6 +75,23 @@ public final class io/github/yuroyami/kiteplayer/AudioPlayback : java/lang/AutoC
 	public static synthetic fun submitDecoded-rkBLMoA$default (Lio/github/yuroyami/kiteplayer/AudioPlayback;Lio/github/yuroyami/kiteplayer/Pts;[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;Lkotlin/jvm/functions/Function0;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 }
 
+public final class io/github/yuroyami/kiteplayer/AudioScanKt {
+	public static final fun scanAudio-8LCcPOI (Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteplayer/spi/MediaBackend;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/AudioScanSink;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun scanAudio-8LCcPOI$default (Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteplayer/spi/MediaBackend;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/AudioScanSink;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/AudioScanResult {
+	public final fun getEndPts-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
+	public final fun getFirstPts-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
+	public final fun getFramesDecoded ()J
+	public final fun getReachedEnd ()Z
+	public final fun getTrack-fQpssaM ()I
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/AudioScanSink {
+	public abstract fun onAudio-s-LLGq8 (J[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
 public abstract interface class io/github/yuroyami/kiteplayer/AudioTap {
 	public abstract fun onAudio-9yvNpTU (J[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
 	public fun onAudio-eGsrvZU (JJ[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
@@ -385,6 +402,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun previousChapter (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun removeFromQueue (ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun restore (Lio/github/yuroyami/kiteplayer/PlayerMemento;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun scanAudio-kn6BlvQ (Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/AudioScanSink;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun scanAudio-kn6BlvQ$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/MediaItem;Lio/github/yuroyami/kiteplayer/TrackId;Lio/github/yuroyami/kiteplayer/AudioScanSink;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun seek-KLykuaI (JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun seek-KLykuaI$default (Lio/github/yuroyami/kiteplayer/KitePlayer;JLio/github/yuroyami/kiteplayer/SeekMode;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun seekLater-VtjQ1oo (JLio/github/yuroyami/kiteplayer/SeekMode;)V

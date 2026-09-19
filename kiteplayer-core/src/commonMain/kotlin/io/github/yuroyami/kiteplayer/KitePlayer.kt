@@ -860,6 +860,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public suspend fun inspect(media: MediaItem): MediaInspection = core.inspect(media)
 
     /**
+     * [scanAudio] through this player's backend, with the reader rules of playback: the item's own
+     * reader factory, then a configured resolver, then automatic network providers. The playback byte
+     * cache is not shared. Null [track] picks what an open would, including preferred languages.
+     *
+     * A reader factory must allow a second, concurrent open for the scan to be independent of a
+     * session that is playing the same item. Run this from a context that may block.
+     */
+    public suspend fun scanAudio(media: MediaItem, track: TrackId? = null, sink: AudioScanSink): AudioScanResult =
+        core.scanAudio(media, track, sink)
+
+    /**
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.
      *
      * Switching a CONTAINER track reopens the container and seeks back to where playback was,

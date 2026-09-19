@@ -861,6 +861,21 @@ internal class PlaybackCore(
         )
     }
 
+    /** Decodes one audio track without playing it, with playback's reader rules. See [KitePlayer.scanAudio]. */
+    suspend fun scanAudio(media: MediaItem, track: io.github.yuroyami.kiteplayer.TrackId?,
+        sink: io.github.yuroyami.kiteplayer.AudioScanSink): io.github.yuroyami.kiteplayer.AudioScanResult {
+        // The backend playback itself opens through, so a scan decodes exactly what playback would.
+        val io = resolveMediaIo(media, config.network)
+        val item = if (io == null) media else media.copy(io = { io })
+        return try {
+            scanMediaAudio(backend, item, track, config.audio.preferredLanguages, sink)
+        } catch (failure: Throwable) {
+            // A reader the backend never took over is closed here; close tolerates a second call.
+            if (io != null) runCatching { io.close() }
+            throw failure
+        }
+    }
+
     /** Reads a file's own facts without opening playback. See [KitePlayer.inspect]. */
     suspend fun inspect(media: MediaItem): MediaInspection {
         val backend = config.backends.backend
@@ -2723,23 +2738,8 @@ internal class PlaybackCore(
         return null
     }
 
-    private fun pickAudio(streams: List<PlayerStreamInfo>): PlayerStreamInfo? {
-        val audio = streams.filter { it.kind == TrackKind.Audio }
-        if (audio.isEmpty()) return null
-        // Ordinary tracks outrank descriptive/accessibility ones at every tier: a described track
-        // is opt-in listening, not the default face of the media. The sort is
-        // stable, so container order still decides inside each rank, and an accessibility track
-        // remains reachable when it is the only candidate. A language preference still outranks
-        // everything, ordinary-first within the language.
-        val ranked = audio.sortedBy { it.isAccessibility }
-        for (language in config.audio.preferredLanguages) {
-            ranked.firstOrNull { it.language?.startsWith(language, ignoreCase = true) == true }?.let { return it }
-        }
-        return ranked.firstOrNull { it.isDefault && !it.isAccessibility }
-            ?: ranked.firstOrNull { !it.isAccessibility }
-            ?: ranked.firstOrNull { it.isDefault }
-            ?: ranked.first()
-    }
+    private fun pickAudio(streams: List<PlayerStreamInfo>): PlayerStreamInfo? =
+        pickAudioStream(streams, config.audio.preferredLanguages)
 
     /**
      * Fills the queues with the device stopped, until every selected stream is at least Ready.
@@ -8038,7 +8038,7 @@ internal class WorkerOutcome(val sessionToken: Long, val name: String, val cause
  * The arrays grow to the largest buffer seen and are reused after that. The conversion stage behind the
  * ring copies what it is given, so handing the same array over again is safe.
  */
-private class Interleaver {
+internal class Interleaver {
     private var planar = FloatArray(0)
     private var interleaved = FloatArray(0)
 
@@ -8251,6 +8251,27 @@ private fun List<PlayerStreamInfo>.toTracks(): Tracks = Tracks(
         )
     },
 )
+
+/**
+ * The audio stream an open picks when nothing was chosen, shared with audio scans.
+ *
+ * Ordinary tracks outrank descriptive/accessibility ones at every tier: a described track is
+ * opt-in listening, not the default face of the media. The sort is stable, so container order
+ * still decides inside each rank, and an accessibility track remains reachable when it is the only
+ * candidate. A language preference still outranks everything, ordinary-first within the language.
+ */
+internal fun pickAudioStream(streams: List<PlayerStreamInfo>, preferredLanguages: List<String>): PlayerStreamInfo? {
+    val audio = streams.filter { it.kind == TrackKind.Audio }
+    if (audio.isEmpty()) return null
+    val ranked = audio.sortedBy { it.isAccessibility }
+    for (language in preferredLanguages) {
+        ranked.firstOrNull { it.language?.startsWith(language, ignoreCase = true) == true }?.let { return it }
+    }
+    return ranked.firstOrNull { it.isDefault && !it.isAccessibility }
+        ?: ranked.firstOrNull { !it.isAccessibility }
+        ?: ranked.firstOrNull { it.isDefault }
+        ?: ranked.first()
+}
 
 /**
  * One edit to the open queue.

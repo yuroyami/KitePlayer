@@ -44,6 +44,18 @@ internal class GpuCompletionBatchLedger<T> {
         completed
     }
 
+    /**
+     * Whether a new keyed draw is needed after the metrics for [reportedVsyncMillis] arrived.
+     *
+     * Only two kinds of pending work need one: a draw that could not be keyed, and a batch older
+     * than the report whose own metrics were lost. A newer batch is no reason, because its metrics
+     * are still on the way. Counting it made every metric ask for another draw, so the window drew
+     * on every refresh while a video frame was on screen (#138).
+     */
+    fun needsProofAfter(reportedVsyncMillis: Long): Boolean = synchronized(batches) {
+        awaitingProof.isNotEmpty() || (batches.isNotEmpty() && batches.firstKey() < reportedVsyncMillis)
+    }
+
     /** Drops references after producer teardown makes every outstanding lease safe to release. */
     fun clear() = synchronized(batches) {
         batches.clear()

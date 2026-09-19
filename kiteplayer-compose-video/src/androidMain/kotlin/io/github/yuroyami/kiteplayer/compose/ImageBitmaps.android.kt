@@ -480,9 +480,10 @@ private class AndroidGpuCompletionTracker(
             requestProofFrame()
             return
         }
-        val completed = batches.completeThroughExact(vsyncTimestamp / NANOS_PER_MILLISECOND)
+        val vsyncMillis = vsyncTimestamp / NANOS_PER_MILLISECOND
+        val completed = batches.completeThroughExact(vsyncMillis)
         if (completed == null) {
-            requestProofFrame()
+            if (batches.needsProofAfter(vsyncMillis)) requestProofFrame()
             return
         }
         completed.forEach { draw ->
@@ -492,7 +493,9 @@ private class AndroidGpuCompletionTracker(
                 completionVsyncNanos = draw.recordedVsyncNanos,
             )
         }
-        if (dropCountSinceLastInvocation > 0 || batches.hasPending) requestProofFrame()
+        // Metrics dropped before this report need nothing more: the exact completion above proved
+        // every older batch too.
+        if (batches.needsProofAfter(vsyncMillis)) requestProofFrame()
     }
 
     private fun requestProofFrame() {

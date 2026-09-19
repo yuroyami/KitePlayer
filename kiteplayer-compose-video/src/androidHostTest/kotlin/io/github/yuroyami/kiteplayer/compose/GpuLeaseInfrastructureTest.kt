@@ -50,6 +50,62 @@ class GpuLeaseInfrastructureTest {
     }
 
     @Test
+    fun aBatchNewerThanTheReportedRefreshNeedsNoProofDraw() {
+        val ledger = GpuCompletionBatchLedger<String>()
+        ledger.record(100L, "reported")
+        ledger.record(116L, "newer")
+
+        assertEquals(listOf("reported"), ledger.completeThroughExact(100L))
+        assertFalse(ledger.needsProofAfter(100L), "the newer draw's own metrics are still on the way")
+    }
+
+    @Test
+    fun aBatchOlderThanTheReportedRefreshNeedsAProofDraw() {
+        val ledger = GpuCompletionBatchLedger<String>()
+        ledger.record(100L, "lost metrics")
+
+        assertNull(ledger.completeThroughExact(116L))
+        assertTrue(ledger.needsProofAfter(116L), "only a later keyed draw can prove it now")
+    }
+
+    @Test
+    fun anUnkeyedDrawNeedsAProofDraw() {
+        val ledger = GpuCompletionBatchLedger<String>()
+        ledger.holdUntilNextProof("detached")
+
+        assertTrue(ledger.needsProofAfter(100L))
+    }
+
+    @Test
+    fun anEmptyLedgerNeedsNoProofDraw() {
+        assertFalse(GpuCompletionBatchLedger<String>().needsProofAfter(100L))
+    }
+
+    /**
+     * The timing measured on a phone: a 24 fps picture every fifth refresh at 120 Hz, and GPU
+     * metrics that arrive two refreshes after their draw. A proof request draws on the next
+     * refresh. One extra draw, as any other change in the window makes, must not start a loop.
+     */
+    @Test
+    fun steadyPlaybackDrawsOncePerPictureAfterOneExtraDraw() {
+        val ledger = GpuCompletionBatchLedger<String>()
+        val drawnAt = mutableSetOf<Long>()
+        val proofDrawAt = mutableSetOf(1L)
+        for (refresh in 0L until 600L) {
+            if (refresh % 5L == 0L || refresh in proofDrawAt) {
+                ledger.record(refresh, "draw")
+                drawnAt += refresh
+            }
+            val reported = refresh - 2L
+            if (reported in drawnAt) {
+                ledger.completeThroughExact(reported)
+                if (ledger.needsProofAfter(reported)) proofDrawAt += refresh + 1L
+            }
+        }
+        assertEquals(121, drawnAt.size, "120 pictures plus the one extra draw")
+    }
+
+    @Test
     fun twoConsumerBindingsRemainIndependent() {
         val bindings = GpuConsumerBindingBook<String>()
         val first = bindings.bind("first")

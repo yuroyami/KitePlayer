@@ -1,3 +1,5 @@
+@file:OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
+
 package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.runtime.Composable
@@ -215,10 +217,11 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
  * An [AudioVizState] that listens to [player] for as long as it stays in the composition.
  *
  * Remember it next to the player rather than inside the audio-only branch, so the analysis is
- * already running when a song starts.
+ * already running when a song starts. [songScan] decides which items a background scan may read
+ * to build a song map; see docs/audioviz-song-scan-api.md.
  */
 @Composable
-public fun rememberAudioVizState(player: KitePlayer): AudioVizState {
+public fun rememberAudioVizState(player: KitePlayer, songScan: SongScanPolicy = SongScanPolicy.Default): AudioVizState {
     val state = remember(player) {
         AudioVizState {
             val reading = player.audioClock()
@@ -227,6 +230,7 @@ public fun rememberAudioVizState(player: KitePlayer): AudioVizState {
     }
     DisposableEffect(player, state) {
         val lease = playerAudioVizSessions.acquire(player)
+        lease.feed.scanPolicy.store(songScan)
         state.bind(lease.feed)
         onDispose {
             state.bind(null)

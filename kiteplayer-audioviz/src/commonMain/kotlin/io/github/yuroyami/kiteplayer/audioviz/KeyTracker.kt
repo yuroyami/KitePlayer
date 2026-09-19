@@ -241,7 +241,23 @@ internal class KeyTracker(private val sampleRate: Int) {
         forgetKey()
     }
 
-    private companion object {
+    internal companion object {
+        /**
+         * Correlation of a pitch-class [profile] with one key's profile, -1..1, or 0 for a flat
+         * profile. The song scan uses it to place a key change between two known keys.
+         */
+        fun correlation(profile: FloatArray, tonic: Int, mode: KeyMode): Double {
+            val mean = profile.sum() / 12.0
+            var norm = 0.0
+            for (note in 0 until 12) norm += (profile[note] - mean) * (profile[note] - mean)
+            if (norm <= 1e-12) return 0.0
+            norm = sqrt(norm)
+            val reference = if (mode == KeyMode.Major) MAJOR_PROFILE else MINOR_PROFILE
+            var dot = 0.0
+            for (note in 0 until 12) dot += (profile[note] - mean) / norm * reference[((note - tonic) % 12 + 12) % 12]
+            return dot
+        }
+
         const val FRAME_SECONDS = 0.2
         const val FAST_SECONDS = 1.0
         const val KEY_SECONDS = 8.0

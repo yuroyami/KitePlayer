@@ -11,6 +11,7 @@ import kotlin.concurrent.atomics.AtomicBoolean
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +27,7 @@ internal class AudioVizFeed(
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
     pcmQueue: AudioPcmQueue = AudioPcmQueue(),
     private val clock: MonotonicClock = MonotonicClock.System,
-) : AudioTap, AutoCloseable {
+) : AudioTap, AutoCloseable, SongMapTarget {
     private class Epoch(val generation: Generation, val revision: Long)
 
     val timeline = SpectrumTimeline(TIMELINE_CAPACITY)
@@ -45,6 +46,27 @@ internal class AudioVizFeed(
     private var analyzer: SpectrumAnalyzer? = null
     private var format: AudioFormat? = null
     private var expectedMicros: Long? = null
+
+    // A song map handed over by the scanner, applied and verified on the analysis worker only.
+    private val pendingMap = AtomicReference<MapInstall?>(null)
+    private var appliedMap: MapInstall? = null
+    private var verification: MapVerification? = null
+
+    /** Which items a background scan may read. The newest view to attach sets it. */
+    val scanPolicy = AtomicReference(SongScanPolicy.Default)
+    private val scanStarted = AtomicBoolean(false)
+
+    /** Hands a finished map to the analysis worker, or removes the current one with null. Any thread. */
+    override fun install(install: MapInstall?) {
+        pendingMap.store(install)
+        wake.trySend(Unit)
+    }
+
+    /** Starts following [source] for song scans, once, for as long as this feed lives. */
+    fun startSongScan(source: SongScanSource, scanDispatcher: CoroutineDispatcher = Dispatchers.IO) {
+        if (!scanStarted.compareAndSet(false, true) || closed.load()) return
+        SongScanner(source, this, { scanPolicy.load() }, scanDispatcher, clock).start(scope)
+    }
 
     private val worker = scope.launch {
         try {
@@ -155,11 +177,15 @@ internal class AudioVizFeed(
             val publication = timeline.publisher()
             active.generation = current.generation
             active.analysisRevision = publication.revision
+            val owner = active
             active.onAnalysis = { frame ->
                 if (!closed.load() && epoch.load() === current) {
+                    verify(frame, owner)
                     if (publication.push(frame)) stats.analyses.fetchAndAdd(1L)
                 }
             }
+            // A new analyser starts from the causal reference unless a map is applied.
+            active.setSongReferencePower(appliedMap?.map?.referencePower)
             analyzer = active
             format = nextFormat
             handled = current
@@ -174,9 +200,36 @@ internal class AudioVizFeed(
             }
         }
         if (sanitised > 0) stats.sanitized.fetchAndAdd(sanitised)
+        applyMap(active)
         active.feed(slot.samples, slot.frames, nextFormat, slot.ptsMicros)
         expectedMicros = slot.ptsMicros + slot.frames * 1_000_000L / nextFormat.sampleRate
         stats.analysisTime.fetchAndAdd((clock.nanos() - started).coerceAtLeast(0L))
+    }
+
+    /** Worker only: brings the applied map up to the newest one the scanner handed over. */
+    private fun applyMap(analyzer: SpectrumAnalyzer) {
+        val pending = pendingMap.load()
+        if (pending === appliedMap) return
+        appliedMap = pending
+        verification = pending?.let { MapVerification(it.map) }
+        analyzer.setSongReferencePower(pending?.map?.referencePower)
+        timeline.installSongMap(pending?.let {
+            SongMapEvents(it.identity, it.map.curveStartMicros, it.map.coveredThroughMicros, it.map.structureList())
+        })
+    }
+
+    /** Worker only: compares live programme levels with the applied map and withdraws a map that disagrees. */
+    private fun verify(frame: SpectrumFrame, analyzer: SpectrumAnalyzer) {
+        val check = verification ?: return
+        val install = appliedMap ?: return
+        if (check.observe(frame) != MapVerification.Verdict.Rejected) return
+        verification = null
+        appliedMap = null
+        pendingMap.compareAndSet(install, null)
+        analyzer.setSongReferencePower(null)
+        timeline.installSongMap(null)
+        stats.rejectedMaps.fetchAndAdd(1L)
+        install.onRejected()
     }
 
     override fun close() {

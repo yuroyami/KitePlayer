@@ -80,6 +80,9 @@ internal class AudioVizSessions<K : Any>(
 }
 
 internal val playerAudioVizSessions = AudioVizSessions<KitePlayer>(
-    attach = { player, feed -> player.attachAudioTap(feed) },
+    attach = { player, feed ->
+        player.attachAudioTap(feed)
+        feed.startSongScan(PlayerScanSource(player))
+    },
     detach = { player, feed -> player.detachAudioTap(feed) },
 )

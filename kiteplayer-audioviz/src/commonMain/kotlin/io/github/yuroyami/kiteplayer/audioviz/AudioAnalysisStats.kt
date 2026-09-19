@@ -24,6 +24,7 @@ public class AudioAnalysisStats internal constructor(
     internal val copyTime = AtomicLong(0L)
     internal val copyMax = AtomicLong(0L)
     internal val analysisTime = AtomicLong(0L)
+    internal val rejectedMaps = AtomicLong(0L)
 
     public val copiedBlocks: Long get() = copies.load()
     public val droppedBlocks: Long get() = drops.load()
@@ -32,6 +33,8 @@ public class AudioAnalysisStats internal constructor(
     public val sanitizedSamples: Long get() = sanitized.load()
     public val discontinuities: Long get() = resets.load()
     public val publishedAnalyses: Long get() = analyses.load()
+    /** Song maps withdrawn because live audio disagreed with them. */
+    public val rejectedSongMaps: Long get() = rejectedMaps.load()
     public val analysisFailures: Long get() = failures.load()
     public val totalCopyWallNanos: Long get() = copyTime.load()
     public val maximumCopyWallNanos: Long get() = copyMax.load()

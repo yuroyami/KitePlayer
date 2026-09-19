@@ -557,25 +557,16 @@ public class AndroidSurfaceVideoRenderer internal constructor(
 
     /**
      * The OS's own frame-rate matching (API 30+): the display can switch to the video's cadence.
-     * The rate is measured from the frames themselves, two consecutive timestamps, because the
-     * renderer is handed frames and no track metadata; asked once per surface, cleared with it.
-     * Device proof rides DEVICE-DAY step 20.
+     * The rate comes from the frames themselves, because the renderer is handed frames and no track
+     * metadata. It is asked for once per Surface, and a new Surface starts a new request.
      */
     @Volatile private var matchedSurface: Surface? = null
-    @Volatile private var matchedFrameRate: Float = 0f
-    @Volatile private var lastFramePtsUs: Long = Long.MIN_VALUE
+    @Volatile private var frameRateRequest = SurfaceFrameRateRequest()
 
     private fun matchFrameRate(ptsUs: Long) {
         if (android.os.Build.VERSION.SDK_INT < 30) return
         val surface = matchedSurface ?: return
-        if (matchedFrameRate > 0f) return
-        val last = lastFramePtsUs
-        lastFramePtsUs = ptsUs
-        if (last == Long.MIN_VALUE) return
-        val deltaUs = ptsUs - last
-        if (deltaUs !in 4_000..200_000) return
-        val fps = 1_000_000f / deltaUs
-        matchedFrameRate = fps
+        val fps = frameRateRequest.offer(ptsUs) ?: return
         runCatching {
             surface.setFrameRate(fps, Surface.FRAME_RATE_COMPATIBILITY_FIXED_SOURCE)
         }
@@ -650,9 +641,9 @@ public class AndroidSurfaceVideoRenderer internal constructor(
             ?: throw IllegalStateException("this renderer was built with a test CanvasTarget")
         if (closed.value) return
         // A new surface has no matched rate yet; the next frames measure it again (API 30+).
+        // A fresh object, not a reset: the schedule thread may be inside the old one right now.
         matchedSurface = surface
-        matchedFrameRate = 0f
-        lastFramePtsUs = Long.MIN_VALUE
+        frameRateRequest = SurfaceFrameRateRequest()
         runCatching { directTarget.update(surface) }
             .onFailure { failure ->
                 eventFlow.tryEmit(

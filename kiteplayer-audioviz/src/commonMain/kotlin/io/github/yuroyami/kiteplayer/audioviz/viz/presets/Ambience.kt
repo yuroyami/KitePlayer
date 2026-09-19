@@ -49,7 +49,7 @@ import kotlin.math.sin
  * Soft lobes of light on three depths, crossing the screen on wide looping paths.
  *
  * Near lobes are bigger, move further with the camera and pass in front of far ones. A kick splits
- * the loud lobes in two for a beat, a drop sends the whole cloud rushing outward for a bar, and the
+ * the loud lobes in two for a beat, a drop sends the whole cloud rushing outward for a visual cycle, and the
  * shape of the paths changes as the song goes on.
  */
 internal class Blur : Layered(
@@ -95,11 +95,11 @@ internal class Blur : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         stage.advance(dt)
-        phase += dt * TAU / (gestures.barSeconds * 1.5f) * (0.75f + 0.6f * state.drive)
+        phase += dt * TAU / (gestures.cycleSeconds * 1.5f) * (0.75f + 0.6f * state.drive)
         bulge.kick(gestures.kickHit * 6f)
         bulge.advance(dt)
         if (gestures.drop) rush = 1f
-        rush = (rush - dt / gestures.barSeconds).coerceAtLeast(0f)
+        rush = (rush - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val loud = state.percentile(0.7f)
         for (index in 0 until MOST) {
             splitting[index] = (splitting[index] - dt / gestures.beatSeconds).coerceAtLeast(0f)
@@ -200,7 +200,7 @@ internal class Blur : Layered(
 
 /**
  * Three fountains, one for each part of the spectrum, spraying toward each other so the drops cross
- * the screen. Drops that land start rings on the pool, the wind changes side every phrase, a big drop
+ * the screen. Drops that land start rings on the pool, the wind changes side at each supported section boundary, a big drop
  * arcs over the middle every bar, and the spray is mirrored in the pool below.
  */
 internal class Fountain : Layered(
@@ -242,8 +242,8 @@ internal class Fountain : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        // The wind's side comes from the gene and flips every phrase.
-        wind.advance(windGene.value * if (gestures.phrases % 2 == 0) 1f else -1f, dt)
+        // The wind's side comes from the gene and flips at each supported section boundary.
+        wind.advance(windGene.value * if (gestures.sections % 2 == 0) 1f else -1f, dt)
         val count = fountains.count(1)
         trickle += dt * (40f + 260f * state.drive)
         while (trickle >= 1f) {
@@ -252,15 +252,15 @@ internal class Fountain : Layered(
         }
         if (gestures.kickHit > 0f) spray(0, 1.35f, (18 + 20 * gestures.kickHit).toInt())
         if (gestures.snareHit > 0f) for (index in 1 until count) spray(index, 1.25f, 12)
-        if (gestures.drop) geyser = gestures.barSeconds
+        if (gestures.drop) geyser = gestures.cycleSeconds
         if (geyser > 0f) {
             geyser -= dt
             spray(0, 1.8f, 6)
         }
         // One big drop a bar arcs from one side to the other, high over the middle.
-        if (gestures.bar) {
+        if (gestures.section) {
             val from = if (fromLeft) 0.1f else 0.9f
-            leaders.spawn(from, POOL, 1f - from, POOL, gestures.barSeconds * 0.9f, PathShape.Arc, if (fromLeft) -0.62f else 0.62f, 0.028f, random.next(), 0f, Sprite.GLOW)
+            leaders.spawn(from, POOL, 1f - from, POOL, gestures.cycleSeconds * 0.9f, PathShape.Arc, if (fromLeft) -0.62f else 0.62f, 0.028f, random.next(), 0f, Sprite.GLOW)
             fromLeft = !fromLeft
         }
         leaders.advance(dt)
@@ -345,7 +345,7 @@ internal class Fountain : Layered(
 /**
  * Balls on up to three depths, bouncing on a floor that tilts, so they roll across the screen while
  * they bounce and leave streaks behind. A kick throws everything up, a snare tips the floor the other
- * way for a moment, the tilt changes side every phrase, and a drop lets the floor fall away for a bar.
+ * way for a moment, the tilt changes side at each supported section boundary, and a drop lets the floor fall away for a visual cycle.
  */
 internal class Gravity : Layered(
     name = "Gravity",
@@ -383,13 +383,13 @@ internal class Gravity : Layered(
             }
             started = true
         }
-        if (gestures.phrase) side = -side
+        if (gestures.section) side = -side
         nudge.kick(gestures.snareHit * 3f * -side)
         nudge.advance(dt)
         tilt.advance(side * slope.value, dt)
         val lean = tilt.value + 0.3f * nudge.value
         if (gestures.drop) fall = 1f
-        fall = (fall - dt / gestures.barSeconds).coerceAtLeast(0f)
+        fall = (fall - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         // Thrown up and back in one beat: both halves come from the tempo.
         val pull = 8f / gestures.beatSeconds
         val throwSpeed = pull * gestures.beatSeconds * 0.5f
@@ -553,7 +553,7 @@ internal class Sparkle : Layered(
             dx += share * DRIFT_X[option]
             dy += share * DRIFT_Y[option]
         }
-        val step = dt / (gestures.barSeconds * 4f)
+        val step = dt / (gestures.cycleSeconds * 4f)
         twinkles.advance(dt, drag = 1.2f)
         val pool = twinkles.pool
         for (slot in 0 until pool.capacity) {
@@ -579,15 +579,15 @@ internal class Sparkle : Layered(
             for (index in 1 until 3) if (split.level(index) > split.level(loudest)) loudest = index
             twinkles.burst(stars[loudest].x, stars[loudest].y, 14, 0.35f, 0.8f, 0.03f, loudest / 3f, Sprite.SPARK)
         }
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         val newBeat = beat != lastBeat
         lastBeat = beat
         val rate = cometRate.value
-        if (gestures.snareHit > 0f || (rate >= 1 && gestures.bar) || (rate >= 2 && newBeat && beat % 2 == 0)) launchComet()
-        if (gestures.drop) showerLeft = gestures.barSeconds
+        if (gestures.snareHit > 0f || (rate >= 1 && gestures.section) || (rate >= 2 && newBeat && beat % 2 == 0)) launchComet()
+        if (gestures.drop) showerLeft = gestures.cycleSeconds
         if (showerLeft > 0f) {
             showerLeft -= dt
-            showerCredit += dt * 20f / gestures.barSeconds
+            showerCredit += dt * 20f / gestures.cycleSeconds
             while (showerCredit >= 1f) {
                 showerCredit -= 1f
                 launchComet()
@@ -648,7 +648,7 @@ internal class Sparkle : Layered(
 }
 
 /**
- * Lines filling the whole height and travelling across it one screen every two bars, with a second
+ * Lines filling the whole height and travelling across it one screen every two visual cycles, with a second
  * sheet behind that the snare tilts, a small boat riding the loudest line, and swells that cross every
  * line on the kick.
  */
@@ -687,11 +687,11 @@ internal class Wave : Layered(
         val dt = state.deltaSeconds
         stage.advance(dt)
         val way = if (backwards.on) -1f else 1f
-        travel += dt / (gestures.barSeconds * 2f) * way
+        travel += dt / (gestures.cycleSeconds * 2f) * way
         ripple += dt * 1.2f * state.tempo
         lean.kick(gestures.snareHit * 2f)
         lean.advance(dt)
-        if (gestures.drop) dropHold = gestures.barSeconds
+        if (gestures.drop) dropHold = gestures.cycleSeconds
         dropHold -= dt
         full.advance(if (dropHold > 0f) 1f else 0f, dt)
         if (gestures.kickHit > 0f) {
@@ -711,7 +711,7 @@ internal class Wave : Layered(
             loudest = best.toFloat() / (bands.size - 1)
         }
         boatLine += (loudest - boatLine) * (dt * 1.5f).coerceAtMost(1f)
-        boatTravel += dt / (gestures.barSeconds * 1.5f) * way
+        boatTravel += dt / (gestures.cycleSeconds * 1.5f) * way
         boatX = wrap(boatTravel)
         boatY = lineY(boatLine, boatX, state, 1f)
         kit.place(0, boatX, boatY)
@@ -863,9 +863,9 @@ internal class Ionizer : Layered(
         flash = maxOf(flash - dt * 3.5f, gestures.snareHit)
         punch.kick(gestures.kickHit * 6f)
         punch.advance(dt)
-        if (gestures.bar) stepTurn += TAU / MOST * 3f
+        if (gestures.section) stepTurn += TAU / MOST * 3f
         stepped.advance(stepTurn, dt)
-        if (gestures.drop) dropHold = gestures.barSeconds * 2f
+        if (gestures.drop) dropHold = gestures.cycleSeconds * 2f
         dropHold -= dt
         second.advance(if (dropHold > 0f || twin.on) 1f else 0f, dt)
         for (index in 0 until 2) {

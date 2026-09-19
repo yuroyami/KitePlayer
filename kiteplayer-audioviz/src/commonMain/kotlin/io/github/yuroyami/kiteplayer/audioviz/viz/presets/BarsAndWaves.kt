@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
+
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -18,7 +20,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
-import io.github.yuroyami.kiteplayer.audioviz.viz.TraceGain
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
@@ -96,10 +97,10 @@ internal class Bars : Layered(
         sweep.advance(gestures)
         if (frame.snare > 0f) snareSweep = 0f
         if (snareSweep >= 0f) {
-            snareSweep += dt / (gestures.barSeconds * 0.5f)
+            snareSweep += dt / (gestures.cycleSeconds * 0.5f)
             if (snareSweep >= 1f) snareSweep = -1f
         }
-        if (gestures.drop) fanHold = gestures.barSeconds
+        if (gestures.drop) fanHold = gestures.cycleSeconds
         fanHold -= dt
         fan.advance(if (fanHold > 0f) 1f else 0f, dt)
         if (lastPeak.size != bands.size) lastPeak = FloatArray(bands.size)
@@ -327,9 +328,9 @@ internal class Equaliser : Layered(
         val dt = state.deltaSeconds
         val frame = state.frame
         val bands = frame.bands
-        if (gestures.phrase) rule.choose(1 - rule.value)
-        val beat = (gestures.barPhase * 4f).toInt()
-        beatFraction = gestures.barPhase * 4f - beat
+        if (gestures.section) rule.choose(1 - rule.value)
+        val beat = (gestures.cyclePhase * 4f).toInt()
+        beatFraction = gestures.cyclePhase * 4f - beat
         if (beat != lastBeat && bands.isNotEmpty()) {
             lastBeat = beat
             newestPast = (newestPast + 1) % PAST
@@ -340,7 +341,7 @@ internal class Equaliser : Layered(
         jump.advance(dt)
         if (frame.snare > 0f) sweepAt = 0f
         if (sweepAt >= 0f) {
-            sweepAt += dt / (gestures.barSeconds * 0.5f)
+            sweepAt += dt / (gestures.cycleSeconds * 0.5f)
             if (sweepAt >= 1f) sweepAt = -1f
         }
         if (gestures.drop) allLit = 1f
@@ -510,8 +511,8 @@ internal class OceanMist : Layered(
     private val swarmSize = genes.choice("Swarm", 3, start = 2)
     private val fourWay = genes.toggle("Four way", start = false)
 
-    private val gain = TraceGain(releasePerSecond = 8f)
     private val scopes = History(rows = 160)
+    private val traceSampler = WaveformResampler()
     private val squeezed = FloatArray(TRACE)
     private val lane = Lane(perBar = 0.5f)
     private var wave = 0f
@@ -531,17 +532,17 @@ internal class OceanMist : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         val frame = state.frame
-        frame.scope.squeezeInto(squeezed)
+        traceSampler.resample(frame.scope, squeezed)
         scopes.push(squeezed, state.timeSeconds)
         lane.advance(state, gestures)
         wave += dt * state.paced(0.5f)
         rise = (frame.loudLong - 0.5f) * 0.16f
-        if (gestures.drop) tightHold = gestures.barSeconds
+        if (gestures.drop) tightHold = gestures.cycleSeconds
         tightHold -= dt
         tight.advance(if (tightHold > 0f) 1f else 0f, dt)
         // The water swells on a drop and the traces pull tight for the bar.
         ground?.dim = 0.9f + 0.4f * tight.value
-        reach = (0.16f + 0.2f * state.energy) * gain.update(frame.scopeLeft, frame.scopeRight, dt) * (1f - 0.6f * tight.value)
+        reach = (0.16f + 0.2f * state.energy) * frame.waveformGain * (1f - 0.6f * tight.value)
         var best = 0
         for (index in squeezed.indices) if (abs(squeezed[index]) > abs(squeezed[best])) best = index
         val loudX = wrap(best.toFloat() / (TRACE - 1) + lane.offset)
@@ -652,7 +653,6 @@ internal class OceanMist : Layered(
         wave = 0f
         tightHold = 0f
         tight.reset()
-        gain.reset()
         swarm.scatter()
         spray.clear()
         mist.clear()
@@ -684,7 +684,6 @@ internal class Scope : Layered(
     private val glow = genes.number("Glow", 0.35f, 0.9f, 0.6f)
     private val grid = genes.toggle("Grid", start = false)
 
-    private val gain = TraceGain(releasePerSecond = 8f)
     private val thick = Spring(stiffness = 200f, damping = 0.5f)
     private var fastHold = 0f
     private val fast = Envelope(attackPerSecond = 8f, releasePerSecond = 2f)
@@ -695,7 +694,7 @@ internal class Scope : Layered(
     private val sparks = Sprites(240, 1_204L)
     private val path = Path()
 
-    // Up, down, or outward from the middle. A drop doubles the speed for a bar.
+    // Up, down, or outward from the middle. A drop doubles the speed for a visual cycle.
     override fun echo(state: VizRenderState): EchoFrame {
         val mood = state.frame.mood
         val speed = (0.15f + 0.45f * state.drive) * (1f + fast.value)
@@ -712,18 +711,18 @@ internal class Scope : Layered(
         ground?.kind = if (grid.on) GroundKind.Grid else GroundKind.Fog
         thick.kick(frame.kick * 6f)
         thick.advance(dt)
-        if (gestures.drop) fastHold = gestures.barSeconds
+        if (gestures.drop) fastHold = gestures.cycleSeconds
         fastHold -= dt
         fast.advance(if (fastHold > 0f) 1f else 0f, dt)
-        reach = (0.2f + 0.2f * state.energy) * gain.update(frame.scopeLeft, frame.scopeRight, dt)
+        reach = (0.2f + 0.2f * state.energy) * frame.waveformGain
         tilt = (split.level(1) - 0.5f) * 0.35f
         val scope = frame.scope
-        val beat = gestures.barPhase * 4f
+        val beat = gestures.cyclePhase * 4f
         dotX = beat - floor(beat)
         dotY = 0.5f - (if (scope.isNotEmpty()) scope.sampleAt(dotX).coerceIn(-1f, 1f) else 0f) * reach
         kit.place(0, dotX, dotY)
         // Sparks jump up where the trace rises through zero, on the hats and snares.
-        if (scope.size > 8 && (frame.hat > 0f || frame.snare > 0f || gestures.bar)) {
+        if (scope.size > 8 && (frame.hat > 0f || frame.snare > 0f || gestures.section)) {
             val step = maxOf(1, scope.size / 64)
             var index = step
             var thrown = 0
@@ -785,7 +784,6 @@ internal class Scope : Layered(
     }
 
     override fun onReset() {
-        gain.reset()
         thick.reset()
         fastHold = 0f
         fast.reset()
@@ -795,7 +793,7 @@ internal class Scope : Layered(
 
 /**
  * Bars throwing a storm of embers that leave the top of the screen within a bar, blown sideways by a
- * wind that changes side every phrase, with smoke rising behind and fireballs thrown on the kick.
+ * wind that changes side at each supported section boundary, with smoke rising behind and fireballs thrown on the kick.
  */
 internal class FireStorm : Layered(
     name = "Fire Storm",
@@ -841,13 +839,13 @@ internal class FireStorm : Layered(
         val dt = state.deltaSeconds
         val frame = state.frame
         val bands = frame.bandsRel
-        // The wind's side comes from the gene and flips every phrase.
-        val side = (1f - 2f * windSide.weight(1)) * if (gestures.phrases % 2 == 0) 1f else -1f
+        // The wind's side comes from the gene and flips at each supported section boundary.
+        val side = (1f - 2f * windSide.weight(1)) * if (gestures.sections % 2 == 0) 1f else -1f
         wind.advance(side, dt)
         front += dt * 2.5f * state.tempo
         lean.kick(frame.snare * 4f * side)
         lean.advance(dt)
-        if (gestures.drop) dropHold = gestures.barSeconds
+        if (gestures.drop) dropHold = gestures.cycleSeconds
         dropHold -= dt
         val wall = dropHold > 0f
         ground?.dim = if (wall) 1.3f else 0.9f

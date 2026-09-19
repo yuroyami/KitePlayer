@@ -1,65 +1,70 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.Generation
+import kotlin.math.sqrt
+
 /**
  * One analysed moment of audio, ready to draw.
  *
- * It is immutable and it is published whole, so the thread that analyses and the thread that
- * draws never share a buffer. Most values are in 0..1. The waveforms ([scope], [scopeLeft] and
- * [scopeRight]) are raw amplitude in -1..1, and [ptsMicros], [bpm], [trend] and [beatInSeconds]
+ * It is published whole and never written afterwards: every analysis allocates new arrays, so a
+ * frame a drawing holds does not change underneath it. Several views share one frame, and the
+ * array properties are plain arrays for compatibility, so treat them as read-only and copy an
+ * array before changing it. Most values are in 0..1. The waveforms ([scope], [scopeLeft] and
+ * [scopeRight]) are raw amplitude with nominal full scale one, and [ptsMicros], [bpm], [trend] and [beatInSeconds]
  * carry their own units.
  *
- * The values come in two kinds and the difference matters. The plain ones ([bands], [level],
- * [bass]) are absolute: they say how loud something is between silence and full scale. They are
- * what a meter should show. The relative ones ([bandsRel], [levelRel], [energy]) place the same
- * sound inside the range THIS song has used over the last few seconds, so a quiet track fills the
- * screen as much as a loud one. Anything that should look different for calm and lively music
- * wants the relative kind.
+ * [power] contains raw unweighted measurements, [programme] contains independently timed
+ * momentary K-weighted loudness, and [drivers] contains display heights under one shared gain.
+ * Legacy relative level names alias those same heights; no band or drawing has a private gain.
  */
 @AudioVizAuthoringApi
 public class SpectrumFrame internal constructor(
-    /** The media timestamp of the audio this was measured from. Negative when it has none. */
+    /** The media timestamp of the audio this was measured from. Consult [hasTimestamp] for validity. */
     public val ptsMicros: Long,
-    /** One value per bar, low frequency first, already smoothed. Absolute. */
+    /** Shared-gain fast display height per ERB band, low frequency first. */
     public val bands: FloatArray,
     /** The falling cap above each bar. */
     public val peaks: FloatArray,
     /** The newest slice of the waveform, for an oscilloscope. */
     public val scope: FloatArray,
-    /** Overall loudness of this moment. Absolute. */
+    /** Shared-gain fast overall energy height. Raw power is available separately in [power]. */
     public val level: Float,
-    /** Energy below 250 Hz. Kick drums and bass lines live here. Absolute. */
+    /** Fast height for integrated energy below 250 Hz, including LFE. */
     public val bass: Float,
     /** Energy from 250 Hz to 2 kHz, which is most of what a voice or a guitar occupies. */
     public val mid: Float,
     /** Energy above 2 kHz. Cymbals, consonants and air. */
     public val treble: Float,
-    /** How strong an onset is at this exact analysis. Zero most of the time. */
+    /**
+     * Scalar onset energy projection. Player views project delivered [events]; a raw analysis
+     * reports newly detected hits whose individual times are in [detections], not [ptsMicros].
+     */
     public val beat: Float,
     /** Jumps to [beat] when one lands, then falls away. This is what a flash or a kick reads. */
     public val pulse: Float,
 
-    // Song-relative. Use these for anything whose look should change with the music.
+    // Compatibility aliases of the same shared-gain drivers.
 
-    /** [bands] placed in the range this song's bars have used. A loud bar for this song reaches 1. */
+    /** Compatibility alias of [bands], with the same gain and smoothing. */
     public val bandsRel: FloatArray = bands,
     /** [bandsRel] sorted low to high, so a drawing can ask for the top part of the frame cheaply. */
     private val bandsSorted: FloatArray = bandsRel,
-    /** [level] placed in this song's own range. */
+    /** Compatibility alias of [level]. */
     public val levelRel: Float = level,
-    /** [bass] placed in this song's own range. */
+    /** Compatibility alias of [bass]. */
     public val bassRel: Float = bass,
-    /** [mid] placed in this song's own range. */
+    /** Compatibility alias of [mid]. */
     public val midRel: Float = mid,
-    /** [treble] placed in this song's own range. */
+    /** Compatibility alias of [treble]. */
     public val trebleRel: Float = treble,
 
     // What kind of hit it was.
 
-    /** A kick drum landed. 0 to 1. */
+    /** Scalar low-transient energy projection, 0..1. Does not identify a kick drum. */
     public val kick: Float = 0f,
-    /** A snare landed. 0 to 1. */
+    /** Scalar body/crack-transient energy projection, 0..1. Does not identify a snare. */
     public val snare: Float = 0f,
-    /** A hat, shaker or cymbal landed. 0 to 1. */
+    /** Scalar high-transient energy projection, 0..1. Does not identify a hi-hat or cymbal. */
     public val hat: Float = 0f,
     /** How hard the hit actually was, rather than how surprising. A soft hit reads soft. */
     public val onsetStrength: Float = 0f,
@@ -67,7 +72,8 @@ public class SpectrumFrame internal constructor(
      * How much energy is arriving right now, gate or no gate.
      *
      * Unlike [beat] this has a value on every analysis, so it reads as a continuous sense of
-     * something happening rather than as a series of separate events.
+     * something happening rather than as a series of separate events. It runs 0..4: positive
+     * spectral change against the detector's recent mean, not an energy height.
      */
     public val novelty: Float = 0f,
 
@@ -78,15 +84,15 @@ public class SpectrumFrame internal constructor(
 
     // Mood.
 
-    /** How loud this moment is for THIS song. 0 is its quietest, 1 its loudest. */
+    /** Compatibility alias of the shared-gain fast overall energy height. */
     public val energy: Float = 0f,
     /** How busy it is. 0 is nothing happening, 1 is eight or more onsets a second. */
     public val density: Float = 0f,
     /** Calm at 0, lively at 1. Moves over bars, not frames. */
     public val mood: Float = 0f,
-    /** Loudness over a third of a second, in this song's range. */
+    /** Shared-gain fast overall energy height, used for short-versus-slow section contrast. */
     public val loudShort: Float = 0f,
-    /** Loudness over eight seconds. What the section sounds like. */
+    /** Shared-gain slow overall energy height (100 ms rise and 2 s fall). */
     public val loudLong: Float = 0f,
     /** [loudShort] against [loudLong]. Above 1 the music is arriving, below 1 it is leaving. */
     public val trend: Float = 1f,
@@ -101,13 +107,13 @@ public class SpectrumFrame internal constructor(
 
     /** Beats per minute, or 0 before a tempo has been found. */
     public val bpm: Float = 0f,
-    /** How sure the tempo is. Below about 0.4, treat the beat as unknown. */
+    /** Compatibility projection of usable beat support, or zero. Diagnostic scores are in [rhythm]. */
     public val beatConfidence: Float = 0f,
     /** Where we are between one beat and the next, 0 to 1. */
     public val beatPhase: Float = 0f,
-    /** Where we are in a four beat bar, 0 to 1, starting at the downbeat. */
+    /** Legacy bar phase. The live pulse tracker does not establish meter and publishes zero. */
     public val barPhase: Float = 0f,
-    /** Where we are in a sixteen beat phrase, 0 to 1. */
+    /** Legacy phrase phase. The live pulse tracker does not establish phrases and publishes zero. */
     public val phrasePhase: Float = 0f,
     /** Seconds until the next beat is expected, or -1 with no tempo. */
     public val beatInSeconds: Float = -1f,
@@ -133,7 +139,51 @@ public class SpectrumFrame internal constructor(
     public val scopeLeft: FloatArray = scope,
     /** The newest samples of the right channel. See [scopeLeft]. */
     public val scopeRight: FloatArray = scope,
+    /** Continuous audio identity, matching the player's audible clock for player-fed analysis. */
+    public val generation: Generation = Generation.Initial,
+    /** Whether [ptsMicros] is known. Zero and negative timestamps can both be valid. */
+    public val hasTimestamp: Boolean = true,
+    /** Local analysis continuity within [generation], including queue gaps and format changes. */
+    public val analysisRevision: Long = 0L,
+    /** Whether the short analysis window is available. Silence is [AnalysisAvailability.Ready]. */
+    public val availability: AnalysisAvailability = if (hasTimestamp) AnalysisAvailability.Ready else AnalysisAvailability.Unavailable,
+    /** Calibrated short-window power, without display scaling. Null until a complete window exists. */
+    public val power: PowerSpectrum? = null,
+    /** Independently timed ungated 400 ms programme measurement, including unavailable/warmup. */
+    public val programme: ProgrammeLoudness? = null,
+    /** Fast/slow/peak energy heights with one shared bounded gain and saturation diagnostics. */
+    public val drivers: EnergyDrivers? = null,
+    /** Exact mono trace interval and trigger, null before a complete input window. */
+    public val scopeMetadata: WaveformMetadata? = null,
+    /** Exact paired trace interval and trigger, null before a complete input window. */
+    public val stereoScopeMetadata: WaveformMetadata? = null,
+    /** Original detector publication and completion watermark, before per-view delivery. */
+    public val detections: AudioDetections? = null,
+    /** Ordered events delivered once to this view, including per-event lateness and discard counts. */
+    public val events: AudioEventDelivery? = null,
+    /** Pulse rate and phase evidence, separately timed and unavailable until analysis is ready. */
+    public val rhythm: RhythmEstimate? = null,
 ) {
+    /** Conservative primitive payload charge; shared legacy array aliases are charged once. */
+    internal val retainedPayloadBytes: Long
+        get() {
+            val arrays = arrayOf(bands, peaks, scope, bandsRel, bandsSorted, scopeLeft, scopeRight, chroma)
+            var bytes = 512L // Scalars and fixed-size measurement/driver metadata.
+            for (index in arrays.indices) {
+                var duplicate = false
+                for (earlier in 0 until index) if (arrays[earlier] === arrays[index]) { duplicate = true; break }
+                if (!duplicate) bytes += arrays[index].size * 4L
+            }
+            power?.let { bytes += (it.binCount + it.bandCount) * 4L + (it.bandCount + 1) * 8L }
+            drivers?.let { bytes += it.bandCount * 12L }
+            detections?.let { bytes += it.size * 64L }
+            events?.let { bytes += it.size * 80L }
+            return bytes
+        }
+
+    /** Recommended trace amplitude multiplier, from the same gain as every energy driver. */
+    public val waveformGain: Float get() = sqrt(drivers?.powerGain ?: 1.0).toFloat()
+
     /** Rate shared by clocks and continuous motion; attacks remain distinct from section mood. */
     public val motionRate: Float get() = 0.08f + 0.57f * mood + 0.20f * energy + 0.15f * kickPulse
 
@@ -157,6 +207,7 @@ public class SpectrumFrame internal constructor(
      * kick that landed in it is not also half landed in the next one.
      */
     internal fun blend(other: SpectrumFrame, mix: Float): SpectrumFrame {
+        require(generation == other.generation && analysisRevision == other.analysisRevision && hasTimestamp && other.hasTimestamp)
         val t = mix.coerceIn(0f, 1f)
         fun mixed(from: Float, to: Float): Float = from + (to - from) * t
         fun mixed(from: FloatArray, to: FloatArray): FloatArray =
@@ -170,8 +221,10 @@ public class SpectrumFrame internal constructor(
             return landed - kotlin.math.floor(landed)
         }
         val relative = mixed(bandsRel, other.bandsRel)
+        val targetMicros = ptsMicros + ((other.ptsMicros - ptsMicros) * t).toLong()
+        val pulseEstimate = if (t >= 1f) other.rhythm else rhythm?.at(targetMicros)
         return SpectrumFrame(
-            ptsMicros = ptsMicros + ((other.ptsMicros - ptsMicros) * t).toLong(),
+            ptsMicros = targetMicros,
             bands = mixed(bands, other.bands),
             peaks = mixed(peaks, other.peaks),
             scope = scope,
@@ -204,12 +257,12 @@ public class SpectrumFrame internal constructor(
             drop = drop,
             dropPulse = mixed(dropPulse, other.dropPulse),
             breakdown = breakdown,
-            bpm = other.bpm,
-            beatConfidence = mixed(beatConfidence, other.beatConfidence),
-            beatPhase = turned(beatPhase, other.beatPhase),
+            bpm = pulseEstimate?.bpm ?: bpm,
+            beatConfidence = pulseEstimate?.let { if (it.usable) it.beatSupport else 0f } ?: beatConfidence,
+            beatPhase = pulseEstimate?.beatPhase ?: turned(beatPhase, other.beatPhase),
             barPhase = turned(barPhase, other.barPhase),
             phrasePhase = turned(phrasePhase, other.phrasePhase),
-            beatInSeconds = mixed(beatInSeconds, other.beatInSeconds),
+            beatInSeconds = pulseEstimate?.beatInSeconds ?: beatInSeconds,
             chroma = mixed(chroma, other.chroma),
             keyHue = keyHue,
             keyConfidence = mixed(keyConfidence, other.keyConfidence),
@@ -218,13 +271,36 @@ public class SpectrumFrame internal constructor(
             width = mixed(width, other.width),
             scopeLeft = scopeLeft,
             scopeRight = scopeRight,
+            generation = generation,
+            hasTimestamp = hasTimestamp,
+            analysisRevision = analysisRevision,
+            availability = availability,
+            power = power,
+            programme = programme,
+            drivers = if (drivers != null && other.drivers != null) drivers.blend(other.drivers, t) else drivers,
+            scopeMetadata = scopeMetadata,
+            stereoScopeMetadata = stereoScopeMetadata,
+            detections = detections,
+            rhythm = pulseEstimate,
         )
     }
+
+    /**
+     * The same moment with its pulse held, for a paused playback clock: no beat progression or
+     * countdown, while the rate estimate stays readable as a diagnostic.
+     */
+    internal fun withPulseHeld(): SpectrumFrame = if (rhythm?.usable != true && beatConfidence == 0f) this else
+        withEvents(beat, kick, snare, hat, onsetStrength, drop, events,
+            rhythm = rhythm?.held(), beatConfidence = 0f, beatInSeconds = -1f)
 
     /** Replace one-shot events without copying any sample buffers. */
     internal fun withEvents(
         beat: Float = 0f, kick: Float = 0f, snare: Float = 0f, hat: Float = 0f,
         onsetStrength: Float = 0f, drop: Boolean = false,
+        events: AudioEventDelivery? = null,
+        rhythm: RhythmEstimate? = this.rhythm,
+        beatConfidence: Float = this.beatConfidence,
+        beatInSeconds: Float = this.beatInSeconds,
     ): SpectrumFrame = SpectrumFrame(
         ptsMicros = ptsMicros,
         bands = bands,
@@ -273,7 +349,45 @@ public class SpectrumFrame internal constructor(
         width = width,
         scopeLeft = scopeLeft,
         scopeRight = scopeRight,
+        generation = generation,
+        hasTimestamp = hasTimestamp,
+        analysisRevision = analysisRevision,
+        availability = availability,
+        power = power,
+        programme = programme,
+        drivers = drivers,
+        scopeMetadata = scopeMetadata,
+        stereoScopeMetadata = stereoScopeMetadata,
+        detections = detections,
+        events = events,
+        rhythm = rhythm,
     )
+
+    /** Keep every delivered record while providing the old strongest-hit projection for envelopes. */
+    internal fun withDeliveredEvents(delivery: AudioEventDelivery): SpectrumFrame {
+        // A reset can land between the independent feature and event reads.
+        if (generation != delivery.generation || analysisRevision != delivery.analysisRevision) {
+            return silent(bands.size, scope.size)
+        }
+        var beat = 0f
+        var kick = 0f
+        var snare = 0f
+        var hat = 0f
+        var drop = false
+        for (index in 0 until delivery.size) {
+            val hit = delivery[index].event.detection
+            when (hit.kind) {
+                AudioEventKind.Onset -> beat = maxOf(beat, hit.strength)
+                AudioEventKind.LowTransient -> kick = maxOf(kick, hit.strength)
+                AudioEventKind.BodyTransient -> snare = maxOf(snare, hit.strength)
+                AudioEventKind.HighTransient -> hat = maxOf(hat, hit.strength)
+                AudioEventKind.EnergyRise -> drop = true
+                AudioEventKind.Drop -> drop = true
+                AudioEventKind.SectionBoundary, AudioEventKind.Breakdown -> Unit
+            }
+        }
+        return withEvents(beat, kick, snare, hat, beat, drop, delivery)
+    }
 
     public companion object {
         private val EMPTY_CHROMA = FloatArray(12)
@@ -294,6 +408,7 @@ public class SpectrumFrame internal constructor(
                 pulse = 0f,
                 bandsRel = empty,
                 bandsSorted = empty,
+                hasTimestamp = false,
             )
         }
     }

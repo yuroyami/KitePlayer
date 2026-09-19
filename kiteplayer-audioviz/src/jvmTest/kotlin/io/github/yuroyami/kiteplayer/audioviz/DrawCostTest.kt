@@ -188,6 +188,7 @@ class DrawCostTest {
             elapsed += delta
             val frame = player.next(delta)
             musicTime += delta * frame.motionRate
+            // These states outlive preparation, so they cannot retain the player's live future reader.
             VizRenderState(frame, elapsed, delta, VizPalette.Prism, musicTime)
         }
     }

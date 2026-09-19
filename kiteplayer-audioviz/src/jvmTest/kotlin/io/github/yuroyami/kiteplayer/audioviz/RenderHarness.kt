@@ -70,6 +70,7 @@ internal object RenderHarness {
         song: Song,
         groundAt: (Int) -> Boolean = { false },
         onGround: (ImageBitmap, Int) -> Unit = { _, _ -> },
+        beforeDraw: (VizRenderState) -> Unit = {},
         onFrame: (ImageBitmap, Int) -> Unit,
     ) {
         val delta = 1f / 60f
@@ -93,7 +94,8 @@ internal object RenderHarness {
             elapsed += delta
             val frame = player.next(delta)
             musicTime += delta * frame.motionRate
-            val state = VizRenderState(frame, elapsed, delta, palette, musicTime)
+            val state = VizRenderState(frame, elapsed, delta, palette, musicTime, player.future)
+            beforeDraw(state)
             if (visualization.trailAt(frame.mood) > 0f) {
                 val previous = if (echoes == 0) null else back
                 scope.draw(Density(1f), LayoutDirection.Ltr, Canvas(front), echoSize) {

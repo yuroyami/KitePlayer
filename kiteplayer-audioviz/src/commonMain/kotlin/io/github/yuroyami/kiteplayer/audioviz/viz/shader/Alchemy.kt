@@ -78,9 +78,9 @@ internal class Alchemy : ShaderPreset(
         program.uniform("uC", (0.5f * cos(theta) - 0.25f * cos(2f * theta)) * 1.03f, (0.5f * sin(theta) - 0.25f * sin(2f * theta)) * 1.03f)
         program.uniform("uCentre", (centre.x - 0.5f) * 2f * aspect, (centre.y - 0.5f) * 2f)
         val period = if (zoomPeriod.value == 0) 1f else 2f
-        val breathe = ((gestures.phrases % period.toInt()) + gestures.phrasePhase) / period
+        val breathe = ((gestures.slowCycles % period.toInt()) + gestures.slowCyclePhase) / period
         program.uniform("uZoom", 2f.pow(0.5f * sin(TAU * breathe)) * (1f + 0.08f * punch.value.coerceIn(0f, 1.5f)))
-        program.uniform("uRayTurn", gestures.barPhase * TAU + rayShift)
+        program.uniform("uRayTurn", gestures.cyclePhase * TAU + rayShift)
         program.uniform("uRayDensity", rayDensity.value)
         program.uniform("uNested", nested.weight(1))
         program.uniform("uTwoRings", rings.weight(1))

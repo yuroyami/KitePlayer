@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizFuture
+import io.github.yuroyami.kiteplayer.audioviz.viz.asFuture
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
@@ -129,63 +131,73 @@ internal object SyntheticSong {
 }
 
 /**
- * Plays a fake song through a real analyser and hands back the frames a window would draw.
+ * Plays synthetic PCM against an independent audible clock with 200 ms of decoded audio ahead.
  *
- * Mood, tempo and which drum was hit are all worked out inside the analyser, so a test that builds
- * [SpectrumFrame]s by hand is testing nothing but its own imagination. This runs the real thing and
- * samples it at the display rate, the way a window does.
+ * The production analyser and event cursor remain real. This is a deterministic render fixture,
+ * not a hardware clock or a held-out recognition corpus. End of input drains without looping.
  */
 internal class SongPlayer(
     mono: FloatArray,
     private val sampleRate: Int = 48_000,
     bandCount: Int = 48,
-    /** Seconds fed in before the first frame is handed out, so mood and tempo have settled. */
+    /** Audio skipped at attachment, after feeding it to settle analysis history. */
     warmupSeconds: Float = 3f,
-    /**
-     * What the channels disagree on, or null for mono. It goes in as mono plus this on the left and
-     * mono minus this on the right, so the mono mix the analyser works from is unchanged.
-     */
+    /** Left is mono plus side; right is mono minus side. Channel power remains independent. */
     private val side: FloatArray? = null,
 ) {
     private val timeline = SpectrumTimeline(capacity = 512)
     private val analyzer = SpectrumAnalyzer(bandCount = bandCount, sampleRate = sampleRate).apply {
         onAnalysis = timeline::push
     }
-
+    private val events = timeline.eventCursor()
     private val source = mono
     private var readIndex = 0
-    private var playedMicros = 0L
-    private var lastReadMicros = -1L
+    private var clockSeconds = 0.0
+    private val playedMicros: Long get() = (clockSeconds * 1_000_000.0).toLong()
+    private val timelineFuture = timeline.asFuture { playedMicros }
+
+    val future: VizFuture = object : VizFuture {
+        override fun at(secondsAhead: Float): SpectrumFrame? =
+            if (secondsAhead in 0f..0.1f) timelineFuture.at(secondsAhead) else null
+        override val nextOnsetSeconds: Float
+            get() = timelineFuture.nextOnsetSeconds.let { if (it in 0f..0.1f) it else -1f }
+        override fun nextEvent(kind: AudioEventKind): UpcomingAudioEvent? =
+            timelineFuture.nextEvent(kind)?.takeIf { it.secondsUntil in 0f..0.1f }
+    }
 
     init {
+        require(warmupSeconds.isFinite() && warmupSeconds >= 0f)
         val warmup = (warmupSeconds * sampleRate).toInt().coerceAtMost(source.size)
         if (warmup > 0) {
-            feed(0, warmup, 0L)
+            feed(0, warmup)
             readIndex = warmup
-            playedMicros = warmup * 1_000_000L / sampleRate
+            clockSeconds = warmup.toDouble() / sampleRate
         }
+        fillAhead()
+        events.sample(playedMicros)
     }
 
-    /** Advances by one display frame and answers what should be drawn. */
+    /** Advance the audible clock once, then sample features and all delivered events there. */
     fun next(deltaSeconds: Float): SpectrumFrame {
-        val wanted = (deltaSeconds * sampleRate).toInt().coerceAtLeast(1)
-        val available = (source.size - readIndex).coerceAtLeast(0)
-        val count = minOf(wanted, available)
-        if (count > 0) {
-            feed(readIndex, count, playedMicros)
-            readIndex += count
-        } else {
-            // Ran out of song: keep the clock moving so trails and springs still settle.
-            readIndex = 0
-        }
-        playedMicros += (deltaSeconds * 1_000_000f).toLong()
-        val newest = timeline.newest() ?: return analyzer.latest
-        val frame = timeline.sample(newest.ptsMicros, lastReadMicros) ?: newest
-        lastReadMicros = newest.ptsMicros
-        return frame
+        require(deltaSeconds.isFinite() && deltaSeconds >= 0f)
+        clockSeconds += deltaSeconds
+        fillAhead()
+        val at = playedMicros
+        val delivery = events.sample(at)
+        val frame = timeline.interpolated(at) ?: SpectrumFrame.silent(analyzer.bandCount, analyzer.scopePoints)
+        return frame.withDeliveredEvents(delivery)
     }
 
-    private fun feed(from: Int, count: Int, ptsMicros: Long) {
+    private fun fillAhead() {
+        val through = minOf(source.size.toLong(), (clockSeconds * sampleRate).toLong() + sampleRate / 5).toInt()
+        if (through <= readIndex) return
+        feed(readIndex, through - readIndex)
+        readIndex = through
+    }
+
+    private fun feed(from: Int, count: Int) {
+        // PTS comes from source sample count, independently of display cadence and its rounding.
+        val ptsMicros = from * 1_000_000L / sampleRate
         val stereo = side
         if (stereo == null) {
             analyzer.feed(source.copyOfRange(from, from + count), count, channels = 1, ptsMicros = ptsMicros)

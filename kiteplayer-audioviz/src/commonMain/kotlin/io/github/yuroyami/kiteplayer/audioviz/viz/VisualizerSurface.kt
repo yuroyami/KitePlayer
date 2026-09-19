@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -125,8 +126,10 @@ private fun VisualizerCanvas(
     }
 
     Canvas(modifier) {
-        val current = frame()
-        // The palette asked for, faded in over two bars and leaning towards the key.
+        // Redraws follow this canvas's own ticks. Reading the shared analysis without observing it
+        // keeps a throttled preview from redrawing, and advancing its drawing, on every change.
+        val current = Snapshot.withoutReadObservation { frame() }
+        // The palette asked for, faded in over eight usable pulses or three seconds, leaning towards the key.
         val shown = fade.advance(palette, current, deltaSeconds)
         val state = VizRenderState(
             frame = current,

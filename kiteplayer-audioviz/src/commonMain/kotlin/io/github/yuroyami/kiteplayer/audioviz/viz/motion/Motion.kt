@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.motion
 
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
+import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -231,10 +232,10 @@ public object Ease {
  *
  * Locking straight to the tempo tracker's phase looks wrong twice: it jumps the moment a tempo is
  * found, and it freezes on music with no steady beat. So this always turns at its own speed and
- * is only pulled gently towards the music's phase, which locks within a bar and never jerks.
+ * is only pulled gently towards an accepted pulse phase, over a couple of seconds and without jerks.
  *
- * [beatsPerCycle] is how much music one full turn covers. Four is a bar, sixteen is a phrase,
- * one is a single beat.
+ * [beatsPerCycle] is the number of pulses per visual cycle. It does not describe musical meter
+ * or establish a phrase boundary. One is a single pulse; larger cycles have an artistic origin.
  */
 @AudioVizAuthoringApi
 public class MusicClock(
@@ -242,16 +243,45 @@ public class MusicClock(
     /** How hard the music pulls the turn into line. Higher locks faster and wobbles more. */
     private val pullPerSecond: Float = 0.6f,
 ) {
+    init { require(beatsPerCycle.isFinite() && beatsPerCycle > 0f) }
+    private var rhythmMix = 0f
+    private var rhythmBpm = 0f
+
     /** Where the turn is, 0 to 1. */
     public var phase: Float = 0f
         private set
 
     /**
+     * Follow an accepted pulse phase, with a two-second rate handover to/from free motion.
+     * The cycle origin is chosen locally; no bar or phrase is inferred from counted pulses.
+     */
+    public fun advance(deltaSeconds: Float, frame: SpectrumFrame, moodPaced: Float): Float {
+        val dt = deltaSeconds.takeIf { it.isFinite() && it > 0f }?.coerceAtMost(0.1f) ?: return phase
+        val rhythm = frame.rhythm?.takeIf { it.usable && it.bpm > 0f }
+        if (rhythm != null) rhythmBpm = rhythm.bpm
+        rhythmMix = (rhythmMix + if (rhythm != null) dt / 2f else -dt / 2f).coerceIn(0f, 1f)
+        val free = moodPaced.takeIf { it.isFinite() }?.coerceAtLeast(0f) ?: 0f
+        val turns = free * (1f - rhythmMix) + rhythmBpm / 60f / beatsPerCycle * rhythmMix
+        phase += turns * dt
+        if (rhythm != null) {
+            // Choose the nearest matching pulse within this visual cycle. We need no downbeat
+            // or sixteen-pulse origin, and switching a hypothesis never assigns phase directly.
+            val localBeats = phase * beatsPerCycle
+            val target = kotlin.math.round(localBeats - rhythm.beatPhase) + rhythm.beatPhase
+            val error = (target - localBeats) / beatsPerCycle
+            phase += error * (1f - exp(-pullPerSecond * dt)) * rhythmMix
+        }
+        phase -= kotlin.math.floor(phase)
+        return phase
+    }
+
+    /**
      * Moves the turn on by one frame and answers the new phase.
      *
-     * [freeTurnsPerSecond] is the speed used when no tempo is known, and it is scaled by the mood
+     * [moodPaced] is the speed used when no tempo is known, and it is scaled by the mood
      * so a calm passage still turns slowly rather than at the same rate as a chorus.
      */
+    @Deprecated("Use the SpectrumFrame overload for accepted rhythm evidence and unknown meter.")
     public fun advance(
         deltaSeconds: Float,
         bpm: Float,
@@ -280,5 +310,7 @@ public class MusicClock(
 
     public fun reset() {
         phase = 0f
+        rhythmMix = 0f
+        rhythmBpm = 0f
     }
 }

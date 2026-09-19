@@ -5,7 +5,6 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
-import io.github.yuroyami.kiteplayer.audioviz.viz.TraceGain
 import io.github.yuroyami.kiteplayer.audioviz.viz.sceneRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -97,8 +96,8 @@ internal class Breath : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        if (gestures.phrase) direction = -direction
-        lap += dt / (gestures.barSeconds * 4f) * direction * TAU
+        if (gestures.section) direction = -direction
+        lap += dt / (gestures.cycleSeconds * 4f) * direction * TAU
         var x = 0f
         var y = 0f
         for (option in 0 until 3) {
@@ -122,7 +121,7 @@ internal class Breath : Layered(
         ground?.dim = 0.7f + 0.4f * swell.value
         turn += dt * 1f * state.tempo
         if (gestures.drop) widen = 1f
-        widen = (widen - dt / gestures.barSeconds).coerceAtLeast(0f)
+        widen = (widen - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         for (mote in 0 until MOTES) {
             moteAngle[mote] += dt * (1.6f + (mote % 5) * 0.4f) * state.tempo * if (mote % 2 == 0) 1f else -1f
         }
@@ -220,18 +219,18 @@ internal class Tide : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         val bands = count.count(7, 2)
-        if (gestures.phrase) {
-            val index = gestures.phrases % bands
+        if (gestures.section) {
+            val index = gestures.sections % bands
             way[index] = -way[index]
         }
-        if (gestures.drop) rush = gestures.barSeconds
+        if (gestures.drop) rush = gestures.cycleSeconds
         rush -= dt
         val frame = state.frame
         var y = 0f
         for (band in 0 until MOST) {
             val barsPerScreen = PERIOD[band] / speed.value
             val direction = if (rush > 0f) 3f else way[band]
-            scroll[band] += dt / (gestures.barSeconds * barsPerScreen) * direction * 1.6f
+            scroll[band] += dt / (gestures.cycleSeconds * barsPerScreen) * direction * 1.6f
             swell[band] = (swell[band] - dt * 1.5f).coerceAtLeast(0f)
             val along = band.toFloat() / (bands - 1).coerceAtLeast(1)
             val reach = heights[band].advance(0.25f + 0.75f * frame.bandsRel.let { if (it.isEmpty()) 0f else it.sampleAt(along.coerceIn(0f, 1f)) }, dt)
@@ -244,7 +243,7 @@ internal class Tide : Layered(
             for (band in 1 until bands) if (heights[band].value > heights[loudest].value) loudest = band
             swell[loudest] = 1f
         }
-        moonX = wrap(moonX + dt / (gestures.barSeconds * 8f))
+        moonX = wrap(moonX + dt / (gestures.cycleSeconds * 8f))
         kit.place(0, wrap(scroll[0]), top[0] + tall[0] * 0.5f)
         kit.place(1, moonX, 0.12f)
         foamCredit += dt * (16f + 30f * state.drive) + gestures.hatHit * 3f
@@ -327,7 +326,7 @@ internal class Tide : Layered(
 }
 
 /**
- * A lamp swinging like a pendulum, one swing every two bars, from a pivot that wanders the screen. A
+ * A lamp swinging like a pendulum, one swing every two visual cycles, from a pivot that wanders the screen. A
  * second lamp hangs far behind, moths circle the flame, sparks climb off it and motes rise the full
  * height. A soft onset lets out a puff of motes and a kick makes the flame flare.
  */
@@ -374,10 +373,10 @@ internal class Lantern : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         stage.advance(dt)
-        // One swing from side to side every two bars, hung from wherever the stage has got to.
-        pendulum += dt * PI.toFloat() / (gestures.barSeconds * 2f)
+        // One swing from side to side every two visual cycles, hung from wherever the stage has got to.
+        pendulum += dt * PI.toFloat() / (gestures.cycleSeconds * 2f)
         if (gestures.drop) wide = 1f
-        wide = (wide - dt / (gestures.barSeconds * 2f)).coerceAtLeast(0f)
+        wide = (wide - dt / (gestures.cycleSeconds * 2f)).coerceAtLeast(0f)
         val amplitude = swing.value * (1f + 0.25f * wide)
         val lean = sin(pendulum)
         lampX = stage.x + amplitude * lean
@@ -405,7 +404,7 @@ internal class Lantern : Layered(
             sparks.burst(lampX, lampY, 1, 0.3f, 1.2f, 0.016f, 0.05f + 0.1f * random.next(), Sprite.SPARK, UP, 1.2f)
         }
         sparks.advance(dt, drag = 0.4f, gravity = -0.1f)
-        if (gestures.bar) risers.spawn(random.next(), 1.05f, random.next(), -0.05f, gestures.barSeconds * 0.9f, PathShape.Wave, 0.05f, 0.022f, 0.15f, 0f, Sprite.GLOW)
+        if (gestures.section) risers.spawn(random.next(), 1.05f, random.next(), -0.05f, gestures.cycleSeconds * 0.9f, PathShape.Wave, 0.05f, 0.022f, 0.15f, 0f, Sprite.GLOW)
         risers.advance(dt)
         kit.follow(2, risers)
         flies.targetX = lampX
@@ -532,15 +531,15 @@ internal class Riot : Layered(
         val snare = gestures.snareHit
         val hat = gestures.hatHit
         sinceHit = if (kick > 0f || snare > 0f) 0f else sinceHit + dt
-        val drums = sinceHit < gestures.barSeconds
+        val drums = sinceHit < gestures.cycleSeconds
         kickFlash = maxOf(kickFlash - dt * 3.5f, kick)
         invert = (invert - dt / 0.15f).coerceAtLeast(0f)
         if (gestures.drop) invert = 1f
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         val newBeat = beat != lastBeat
         lastBeat = beat
         val flip = drums && when (strobe.value) {
-            1 -> gestures.bar
+            1 -> gestures.section
             2 -> newBeat
             else -> false
         }
@@ -564,8 +563,8 @@ internal class Riot : Layered(
         }
         // Without drums the beat throws one small, faint shape, so a quiet passage is not frozen.
         if (newBeat && !drums) launch(SOFT, 0.09f, 0.8f, 0.7f, twin = false)
-        if (gestures.bar) stripesLeft = 0.5f
-        stripesLeft -= dt / gestures.barSeconds
+        if (gestures.section) stripesLeft = 0.5f
+        stripesLeft -= dt / gestures.cycleSeconds
         stripes.advance(gestures)
         flying.advance(dt)
         kit.follow(0, flying)
@@ -681,7 +680,7 @@ internal class Riot : Layered(
  *
  * Between drops three traces are drawn at one edge every frame and the echo carries them across, so the
  * last seconds of sound stack up into a waterfall that fills the screen. On a drop the picture is cut
- * into shards, each a triangle carrying its own piece of it, spinning out to the edges over a bar. A
+ * into shards, each a triangle carrying its own piece of it, spinning out to the edges over a visual cycle. A
  * snare breaks off six smaller shards, a kick jolts the waterfall, and dust flies with the pieces.
  */
 internal class Shatter : Layered(
@@ -697,7 +696,6 @@ internal class Shatter : Layered(
     private val upward = genes.toggle("Waterfall rises", start = false)
     private val smallShatter = genes.toggle("Snare shatter", start = true)
 
-    private val gain = TraceGain()
     private val jolt = Spring(stiffness = 120f, damping = 0.5f)
     private var previous: ImageBitmap? = null
     private var snapshot: ImageBitmap? = null
@@ -739,7 +737,7 @@ internal class Shatter : Layered(
         }
         for (slot in 0 until MOST) {
             if (life[slot] <= 0f) continue
-            life[slot] -= dt / gestures.barSeconds
+            life[slot] -= dt / gestures.cycleSeconds
             shardX[slot] += speedX[slot] * dt
             shardY[slot] += speedY[slot] * dt
             turn[slot] += spin[slot] * dt
@@ -750,8 +748,8 @@ internal class Shatter : Layered(
         kit.place(1, 0.5f, if (rising()) 0.9f else 0.1f)
     }
 
-    // The waterfall turns round every phrase.
-    private fun rising(): Boolean = upward.on != (gestures.phrases % 2 == 1)
+    // The waterfall turns round at each supported section boundary.
+    private fun rising(): Boolean = upward.on != (gestures.sections % 2 == 1)
 
     override fun DrawScope.drawEcho(state: VizRenderState) {
         if (pending > 0) {
@@ -858,7 +856,7 @@ internal class Shatter : Layered(
     // Three traces at the edge the waterfall starts from; the echo does the rest.
     private fun DrawScope.drawWaterfall(state: VizRenderState) {
         val frame = state.frame
-        val scale = gain.update(frame.scopeLeft, frame.scopeRight, state.deltaSeconds)
+        val scale = frame.waveformGain
         val edge = size.height * if (rising()) 0.9f else 0.1f
         val reach = size.height * 0.08f * (0.6f + state.lift) * scale
         for (index in 0 until 3) {
@@ -883,7 +881,6 @@ internal class Shatter : Layered(
     }
 
     override fun onReset() {
-        gain.reset()
         jolt.reset()
         previous = null
         pending = 0
@@ -936,11 +933,11 @@ internal class Piston : Layered(
         val frame = state.frame
         val bands = frame.bandsRel
         val count = pistons.count(16, 8)
-        if (gestures.phrase) direction = -direction
+        if (gestures.section) direction = -direction
         // Everything runs at the pace the music pushes, so under a pad the machine all but stops.
         stage.advance(dt * (0.3f + state.drive))
         climb = wrap(climb + dt * (0.3f + 14f * state.drive))
-        slide += dt * 10f * state.drive / gestures.barSeconds * direction * if (reversed.on) -1f else 1f
+        slide += dt * 10f * state.drive / gestures.cycleSeconds * direction * if (reversed.on) -1f else 1f
         pump += dt * (0.5f + 4f * state.drive)
         val all = gestures.drop
         // Only real hits throw the pistons; the soft onsets of a pad leave the machine pumping.
@@ -1120,7 +1117,7 @@ internal class Blackout : Layered(
         // Already rising before the hit, because the audio for it has been analysed and is waiting to be played.
         val coming = state.anticipation(window = 0.06f)
         var landed = maxOf(gestures.kickHit, gestures.snareHit * 0.8f)
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         val newBeat = beat != lastBeat
         lastBeat = beat
         if (strobe.on) landed = maxOf(landed, gestures.hatHit * 0.45f)

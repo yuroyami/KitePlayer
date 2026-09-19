@@ -43,9 +43,9 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * The classic plasma, set travelling: the field scrolls one screen every two bars, two layers of strips
+ * The classic plasma, set travelling: the field scrolls one screen every two visual cycles, two layers of strips
  * cross it at other angles, and glowing blobs ride its brightest ridges. A kick bends the field and the
- * strips turn to a new angle every phrase.
+ * strips turn to a new angle at each supported section boundary.
  *
  * Drawn as one mesh of smoothly shaded cells, which the graphics card interpolates, so a full screen of
  * colour costs a single call.
@@ -78,10 +78,10 @@ internal class Plasma : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         flow += dt * 3.3f * state.tempo
-        travel += dt / (gestures.barSeconds * 2f) * if (backwards.on) -1f else 1f
+        travel += dt / (gestures.cycleSeconds * 2f) * if (backwards.on) -1f else 1f
         bend.kick(gestures.kickHit * 5f)
         bend.advance(dt)
-        if (gestures.phrase) strips.choose((strips.value + 1) % 3)
+        if (gestures.section) strips.choose((strips.value + 1) % 3)
         angle.advance(strips.value * 0.785f, dt)
         // The blobs glide toward the brightest points of the field, a few cells apart.
         for (index in samples.indices) {
@@ -229,9 +229,9 @@ internal class Nebula : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         stage.advance(dt)
-        phase += dt * TAU / (gestures.barSeconds * 4f) * (0.7f + 0.6f * state.drive)
+        phase += dt * TAU / (gestures.cycleSeconds * 4f) * (0.7f + 0.6f * state.drive)
         if (gestures.drop) parting = 1f
-        parting = (parting - dt / gestures.barSeconds).coerceAtLeast(0f)
+        parting = (parting - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val push = 1f + 0.7f * sin(parting * PI.toFloat())
         for (index in 0 until MOST) {
             bulge[index] = (bulge[index] - dt * 2f).coerceAtLeast(0f)
@@ -383,14 +383,14 @@ internal class Aurora : Layered(
         val dt = state.deltaSeconds
         time += dt * state.tempo
         stage.advance(dt)
-        for (layer in 0 until 3) scroll[layer] += dt / (gestures.barSeconds * BARS_PER_SCREEN[layer] / rates.value)
-        ridgeScroll += dt / (gestures.barSeconds * 8f)
+        for (layer in 0 until 3) scroll[layer] += dt / (gestures.cycleSeconds * BARS_PER_SCREEN[layer] / rates.value)
+        ridgeScroll += dt / (gestures.cycleSeconds * 8f)
         if (gestures.kickHit > 0f) wave = 0f
         if (wave >= 0f) {
             wave += dt / (gestures.beatSeconds * 2f)
             if (wave > 1.2f) wave = -1f
         }
-        if (gestures.drop) dropHold = gestures.barSeconds
+        if (gestures.drop) dropHold = gestures.cycleSeconds
         dropHold -= dt
         floorPull.advance(if (dropHold > 0f) 1f else 0f, dt)
         comets.advance(state, gestures, random)
@@ -532,21 +532,21 @@ internal class Kaleidoscope : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         ground?.kind = if (groundFold.on) GroundKind.Voronoi else GroundKind.Plasma
-        spin = turn.advance(dt, state.frame.bpm, state.frame.beatConfidence, state.frame.phrasePhase, state.paced(0.2f)) * TAU
+        spin = turn.advance(dt, state.frame, state.paced(0.2f)) * TAU
         if (gestures.drop) {
             mirrors.choose(2)
-            fastLeft = gestures.barSeconds
+            fastLeft = gestures.cycleSeconds
         }
         if (fastLeft > 0f) {
             fastLeft -= dt
-            extra += dt * TAU / gestures.barSeconds
+            extra += dt * TAU / gestures.cycleSeconds
         }
         snap.kick(gestures.kickHit * 6f)
         snap.advance(dt)
         wander.advance(state, gestures)
         centreX = 0.5f + offset.value * cos(wander.angle) / kit.aspect * 1.6f
         centreY = 0.5f + offset.value * sin(wander.angle)
-        sweepAngle = gestures.barPhase * TAU
+        sweepAngle = gestures.cyclePhase * TAU
         kit.place(0, centreX + sin(sweepAngle) * 0.4f / kit.aspect, centreY - cos(sweepAngle) * 0.4f)
         kit.place(1, centreX, centreY)
         if (gestures.kickHit > 0f || gestures.snareHit > 0f) {
@@ -618,7 +618,7 @@ internal class Kaleidoscope : Layered(
 /**
  * Rings of spectrum rushing out of a vanishing point that orbits the screen, with a second tunnel
  * behind turning the other way. Debris flies out to the corners, a light sweeps down the tunnel on
- * every kick, a snare nudges the vanishing point, and a drop doubles the rush for a bar.
+ * every kick, a snare nudges the vanishing point, and a drop doubles the rush for a visual cycle.
  */
 internal class Tunnel : Layered(
     name = "Tunnel",
@@ -662,7 +662,7 @@ internal class Tunnel : Layered(
         kit.place(1, pointX, pointY)
         surge.kick(gestures.kickHit * 4f)
         surge.advance(dt)
-        if (gestures.drop) rushHold = gestures.barSeconds
+        if (gestures.drop) rushHold = gestures.cycleSeconds
         rushHold -= dt
         travelled += dt * (0.2f + 3.6f * state.drive + surge.value.coerceIn(0f, 3f)) * if (rushHold > 0f) 2f else 1f
         if (gestures.kickHit > 0f) sweepDepth = 0f
@@ -671,7 +671,7 @@ internal class Tunnel : Layered(
             if (sweepDepth > 1f) sweepDepth = -1f
         }
         // Debris on the drums, and one piece a beat in any case.
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         val newBeat = beat != lastBeat
         lastBeat = beat
         if (gestures.kickHit > 0f || gestures.snareHit > 0f || newBeat) {
@@ -759,7 +759,7 @@ internal class Tunnel : Layered(
 /**
  * Smoke rising through light: hundreds of motes in one or two columns climbing the full height on a
  * curl that the echo's flow warp stretches into streaks. A kick lets out a puff and embers, the wind
- * changes side every phrase, and a drop opens both columns full.
+ * changes side at each supported section boundary, and a drop opens both columns full.
  */
 internal class Smoke : Layered(
     name = "Smoke",
@@ -788,8 +788,8 @@ internal class Smoke : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         swirl += dt * 0.6f * state.tempo
-        wind.advance(windGene.value * if (gestures.phrases % 2 == 0) 1f else -1f, dt)
-        if (gestures.drop) fullHold = gestures.barSeconds
+        wind.advance(windGene.value * if (gestures.sections % 2 == 0) 1f else -1f, dt)
+        if (gestures.drop) fullHold = gestures.cycleSeconds
         fullHold -= dt
         val twin = columns.weight(1)
         credit = (credit + dt * (40f + 380f * state.drive) * if (fullHold > 0f) 3f else 1f).coerceAtMost(60f)
@@ -812,8 +812,8 @@ internal class Smoke : Layered(
         }
         motes.advance(dt, drag = 0.2f, gravity = -0.15f)
         embers.advance(dt, drag = 0.1f, gravity = -0.5f)
-        if (gestures.bar || !wisps.anyNewest) {
-            wisps.spawn(0.3f + 0.4f * random.next(), 1.05f, 0.2f + 0.6f * random.next(), -0.05f, gestures.barSeconds * 0.9f, PathShape.Wave, 0.06f, 0.03f, random.next(), 0f, Sprite.GLOW)
+        if (gestures.section || !wisps.anyNewest) {
+            wisps.spawn(0.3f + 0.4f * random.next(), 1.05f, 0.2f + 0.6f * random.next(), -0.05f, gestures.cycleSeconds * 0.9f, PathShape.Wave, 0.06f, 0.03f, random.next(), 0f, Sprite.GLOW)
         }
         wisps.advance(dt)
         kit.follow(0, wisps)

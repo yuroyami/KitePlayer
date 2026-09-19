@@ -51,7 +51,7 @@ import kotlin.math.sqrt
  * Spike stars, one for each part of the spectrum, orbiting each other across the screen.
  *
  * The bass star is the biggest. A snare sends a small star across, a kick flashes the hubs and
- * throws sparks, and a drop pulls every star into one for a bar before they split again.
+ * throws sparks, and a drop pulls every star into one for a visual cycle before they split again.
  */
 internal class Spikes : Layered(
     name = "Spikes",
@@ -110,7 +110,7 @@ internal class Spikes : Layered(
         val dt = state.deltaSeconds
         stage.advance(dt)
         ground?.kind = if (floor.value == 0) GroundKind.Rings else GroundKind.Stars
-        if (gestures.drop) mergeHold = gestures.barSeconds
+        if (gestures.drop) mergeHold = gestures.cycleSeconds
         mergeHold -= dt
         merge.advance(if (mergeHold > 0f) 1f else 0f, dt)
         hub.kick(gestures.kickHit * 9f)
@@ -132,8 +132,8 @@ internal class Spikes : Layered(
         if (gestures.snareHit > 0f) {
             travellers.across(random, gestures.beatSeconds * 2.5f, PathShape.Arc, 0.14f, 0.045f, random.next(), 4f, Sprite.SPARK)
         }
-        if (gestures.bar) {
-            travellers.across(random, gestures.barSeconds * 0.7f, PathShape.Wave, 0.05f, 0.06f, random.next(), -2f, Sprite.HEX)
+        if (gestures.section) {
+            travellers.across(random, gestures.cycleSeconds * 0.7f, PathShape.Wave, 0.05f, 0.06f, random.next(), -2f, Sprite.HEX)
         }
         travellers.advance(dt)
         kit.follow(STARS, travellers)
@@ -548,13 +548,13 @@ internal class LockOn : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         stage.advance(dt)
-        drift += dt * TAU / (gestures.barSeconds * 1.6f) * state.tempo
+        drift += dt * TAU / (gestures.cycleSeconds * 1.6f) * state.tempo
         for (index in 0 until TARGETS) {
             targetX[index] = stage.x + 0.36f * sin(drift * FX[index] + index * 1.7f)
             targetY[index] = stage.y + 0.34f * sin(drift * FY[index] + index * 2.9f)
         }
         val count = targets.count(2)
-        if (gestures.bar) {
+        if (gestures.section) {
             var best = (chosen + 1) % count
             var loudest = -1f
             for (index in 0 until count) {
@@ -578,7 +578,7 @@ internal class LockOn : Layered(
         jump.advance(dt)
         flash.hit(maxOf(gestures.kickHit, gestures.snareHit))
         flash.advance(0f, dt)
-        spin = turn.advance(dt, state.frame.bpm, state.frame.beatConfidence, state.frame.phrasePhase, state.paced(0.03f)) * TAU
+        spin = turn.advance(dt, state.frame, state.paced(0.03f)) * TAU
         if (gestures.kickHit > 0f) {
             pulse[nextPulse] = 0.001f
             pulseX[nextPulse] = aimX.value
@@ -751,7 +751,7 @@ internal class Sunburst : Layered(
         main.centreY = stage.y
         main.advance(state, gestures)
         kit.place(0, main.x, main.y)
-        spin = -turn.advance(dt, state.frame.bpm, state.frame.beatConfidence, state.frame.phrasePhase, state.paced(0.03f)) * TAU
+        spin = -turn.advance(dt, state.frame, state.paced(0.03f)) * TAU
         behind += dt * 0.3f * state.tempo * if (counter.on) -1f else 1f
         snap.kick(gestures.kickHit * 8f)
         snap.advance(dt)
@@ -1034,11 +1034,11 @@ internal class Gemini : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         stage.advance(dt)
-        if (gestures.phrase) {
+        if (gestures.section) {
             direction = -direction
             swapped = !swapped
         }
-        orbit += dt * TAU / (gestures.barSeconds * 1.3f) * state.tempo * direction
+        orbit += dt * TAU / (gestures.cycleSeconds * 1.3f) * state.tempo * direction
         spin += dt * 1.3f * state.tempo * direction
         apart.kick(gestures.kickHit * 4f)
         apart.advance(dt)

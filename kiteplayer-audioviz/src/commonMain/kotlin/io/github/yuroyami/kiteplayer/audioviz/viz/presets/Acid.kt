@@ -47,7 +47,7 @@ import kotlin.math.sqrt
 
 /**
  * Arms of spectrum round a centre on an orbit, added rather than painted over a frame that comes back
- * twisted, so each arm leaves a spiral of its own past. The arm count changes every phrase, a second
+ * twisted, so each arm leaves a spiral of its own past. The arm count changes at each supported section boundary, a second
  * mandala at half size turns the other way behind, glyphs fly out along the arms, a sweep goes round
  * once a bar, and a drop copies the echo and spins the whole figure a full turn.
  *
@@ -107,11 +107,11 @@ internal class Mandala : Layered(
         centreX = stage.x + orbitGene.value * cos(centre.angle) / kit.aspect * 1.6f
         centreY = stage.y + orbitGene.value * sin(centre.angle)
         kit.place(1, centreX, centreY)
-        spin = turn.advance(dt, state.frame.bpm, state.frame.beatConfidence, state.frame.phrasePhase, state.paced(0.06f)) * TAU
-        if (gestures.drop) dropLeft = gestures.barSeconds
+        spin = turn.advance(dt, state.frame, state.paced(0.06f)) * TAU
+        if (gestures.drop) dropLeft = gestures.cycleSeconds
         if (dropLeft > 0f) {
             dropLeft -= dt
-            extra += dt * TAU / gestures.barSeconds
+            extra += dt * TAU / gestures.cycleSeconds
         }
         flare.kick(gestures.kickHit * 7f)
         flare.advance(dt)
@@ -129,7 +129,7 @@ internal class Mandala : Layered(
             glyphs.burst(centreX, centreY, 3, 0.6f, 0.9f, 0.016f, arm.toFloat() / count, kind, angle, 0.2f)
         }
         glyphs.advance(dt, drag = 0.4f)
-        val sweep = gestures.barPhase * TAU
+        val sweep = gestures.cyclePhase * TAU
         kit.place(2, centreX + sin(sweep) * 0.4f / kit.aspect, centreY - cos(sweep) * 0.4f)
         comets.advance(state, gestures, random)
         kit.follow(0, comets.travellers)
@@ -153,7 +153,7 @@ internal class Mandala : Layered(
             blendMode = BlendMode.Plus,
         )
         // A sweep round once a bar.
-        drawLine(state.palette.cap.copy(alpha = (0.1f + 0.2f * state.lift).coerceIn(0f, 1f)), at, polar(at, gestures.barPhase * TAU, reach), (size.minDimension * 0.005f).coerceAtLeast(1f), blendMode = BlendMode.Plus)
+        drawLine(state.palette.cap.copy(alpha = (0.1f + 0.2f * state.lift).coerceIn(0f, 1f)), at, polar(at, gestures.cyclePhase * TAU, reach), (size.minDimension * 0.005f).coerceAtLeast(1f), blendMode = BlendMode.Plus)
         with(glyphs) { drawSprites(state.palette, genes.walk) }
         with(comets) { drawComets(state.palette, genes.walk) }
     }
@@ -196,7 +196,7 @@ internal class Mandala : Layered(
 }
 
 /**
- * Soft blobs on up to three depths, crossing the screen on looping paths once every two bars, added
+ * Soft blobs on up to three depths, crossing the screen on looping paths once every two visual cycles, added
  * together and carried by a flow warp that drifts toward the loudest band. A kick splits blobs in two
  * and sends the halves flying, and a drop pulls every blob to the middle and throws them out again.
  */
@@ -234,10 +234,10 @@ internal class Melt : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         warp.strength = flow.value
-        phase += dt * TAU / (gestures.barSeconds * 2f) * (0.6f + 0.6f * state.drive)
-        if (gestures.phrase) paths.choose((paths.value + 1) % 3)
+        phase += dt * TAU / (gestures.cycleSeconds * 2f) * (0.6f + 0.6f * state.drive)
+        if (gestures.section) paths.choose((paths.value + 1) % 3)
         if (gestures.drop) gather = 1f
-        gather = (gather - dt / gestures.barSeconds).coerceAtLeast(0f)
+        gather = (gather - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val pull = sin(gather * PI.toFloat())
         for (index in 0 until MOST) {
             var x = 0f
@@ -366,7 +366,7 @@ internal class Lava : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        phase += dt * TAU / (gestures.barSeconds * 4f)
+        phase += dt * TAU / (gestures.cycleSeconds * 4f)
         lensPhase += dt * 0.25f
         val count = blobs.count(4, 2)
         // An onset makes one blob glow: a real drum fully, a soft onset faintly.
@@ -389,7 +389,7 @@ internal class Lava : Layered(
             blobY[index] = 0.5f + y
             if (index < 3) kit.place(index, blobX[index], blobY[index])
         }
-        if (gestures.drop) fastSweep = gestures.barSeconds
+        if (gestures.drop) fastSweep = gestures.cycleSeconds
         fastSweep -= dt
         sweep.perBar = if (fastSweep > 0f) 1f else 0.25f
         sweep.backwards = sweepBack.on
@@ -495,14 +495,14 @@ internal class PrismBurst : Layered(
         centre.centreY = stage.y
         centre.advance(state, gestures)
         kit.place(1, centre.x, centre.y)
-        if (gestures.phrase) direction = -direction
-        spin = turn.advance(dt, state.frame.bpm, state.frame.beatConfidence, state.frame.phrasePhase, state.paced(0.05f)) * TAU * direction
+        if (gestures.section) direction = -direction
+        spin = turn.advance(dt, state.frame, state.paced(0.05f)) * TAU * direction
         snap.kick(gestures.kickHit * 6f)
         snap.advance(dt)
-        if (gestures.drop) both = gestures.barSeconds
+        if (gestures.drop) both = gestures.cycleSeconds
         both -= dt
         // Dashes fly outward along the rays, once a beat or more often.
-        val beat = (gestures.barPhase * 4f * (dashRate.value + 1)).toInt()
+        val beat = (gestures.cyclePhase * 4f * (dashRate.value + 1)).toInt()
         if (beat != lastBeat) {
             lastBeat = beat
             val count = rayCount()
@@ -617,9 +617,9 @@ internal class OilSlick : Layered(
         sheen += dt * sheenRate.value
         if (gestures.snareHit > 0f) sheen += 0.2f
         ripple += dt * 2f * state.tempo
-        if (gestures.drop) rush = gestures.barSeconds
+        if (gestures.drop) rush = gestures.cycleSeconds
         rush -= dt
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         if (beat != lastBeat || gestures.kickHit > 0f) {
             lastBeat = beat
             age[nextRing] = 0f
@@ -741,12 +741,12 @@ internal class StrobeWeb : Layered(
         val dt = state.deltaSeconds
         strobe = maxOf(strobe - dt * 4f, gestures.snareHit)
         wobble += dt * 2f * state.tempo
-        if (!started || gestures.bar) {
+        if (!started || gestures.section) {
             spread(first = !started)
             started = true
         }
         if (gestures.drop) edges = 1f
-        edges = (edges - dt / gestures.barSeconds).coerceAtLeast(0f)
+        edges = (edges - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val ease = (dt * 5f).coerceAtMost(1f)
         for (web in 0 until 3) {
             for (node in 0 until MOST) {

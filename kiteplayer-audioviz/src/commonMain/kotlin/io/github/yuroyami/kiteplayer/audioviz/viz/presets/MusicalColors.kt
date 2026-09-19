@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
+
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -18,7 +20,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
-import io.github.yuroyami.kiteplayer.audioviz.viz.TraceGain
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
@@ -81,7 +82,7 @@ internal class Reactor : Layered(
         orbit += dt * (0.5f + 2.2f * state.drive)
         spin += dt * (0.4f + 2.4f * state.drive)
         if (gestures.drop) collide = 1f
-        collide = (collide - dt / gestures.barSeconds).coerceAtLeast(0f)
+        collide = (collide - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         swell.kick(gestures.kickHit * 9f)
         swell.advance(dt)
         if (gestures.snareHit > 0f) step += TAU / 24f
@@ -94,7 +95,7 @@ internal class Reactor : Layered(
             kit.place(index + 1, coreX[index], coreY[index])
         }
         // Arcs pass from core to core once a bar, once a beat or twice a beat.
-        val beats = (gestures.barPhase * 8f).toInt()
+        val beats = (gestures.cyclePhase * 8f).toInt()
         if (beats != lastBeat) {
             lastBeat = beats
             val every = when (exchange.value) {
@@ -230,11 +231,11 @@ internal class Stereogram : Layered(
     private val glintRate = genes.number("Glints", 0.3f, 1.5f, 0.8f)
     private val copies = genes.toggle("Turned copies", start = true)
 
-    private val gain = TraceGain()
     private val jump = Spring(stiffness = 150f, damping = 0.45f)
     private val stage = Stage(reachX = 0.2f, reachY = 0.14f, start = 0.9f)
     private val lefts = History(rows = 160)
     private val rights = History(rows = 160)
+    private val traceSampler = WaveformResampler()
     private val left = FloatArray(TRACE)
     private val right = FloatArray(TRACE)
     private var scale = 1f
@@ -257,15 +258,15 @@ internal class Stereogram : Layered(
         val dt = state.deltaSeconds
         stage.advance(dt)
         val frame = state.frame
-        frame.scopeLeft.squeezeInto(left)
-        frame.scopeRight.squeezeInto(right)
+        traceSampler.resample(frame.scopeLeft, left)
+        traceSampler.resample(frame.scopeRight, right)
         lefts.push(left, state.timeSeconds)
         rights.push(right, state.timeSeconds)
-        scale = gain.update(frame.scopeLeft, frame.scopeRight, dt)
+        scale = frame.waveformGain
         jump.kick(gestures.kickHit * 5f)
         jump.advance(dt)
         if (gestures.drop) separate = 1f
-        separate = (separate - dt / gestures.barSeconds).coerceAtLeast(0f)
+        separate = (separate - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         // The head of the trace is its point furthest out, which leaps round the figure.
         var head = 0
         var furthest = -1f
@@ -352,7 +353,6 @@ internal class Stereogram : Layered(
     }
 
     override fun onReset() {
-        gain.reset()
         jump.reset()
         stage.reset()
         lefts.clear()

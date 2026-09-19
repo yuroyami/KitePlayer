@@ -91,7 +91,7 @@ internal class Bloom : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         val frame = state.frame
-        if (gestures.drop) dropHold = gestures.barSeconds
+        if (gestures.drop) dropHold = gestures.cycleSeconds
         dropHold -= dt
         val dropping = dropHold > 0f
         open.hit(if (dropping) 1f else gestures.kickHit * 0.9f + gestures.snareHit * 0.3f)
@@ -119,7 +119,7 @@ internal class Bloom : Layered(
         }
         // A petal leaves every bar, and on every snare while shedding is on. It flies over the middle,
         // so it crosses the screen instead of leaving by the nearest edge.
-        if (gestures.bar || (gestures.snareHit > 0f && shedding.on)) {
+        if (gestures.section || (gestures.snareHit > 0f && shedding.on)) {
             val count = petals.count(8, 4)
             val petal = (random.next() * count).toInt()
             val over = atan2(0.5f - main.y, 0.5f - main.x) + random.signed() * 0.5f
@@ -279,12 +279,12 @@ internal class Radar : Layered(
         kit.place(DIAL, centre.x, centre.y)
         if (gestures.drop) dropLeft = 1f
         if (dropLeft > 0f) {
-            val step = minOf(dropLeft, dt / gestures.barSeconds)
+            val step = minOf(dropLeft, dt / gestures.cycleSeconds)
             dropLeft -= step
             dropTurn += step * TAU
         }
-        slowAngle = slow.advance(dt, frame.bpm, frame.beatConfidence, frame.phrasePhase, state.paced(0.25f)) * TAU + dropTurn
-        fastAngle = -fast.advance(dt, frame.bpm, frame.beatConfidence, frame.phrasePhase, state.paced(0.7f)) * TAU - dropTurn
+        slowAngle = slow.advance(dt, frame, state.paced(0.25f)) * TAU + dropTurn
+        fastAngle = -fast.advance(dt, frame, state.paced(0.7f)) * TAU - dropTurn
         kit.place(0, centre.x + sin(slowAngle) * 0.45f / kit.aspect, centre.y - cos(slowAngle) * 0.45f)
         if (gestures.snareHit > 0f) {
             extra = 1f
@@ -293,7 +293,7 @@ internal class Radar : Layered(
         extra = (extra - dt / (gestures.beatSeconds * 0.75f)).coerceAtLeast(0f)
         flare.hit(gestures.kickHit)
         flare.advance(0f, dt)
-        drift += dt * TAU / (gestures.barSeconds * 3f) * (0.6f + 0.6f * state.drive)
+        drift += dt * TAU / (gestures.cycleSeconds * 3f) * (0.6f + 0.6f * state.drive)
         val count = contacts.count(3)
         val second = sweeps.value == 1
         for (index in 0 until CONTACTS) {
@@ -442,7 +442,7 @@ internal class Radar : Layered(
 /**
  * Stacks of discs, one for each part of the spectrum, riding orbits and pushing each other apart. A
  * kick punches the cores, a snare makes the stacks swap places, ripples leave each stack on its own
- * drum, and a drop merges every stack into one for a bar.
+ * drum, and a drop merges every stack into one for a visual cycle.
  */
 internal class Pulse : Layered(
     name = "Pulse",
@@ -483,7 +483,7 @@ internal class Pulse : Layered(
         val count = stacks.count(2)
         stage.advance(dt)
         if (gestures.snareHit > 0f) shift = (shift + 1) % STACKS
-        if (gestures.drop) mergeHold = gestures.barSeconds
+        if (gestures.drop) mergeHold = gestures.cycleSeconds
         mergeHold -= dt
         merge.advance(if (mergeHold > 0f) 1f else 0f, dt)
         core.kick(gestures.kickHit * 8f)

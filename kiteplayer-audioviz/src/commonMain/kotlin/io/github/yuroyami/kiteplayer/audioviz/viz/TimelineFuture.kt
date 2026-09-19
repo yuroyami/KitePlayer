@@ -1,8 +1,10 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
+import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumTimeline
+import io.github.yuroyami.kiteplayer.audioviz.UpcomingAudioEvent
 
 /**
  * Lets a drawing see the audio that has been analysed but has not been played yet.
@@ -13,11 +15,18 @@ import io.github.yuroyami.kiteplayer.audioviz.SpectrumTimeline
  * still in the queue is music the listener has not reached. A drawing can be already moving when
  * a beat arrives rather than starting when it does, which is what a person listening does.
  *
- * [positionMicros] is asked on every frame, so hand it the player's own clock.
+ * [positionMicros] is asked on every query. This adapter assumes 1x playback; the player view
+ * supplies its own rate-aware adapter for other playback rates.
  */
 @AudioVizAuthoringApi
 public fun SpectrumTimeline.asFuture(positionMicros: () -> Long): VizFuture = object : VizFuture {
     override fun at(secondsAhead: Float): SpectrumFrame? = ahead(positionMicros(), secondsAhead)
 
     override val nextOnsetSeconds: Float get() = nextOnsetSeconds(positionMicros())
+
+    override fun nextEvent(kind: AudioEventKind): UpcomingAudioEvent? {
+        val at = positionMicros()
+        val event = nextEvent(at, kind) ?: return null
+        return UpcomingAudioEvent(event, (event.detection.ptsMicros - at) / 1_000_000f)
+    }
 }

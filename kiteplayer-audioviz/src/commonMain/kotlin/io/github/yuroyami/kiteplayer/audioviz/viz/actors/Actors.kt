@@ -152,19 +152,19 @@ internal class Travellers(val capacity: Int) {
     }
 }
 
-/** A band that crosses the screen once per bar, or [perBar] times a bar. [position] runs 0 to 1. */
+/** A band that crosses the screen [perBar] times per visual cycle. [position] runs 0 to 1. */
 internal class Sweep(var perBar: Float = 1f, var backwards: Boolean = false) {
     var position: Float = 0f
         private set
 
     fun advance(gestures: Gestures) {
-        val along = gestures.barPhase * perBar
+        val along = gestures.cyclePhase * perBar
         val wrapped = along - floor(along)
         position = if (backwards) 1f - wrapped else wrapped
     }
 }
 
-/** A body on a wide ellipse, [lapsPerBar] laps a bar, faster when the music pushes. */
+/** A body on a wide ellipse, [lapsPerBar] laps per visual cycle, faster when the music pushes. */
 internal class Orbiter(
     var centreX: Float = 0.5f,
     var centreY: Float = 0.5f,
@@ -183,7 +183,7 @@ internal class Orbiter(
     var direction: Float = 1f
 
     fun advance(state: VizRenderState, gestures: Gestures) {
-        angle += direction * state.deltaSeconds * lapsPerBar * TAU / gestures.barSeconds * (0.6f + 0.6f * state.drive)
+        angle += direction * state.deltaSeconds * lapsPerBar * TAU / gestures.cycleSeconds * (0.6f + 0.6f * state.drive)
         x = centreX + radiusX * cos(angle)
         y = centreY + radiusY * sin(angle)
     }
@@ -268,14 +268,14 @@ internal class Swarm(val count: Int, seed: Long) {
     }
 }
 
-/** A conveyor: [offset] runs through 0 to 1 [perBar] times a bar, so a repeated shape moves with the tempo. */
+/** A conveyor: [offset] runs through 0 to 1 [perBar] times per visual cycle, which follows a usable pulse. */
 internal class Lane(var perBar: Float = 1f, var direction: Float = 1f) {
     var offset: Float = 0f
         private set
     private var travelled = 0f
 
     fun advance(state: VizRenderState, gestures: Gestures) {
-        travelled += direction * state.deltaSeconds * perBar / gestures.barSeconds * (0.5f + 0.7f * state.drive)
+        travelled += direction * state.deltaSeconds * perBar / gestures.cycleSeconds * (0.5f + 0.7f * state.drive)
         offset = travelled - floor(travelled)
     }
 

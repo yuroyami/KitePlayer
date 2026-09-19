@@ -2,7 +2,6 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.KitePlayerPlatform
 import io.github.yuroyami.kiteplayer.MediaItem
-import io.github.yuroyami.kiteplayer.PlaybackStatus
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -15,13 +14,11 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * How far the analysis the picture draws sits from the sound, on a real player.
+ * How far queued analysis sits from the device-anchored clock, on a real player.
  *
- * Each analysis carries the time its audio plays at, and the picture asks the player where it is.
- * This plays a clip, samples the picture's clock, and checks that the analysis for that moment is
- * within two frames of it. Clock interpolation is checked with a controlled time source in
- * [SmoothClockTest]: a real device can republish a position behind the extrapolation, and a loaded
- * runner can miss several sampling intervals. Neither promises a constant step between probes.
+ * This plays a clip and compares feature timestamps with the audible clock's media timestamps.
+ * It checks queue alignment, not physical sound/display synchronisation. A loaded runner can miss
+ * sampling intervals, and device clock corrections need not produce a constant step between probes.
  * It opens a real device, so it skips itself where there is no mixer or no clip.
  */
 class ClockProbeTest {
@@ -33,17 +30,12 @@ class ClockProbeTest {
     ).filterNotNull().firstOrNull { it.isFile }
 
     @Test
-    fun `the analysis the picture draws is within two frames of the sound`() = runBlocking {
+    fun `queued analysis follows the device anchored media clock`() = runBlocking {
         val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
         if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
 
         val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
         val feed = AudioVizFeed()
-        val clock = SmoothClock(
-            published = { player.position().inWholeMicroseconds },
-            rate = { player.state.value.let { if (it.status == PlaybackStatus.Playing) it.speed else 0.0 } },
-            nanos = System::nanoTime,
-        )
         try {
             player.attachAudioTap(feed)
             player.open(MediaItem(file.absolutePath))
@@ -64,7 +56,9 @@ class ClockProbeTest {
             while (System.nanoTime() < until) {
                 delay(8)
                 val raw = player.position().inWholeMicroseconds
-                val now = clock.micros()
+                val reading = player.audioClock()
+                val now = reading.position?.micros ?: continue
+                if (feed.timeline.generation != reading.generation) continue
                 if (lastPlayer >= 0 && raw != lastPlayer) playerSteps += raw - lastPlayer
                 if (lastClock >= 0) clockSteps += now - lastClock
                 lastPlayer = raw
@@ -80,10 +74,15 @@ class ClockProbeTest {
             println("the picture's clock moves in steps of ${summary(clockSteps)}")
             assertTrue(gaps.isNotEmpty(), "no analysis ever matched the clock")
             val median = gaps.sorted()[gaps.size / 2]
-            assertTrue(abs(median) <= BOUND_MICROS, "the picture's analysis sits ${median / 1000} ms from the sound")
+            assertTrue(abs(median) <= BOUND_MICROS, "queued analysis sits ${median / 1000} ms from the audible clock")
         } finally {
-            player.detachAudioTap(feed)
-            player.closeAndAwait()
+            feed.close()
+            try {
+                player.detachAudioTap(feed)
+                player.closeAndAwait()
+            } finally {
+                feed.awaitClosed()
+            }
         }
     }
 

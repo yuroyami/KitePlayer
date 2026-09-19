@@ -4,7 +4,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.exp
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -64,29 +63,6 @@ internal class Rng(private val seed: Long = 88_172_645L) {
 
     fun reset() {
         state = seed
-    }
-}
-
-/**
- * Scales a raw waveform so it fills the drawing whatever the mastering level, the way the bars use
- * the song's own range. It follows a louder peak at once and lets a quieter one in over a couple of
- * seconds, so a quiet song draws as large as a loud one without the size pumping.
- */
-internal class TraceGain(private val releasePerSecond: Float = 0.6f, private val floor: Float = 0.004f) {
-    private var peak = floor
-
-    /** The multiplier for this frame: one over the recent peak of either trace. */
-    fun update(first: FloatArray, second: FloatArray, deltaSeconds: Float): Float {
-        var loudest = 0f
-        for (value in first) loudest = maxOf(loudest, abs(value))
-        for (value in second) loudest = maxOf(loudest, abs(value))
-        peak = if (loudest > peak) loudest else peak * exp(-releasePerSecond * deltaSeconds)
-        peak = peak.coerceAtLeast(floor)
-        return 1f / peak
-    }
-
-    fun reset() {
-        peak = floor
     }
 }
 

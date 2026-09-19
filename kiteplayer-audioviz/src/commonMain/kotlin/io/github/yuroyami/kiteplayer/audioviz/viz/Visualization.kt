@@ -3,7 +3,9 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
+import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
+import io.github.yuroyami.kiteplayer.audioviz.UpcomingAudioEvent
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.Detail
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.Ground
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
@@ -215,8 +217,11 @@ public class VizRenderState(
      */
     public fun paced(base: Float): Float = base * frame.motionRate
 
-    /** The frame that will be audible [seconds] from now, or this one when nothing is queued. */
-    public fun ahead(seconds: Float): SpectrumFrame = future?.at(seconds) ?: frame
+    /**
+     * Continuous features [seconds] from now, or null when unavailable. For a future hit and its
+     * strength, use [VizFuture.nextEvent]; feature-window times are separate from event times.
+     */
+    public fun ahead(seconds: Float): SpectrumFrame? = future?.at(seconds)
 
     /** Seconds until the next onset that is already in the queue, or -1 when it is not known. */
     public val nextOnsetIn: Float get() = future?.nextOnsetSeconds ?: -1f
@@ -247,6 +252,9 @@ public interface VizFuture {
 
     /** Seconds until the next queued onset, or -1 when there is none in the queue. */
     public val nextOnsetSeconds: Float
+
+    /** An already detected future event, or null when this provider has no event lookahead. */
+    public fun nextEvent(kind: AudioEventKind): UpcomingAudioEvent? = null
 }
 
 /**

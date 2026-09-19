@@ -49,6 +49,10 @@ uniform float uHat;
 
 uniform float uBpm;
 uniform float uBeatPhase;
+uniform float uBeatUsable;
+uniform float uCyclePhase;
+uniform float uSlowCyclePhase;
+// Legacy musical structure fields remain unknown. Use the visual cycles above for animation.
 uniform float uBarPhase;
 uniform float uPhrasePhase;
 uniform float uBeatIn;
@@ -61,7 +65,7 @@ uniform float uSeed;
 
 // The drawing's camera: pan across and down as shares of the screen, zoom, and roll in radians.
 uniform float4 uCam;
-// A colour offset that walks one turn every eight phrases.
+// A colour offset that walks one turn every eight slow visual cycles.
 uniform float uWalk;
 
 // The readings arrive as small pictures rather than as lists of numbers, because this language

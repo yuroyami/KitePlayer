@@ -3,7 +3,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Anticipator
+import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Noise1
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
 import kotlin.math.cos
@@ -13,7 +13,7 @@ import kotlin.math.sin
  * Moves a whole flat drawing, the way [CameraRig] moves a flight.
  *
  * A wander, a zoom punch on the kick (early, when the queue shows it coming), a nudge on the
- * snare, a roll, a whip on a drop, and now and then a cut to a new framing on a bar line.
+ * snare, a roll, a whip on a drop, and now and then a cut to a new framing at a supported section boundary.
  * Pans are shares of the screen, [angle] is radians.
  */
 @AudioVizAuthoringApi
@@ -39,12 +39,12 @@ public class Camera2D(
     /** Radius of a slow orbit, as a share of the screen. Zero leaves it off. */
     public var orbit: Float = 0f
 
-    /** Laps of that orbit per bar. */
+    /** Laps per four-pulse visual cycle when rhythm is usable. */
     public var orbitRate: Float = 0.5f
 
-    private val punchSpring = Spring(stiffness = 90f, damping = 0.5f)
-    private val early = Anticipator(punchSpring)
-    private var shovedEarly = false
+    // Its theoretical peak is about 96 ms after an impulse, inside the 100 ms lookahead limit.
+    private val punchSpring = Spring(stiffness = 160f, damping = 0.5f)
+    private val impulse = AnticipatedImpulse(punchSpring)
     private val nudge = Spring(stiffness = 50f, damping = 0.55f)
     private var nudgeSide = 1f
     private val whip = Spring(stiffness = 14f, damping = 0.6f)
@@ -56,44 +56,40 @@ public class Camera2D(
     private var laneX = 0f
     private var laneY = 0f
     private var laneZoom = 1f
-    private var lastBar = 0f
-    private var advancedAt = Float.NaN
+    private var boundaries = MusicalBoundaryGate()
+    private val step = DisplayStep()
 
-    /** Moves the camera on by one frame. Safe to call twice in a frame. */
+    /**
+     * Moves the camera on by one frame. The same state twice moves it once. A new frame at an
+     * instant already drawn still applies its hits, without adding elapsed time.
+     */
     public fun advance(state: VizRenderState) {
-        if (state.timeSeconds == advancedAt) return
-        advancedAt = state.timeSeconds
+        val dt = step.of(state) ?: return
         val frame = state.frame
-        val dt = state.deltaSeconds
+        val boundary = boundaries.read(frame)
 
-        val soon = state.nextOnsetIn
-        val coming = if (soon >= 0f) state.ahead(soon).kick else 0f
-        if (coming > 0f && early.due(soon)) {
-            punchSpring.kick(coming * PUNCH_KICK)
-            shovedEarly = true
-        }
-        if (frame.kick > 0f) {
-            if (!shovedEarly) punchSpring.kick(frame.kick * PUNCH_KICK)
-            shovedEarly = false
-        }
+        // Advance the previous state to this display instant before applying newly delivered hits.
         punchSpring.advance(dt)
+        val upcoming = state.future?.nextEvent(AudioEventKind.LowTransient)
+        impulse.apply(frame, upcoming, PUNCH_KICK)
 
+        nudge.advance(dt)
         if (frame.snare > 0f) {
             nudge.kick(frame.snare * NUDGE_KICK * nudgeSide)
             nudgeSide = -nudgeSide
         }
-        nudge.advance(dt)
-        if (frame.drop) whip.kick(WHIP_KICK * if (random.next() < 0.5f) -1f else 1f)
         whip.advance(dt)
+        if (boundary?.detection?.kind == AudioEventKind.Drop) {
+            whip.kick(WHIP_KICK * boundary.detection.strength * if (random.next() < 0.5f) -1f else 1f)
+        }
 
-        if (cuts && frame.beatConfidence > 0.7f && frame.barPhase < lastBar - 0.5f && random.next() < CUT_CHANCE) {
+        if (cuts && boundary != null && random.next() < CUT_CHANCE) {
             laneX = random.signed() * wander * 1.4f
             laneY = random.signed() * wander
             laneZoom = 1f + random.next() * 0.12f
         }
-        lastBar = frame.barPhase
 
-        val locked = frame.beatConfidence > 0.4f && frame.bpm > 0f
+        val locked = frame.rhythm?.usable == true
         drift += dt * state.paced(1.6f)
         bank += dt * state.paced(0.3f + 0.9f * frame.midRel)
         orbitPhase += dt * orbitRate * if (locked) frame.bpm / 240f else state.paced(0.5f)
@@ -134,8 +130,7 @@ public class Camera2D(
         zoom = 1f
         angle = 0f
         punchSpring.reset()
-        early.reset()
-        shovedEarly = false
+        impulse.reset()
         nudge.reset()
         nudgeSide = 1f
         whip.reset()
@@ -146,8 +141,8 @@ public class Camera2D(
         laneX = 0f
         laneY = 0f
         laneZoom = 1f
-        lastBar = 0f
-        advancedAt = Float.NaN
+        boundaries = MusicalBoundaryGate()
+        step.reset()
     }
 
     private companion object {

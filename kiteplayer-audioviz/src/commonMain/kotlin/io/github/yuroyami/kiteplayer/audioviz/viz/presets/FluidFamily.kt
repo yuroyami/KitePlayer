@@ -85,8 +85,8 @@ private fun towards(component: Float): Int = if (component > 0.38f) 1 else if (c
 /**
  * Coloured dye in a tank of moving water, stirred from places that move. A kick shoves the water up
  * from a point sliding along the bottom, hats and snares drip dye in from the top, and a stirrer
- * crosses the tank every two bars dragging the water along its path. Two springs pour dye in from the
- * top and bottom, the whole tank turns slowly the other way each phrase, and up to three discs drift
+ * crosses the tank every two visual cycles dragging the water along its path. Two springs pour dye in from the
+ * top and bottom, the whole tank turns slowly the other way each slow visual cycle, and up to three discs drift
  * through it as obstacles the dye has to flow round. The low half of the spectrum pours one colour and the
  * high half another, and a drop shoves the water in from every edge at once.
  */
@@ -125,7 +125,7 @@ internal class StableFluids : Layered(
         val bands = state.frame.bandsRel
         if (before.size != bands.size) before = FloatArray(bands.size)
         drift += dt * (0.3f + 0.4f * state.frame.motionRate)
-        shovePhase += dt * TAU / (gestures.barSeconds * 3f)
+        shovePhase += dt * TAU / (gestures.cycleSeconds * 3f)
         // The kick shoves from a point sliding back and forth along the bottom.
         if (gestures.kickHit > 0f) {
             val x = 0.5f + 0.4f * sin(shovePhase)
@@ -180,8 +180,8 @@ internal class StableFluids : Layered(
                 grid.splat(x, y, 0.25f, pushX, pushY, colour.red * 1.5f, colour.green * 1.5f, colour.blue * 1.5f)
             }
         }
-        // The whole tank turns slowly round its middle, the other way each phrase, so the dye never settles.
-        if (gestures.phrase) swirlWay = -swirlWay
+        // The whole tank turns slowly round its middle, the other way each slow visual cycle, so the dye never settles.
+        if (gestures.section) swirlWay = -swirlWay
         swirl(swirlWay * dt * (30f + 60f * state.drive))
         grid.step(dt, curl = (8f + 34f * state.mood) * curl.value, dyeKept = 0.9f - 0.3f * state.mood, speedKept = 0.5f)
         // The discs drift, and the water stops dead inside them, so the dye has to flow round.
@@ -202,11 +202,11 @@ internal class StableFluids : Layered(
         kit.follow(0, comets.travellers)
     }
 
-    // The stirrer crosses the tank every two bars and drags the water along its path.
+    // The stirrer crosses the tank every two visual cycles and drags the water along its path.
     private fun stir(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stirTravel += dt / (gestures.barSeconds * 2f)
-        if (gestures.phrase) stirPath.choose((stirPath.value + 1) % 3)
+        stirTravel += dt / (gestures.cycleSeconds * 2f)
+        if (gestures.section) stirPath.choose((stirPath.value + 1) % 3)
         val leg = stirTravel % 2f
         val along = if (leg < 1f) leg else 2f - leg
         val lastX = stirX
@@ -326,8 +326,8 @@ internal class StableFluids : Layered(
 
 /**
  * Two chemicals that feed on each other and grow spots, stripes and mazes by themselves, over fog that
- * shows through wherever the pattern is empty. The recipe changes every phrase, from mazes to spots to
- * worms to coral. A seeder crosses the screen every two bars, dropping a seed every beat, the whole
+ * shows through wherever the pattern is empty. The recipe changes at each supported section boundary, from mazes to spots to
+ * worms to coral. A seeder crosses the screen every two visual cycles, dropping a seed every beat, the whole
  * pattern slides sideways eight cells a beat, and a light circling the dish shades it from one side.
  * Drums drop seeds where their band sits, and a drop seeds everywhere at once.
  *
@@ -373,18 +373,18 @@ internal class ReactionDiffusion : Layered(
             seeded = true
             for (index in 0 until 14) seed((index % 5 + 0.5f) / 5f, (index / 5 + 0.5f) / 3f, 6f)
         }
-        // A new species every phrase: mazes, spots, worms or coral.
-        if (gestures.phrase) {
+        // A new species at each supported section boundary: mazes, spots, worms or coral.
+        if (gestures.section) {
             val species = (random.next() * 4f).toInt().coerceIn(0, 3)
             feed.target = SPECIES[species * 2]
             kill.target = SPECIES[species * 2 + 1]
         }
-        seederTravel += dt / (gestures.barSeconds * 2f)
+        seederTravel += dt / (gestures.cycleSeconds * 2f)
         val leg = seederTravel % 2f
         seederX = 0.05f + 0.9f * (if (leg < 1f) leg else 2f - leg)
         seederY = 0.5f + 0.35f * sin(seederTravel * TAU * 0.5f)
         kit.place(1, seederX, seederY)
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         if (beat != lastBeat) {
             lastBeat = beat
             seed(seederX, seederY, 2f + 2f * state.drive)
@@ -549,7 +549,7 @@ internal class ReactionDiffusion : Layered(
 
 /**
  * Smoke rising from two emitters that cross back and forth along the bottom, blown by a wind that
- * changes side every phrase and curling under a ceiling set by how loud the song has been. A lamp
+ * changes side at each supported section boundary and curling under a ceiling set by how loud the song has been. A lamp
  * circling the tank lights the smoke from one side, embers rise through it, a kick lets out a puff,
  * and a drop lifts the ceiling out of the way.
  */
@@ -585,11 +585,11 @@ internal class SmokeRise : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         val frame = state.frame
-        travel += dt * TAU / (gestures.barSeconds * 4f)
+        travel += dt * TAU / (gestures.cycleSeconds * 4f)
         for (index in 0 until 2) emitterX[index] = 0.5f + 0.4f * sin(travel + index * PI.toFloat())
         kit.place(1, emitterX[0], 0.92f)
-        wind.advance(windGene.value * if (gestures.phrases % 2 == 0) 1f else -1f, dt)
-        if (gestures.drop) liftHold = gestures.barSeconds * 2f
+        wind.advance(windGene.value * if (gestures.sections % 2 == 0) 1f else -1f, dt)
+        if (gestures.drop) liftHold = gestures.cycleSeconds * 2f
         liftHold -= dt
         lifted.advance(if (liftHold > 0f) 1f else 0f, dt)
         // The ceiling hangs lower after a quiet stretch, and a drop lifts it out of the way.

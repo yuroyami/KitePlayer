@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
+import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 
 /** How one drawing gives way to the next. */
 public enum class VizTransition {
@@ -27,32 +28,18 @@ public enum class VizTransition {
 }
 
 /**
- * Chooses what to show and when to change it.
- *
- * A plain timer that moves to the next drawing in the list has two problems. Changes land in the
- * middle of a phrase, where they read as a glitch rather than as a
- * decision. And the drawing that arrives has nothing to do with what the music is doing, so a
- * strobe turns up under a piano intro about as often as anywhere else.
- *
- * This waits for the top of a phrase, picks from the drawings whose energy matches the music, and
- * reacts to the two moments in a track that a person would react to: a drop, where it moves up a
- * gear at once, and a breakdown, where it drops back and softens.
- *
- * It is seeded, so a run can be repeated exactly.
+ * Changes scenes only at a supported musical boundary. Tempo, elapsed time and energy-only
+ * flags cannot authorize a change. A seeded choice matches the scene to current energy.
  */
 public class VizDirector(
     private val catalogue: List<Visualization>,
     seed: Long = 20_260_910L,
-    /** How many phrases to sit on one drawing at least. */
-    private val leastPhrases: Int = 2,
-    /** And at most, before it moves on regardless. */
-    private val mostPhrases: Int = 4,
-    /** Seconds between changes when there is no tempo to count phrases with. */
-    private val secondsWithoutTempo: Float = 22f,
+    /** Minimum time between automatic changes. Reaching it does not schedule a change. */
+    private val minimumHoldSeconds: Float = 8f,
 ) {
     init {
         require(catalogue.isNotEmpty()) { "the director needs something to choose from" }
-        require(leastPhrases in 1..mostPhrases) { "leastPhrases must be 1..mostPhrases" }
+        require(minimumHoldSeconds.isFinite() && minimumHoldSeconds >= 0f)
     }
 
     private var random = seed
@@ -89,13 +76,10 @@ public class VizDirector(
     public var nextChangeSeconds: Float = -1f
         private set
 
-    private var phrasesHeld = 0
-    private var lastPhrasePosition = 0f
-    private var phraseTurned = false
+    private val boundaries = MusicalBoundaryGate()
     private var heldSeconds = 0f
     private var transitionSeconds = 0f
     private var transitionLength = 1f
-    private var wanted = 0
 
     /** Starts on a named drawing, or the first one if the name is not in the list. */
     public fun startWith(name: String) {
@@ -103,34 +87,39 @@ public class VizDirector(
         remember(current)
     }
 
-    /** Moves it on by one frame. Call this once per drawn frame, before drawing. */
+    /**
+     * Moves it on by one frame. Call this once per drawn frame, before drawing.
+     *
+     * A seek or track change does not cut a change already under way: it finishes over its planned
+     * duration. Boundaries delivered meanwhile are consumed, not queued for later.
+     */
     public fun advance(frame: SpectrumFrame, deltaSeconds: Float) {
-        heldSeconds += deltaSeconds
-
+        val dt = deltaSeconds.takeIf { it.isFinite() && it > 0f } ?: return
+        heldSeconds += dt
+        // Consume identities even during a transition or cooldown, so they cannot replay later.
+        val boundary = boundaries.read(frame)
+        nextChangeSeconds = -1f
         if (incoming != null) {
-            transitionSeconds += deltaSeconds
+            transitionSeconds += dt
             progress = (transitionSeconds / transitionLength).coerceIn(0f, 1f)
             if (progress >= 1f) finish()
             return
         }
-
-        countPhrases(frame)
-        updateCountdown(frame)
-
-        // A drop is not something to wait a phrase for. It is the moment itself.
-        if (frame.drop && heldSeconds > 4f) {
-            val next = pick(upFrom(moodBucket(frame)))
-            begin(next, allowed(VizTransition.ZoomThrough, next), frame, bars = 1)
-            return
-        }
-        if (frame.breakdown && heldSeconds > 8f && current.bucket != VizEnergy.Calm) {
-            val next = pick(VizEnergy.Calm)
-            begin(next, allowed(VizTransition.Crossfade, next), frame, bars = 4)
-            return
-        }
-        if (dueForAChange(frame)) {
-            val next = pick(moodBucket(frame))
-            begin(next, chooseTransition(frame, next), frame, bars = 2)
+        if (boundary == null || heldSeconds < minimumHoldSeconds) return
+        when (boundary.detection.kind) {
+            AudioEventKind.Drop -> {
+                val next = pick(upFrom(moodBucket(frame)))
+                begin(next, allowed(VizTransition.ZoomThrough, next), frame, pulses = 4)
+            }
+            AudioEventKind.Breakdown -> {
+                val next = pick(VizEnergy.Calm)
+                begin(next, allowed(VizTransition.Crossfade, next), frame, pulses = 8)
+            }
+            AudioEventKind.SectionBoundary -> {
+                val next = pick(moodBucket(frame))
+                begin(next, chooseTransition(frame, next), frame, pulses = 8)
+            }
+            else -> Unit
         }
     }
 
@@ -141,51 +130,18 @@ public class VizDirector(
         current = visualization
         remember(visualization)
         heldSeconds = 0f
-        phrasesHeld = 0
     }
 
-    private fun countPhrases(frame: SpectrumFrame) {
-        phraseTurned = false
-        if (frame.beatConfidence <= 0.4f) return
-        // The phrase position runs 0 to 1 and wraps. A wrap is the top of a phrase.
-        // Small phase corrections are not new phrases. Only a wrap through zero counts.
-        if (lastPhrasePosition > 0.75f && frame.phrasePhase < 0.25f) {
-            phrasesHeld++
-            phraseTurned = true
-        }
-        lastPhrasePosition = frame.phrasePhase
-    }
-
-    private fun dueForAChange(frame: SpectrumFrame): Boolean {
-        val tracked = frame.beatConfidence > 0.4f
-        if (!tracked) return heldSeconds >= secondsWithoutTempo
-        if (phrasesHeld < leastPhrases) return false
-        if (phrasesHeld >= mostPhrases) return true
-        // Somewhere between the two, decided once per phrase, on the frame the phrase turns over.
-        return phraseTurned && nextRandom() < 0.4f
-    }
-
-    private fun updateCountdown(frame: SpectrumFrame) {
-        nextChangeSeconds = if (frame.beatConfidence > 0.4f && frame.bpm > 0f) {
-            val phraseSeconds = 16f * 60f / frame.bpm
-            val left = (leastPhrases - phrasesHeld).coerceAtLeast(0)
-            left * phraseSeconds + (1f - frame.phrasePhase) * phraseSeconds
-        } else {
-            (secondsWithoutTempo - heldSeconds).coerceAtLeast(0f)
-        }
-    }
-
-    private fun begin(next: Visualization, how: VizTransition, frame: SpectrumFrame, bars: Int) {
+    private fun begin(next: Visualization, how: VizTransition, frame: SpectrumFrame, pulses: Int) {
         if (next.name == current.name) return
         incoming = next
         transition = how
         progress = 0f
         transitionSeconds = 0f
-        // Changes last a whole number of bars, so the new drawing lands where the music does.
-        // A hand-off happens on its first frame; the rest of it is the new drawing's echoes fading.
-        val length = if (how == VizTransition.WarpHandoff) 1 else bars
-        transitionLength = if (frame.bpm > 0f && frame.beatConfidence > 0.4f) {
-            (length * 4f * 60f / frame.bpm).coerceIn(0.4f, 6f)
+        // A pulse-scaled artistic duration does not claim the transition ends on a downbeat.
+        val length = if (how == VizTransition.WarpHandoff) 1 else pulses
+        transitionLength = if (frame.rhythm?.usable == true) {
+            (length * 60f / frame.rhythm.bpm).coerceIn(0.4f, 6f)
         } else {
             1.6f
         }
@@ -197,7 +153,6 @@ public class VizDirector(
         incoming = null
         progress = 0f
         heldSeconds = 0f
-        phrasesHeld = 0
     }
 
     /** Which shelf of the catalogue suits the music right now. */

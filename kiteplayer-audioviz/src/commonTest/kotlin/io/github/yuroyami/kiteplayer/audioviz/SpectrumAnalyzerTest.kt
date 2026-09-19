@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import kotlin.math.PI
 import kotlin.math.sin
+import io.github.yuroyami.kiteplayer.Generation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -50,6 +51,28 @@ class SpectrumAnalyzerTest {
     }
 
     @Test
+    fun resettingTheAnalyzerAndTimelineKeepsFreshAnalysisPublishable() {
+        val analyzer = SpectrumAnalyzer(sampleRate = rate)
+        val timeline = SpectrumTimeline()
+        analyzer.onAnalysis = timeline::push
+        feedTone(analyzer, 1_000.0, seconds = 0.1, ptsMicros = 0L)
+        val retired = assertNotNull(timeline.newest())
+        timeline.clear()
+        analyzer.reset()
+        feedTone(analyzer, 1_000.0, seconds = 0.1, ptsMicros = 1_000_000L)
+        val fresh = assertNotNull(timeline.newest(), "an authoring reset must advance its continuity identity")
+        assertEquals(timeline.revision, fresh.analysisRevision)
+        assertTrue(fresh.analysisRevision > retired.analysisRevision)
+
+        timeline.reset(Generation(7))
+        analyzer.reset(timeline.generation, timeline.revision)
+        feedTone(analyzer, 1_000.0, seconds = 0.1, ptsMicros = -1_000_000L)
+        val changed = assertNotNull(timeline.newest())
+        assertEquals(Generation(7), changed.generation)
+        assertEquals(timeline.revision, changed.analysisRevision)
+    }
+
+    @Test
     fun timestampsFollowTheAudioAndTrailItByHalfAWindow() {
         val analyzer = SpectrumAnalyzer(fftSize = 1024, sampleRate = rate)
         feedTone(analyzer, 1_000.0, seconds = 0.5, ptsMicros = 10_000_000L)
@@ -70,7 +93,7 @@ class SpectrumAnalyzerTest {
 
         assertEquals(frames.last().ptsMicros, timeline.newest()?.ptsMicros)
         assertEquals(200_000L, timeline.at(250_000L)?.ptsMicros, "should pick the newest one already heard")
-        assertEquals(400_000L, timeline.at(9_000_000L)?.ptsMicros)
+        assertNull(timeline.at(9_000_000L), "a starved timeline must expire its last analysis")
         assertNull(timeline.at(-1L), "nothing has been heard yet")
         assertNotNull(timeline.at(0L))
     }
@@ -87,14 +110,6 @@ class SpectrumAnalyzerTest {
         beat = 0f,
         pulse = 0f,
     )
-
-    @Test
-    fun fiftyAndSeventyHertzLightDifferentBars() {
-        // The long transform exists for exactly this: at the plain resolution both tones share bins.
-        val fifty = loudestBandOf(50.0)
-        val seventy = loudestBandOf(70.0)
-        assertTrue(fifty < seventy, "50 Hz landed on bar $fifty and 70 Hz on bar $seventy")
-    }
 
     @Test
     fun aSteadyToneHoldsItsTraceStill() {

@@ -2,6 +2,9 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.Generation
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,7 +16,8 @@ class TimelineAndParamTest {
 
     init { useSkiaGraphics() }
 
-    private fun reading(pts: Long, value: Float, kick: Float = 0f, beatPhase: Float = 0f): SpectrumFrame =
+    private fun reading(pts: Long, value: Float, kick: Float = 0f, beatPhase: Float = 0f, generation: Generation = Generation.Initial, revision: Long = 0L,
+        availability: AnalysisAvailability = AnalysisAvailability.Ready): SpectrumFrame =
         SpectrumFrame(
             ptsMicros = pts,
             bands = FloatArray(4) { value },
@@ -27,7 +31,34 @@ class TimelineAndParamTest {
             pulse = 0f,
             kick = kick,
             beatPhase = beatPhase,
+            generation = generation,
+            analysisRevision = revision,
+            availability = availability,
         )
+
+    @Test
+    fun warmupDoesNotCreateInterpolatedLevelsOrAnAvailableFuture() {
+        val timeline = SpectrumTimeline(8)
+        timeline.push(reading(0L, 0f, availability = AnalysisAvailability.WarmingUp))
+        assertNull(timeline.interpolated(0L))
+        assertNull(timeline.ahead(-5_000L, 0.005f))
+        assertEquals(0f, timeline.availableAheadSeconds(-5_000L))
+        timeline.push(reading(10_000L, 1f))
+        assertNull(timeline.interpolated(5_000L))
+        assertEquals(1f, timeline.interpolated(10_000L)?.level)
+    }
+
+    @Test
+    fun unavailableMeasurementsBreakInterpolationAndCannotEmitEvents() {
+        val timeline = SpectrumTimeline(8)
+        timeline.push(reading(0L, 0.2f))
+        timeline.push(reading(10_000L, 1f, kick = 1f, availability = AnalysisAvailability.Unavailable))
+        timeline.push(reading(20_000L, 0.8f))
+        assertNull(timeline.interpolated(5_000L))
+        assertNull(timeline.interpolated(15_000L))
+        assertEquals(0.2f, timeline.interpolated(0L)?.level)
+        assertEquals(0f, timeline.sample(20_000L, 0L)?.kick)
+    }
 
     @Test
     fun aMomentBetweenTwoReadingsIsBlended() {
@@ -54,6 +85,68 @@ class TimelineAndParamTest {
         timeline.push(reading(10_000L, 0.8f))
         val late = timeline.interpolated(50_000L)!!
         assertTrue(abs(late.bands[0] - 0.8f) < 0.001f, "past the end it should hold the newest, was ${late.bands[0]}")
+    }
+
+    @Test
+    fun unavailableFutureDoesNotPretendToBeTheNewestAnalysis() {
+        val timeline = SpectrumTimeline(8)
+        timeline.push(reading(0L, 0.2f))
+        timeline.push(reading(10_000L, 0.8f))
+        assertNull(timeline.ahead(0L, 0.5f), "a retained past frame is not half a second of lookahead")
+    }
+
+    @Test
+    fun drawingHelperPreservesUnavailableLookahead() {
+        val state = VizRenderState(reading(0L, 1f, kick = 1f), 0f, 0.016f, VizPalette.Prism)
+        assertNull(state.ahead(0.05f), "the current kick must not masquerade as a future kick")
+    }
+
+    @Test
+    fun staleFeaturesExpireInsteadOfHoldingAnOldKickForever() {
+        val timeline = SpectrumTimeline(8)
+        timeline.push(reading(0L, 0.8f, kick = 1f))
+        assertNull(timeline.interpolated(1_000_000L), "starved analysis must become unavailable")
+    }
+
+    @Test
+    fun retiredWorkCannotRepopulateAResetTimeline() {
+        val timeline = SpectrumTimeline(8)
+        val retired = reading(0L, 1f)
+        timeline.push(retired)
+        timeline.reset(Generation(1))
+        timeline.push(retired)
+        assertNull(timeline.newest())
+        timeline.push(reading(0L, 0.2f, generation = Generation(1), revision = timeline.revision))
+        timeline.push(reading(10_000L, 0.8f, generation = Generation(1), revision = timeline.revision))
+        assertEquals(Generation(1), timeline.interpolated(5_000L)?.generation)
+        timeline.reset(Generation.Initial)
+        assertEquals(Generation(1), timeline.generation, "an old reset must not roll back the timeline")
+    }
+
+    @Test
+    fun aLocalResetRejectsBothOldFramesAndCapturedPublishers() {
+        val timeline = SpectrumTimeline(8)
+        val oldPublisher = timeline.publisher()
+        val oldFrame = reading(0L, 1f)
+        timeline.push(oldFrame)
+        timeline.clear()
+        timeline.push(oldFrame)
+        assertNull(timeline.newest(), "the same audio generation does not revive retired analysis")
+        assertTrue(!oldPublisher.push(oldFrame), "a retired publisher must not target the new history")
+        val fresh = reading(10_000L, 0.5f, revision = timeline.revision)
+        assertTrue(timeline.publisher().push(fresh))
+        assertEquals(fresh, timeline.newest())
+    }
+
+    @Test
+    fun negativeMediaTimeIsNotMissingAndUnknownFramesAreNotQueued() {
+        val timeline = SpectrumTimeline(8)
+        timeline.push(SpectrumFrame.silent(4, 4))
+        assertNull(timeline.newest())
+        timeline.push(reading(-20_000L, 0.1f))
+        timeline.push(reading(-10_000L, 0.9f, kick = 1f))
+        assertEquals(1f, timeline.sample(-10_000L, -15_000L)?.kick)
+        assertEquals(-15_000L, timeline.interpolated(-15_000L)?.ptsMicros)
     }
 
     @Test

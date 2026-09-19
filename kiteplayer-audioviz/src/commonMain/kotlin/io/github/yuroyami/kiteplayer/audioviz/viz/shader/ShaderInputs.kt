@@ -1,21 +1,25 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 
-import io.github.yuroyami.kiteplayer.audioviz.viz.TraceGain
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
+import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 
 /** The readings every program gets. Strips are written once a frame, then handed to any number of programs. */
 internal class ShaderInputs(private val seed: Float = 1f) {
     private val data = ShaderData()
-    private val traceGain = TraceGain()
     private var writtenAt = Float.NaN
+    private var lastFrame: SpectrumFrame? = null
+    private val cycles = Gestures()
 
     /** Rewrites the spectrum, waveform, palette and history strips. Safe to call twice in a frame. */
     fun update(state: VizRenderState) {
-        if (state.timeSeconds == writtenAt) return
+        if (state.timeSeconds == writtenAt && state.frame === lastFrame) return
         writtenAt = state.timeSeconds
         val frame = state.frame
+        lastFrame = frame
+        cycles.update(state)
         data.writeBands(frame.bandsRel)
-        data.writeScope(frame.scope, traceGain.update(frame.scope, frame.scope, state.deltaSeconds))
+        data.writeScope(frame.scope, frame.waveformGain)
         data.writePalette(state.palette)
         data.writeHistory(frame.bandsRel)
     }
@@ -44,9 +48,12 @@ internal class ShaderInputs(private val seed: Float = 1f) {
         program.uniform("uHat", frame.hatPulse)
 
         program.uniform("uBpm", frame.bpm)
-        program.uniform("uBeatPhase", frame.beatPhase)
-        program.uniform("uBarPhase", frame.barPhase)
-        program.uniform("uPhrasePhase", frame.phrasePhase)
+        program.uniform("uBeatPhase", if (frame.rhythm?.usable == true) frame.beatPhase else 0f)
+        program.uniform("uBeatUsable", if (frame.rhythm?.usable == true) 1f else 0f)
+        program.uniform("uCyclePhase", cycles.cyclePhase)
+        program.uniform("uBarPhase", 0f)
+        program.uniform("uSlowCyclePhase", cycles.slowCyclePhase)
+        program.uniform("uPhrasePhase", 0f)
         program.uniform("uBeatIn", frame.beatInSeconds)
 
         program.uniform("uCentroid", frame.centroid)
@@ -59,7 +66,8 @@ internal class ShaderInputs(private val seed: Float = 1f) {
 
     fun reset() {
         data.clearHistory()
-        traceGain.reset()
         writtenAt = Float.NaN
+        lastFrame = null
+        cycles.reset()
     }
 }

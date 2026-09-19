@@ -139,7 +139,7 @@ internal open class Starfield(
             if (z[index] > -0.6f) respawn(index, anywhere = false)
         }
         // A planet every four, two or one phrases, and a drop sends one right through the frame.
-        if (gestures.phrase) {
+        if (gestures.section) {
             phrasesSeen++
             val every = when (planetRate.value) {
                 0 -> 4
@@ -150,15 +150,15 @@ internal open class Starfield(
         }
         if (gestures.drop) startPlanet(big = true)
         if (planet >= 0f) {
-            planet += dt / (gestures.barSeconds * if (planetBig) 1f else 3f) * speedScale.coerceAtLeast(0.3f)
+            planet += dt / (gestures.cycleSeconds * if (planetBig) 1f else 3f) * speedScale.coerceAtLeast(0.3f)
             if (planet > 1f) planet = -1f
         }
         // Asteroids tumble across, one a bar at least and more when the music drives.
         rockCredit += dt * asteroidRate.value * state.drive / gestures.beatSeconds * 0.5f
         val flown = asteroids.anyNewest && asteroids.progress[asteroids.newest] > 0.6f
-        if (!asteroids.anyNewest || ((gestures.bar || rockCredit >= 1f) && flown)) {
+        if (!asteroids.anyNewest || ((gestures.section || rockCredit >= 1f) && flown)) {
             rockCredit = 0f
-            asteroids.across(random, gestures.barSeconds * 0.7f / speedScale.coerceAtLeast(0.6f), PathShape.Line, 0f, 0.025f + 0.03f * random.next(), random.next(), random.signed() * 3f, Sprite.HEX)
+            asteroids.across(random, gestures.cycleSeconds * 0.7f / speedScale.coerceAtLeast(0.6f), PathShape.Line, 0f, 0.025f + 0.03f * random.next(), random.next(), random.signed() * 3f, Sprite.HEX)
         }
         asteroids.advance(dt)
         kit.follow(0, asteroids)
@@ -418,12 +418,12 @@ internal class Terrain : Layered(
         // The camera climbs through a loud section and settles back in a quiet one.
         lift.target = 2.4f + 2.6f * state.frame.loudLong
         lift.advance(dt)
-        if (gestures.phrase) {
+        if (gestures.section) {
             reliefGene.target = 0.5f + 1.1f * random.next()
             waterRule.choose(1 - waterRule.value)
             hueShift += 0.25f
         }
-        if (gestures.drop) drainHold = gestures.barSeconds
+        if (gestures.drop) drainHold = gestures.cycleSeconds
         drainHold -= dt
         drained.advance(if (drainHold > 0f) 1f else 0f, dt)
         if (gestures.kickHit > 0f) {
@@ -437,7 +437,7 @@ internal class Terrain : Layered(
         spray.advance(dt, drag = 0.5f, gravity = 0.5f)
         // The flock crosses the sky, turning back on the snare.
         if (gestures.snareHit > 0f) flockWay = -flockWay
-        flockTravel += dt / (gestures.barSeconds * 2f) * flockWay
+        flockTravel += dt / (gestures.cycleSeconds * 2f) * flockWay
         flock.targetX = -0.1f + 1.2f * wrap(flockTravel)
         flock.targetY = 0.2f + 0.06f * sin(flockTravel * TAU * 2f)
         flock.advance(dt, speed = 0.45f + 0.4f * state.drive)
@@ -468,7 +468,7 @@ internal class Terrain : Layered(
             1f to state.palette.cycled(hue + 0.7f, value = 0.025f + 0.1f * state.energy),
         ))
         // A sun swinging across the sky once a phrase.
-        val swing = TAU * gestures.phrasePhase
+        val swing = TAU * gestures.slowCyclePhase
         val sun = Offset((0.5f + 0.35f * sin(swing)) * size.width, (0.16f + 0.06f * cos(swing)) * size.height)
         val glow = size.minDimension * 0.18f
         drawCircle(Brush.radialGradient(0f to state.palette.cap.copy(alpha = 0.35f + 0.3f * state.lift), 1f to Color.Transparent, center = sun, radius = glow), glow, sun)
@@ -684,8 +684,8 @@ internal class Terrain : Layered(
 
 /**
  * A solid turning in a room, orbiting and tumbling, with its dual inside turning the other way, the two
- * trading shapes over each phrase. Three satellites circle it and jump on the snare, sparks fly off its
- * corners on the kick, and a drop blows it apart and puts it back together over a bar.
+ * trading shapes over each slow visual cycle. Three satellites circle it and jump on the snare, sparks fly off its
+ * corners on the kick, and a drop blows it apart and puts it back together over a visual cycle.
  *
  * The outer shape is an icosahedron; its dual, the dodecahedron, has a corner at the middle of each of
  * its faces.
@@ -780,7 +780,7 @@ internal class Wireframe : Layered(
         swell.kick(gestures.kickHit * 6f)
         swell.advance(dt)
         if (gestures.drop) explode = 1f
-        explode = (explode - dt / gestures.barSeconds).coerceAtLeast(0f)
+        explode = (explode - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         if (gestures.snareHit > 0f) for (index in 0 until 3) satPhase[index] += 1.2f
         for (index in 0 until 3) satPhase[index] += dt * (1.5f + 0.4f * index) * state.tempo
         comets.advance(state, gestures, random)
@@ -796,8 +796,8 @@ internal class Wireframe : Layered(
         val centreX = 6f * cos(orbit)
         val centreY = 2.6f * sin(orbit * 0.7f)
         val distance = 11f
-        // The two shapes trade places over each phrase, the gene shifting where in the phrase it happens.
-        val morph = 0.5f - 0.5f * cos(TAU * (gestures.phrasePhase + blend.value))
+        // The two shapes trade places over each slow visual cycle, the gene shifting where in the phrase it happens.
+        val morph = 0.5f - 0.5f * cos(TAU * (gestures.slowCyclePhase + blend.value))
         val lift = 0.35f + 0.65f * state.lift
         solid(state, ico, icoEdges, scale, centreX, centreY, distance, spinX, spinY, (1f - morph) * lift, 0f)
         solid(state, dual, dualEdges, scale, centreX, centreY, distance, spinX, spinY, morph * lift, 0.5f)
@@ -935,7 +935,7 @@ internal class RingFlight : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         // One gate per beat when the tempo is known, so passing through one IS the beat.
-        val cruise = if (state.frame.bpm > 0f && state.frame.beatConfidence > 0.4f) spacing * state.frame.bpm / 60f else -1f
+        val cruise = if (state.frame.rhythm?.usable == true) spacing * state.frame.bpm / 60f else -1f
         travel += rig.advance(state, cruise = cruise)
         wobblePhase += dt * 2f * state.tempo
         look += dt * TAU / 16f
@@ -959,10 +959,10 @@ internal class RingFlight : Layered(
             racerPush[index] += (0f - racerPush[index]) * (dt * 1.5f).coerceAtMost(1f)
             racerAhead[index] = 6f + 4f * index + 2f * sin(wobblePhase * 0.5f + index * 2f) + racerPush[index]
         }
-        if (gestures.drop) rollLeft = gestures.barSeconds
+        if (gestures.drop) rollLeft = gestures.cycleSeconds
         if (rollLeft > 0f) {
             rollLeft -= dt
-            rollExtra += dt * TAU / gestures.barSeconds
+            rollExtra += dt * TAU / gestures.cycleSeconds
         }
         comets.advance(state, gestures, random)
         kit.follow(0, comets.travellers)

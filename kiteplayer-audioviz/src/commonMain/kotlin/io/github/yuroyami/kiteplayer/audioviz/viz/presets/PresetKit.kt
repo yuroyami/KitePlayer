@@ -107,15 +107,6 @@ internal class History(private val rows: Int = 200) {
     }
 }
 
-/** Shrinks this into [into] by taking evenly spaced samples. */
-internal fun FloatArray.squeezeInto(into: FloatArray) {
-    if (isEmpty()) {
-        into.fill(0f)
-        return
-    }
-    for (index in into.indices) into[index] = this[(index.toLong() * size / into.size).toInt().coerceAtMost(size - 1)]
-}
-
 /** The fractional part, so a share of the screen wraps round to the other side. */
 internal fun wrap(value: Float): Float = value - kotlin.math.floor(value)
 
@@ -174,18 +165,18 @@ internal class Stage(private val seconds: Float = 16f, private val reachX: Float
 }
 
 /**
- * A bright body that crosses the whole screen on an arc once a bar, under any music. Drawn in the
- * echo layer it leaves a tail. Its anchor gives a drawing a crossing when its own actors keep to one part.
+ * A bright body that crosses the whole screen on an arc, one always in flight, with a fresh launch
+ * at an accepted section boundary. Drawn in the echo layer it leaves a tail. Its anchor gives a drawing a crossing when its own actors keep to one part.
  */
 internal class Comets(capacity: Int = 3, private val kind: Int = Sprite.GLOW, private val size: Float = 0.035f) {
     val travellers: Travellers = Travellers(capacity)
     private val mesh = TriangleMesh(maxVertices = capacity * 12 + 8)
 
     fun advance(state: VizRenderState, gestures: Gestures, random: Rng) {
-        // One a bar and never a moment without one in flight, each flying most of the way first.
+        // Never a moment without one in flight; a section launches another once most of the way flown.
         val flown = travellers.anyNewest && travellers.progress[travellers.newest] > 0.6f
-        if (!travellers.anyNewest || (gestures.bar && flown)) {
-            travellers.across(random, gestures.barSeconds * 0.85f, PathShape.Arc, 0.18f * random.signed(), size, random.next(), 3f, kind)
+        if (!travellers.anyNewest || (gestures.section && flown)) {
+            travellers.across(random, gestures.cycleSeconds * 0.85f, PathShape.Arc, 0.18f * random.signed(), size, random.next(), 3f, kind)
         }
         travellers.advance(state.deltaSeconds)
     }

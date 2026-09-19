@@ -41,7 +41,7 @@ import kotlin.math.sin
  * toward the camera, so flying forward means flying back through what was already played. Around
  * that there is a world: gates to fly through once a beat, debris rushing past, a light that runs
  * down the wall on every kick, windows where the quiet bands open the wall onto the stars outside,
- * and a camera that cuts to a new lane on some bar lines. A drop widens the pipe for a bar and turns
+ * and a camera that cuts to a new lane on some bar lines. A drop widens the pipe for a visual cycle and turns
  * its twist the other way.
  */
 internal open class Pipe(
@@ -187,18 +187,18 @@ internal open class Pipe(
             writeSlot = (writeSlot - 1 + ribs) % ribs
             captureInto(writeSlot, state)
         }
-        if (gestures.phrase) {
+        if (gestures.section) {
             twistGene.target = random.next()
             radiusRule.choose(1 - radiusRule.value)
         }
         if (gestures.drop) {
-            widenHold = gestures.barSeconds
+            widenHold = gestures.cycleSeconds
             twistSign = -twistSign
         }
         widenHold -= dt
         widen.advance(if (widenHold > 0f) 1f else 0f, dt)
         // A gate every beat, born at the far end and flown through a few beats later.
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         if (beat != lastBeat) {
             lastBeat = beat
             gateDistance[nextGate] = far * 0.95f

@@ -21,19 +21,28 @@ class DirectorTest {
 
     private val catalogue = VizCatalog.create()
 
-    /** Plays a fake song through a real analyser and drives the director at sixty frames a second. */
+    /**
+     * Generated audio supplies continuous features. Boundary events are injected independently;
+     * these tests qualify scene decisions, not section recognition.
+     */
     private fun run(
         mono: FloatArray,
         seconds: Float,
         seed: Long = 1L,
+        boundaries: Boolean = true,
         onChange: (String) -> Unit = {},
     ): VizDirector {
         val director = VizDirector(catalogue, seed = seed)
+        // Only injected boundary IDs belong to this scene-decision fixture.
         val player = SongPlayer(mono)
         var showing = director.current.name
         var elapsed = 0f
+        var boundaryIndex = 0
         while (elapsed < seconds) {
-            val frame = player.next(1f / 60f)
+            var frame = player.next(1f / 60f).withEvents()
+            if (boundaries && elapsed >= (boundaryIndex + 1) * 12f) {
+                frame = boundary(frame, boundaryIndex++.toLong())
+            }
             director.advance(frame, 1f / 60f)
             if (director.current.name != showing) {
                 showing = director.current.name
@@ -44,13 +53,22 @@ class DirectorTest {
         return director
     }
 
+    private fun boundary(frame: SpectrumFrame, sequence: Long): SpectrumFrame {
+        val hit = AudioEvent(frame.generation, frame.analysisRevision, sequence,
+            AudioDetection(AudioEventKind.SectionBoundary, frame.ptsMicros, frame.ptsMicros,
+                0.3f, 0.9f, 0.8f))
+        return frame.withDeliveredEvents(AudioEventDelivery(frame.generation, frame.analysisRevision,
+            frame.ptsMicros, arrayOf(DeliveredAudioEvent(hit, 0L))))
+    }
+
     @Test
     fun aChangeTakesTimeRatherThanHappeningAtOnce() {
         var partWayThrough = 0
         val director = VizDirector(catalogue, seed = 5L)
         val player = SongPlayer(SyntheticSong.drumLoop(70f))
-        repeat(60 * 60) {
-            director.advance(player.next(1f / 60f), 1f / 60f)
+        repeat(60 * 60) { index ->
+            val frame = player.next(1f / 60f).withEvents()
+            director.advance(if (index > 0 && index % 720 == 0) boundary(frame, index.toLong()) else frame, 1f / 60f)
             if (director.changing) partWayThrough++
         }
         assertTrue(partWayThrough > 30, "a change should last a while, was mid change on $partWayThrough frames")
@@ -87,12 +105,11 @@ class DirectorTest {
 
     @Test
     fun quietMusicIsLeftAlone() {
-        // With no tempo there are no phrases to count, so it falls back to a plain wait. It should
-        // still not thrash: a pad should sit on one drawing for a good while.
+        // No accepted boundary was provided. Quiet music must keep its scene.
         val seen = ArrayList<String>()
-        run(SyntheticSong.calmPad(40f), seconds = 38f) { seen += it }
+        run(SyntheticSong.calmPad(40f), seconds = 38f, boundaries = false) { seen += it }
         println("changes under a pad in 38 seconds: ${seen.size}")
-        assertTrue(seen.size <= 2, "a pad should be left alone, changed ${seen.size} times")
+        assertEquals(0, seen.size, "a pad with no boundary should be left alone")
     }
 
     @Test
@@ -101,6 +118,7 @@ class DirectorTest {
         val second = ArrayList<String>()
         run(SyntheticSong.drumLoop(90f), seconds = 85f, seed = 99L) { first += it }
         run(SyntheticSong.drumLoop(90f), seconds = 85f, seed = 99L) { second += it }
+        assertTrue(first.isNotEmpty(), "the seeded comparison must include scene decisions")
         assertEquals(first, second, "the same seed should replay exactly")
     }
 
@@ -120,41 +138,26 @@ class DirectorTest {
     }
 
     @Test
-    fun changesBeginOnTheBar() {
-        // A steady beat grid made by hand: 120 beats a minute, sure of it, the phrase running on.
+    fun changesBeginOnlyAtTheAcceptedBoundaryIncludingNonDownbeatPositions() {
         val director = VizDirector(catalogue, seed = 11L)
-        val starts = ArrayList<Float>()
-        var phrase = 0f
-        var wasChanging = false
-        repeat(60 * 180) {
+        var starts = 0
+        repeat(60 * 120) { index ->
             val delta = 1f / 60f
-            phrase = (phrase + delta * 2f / 16f) % 1f
-            val frame = SpectrumFrame(
-                ptsMicros = 0L,
-                bands = FloatArray(8) { 0.5f },
-                peaks = FloatArray(8),
-                scope = FloatArray(8),
-                level = 0.5f,
-                bass = 0.5f,
-                mid = 0.5f,
-                treble = 0.5f,
-                beat = 0f,
-                pulse = 0f,
-                energy = 0.8f,
-                density = 0.7f,
-                mood = 0.75f,
-                bpm = 120f,
-                beatConfidence = 0.9f,
-                barPhase = (phrase * 4f) % 1f,
-                phrasePhase = phrase,
-            )
+            val at = index / 60f
+            val plain = SpectrumFrame((at * 1_000_000L).toLong(), FloatArray(8), FloatArray(8),
+                FloatArray(8), 0.5f, 0.5f, 0.5f, 0.5f, 0f, 0f,
+                mood = 0.75f, bpm = 120f, beatConfidence = 0.9f, barPhase = 0.37f)
+            val accepted = index > 0 && index % 720 == 0
+            val frame = if (accepted) boundary(plain, index.toLong()) else plain
+            val wasChanging = director.changing
             director.advance(frame, delta)
-            if (director.changing && !wasChanging) starts += frame.barPhase
-            wasChanging = director.changing
+            if (director.changing && !wasChanging) {
+                starts++
+                assertTrue(accepted, "scene change without a boundary at $at")
+                assertEquals(0.37f, frame.barPhase, "a boundary need not be a counted downbeat")
+            }
         }
-        println("changes began at these places in the bar: $starts")
-        assertTrue(starts.size >= 3, "three minutes of a steady beat should bring a few changes, brought ${starts.size}")
-        assertTrue(starts.all { it < 0.05f || it > 0.95f }, "every change should begin on a bar line: $starts")
+        assertTrue(starts >= 3, "injected boundaries must actually change scenes")
     }
 
     @Test

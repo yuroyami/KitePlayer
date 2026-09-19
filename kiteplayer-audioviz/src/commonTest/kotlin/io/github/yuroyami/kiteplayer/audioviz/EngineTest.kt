@@ -22,6 +22,7 @@ class EngineTest {
         confidence: Float = 0.9f,
         kick: Float = 0f,
         drop: Boolean = false,
+        section: Boolean = false,
         mood: Float = 0.5f,
         level: Float = 0.5f,
     ): SpectrumFrame {
@@ -46,6 +47,14 @@ class EngineTest {
             beatPhase = beats - kotlin.math.floor(beats),
             barPhase = (beats / 4f) - kotlin.math.floor(beats / 4f),
             phrasePhase = (beats / 16f) - kotlin.math.floor(beats / 16f),
+            rhythm = RhythmEstimate((seconds * 1_000_000L).toLong(), (seconds * 1_000_000L).toLong(),
+                Long.MAX_VALUE, 0L, bpm, confidence, confidence, confidence > 0.6f,
+                beats - kotlin.math.floor(beats), 0f, 0f),
+            events = if (!section && !drop) null else AudioEventDelivery(io.github.yuroyami.kiteplayer.Generation.Initial,
+                0L, (seconds * 1_000_000L).toLong(), arrayOf(DeliveredAudioEvent(AudioEvent(
+                    io.github.yuroyami.kiteplayer.Generation.Initial, 0L, (seconds * 1_000_000L).toLong(),
+                    AudioDetection(if (drop) AudioEventKind.Drop else AudioEventKind.SectionBoundary,
+                        (seconds * 1_000_000L).toLong(), (seconds * 1_000_000L).toLong(), 0.4f, 0.9f, 0.8f)), 0L))),
         )
     }
 
@@ -53,7 +62,7 @@ class EngineTest {
         VizRenderState(frame, time, 1f / 60f, VizPalette.Classic, time, future)
 
     @Test
-    fun gesturesCountBarsAndPhrasesOnTheTempo() {
+    fun gesturesKeepVisualCyclesSeparateFromUnknownBarsAndPhrases() {
         val gestures = Gestures()
         var time = 0f
         repeat(60 * 16 + 30) {
@@ -61,12 +70,13 @@ class EngineTest {
             gestures.update(state(frame(time), time))
         }
         println("sixteen and a half seconds at 120 bpm: ${gestures.bars} bars, ${gestures.phrases} phrases")
-        assertEquals(8, gestures.bars, "a bar is two seconds at 120 bpm")
-        assertEquals(2, gestures.phrases, "a phrase is four bars")
+        assertEquals(0, gestures.bars)
+        assertTrue(gestures.cycles >= 7, "pulse-locked visual cycles still advance")
+        assertEquals(0, gestures.phrases)
     }
 
     @Test
-    fun withoutATempoTheBarsRunFree() {
+    fun withoutATempoVisualCyclesRunFree() {
         val gestures = Gestures()
         var time = 0f
         repeat(60 * 21 + 30) {
@@ -74,7 +84,8 @@ class EngineTest {
             gestures.update(state(frame(time, bpm = 0f, confidence = 0f, mood = 0f), time))
         }
         println("21.5 calm seconds with no tempo: ${gestures.bars} bars of ${gestures.barSeconds} s")
-        assertEquals(5, gestures.bars, "calm free bars last 4.2 seconds")
+        assertEquals(5, gestures.cycles, "calm visual cycles last 4.2 seconds")
+        assertEquals(0, gestures.bars)
     }
 
     private fun recipe(seed: Long): Genes = Genes(seed).apply {
@@ -86,25 +97,25 @@ class EngineTest {
     }
 
     @Test
-    fun everyPhraseChangesTheRecipeAndEveryFourthChangesMore() {
+    fun supportedSectionsChangeTheRecipeAndEveryFourthChangesMore() {
         val genes = recipe(7L)
         val gestures = Gestures()
         var time = 0f
-        val perPhrase = ArrayList<Int>()
+        val perSection = ArrayList<Int>()
         var before = 0
-        repeat(60 * 34) {
+        repeat(60 * 34) { index ->
             time += 1f / 60f
-            gestures.update(state(frame(time), time))
+            gestures.update(state(frame(time, section = index > 0 && index % 480 == 0), time))
             genes.advance(gestures, 1f / 60f)
-            if (gestures.phrase) {
-                perPhrase += genes.changes - before
+            if (gestures.section) {
+                perSection += genes.changes - before
                 before = genes.changes
             }
         }
-        println("changes at each phrase: $perPhrase")
-        assertTrue(perPhrase.size >= 4, "34 seconds at 120 bpm holds four phrases")
-        assertTrue(perPhrase.all { it >= 1 }, "every phrase changes something: $perPhrase")
-        assertTrue(perPhrase[3] >= 3, "the fourth phrase changes three or more: $perPhrase")
+        println("changes at each section: $perSection")
+        assertTrue(perSection.size >= 4, "the fixture injects four supported section boundaries")
+        assertTrue(perSection.all { it >= 1 }, "every section changes something: $perSection")
+        assertTrue(perSection[3] >= 3, "the fourth section changes three or more: $perSection")
     }
 
     @Test
@@ -113,11 +124,12 @@ class EngineTest {
             val genes = recipe(11L)
             val gestures = Gestures()
             var time = 0f
-            repeat(60 * 40) {
+            repeat(60 * 40) { index ->
                 time += 1f / 60f
-                gestures.update(state(frame(time), time))
+                gestures.update(state(frame(time, section = index > 0 && index % 480 == 0), time))
                 genes.advance(gestures, 1f / 60f)
             }
+            assertTrue(genes.changes > 0, "seeded comparison must include mutations")
             return genes.all.map { if (it is NumberGene) it.value else (it as io.github.yuroyami.kiteplayer.audioviz.viz.motion.ChoiceGene).value.toFloat() }
         }
         assertEquals(run(), run(), "a seeded recipe replays exactly")
@@ -142,13 +154,17 @@ class EngineTest {
         var highest = 0f
         var highestAt = 0f
         var landed = false
+        val event = AudioEvent(io.github.yuroyami.kiteplayer.Generation.Initial, 0L, 0L,
+            AudioDetection(AudioEventKind.LowTransient, 1_000_000L, 1_010_000L, 1f, 0.8f, 0.5f))
         while (time < 1.5f) {
             val away = onset - time
             val kick = if (!landed && time >= onset) 1f else 0f
             if (kick > 0f) landed = true
             val future = object : VizFuture {
-                override fun at(secondsAhead: Float): SpectrumFrame = frame(time + secondsAhead, kick = 1f)
+                override fun at(secondsAhead: Float): SpectrumFrame = frame(time + secondsAhead)
                 override val nextOnsetSeconds: Float = if (away > 0f) away else -1f
+                override fun nextEvent(kind: AudioEventKind): UpcomingAudioEvent? =
+                    if (away > 0f && away <= 0.1f && kind == AudioEventKind.LowTransient) UpcomingAudioEvent(event, away) else null
             }
             val current = frame(time, kick = kick)
             camera.advance(VizRenderState(current, time, step, VizPalette.Classic, time, future))

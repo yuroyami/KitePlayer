@@ -7,8 +7,8 @@ import kotlin.math.sin
 /**
  * A radix-2 Cooley-Tukey FFT built once for one size and reused.
  *
- * Every table it needs is built in the constructor, so [forward] allocates nothing and is safe
- * to call on an audio thread. The size must be a power of two, which is what radix-2 means.
+ * Every table it needs is built in the constructor, so [forward] allocates nothing on the
+ * analysis worker. The size must be a power of two, which is what radix-2 means.
  */
 internal class Fft(public val size: Int) {
 
@@ -37,8 +37,8 @@ internal class Fft(public val size: Int) {
     private val sinTable = FloatArray(size / 2) { sin(-2.0 * PI * it / size).toFloat() }
 
     /**
-     * Transforms in place. Both arrays must be [size] long, and [imaginary] is all zeros for the
-     * real audio input this library feeds it.
+     * Transforms in place. Both arrays must be [size] long. An imaginary input of zero describes
+     * one real signal; the spectral-power path also packs a second real channel into that input.
      */
     public fun forward(real: FloatArray, imaginary: FloatArray) {
         require(real.size == size && imaginary.size == size) {

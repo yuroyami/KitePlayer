@@ -1,5 +1,7 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
+
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -17,7 +19,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
-import io.github.yuroyami.kiteplayer.audioviz.viz.TraceGain
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
@@ -60,9 +61,9 @@ import kotlin.math.sin
 
 /**
  * Three spoked figures, one for each part of the spectrum, riding orbits round a twist whose centre
- * wanders the screen. The echoes stream off to one side, the side changing every phrase. Glyphs
+ * wanders the screen. The echoes stream off to one side, the side changing at each supported section boundary. Glyphs
  * dropped in are wound into the spirals, a kick tightens the twist, a light sweeps round once a bar,
- * and a drop adds a turned copy of the echo for a bar.
+ * and a drop adds a turned copy of the echo for a visual cycle.
  */
 internal class Twist : Layered(
     name = "Twist",
@@ -113,14 +114,14 @@ internal class Twist : Layered(
         val dt = state.deltaSeconds
         centre.advance(state, gestures)
         kit.place(1, centre.x, centre.y)
-        stream.advance((if (side.on) 1f else -1f) * if (gestures.phrases % 2 == 0) 1f else -1f, dt)
+        stream.advance((if (side.on) 1f else -1f) * if (gestures.sections % 2 == 0) 1f else -1f, dt)
         tighten.kick(gestures.kickHit * 4f)
         tighten.advance(dt)
         warp.strength = strengthParam.value * twist.value
         warp.params[0] = 1.2f * tighten.value.coerceIn(-0.5f, 2f)
-        if (gestures.drop) copyHold = gestures.barSeconds
+        if (gestures.drop) copyHold = gestures.cycleSeconds
         copyHold -= dt
-        sweepAngle = gestures.barPhase * TAU
+        sweepAngle = gestures.cyclePhase * TAU
         for (index in 0 until FIGURES) {
             val orbit = orbits[index]
             orbit.centreX = centre.x
@@ -235,7 +236,6 @@ internal class RippleWell : Layered(
     private val rippleCount = genes.number("Ripple count", 0.7f, 1.5f, 1f)
     private val spinGene = genes.number("Drift", -0.4f, 0.4f, 0.15f)
 
-    private val gain = TraceGain()
     private val orbit = Orbiter(radiusX = 0.26f, radiusY = 0.2f, lapsPerBar = 0.3f)
     private var wellX = 0.5f
     private var wellY = 0.5f
@@ -263,8 +263,8 @@ internal class RippleWell : Layered(
         val dt = state.deltaSeconds
         orbit.advance(state, gestures)
         if (gestures.drop) gather = 1f
-        gather = (gather - dt / (gestures.barSeconds * 2f)).coerceAtLeast(0f)
-        // Pulled to the middle on a drop, and let go again over two bars.
+        gather = (gather - dt / (gestures.cycleSeconds * 2f)).coerceAtLeast(0f)
+        // Pulled to the middle on a drop, and let go again over two visual cycles.
         val pull = sin(gather * PI.toFloat() * 0.5f)
         wellX = orbit.x + (0.5f - orbit.x) * pull
         wellY = orbit.y + (0.5f - orbit.y) * pull
@@ -284,7 +284,7 @@ internal class RippleWell : Layered(
             if (wells.on) rings.fire(otherX, otherY, random.next(), gestures.kickHit * 0.7f)
         }
         rings.advance(dt, gestures.beatSeconds * 2.5f)
-        if (gestures.hatHit > 0f || gestures.bar) {
+        if (gestures.hatHit > 0f || gestures.section) {
             val toSecond = wells.on && random.next() < 0.5f
             val x = if (toSecond) otherX else wellX
             val y = if (toSecond) otherY else wellY
@@ -301,7 +301,7 @@ internal class RippleWell : Layered(
         val lift = 0.3f + 0.7f * state.lift
         val walk = genes.walk
         val diagonal = hypot(size.width, size.height)
-        val scale = gain.update(scope, scope, state.deltaSeconds)
+        val scale = state.frame.waveformGain
         traceRing(state, scope, wellX, wellY, diagonal * ringReach.value, scale, 1f, walk)
         val second = wells.weight(1)
         if (second > 0.01f) traceRing(state, scope, otherX, otherY, diagonal * ringReach.value * 0.6f, scale, second, walk + 0.5f)
@@ -347,7 +347,6 @@ internal class RippleWell : Layered(
     }
 
     override fun onReset() {
-        gain.reset()
         orbit.reset()
         gather = 0f
         rings.clear()
@@ -360,10 +359,10 @@ internal class RippleWell : Layered(
 /**
  * Drops of colour let fall into moving water.
  *
- * A dropper crosses the tank every two bars, letting drops fall as it goes; more fall all over the
+ * A dropper crosses the tank every two visual cycles, letting drops fall as it goes; more fall all over the
  * tank, each spreading a ring, and onsets drop more in from the edges. A drop is drawn once, on the
  * frame it lands; after that the warp drags it through a current, and the whole tank turns with it,
- * both changing way every phrase, while the feedback slowly lets it fade. The left of the tank
+ * both changing way at each supported section boundary, while the feedback slowly lets it fade. The left of the tank
  * takes one colour and the right another, and a drop in the music spills ink from every edge.
  */
 internal class Ink : Layered(
@@ -416,10 +415,10 @@ internal class Ink : Layered(
         val dt = state.deltaSeconds
         queued = 0
         warp.strength = flowAmount.value
-        if (gestures.phrase) way = -way
+        if (gestures.section) way = -way
         current.advance(way, dt)
-        // Back and forth across the tank, one crossing every two bars.
-        crossing += dt / (gestures.barSeconds * 2f)
+        // Back and forth across the tank, one crossing every two visual cycles.
+        crossing += dt / (gestures.cycleSeconds * 2f)
         val leg = crossing % 2f
         val along = if (leg < 1f) leg else 2f - leg
         dropperX = 0.06f + 0.88f * along
@@ -466,10 +465,10 @@ internal class Ink : Layered(
             }
             drop(x, ey, 0.04f + 0.06f * onset)
         }
-        if (gestures.drop) spillLeft = gestures.barSeconds
+        if (gestures.drop) spillLeft = gestures.cycleSeconds
         if (spillLeft > 0f) {
             spillLeft -= dt
-            // A spill: ink pours in from all four edges for a bar.
+            // A spill: ink pours in from all four edges for a visual cycle.
             for (edge in 0 until 4) {
                 val t = random.next()
                 val x = when (edge) {
@@ -563,9 +562,9 @@ internal class Ink : Layered(
 
 /**
  * Rain on up to three depths, near drops longer and faster, blown sideways by a wind that changes
- * side every phrase, falling behind lenses that drift down the glass and bend everything behind them.
+ * side at each supported section boundary, falling behind lenses that drift down the glass and bend everything behind them.
  * Drops that reach the bottom leave rings in a puddle, a snare throws lightning across the screen,
- * and a drop brings a downpour for a bar.
+ * and a drop brings a downpour for a visual cycle.
  */
 internal class LensRain : Layered(
     name = "Lens Rain",
@@ -612,8 +611,8 @@ internal class LensRain : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        wind.advance(windGene.value * if (gestures.phrases % 2 == 0) 1f else -1f, dt)
-        if (gestures.drop) downpour = gestures.barSeconds
+        wind.advance(windGene.value * if (gestures.sections % 2 == 0) 1f else -1f, dt)
+        if (gestures.drop) downpour = gestures.cycleSeconds
         downpour -= dt
         // The lenses fall on their own clock, the same one the warp's field reads.
         fallClock += dt * (0.18f + 0.2f * state.drive)
@@ -811,7 +810,7 @@ internal class FractalZoom : Layered(
         kit.place(RINGS, centre.x, centre.y)
         throwOut.kick(gestures.kickHit * 6f)
         throwOut.advance(dt)
-        // The constant walks round the edge of the chosen bulb; a change of bulb glides over a bar.
+        // The constant walks round the edge of the chosen bulb; a change of bulb glides over a visual cycle.
         walkAngle += dt * (0.2f + 0.6f * state.drive)
         var cx = 0f
         var cy = 0f
@@ -905,10 +904,10 @@ internal class FractalZoom : Layered(
 }
 
 /**
- * Specks carried along streams that run a screen every two bars, over the spectrogram that shapes
- * them. The landscape the streams follow scrolls and turns a step every phrase, big glows ride the
+ * Specks carried along streams that run a screen every two visual cycles, over the spectrogram that shapes
+ * them. The landscape the streams follow scrolls and turns a step at each supported section boundary, big glows ride the
  * currents, a lamp drifts over it all on a slow circle, a kick sends a pulse down every stream, and a
- * drop doubles the flow for a bar.
+ * drop doubles the flow for a visual cycle.
  */
 internal class FlowField : Layered(
     name = "Flow Field",
@@ -953,13 +952,13 @@ internal class FlowField : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        if (gestures.drop) doubleHold = gestures.barSeconds
+        if (gestures.drop) doubleHold = gestures.cycleSeconds
         doubleHold -= dt
         pulse.kick(gestures.kickHit * 3f)
         pulse.advance(dt)
         warp.strength = amount.value * (if (doubleHold > 0f) 2f else 1f) * (1f + 0.5f * pulse.value.coerceIn(-0.5f, 1.5f))
         scroll += dt * (0.1f + 0.2f * state.drive) * if (scrollBack.on) -1f else 1f
-        if (gestures.phrase) turnGoal += 0.5f
+        if (gestures.section) turnGoal += 0.5f
         turn.advance(turnGoal, dt)
         warp.params[0] = turn.value
         warp.params[1] = scroll
@@ -1064,7 +1063,6 @@ internal class Phosphor : Layered(
     private val grid = genes.toggle("Fine grid", start = false)
     private val beamWidth = genes.number("Beam width", 0.7f, 1.6f, 1f)
 
-    private val gain = TraceGain()
     private val levels = Array(LEVELS) { Path() }
     private val flash = Envelope(attackPerSecond = 60f, releasePerSecond = 6f)
     private val wander = Orbiter(radiusX = 0.26f, radiusY = 0.18f, lapsPerBar = 0.2f)
@@ -1073,6 +1071,7 @@ internal class Phosphor : Layered(
     private val quiet = Envelope(attackPerSecond = 1f, releasePerSecond = 2f)
     private var phase = 0f
     private var scale = 1f
+    private val traceSampler = WaveformResampler()
     private val left = FloatArray(POINTS)
     private val right = FloatArray(POINTS)
     private val pastLeft = History(rows = 40)
@@ -1098,16 +1097,16 @@ internal class Phosphor : Layered(
         kit.place(1, wander.x, wander.y, parallax = 0.8f)
         flash.hit(gestures.kickHit)
         flash.advance(0f, dt)
-        if (gestures.drop) apartHold = gestures.barSeconds
+        if (gestures.drop) apartHold = gestures.cycleSeconds
         apartHold -= dt
         apart.advance(if (apartHold > 0f) 1f else 0f, dt)
         quiet.advance(if (gestures.silence) 1f else 0f, dt)
         phase += dt * 0.4f
-        frame.scopeLeft.squeezeInto(left)
-        frame.scopeRight.squeezeInto(right)
+        traceSampler.resample(frame.scopeLeft, left)
+        traceSampler.resample(frame.scopeRight, right)
         pastLeft.push(left, state.timeSeconds)
         pastRight.push(right, state.timeSeconds)
-        scale = gain.update(frame.scopeLeft, frame.scopeRight, dt)
+        scale = frame.waveformGain
         val lateLeft = pastLeft.row(0.3f)
         val lateRight = pastRight.row(0.3f)
         val still = quiet.value
@@ -1201,7 +1200,6 @@ internal class Phosphor : Layered(
     }
 
     override fun onReset() {
-        gain.reset()
         flash.reset()
         wander.reset()
         apartHold = 0f

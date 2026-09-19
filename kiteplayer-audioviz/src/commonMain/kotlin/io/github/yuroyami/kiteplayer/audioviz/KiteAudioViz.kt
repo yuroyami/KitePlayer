@@ -16,7 +16,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VisualizerSurface
 @Composable
 public fun KiteAudioViz(state: AudioVizState, modifier: Modifier = Modifier, post: Boolean = true) {
     LaunchedEffect(state) {
-        while (true) withFrameNanos { state.nextFrame() }
+        while (true) withFrameNanos { state.nextFrame(it) }
     }
     if (state.directed) {
         DirectedVisualizerSurface(

@@ -8,11 +8,11 @@ public sealed class Gene(public val name: String) {
     internal abstract fun mutate(random: Rng)
     internal abstract fun toMost()
     internal abstract fun toLeast()
-    internal abstract fun advance(deltaSeconds: Float, barSeconds: Float)
+    internal abstract fun advance(deltaSeconds: Float, cycleSeconds: Float)
     internal abstract fun restart()
 }
 
-/** A number in the recipe. A change glides to the new value over one bar. */
+/** A number in the recipe. A change glides to the new value over one visual cycle. */
 public class NumberGene internal constructor(
     name: String,
     public val min: Float,
@@ -52,8 +52,8 @@ public class NumberGene internal constructor(
         target = if (mostAtMax) min else max
     }
 
-    override fun advance(deltaSeconds: Float, barSeconds: Float) {
-        val step = glide * deltaSeconds / barSeconds.coerceAtLeast(0.2f)
+    override fun advance(deltaSeconds: Float, cycleSeconds: Float) {
+        val step = glide * deltaSeconds / cycleSeconds.coerceAtLeast(0.2f)
         value += (target - value).coerceIn(-step, step)
     }
 
@@ -64,7 +64,7 @@ public class NumberGene internal constructor(
     }
 }
 
-/** A choice between [options] ways of drawing. A change fades from the old option over one bar. */
+/** A choice between [options] ways of drawing. A change fades from the old option over one visual cycle. */
 public class ChoiceGene internal constructor(
     name: String,
     public val options: Int,
@@ -110,8 +110,8 @@ public class ChoiceGene internal constructor(
 
     override fun toLeast() = choose(least)
 
-    override fun advance(deltaSeconds: Float, barSeconds: Float) {
-        if (mix < 1f) mix = (mix + deltaSeconds / barSeconds.coerceAtLeast(0.2f)).coerceAtMost(1f)
+    override fun advance(deltaSeconds: Float, cycleSeconds: Float) {
+        if (mix < 1f) mix = (mix + deltaSeconds / cycleSeconds.coerceAtLeast(0.2f)).coerceAtMost(1f)
         if (mix >= 1f) previous = value
     }
 
@@ -125,7 +125,7 @@ public class ChoiceGene internal constructor(
 /**
  * A drawing's recipe, and the rules that change it.
  *
- * One or two genes change at the top of every phrase, three or more on every fourth phrase, all go to
+ * One or two genes change at the accepted section boundary, three or more on every fourth accepted boundary, all go to
  * their busiest end on a drop and their sparest on a breakdown. Seeded, so a run replays exactly.
  */
 public class Genes(seed: Long) {
@@ -133,13 +133,13 @@ public class Genes(seed: Long) {
         field = ArrayList<Gene>()
 
     private val random = Rng(seed)
-    private var phrasesSeen = 0
+    private var sectionsSeen = 0
 
     /** How many single changes have happened, for tests and readouts. */
     public var changes: Int = 0
         private set
 
-    /** A colour offset that walks one full turn every eight phrases. */
+    /** A colour offset that walks one full turn every eight slow visual cycles. */
     public var walk: Float = 0f
         private set
 
@@ -163,14 +163,14 @@ public class Genes(seed: Long) {
                 all.forEach { it.toLeast() }
                 changes += all.size
             }
-            gestures.phrase -> {
-                phrasesSeen++
-                val big = phrasesSeen % 4 == 0
+            gestures.section -> {
+                sectionsSeen++
+                val big = sectionsSeen % 4 == 0
                 mutate(if (big) maxOf(3, (all.size + 1) / 2) else 1 + (random.next() * 2f).toInt())
             }
         }
-        for (gene in all) gene.advance(deltaSeconds, gestures.barSeconds)
-        walk = (gestures.phrases + gestures.phrasePhase) / 8f
+        for (gene in all) gene.advance(deltaSeconds, gestures.cycleSeconds)
+        walk = (gestures.slowCycles + gestures.slowCyclePhase) / 8f
     }
 
     /** Changes [count] genes at once, for a button that says "change it now". */
@@ -197,7 +197,7 @@ public class Genes(seed: Long) {
 
     public fun restart() {
         random.reset()
-        phrasesSeen = 0
+        sectionsSeen = 0
         changes = 0
         walk = 0f
         for (gene in all) gene.restart()

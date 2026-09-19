@@ -7,7 +7,7 @@ import kotlin.math.round
  * The palette actually drawn with: the one asked for, reached gradually, and leaning slightly
  * towards the key of the music.
  *
- * A change of palette fades over two bars instead of cutting, by blending the old colours into the
+ * A change of palette fades over eight accepted pulses instead of cutting, by blending the old colours into the
  * new ones; with no tempo it takes three seconds. When the key is clear, every hue turns up to twenty
  * degrees towards the key's own colour, so two songs in the same palette still look a little different.
  */
@@ -36,7 +36,7 @@ internal class PaletteFade {
             progress = 0f
         }
         if (progress >= 1f) return shown
-        val seconds = if (frame.bpm > 0f && frame.beatConfidence > 0.4f) 8f * 60f / frame.bpm else 3f
+        val seconds = if (frame.rhythm?.usable == true) 8f * 60f / frame.bpm else 3f
         progress = (progress + deltaSeconds / seconds).coerceAtMost(1f)
         val eased = progress * progress * (3f - 2f * progress)
         val next = if (progress >= 1f) wanted else (from ?: wanted).mixedWith(wanted, eased)

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -165,7 +166,8 @@ internal fun PostProcessedBox(
                 drawContent()
                 return@drawWithContent
             }
-            val current = frame()
+            // The scene inside redraws on its own ticks; the shared analysis alone must not.
+            val current = Snapshot.withoutReadObservation { frame() }
             // The moment a drop lands the picture sticks for two frames, the way a signal catches,
             // and then it tears.
             if (!(post.glitch && hold.holding(current.dropPulse))) {

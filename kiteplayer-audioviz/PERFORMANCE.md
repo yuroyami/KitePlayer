@@ -68,6 +68,50 @@ scale; they are separate from the visible-window measurements above.
 
 ## Reproduce
 
+### Spectral analysis comparison on 2026-09-19
+
+Packing two real channels into one complex FFT preserves their separate spectral powers and
+reduces transform work. The independent DFT tests cover unrelated channels, odd channel counts,
+opposite polarity, DC, Nyquist and wrapped input rings.
+
+The development Mac ran four separate JDK 21 processes in before/after/after/before order. Each
+case used a 2048-sample Hann window, 40 ERB bands and 48 kHz input, with 30,000 warmup and 30,000
+measured calls. The table gives the range of mean thread CPU times across the two runs of each
+variant. Other builds were active, so these are algorithm probes under host load, not release
+device qualification. The mono measurements overlap.
+
+| Channels | Separate transforms, ms/call | Packed transforms, ms/call |
+| --- | ---: | ---: |
+| 1 | 0.0504-0.0521 | 0.0468-0.0531 |
+| 2 | 0.0972-0.1013 | 0.0487-0.0544 |
+| 3 | 0.1471-0.1502 | 0.1100-0.1141 |
+| 6 | 0.2672-0.3089 | 0.1638-0.1735 |
+
+The stereo transform stage used about 48% less thread CPU in this paired probe; six channels
+used about 41% less. These percentages apply to `SpectralPower.measure`, not the whole analyser,
+playback pipeline, render frame or phone budget. Full-analyser probes showed substantial run-to-run
+variation under concurrent load; they do not support a precise end-to-end speedup claim.
+
+The reproducible harness is [KiteSpectralProfile.java](../scripts/benchmarks/KiteSpectralProfile.java).
+Compile it with JDK 21 against an audioviz JVM jar and Kotlin stdlib, then run the same class
+against each candidate jar in separate JVMs with `-Xms128m -Xmx128m`. It prints JSON lines and
+does not assert a hardware-independent timing threshold. The measured pre-change jar SHA-256 was
+`36c72ad88316a7f6a3d3f914ffee9c271c526c0b5e4e7643b8119c6e2715a3c9`; the packed jar was
+`4975118666039b7cac14398d6d6fd08c49c0b0043e9479162028d44cc66ece6d`.
+These jars preceded the later event-history integration; only their spectral stage is compared.
+
+### Rendering
+
+The synthetic render harness uses an independent audible clock and a 200 ms decoded lead.
+It samples continuous features at that clock, consumes timestamped events with a cursor, and
+exposes at most 100 ms of real lookahead while drawing. Input ends without replaying the opening.
+These are generated development signals, not held-out recognition clips or physical output.
+The separately prepared drawing-cost states omit a live future reader because their clock would
+otherwise point to the end of preparation when an earlier saved state is drawn. The frame-by-frame
+render harness exercises event anticipation. The 2026-09-12 measurements above predate this
+fixture correction and the subsequent calibrated analysis/event changes; they remain historical
+comparisons, not measurements of the current implementation.
+
 Run performance measurements alone with the machine idle. The desktop task opens
 a temporary window; keep it visible. Timing assertions do not run in the ordinary
 unit-test gate.
@@ -84,7 +128,7 @@ cadence, CPU preparation and feedback scale. Frame cadence includes scheduling
 and display pacing; it is not a GPU execution timer. A CPU raster benchmark alone
 cannot establish interactive GPU performance.
 
-## Validation
+## Rendering validation recorded on 2026-09-12
 
 Platform Kotlin and the module build file changed, selecting the repository's
 Tier 2 gate. The macOS, iOS simulator, JVM, web Node, native sanitizer, Linux native,

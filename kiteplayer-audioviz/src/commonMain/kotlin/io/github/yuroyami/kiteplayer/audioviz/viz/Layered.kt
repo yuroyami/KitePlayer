@@ -36,20 +36,23 @@ internal class Kit(
     /** Width over height of the canvas, as last seen. */
     var aspect: Float = 16f / 9f
         private set
-    private var advancedAt = Float.NaN
+    private val step = DisplayStep()
 
-    /** Moves everything shared on by one frame. True on the first call of a frame. */
-    fun advance(state: VizRenderState, size: Size): Boolean {
-        if (state.timeSeconds == advancedAt) return false
-        advancedAt = state.timeSeconds
+    /**
+     * Moves everything shared on by one frame. Returns the state the actors integrate, or null when
+     * this state was already consumed. A new frame at a consumed instant integrates no time.
+     */
+    fun advance(state: VizRenderState, size: Size): VizRenderState? {
+        val dt = step.of(state) ?: return null
         if (size.height > 0f) aspect = size.width / size.height
         gestures.update(state)
-        genes.advance(gestures, state.deltaSeconds)
+        genes.advance(gestures, dt)
         camera.advance(state)
-        split.update(state.frame.bandsRel, state.deltaSeconds)
+        split.update(state.frame.bandsRel, dt)
         ground?.walk = genes.walk
         detail?.walk = genes.walk
-        return true
+        return if (dt == state.deltaSeconds) state
+            else VizRenderState(state.frame, state.timeSeconds, dt, state.palette, state.musicTime, state.future)
     }
 
     /** Sets anchor [index] to a point given in shares of the screen before the camera. */
@@ -66,7 +69,7 @@ internal class Kit(
         split.reset()
         ground?.reset()
         detail?.reset()
-        advancedAt = Float.NaN
+        step.reset()
     }
 }
 
@@ -100,12 +103,12 @@ internal abstract class Layered(
     protected open val cameraOnEcho: Boolean get() = true
 
     final override fun DrawScope.draw(state: VizRenderState) {
-        if (kit.advance(state, size)) advance(state)
+        kit.advance(state, size)?.let { advance(it) }
         if (cameraOnEcho) withCamera(camera, 1f) { drawEcho(state) } else drawEcho(state)
     }
 
     final override fun DrawScope.drawFront(state: VizRenderState) {
-        if (kit.advance(state, size)) advance(state)
+        kit.advance(state, size)?.let { advance(it) }
         withCamera(camera, frontParallax) { drawTop(state) }
     }
 

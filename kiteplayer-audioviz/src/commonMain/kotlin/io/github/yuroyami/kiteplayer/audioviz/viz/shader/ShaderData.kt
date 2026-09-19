@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 import androidx.compose.ui.graphics.toArgb
 import io.github.yuroyami.kiteplayer.audioviz.viz.PixelImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
+import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
 
 /**
  * The readings a shader looks things up in, kept as very small pictures.
@@ -27,6 +28,8 @@ internal class ShaderData {
 
     private val bands = PixelImage(ShaderLibrary.BANDS, 1)
     private val scope = PixelImage(ShaderLibrary.SCOPE, 1)
+    private val scopeSampler = WaveformResampler()
+    private val scopeSamples = FloatArray(ShaderLibrary.SCOPE)
     private val palette = PixelImage(PALETTE_STEPS, 1)
     private val history = PixelImage(ShaderLibrary.BANDS, ShaderLibrary.HISTORY)
     private var historyRow = 0
@@ -41,12 +44,13 @@ internal class ShaderData {
         }
     }
 
-    /** Redraws the waveform strip, with zero sitting at half brightness. */
+    /** Redraws a filtered waveform strip, with zero sitting at half brightness. */
     fun writeScope(values: FloatArray, gain: Float = 1f) {
-        writeStrip(scope, ShaderLibrary.SCOPE) { at ->
-            val read = sample(values, at) * gain
-            red(read * 0.5f + 0.5f)
+        scopeSampler.resample(values, scopeSamples)
+        for (pixel in scopeSamples.indices) {
+            scope.pixels[pixel] = red(scopeSamples[pixel] * gain * 0.5f + 0.5f)
         }
+        scope.upload()
     }
 
     /** Redraws the colour ramp, but only when the palette has actually changed. */

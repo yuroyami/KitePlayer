@@ -1,180 +1,100 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.Generation
+import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import io.github.yuroyami.kiteplayer.spi.ChannelLayout
+import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import kotlin.concurrent.Volatile
 import kotlin.math.exp
-import kotlin.math.ln
-import kotlin.math.log10
 import kotlin.math.sqrt
+import kotlin.math.roundToInt
 
 /**
- * Turns a stream of audio samples into something that looks like a music player's spectrum.
+ * Causal, sample-timed audio analysis with per-channel power and one shared display gain.
  *
- * Feed it interleaved samples with [feed] as they go to the speakers. It mixes them to mono,
- * runs an FFT every [hop] samples, and publishes the result to [latest].
+ * Feed sanitised or borrowed interleaved samples from one analysis thread. Short spectra use a
+ * Hann window, per-channel power averaging and fractional ERB integration. Programme loudness
+ * uses an independently timed 400 ms K-weighted channel sum. All energy display drivers share
+ * its bounded causal or fixed-song reference and their fast/slow envelopes advance in media time.
+ * Mono mixing is only for the decorative scope; opposite channel polarities retain their energy.
  *
- * The FFT is the easy half. What makes the picture look right is the shaping after it:
- * bars spaced by ear rather than evenly, a decibel scale, a fast rise with a slow fall, and
- * caps that hang for a moment before dropping. A raw FFT plotted directly looks like noise.
- *
- * Three things here are not about the spectrum at all, and they are what let a drawing tell a
- * ballad from a banger. [MoodTracker] places the present moment inside the range this song has
- * used, so the answer does not depend on how the track was mastered. [TempoTracker] finds the
- * beat and keeps a running position inside the bar. [Timbre] reads the key and the brightness.
- * All three run off numbers the FFT produced anyway.
- *
- * One thread feeds, any thread reads [latest]. There is no lock: each analysis publishes a
- * whole new [SpectrumFrame] and the reader either sees the old one or the new one.
+ * Each analysis publishes new snapshot storage. Readers may retain an old frame while analysis
+ * continues. The recognition helpers are separate from the calibrated power and display paths.
  */
 @AudioVizAuthoringApi
 public class SpectrumAnalyzer(
-    /** Points per FFT. 2048 at 48 kHz is about 43 ms of sound, which is the usual compromise. */
-    public val fftSize: Int = 2048,
+    /** Points per FFT, or zero for a power of two spanning at most 50 ms. */
+    fftSize: Int = 0,
     /** How many bars to draw. */
-    public val bandCount: Int = 48,
-    /** How many samples of new audio trigger the next analysis. Sets the refresh rate. */
-    public val hop: Int = 512,
-    /** Points in the oscilloscope trace. */
-    public val scopePoints: Int = 256,
+    public val bandCount: Int = 40,
+    /** New samples per analysis, or zero for 10 ms rounded to whole samples. */
+    hop: Int = 0,
+    /** Requested scope points, limited to the resolved FFT size. */
+    scopePoints: Int = 256,
     private val sampleRate: Int = 48_000,
-    /** The lowest bar's frequency. Below this is mostly rumble and room noise. */
-    private val minHz: Float = 35f,
-    /** The highest bar's frequency, capped to what the rate can carry. */
-    private val maxHz: Float = 16_000f,
-    /** Anything quieter than this reads as an empty bar. */
-    private val floorDb: Float = -72f,
-    /** How fast a bar rises towards a louder reading, 0 to 1. */
-    private val attack: Float = 0.6f,
-    /** How fast a bar falls towards a quieter one, 0 to 1. Slower than [attack] on purpose. */
-    private val release: Float = 0.13f,
-    /** How many analyses a cap hangs at its high point before it starts to fall. */
-    private val peakHoldFrames: Int = 14,
-    /** How much speed a falling cap gains per analysis. */
-    private val peakGravity: Float = 0.0035f,
-    /** How much of the beat flash survives each analysis. Lower makes a sharper flash. */
-    private val pulseDecay: Float = 0.86f,
     /** Points in each channel of the stereo trace, for a drawing that plots left against right. */
-    public val stereoPoints: Int = 512,
+    stereoPoints: Int = 512,
 ) {
+    public val fftSize: Int = if (fftSize == 0) transientFftSize(sampleRate) else fftSize
+    public val hop: Int = if (hop == 0) (sampleRate / 100.0).roundToInt().coerceAtLeast(1) else hop
+    public val scopePoints: Int = minOf(scopePoints, this.fftSize)
+    public val stereoPoints: Int = minOf(stereoPoints, this.fftSize)
+
     init {
+        require(this.fftSize in 4..32_768) { "fftSize must be 4..32768" }
         require(bandCount in 1..512) { "bandCount must be 1..512, was $bandCount" }
-        require(hop in 1..fftSize) { "hop must be 1..$fftSize, was $hop" }
-        require(scopePoints in 2..fftSize) { "scopePoints must be 2..$fftSize, was $scopePoints" }
-        require(sampleRate > 0) { "sampleRate must be positive, was $sampleRate" }
+        require(this.hop in 1..this.fftSize) { "hop must fit the analysis window" }
+        require(this.scopePoints in 2..this.fftSize) { "scopePoints must contain at least two points" }
+        require(this.stereoPoints in 2..this.fftSize) { "stereoPoints must contain at least two points" }
+        require(sampleRate in 1_000..768_000) { "supported sample rates are 1000..768000 Hz" }
     }
 
-    private val fft = Fft(fftSize)
-    private val window = Fft.hannWindow(fftSize)
-    private val usableBins = fftSize / 2
-    private val stereoLength = stereoPoints.coerceIn(2, fftSize)
+    private val spectralPower = SpectralPower(this.fftSize, sampleRate, bandCount)
+    private var channelRings = emptyArray<FloatArray>()
+    private var inputFormat: AudioFormat? = null
+    private var sanitisedSamples = 0L
+    /** Number of non-finite or beyond-headroom samples sanitised by direct PCM input. */
+    public val sanitizedSamples: Long get() = sanitisedSamples
+    private val usableBins = this.fftSize / 2
+    private val stereoLength = this.stereoPoints
 
-    /**
-     * A second, much longer FFT used only for the lowest bars.
-     *
-     * At 2048 points a bin is 23 Hz wide, so every bar below about 100 Hz shares its bins with
-     * its neighbours and they all move together in a block. Four times the points is four times
-     * the resolution exactly where the ear has the most, and it costs little because it only has
-     * to run every fourth analysis: bass does not change fast enough to need more.
-     */
-    private val bassFftSize = (fftSize * 4).coerceAtMost(16_384)
-    private val bassFft = Fft(bassFftSize)
-    private val bassWindow = Fft.hannWindow(bassFftSize)
-    private val bassUsableBins = bassFftSize / 2
-    private val bassRing = FloatArray(bassFftSize)
-    private var bassWriteIndex = 0
-    private val bassReal = FloatArray(bassFftSize)
-    private val bassImaginary = FloatArray(bassFftSize)
-    private val bassMagnitudes = FloatArray(bassUsableBins)
-    // Starts primed so the lowest bars are right on the very first analysis rather than after four.
-    private var sinceBassAnalysis = BASS_EVERY
+    private var programmePower: ProgrammePower? = null
+    private val displayScale = DisplayScale()
+    private val bandEnvelopes = Array(bandCount) { EnergyEnvelope() }
+    private val overallEnvelope = EnergyEnvelope()
+    private val bassEnvelope = EnergyEnvelope()
+    private val midEnvelope = EnergyEnvelope()
+    private val trebleEnvelope = EnergyEnvelope()
 
     // The newest fftSize mono samples, oldest overwritten first.
-    private val ring = FloatArray(fftSize)
-    private val ringLeft = FloatArray(fftSize)
-    private val ringRight = FloatArray(fftSize)
+    private val ring = FloatArray(this.fftSize)
+    private val ringLeft = FloatArray(this.fftSize)
+    private val ringRight = FloatArray(this.fftSize)
     private var writeIndex = 0
     private var samplesSinceAnalysis = 0
     private var samplesSeen = 0L
-    private var startMicros = -1L
+    private var startMicros: Long? = null
+    internal var generation: Generation = Generation.Initial
+    internal var analysisRevision: Long = 0L
 
-    private val real = FloatArray(fftSize)
-    private val imaginary = FloatArray(fftSize)
     private val magnitudes = FloatArray(usableBins)
 
-    // Carried between analyses: this is where the smoothing and the caps live.
-    private val smoothed = FloatArray(bandCount)
-    private val peaks = FloatArray(bandCount)
-    private val peakHold = IntArray(bandCount)
-    private val peakSpeed = FloatArray(bandCount)
-    private val relative = FloatArray(bandCount)
-    private val quietScratch = FloatArray(bandCount)
-    private val sorted = FloatArray(bandCount)
-    private var smoothBass = 0f
-    private var smoothMid = 0f
-    private var smoothTreble = 0f
     private var kickPulse = 0f
     private var snarePulse = 0f
     private var hatPulse = 0f
     private var pulse = 0f
     private var smoothWidth = 0f
 
-    private val analysesPerSecond = sampleRate.toFloat() / hop
-    private val secondsPerAnalysis = hop.toFloat() / sampleRate
+    private val analysesPerSecond = sampleRate.toFloat() / this.hop
+    private val secondsPerAnalysis = this.hop.toFloat() / sampleRate
 
-    private val beatDetector = BeatDetector(usableBins, sampleRate, fftSize)
+    private val beatDetector = BeatDetector(usableBins, sampleRate, this.fftSize, this.hop)
     private val tempo = TempoTracker(analysesPerSecond)
-    private val timbre = Timbre(usableBins, sampleRate, fftSize)
+    private val timbre = Timbre(usableBins, sampleRate, this.fftSize)
     private val moodTracker = MoodTracker(analysesPerSecond)
-    private val loudnessWeights = Loudness.weightsFor(usableBins, sampleRate, fftSize)
-
-    private val levelRange = RunningRange(0.35f, 0.2f, 0f, 0.6f)
-    private val bassRange = RunningRange(0.35f, 0.2f, 0f, 0.6f)
-    private val midRange = RunningRange(0.35f, 0.2f, 0f, 0.6f)
-    private val trebleRange = RunningRange(0.35f, 0.2f, 0f, 0.6f)
-
-    /** First and last FFT bin of each bar, spaced logarithmically because hearing is. */
-    private val bandStart = IntArray(bandCount)
-    private val bandEnd = IntArray(bandCount)
-
-    /** The same bars against the long FFT, for the ones low enough to need it. */
-    private val bassBandStart = IntArray(bandCount)
-    private val bassBandEnd = IntArray(bandCount)
-    private val bassBandValue = FloatArray(bandCount)
-    private var bassBandCount = 0
-
-    private val binsPerHz = fftSize.toFloat() / sampleRate
-    private val bassEndBin = binFor(250f)
-    private val midEndBin = binFor(2_000f)
-
-    init {
-        val usableTop = minOf(maxHz, sampleRate / 2f * 0.95f)
-        val ratio = ln(usableTop / minHz)
-        val lastBin = usableBins - 1
-        val bassBinsPerHz = bassFftSize.toFloat() / sampleRate
-        val lastBassBin = bassUsableBins - 1
-        for (band in 0 until bandCount) {
-            val low = minHz * exp(ratio * band / bandCount)
-            val high = minHz * exp(ratio * (band + 1) / bandCount)
-            val start = (low * binsPerHz).toInt().coerceIn(1, lastBin)
-            // At least one bin wide, or the lowest bars would all read the same value.
-            val end = (high * binsPerHz).toInt().coerceIn(start + 1, lastBin + 1)
-            bandStart[band] = start
-            bandEnd[band] = end
-
-            if (high < FINE_BASS_TOP_HZ) {
-                val bassStart = (low * bassBinsPerHz).toInt().coerceIn(1, lastBassBin)
-                val bassEnd = (high * bassBinsPerHz).toInt().coerceIn(bassStart + 1, lastBassBin + 1)
-                bassBandStart[band] = bassStart
-                bassBandEnd[band] = bassEnd
-                bassBandCount = band + 1
-            }
-        }
-    }
-
-    private fun binFor(hz: Float): Int = (hz * binsPerHz).toInt().coerceIn(1, usableBins - 1)
-
     /** The newest analysis. Read it from the drawing thread as often as you like. */
     @Volatile
-    public var latest: SpectrumFrame = SpectrumFrame.silent(bandCount, scopePoints)
+    public var latest: SpectrumFrame = SpectrumFrame.silent(bandCount, this.scopePoints)
         private set
 
     /**
@@ -188,27 +108,50 @@ public class SpectrumAnalyzer(
 
     /**
      * Takes [frames] sample frames of [channels]-channel interleaved audio and analyses whatever
-     * it can. [ptsMicros] is the media timestamp of the first frame, or a negative number when
-     * there is none: it is copied onto the results so a drawing can be lined up with the sound.
+     * it can. [ptsMicros] is the media timestamp of the first frame, or null when unknown.
+     * Zero and negative positions are valid timestamps.
      */
-    public fun feed(interleaved: FloatArray, frames: Int, channels: Int, ptsMicros: Long = -1L) {
-        require(channels > 0) { "channels must be positive, was $channels" }
-        if (frames <= 0) return
-        if (startMicros < 0 && ptsMicros >= 0) {
+    public fun feed(interleaved: FloatArray, frames: Int, channels: Int, ptsMicros: Long? = null) {
+        feed(interleaved, frames, AudioFormat(sampleRate, channels, SampleFormat.F32, ChannelLayout.Unknown), ptsMicros)
+    }
+
+    /**
+     * PCM with explicit layout metadata. Its sample rate must match this analyser. Reset before
+     * changing channels or layout; a different sample rate needs a new analyser. Inputs are floats
+     * regardless of [AudioFormat.sampleFormat]. Non-finite values become zero and finite values
+     * are limited to amplitude +/-16, with each change counted in [sanitizedSamples].
+     */
+    public fun feed(interleaved: FloatArray, frames: Int, format: AudioFormat, ptsMicros: Long? = null) {
+        val channels = format.channels
+        require(channels in 1..64) { "channels must be 1..64, was $channels" }
+        require(format.sampleRate == sampleRate) { "sample rate does not match this analyser" }
+        require(frames >= 0 && frames <= interleaved.size / channels) { "sample frame count does not fit input" }
+        if (frames == 0) return
+        require(inputFormat == null || inputFormat == format) { "reset before changing the audio format" }
+        if (inputFormat == null) programmePower = ProgrammePower(format)
+        inputFormat = format
+        if (channelRings.size != channels) channelRings = Array(channels) { FloatArray(fftSize) }
+        if (startMicros == null && ptsMicros != null) {
             startMicros = ptsMicros - samplesSeen * 1_000_000L / sampleRate
         }
 
         for (frame in 0 until frames) {
             var mono = 0f
             val base = frame * channels
-            for (channel in 0 until channels) mono += interleaved[base + channel]
+            for (channel in 0 until channels) {
+                val input = interleaved[base + channel]
+                val safe = if (input.isFinite()) input.coerceIn(-16f, 16f) else 0f
+                if (safe != input) sanitisedSamples++
+                channelRings[channel][writeIndex] = safe
+                programmePower?.addChannel(channel, safe)
+                mono += safe
+            }
+            programmePower?.endFrame()
             mono /= channels
             ring[writeIndex] = mono
-            ringLeft[writeIndex] = interleaved[base]
-            ringRight[writeIndex] = if (channels > 1) interleaved[base + 1] else interleaved[base]
+            ringLeft[writeIndex] = channelRings[0][writeIndex]
+            ringRight[writeIndex] = channelRings[if (channels > 1) 1 else 0][writeIndex]
             writeIndex = (writeIndex + 1) % fftSize
-            bassRing[bassWriteIndex] = mono
-            bassWriteIndex = (bassWriteIndex + 1) % bassFftSize
             samplesSeen++
             if (++samplesSinceAnalysis >= hop) {
                 samplesSinceAnalysis = 0
@@ -217,21 +160,40 @@ public class SpectrumAnalyzer(
         }
     }
 
-    /** Drops every carried value. Call it on a seek so old bars do not fall into the new music. */
+    /**
+     * A complete-song reference in linear K-weighted programme power. Positive finite values
+     * transition the one shared gain over two media seconds. Null resumes the causal reference.
+     * Call on the feeding thread. Reset retains this value for seeks; clear it for another song.
+     */
+    public fun setSongReferencePower(power: Double?) {
+        displayScale.setReference(power)
+    }
+
+    /** Drops carried values and advances local continuity. Pair with [SpectrumTimeline.clear]. */
     public fun reset() {
+        reset(generation, analysisRevision + 1L)
+    }
+
+    /**
+     * Resets into an explicitly supplied timeline identity. Call on the feeding thread, then
+     * publish into a timeline with matching [SpectrumTimeline.generation] and
+     * [SpectrumTimeline.revision]. This does not itself reset that timeline.
+     */
+    public fun reset(generation: Generation, analysisRevision: Long) {
+        this.generation = generation
+        this.analysisRevision = analysisRevision
+        inputFormat = null
+        programmePower = null
+        displayScale.reset()
+        bandEnvelopes.forEach { it.reset() }
+        overallEnvelope.reset()
+        bassEnvelope.reset()
+        midEnvelope.reset()
+        trebleEnvelope.reset()
+        channelRings.forEach { it.fill(0f) }
         ring.fill(0f)
         ringLeft.fill(0f)
         ringRight.fill(0f)
-        bassRing.fill(0f)
-        bassBandValue.fill(0f)
-        smoothed.fill(0f)
-        peaks.fill(0f)
-        peakHold.fill(0)
-        peakSpeed.fill(0f)
-        relative.fill(0f)
-        smoothBass = 0f
-        smoothMid = 0f
-        smoothTreble = 0f
         pulse = 0f
         kickPulse = 0f
         snarePulse = 0f
@@ -241,32 +203,21 @@ public class SpectrumAnalyzer(
         tempo.reset()
         timbre.reset()
         moodTracker.reset()
-        levelRange.reset()
-        bassRange.reset()
-        midRange.reset()
-        trebleRange.reset()
         writeIndex = 0
-        bassWriteIndex = 0
-        sinceBassAnalysis = BASS_EVERY
         samplesSinceAnalysis = 0
         samplesSeen = 0
-        startMicros = -1L
+        startMicros = null
         latest = SpectrumFrame.silent(bandCount, scopePoints)
     }
 
     private fun analyse(channels: Int) {
-        // Unwrap the ring into the FFT input, oldest sample first, windowed on the way. The
-        // stereo sums ride along in the same pass rather than costing a second one.
+        // Unweighted time-domain energy and paired stereo statistics. Spectral measurement below
+        // keeps channels separate through the transform, so opposite polarities retain power.
         var read = writeIndex
-        var sumOfSquares = 0.0
         var sumLeftRight = 0.0
         var sumLeftLeft = 0.0
         var sumRightRight = 0.0
         for (index in 0 until fftSize) {
-            val sample = ring[read]
-            real[index] = sample * window[index]
-            imaginary[index] = 0f
-            sumOfSquares += sample.toDouble() * sample
             val left = ringLeft[read].toDouble()
             val right = ringRight[read].toDouble()
             sumLeftRight += left * right
@@ -276,72 +227,60 @@ public class SpectrumAnalyzer(
             if (read == fftSize) read = 0
         }
 
-        fft.forward(real, imaginary)
-
-        // Two for the window's coherent gain, two for folding the negative frequencies back in.
-        val scale = 4f / (fftSize * Fft.HANN_COHERENT_GAIN * 2f)
+        spectralPower.measure(channelRings, writeIndex)
         for (bin in 0 until usableBins) {
-            magnitudes[bin] = sqrt(real[bin] * real[bin] + imaginary[bin] * imaginary[bin]) * scale
+            magnitudes[bin] = spectralPower.toneAmplitude(bin)
         }
 
-        if (bassBandCount > 0 && ++sinceBassAnalysis >= BASS_EVERY) {
-            sinceBassAnalysis = 0
-            analyseBass()
+        val programme = checkNotNull(programmePower)
+        val delta = hop.toDouble() / sampleRate
+        displayScale.advance(programme.meanSquare, programme.digitalSilence, delta)
+        var saturated = 0
+        fun advance(envelope: EnergyEnvelope, power: Double) {
+            val normalised = power * displayScale.gain
+            if (normalised > 1.0) saturated++
+            envelope.advance(normalised, delta)
         }
-
-        var loudestBand = 0f
+        // A padded warmup window is not a measurement and cannot drive a false opening attack.
+        val ready = samplesSeen >= fftSize
         for (band in 0 until bandCount) {
-            var loudest = 0f
-            for (bin in bandStart[band] until bandEnd[band]) {
-                if (magnitudes[bin] > loudest) loudest = magnitudes[bin]
-            }
-            // The lowest bars take the long FFT's answer, which can actually tell them apart.
-            val target = if (band < bassBandCount) bassBandValue[band] else normalise(loudest)
-
-            val current = smoothed[band]
-            smoothed[band] = current + (target - current) * if (target > current) attack else release
-            if (smoothed[band] > loudestBand) loudestBand = smoothed[band]
-
-            if (smoothed[band] >= peaks[band]) {
-                peaks[band] = smoothed[band]
-                peakHold[band] = peakHoldFrames
-                peakSpeed[band] = 0f
-            } else if (peakHold[band] > 0) {
-                peakHold[band]--
-            } else {
-                peakSpeed[band] += peakGravity
-                peaks[band] = (peaks[band] - peakSpeed[band]).coerceAtLeast(smoothed[band])
-            }
+            advance(bandEnvelopes[band], if (ready) spectralPower.bands[band].toDouble() else 0.0)
         }
+        advance(overallEnvelope, if (ready) spectralPower.totalPower.toDouble() else 0.0)
+        advance(bassEnvelope, if (ready) spectralPower.integratedPower(0.0, 250.0) else 0.0)
+        advance(midEnvelope, if (ready) spectralPower.integratedPower(250.0, 2_000.0) else 0.0)
+        advance(trebleEnvelope, if (ready) spectralPower.integratedPower(2_000.0, sampleRate / 2.0) else 0.0)
+        val drivers = EnergyDrivers(
+            overallEnvelope.snapshot(), bassEnvelope.snapshot(), midEnvelope.snapshot(), trebleEnvelope.snapshot(),
+            Array(bandCount) { bandEnvelopes[it].snapshot() }, displayScale.referencePower, displayScale.gain,
+            displayScale.gainLimited, displayScale.handingOver, saturated,
+        )
+        val smoothed = FloatArray(bandCount) { drivers.band(it).fast }
+        val peaks = FloatArray(bandCount) { drivers.band(it).peak }
+        val sorted = smoothed.copyOf().also { it.sort() }
 
-        smoothBass = follow(smoothBass, loudestBetween(1, bassEndBin))
-        smoothMid = follow(smoothMid, loudestBetween(bassEndBin, midEndBin))
-        smoothTreble = follow(smoothTreble, loudestBetween(midEndBin, usableBins))
+        val detectedBeat = if (ready) beatDetector.feed(magnitudes, usableBins) else 0f
+        fun hit(strength: Float, power: Double): Float =
+            if (ready && strength > 0f) powerHeight(power * displayScale.gain).toFloat() else 0f
+        val beat = hit(detectedBeat, spectralPower.totalPower.toDouble())
+        val kick = hit(beatDetector.kick, spectralPower.integratedPower(40.0, 150.0))
+        val snare = hit(beatDetector.snare,
+            spectralPower.integratedPower(150.0, 300.0) + spectralPower.integratedPower(1_000.0, 5_000.0))
+        val hat = hit(beatDetector.hat, spectralPower.integratedPower(6_000.0, 16_000.0))
+        pulse = maxOf(pulse * exp(-secondsPerAnalysis / 0.07f), beat)
+        kickPulse = maxOf(kick, kickPulse * exp(-secondsPerAnalysis / 0.18f))
+        snarePulse = maxOf(snare, snarePulse * exp(-secondsPerAnalysis / 0.12f))
+        hatPulse = maxOf(hat, hatPulse * exp(-secondsPerAnalysis / 0.055f))
 
-        val beat = beatDetector.feed(magnitudes, usableBins)
-        pulse = maxOf(pulse * pulseDecay, beat)
-        kickPulse = maxOf(beatDetector.kick, kickPulse * exp(-secondsPerAnalysis / 0.18f))
-        snarePulse = maxOf(beatDetector.snare, snarePulse * exp(-secondsPerAnalysis / 0.12f))
-        hatPulse = maxOf(beatDetector.hat, hatPulse * exp(-secondsPerAnalysis / 0.055f))
-
-        val decibels = Loudness.decibels(magnitudes, loudnessWeights, usableBins)
         timbre.feed(magnitudes, secondsPerAnalysis)
-        tempo.feed(beatDetector.novelty, beatDetector.strength, secondsPerAnalysis)
-        // The quiet quarter of the spectrum, which is where the bottom of the bars' range sits.
-        smoothed.copyInto(quietScratch)
-        quietScratch.sort()
+        tempo.feed(if (ready) beatDetector.novelty else 0f, if (ready) beatDetector.strength else 0f, secondsPerAnalysis)
         moodTracker.feed(
-            loudnessDecibels = decibels,
-            loudestBand = loudestBand,
-            quietBand = quietScratch[bandCount / 4],
+            fastEnergy = drivers.overall.fast,
+            slowEnergy = drivers.overall.slow,
             onsetStrength = beatDetector.strength,
-            beatConfidence = tempo.confidence,
+            beatConfidence = if (tempo.usable) tempo.confidence else 0f,
             deltaSeconds = secondsPerAnalysis,
         )
-
-        for (band in 0 until bandCount) relative[band] = moodTracker.placeBand(smoothed[band])
-        relative.copyInto(sorted)
-        sorted.sort()
 
         val correlation =
             if (channels < 2 || sumLeftLeft <= 1e-12 || sumRightRight <= 1e-12) 1.0
@@ -349,16 +288,31 @@ public class SpectrumAnalyzer(
         // Identical channels give 1 and fully out of phase gives -1, so this reads 0 for mono
         // and 1 for the widest thing a stereo file can hold.
         val width = ((1.0 - correlation) * 0.5).toFloat().coerceIn(0f, 1f)
-        smoothWidth += (width - smoothWidth) * 0.08f
-
-        val rootMeanSquare = sqrt(sumOfSquares / fftSize).toFloat()
-        val level = normalise(rootMeanSquare)
+        smoothWidth += (width - smoothWidth) * (1 - exp(-secondsPerAnalysis / 0.12f))
 
         // The Hann window is centred here. Dating it at its oldest sample would put the picture
         // half an FFT window ahead of the sound (23 ms at 44.1 kHz).
-        val windowPts =
-            if (startMicros < 0) -1L
-            else startMicros + (samplesSeen - fftSize / 2).coerceAtLeast(0) * 1_000_000L / sampleRate
+        val windowPts = startMicros?.let {
+            it + (samplesSeen - fftSize / 2).coerceAtLeast(0) * 1_000_000L / sampleRate
+        }
+
+        val detections = if (!ready || windowPts == null) null else {
+            val available = checkNotNull(startMicros) + samplesSeen * 1_000_000L / sampleRate
+            // Causal growth responds to new input, not the older spectral centre. Estimate the
+            // attack within the newest hop; availability still includes the whole consumed window.
+            val eventReference = available - hop * 500_000L / sampleRate
+            val events = ArrayList<AudioDetection>(5)
+            fun record(kind: AudioEventKind, detected: Boolean, strength: Float) {
+                if (detected) events.add(AudioDetection(kind, eventReference, available, strength,
+                    beatDetector.confidence(kind), beatDetector.surprise(kind)))
+            }
+            record(AudioEventKind.Onset, detectedBeat > 0f, beat)
+            record(AudioEventKind.LowTransient, beatDetector.kick > 0f, kick)
+            record(AudioEventKind.BodyTransient, beatDetector.snare > 0f, snare)
+            record(AudioEventKind.HighTransient, beatDetector.hat > 0f, hat)
+            record(AudioEventKind.EnergyRise, moodTracker.drop, drivers.overall.fast)
+            AudioDetections(available, eventReference, events.toTypedArray())
+        }
 
         // The tempo tracker advances at the newest sample. Publish its phase at the same
         // centre timestamp as the spectrum, rather than mixing two time origins in one frame.
@@ -368,31 +322,77 @@ public class SpectrumAnalyzer(
             return shifted - kotlin.math.floor(shifted)
         }
         val beatPhase = phaseAtCentre(tempo.beatPhase, 1f)
+        val rhythm = if (ready && windowPts != null) {
+            val available = checkNotNull(startMicros) + samplesSeen * 1_000_000L / sampleRate
+            RhythmEstimate(windowPts, available, available + (tempo.remainingEvidenceSeconds * 1_000_000L).toLong(),
+                tempo.revision, tempo.bpm, tempo.tempoConfidence, tempo.confidence, tempo.usable,
+                beatPhase, tempo.alternativeBpm, tempo.alternativeConfidence)
+        } else null
+        val monoStart = triggerStart(scopePoints)
         val stereoStart = triggerStart(stereoLength)
         val frame = SpectrumFrame(
-            ptsMicros = windowPts,
-            bands = smoothed.copyOf(),
-            peaks = peaks.copyOf(),
-            scope = readTriggeredScope(),
-            level = level,
-            bass = smoothBass,
-            mid = smoothMid,
-            treble = smoothTreble,
+            ptsMicros = windowPts ?: -1L,
+            hasTimestamp = windowPts != null,
+            generation = generation,
+            analysisRevision = analysisRevision,
+            detections = detections,
+            availability = if (samplesSeen < fftSize) AnalysisAvailability.WarmingUp else AnalysisAvailability.Ready,
+            power = if (samplesSeen < fftSize) null else PowerSpectrum(
+                window = AnalysisWindow(
+                    startMicros?.let { it + (samplesSeen - fftSize) * 1_000_000L / sampleRate },
+                    startMicros?.let { it + samplesSeen * 1_000_000L / sampleRate },
+                    windowPts, sampleRate, fftSize,
+                ),
+                generation = generation,
+                analysisRevision = analysisRevision,
+                channelCount = channels,
+                channelLayout = checkNotNull(inputFormat).channelLayout,
+                channelLayoutMask = inputFormat?.channelLayoutMask,
+                totalMeanSquare = spectralPower.totalPower,
+                bins = spectralPower.bins.copyOf(),
+                bands = spectralPower.bands.copyOf(),
+                edges = spectralPower.edgesHz.copyOf(),
+            ),
+            programme = ProgrammeLoudness(
+                availability = when {
+                    !programme.supported -> AnalysisAvailability.Unavailable
+                    !programme.ready -> AnalysisAvailability.WarmingUp
+                    else -> AnalysisAvailability.Ready
+                },
+                window = if (!programme.ready) null else AnalysisWindow(
+                    startMicros?.let { it + (samplesSeen - programme.windowSamples) * 1_000_000L / sampleRate },
+                    startMicros?.let { it + samplesSeen * 1_000_000L / sampleRate },
+                    startMicros?.let { it + (samplesSeen - programme.windowSamples / 2) * 1_000_000L / sampleRate },
+                    sampleRate, programme.windowSamples,
+                ),
+                meanSquare = programme.meanSquare,
+                digitalSilence = programme.digitalSilence,
+            ),
+            drivers = drivers,
+            bands = smoothed,
+            peaks = peaks,
+            scope = readTriggeredScope(monoStart),
+            scopeMetadata = traceMetadata(monoStart, scopePoints, channels, WaveformChannels.MeanAll),
+            stereoScopeMetadata = traceMetadata(stereoStart, stereoLength, channels, WaveformChannels.FirstPair),
+            level = drivers.overall.fast,
+            bass = drivers.bass.fast,
+            mid = drivers.mid.fast,
+            treble = drivers.treble.fast,
             beat = beat,
             pulse = pulse,
-            bandsRel = relative.copyOf(),
-            bandsSorted = sorted.copyOf(),
-            levelRel = levelRange.place(level, secondsPerAnalysis),
-            bassRel = bassRange.place(smoothBass, secondsPerAnalysis),
-            midRel = midRange.place(smoothMid, secondsPerAnalysis),
-            trebleRel = trebleRange.place(smoothTreble, secondsPerAnalysis),
-            kick = beatDetector.kick,
-            snare = beatDetector.snare,
-            hat = beatDetector.hat,
+            bandsRel = smoothed,
+            bandsSorted = sorted,
+            levelRel = drivers.overall.fast,
+            bassRel = drivers.bass.fast,
+            midRel = drivers.mid.fast,
+            trebleRel = drivers.treble.fast,
+            kick = kick,
+            snare = snare,
+            hat = hat,
             kickPulse = kickPulse,
             snarePulse = snarePulse,
             hatPulse = hatPulse,
-            onsetStrength = beatDetector.strength,
+            onsetStrength = beat,
             novelty = beatDetector.novelty,
             energy = moodTracker.energy,
             density = moodTracker.density,
@@ -404,11 +404,12 @@ public class SpectrumAnalyzer(
             dropPulse = moodTracker.dropPulse,
             breakdown = moodTracker.breakdown,
             bpm = tempo.bpm,
-            beatConfidence = tempo.confidence,
+            beatConfidence = if (tempo.usable) tempo.confidence else 0f,
             beatPhase = beatPhase,
-            barPhase = phaseAtCentre(tempo.alignedBarPhase(), 4f),
-            phrasePhase = phaseAtCentre(tempo.alignedPhrasePhase(), 16f),
-            beatInSeconds = if (tempo.bpm > 0f) (1f - beatPhase) * 60f / tempo.bpm else -1f,
+            barPhase = 0f,
+            phrasePhase = 0f,
+            beatInSeconds = rhythm?.beatInSeconds ?: -1f,
+            rhythm = rhythm,
             chroma = timbre.chroma.copyOf(),
             keyHue = timbre.keyHue,
             keyConfidence = timbre.keyConfidence,
@@ -422,30 +423,6 @@ public class SpectrumAnalyzer(
         latest = frame
     }
 
-    /** The long FFT, run for the low bars only. */
-    private fun analyseBass() {
-        var read = bassWriteIndex
-        for (index in 0 until bassFftSize) {
-            bassReal[index] = bassRing[read] * bassWindow[index]
-            bassImaginary[index] = 0f
-            read++
-            if (read == bassFftSize) read = 0
-        }
-        bassFft.forward(bassReal, bassImaginary)
-        val scale = 4f / (bassFftSize * Fft.HANN_COHERENT_GAIN * 2f)
-        for (bin in 0 until bassUsableBins) {
-            bassMagnitudes[bin] =
-                sqrt(bassReal[bin] * bassReal[bin] + bassImaginary[bin] * bassImaginary[bin]) * scale
-        }
-        for (band in 0 until bassBandCount) {
-            var loudest = 0f
-            for (bin in bassBandStart[band] until bassBandEnd[band]) {
-                if (bassMagnitudes[bin] > loudest) loudest = bassMagnitudes[bin]
-            }
-            bassBandValue[band] = normalise(loudest)
-        }
-    }
-
     /**
      * The waveform, started at a rising zero crossing so the trace holds still.
      *
@@ -453,13 +430,29 @@ public class SpectrumAnalyzer(
      * cycle each time and the picture swims. Every oscilloscope ever built solves this the same
      * way: wait for the signal to cross zero going upward, and start drawing there.
      */
-    private fun readTriggeredScope(): FloatArray {
+    private fun readTriggeredScope(start: Int): FloatArray {
         val out = FloatArray(scopePoints)
-        val start = triggerStart(scopePoints)
         for (point in 0 until scopePoints) {
             out[point] = ring[((start + point) % fftSize + fftSize) % fftSize]
         }
         return out
+    }
+
+    private fun traceMetadata(start: Int, points: Int, channels: Int, projection: WaveformChannels): WaveformMetadata? {
+        if (samplesSeen < fftSize) return null
+        val first = samplesSeen + start - writeIndex
+        return WaveformMetadata(
+            window = AnalysisWindow(
+                startMicros?.let { it + first * 1_000_000L / sampleRate },
+                startMicros?.let { it + (first + points) * 1_000_000L / sampleRate },
+                startMicros?.let { it + (first * 2 + points) * 500_000L / sampleRate },
+                sampleRate, points,
+            ),
+            firstSampleIndex = first,
+            triggerOffsetSamples = start - (writeIndex - points),
+            channels = projection,
+            sourceChannelCount = channels,
+        )
     }
 
     /**
@@ -494,26 +487,13 @@ public class SpectrumAnalyzer(
         return out
     }
 
-    private fun loudestBetween(fromBin: Int, toBin: Int): Float {
-        var loudest = 0f
-        for (bin in fromBin until toBin) {
-            if (magnitudes[bin] > loudest) loudest = magnitudes[bin]
-        }
-        return normalise(loudest)
-    }
+}
 
-    /** A magnitude as a 0..1 position on the decibel scale between [floorDb] and full scale. */
-    private fun normalise(magnitude: Float): Float =
-        ((20f * log10(magnitude + 1e-9f) - floorDb) / -floorDb).coerceIn(0f, 1f)
-
-    private fun follow(current: Float, target: Float): Float =
-        current + (target - current) * if (target > current) attack else release
-
-    private companion object {
-        /** Bars whose top edge is below this get the long FFT's resolution. */
-        const val FINE_BASS_TOP_HZ = 200f
-
-        /** How many normal analyses pass between long ones. */
-        const val BASS_EVERY = 4
-    }
+/** Largest supported power of two whose window spans at most 50 ms. */
+internal fun transientFftSize(sampleRate: Int): Int {
+    require(sampleRate in 1_000..768_000) { "supported sample rates are 1000..768000 Hz" }
+    val maximum = minOf(sampleRate / 20, 32_768)
+    var size = 4
+    while (size <= maximum / 2) size *= 2
+    return size
 }

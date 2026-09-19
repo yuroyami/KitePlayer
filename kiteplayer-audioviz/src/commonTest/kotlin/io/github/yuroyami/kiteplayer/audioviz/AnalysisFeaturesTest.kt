@@ -4,16 +4,10 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * The readings a drawing uses to tell calm music from lively music.
- *
- * A ballad and a drum track must not look the same. They would if every number the analyser
- * published were measured against silence and full scale: a song only ever uses a slice of that
- * range, and where the slice sits depends on how the track was mastered rather than on how it
- * feels.
- */
+/** Musical activity and recognition fixtures, separate from the calibrated level tests. */
 class AnalysisFeaturesTest {
 
     private val rate = 48_000
@@ -34,7 +28,7 @@ class AnalysisFeaturesTest {
         val analyzer = SpectrumAnalyzer(sampleRate = rate, bandCount = 48)
         val kept = ArrayList<SpectrumFrame>()
         var seen = 0
-        val settle = rate / 512
+        val settle = rate / analyzer.hop
         analyzer.onAnalysis = {
             if (seen++ > settle) kept += it
         }
@@ -55,7 +49,11 @@ class AnalysisFeaturesTest {
         val drops = ArrayList<Long>()
         analyzer.onAnalysis = { if (it.drop) drops += it.ptsMicros }
         analyzer.feed(track, track.size, 1, 0L)
-        assertTrue(drops.any { it in 12_000_000L..14_000_000L }, "returning drums should trigger a drop: $drops")
+        // A centre-dated window can include the attack while its reference precedes the boundary.
+        // This checks recognition near the return, not physical presentation timing.
+        val halfWindowMicros = analyzer.fftSize * 1_000_000L / (2 * rate)
+        assertTrue(drops.any { it in (12_000_000L - halfWindowMicros)..14_000_000L },
+            "returning drums should trigger a drop: $drops")
     }
 
     @Test
@@ -95,38 +93,17 @@ class AnalysisFeaturesTest {
     }
 
     @Test
-    fun aQuietSongGetsTheSameBarsAsALoudOne() {
-        // This is the measurement the mood tracking exists for. On the absolute scale the
-        // bars of a quiet song are a fraction of the height of a loud one's, whatever is actually
-        // being played, because the scale runs from silence to full scale and a track only ever
-        // uses a slice of it. Against the song's own range they are comparable, so a drawing shows
-        // the shape of the music instead of the level it was mastered at.
-        val calm = play(SyntheticSong.calmPad(12f, rate))
-        val lively = play(SyntheticSong.drumLoop(12f, sampleRate = rate))
-
-        fun meanBand(run: Run, pick: (SpectrumFrame) -> FloatArray): Float =
-            run.frames.sumOf { frame -> pick(frame).average() }.toFloat() / run.frames.size
-
-        val absoluteGap = meanBand(lively) { it.bands } / meanBand(calm) { it.bands }
-        val relativeGap = meanBand(lively) { it.bandsRel } / meanBand(calm) { it.bandsRel }
-        println("bar height, loud against quiet: absolute ${absoluteGap}x, song relative ${relativeGap}x")
-
-        assertTrue(absoluteGap > 2f, "the absolute scale should show a big gap, showed ${absoluteGap}x")
-        assertTrue(
-            relativeGap < absoluteGap * 0.6f,
-            "the song relative bars should close most of that gap, went from ${absoluteGap}x to ${relativeGap}x",
-        )
-        // And the absolute reading is still there for anything that wants to be a meter.
-        assertTrue(calm.max { it.level } < 0.7f, "the absolute level of a quiet song should stay low")
-    }
-
-    @Test
-    fun aSongWithDynamicsFillsItsRange() {
-        val lively = play(SyntheticSong.drumLoop(12f, sampleRate = rate))
-        val span = lively.max { it.energy } - lively.min { it.energy }
-        println("lively energy: min ${lively.min { it.energy }} max ${lively.max { it.energy }} span $span")
-        assertTrue(lively.max { it.energy } > 0.75f, "the loud moments should reach the top of the range")
-        assertTrue(span > 0.5f, "the song should use most of its own range, used $span of it")
+    fun compatibilityLevelsNeverApplyASecondAutomaticGain() {
+        for (run in listOf(play(SyntheticSong.calmPad(4f, rate)), play(SyntheticSong.drumLoop(4f, sampleRate = rate)))) {
+            for (frame in run.frames) {
+                assertEquals(frame.bands.toList(), frame.bandsRel.toList())
+                assertEquals(frame.level, frame.levelRel)
+                assertEquals(frame.bass, frame.bassRel)
+                assertEquals(frame.mid, frame.midRel)
+                assertEquals(frame.treble, frame.trebleRel)
+                assertEquals(frame.level, frame.energy)
+            }
+        }
     }
 
     @Test
@@ -145,7 +122,8 @@ class AnalysisFeaturesTest {
         println("tempo: $bpm bpm, confidence $confidence")
         assertTrue(abs(bpm - 130f) < 4f || abs(bpm - 65f) < 3f, "expected about 130 bpm, found $bpm")
         assertTrue(confidence > 0.35f, "a plain drum loop should be tracked confidently, was $confidence")
-        assertTrue(settled.max { it.barPhase } > 0.8f, "the bar position should sweep its whole range")
+        assertEquals(0f, settled.max { it.barPhase }, "a pulse grid does not establish a downbeat")
+        assertEquals(0f, settled.max { it.phrasePhase }, "a pulse grid does not establish a phrase")
     }
 
     @Test

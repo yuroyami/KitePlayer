@@ -88,8 +88,8 @@ internal class PlasmaField : ShaderPreset(
         }
         if (state.frame.hat > 0f) sparks.sprinkle(3, 0.4f, 0.006f, 0.6f, Sprite.GLOW)
         sparks.advance(dt, drag = 1f)
-        if (gestures.bar) {
-            travellers.across(random, gestures.barSeconds * 0.75f, PathShape.Arc, 0.18f, 0.05f, random.next(), 0f, Sprite.STREAK)
+        if (gestures.section) {
+            travellers.across(random, gestures.cycleSeconds * 0.75f, PathShape.Arc, 0.18f, 0.05f, random.next(), 0f, Sprite.STREAK)
         }
         travellers.advance(dt)
         val newest = travellers.newest
@@ -169,7 +169,7 @@ half4 main(float2 position) {
     if (uFold > 0.0) {
         float reach = length(uv);
         float wedge = 6.2831853 / 6.0;
-        float angle = abs(mod(atan(uv.y, uv.x) + uPhrasePhase * wedge, wedge) - wedge * 0.5);
+        float angle = abs(mod(atan(uv.y, uv.x) + uSlowCyclePhase * wedge, wedge) - wedge * 0.5);
         uv = mix(uv, reach * float2(cos(angle), sin(angle)), uFold);
     }
     float aspect = uResolution.x / uResolution.y;
@@ -253,13 +253,13 @@ internal class Cathedral : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        // Fast enough to read as flight, and a new corridor every phrase.
+        // Fast enough to read as flight, and a new corridor at each supported section boundary.
         travelled += dt * 18f * (0.25f + state.drive) * speed.value
         stripes += dt * 20f * (0.4f + state.drive)
         drift += dt * (0.6f + 0.8f * state.frame.motionRate)
-        if (gestures.phrase) corridor.choose((corridor.value + 1) % 3)
+        if (gestures.section) corridor.choose((corridor.value + 1) % 3)
         if (gestures.drop) gather = 1f
-        gather = (gather - dt / gestures.barSeconds).coerceAtLeast(0f)
+        gather = (gather - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         if (gestures.snareHit > 0f) snap = 1f
         snap = (snap - dt * 3f).coerceAtLeast(0f)
         flash.hit(gestures.kickHit)
@@ -346,7 +346,7 @@ float archFrame(float3 point, float height, float gap) {
 
 // Which arch this is, turned into a position in the spectrum.
 float archHeight(float z, float gap) {
-    return (1.8 + 2.2 * bandFolded(fract(floor(z / gap) * 0.17 + uPhrasePhase))) * (1.0 + 0.4 * uCorridor.y);
+    return (1.8 + 2.2 * bandFolded(fract(floor(z / gap) * 0.17 + uSlowCyclePhase))) * (1.0 + 0.4 * uCorridor.y);
 }
 
 // A banner under each arch, swaying with the middle of the spectrum and snapping on a snare.
@@ -479,12 +479,12 @@ internal class NeonCity : ShaderPreset(
         cars += dt * (6f + 10f * state.drive) * traffic.value
         sway += dt * (0.4f + 0.6f * state.frame.motionRate)
         // The street turns the other way every two phrases.
-        if (gestures.phrase && gestures.phrases % 2 == 0) way = -way
+        if (gestures.section && gestures.sections % 2 == 0) way = -way
         bend.advance(way * bendGene.value, dt)
         flash.hit(gestures.kickHit)
         flash.advance(0f, dt)
         if (gestures.drop) allOn = 1f
-        allOn = (allOn - dt / gestures.barSeconds).coerceAtLeast(0f)
+        allOn = (allOn - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         if (gestures.snareHit > 0f) beamPhase[(random.next() * searchlights.count(1)).toInt().coerceIn(0, 2)] += 1.2f
         for (index in 0 until 3) {
             beamPhase[index] += dt * (0.7f + 0.25f * index) * state.tempo
@@ -645,8 +645,8 @@ half4 main(float2 position) {
  * A flight down the tunnels of a Menger sponge: a cube with its middle cut out, and the middle of every
  * smaller cube cut out again, repeated in every direction so the tunnel never ends. Three lights ride
  * ahead of the camera, one each for the kick, the snare and the hat, and flash with their drums. Sparks
- * stream out of the holes past the camera, the number of folds changes over each phrase, and a drop
- * rolls the camera a full turn and rushes it forward for a bar.
+ * stream out of the holes past the camera, the number of folds changes over each slow visual cycle, and a drop
+ * rolls the camera a full turn and rushes it forward for a visual cycle.
  */
 internal class Menger : ShaderPreset(
     source = SOURCE,
@@ -672,12 +672,12 @@ internal class Menger : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        if (gestures.phrase) folds.target = if (folds.value > 3f) 2f + random.next() else 3f + random.next()
-        if (gestures.drop) rush = gestures.barSeconds
+        if (gestures.section) folds.target = if (folds.value > 3f) 2f + random.next() else 3f + random.next()
+        if (gestures.drop) rush = gestures.cycleSeconds
         rush -= dt
         travelled += dt * 1.2f * (0.25f + state.drive) * if (rush > 0f) 3f else 1f
         turn += dt * (0.5f + 0.7f * state.frame.motionRate)
-        if (rush > 0f) roll += dt * TAU / gestures.barSeconds
+        if (rush > 0f) roll += dt * TAU / gestures.cycleSeconds
         drums[0].hit(gestures.kickHit)
         drums[1].hit(gestures.snareHit)
         drums[2].hit(gestures.hatHit)
@@ -808,8 +808,8 @@ half4 main(float2 position) {
 
 /**
  * The Mandelbox: a cube folded into itself over and over, which grows rooms, bridges and towers at every
- * scale. The camera circles it and closes in over each phrase, then cuts back out, and the fold scale
- * walks to a new value every phrase so the structure itself changes. Two lights circle it, a halo of
+ * scale. The camera circles it and closes in over each slow visual cycle, then cuts back out, and the fold scale
+ * walks to a new value at each supported section boundary so the structure itself changes. Two lights circle it, a halo of
  * sparks rushes at the camera on the kick, stars sweep past, and a drop cuts straight back out.
  *
  * Each fold mirrors anything outside a box back inside it and pushes anything near the middle out
@@ -841,11 +841,11 @@ internal class Mandelbox : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        // In over each phrase, and straight back out at the next one, or at once on a drop.
-        if (gestures.drop) cut = gestures.barSeconds
+        // In over each slow visual cycle, and straight back out at the next one, or at once on a drop.
+        if (gestures.drop) cut = gestures.cycleSeconds
         cut -= dt
-        dive = if (cut > 0f) 0f else gestures.phrasePhase
-        if (gestures.phrase) scaleGene.target = -2.1f + 0.5f * random.next()
+        dive = if (cut > 0f) 0f else gestures.slowCyclePhase
+        if (gestures.section) scaleGene.target = -2.1f + 0.5f * random.next()
         halo.hit(gestures.kickHit)
         halo.advance(0f, dt)
         lightTurn += dt * (0.8f + 0.8f * state.frame.motionRate)
@@ -869,7 +869,7 @@ internal class Mandelbox : ShaderPreset(
 
     override fun extraUniforms(program: ShaderProgram, state: VizRenderState) {
         val frame = state.frame
-        val turn = orbit.advance(state.deltaSeconds, frame.bpm, frame.beatConfidence, frame.phrasePhase, 0.04f + state.paced(0.06f))
+        val turn = orbit.advance(state.deltaSeconds, frame, 0.04f + state.paced(0.06f))
         program.uniform("uOrbit", turn * TAU)
         program.uniform("uLook", look)
         program.uniform("uDistance", 7f + (depth.value - 7f) * dive)
@@ -981,7 +981,7 @@ half4 main(float2 position) {
     );
     float occlusion = clamp(mandelbox(at + normal * 0.08, scale) / 0.08, 0.0, 1.0);
     float fill = max(dot(normal, -ray), 0.0);
-    float strength = bandFolded(fract(length(at) * 0.18 + uPhrasePhase));
+    float strength = bandFolded(fract(length(at) * 0.18 + uSlowCyclePhase));
     // Two lights circling the box, the second one turning the other way.
     float3 lightA = float3(cos(uLightTurn) * 7.0, 4.0, sin(uLightTurn) * 7.0);
     float3 lightB = float3(cos(2.0 - uLightTurn * 1.3) * 6.0, -2.0, sin(2.0 - uLightTurn * 1.3) * 6.0);
@@ -1044,12 +1044,12 @@ internal class TerrainMarch : ShaderPreset(
         cloudScroll += dt * (0.15f + 0.1f * state.drive)
         river.hit(gestures.kickHit)
         river.advance(0f, dt)
-        if (gestures.drop) dawnHold = gestures.barSeconds * 2f
+        if (gestures.drop) dawnHold = gestures.cycleSeconds * 2f
         dawnHold -= dt
         dawn.advance(if (dawnHold > 0f) 1f else 0f, dt)
         // The flock crosses the sky, turning back on the snare.
         if (gestures.snareHit > 0f) flockWay = -flockWay
-        flockTravel += dt / (gestures.barSeconds * 2f) * flockWay
+        flockTravel += dt / (gestures.cycleSeconds * 2f) * flockWay
         flock.targetX = -0.1f + 1.2f * wrap(flockTravel)
         flock.targetY = 0.18f + 0.06f * sin(flockTravel * TAU * 2f)
         flock.advance(dt, speed = 0.45f + 0.4f * state.drive)
@@ -1075,7 +1075,7 @@ internal class TerrainMarch : ShaderPreset(
     override fun extraUniforms(program: ShaderProgram, state: VizRenderState) {
         val frame = state.frame
         program.uniform("uFlight", travelled)
-        val turn = sun.advance(state.deltaSeconds, frame.bpm, frame.beatConfidence, frame.phrasePhase, 0.01f + state.paced(0.03f))
+        val turn = sun.advance(state.deltaSeconds, frame, 0.01f + state.paced(0.03f))
         program.uniform("uSun", turn * TAU)
         program.uniform("uLift", lift.advance(frame.loudLong, state.deltaSeconds))
         program.uniform("uCurve", curve.value)
@@ -1220,9 +1220,9 @@ half4 main(float2 position) {
 }
 
 /**
- * Sixteen blobs of light in three sizes on paths that span the screen, one lap every two bars, over
+ * Sixteen blobs of light in three sizes on paths that span the screen, one lap every two visual cycles, over
  * water with light drifting across it. They weld into each other with a soft join, and the weld changes
- * every phrase, from separate drops to one mass. A kick pulls them together, bubbles rise off them on
+ * at each supported section boundary, from separate drops to one mass. A kick pulls them together, bubbles rise off them on
  * the hats, and a drop gathers every blob to the middle and lets them go.
  *
  * Each blob is a circle, and the field is their distances welded together; because the join is
@@ -1251,13 +1251,13 @@ internal class BlobField : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        phase += dt * TAU / (gestures.barSeconds * 2f) * (0.6f + 0.6f * state.drive)
+        phase += dt * TAU / (gestures.cycleSeconds * 2f) * (0.6f + 0.6f * state.drive)
         ripple += dt * (0.5f + 0.8f * state.frame.motionRate)
-        if (gestures.phrase) weld.target = if (weld.value > 0.25f) 0.05f + 0.1f * random.next() else 0.35f + 0.15f * random.next()
+        if (gestures.section) weld.target = if (weld.value > 0.25f) 0.05f + 0.1f * random.next() else 0.35f + 0.15f * random.next()
         merge.kick(gestures.kickHit * 3f)
         merge.advance(dt)
         if (gestures.drop) gather = 1f
-        gather = (gather - dt / gestures.barSeconds).coerceAtLeast(0f)
+        gather = (gather - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val spread = 1f - sin(gather * 3.1415927f)
         val aspect = kit.aspect
         for (index in 0 until MOST) {
@@ -1382,7 +1382,7 @@ internal class NebulaField : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        val step = dt / (gestures.barSeconds * 3f)
+        val step = dt / (gestures.cycleSeconds * 3f)
         for (option in 0 until 4) {
             val share = direction.weight(option)
             driftX += share * DRIFT_X[option] * step
@@ -1394,7 +1394,7 @@ internal class NebulaField : ShaderPreset(
         val figureX = 0.5f + 0.32f * sin(core.angle)
         val figureY = 0.5f + 0.2f * sin(2f * core.angle)
         if (gestures.drop) toCentre = 1f
-        toCentre = (toCentre - dt / gestures.barSeconds).coerceAtLeast(0f)
+        toCentre = (toCentre - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val x = core.x + (figureX - core.x) * eight
         val y = core.y + (figureY - core.y) * eight
         coreX = x + (0.5f - x) * toCentre
@@ -1402,7 +1402,7 @@ internal class NebulaField : ShaderPreset(
         kit.place(0, coreX, coreY)
         flare.kick(gestures.kickHit * 6f)
         flare.advance(dt)
-        if (gestures.phrase) lanes.target = 0.6f + 1.2f * random.next()
+        if (gestures.section) lanes.target = 0.6f + 1.2f * random.next()
         if (gestures.snareHit > 0f) snareComets.across(random, gestures.beatSeconds * 3f, PathShape.Arc, 0.15f, 0.02f, random.next(), 0f, Sprite.GLOW)
         snareComets.advance(dt)
         comets.advance(state, gestures, random)
@@ -1519,7 +1519,7 @@ internal class AuroraField : ShaderPreset(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         sway += dt * (0.8f + 0.8f * state.frame.motionRate)
-        for (layer in 0 until 4) scroll[layer] += 2f * dt / (gestures.barSeconds * BARS_PER_SCREEN[layer])
+        for (layer in 0 until 4) scroll[layer] += 2f * dt / (gestures.cycleSeconds * BARS_PER_SCREEN[layer])
         lean += dt * TAU / 16f
         moonOrbit.advance(state, gestures)
         if (gestures.kickHit > 0f) wave = 0f
@@ -1527,7 +1527,7 @@ internal class AuroraField : ShaderPreset(
             wave += dt / (gestures.beatSeconds * 2f)
             if (wave > 1.2f) wave = -1f
         }
-        if (gestures.drop) dropHold = gestures.barSeconds
+        if (gestures.drop) dropHold = gestures.cycleSeconds
         dropHold -= dt
         floorPull.advance(if (dropHold > 0f) 1f else 0f, dt)
         comets.advance(state, gestures, random)

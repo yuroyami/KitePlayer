@@ -92,14 +92,14 @@ internal class Ripple : ShaderPreset(
         source.centreY = stage.y
         source.advance(state, gestures)
         flow += dt * (1.6f + 1.6f * state.frame.motionRate)
-        drift += dt * TAU / (gestures.barSeconds * 1.8f) * state.tempo
+        drift += dt * TAU / (gestures.cycleSeconds * 1.8f) * state.tempo
         for (index in 0 until 3) {
             figureX[index] = stage.x + 0.36f * sin(drift * FX[index] + index * 2.1f)
             figureY[index] = stage.y + 0.3f * sin(drift * FY[index] + index * 1.3f)
             kit.place(index, figureX[index], figureY[index])
         }
         if (lightJumps.on) {
-            if (gestures.bar) lightGoal += 1.3f
+            if (gestures.section) lightGoal += 1.3f
         } else {
             lightGoal += dt * 0.5f * state.tempo
         }
@@ -110,7 +110,7 @@ internal class Ripple : ShaderPreset(
         if (gestures.drop) born(1f, 2f, 0.2f, -0.6f, 0.5f, 4f)
         for (slot in 0 until RINGS) {
             if (strength[slot] <= 0f) continue
-            along[slot] += dt / gestures.barSeconds
+            along[slot] += dt / gestures.cycleSeconds
             if (along[slot] >= 1f) strength[slot] = 0f
         }
         // Droplets fall in from the front and start small rings where they land.
@@ -137,9 +137,9 @@ internal class Ripple : ShaderPreset(
         else -> source.x
     }
 
-    // Down the screen with time over two bars, at random, or round the orbit.
+    // Down the screen with time over two visual cycles, at random, or round the orbit.
     private fun sourceY(): Float = when (placement.value) {
-        0 -> 0.2f + 0.6f * ((gestures.bars % 2) + gestures.barPhase) / 2f
+        0 -> 0.2f + 0.6f * ((gestures.cycles % 2) + gestures.cyclePhase) / 2f
         1 -> 0.15f + 0.7f * random.next()
         else -> source.y
     }
@@ -318,7 +318,7 @@ internal class DanceOfTheFreq : Layered(
         expand.kick(gestures.kickHit * 3f)
         expand.advance(dt)
         if (gestures.drop) fling = 1f
-        fling = (fling - dt / gestures.barSeconds).coerceAtLeast(0f)
+        fling = (fling - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val count = state.frame.bandsRel.size.coerceAtMost(MOST)
         if (gestures.snareHit > 0f && count > 0) {
             val dot = (random.next() * count).toInt().coerceIn(0, count - 1)
@@ -416,7 +416,7 @@ internal class DanceOfTheFreq : Layered(
 
 /**
  * Ribbons on up to three depths filling the whole height, twisting and travelling across it one screen
- * every two bars, braiding where they cross. Beads slide along them, a kick sends a pulse down every
+ * every two visual cycles, braiding where they cross. Beads slide along them, a kick sends a pulse down every
  * ribbon, and a drop snaps them straight for a moment before they curl back.
  */
 internal class Strands : Layered(
@@ -449,7 +449,7 @@ internal class Strands : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        travel += dt / (gestures.barSeconds * 2f)
+        travel += dt / (gestures.cycleSeconds * 2f)
         flow += dt * 0.6f * state.tempo
         rise.advance((state.frame.loudLong - 0.5f) * 0.1f, dt)
         if (gestures.kickHit > 0f) {
@@ -462,10 +462,10 @@ internal class Strands : Layered(
             if (pulseAt[slot] > 1.1f) pulseAt[slot] = -1f
         }
         if (gestures.drop) straight = 1f
-        straight = (straight - dt / gestures.barSeconds).coerceAtLeast(0f)
+        straight = (straight - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val count = ribbons.count(12, 6)
         // Beads: every other ribbon, every ribbon, or two on every ribbon, each beat.
-        val beat = (gestures.barPhase * 4f).toInt()
+        val beat = (gestures.cyclePhase * 4f).toInt()
         if (beat != lastBeat) {
             lastBeat = beat
             val step = if (beadRate.value == 0) 2 else 1
@@ -480,11 +480,11 @@ internal class Strands : Layered(
         }
         for (slot in 0 until BEADS) {
             if (beadAlong[slot] < -0.5f) continue
-            beadAlong[slot] += dt / (gestures.barSeconds * 2f)
+            beadAlong[slot] += dt / (gestures.cycleSeconds * 2f)
             if (beadAlong[slot] > 1.02f) beadAlong[slot] = -1f
         }
         // One lead bead the anchors follow, relaunched as soon as it leaves the screen.
-        leadAlong += dt / (gestures.barSeconds * 1.4f)
+        leadAlong += dt / (gestures.cycleSeconds * 1.4f)
         if (leadAlong > 1.02f) {
             leadAlong = -0.02f
             leadRibbon = (leadRibbon + 5) % count
@@ -572,7 +572,7 @@ internal class Strands : Layered(
  * A contour map of the last few seconds of music laid out in rings round a centre on an orbit, its
  * outer rings wider than the screen. Each level sits at its own depth, hikers walk round the lines,
  * shooting stars cross above, and a kick sends a ring out from the core. On a drop time runs backwards
- * for a bar and the map turns inside out.
+ * for a visual cycle and the map turns inside out.
  */
 internal class Contour : Layered(
     name = "Contour",
@@ -617,7 +617,7 @@ internal class Contour : Layered(
                 for (column in 0 until COLUMNS) row[column] = bands.foldedAt(column.toFloat() / COLUMNS)
             }
         }
-        spin = turn.advance(dt, state.frame.bpm, state.frame.beatConfidence, state.frame.phrasePhase, state.paced(0.05f)) * TAU
+        spin = turn.advance(dt, state.frame, state.paced(0.05f)) * TAU
         core.kick(gestures.kickHit * 7f)
         core.advance(dt)
         if (gestures.kickHit > 0f) {
@@ -630,7 +630,7 @@ internal class Contour : Layered(
             if (ringAge[slot] >= 1f) ringAge[slot] = 0f
         }
         if (gestures.drop) inside = 1f
-        inside = (inside - dt / gestures.barSeconds).coerceAtLeast(0f)
+        inside = (inside - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         stage.advance(dt)
         centre.centreX = stage.x
         centre.centreY = stage.y
@@ -746,7 +746,7 @@ internal class Contour : Layered(
     private fun radiusOf(row: Float, inner: Float, outer: Float): Float {
         val out = row / (ROWS - 1)
         val flipped = if (backwards.on) 1f - out else out
-        // A drop turns the map inside out for a bar.
+        // A drop turns the map inside out for a visual cycle.
         val shown = flipped + (1f - 2f * flipped) * inside
         return inner + (outer - inner) * shown
     }

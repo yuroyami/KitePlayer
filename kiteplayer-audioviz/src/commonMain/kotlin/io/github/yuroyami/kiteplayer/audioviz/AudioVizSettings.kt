@@ -80,7 +80,7 @@ public fun AudioVizSettings(
 
         drawing.genes?.let { genes ->
             Heading("Recipe")
-            Note("The song changes these by itself every phrase. ${genes.changes} changes so far.")
+            Note("These controls shape the current visual. ${genes.changes} changes so far.")
             for (gene in genes.all) GeneControl(gene, tick)
             PanelButton("Mutate now") { state.mutate() }
         }

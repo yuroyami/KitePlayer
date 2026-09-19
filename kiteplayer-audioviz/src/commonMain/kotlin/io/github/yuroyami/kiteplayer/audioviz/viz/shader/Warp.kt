@@ -72,7 +72,7 @@ public class WarpSpec(
 internal class WarpRunner(field: String, private val drift: Float = 0f, private val params: FloatArray = FloatArray(4)) {
 
     private val program = ShaderProgram(ShaderLibrary.HEADER + PARAMS + field + MAIN)
-    private val data = ShaderData()
+    private val inputs = ShaderInputs()
 
     val available: Boolean get() = program.available
 
@@ -101,27 +101,8 @@ internal class WarpRunner(field: String, private val drift: Float = 0f, private 
         copy: EchoCopy? = null,
     ): Boolean {
         if (!program.available) return false
-        val frame = state.frame
-        program.uniform("uResolution", width, height)
-        program.uniform("uTime", state.timeSeconds)
-        program.uniform("uMusicTime", state.musicTime)
-        program.uniform("uDelta", state.deltaSeconds)
-        program.uniform("uLevel", frame.levelRel)
-        program.uniform("uBass", frame.bassRel)
-        program.uniform("uMid", frame.midRel)
-        program.uniform("uTreble", frame.trebleRel)
-        program.uniform("uEnergy", frame.energy)
-        program.uniform("uMood", frame.mood)
-        program.uniform("uDrive", state.drive)
-        program.uniform("uDensity", frame.density)
-        program.uniform("uBeat", frame.beat)
-        program.uniform("uPulse", frame.pulse)
-        program.uniform("uKick", frame.kick)
-        program.uniform("uSnare", frame.snare)
-        program.uniform("uHat", frame.hat)
-        program.uniform("uBarPhase", frame.barPhase)
-        program.uniform("uPhrasePhase", frame.phrasePhase)
-        program.uniform("uKeyHue", frame.keyHue * frame.keyConfidence)
+        inputs.update(state)
+        inputs.publish(program, state, width, height)
 
         program.uniform("uWarpZoom", zoomX, zoomY)
         program.uniform("uWarpSpin", spin)
@@ -145,11 +126,6 @@ internal class WarpRunner(field: String, private val drift: Float = 0f, private 
         program.uniform("uWarpDrift", drift * state.deltaSeconds)
         program.uniform("uWarpParams", params[0], params[1], params[2], params[3])
 
-        data.writeBands(frame.bandsRel)
-        data.writeScope(frame.scope)
-        data.writePalette(state.palette)
-        data.writeHistory(frame.bandsRel)
-        data.bindTo(program)
         program.child("uPrevious", previous)
         return true
     }
@@ -157,7 +133,7 @@ internal class WarpRunner(field: String, private val drift: Float = 0f, private 
     fun brush(): androidx.compose.ui.graphics.Brush? = program.brush()
 
     fun reset() {
-        data.clearHistory()
+        inputs.reset()
     }
 
     private companion object {
@@ -263,7 +239,7 @@ float2 warpField(float2 uv) {
     public const val WELLS: String = """
 float2 ringsFrom(float2 uv, float count) {
     float reach = max(length(uv), 0.001);
-    return uv / reach * sin(reach * count - uBarPhase * 25.1327 - uMusicTime * 2.0);
+    return uv / reach * sin(reach * count - uCyclePhase * 25.1327 - uMusicTime * 2.0);
 }
 
 float2 warpField(float2 uv) {
@@ -301,7 +277,7 @@ float2 warpField(float2 uv) {
     public const val RIPPLE: String = """
 float2 warpField(float2 uv) {
     float reach = max(length(uv), 0.001);
-    float wave = sin(reach * 14.0 - uMusicTime * 4.0 - uBarPhase * 6.2831);
+    float wave = sin(reach * 14.0 - uMusicTime * 4.0 - uCyclePhase * 6.2831);
     return uv / reach * wave * (0.25 + 0.9 * uKick + 0.4 * uEnergy);
 }
 """
@@ -347,8 +323,8 @@ float2 warpField(float2 uv) {
 float2 warpField(float2 uv) {
     float reach = length(uv);
     float wedge = 6.2831 / 6.0;
-    // One wedge per phrase, so the turn wraps round with the phrase without a visible jump.
-    float angle = atan(uv.y, uv.x) + uPhrasePhase * wedge + uKeyHue;
+    // One wedge per slow visual cycle, so the turn wraps round with the cycle without a visible jump.
+    float angle = atan(uv.y, uv.x) + uSlowCyclePhase * wedge + uKeyHue;
     angle = abs(mod(angle, wedge) - wedge * 0.5);
     float2 folded = reach * float2(cos(angle), sin(angle));
     return (folded - uv) * (0.3 + 0.4 * uBass);

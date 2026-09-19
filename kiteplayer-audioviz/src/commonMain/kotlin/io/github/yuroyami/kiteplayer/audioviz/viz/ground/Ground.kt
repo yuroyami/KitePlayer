@@ -59,7 +59,7 @@ public class Ground(
         val frame = state.frame
         // Never slower than about a third of full pace, so a ground is alive even in silence.
         phase += dt * (0.3f + state.paced(1f))
-        val locked = frame.beatConfidence > 0.4f && frame.bpm > 0f
+        val locked = frame.rhythm?.usable == true
         travel += dt * if (locked) frame.bpm / 60f else state.paced(2f)
         if (fade < 1f) fade = (fade + dt / fadeSeconds.coerceAtLeast(0.05f)).coerceAtMost(1f)
         if (fade >= 1f) leaving = null

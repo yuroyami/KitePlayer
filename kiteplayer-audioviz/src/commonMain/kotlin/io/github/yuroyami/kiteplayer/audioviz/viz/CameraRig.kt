@@ -1,9 +1,11 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz
 
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Anticipator
+import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Noise1
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
  * One camera for every drawing that flies, so they all answer the music the same way.
@@ -11,9 +13,9 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
  * - Speed follows [VizRenderState.drive], from a slow drift in silence up to [topSpeed].
  * - A kick shoves it forward through a spring. When the queued audio shows a kick coming, the camera
  *   first sinks back a little, and the shove goes in early enough that the surge peaks on the kick.
- * - A snare nudges it sideways, a drop flings the lens wide for about a bar, and it banks on noise
+ * - A snare nudges it sideways, a supported drop flings the lens wide for about two seconds, and it banks on noise
  *   that wanders faster when the middle of the spectrum is busy.
- * - With [cuts] on, a bar line with a sure tempo can jump it to a new lane instead of sliding there.
+ * - With [cuts] on, a supported section boundary can jump it to a new lane instead of sliding there.
  *
  * Call [advance] once a frame, then read where the camera is.
  */
@@ -33,7 +35,7 @@ public class CameraRig(
     private val lean: Float = 0.25f,
     /** The lens with nothing happening, in degrees. */
     private val baseFov: Float = 70f,
-    /** Whether a bar line may jump the camera to a new lane. */
+    /** Whether a supported section boundary may jump the camera to a new lane. */
     private val cuts: Boolean = false,
     seed: Int = 1,
 ) {
@@ -63,9 +65,9 @@ public class CameraRig(
     public var fov: Float = baseFov
         private set
 
-    private val surge = Spring(stiffness = 70f, damping = 0.6f)
-    private val early = Anticipator(surge)
-    private var shovedEarly = false
+    // About 92 ms to peak after an impulse, inside the 100 ms anticipation limit.
+    private val surge = Spring(stiffness = 160f, damping = 0.6f)
+    private val impulse = AnticipatedImpulse(surge)
     private val sideways = Spring(stiffness = 60f, damping = 0.5f)
     private val widen = Spring(stiffness = 10f, damping = 0.85f)
     private val wander = Noise1(seed)
@@ -74,7 +76,7 @@ public class CameraRig(
     private var banking = 0f
     private var laneX = 0f
     private var laneY = 0f
-    private var lastBar = 0f
+    private var boundaries = MusicalBoundaryGate()
 
     /**
      * Moves the camera on by one frame and answers how far it went.
@@ -85,39 +87,32 @@ public class CameraRig(
     public fun advance(state: VizRenderState, speedScale: Float = 1f, cruise: Float = -1f): Float {
         val frame = state.frame
         val dt = state.deltaSeconds
+        val boundary = boundaries.read(frame)
 
         // The kick. With the queue, the camera sinks back as the kick approaches and the shove is
         // timed so the surge peaks on the beat. Without it, the shove lands on the kick itself.
-        val soon = state.nextOnsetIn
-        val coming = if (soon >= 0f) state.ahead(soon).kick else 0f
-        if (coming > 0f) {
-            surge.target = -CROUCH * state.anticipation(CROUCH_SECONDS)
-            if (early.due(soon)) {
-                surge.kick(coming * KICK)
-                shovedEarly = true
-            }
-        } else {
-            surge.target = 0f
-        }
-        if (frame.kick > 0f) {
-            if (!shovedEarly) surge.kick(frame.kick * KICK)
-            shovedEarly = false
-        }
         surge.advance(dt)
+        val upcoming = state.future?.nextEvent(AudioEventKind.LowTransient)
+        impulse.apply(frame, upcoming, KICK)
+        // The preparatory dip returns to zero at the event. Moving the impulse spring's target
+        // here would shift its peak away from the event, even with correctly timed impulses.
+        val crouch = if (upcoming != null) {
+            val phase = (1f - upcoming.secondsUntil / CROUCH_SECONDS).coerceIn(0f, 1f)
+            -CROUCH * upcoming.event.detection.strength * sin(PI * phase).toFloat()
+        } else 0f
 
-        if (frame.snare > 0f) sideways.kick(frame.snare * (if (random.next() < 0.5f) -NUDGE else NUDGE))
         sideways.advance(dt)
-        if (frame.drop) widen.kick(frame.dropPulse.coerceAtLeast(0.5f) * WIDEN)
+        if (frame.snare > 0f) sideways.kick(frame.snare * (if (random.next() < 0.5f) -NUDGE else NUDGE))
         widen.advance(dt)
+        if (boundary?.detection?.kind == AudioEventKind.Drop) widen.kick(boundary.detection.strength * WIDEN)
 
-        if (cuts && frame.beatConfidence > 0.7f && frame.barPhase < lastBar && random.next() < 0.3f) {
+        if (cuts && boundary != null && random.next() < 0.3f) {
             laneX = random.signed() * sway * 1.2f
             laneY = random.signed() * swayUp
         }
-        lastBar = frame.barPhase
 
         val base = if (cruise >= 0f) cruise else restSpeed + (topSpeed - restSpeed) * state.drive
-        val speed = ((base + surge.value * shove) * speedScale).coerceAtLeast(0f)
+        val speed = ((base + (surge.value + crouch) * shove) * speedScale).coerceAtLeast(0f)
         val moved = speed * dt
         travelled += moved
 
@@ -134,8 +129,7 @@ public class CameraRig(
     public fun reset() {
         travelled = 0f
         surge.reset()
-        early.reset()
-        shovedEarly = false
+        impulse.reset()
         sideways.reset()
         widen.reset()
         random.reset()
@@ -143,7 +137,7 @@ public class CameraRig(
         banking = 0f
         laneX = 0f
         laneY = 0f
-        lastBar = 0f
+        boundaries = MusicalBoundaryGate()
         eyeX = 0f
         eyeY = 0f
         nudgeX = 0f
@@ -157,7 +151,7 @@ public class CameraRig(
 
         /** How far the camera sinks back before a kick it can see coming, and how early it starts. */
         const val CROUCH = 0.25f
-        const val CROUCH_SECONDS = 0.15f
+        const val CROUCH_SECONDS = 0.1f
 
         const val NUDGE = 10f
         const val WIDEN = 120f

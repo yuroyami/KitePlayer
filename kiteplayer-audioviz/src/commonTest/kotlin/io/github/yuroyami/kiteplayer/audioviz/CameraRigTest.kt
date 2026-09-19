@@ -27,12 +27,17 @@ class CameraRigTest {
         mood = 0.5f,
         drop = drop,
         dropPulse = if (drop) 1f else 0f,
+        events = if (!drop) null else AudioEventDelivery(io.github.yuroyami.kiteplayer.Generation.Initial,
+            0L, 0L, arrayOf(DeliveredAudioEvent(AudioEvent(io.github.yuroyami.kiteplayer.Generation.Initial, 0L, 0L,
+                AudioDetection(AudioEventKind.Drop, 0L, 0L, 1f, 0.9f, 0.8f)), 0L))),
     )
 
     @Test
     fun withTheQueueTheSurgePeaksOnTheKick() {
         val step = 1f / 240f
         val kickStep = 240
+        val event = AudioEvent(io.github.yuroyami.kiteplayer.Generation.Initial, 0L, 0L,
+            AudioDetection(AudioEventKind.LowTransient, 1_000_000L, 1_010_000L, 1f, 0.8f, 0.5f))
         fun peakAgainstKick(queued: Boolean): Float {
             val rig = CameraRig(topSpeed = 10f)
             var fastest = 0f
@@ -42,8 +47,11 @@ class CameraRigTest {
                 val now = frame(kick = if (index == kickStep) 1f else 0f)
                 val future = if (queued && index < kickStep) {
                     object : VizFuture {
-                        override fun at(secondsAhead: Float): SpectrumFrame = frame(kick = 1f)
+                        override fun at(secondsAhead: Float): SpectrumFrame = frame()
                         override val nextOnsetSeconds: Float = (kickStep - index) * step
+                        override fun nextEvent(kind: AudioEventKind): UpcomingAudioEvent? =
+                            if (kind == AudioEventKind.LowTransient && nextOnsetSeconds <= 0.1f)
+                                UpcomingAudioEvent(event, nextOnsetSeconds) else null
                     }
                 } else {
                     null

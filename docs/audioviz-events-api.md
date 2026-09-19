@@ -38,8 +38,8 @@ audio generation and local analysis revision. `AudioEvent` retains that identity
 detection. `EnergyRise` is a cue for an attack accompanying energy recovery; it does not assert
 a formal section boundary. `SectionBoundary`, `Drop` and `Breakdown` are separate structural
 classifications, consumed under the [rhythm and boundary contract](audioviz-rhythm-api.md).
-The current live detector publishes the four transient kinds and `EnergyRise`; the structural
-consumer tests inject their evidence independently. A reset replaces both feature and event histories;
+The transient detector publishes the four transient kinds and `EnergyRise`. Structural kinds come
+only from the structural source or a song map, described under event sources below. A reset replaces both feature and event histories;
 a captured old publisher cannot write into the new history. Predicted grid beats are not
 detected onsets and do not use these event kinds.
 
@@ -75,16 +75,56 @@ record has a fixed 64-byte logical payload, so retained event payload is at most
 array and atomic-slot overhead is additional and is bounded by the same record count; the
 payload budget is not a claim about exact JVM or native heap size. Eviction counts and retained
 payload bytes are observable. At 100 analyses/s and at most five kinds per analysis, the count
-bound covers the stated two-second history for that publisher. The enum also includes three
-structural categories. Their future publisher must declare its rate and retention budget; eight
-kinds at 100 Hz would exceed the current count bound before two seconds, and eviction is observable.
+bound covers the stated two-second history for that publisher. The three structural kinds do not
+use this history; they have their own source, described next.
 
-The current single completion watermark cannot accept a causal section confirmation whose
-original boundary time has already been passed by the onset watermark. Wiring a confirming
-structural detector therefore requires independent completion/late-delivery handling and a
-declared structural lateness budget. It must not solve this by retiming an old boundary to its
-confirmation time or delaying the live onset stream. Precomputed evidence also needs the same
-original-time and identity guarantees when it is merged with live events.
+## Event sources
+
+Each event comes from one `AudioEventSource`. A source has its own completion watermark, its own
+sequence numbers and its own lateness budget. One slow source therefore never holds back another.
+
+| Source | Publisher | Lateness budget | Retention |
+| --- | --- | ---: | --- |
+| `LiveTransient` | The causal transient detectors, once per analysis | 30 ms | 1024 records, 2 s |
+| `LiveStructure` | A causal structural detector, which confirms a boundary after it | 3 s | 64 records, 12 s |
+| `SongMap` | The structural events of an installed song map | 3 s | The map itself |
+
+`AudioDetections.source` names the source of a batch. `SpectrumFrame.detections` carries the
+transient batch of an analysis. `SpectrumFrame.structure` carries its structural batch, with the
+structural watermark: the time through which the structural detector will publish nothing more.
+A structural detector holds that watermark behind any candidate it has not yet decided. Its
+confirmations keep their original boundary time; availability records when the confirmation was
+made. No confirmation is retimed to its confirmation time, and the transient stream never waits
+for a structural decision. The 64-record structural history holds at most 4 KiB of logical
+payload.
+
+`AudioEvent.source` completes an event's identity: source, generation, analysis revision and
+sequence. Sequence numbers are comparable only within one source. Consumers that deduplicate, such
+as the boundary gate and the anticipated camera impulse, compare the whole identity.
+
+A cursor sample merges all sources. It delivers each event in `(previousMediaTime,
+currentMediaTime]` once, ordered by original time, then source, then sequence. An event that
+arrives after the cursor passed its time is delivered once with its lateness when that lateness is
+within its source's budget. Otherwise it is discarded and counted in `lateDiscards`. Initial
+attachment, reset, backward movement, a jump over 250 ms and overwritten unread events discard
+past events of every source, including structural confirmations that arrive later for times
+before that boundary. `AudioEventDelivery.structureCompleteThroughMicros` reports the structural
+watermark. `completeThroughMicros` keeps its meaning: the transient watermark.
+
+A song map is not a second live detector. Where an installed map has complete structural coverage
+for a media time, a live structural event at that time is discarded as a duplicate and counted in
+`duplicateDiscards`. The map's event is delivered instead. Map events take the generation and
+revision of the history they are delivered into, and their sequence is their index in the map. A
+seek back over a map event therefore delivers it again under the new identity, which is correct:
+the music crosses that boundary again. Installing, replacing and removing a map for one track is
+the song map contract's concern; this contract only merges what is installed.
+
+`SpectrumTimeline.nextEvent` searches every source, so a camera can anticipate a mapped boundary.
+Live structural confirmations lie in the past by construction and never appear as future events.
+The scalar projection is unchanged: structural kinds set no scalar hit field, and `Drop` alone
+sets the legacy `drop` flag.
+
+## Feature history, compatibility and camera timing
 
 Feature history separately retains at most the configured 2..1024 slots, two seconds measured
 between feature reference times, and 8 MiB of conservatively charged primitive payload. The

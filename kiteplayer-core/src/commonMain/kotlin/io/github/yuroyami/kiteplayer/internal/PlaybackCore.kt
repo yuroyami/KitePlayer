@@ -6912,14 +6912,15 @@ internal class PlaybackCore(
                     if (videoDecoderSend(decoder, null)) ending = true
                     continue
                 }
-                worker.nap(WORKER_POLL)
+                // The last frames still leave the schedule, and each may owe its decoder a release.
+                worker.napUntil(WORKER_POLL) { video.awaitDeparture() }
                 continue
             }
             val packet = queue.poll()
             if (packet == null) {
                 // Nothing taken, so nothing can be lost: the wait is bounded and the poll above is what
                 // actually takes a packet.
-                worker.napUntil(WORKER_POLL) { queue.awaitData() }
+                worker.napUntil(WORKER_POLL) { awaitPacketOrDeparture(queue, video) }
                 continue
             }
             if (session.videoParked.value) {
@@ -6959,7 +6960,7 @@ internal class PlaybackCore(
                         if (!handOver(session, worker, video, frame, epoch)) break
                     } else {
                         if (worker.quiesceRequested) break
-                        delay(HANDOVER_RETRY)
+                        worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
                     }
                 }
             } finally {
@@ -6967,6 +6968,22 @@ internal class PlaybackCore(
             }
         }
     }
+
+    /**
+     * Waits for the next video packet or for a frame to leave the schedule, whichever comes first.
+     * A frame that leaves may owe its decoder a release, and only a call from this worker makes it.
+     */
+    private suspend fun awaitPacketOrDeparture(queue: PacketQueue, video: VideoPlayback) =
+        kotlinx.coroutines.coroutineScope {
+            val packet = async { queue.awaitData() }
+            val departure = async { video.awaitDeparture() }
+            select<Unit> {
+                packet.onAwait { }
+                departure.onAwait { }
+            }
+            packet.cancel()
+            departure.cancel()
+        }
 
     /** The pre-decode drop rule, with this session's numbers. See [skipVideoPacketBeforeDecode]. */
     private fun skipToKeyframe(
@@ -7063,7 +7080,9 @@ internal class PlaybackCore(
                     return true
                 }
                 if (worker.quiesceRequested) return false
-                delay(HANDOVER_RETRY)
+                // Woken by the frame that frees the slot, so the release that frame queued is served
+                // on the next decoder call instead of at the end of a poll (#139).
+                worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
             }
         } finally {
             if (ownsFrame) frame.close()

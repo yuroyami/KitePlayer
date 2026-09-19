@@ -9,6 +9,8 @@ import io.github.yuroyami.kiteplayer.internal.SyncAction
 import io.github.yuroyami.kiteplayer.internal.SyncLaw
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
 import io.github.yuroyami.kiteplayer.spi.VideoRenderer
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.microseconds
 
@@ -151,6 +153,20 @@ public class VideoPlayback(
     private val lateness = Percentiles(240)
 
     /**
+     * One wake for the decode worker each time a frame leaves the schedule.
+     *
+     * A hardware frame reaches the display through its decoder, which performs the release the next
+     * time the decode worker calls it. A worker that noticed only at the end of its own poll released
+     * each frame up to that poll late (#139). Conflated: one waiting wake covers any number of frames.
+     */
+    private val departures = Channel<Unit>(capacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    /** Suspends until a frame leaves the schedule: handed to the renderer, dropped or discarded. */
+    internal suspend fun awaitDeparture() {
+        departures.receive()
+    }
+
+    /**
      * Frames a renderer accepted.
      *
      * Accepted is not drawn. A renderer may take a frame and then supersede it with a newer one, or
@@ -272,6 +288,7 @@ public class VideoPlayback(
         // slipped through the queues.
         if (next.generation != generation) {
             queue.discardStale(generation)
+            departures.trySend(Unit)
             return Duration.ZERO
         }
 
@@ -324,6 +341,7 @@ public class VideoPlayback(
                 if (now > frameTimerNanos + (candidateUs * 1_000L / appliedSpeed).toLong()) {
                     queue.dropNext()
                     droppedLate++
+                    departures.trySend(Unit)
                     return Duration.ZERO
                 }
             }
@@ -368,6 +386,7 @@ public class VideoPlayback(
             // closes it.
             frame.close()
             headless++
+            departures.trySend(Unit)
             return Duration.ZERO
         }
         // The renderer owns the frame from here, including on failure, so it must not be touched
@@ -380,6 +399,8 @@ public class VideoPlayback(
         } else {
             refused++
         }
+        // After present, never before: by now a hardware renderer has queued its release.
+        departures.trySend(Unit)
         return Duration.ZERO
     }
 

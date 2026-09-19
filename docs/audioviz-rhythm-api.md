@@ -43,8 +43,9 @@ The director's `minimumHoldSeconds` is a cooldown, not a timer that schedules a 
 With no accepted boundary it holds the scene and reports an unknown next-change time. Manual
 selection remains immediate. A seek or track change does not cut a change already under way; it
 finishes over its planned duration, and boundaries delivered meanwhile are consumed rather than
-queued. The event vocabulary and consumer gate do not themselves recognize sections; that
-requires a multi-feature detector and its own qualification.
+queued. The event vocabulary and consumer gate do not themselves recognize sections. The live
+detector that publishes them, with its development evidence and its limits, is described in the
+[structure and key contract](audioviz-structure-api.md).
 
 The `VizDirector` constructor no longer takes `leastPhrases`, `mostPhrases` or
 `secondsWithoutTempo`. Those parameters scheduled changes by counted phrases or elapsed time,

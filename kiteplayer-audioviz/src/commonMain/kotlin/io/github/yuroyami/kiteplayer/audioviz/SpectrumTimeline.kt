@@ -30,6 +30,7 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
     )
     private class History(val generation: Generation, val revision: Long, val capacity: Int) {
         val events = AudioEventHistory(generation, revision)
+        val structure = structureHistory(generation, revision)
         // Allocation belongs to the first analysis publication, never the tap's reset callback.
         @Volatile var slots: AtomicArray<Entry?>? = null
         val head = AtomicReference(Head())
@@ -44,6 +45,9 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
 
     private val active = AtomicReference(History(Generation.Initial, 0L, capacity))
 
+    // A song map belongs to the track, so it survives the history resets of a seek.
+    private val songMap = AtomicReference<SongMapEvents?>(null)
+
     /** The continuous audio timeline this history accepts. */
     public val generation: Generation get() = active.load().generation
 
@@ -53,6 +57,17 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
     /** Bounded event retention and detection-completion diagnostics for the current history. */
     public val eventStats: AudioEventHistoryStats get() = active.load().events.stats
 
+    /** Structural event retention and the structural watermark for the current history. */
+    public val structureEventStats: AudioEventHistoryStats get() = active.load().structure.stats
+
+    /**
+     * Installs the structural events of a song map for the current track, or removes them with
+     * null. The caller replaces or removes the map when the track changes; a seek keeps it.
+     */
+    internal fun installSongMap(map: SongMapEvents?) {
+        songMap.store(map)
+    }
+
     /** Current feature retention, including evictions by count, media time or payload size. */
     public val historyStats: SpectrumHistoryStats get() {
         val head = active.load().head.load()
@@ -61,7 +76,10 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
     }
 
     /** A new independent consumer, initially discarding events at or before its first sample time. */
-    public fun eventCursor(): AudioEventCursor = AudioEventCursor { active.load().events }
+    public fun eventCursor(): AudioEventCursor = AudioEventCursor {
+        val history = active.load()
+        EventSources(history.events, history.structure, songMap.load())
+    }
 
     /** Publishes only frames matching both [generation] and [revision] of this history. */
     public fun push(frame: SpectrumFrame) {
@@ -91,7 +109,13 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
             return false
         }
         if (frame.availability == AnalysisAvailability.Ready) {
-            frame.detections?.let { if (!history.events.publish(it)) return false }
+            // Both batches are checked before either is published, so a frame lands whole or not at all.
+            val transient = frame.detections
+            val structural = frame.structure
+            if (transient != null && !history.events.accepts(transient)) return history.events.reject()
+            if (structural != null && !history.structure.accepts(structural)) return history.structure.reject()
+            transient?.let { history.events.commit(it) }
+            structural?.let { history.structure.commit(it) }
         }
         val slots = history.slots ?: AtomicArray<Entry?>(capacity) { null }.also { history.slots = it }
         var first = old.first
@@ -148,15 +172,33 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
         return if (active.load() !== history) 0f else (through - ptsMicros) / 1_000_000f
     }
 
-    /** Next retained event of [kind] strictly after [ptsMicros], preserving its original identity. */
+    /**
+     * Next retained or mapped event of [kind] strictly after [ptsMicros], from any source, preserving
+     * its original identity. Live structural confirmations lie in the past and rarely qualify.
+     */
     public fun nextEvent(ptsMicros: Long, kind: AudioEventKind): AudioEvent? {
         val history = active.load()
-        val head = history.events.snapshot
         var next: AudioEvent? = null
-        for (sequence in head.nextSequence - 1 downTo head.firstSequence) {
-            val candidate = history.events.event(sequence) ?: return null
-            if (candidate.detection.ptsMicros <= ptsMicros) break
-            if (candidate.detection.kind == kind) next = candidate
+        for (events in arrayOf(history.events, history.structure)) {
+            val head = events.snapshot
+            for (sequence in head.nextSequence - 1 downTo head.firstSequence) {
+                val candidate = events.event(sequence) ?: return null
+                if (candidate.detection.ptsMicros <= ptsMicros) break
+                if (candidate.detection.kind == kind &&
+                    (next == null || candidate.detection.ptsMicros < next.detection.ptsMicros)) next = candidate
+            }
+        }
+        songMap.load()?.let { map ->
+            var index = map.firstAfter(ptsMicros)
+            while (index < map.detections.size) {
+                val detection = map.detections[index]
+                if (next != null && detection.ptsMicros >= next.detection.ptsMicros) break
+                if (detection.kind == kind) {
+                    next = AudioEvent(history.generation, history.revision, index.toLong(), detection, AudioEventSource.SongMap)
+                    break
+                }
+                index++
+            }
         }
         return next.takeIf { active.load() === history }
     }

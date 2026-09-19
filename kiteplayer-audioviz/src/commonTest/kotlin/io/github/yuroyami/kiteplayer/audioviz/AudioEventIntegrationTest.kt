@@ -29,7 +29,7 @@ class AudioEventIntegrationTest {
         val measured = frame(10_000L, generation = Generation(1), revision = 2L)
         for ((generation, revision) in listOf(Generation(2) to 2L, Generation(1) to 3L)) {
             val history = AudioEventHistory(generation, revision)
-            val cursor = AudioEventCursor { history }
+            val cursor = AudioEventCursor { EventSources(history) }
             cursor.sample(0L)
             history.publish(AudioDetections(30_000L, 10_000L, arrayOf(hit(5_000L))))
             val delivery = cursor.sample(10_000L)

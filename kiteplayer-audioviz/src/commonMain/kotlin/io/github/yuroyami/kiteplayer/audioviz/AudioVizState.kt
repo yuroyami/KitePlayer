@@ -36,11 +36,14 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
     /** Shared event retention and detector completion, separate from this view's cursor. */
     public val eventStats: AudioEventHistoryStats? get() = analysisFeed?.timeline?.eventStats
 
-    /** Events this view discarded because their confirmation arrived more than 30 ms late. */
+    /** Events this view discarded as too late: over 30 ms for a transient, over 3 s for structure. */
     public val lateEventDiscards: Long get() = eventCursor?.lateDiscards ?: 0L
 
     /** Past events discarded on attachment, pause, discontinuity, long suspension or overflow. */
     public val catchUpEventDiscards: Long get() = eventCursor?.catchUpDiscards ?: 0L
+
+    /** Live structural events this view dropped because a complete song map covered their time. */
+    public val duplicateEventDiscards: Long get() = eventCursor?.duplicateDiscards ?: 0L
 
     internal fun bind(feed: AudioVizFeed?) {
         analysisFeed = feed

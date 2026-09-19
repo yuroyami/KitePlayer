@@ -132,6 +132,18 @@ final enum class io.github.yuroyami.kiteplayer.audioviz/AudioEventKind : kotlin/
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz/AudioEventKind> // io.github.yuroyami.kiteplayer.audioviz/AudioEventKind.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer.audioviz/AudioEventSource : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz/AudioEventSource> { // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource|null[0]
+    enum entry LiveStructure // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.LiveStructure|null[0]
+    enum entry LiveTransient // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.LiveTransient|null[0]
+    enum entry SongMap // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.SongMap|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz/AudioEventSource> // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz/AudioEventSource // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz/AudioEventSource> // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.audioviz/WaveformChannels : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz/WaveformChannels> { // io.github.yuroyami.kiteplayer.audioviz/WaveformChannels|null[0]
     enum entry FirstPair // io.github.yuroyami.kiteplayer.audioviz/WaveformChannels.FirstPair|null[0]
     enum entry MeanAll // io.github.yuroyami.kiteplayer.audioviz/WaveformChannels.MeanAll|null[0]
@@ -950,6 +962,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/AudioDetections { // io.githu
         final fun <get-completeThroughMicros>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioDetections.completeThroughMicros.<get-completeThroughMicros>|<get-completeThroughMicros>(){}[0]
     final val size // io.github.yuroyami.kiteplayer.audioviz/AudioDetections.size|{}size[0]
         final fun <get-size>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/AudioDetections.size.<get-size>|<get-size>(){}[0]
+    final val source // io.github.yuroyami.kiteplayer.audioviz/AudioDetections.source|{}source[0]
+        final fun <get-source>(): io.github.yuroyami.kiteplayer.audioviz/AudioEventSource // io.github.yuroyami.kiteplayer.audioviz/AudioDetections.source.<get-source>|<get-source>(){}[0]
 
     final fun get(kotlin/Int): io.github.yuroyami.kiteplayer.audioviz/AudioDetection // io.github.yuroyami.kiteplayer.audioviz/AudioDetections.get|get(kotlin.Int){}[0]
 }
@@ -963,11 +977,17 @@ final class io.github.yuroyami.kiteplayer.audioviz/AudioEvent { // io.github.yur
         final fun <get-generation>(): io.github.yuroyami.kiteplayer/Generation // io.github.yuroyami.kiteplayer.audioviz/AudioEvent.generation.<get-generation>|<get-generation>(){}[0]
     final val sequence // io.github.yuroyami.kiteplayer.audioviz/AudioEvent.sequence|{}sequence[0]
         final fun <get-sequence>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioEvent.sequence.<get-sequence>|<get-sequence>(){}[0]
+    final val source // io.github.yuroyami.kiteplayer.audioviz/AudioEvent.source|{}source[0]
+        final fun <get-source>(): io.github.yuroyami.kiteplayer.audioviz/AudioEventSource // io.github.yuroyami.kiteplayer.audioviz/AudioEvent.source.<get-source>|<get-source>(){}[0]
+
+    final fun sameIdentity(io.github.yuroyami.kiteplayer.audioviz/AudioEvent?): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz/AudioEvent.sameIdentity|sameIdentity(io.github.yuroyami.kiteplayer.audioviz.AudioEvent?){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor { // io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor|null[0]
     final var catchUpDiscards // io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor.catchUpDiscards|{}catchUpDiscards[0]
         final fun <get-catchUpDiscards>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor.catchUpDiscards.<get-catchUpDiscards>|<get-catchUpDiscards>(){}[0]
+    final var duplicateDiscards // io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor.duplicateDiscards|{}duplicateDiscards[0]
+        final fun <get-duplicateDiscards>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor.duplicateDiscards.<get-duplicateDiscards>|<get-duplicateDiscards>(){}[0]
     final var lateDiscards // io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor.lateDiscards|{}lateDiscards[0]
         final fun <get-lateDiscards>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioEventCursor.lateDiscards.<get-lateDiscards>|<get-lateDiscards>(){}[0]
 
@@ -982,6 +1002,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery { // io.gi
         final fun <get-catchUpDiscards>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.catchUpDiscards.<get-catchUpDiscards>|<get-catchUpDiscards>(){}[0]
     final val completeThroughMicros // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.completeThroughMicros|{}completeThroughMicros[0]
         final fun <get-completeThroughMicros>(): kotlin/Long? // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.completeThroughMicros.<get-completeThroughMicros>|<get-completeThroughMicros>(){}[0]
+    final val duplicateDiscards // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.duplicateDiscards|{}duplicateDiscards[0]
+        final fun <get-duplicateDiscards>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.duplicateDiscards.<get-duplicateDiscards>|<get-duplicateDiscards>(){}[0]
     final val generation // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.generation|{}generation[0]
         final fun <get-generation>(): io.github.yuroyami.kiteplayer/Generation // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.generation.<get-generation>|<get-generation>(){}[0]
     final val lateDiscards // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.lateDiscards|{}lateDiscards[0]
@@ -990,6 +1012,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery { // io.gi
         final fun <get-reset>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.reset.<get-reset>|<get-reset>(){}[0]
     final val size // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.size|{}size[0]
         final fun <get-size>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.size.<get-size>|<get-size>(){}[0]
+    final val structureCompleteThroughMicros // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.structureCompleteThroughMicros|{}structureCompleteThroughMicros[0]
+        final fun <get-structureCompleteThroughMicros>(): kotlin/Long? // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.structureCompleteThroughMicros.<get-structureCompleteThroughMicros>|<get-structureCompleteThroughMicros>(){}[0]
 
     final fun get(kotlin/Int): io.github.yuroyami.kiteplayer.audioviz/DeliveredAudioEvent // io.github.yuroyami.kiteplayer.audioviz/AudioEventDelivery.get|get(kotlin.Int){}[0]
 }
@@ -1016,6 +1040,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/AudioVizState { // io.github.
         final fun <get-catchUpEventDiscards>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.catchUpEventDiscards.<get-catchUpEventDiscards>|<get-catchUpEventDiscards>(){}[0]
     final val director // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.director|{}director[0]
         final fun <get-director>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizDirector // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.director.<get-director>|<get-director>(){}[0]
+    final val duplicateEventDiscards // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.duplicateEventDiscards|{}duplicateEventDiscards[0]
+        final fun <get-duplicateEventDiscards>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.duplicateEventDiscards.<get-duplicateEventDiscards>|<get-duplicateEventDiscards>(){}[0]
     final val eventStats // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.eventStats|{}eventStats[0]
         final fun <get-eventStats>(): io.github.yuroyami.kiteplayer.audioviz/AudioEventHistoryStats? // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.eventStats.<get-eventStats>|<get-eventStats>(){}[0]
     final val lateEventDiscards // io.github.yuroyami.kiteplayer.audioviz/AudioVizState.lateEventDiscards|{}lateEventDiscards[0]
@@ -1300,6 +1326,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame { // io.github.
         final fun <get-snarePulse>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.snarePulse.<get-snarePulse>|<get-snarePulse>(){}[0]
     final val stereoScopeMetadata // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.stereoScopeMetadata|{}stereoScopeMetadata[0]
         final fun <get-stereoScopeMetadata>(): io.github.yuroyami.kiteplayer.audioviz/WaveformMetadata? // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.stereoScopeMetadata.<get-stereoScopeMetadata>|<get-stereoScopeMetadata>(){}[0]
+    final val structure // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.structure|{}structure[0]
+        final fun <get-structure>(): io.github.yuroyami.kiteplayer.audioviz/AudioDetections? // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.structure.<get-structure>|<get-structure>(){}[0]
     final val treble // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.treble|{}treble[0]
         final fun <get-treble>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.treble.<get-treble>|<get-treble>(){}[0]
     final val trebleRel // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.trebleRel|{}trebleRel[0]
@@ -1346,6 +1374,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline { // io.gith
         final fun <get-historyStats>(): io.github.yuroyami.kiteplayer.audioviz/SpectrumHistoryStats // io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline.historyStats.<get-historyStats>|<get-historyStats>(){}[0]
     final val revision // io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline.revision|{}revision[0]
         final fun <get-revision>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline.revision.<get-revision>|<get-revision>(){}[0]
+    final val structureEventStats // io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline.structureEventStats|{}structureEventStats[0]
+        final fun <get-structureEventStats>(): io.github.yuroyami.kiteplayer.audioviz/AudioEventHistoryStats // io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline.structureEventStats.<get-structureEventStats>|<get-structureEventStats>(){}[0]
 
     final fun ahead(kotlin/Long, kotlin/Float): io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame? // io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline.ahead|ahead(kotlin.Long;kotlin.Float){}[0]
     final fun at(kotlin/Long): io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame? // io.github.yuroyami.kiteplayer.audioviz/SpectrumTimeline.at|at(kotlin.Long){}[0]

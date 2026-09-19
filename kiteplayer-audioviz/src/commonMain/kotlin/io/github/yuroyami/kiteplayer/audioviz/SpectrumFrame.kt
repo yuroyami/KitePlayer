@@ -163,6 +163,8 @@ public class SpectrumFrame internal constructor(
     public val events: AudioEventDelivery? = null,
     /** Pulse rate and phase evidence, separately timed and unavailable until analysis is ready. */
     public val rhythm: RhythmEstimate? = null,
+    /** This analysis's structural publication and watermark, separate from the transient [detections]. */
+    public val structure: AudioDetections? = null,
 ) {
     /** Conservative primitive payload charge; shared legacy array aliases are charged once. */
     internal val retainedPayloadBytes: Long
@@ -177,6 +179,7 @@ public class SpectrumFrame internal constructor(
             power?.let { bytes += (it.binCount + it.bandCount) * 4L + (it.bandCount + 1) * 8L }
             drivers?.let { bytes += it.bandCount * 12L }
             detections?.let { bytes += it.size * 64L }
+            structure?.let { bytes += it.size * 64L }
             events?.let { bytes += it.size * 80L }
             return bytes
         }
@@ -282,6 +285,7 @@ public class SpectrumFrame internal constructor(
             stereoScopeMetadata = stereoScopeMetadata,
             detections = detections,
             rhythm = pulseEstimate,
+            structure = structure,
         )
     }
 
@@ -361,6 +365,7 @@ public class SpectrumFrame internal constructor(
         detections = detections,
         events = events,
         rhythm = rhythm,
+        structure = structure,
     )
 
     /** Keep every delivered record while providing the old strongest-hit projection for envelopes. */

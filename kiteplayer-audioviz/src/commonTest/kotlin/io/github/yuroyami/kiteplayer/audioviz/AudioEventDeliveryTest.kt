@@ -18,8 +18,8 @@ class AudioEventDeliveryTest {
     @Test
     fun twoHitsAndCoincidentKindsReachEachViewOnceInSequenceOrder() {
         val history = AudioEventHistory(Generation.Initial, 0L)
-        val first = AudioEventCursor { history }
-        val second = AudioEventCursor { history }
+        val first = AudioEventCursor { EventSources(history) }
+        val second = AudioEventCursor { EventSources(history) }
         first.sample(0L)
         second.sample(0L)
         assertTrue(publish(history, detection(5_000L), detection(10_000L, strength = 0.2f),
@@ -40,7 +40,7 @@ class AudioEventDeliveryTest {
     @Test
     fun aFutureEventWaitsForItsOriginalTime() {
         val history = AudioEventHistory(Generation.Initial, 0L)
-        val cursor = AudioEventCursor { history }
+        val cursor = AudioEventCursor { EventSources(history) }
         cursor.sample(0L)
         publish(history, detection(10_000L))
         assertEquals(0, cursor.sample(9_999L).size)
@@ -51,7 +51,7 @@ class AudioEventDeliveryTest {
     @Test
     fun completionWatermarkAndLateArrivalAreIndependentOfTheDisplayCursor() {
         val history = AudioEventHistory(Generation.Initial, 0L)
-        val cursor = AudioEventCursor { history }
+        val cursor = AudioEventCursor { EventSources(history) }
         assertNull(cursor.sample(0L).completeThroughMicros)
         publish(history, complete = 5_000L, available = 30_000L)
         assertEquals(5_000L, cursor.sample(10_000L).completeThroughMicros)
@@ -74,7 +74,7 @@ class AudioEventDeliveryTest {
     @Test
     fun overflowResetsAtNowAndKeepsFutureEventsWithoutReplayingPastBursts() {
         val history = AudioEventHistory(Generation.Initial, 0L, capacity = 4)
-        val cursor = AudioEventCursor { history }
+        val cursor = AudioEventCursor { EventSources(history) }
         cursor.sample(0L)
         publish(history, *listOf(1L, 2L, 3L, 4L, 5L, 6L, 8L).map { detection(it * 1_000) }.toTypedArray())
         assertEquals(3L, history.snapshot.evictedEvents)
@@ -101,7 +101,7 @@ class AudioEventDeliveryTest {
     @Test
     fun longStallsAndPausesDiscardPastEventsIncludingDelayedConfirmations() {
         val history = AudioEventHistory(Generation.Initial, 0L)
-        val cursor = AudioEventCursor { history }
+        val cursor = AudioEventCursor { EventSources(history) }
         cursor.sample(0L)
         publish(history, detection(100_000L), detection(200_000L), detection(400_000L))
         val stalled = cursor.sample(300_001L)
@@ -121,7 +121,7 @@ class AudioEventDeliveryTest {
     @Test
     fun historyReplacementAndBackwardClockNeverReviveOldEvents() {
         var history = AudioEventHistory(Generation.Initial, 0L)
-        val cursor = AudioEventCursor { history }
+        val cursor = AudioEventCursor { EventSources(history) }
         cursor.sample(0L)
         publish(history, detection(10_000L))
         assertEquals(1, cursor.sample(20_000L).size)

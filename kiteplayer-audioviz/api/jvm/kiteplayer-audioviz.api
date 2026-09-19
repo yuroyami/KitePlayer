@@ -51,19 +51,24 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioDetections {
 	public final fun getAvailableThroughMicros ()J
 	public final fun getCompleteThroughMicros ()J
 	public final fun getSize ()I
+	public final fun getSource ()Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioEvent {
 	public static final field $stable I
+	public synthetic fun <init> (JJJLio/github/yuroyami/kiteplayer/audioviz/AudioDetection;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getAnalysisRevision ()J
 	public final fun getDetection ()Lio/github/yuroyami/kiteplayer/audioviz/AudioDetection;
 	public final fun getGeneration-exH1Oj8 ()J
 	public final fun getSequence ()J
+	public final fun getSource ()Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;
+	public final fun sameIdentity (Lio/github/yuroyami/kiteplayer/audioviz/AudioEvent;)Z
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioEventCursor {
 	public static final field $stable I
 	public final fun getCatchUpDiscards ()J
+	public final fun getDuplicateDiscards ()J
 	public final fun getLateDiscards ()J
 	public final fun reset ()V
 	public final fun sample (JZ)Lio/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery;
@@ -72,15 +77,17 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioEventCursor {
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery {
 	public static final field $stable I
-	public synthetic fun <init> (JJLjava/lang/Long;[Lio/github/yuroyami/kiteplayer/audioviz/DeliveredAudioEvent;JJZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (JJLjava/lang/Long;[Lio/github/yuroyami/kiteplayer/audioviz/DeliveredAudioEvent;JJZLjava/lang/Long;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun get (I)Lio/github/yuroyami/kiteplayer/audioviz/DeliveredAudioEvent;
 	public final fun getAnalysisRevision ()J
 	public final fun getCatchUpDiscards ()J
 	public final fun getCompleteThroughMicros ()Ljava/lang/Long;
+	public final fun getDuplicateDiscards ()J
 	public final fun getGeneration-exH1Oj8 ()J
 	public final fun getLateDiscards ()J
 	public final fun getReset ()Z
 	public final fun getSize ()I
+	public final fun getStructureCompleteThroughMicros ()Ljava/lang/Long;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioEventHistoryStats {
@@ -104,6 +111,15 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioEventKind : java/
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/AudioEventKind;
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/AudioEventKind;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/AudioEventSource : java/lang/Enum {
+	public static final field LiveStructure Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;
+	public static final field LiveTransient Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;
+	public static final field SongMap Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/AudioEventSource;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioOnlyKt {
@@ -130,6 +146,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizState {
 	public final fun getDirector ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDirector;
 	public final fun getDisplayDelay-FghU774 ()Lkotlin/time/Duration;
 	public final fun getDrawing ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
+	public final fun getDuplicateEventDiscards ()J
 	public final fun getEstimatedDisplayDelay-UwyO8pc ()J
 	public final fun getEventStats ()Lio/github/yuroyami/kiteplayer/audioviz/AudioEventHistoryStats;
 	public final fun getLateEventDiscards ()J
@@ -254,7 +271,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumAnalyzer {
 public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumFrame {
 	public static final field $stable I
 	public static final field Companion Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame$Companion;
-	public synthetic fun <init> (J[F[F[FFFFFFF[F[FFFFFFFFFFFFFFFFFFFZFZFFFFFF[FFFFFF[F[FJZJLio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;Lio/github/yuroyami/kiteplayer/audioviz/PowerSpectrum;Lio/github/yuroyami/kiteplayer/audioviz/ProgrammeLoudness;Lio/github/yuroyami/kiteplayer/audioviz/EnergyDrivers;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery;Lio/github/yuroyami/kiteplayer/audioviz/RhythmEstimate;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (J[F[F[FFFFFFF[F[FFFFFFFFFFFFFFFFFFFZFZFFFFFF[FFFFFF[F[FJZJLio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;Lio/github/yuroyami/kiteplayer/audioviz/PowerSpectrum;Lio/github/yuroyami/kiteplayer/audioviz/ProgrammeLoudness;Lio/github/yuroyami/kiteplayer/audioviz/EnergyDrivers;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery;Lio/github/yuroyami/kiteplayer/audioviz/RhythmEstimate;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun bandPercentile (F)F
 	public final fun getAnalysisRevision ()J
 	public final fun getAvailability ()Lio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;
@@ -311,6 +328,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumFrame {
 	public final fun getSnare ()F
 	public final fun getSnarePulse ()F
 	public final fun getStereoScopeMetadata ()Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;
+	public final fun getStructure ()Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;
 	public final fun getTreble ()F
 	public final fun getTrebleRel ()F
 	public final fun getTrend ()F
@@ -347,6 +365,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumTimeline {
 	public final fun getGeneration-exH1Oj8 ()J
 	public final fun getHistoryStats ()Lio/github/yuroyami/kiteplayer/audioviz/SpectrumHistoryStats;
 	public final fun getRevision ()J
+	public final fun getStructureEventStats ()Lio/github/yuroyami/kiteplayer/audioviz/AudioEventHistoryStats;
 	public final fun interpolated (J)Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame;
 	public final fun newest ()Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame;
 	public final fun nextEvent (JLio/github/yuroyami/kiteplayer/audioviz/AudioEventKind;)Lio/github/yuroyami/kiteplayer/audioviz/AudioEvent;

@@ -13,7 +13,7 @@ class AudioEventConcurrencyTest {
     fun aWrappingProducerAndTwoReadersAccountForEveryEventWithoutDuplicates() {
         val history = AudioEventHistory(Generation.Initial, 0L, capacity = 16)
         val count = 20_000
-        val cursors = Array(2) { AudioEventCursor { history }.also { it.sample(0L) } }
+        val cursors = Array(2) { AudioEventCursor { EventSources(history) }.also { it.sample(0L) } }
         val start = CountDownLatch(1)
         val completed = CountDownLatch(3)
         val failure = AtomicReference<Throwable?>(null)

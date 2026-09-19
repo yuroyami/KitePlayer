@@ -55,7 +55,5 @@ internal class AnticipatedImpulse(private val spring: Spring) {
         revision = 0L
     }
 
-    private fun sameIdentity(first: AudioEvent?, second: AudioEvent): Boolean = first != null &&
-        first.generation == second.generation && first.analysisRevision == second.analysisRevision &&
-        first.sequence == second.sequence
+    private fun sameIdentity(first: AudioEvent?, second: AudioEvent): Boolean = second.sameIdentity(first)
 }

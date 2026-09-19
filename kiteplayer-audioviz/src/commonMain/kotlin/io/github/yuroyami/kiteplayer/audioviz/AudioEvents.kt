@@ -23,6 +23,20 @@ public enum class AudioEventKind {
     Breakdown,
 }
 
+/**
+ * Which publisher produced an event. Each source has its own completion watermark, sequence
+ * numbers, lateness budget and retention, so a slow source never holds back another.
+ */
+@AudioVizAuthoringApi
+public enum class AudioEventSource {
+    /** The causal transient detectors, confirmed within one analysis window. Budget 30 ms. */
+    LiveTransient,
+    /** A causal structural detector, which confirms a boundary after it happened. Budget 3 s. */
+    LiveStructure,
+    /** The structural events of an installed song map, delivered on time only. */
+    SongMap,
+}
+
 /** One detector result. Availability is the newest media sample needed to produce this result. */
 @AudioVizAuthoringApi
 public class AudioDetection internal constructor(
@@ -37,25 +51,36 @@ public class AudioDetection internal constructor(
     public val surprise: Float,
 )
 
-/** Immutable publication of all detections through an inclusive media-time watermark. */
+/** Immutable publication of all detections of one source through an inclusive media-time watermark. */
 @AudioVizAuthoringApi
 public class AudioDetections internal constructor(
     public val availableThroughMicros: Long,
     public val completeThroughMicros: Long,
     private val detections: Array<AudioDetection>,
+    /** The publisher of this batch. Its watermark says nothing about any other source. */
+    public val source: AudioEventSource = AudioEventSource.LiveTransient,
 ) {
     public val size: Int get() = detections.size
     public operator fun get(index: Int): AudioDetection = detections[index]
 }
 
-/** An accepted detection with an identity unique within one continuous analysis history. */
+/**
+ * An accepted detection with an identity unique within one continuous analysis history. The
+ * identity is the source, generation, revision and sequence together; sequence numbers are
+ * comparable only within one source.
+ */
 @AudioVizAuthoringApi
 public class AudioEvent internal constructor(
     public val generation: Generation,
     public val analysisRevision: Long,
     public val sequence: Long,
     public val detection: AudioDetection,
-)
+    public val source: AudioEventSource = AudioEventSource.LiveTransient,
+) {
+    /** True when [other] is the same accepted event, compared by its whole identity. */
+    public fun sameIdentity(other: AudioEvent?): Boolean = other != null && source == other.source &&
+        generation == other.generation && analysisRevision == other.analysisRevision && sequence == other.sequence
+}
 
 /** A retained event and the presentation seconds until its original estimated media time. */
 @AudioVizAuthoringApi
@@ -83,6 +108,10 @@ public class AudioEventDelivery internal constructor(
     public val catchUpDiscards: Long = 0L,
     /** Whether this call reset its catch-up boundary, rather than replaying a missed burst. */
     public val reset: Boolean = false,
+    /** The structural source's watermark, or null before it has published. */
+    public val structureCompleteThroughMicros: Long? = null,
+    /** Live structural events dropped because a complete song map already covers their time. */
+    public val duplicateDiscards: Long = 0L,
 ) {
     public val size: Int get() = events.size
     public operator fun get(index: Int): DeliveredAudioEvent = events[index]

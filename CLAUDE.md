@@ -254,6 +254,18 @@ Each line is something that bit someone. Delete a line when it stops being true.
   the JVM first. Every real device bug of the past sessions reproduced there before it was fixed.
   The exposing fixture class is a long-GOP animation file with a dense subtitle track of roughly
   70,000 cues; short clean files hide these bugs.
+- The player's own counters cannot see judder, so measure Android video cadence with
+  `adb shell dumpsys SurfaceFlinger --latency '<layer>'`, whose rows hold each frame's requested and
+  real on-screen time for the last 127 frames (#137).
+- One Matroska timestamp gap misstates a frame rate by up to 2 percent, because Matroska rounds to
+  whole milliseconds, and a phone asked for 24.39 fps instead of 23.976 picked a 48 Hz mode that
+  put a third of the frames on the wrong refresh (#137).
+- Since Android 14 MediaCodec promises a rendered callback for every shown frame, but on an ASUS ROG
+  Phone 9 it also reported frames that SurfaceFlinger never showed, so the lost-frame count catches
+  only part of the losses (#139).
+- The sample app holds no keep-screen-on and its Compose screens are not exported, so a device
+  measurement longer than five minutes needs `adb shell input keyevent 0` now and then, and the
+  Compose screen opens from the launcher's button (#138).
 
 ## Decisions already made
 

@@ -475,9 +475,10 @@ overhaul, not the implementation's current status or a second issue tracker. The
 [timing API contract](audioviz-timing-api.md),
 [calibrated feature contract](audioviz-feature-api.md),
 [event-delivery contract](audioviz-events-api.md),
-[onset method](audioviz-onset-method.md) and
-[structure and key contract](audioviz-structure-api.md) describe the subsequent implementation
-contracts and their qualification limits.
+[onset method](audioviz-onset-method.md),
+[structure and key contract](audioviz-structure-api.md) and
+[song scan contract](audioviz-song-scan-api.md) describe the subsequent implementation contracts
+and their qualification limits.
 
 | Area | Source at the baseline and implication for the overhaul |
 |---|---|

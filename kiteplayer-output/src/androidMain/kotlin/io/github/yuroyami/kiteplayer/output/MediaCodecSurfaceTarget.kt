@@ -104,12 +104,14 @@ internal interface DirectSurfaceVideoFrame : io.github.yuroyami.kiteplayer.spi.V
     /**
      * Consumes this frame and enqueues presentation for [targetNanos]. False means it enqueued a
      * discard because no live display Surface existed. [onRenderFailed] rolls back work performed
-     * by [beforeRender] only when MediaCodec's timed Surface release itself throws.
+     * by [beforeRender] only when MediaCodec's timed Surface release itself throws. [displayReport]
+     * learns whether the display showed the frame, where the decoder can tell (Android 14 and newer).
      */
     fun renderAt(
         targetNanos: Long,
         beforeRender: (renderTimestampNanos: Long) -> Unit = {},
         onRenderFailed: (renderTimestampNanos: Long) -> Unit = {},
+        displayReport: MediaCodecDisplayReport? = null,
         onReleased: (rendered: Boolean) -> Unit,
     ): Boolean
 }

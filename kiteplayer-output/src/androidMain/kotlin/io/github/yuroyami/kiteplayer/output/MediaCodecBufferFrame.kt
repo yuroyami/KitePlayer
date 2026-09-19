@@ -21,6 +21,10 @@ internal data class MediaCodecReleaseCommand(
     val beforeRender: (renderTimestampNanos: Long) -> Unit,
     val onRenderFailed: (renderTimestampNanos: Long) -> Unit,
     val completion: (rendered: Boolean) -> Unit,
+    /** The frame's own timestamp, which MediaCodec's rendered callback names it by. */
+    val ptsUs: Long = 0L,
+    /** Asked for when the display showed or lost this frame; null asks for nothing. */
+    val displayReport: MediaCodecDisplayReport? = null,
 ) {
     fun complete(rendered: Boolean) {
         completion(rendered)
@@ -54,6 +58,7 @@ internal class MediaCodecBufferFrame(
         targetNanos: Long,
         beforeRender: (renderTimestampNanos: Long) -> Unit,
         onRenderFailed: (renderTimestampNanos: Long) -> Unit,
+        displayReport: MediaCodecDisplayReport?,
         onReleased: (rendered: Boolean) -> Unit,
     ): Boolean {
         if (!released.compareAndSet(false, true)) return false
@@ -73,6 +78,8 @@ internal class MediaCodecBufferFrame(
                 beforeRender = beforeRender,
                 onRenderFailed = onRenderFailed,
                 completion = if (canRender) onReleased else NO_COMPLETION,
+                ptsUs = pts.micros,
+                displayReport = displayReport.takeIf { canRender },
             ),
         )
         return canRender

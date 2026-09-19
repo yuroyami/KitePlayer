@@ -223,7 +223,11 @@ public class AndroidSurfaceVideoRenderer internal constructor(
         }
     }
 
-    /** Frames whose picture was posted to the Surface. */
+    /**
+     * Frames the display showed. From Android 14 a hardware frame counts when MediaCodec reports it
+     * rendered. Before that, and for every software frame, it counts when its picture was posted to
+     * the Surface, which the display can still drop.
+     */
     public val presentedFrames: Long get() = presented.value
 
     /**
@@ -239,7 +243,8 @@ public class AndroidSurfaceVideoRenderer internal constructor(
      * Frames that reached no Surface for a reason other than being superseded: a conversion that
      * failed or returned the wrong number of bytes, a frame refused while the Surface was gone, a lock
      * or a post the Surface would not give, a draw that threw, or a frame still in hand when the
-     * renderer closed.
+     * renderer closed. From Android 14 it also counts a hardware frame the display dropped after its
+     * release, because a newer frame was shown in its place.
      */
     public val failedFrames: Long get() = failed.value
 
@@ -275,15 +280,30 @@ public class AndroidSurfaceVideoRenderer internal constructor(
                 return false
             }
             val framePtsUs = frame.pts.micros
-            val accepted = frame.renderAt(targetNanos) { rendered ->
-                if (rendered) {
+            // Where MediaCodec reports every shown frame, a frame counts as presented when the
+            // display showed it, and one the display dropped counts as failed (#139).
+            val exact = mediaCodecReportsEveryRender()
+            val report = if (!exact) null else object : MediaCodecDisplayReport {
+                override fun displayed(atNanos: Long) {
                     presented.incrementAndGet()
+                    eventFlow.tryEmit(RendererEvent.FramePresented(Pts(framePtsUs), atNanos = atNanos, exact = true))
+                }
+
+                override fun lost() {
+                    if (!closed.value) failed.incrementAndGet()
+                }
+            }
+            val accepted = frame.renderAt(targetNanos, displayReport = report) { rendered ->
+                if (rendered) {
                     noteSurfaceAvailable()
-                    // Best effort: the codec released the buffer toward the surface. The EXACT
-                    // report is MediaCodec's own rendered listener, still owed.
-                    eventFlow.tryEmit(
-                        RendererEvent.FramePresented(Pts(framePtsUs), atNanos = System.nanoTime(), exact = false),
-                    )
+                    if (!exact) {
+                        presented.incrementAndGet()
+                        // Best effort before Android 14: the codec released the buffer toward the
+                        // Surface, and the display may still drop it.
+                        eventFlow.tryEmit(
+                            RendererEvent.FramePresented(Pts(framePtsUs), atNanos = System.nanoTime(), exact = false),
+                        )
+                    }
                 } else if (!closed.value) {
                     failed.incrementAndGet()
                 }

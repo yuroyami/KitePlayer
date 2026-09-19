@@ -472,6 +472,10 @@ private class MediaCodecVideoDecoder(
     private val outstanding = mutableMapOf<Int, Long>()
     private val pendingConfig = ArrayDeque<ByteArray>()
     private val releaseTimestamps = MediaCodecReleaseTimestampSequence()
+
+    /** Present only where MediaCodec reports every rendered frame; see [mediaCodecReportsEveryRender]. */
+    private val displayLedger: MediaCodecDisplayLedger? =
+        if (mediaCodecReportsEveryRender()) MediaCodecDisplayLedger() else null
     private var pendingInput: PendingInput? = null
 
     private var generation: Generation = Generation.Initial
@@ -501,6 +505,10 @@ private class MediaCodecVideoDecoder(
         try {
             synchronized(codecLock) {
                 codec.configure(format, fallbackSurface, null, 0)
+                // A null handler runs the callback on MediaCodec's own thread; the ledger locks.
+                displayLedger?.let { ledger ->
+                    codec.setOnFrameRenderedListener({ _, ptsUs, atNanos -> ledger.rendered(ptsUs, atNanos) }, null)
+                }
                 outputContract.requestedColorTransfer?.let { requested ->
                     val accepted = codec.inputFormat.intOrNull(MediaFormat.KEY_COLOR_TRANSFER_REQUEST)
                     check(accepted == requested) {
@@ -563,6 +571,7 @@ private class MediaCodecVideoDecoder(
         rejectReleaseCommands()
         val replayCodecConfig = !outputEstablished
         codecCall { flush() }
+        displayLedger?.clear()
         decoderEpoch += 1L
         releaseTimestamps.reset()
         outstanding.clear()
@@ -609,6 +618,7 @@ private class MediaCodecVideoDecoder(
                 }
             }
         } finally {
+            displayLedger?.clear()
             runCatching { drainFallbackImages() }
             runCatching { fallbackReader.close() }
             target.unbind(this)
@@ -750,6 +760,9 @@ private class MediaCodecVideoDecoder(
                             throw releaseFailure
                         }
                         rendered = true
+                        // After the release, never before: a release that threw must not wait for an
+                        // answer. The display needs at least a refresh, so the callback cannot win.
+                        command.displayReport?.let { report -> displayLedger?.released(command.ptsUs, report) }
                     } else {
                         codec.releaseOutputBuffer(command.outputIndex, false)
                     }

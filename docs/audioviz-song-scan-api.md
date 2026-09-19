@@ -61,11 +61,14 @@ The reference is present only when the scan is complete and at least one reading
 convention as the causal reference, bounded to the same plus or minus 24 dB gain.
 
 Structure comes from running the live section detector over the scanned audio, plus key
-changes: where the key estimate changes from one known key to another, a `SectionBoundary` is
-placed at the change point that best separates the two keys' correlations over the preceding
-12 seconds, unless another boundary lies within four seconds. This is the harmony-only case the
-live detector leaves out. Offline detector results can differ from live ones; the map does not
-claim they agree.
+changes. Where the key estimate changes from one known key to another, a `SectionBoundary` is
+placed where the new key's lead over the old one steps up: the split of a least-squares fit of two
+constant segments over the preceding 30 seconds, the later segment higher. A chord both keys share
+dips that lead inside a section, so the fit follows the mean rather than the sign of each step.
+The key estimate itself lagged a mode change by seventeen seconds on the development fixtures,
+which is why the history is that long. No key change is added within four seconds of another
+boundary. This is the harmony-only case the live detector leaves out. Offline results can differ
+from live ones; the map does not claim they agree.
 
 The map keeps a programme level curve, one value per 100 ms, to verify the map against live audio.
 A four minute song holds about 2400 values; the whole map stays far below the standard's 2 MB.
@@ -110,9 +113,38 @@ programme level is compared with the map's curve at the same media times. A mean
 difference above 1.5 dB discards the map and its cache entry, and live analysis continues alone.
 This catches changed content behind the same URI and any timestamp convention mismatch.
 
+## Views and migration
+
+`rememberAudioVizState(player, songScan)` sets the policy for that player's shared analysis
+session; the newest view to attach sets it. The parameter has a default, so source callers keep
+compiling, but compiled callers of the old signature must recompile. `SongScanPolicy.Off` turns
+scans off. `AudioAnalysisStats.rejectedSongMaps` counts maps withdrawn after verification.
+Scans read on the platform's blocking-capable dispatcher.
+
+## Development evidence on 2026-09-19
+
+A real-media test plays a clip through the default desktop player with an audio tap attached,
+scans the same track through `KitePlayer.scanAudio`, and requires every tap block after the first
+to have an identical scan block at the same timestamp: same frame count, format and samples. The
+first tap block is skipped because the start of playback may trim it.
+
+| Clip | What it exercises | Blocks compared, all identical |
+| --- | --- | ---: |
+| `audio-aac.m4a` | AAC encoder delay | 94 |
+| `audio-mp3.mp3` | MP3 padding | 77 |
+| `tsoffset1400.ts` | A transport stream with a nonzero start time | 94 |
+| `multitrack.mkv` | The second audio track, selected before playback | 94 |
+
+Shifting the scan's timestamps by one microsecond failed all four. Scripted-backend tests check
+stream choice, ordering, pacing by the sink, cancellation and the closing of the decoder, packets
+and session. Scanner tests on fakes check the settle delay, the policy table, cancellation of a
+replaced scan, one scan at a time across players, the cache and its key, and the pacer's share.
+Feed tests check that a map of the same audio stays and moves the shared gain to its reference,
+that a map of other audio is withdrawn within five seconds of readings, and that mapped structure
+arrives on time with the live duplicate counted.
+
 ## Qualification boundary
 
-Core tests use a scripted backend to check stream choice, ordering, pacing, cancellation and
-resource closing. A real-media test decodes the same file through playback and through a scan
-and compares their samples and timestamps. Scan cost is measured on the host; the standard's
-four-minute target of five core-seconds on a phone remains a device measurement.
+Scan cost is measured on the host only; the standard's four-minute target of five core-seconds on
+a phone remains a device measurement, and so does any effect of a scan on playback there. Network
+scans are covered by the policy and the core resolver test, not by a slow-network measurement.

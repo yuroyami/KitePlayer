@@ -4,6 +4,7 @@ import io.github.yuroyami.kiteplayer.internal.AudioPipeline
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
 import io.github.yuroyami.kiteplayer.internal.AudioRingHandle
 import io.github.yuroyami.kiteplayer.internal.MediaClock
+import io.github.yuroyami.kiteplayer.internal.ClockSnapshot
 import io.github.yuroyami.kiteplayer.internal.TempoStage
 import io.github.yuroyami.kiteplayer.internal.framesToMicros
 import io.github.yuroyami.kiteplayer.internal.openAudioPath
@@ -421,6 +422,12 @@ public class AudioPlayback(
     public fun position(): Pts? = synchronized(lock) {
         anchorLocked()
         mediaClock.nowOrNull()
+    }
+
+    /** Actor publication uses one mapping instead of separately reading position and rate. */
+    internal fun clockSnapshot(): ClockSnapshot = synchronized(lock) {
+        anchorLocked()
+        mediaClock.snapshot()
     }
 
     private fun anchorLocked() {

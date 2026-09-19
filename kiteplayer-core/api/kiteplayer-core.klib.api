@@ -715,7 +715,9 @@ abstract interface io.github.yuroyami.kiteplayer.spi/VideoRendererFactory { // i
 
 abstract interface io.github.yuroyami.kiteplayer/AudioTap { // io.github.yuroyami.kiteplayer/AudioTap|null[0]
     abstract fun onAudio(io.github.yuroyami.kiteplayer/Pts, kotlin/FloatArray, kotlin/Int, io.github.yuroyami.kiteplayer.spi/AudioFormat) // io.github.yuroyami.kiteplayer/AudioTap.onAudio|onAudio(io.github.yuroyami.kiteplayer.Pts;kotlin.FloatArray;kotlin.Int;io.github.yuroyami.kiteplayer.spi.AudioFormat){}[0]
+    open fun onAudio(io.github.yuroyami.kiteplayer/Generation, io.github.yuroyami.kiteplayer/Pts, kotlin/FloatArray, kotlin/Int, io.github.yuroyami.kiteplayer.spi/AudioFormat) // io.github.yuroyami.kiteplayer/AudioTap.onAudio|onAudio(io.github.yuroyami.kiteplayer.Generation;io.github.yuroyami.kiteplayer.Pts;kotlin.FloatArray;kotlin.Int;io.github.yuroyami.kiteplayer.spi.AudioFormat){}[0]
     open fun onDiscontinuity() // io.github.yuroyami.kiteplayer/AudioTap.onDiscontinuity|onDiscontinuity(){}[0]
+    open fun onDiscontinuity(io.github.yuroyami.kiteplayer/Generation) // io.github.yuroyami.kiteplayer/AudioTap.onDiscontinuity|onDiscontinuity(io.github.yuroyami.kiteplayer.Generation){}[0]
 }
 
 abstract interface io.github.yuroyami.kiteplayer/MediaIo : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer/MediaIo|null[0]
@@ -1701,6 +1703,21 @@ final class io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride { // io
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.subtitle/SubtitleStyleOverride.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/AudioClockSnapshot { // io.github.yuroyami.kiteplayer/AudioClockSnapshot|null[0]
+    final val generation // io.github.yuroyami.kiteplayer/AudioClockSnapshot.generation|{}generation[0]
+        final fun <get-generation>(): io.github.yuroyami.kiteplayer/Generation // io.github.yuroyami.kiteplayer/AudioClockSnapshot.generation.<get-generation>|<get-generation>(){}[0]
+    final val hostTimeNanos // io.github.yuroyami.kiteplayer/AudioClockSnapshot.hostTimeNanos|{}hostTimeNanos[0]
+        final fun <get-hostTimeNanos>(): kotlin/Long // io.github.yuroyami.kiteplayer/AudioClockSnapshot.hostTimeNanos.<get-hostTimeNanos>|<get-hostTimeNanos>(){}[0]
+    final val isValid // io.github.yuroyami.kiteplayer/AudioClockSnapshot.isValid|{}isValid[0]
+        final fun <get-isValid>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/AudioClockSnapshot.isValid.<get-isValid>|<get-isValid>(){}[0]
+    final val position // io.github.yuroyami.kiteplayer/AudioClockSnapshot.position|{}position[0]
+        final fun <get-position>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer/AudioClockSnapshot.position.<get-position>|<get-position>(){}[0]
+    final val quality // io.github.yuroyami.kiteplayer/AudioClockSnapshot.quality|{}quality[0]
+        final fun <get-quality>(): io.github.yuroyami.kiteplayer/LatencyQuality // io.github.yuroyami.kiteplayer/AudioClockSnapshot.quality.<get-quality>|<get-quality>(){}[0]
+    final val rate // io.github.yuroyami.kiteplayer/AudioClockSnapshot.rate|{}rate[0]
+        final fun <get-rate>(): kotlin/Double // io.github.yuroyami.kiteplayer/AudioClockSnapshot.rate.<get-rate>|<get-rate>(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/AudioConfig { // io.github.yuroyami.kiteplayer/AudioConfig|null[0]
     constructor <init>(kotlin.collections/List<kotlin/String> = ..., kotlin/Boolean = ..., io.github.yuroyami.kiteplayer/DownmixConfig = ..., kotlin/Float = ..., io.github.yuroyami.kiteplayer/EqualizerSettings = ..., io.github.yuroyami.kiteplayer/ReplayGainMode = ..., kotlin/Float = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer/AudioConfig.<init>|<init>(kotlin.collections.List<kotlin.String>;kotlin.Boolean;io.github.yuroyami.kiteplayer.DownmixConfig;kotlin.Float;io.github.yuroyami.kiteplayer.EqualizerSettings;io.github.yuroyami.kiteplayer.ReplayGainMode;kotlin.Float;kotlin.Float){}[0]
 
@@ -1960,6 +1977,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
 
     final fun attachAudioTap(io.github.yuroyami.kiteplayer/AudioTap) // io.github.yuroyami.kiteplayer/KitePlayer.attachAudioTap|attachAudioTap(io.github.yuroyami.kiteplayer.AudioTap){}[0]
     final fun attachRenderer(io.github.yuroyami.kiteplayer.spi/VideoRenderer) // io.github.yuroyami.kiteplayer/KitePlayer.attachRenderer|attachRenderer(io.github.yuroyami.kiteplayer.spi.VideoRenderer){}[0]
+    final fun audioClock(): io.github.yuroyami.kiteplayer/AudioClockSnapshot // io.github.yuroyami.kiteplayer/KitePlayer.audioClock|audioClock(){}[0]
     final fun chapterAt(kotlin.time/Duration): io.github.yuroyami.kiteplayer/Chapter? // io.github.yuroyami.kiteplayer/KitePlayer.chapterAt|chapterAt(kotlin.time.Duration){}[0]
     final fun close() // io.github.yuroyami.kiteplayer/KitePlayer.close|close(){}[0]
     final fun detachAudioTap(io.github.yuroyami.kiteplayer/AudioTap) // io.github.yuroyami.kiteplayer/KitePlayer.detachAudioTap|detachAudioTap(io.github.yuroyami.kiteplayer.AudioTap){}[0]

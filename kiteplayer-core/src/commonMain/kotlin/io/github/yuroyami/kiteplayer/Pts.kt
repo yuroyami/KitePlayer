@@ -69,15 +69,15 @@ public value class Pts(public val micros: Long) : Comparable<Pts> {
 }
 
 /**
- * The epoch a piece of pipeline state belongs to.
+ * The epoch a piece of state belongs to, within the timeline that produced it.
  *
- * Every packet, frame, queue, decoder and clock carries one. The core increments it on every seek
- * and every stream reconfiguration, and anything whose generation is not current is discarded
- * without being decoded or shown, wherever it is found.
+ * Packets, frames, queues and decoders carry a pipeline epoch. Seeking or rebuilding retires that
+ * epoch, so stale work can be discarded. An in-place audio selection keeps the video epoch valid;
+ * [AudioTap] and [AudioClockSnapshot] therefore share a separate audio generation that also changes
+ * at that selection. Compare generations only within the same producer and timeline.
  *
- * This single integer replaces a flush handshake across four threads. It is the reason seeking in
- * this engine is a state machine that can be reasoned about instead of a race that is tested by
- * hope.
+ * The identifier complements the worker quiesce and flush handshake; it does not make mutable
+ * pipeline state safe to change while a worker still owns it.
  *
  * Generation 0 is the initial one and is valid. "Not started" is expressed as a null
  * `Generation?`, never as a reserved value.

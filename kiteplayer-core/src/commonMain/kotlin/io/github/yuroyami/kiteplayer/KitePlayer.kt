@@ -93,6 +93,15 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     public fun position(): Duration = core.position()
 
     /**
+     * A coherent audible clock for visualisation and synchronised UI, independent of the seek bar.
+     *
+     * Includes its monotonic timestamp, effective rate, audio generation and device timing quality.
+     * Read once per display frame and apply the estimated display delay in media time. See
+     * [AudioClockSnapshot] for validity and clock-domain rules.
+     */
+    public fun audioClock(): AudioClockSnapshot = core.audioClock()
+
+    /**
      * Opens [media] and returns once the first frame is on screen and the player is paused on it.
      *
      * Legal from Idle, Ended and Failed. From anything else it throws: replacing what is playing needs an

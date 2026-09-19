@@ -179,12 +179,27 @@ class MediaClockTest {
         assertEquals(pts(4_000), snapshot.pts)
         assertEquals(Generation(7), snapshot.generation)
         assertEquals(1.5, snapshot.speed)
+        assertEquals(wall.nanos(), snapshot.hostTimeNanos)
         assertTrue(snapshot.isValid)
 
         // The snapshot does not move when the clock does.
         wall.advance(1.seconds)
         assertEquals(pts(4_000), snapshot.pts)
         assertEquals(pts(5_500), clock.nowOrNull())
+    }
+
+    @Test
+    fun `snapshot reads the host clock exactly once`() {
+        var nanos = 1_000_000_000L
+        val wall = object : MonotonicClock {
+            override fun nanos(): Long = nanos.also { nanos += 1_000_000L }
+        }
+        val clock = MediaClock(wall)
+        clock.setAt(Pts.Zero, Generation.Initial, 1_000_000_000L)
+        val snapshot = clock.snapshot()
+        assertEquals(Pts.Zero, snapshot.pts)
+        assertEquals(1_000_000_000L, snapshot.hostTimeNanos)
+        assertEquals(1_001_000_000L, nanos, "separate time reads can create an incoherent mapping")
     }
 
     @Test

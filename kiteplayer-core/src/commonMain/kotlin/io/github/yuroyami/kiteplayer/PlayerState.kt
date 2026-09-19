@@ -396,17 +396,16 @@ public enum class SyncMode {
 public enum class MasterClock { None, Audio, Video, External }
 
 /**
- * How much a sink's latency figure can be trusted.
+ * The evidence behind a sink's audio presentation timing.
  *
- * A sink reports one of these and the engine's tolerances do not change. The only response today is
- * a single warning when a sink says [Unreliable], and the one sink that exists says [Estimated].
- * Not implemented yet.
+ * Reported in playback statistics and [AudioClockSnapshot]. A measured device timestamp does not
+ * certify an external wireless route or the timing of a separately rendered display.
  */
 public enum class LatencyQuality {
     /** The platform reports a real measured figure. */
     Exact,
 
-    /** A figure that moves around and needs low-pass filtering before it is used. */
+    /** Timing derived from a platform estimate or fallback rather than a measured presentation. */
     Estimated,
 
     /** No usable figure at all. */

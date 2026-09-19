@@ -27,9 +27,28 @@ public interface AudioTap {
     public fun onAudio(pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat)
 
     /**
+     * A block with its continuous audio timeline identity, matching [KitePlayer.audioClock].
+     *
+     * The engine calls this overload. The default forwards to the original callback so existing
+     * taps keep working. Asynchronous consumers retain [generation] with their copied PCM and
+     * reject old work after a discontinuity, even when its timestamp equals the new position.
+     */
+    public fun onAudio(generation: Generation, pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {
+        onAudio(pts, interleaved, frames, format)
+    }
+
+    /**
      * Whatever the tap holds is stale: the player sought, changed the audio track or opened a new
      * audio path, and the next [onAudio] continues from somewhere else. It may arrive on another
      * thread than [onAudio].
      */
     public fun onDiscontinuity() {}
+
+    /**
+     * Retires all deliveries before [generation]. May race with a callback still completing from
+     * a retired session; that callback retains its old generation. The default notifies legacy taps.
+     */
+    public fun onDiscontinuity(generation: Generation) {
+        onDiscontinuity()
+    }
 }

@@ -1,3 +1,12 @@
+public final class io/github/yuroyami/kiteplayer/AudioClockSnapshot {
+	public final fun getGeneration-exH1Oj8 ()J
+	public final fun getHostTimeNanos ()J
+	public final fun getPosition-VcJ3hEI ()Lio/github/yuroyami/kiteplayer/Pts;
+	public final fun getQuality ()Lio/github/yuroyami/kiteplayer/LatencyQuality;
+	public final fun getRate ()D
+	public final fun isValid ()Z
+}
+
 public final class io/github/yuroyami/kiteplayer/AudioConfig {
 	public fun <init> ()V
 	public fun <init> (Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FF)V
@@ -68,11 +77,15 @@ public final class io/github/yuroyami/kiteplayer/AudioPlayback : java/lang/AutoC
 
 public abstract interface class io/github/yuroyami/kiteplayer/AudioTap {
 	public abstract fun onAudio-9yvNpTU (J[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
+	public fun onAudio-eGsrvZU (JJ[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
 	public fun onDiscontinuity ()V
+	public fun onDiscontinuity-gp5MJe8 (J)V
 }
 
 public final class io/github/yuroyami/kiteplayer/AudioTap$DefaultImpls {
+	public static fun onAudio-eGsrvZU (Lio/github/yuroyami/kiteplayer/AudioTap;JJ[FILio/github/yuroyami/kiteplayer/spi/AudioFormat;)V
 	public static fun onDiscontinuity (Lio/github/yuroyami/kiteplayer/AudioTap;)V
+	public static fun onDiscontinuity-gp5MJe8 (Lio/github/yuroyami/kiteplayer/AudioTap;J)V
 }
 
 public final class io/github/yuroyami/kiteplayer/Backends {
@@ -341,6 +354,7 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public static synthetic fun addToQueue$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Ljava/util/List;Ljava/lang/Integer;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun attachAudioTap (Lio/github/yuroyami/kiteplayer/AudioTap;)V
 	public final fun attachRenderer (Lio/github/yuroyami/kiteplayer/spi/VideoRenderer;)V
+	public final fun audioClock ()Lio/github/yuroyami/kiteplayer/AudioClockSnapshot;
 	public final fun captureFrame (ZLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun captureFrame$default (Lio/github/yuroyami/kiteplayer/KitePlayer;ZLkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun chapterAt-LRDsOJo (J)Lio/github/yuroyami/kiteplayer/Chapter;

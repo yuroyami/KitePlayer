@@ -6,6 +6,7 @@
 package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.AudioPlayback
+import io.github.yuroyami.kiteplayer.AudioClockSnapshot
 import io.github.yuroyami.kiteplayer.chapterHolding
 import io.github.yuroyami.kiteplayer.Generation
 import io.github.yuroyami.kiteplayer.HwdecPolicy
@@ -695,6 +696,10 @@ internal class PlaybackCore(
     /** Read from any thread, so it is published rather than computed on demand. */
     private val publishedPositionMicros = atomic(0L)
 
+    /** Independent of the video epoch: an in-place audio switch retires analysis too. */
+    private var audioGeneration = Generation.Initial
+    private val publishedAudioClock = atomic(AudioClockSnapshot.unavailable(audioGeneration))
+
     /**
      * The newest requested seek target, masking [publishedPositionMicros] until the seek machine
      * drains. Written at the public entry points (an absolute target needs no session state) and
@@ -1091,6 +1096,12 @@ internal class PlaybackCore(
     fun position(): Duration {
         val masked = maskedSeekTargetMicros.value
         return (if (masked != NO_SEEK_MASK) masked else publishedPositionMicros.value).microseconds
+    }
+
+    /** One atomic mapping read, projected to the host instant of this call. */
+    fun audioClock(): AudioClockSnapshot {
+        val snapshot = publishedAudioClock.value
+        return if (snapshot.isValid) snapshot.at(clock.nanos()) else snapshot
     }
 
     /** Terminal and idempotent. Atomically requests the shared close and returns without awaiting it. */
@@ -1880,12 +1891,12 @@ internal class PlaybackCore(
     private val audioTaps = atomic<List<AudioTap>>(emptyList())
 
     /** Hands one block to every attached tap and detaches any tap that throws. Runs on the feed worker. */
-    private fun deliverToTaps(pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {
+    private fun deliverToTaps(generation: Generation, pts: Pts, interleaved: FloatArray, frames: Int, format: AudioFormat) {
         val taps = audioTaps.value
         if (taps.isEmpty()) return
         for (tap in taps) {
             try {
-                tap.onAudio(pts, interleaved, frames, format)
+                tap.onAudio(generation, pts, interleaved, frames, format)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Throwable) {
@@ -1895,10 +1906,13 @@ internal class PlaybackCore(
     }
 
     /** Tells every attached tap that what it holds is stale. Called wherever the engine flushes the ring. */
-    private fun tapsDiscontinuous() {
+    private fun tapsDiscontinuous(active: OpenSession? = session) {
+        audioGeneration = audioGeneration.next()
+        active?.audioGeneration?.value = audioGeneration.value
+        publishedAudioClock.value = AudioClockSnapshot.unavailable(audioGeneration, clock.nanos())
         for (tap in audioTaps.value) {
             try {
-                tap.onDiscontinuity()
+                tap.onDiscontinuity(audioGeneration)
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Throwable) {
@@ -3209,7 +3223,6 @@ internal class PlaybackCore(
             playback.balance = balance
             playback.equalizer = equalizer
             playback.flush(requestedEpoch)
-            tapsDiscontinuous()
             return PreparedAudioPath(playback, createdSink, negotiated)
         } catch (cancellation: CancellationException) {
             if (createdPlayback != null) createdPlayback.close() else createdSink.close()
@@ -6027,6 +6040,8 @@ internal class PlaybackCore(
     private fun detachSession(): OpenSession? {
         val detached = session ?: return null
         session = null
+        // The retiring worker keeps its old identity even if its final callback is still running.
+        tapsDiscontinuous(active = null)
         // No session, no cues. A stop or a close that left the last line published would have an
         // application drawing subtitles over nothing.
         cuesState.value = emptyList()
@@ -6299,16 +6314,36 @@ internal class PlaybackCore(
         publishProgressAndStats()
     }
 
+    /** Publishes position, host time, effective rate and identity as one atomic audio mapping. */
+    private fun publishAudioClock(session: OpenSession?, now: Long) {
+        val audio = session?.audio?.takeIf { session.audioLane != null }
+        if (audio == null || pendingSeek != null || seekPhase.isRunning ||
+            (status != PlaybackStatus.Playing && status != PlaybackStatus.Paused)
+        ) {
+            publishedAudioClock.value = AudioClockSnapshot.unavailable(audioGeneration, now)
+            return
+        }
+        val reading = audio.clockSnapshot()
+        publishedAudioClock.value = AudioClockSnapshot(
+            position = reading.pts,
+            hostTimeNanos = reading.hostTimeNanos,
+            rate = if (reading.paused) 0.0 else reading.speed,
+            generation = Generation(session.audioGeneration.value),
+            quality = audio.latencyQuality,
+        )
+    }
+
     /**
      * The interval-gated halves, shared by dirty and quiet passes.
      *
      * [force] publishes regardless of the intervals, which is what a stop needs: the session is
      * gone, and leaving the last playing session's queue depths and drift on the flow describes
-     * media that is no longer open.
+     * media that is no longer open. The audible mapping is refreshed on every pass.
      */
     private fun publishProgressAndStats(force: Boolean = false) {
         val session = session
         val now = clock.nanos()
+        publishAudioClock(session, now)
         if (force || (now - lastProgressAtNanos).nanoseconds >= config.progressInterval) {
             lastProgressAtNanos = now
             progressState.value = Progress(
@@ -6640,6 +6675,7 @@ internal class PlaybackCore(
     // ---------------------------------------------------------------------------------------------
 
     private fun startWorkers(session: OpenSession) {
+        tapsDiscontinuous(session)
         val epoch = requestedEpoch
         if (session.videoQueue != null && session.videoDecoder != null && session.video != null) {
             session.videoDecodeWorker = Worker(VIDEO_DECODE_WORKER)
@@ -7263,7 +7299,7 @@ internal class PlaybackCore(
                 }
                 if (frames == 0) continue
                 // The trimmed block goes to the taps first, then to the device.
-                deliverToTaps(pts, interleaved, frames, buffer.format)
+                deliverToTaps(Generation(session.audioGeneration.value), pts, interleaved, frames, buffer.format)
                 // One call, no external timeout, no retry. The old shape cancelled submitDecoded
                 // mid-buffer on a deadline and called it again with the same input, which replayed
                 // samples the ring had already accepted and ran the stateful conversion twice
@@ -7431,6 +7467,9 @@ internal class PlaybackCore(
 
         /** Between the audio decoder and the feeder. Small, because the ring is the real buffer. */
         val decodedAudio: Channel<AudioBuffer> = Channel(capacity = 4)
+
+        /** Written before worker start or with the audio workers parked. Read once per tap block. */
+        val audioGeneration = atomic(0L)
 
         /**
          * Pinged when a worker records a first timestamp for a new epoch, and when the schedule

@@ -51,8 +51,8 @@ in sequence order, including multiple hits of one kind. Sampling again does not 
 Independent cursors do not consume one another's events.
 
 If a detection arrives after a cursor has passed its original time, the cursor offers it once
-with its lateness when it is no more than 30 ms behind the current media time. Older late
-detections are discarded and counted. This budget is in media time; presentation-time lateness
+with its lateness when that lateness is within its source's budget: 30 ms for a transient and
+3 s for a structural confirmation. Older late detections are discarded and counted. This budget is in media time; presentation-time lateness
 also depends on playback rate and the output route. An on-time event inside the normal display
 interval is not classified as a late arrival merely because its timestamp precedes the current
 frame's time.
@@ -87,7 +87,7 @@ sequence numbers and its own lateness budget. One slow source therefore never ho
 | --- | --- | ---: | --- |
 | `LiveTransient` | The causal transient detectors, once per analysis | 30 ms | 1024 records, 2 s |
 | `LiveStructure` | A causal structural detector, which confirms a boundary after it | 3 s | 64 records, 12 s |
-| `SongMap` | The structural events of an installed song map | 3 s | The map itself |
+| `SongMap` | The structural events of an installed song map | On time only | The map itself |
 
 `AudioDetections.source` names the source of a batch. `SpectrumFrame.detections` carries the
 transient batch of an analysis. `SpectrumFrame.structure` carries its structural batch, with the
@@ -111,9 +111,12 @@ past events of every source, including structural confirmations that arrive late
 before that boundary. `AudioEventDelivery.structureCompleteThroughMicros` reports the structural
 watermark. `completeThroughMicros` keeps its meaning: the transient watermark.
 
-A song map is not a second live detector. Where an installed map has complete structural coverage
-for a media time, a live structural event at that time is discarded as a duplicate and counted in
-`duplicateDiscards`. The map's event is delivered instead. Map events take the generation and
+A song map is not a second live detector. A view reads an installed map from the moment it first
+sees it, or from its latest reset. Map events the playhead has already passed are not delivered,
+because live evidence already covered that time and a late map event could act on the same
+boundary twice. From that moment on, where the map has complete structural coverage, a live
+structural event is discarded as a duplicate and counted in `duplicateDiscards`; the map's event
+is delivered instead. Map events take the generation and
 revision of the history they are delivered into, and their sequence is their index in the map. A
 seek back over a map event therefore delivers it again under the new identity, which is correct:
 the music crosses that boundary again. Installing, replacing and removing a map for one track is

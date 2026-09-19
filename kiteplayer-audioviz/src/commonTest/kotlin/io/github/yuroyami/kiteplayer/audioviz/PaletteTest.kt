@@ -98,12 +98,47 @@ class PaletteTest {
 
     @Test
     fun aClearKeyLeansThePalette() {
-        val leaned = PaletteFade().advance(VizPalette.Classic, frameWith(keyHue = 0.5f, keyConfidence = 1f), 0.016f)
+        val fade = PaletteFade()
+        var leaned = VizPalette.Classic
+        repeat(180) { leaned = fade.advance(VizPalette.Classic, frameWith(keyHue = 0.5f, keyConfidence = 1f), 1f / 60f) }
         val turn = leaned.baseHue - VizPalette.Classic.baseHue
-        println("a clear key turned the palette by $turn degrees")
         assertTrue(abs(turn) in 1f..20f, "a clear key should turn the palette a little, turned it $turn")
-        val unsure = PaletteFade().advance(VizPalette.Classic, frameWith(keyHue = 0.5f, keyConfidence = 0.3f), 0.016f)
-        assertEquals(VizPalette.Classic, unsure, "an unclear key should leave it alone")
+        val unsure = PaletteFade()
+        var kept = VizPalette.Classic
+        repeat(180) { kept = unsure.advance(VizPalette.Classic, frameWith(keyHue = 0.5f, keyConfidence = 0.3f), 1f / 60f) }
+        assertEquals(VizPalette.Classic, kept, "an unclear key should leave it alone")
+    }
+
+    @Test
+    fun anUnknownKeyHoldsTheLeanAndFadesItOut() {
+        val fade = PaletteFade()
+        val clear = frameWith(keyHue = 0.5f, keyConfidence = 1f)
+        val unknown = frameWith()
+        fun turn(palette: VizPalette) = palette.baseHue - VizPalette.Classic.baseHue
+        var shown = VizPalette.Classic
+        repeat(180) { shown = fade.advance(VizPalette.Classic, clear, 1f / 60f) }
+        val full = turn(shown)
+        assertTrue(abs(full) >= 15f, "the lean should be established, was $full")
+        repeat(60) { shown = fade.advance(VizPalette.Classic, unknown, 1f / 60f) }
+        assertTrue(abs(turn(shown)) >= abs(full) * 0.6f, "one second after the key goes unknown the lean should still show: ${turn(shown)}")
+        repeat(8 * 60) { shown = fade.advance(VizPalette.Classic, unknown, 1f / 60f) }
+        assertEquals(0f, turn(shown), "nine seconds later the lean has faded out")
+    }
+
+    @Test
+    fun aNewKeyTurnsTheLeanGraduallyRatherThanFlipping() {
+        val fade = PaletteFade()
+        val base = VizPalette.Classic.baseHue / 360f
+        val above = frameWith(keyHue = (base + 0.25f) % 1f, keyConfidence = 1f)
+        val below = frameWith(keyHue = (base + 0.75f) % 1f, keyConfidence = 1f)
+        var shown = VizPalette.Classic
+        repeat(180) { shown = fade.advance(VizPalette.Classic, above, 1f / 60f) }
+        val before = shown.baseHue - VizPalette.Classic.baseHue
+        repeat(15) { shown = fade.advance(VizPalette.Classic, below, 1f / 60f) }
+        val soon = shown.baseHue - VizPalette.Classic.baseHue
+        assertTrue(before > 0f && soon > 0f, "a quarter second after the key moved the lean must not have flipped: $before then $soon")
+        repeat(240) { shown = fade.advance(VizPalette.Classic, below, 1f / 60f) }
+        assertTrue(shown.baseHue - VizPalette.Classic.baseHue < 0f, "four seconds later it leans the new way")
     }
 
     private fun frameWith(

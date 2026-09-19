@@ -91,6 +91,8 @@ public class SpectrumAnalyzer(
     private val beatDetector = BeatDetector(usableBins, sampleRate, this.fftSize, this.hop)
     private val tempo = TempoTracker(analysesPerSecond)
     private val timbre = Timbre(usableBins, sampleRate, this.fftSize)
+    private val keyTracker = KeyTracker(sampleRate)
+    private val sections = SectionDetector(bandCount, secondsPerAnalysis.toDouble())
     private val moodTracker = MoodTracker(analysesPerSecond)
     /** The newest analysis. Read it from the drawing thread as often as you like. */
     @Volatile
@@ -147,6 +149,7 @@ public class SpectrumAnalyzer(
                 mono += safe
             }
             programmePower?.endFrame()
+            keyTracker.push(channelRings[0][writeIndex], channelRings[if (channels > 1) 1 else 0][writeIndex])
             mono /= channels
             ring[writeIndex] = mono
             ringLeft[writeIndex] = channelRings[0][writeIndex]
@@ -202,6 +205,8 @@ public class SpectrumAnalyzer(
         beatDetector.reset()
         tempo.reset()
         timbre.reset()
+        keyTracker.reset()
+        sections.reset()
         moodTracker.reset()
         writeIndex = 0
         samplesSinceAnalysis = 0
@@ -272,7 +277,7 @@ public class SpectrumAnalyzer(
         snarePulse = maxOf(snare, snarePulse * exp(-secondsPerAnalysis / 0.12f))
         hatPulse = maxOf(hat, hatPulse * exp(-secondsPerAnalysis / 0.055f))
 
-        timbre.feed(magnitudes, secondsPerAnalysis)
+        timbre.feed(magnitudes)
         tempo.feed(if (ready) beatDetector.novelty else 0f, if (ready) beatDetector.strength else 0f, secondsPerAnalysis)
         moodTracker.feed(
             fastEnergy = drivers.overall.fast,
@@ -296,6 +301,8 @@ public class SpectrumAnalyzer(
             it + (samplesSeen - fftSize / 2).coerceAtLeast(0) * 1_000_000L / sampleRate
         }
 
+        val availableMicros = startMicros?.let { it + samplesSeen * 1_000_000L / sampleRate }
+        keyTracker.analyse(availableMicros)
         val detections = if (!ready || windowPts == null) null else {
             val available = checkNotNull(startMicros) + samplesSeen * 1_000_000L / sampleRate
             // Causal growth responds to new input, not the older spectral centre. Estimate the
@@ -328,6 +335,18 @@ public class SpectrumAnalyzer(
                 tempo.revision, tempo.bpm, tempo.tempoConfidence, tempo.confidence, tempo.usable,
                 beatPhase, tempo.alternativeBpm, tempo.alternativeConfidence)
         } else null
+        val structure = if (!ready) null else sections.feed(
+            bandPowers = spectralPower.bands,
+            totalPower = spectralPower.totalPower,
+            programmeMeanSquare = programme.meanSquare.takeIf { programme.supported && programme.ready },
+            onsetMicros = detections?.let { batch -> (0 until batch.size).map { batch[it] }
+                .firstOrNull { it.kind == AudioEventKind.Onset }?.ptsMicros },
+            onsetStrength = beat,
+            overallFast = drivers.overall.fast,
+            centreMicros = windowPts,
+            availableMicros = availableMicros,
+        )
+        val key = keyTracker.key
         val monoStart = triggerStart(scopePoints)
         val stereoStart = triggerStart(stereoLength)
         val frame = SpectrumFrame(
@@ -410,9 +429,11 @@ public class SpectrumAnalyzer(
             phrasePhase = 0f,
             beatInSeconds = rhythm?.beatInSeconds ?: -1f,
             rhythm = rhythm,
-            chroma = timbre.chroma.copyOf(),
-            keyHue = timbre.keyHue,
-            keyConfidence = timbre.keyConfidence,
+            chroma = keyTracker.chroma.copyOf(),
+            keyHue = key?.hue ?: 0f,
+            keyConfidence = key?.confidence ?: 0f,
+            key = key,
+            structure = structure,
             centroid = timbre.centroid,
             flatness = timbre.flatness,
             width = smoothWidth,

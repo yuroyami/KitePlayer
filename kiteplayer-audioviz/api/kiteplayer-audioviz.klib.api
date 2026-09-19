@@ -144,6 +144,17 @@ final enum class io.github.yuroyami.kiteplayer.audioviz/AudioEventSource : kotli
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz/AudioEventSource> // io.github.yuroyami.kiteplayer.audioviz/AudioEventSource.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer.audioviz/KeyMode : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz/KeyMode> { // io.github.yuroyami.kiteplayer.audioviz/KeyMode|null[0]
+    enum entry Major // io.github.yuroyami.kiteplayer.audioviz/KeyMode.Major|null[0]
+    enum entry Minor // io.github.yuroyami.kiteplayer.audioviz/KeyMode.Minor|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz/KeyMode.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz/KeyMode> // io.github.yuroyami.kiteplayer.audioviz/KeyMode.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz/KeyMode // io.github.yuroyami.kiteplayer.audioviz/KeyMode.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz/KeyMode> // io.github.yuroyami.kiteplayer.audioviz/KeyMode.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.audioviz/WaveformChannels : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz/WaveformChannels> { // io.github.yuroyami.kiteplayer.audioviz/WaveformChannels|null[0]
     enum entry FirstPair // io.github.yuroyami.kiteplayer.audioviz/WaveformChannels.FirstPair|null[0]
     enum entry MeanAll // io.github.yuroyami.kiteplayer.audioviz/WaveformChannels.MeanAll|null[0]
@@ -1115,6 +1126,25 @@ final class io.github.yuroyami.kiteplayer.audioviz/EnergyDrivers { // io.github.
     final fun band(kotlin/Int): io.github.yuroyami.kiteplayer.audioviz/EnergyDriver // io.github.yuroyami.kiteplayer.audioviz/EnergyDrivers.band|band(kotlin.Int){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.audioviz/KeyEstimate { // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate|null[0]
+    final val confidence // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.confidence|{}confidence[0]
+        final fun <get-confidence>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.confidence.<get-confidence>|<get-confidence>(){}[0]
+    final val correlation // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.correlation|{}correlation[0]
+        final fun <get-correlation>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.correlation.<get-correlation>|<get-correlation>(){}[0]
+    final val hue // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.hue|{}hue[0]
+        final fun <get-hue>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.hue.<get-hue>|<get-hue>(){}[0]
+    final val lead // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.lead|{}lead[0]
+        final fun <get-lead>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.lead.<get-lead>|<get-lead>(){}[0]
+    final val mode // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.mode|{}mode[0]
+        final fun <get-mode>(): io.github.yuroyami.kiteplayer.audioviz/KeyMode // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.mode.<get-mode>|<get-mode>(){}[0]
+    final val tonic // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.tonic|{}tonic[0]
+        final fun <get-tonic>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.tonic.<get-tonic>|<get-tonic>(){}[0]
+    final val tuningCents // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.tuningCents|{}tuningCents[0]
+        final fun <get-tuningCents>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.tuningCents.<get-tuningCents>|<get-tuningCents>(){}[0]
+    final val window // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.window|{}window[0]
+        final fun <get-window>(): io.github.yuroyami.kiteplayer.audioviz/AnalysisWindow // io.github.yuroyami.kiteplayer.audioviz/KeyEstimate.window.<get-window>|<get-window>(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.audioviz/PowerSpectrum { // io.github.yuroyami.kiteplayer.audioviz/PowerSpectrum|null[0]
     final val analysisRevision // io.github.yuroyami.kiteplayer.audioviz/PowerSpectrum.analysisRevision|{}analysisRevision[0]
         final fun <get-analysisRevision>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/PowerSpectrum.analysisRevision.<get-analysisRevision>|<get-analysisRevision>(){}[0]
@@ -1270,6 +1300,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame { // io.github.
         final fun <get-hat>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.hat.<get-hat>|<get-hat>(){}[0]
     final val hatPulse // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.hatPulse|{}hatPulse[0]
         final fun <get-hatPulse>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.hatPulse.<get-hatPulse>|<get-hatPulse>(){}[0]
+    final val key // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.key|{}key[0]
+        final fun <get-key>(): io.github.yuroyami.kiteplayer.audioviz/KeyEstimate? // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.key.<get-key>|<get-key>(){}[0]
     final val keyConfidence // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.keyConfidence|{}keyConfidence[0]
         final fun <get-keyConfidence>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.keyConfidence.<get-keyConfidence>|<get-keyConfidence>(){}[0]
     final val keyHue // io.github.yuroyami.kiteplayer.audioviz/SpectrumFrame.keyHue|{}keyHue[0]
@@ -1505,6 +1537,7 @@ final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_a
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_DeliveredAudioEvent$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_DeliveredAudioEvent$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_DeliveredAudioEvent$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDriver$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDriver$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_EnergyDriver$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDrivers$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDrivers$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_EnergyDrivers$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_KeyEstimate$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_KeyEstimate$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_KeyEstimate$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_PowerSpectrum$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_PowerSpectrum$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_PowerSpectrum$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_ProgrammeLoudness$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_ProgrammeLoudness$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_ProgrammeLoudness$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_RhythmEstimate$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_RhythmEstimate$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_RhythmEstimate$stableprop[0]
@@ -1585,6 +1618,7 @@ final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_a
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_DeliveredAudioEvent$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_DeliveredAudioEvent$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_DeliveredAudioEvent$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDriver$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDriver$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_EnergyDriver$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDrivers$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_EnergyDrivers$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_EnergyDrivers$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_KeyEstimate$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_KeyEstimate$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_KeyEstimate$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_PowerSpectrum$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_PowerSpectrum$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_PowerSpectrum$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_ProgrammeLoudness$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_ProgrammeLoudness$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_ProgrammeLoudness$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_RhythmEstimate$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_RhythmEstimate$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_RhythmEstimate$stableprop_getter(){}[0]

@@ -120,11 +120,14 @@ public class SpectrumFrame internal constructor(
 
     // Timbre.
 
-    /** Energy per note of the octave, C first. */
+    /**
+     * Short-term pitch-class profile from the long key window, C first, each pitched analysis
+     * peaking at one. It decays to zero during unpitched audio.
+     */
     public val chroma: FloatArray = EMPTY_CHROMA,
-    /** The key placed on the circle of fifths, 0 to 1. Related keys sit next to each other. */
+    /** The known key on the circle of fifths, 0 to 1, with a minor key at its relative major. */
     public val keyHue: Float = 0f,
-    /** How clearly one key stands out, 0 to 1. */
+    /** The key's confidence, 0 to 1, and zero while the key is unknown. */
     public val keyConfidence: Float = 0f,
     /** Where the weight of the spectrum sits. Bright music is high. */
     public val centroid: Float = 0f,
@@ -165,6 +168,8 @@ public class SpectrumFrame internal constructor(
     public val rhythm: RhythmEstimate? = null,
     /** This analysis's structural publication and watermark, separate from the transient [detections]. */
     public val structure: AudioDetections? = null,
+    /** The key supported by pitched audio, separately timed, or null when unknown. */
+    public val key: KeyEstimate? = null,
 ) {
     /** Conservative primitive payload charge; shared legacy array aliases are charged once. */
     internal val retainedPayloadBytes: Long
@@ -286,6 +291,7 @@ public class SpectrumFrame internal constructor(
             detections = detections,
             rhythm = pulseEstimate,
             structure = structure,
+            key = key,
         )
     }
 
@@ -366,6 +372,7 @@ public class SpectrumFrame internal constructor(
         events = events,
         rhythm = rhythm,
         structure = structure,
+        key = key,
     )
 
     /** Keep every delivered record while providing the old strongest-hit projection for envelopes. */

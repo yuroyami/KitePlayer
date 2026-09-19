@@ -195,6 +195,26 @@ public final class io/github/yuroyami/kiteplayer/audioviz/EnergyDrivers {
 	public final fun getTreble ()Lio/github/yuroyami/kiteplayer/audioviz/EnergyDriver;
 }
 
+public final class io/github/yuroyami/kiteplayer/audioviz/KeyEstimate {
+	public static final field $stable I
+	public final fun getConfidence ()F
+	public final fun getCorrelation ()F
+	public final fun getHue ()F
+	public final fun getLead ()F
+	public final fun getMode ()Lio/github/yuroyami/kiteplayer/audioviz/KeyMode;
+	public final fun getTonic ()I
+	public final fun getTuningCents ()F
+	public final fun getWindow ()Lio/github/yuroyami/kiteplayer/audioviz/AnalysisWindow;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/KeyMode : java/lang/Enum {
+	public static final field Major Lio/github/yuroyami/kiteplayer/audioviz/KeyMode;
+	public static final field Minor Lio/github/yuroyami/kiteplayer/audioviz/KeyMode;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/KeyMode;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/KeyMode;
+}
+
 public final class io/github/yuroyami/kiteplayer/audioviz/KiteAudioVizKt {
 	public static final fun KiteAudioViz (Lio/github/yuroyami/kiteplayer/audioviz/AudioVizState;Landroidx/compose/ui/Modifier;ZLandroidx/compose/runtime/Composer;II)V
 }
@@ -271,7 +291,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumAnalyzer {
 public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumFrame {
 	public static final field $stable I
 	public static final field Companion Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame$Companion;
-	public synthetic fun <init> (J[F[F[FFFFFFF[F[FFFFFFFFFFFFFFFFFFFZFZFFFFFF[FFFFFF[F[FJZJLio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;Lio/github/yuroyami/kiteplayer/audioviz/PowerSpectrum;Lio/github/yuroyami/kiteplayer/audioviz/ProgrammeLoudness;Lio/github/yuroyami/kiteplayer/audioviz/EnergyDrivers;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery;Lio/github/yuroyami/kiteplayer/audioviz/RhythmEstimate;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (J[F[F[FFFFFFF[F[FFFFFFFFFFFFFFFFFFFZFZFFFFFF[FFFFFF[F[FJZJLio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;Lio/github/yuroyami/kiteplayer/audioviz/PowerSpectrum;Lio/github/yuroyami/kiteplayer/audioviz/ProgrammeLoudness;Lio/github/yuroyami/kiteplayer/audioviz/EnergyDrivers;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery;Lio/github/yuroyami/kiteplayer/audioviz/RhythmEstimate;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/KeyEstimate;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun bandPercentile (F)F
 	public final fun getAnalysisRevision ()J
 	public final fun getAvailability ()Lio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;
@@ -300,6 +320,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumFrame {
 	public final fun getHasTimestamp ()Z
 	public final fun getHat ()F
 	public final fun getHatPulse ()F
+	public final fun getKey ()Lio/github/yuroyami/kiteplayer/audioviz/KeyEstimate;
 	public final fun getKeyConfidence ()F
 	public final fun getKeyHue ()F
 	public final fun getKick ()F

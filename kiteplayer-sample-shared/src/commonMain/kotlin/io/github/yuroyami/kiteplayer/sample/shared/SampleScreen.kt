@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +59,7 @@ import io.github.yuroyami.kiteplayer.audioviz.rememberAudioVizState
 import io.github.yuroyami.kiteplayer.compose.KitePlayerVideo
 import io.github.yuroyami.kiteplayer.compose.KiteRenderPath
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.time.Duration
 
 /**
@@ -86,8 +88,10 @@ fun SampleScreen(
     val viz = rememberAudioVizState(player, songMapStore = songMapStore)
     val snapshot by player.state.collectAsState()
     var panel by remember { mutableStateOf(Panel.None) }
-    // A different song each launch, so repeated runs do not always show the same one first.
-    var track by remember(media) { mutableStateOf(media.tracks.indices.random()) }
+    val scope = rememberCoroutineScope()
+    // Which of the queue's items is open. The engine owns this; reading it back rather than
+    // keeping a copy is what stops the two from disagreeing.
+    val track = snapshot.queueIndex.coerceIn(0, media.tracks.lastIndex)
     // The director changes the drawing without telling Compose, so its name is read again twice a
     // second. A drawing picked by hand is Compose state already and shows at once.
     val directedName by produceState(viz.showing.name, viz) {
@@ -112,7 +116,11 @@ fun SampleScreen(
         viz.drawing = viz.catalogue.filter { it.name != viz.showing.name }.random()
     }
 
-    val stepTrack: (Int) -> Unit = { delta -> track = (track + delta).mod(media.tracks.size) }
+    // The queue moves itself, keeping whether it was playing. Opening a second time instead would
+    // be refused: open is legal only from Idle, Ended and Failed.
+    val stepTrack: (Int) -> Unit = { delta ->
+        scope.launch { if (delta >= 0) player.next() else player.previous() }
+    }
 
     LaunchedEffect(player, media) {
         viz.drawing = viz.catalogue.firstOrNull { it.name == FIRST_DRAWING } ?: viz.catalogue.first()
@@ -120,11 +128,14 @@ fun SampleScreen(
         // Some songs offer the detector no section it will support, and Bad Cat is one of them, so
         // without this the director can sit on one drawing for a whole track.
         viz.director.maximumHoldSeconds = DIRECTOR_LONGEST_HOLD_SECONDS
-        player.setLoop(LoopMode.One)
-    }
-
-    LaunchedEffect(player, media, track) {
-        player.open(MediaItem(media.tracks[track].path))
+        // All of them, in a queue, so the song buttons move the queue rather than reopening the
+        // player, and the ends meet so stepping past either one wraps. It starts on a different
+        // song each launch.
+        player.setLoop(LoopMode.All)
+        player.openQueue(
+            media.tracks.map { MediaItem(it.path) },
+            startIndex = media.tracks.indices.random(),
+        )
         player.play()
     }
 
@@ -287,7 +298,8 @@ private fun BoxScope.Transport(player: KitePlayer, duration: Duration?) {
     val playing = snapshot.status == PlaybackStatus.Playing
     val length = duration?.takeIf { it > Duration.ZERO }
     val seek by rememberUpdatedState<(Float) -> Unit> { fraction ->
-        length?.let { player.seekLater(it * fraction.toDouble()) }
+        // A drag that leaves the bar reports a position outside it, and a negative one is refused.
+        length?.let { player.seekLater(it * fraction.coerceIn(0f, 1f).toDouble()) }
     }
     Row(
         Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(BAR_HEIGHT)

@@ -61,7 +61,8 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
     /** Changes the drawing at supported musical boundaries while [directed] is on. */
     public val director: VizDirector = VizDirector(catalogue)
 
-    private var chosen by mutableStateOf(catalogue.first())
+    // The director's first pick is random, and a state that is not directed opens on it too.
+    private var chosen by mutableStateOf(director.current)
     private var directing by mutableStateOf(false)
 
     /** The drawing to show. Setting it puts it on screen at once, and the director carries on from it. */
@@ -105,6 +106,15 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
 
     /** How much of the canvas trailing drawings render at, and whether that may drop when frames run slow. */
     public val quality: RenderQuality = RenderQuality()
+
+    /**
+     * Frames a second to redraw at, or 0 for every display frame.
+     *
+     * A cap under the display's rate skips display frames: 60 on a 120 Hz phone draws every second
+     * frame and halves the work, and 60 on a 60 Hz display changes nothing. The analysis and the
+     * player are untouched; only the drawing and the director run at this rate.
+     */
+    public var framesPerSecond: Int by mutableStateOf(0)
 
     /** How long each part of the last frame took. */
     public val stats: RenderStats = RenderStats()

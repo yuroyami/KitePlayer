@@ -533,6 +533,8 @@ public fun DirectedVisualizerSurface(
      * the player keeps playing, so turning the picture off costs nothing but the picture.
      */
     visible: Boolean = true,
+    /** Frames a second to redraw at, or 0 for every display frame. A cap under the display's rate skips frames. */
+    framesPerSecond: Int = 0,
 ) {
     val renderQuality = quality ?: remember { RenderQuality() }
     if (!visible) {
@@ -543,7 +545,7 @@ public fun DirectedVisualizerSurface(
     val flashes = if (reducedMotion) 0 else FLASHES_PER_SECOND
     director.calmChanges = reducedMotion
     if (!post) {
-        DirectedCanvas(director, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
+        DirectedCanvas(director, frame, palette, framesPerSecond, modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
         return
     }
     PostProcessedBox(
@@ -552,7 +554,7 @@ public fun DirectedVisualizerSurface(
         modifier = modifier,
         stats = stats,
     ) {
-        DirectedCanvas(director, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
+        DirectedCanvas(director, frame, palette, framesPerSecond, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
     }
 }
 
@@ -562,6 +564,7 @@ private fun DirectedCanvas(
     director: VizDirector,
     frame: () -> SpectrumFrame,
     palette: VizPalette,
+    framesPerSecond: Int,
     modifier: Modifier = Modifier,
     future: VizFuture? = null,
     stats: RenderStats? = null,
@@ -578,18 +581,28 @@ private fun DirectedCanvas(
     var musicTime by remember { mutableFloatStateOf(0f) }
     var deltaSeconds by remember { mutableFloatStateOf(0f) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(framesPerSecond) {
         var previousNanos = 0L
+        var waiting = 0f
+        val every = if (framesPerSecond > 0) 1f / framesPerSecond else 0f
         while (true) {
-            withFrameNanos { nowNanos ->
+            val stepped = withFrameNanos { nowNanos ->
+                var passed = false
                 if (previousNanos != 0L) {
-                    deltaSeconds = ((nowNanos - previousNanos) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.1f)
-                    timeSeconds += deltaSeconds
-                    musicTime += deltaSeconds * frame().motionRate
+                    waiting += ((nowNanos - previousNanos) / 1_000_000_000.0).toFloat()
+                    // Held back until a whole frame at the chosen rate has passed, as the plain canvas is.
+                    if (waiting >= every) {
+                        deltaSeconds = waiting.coerceIn(0f, 0.1f)
+                        timeSeconds += deltaSeconds
+                        musicTime += deltaSeconds * frame().motionRate
+                        waiting = 0f
+                        passed = true
+                    }
                 }
                 previousNanos = nowNanos
+                passed
             }
-            director.advance(frame(), deltaSeconds)
+            if (stepped) director.advance(frame(), deltaSeconds)
         }
     }
 

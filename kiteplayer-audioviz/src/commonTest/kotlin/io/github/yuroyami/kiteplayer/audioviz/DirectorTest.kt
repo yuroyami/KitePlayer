@@ -16,6 +16,17 @@ import kotlin.test.assertTrue
  * what it changes to has nothing to do with what the music is doing.
  */
 class DirectorTest {
+    /** A run opens on a random drawing and walks its own sequence; a given seed plays one back. */
+    @Test
+    fun theFirstDrawingComesFromTheSeed() {
+        val catalogue = VizCatalog.create()
+        val starts = (1L..40L).map { VizDirector(catalogue, seed = it).current.name }.toSet()
+        assertTrue(starts.size > 1, "forty seeds opened on one drawing: $starts")
+        assertEquals(VizDirector(catalogue, seed = 7L).current.name, VizDirector(catalogue, seed = 7L).current.name)
+        val unseeded = (1..40).map { VizDirector(catalogue).current.name }.toSet()
+        assertTrue(unseeded.size > 1, "forty unseeded directors opened on one drawing: $unseeded")
+    }
+
 
     init { useSkiaGraphics() } // before catalogue, which builds drawings
 

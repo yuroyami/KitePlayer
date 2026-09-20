@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
+import kotlin.random.Random
 
 /** How one drawing gives way to the next. */
 public enum class VizTransition {
@@ -40,12 +41,16 @@ public enum class VizTransition {
  * Changes scenes only at a supported musical boundary. Tempo, elapsed time and energy-only
  * flags cannot authorize a change. A seeded choice matches the scene to current energy.
  *
+ * The first drawing and the order of the changes come from [seed], which is random unless one
+ * is given, so two runs open on different drawings and walk different sequences. Pass a seed to
+ * play a run back exactly.
+ *
  * Set [maximumHoldSeconds] to let a long wait change the drawing anyway, which a viewer-facing
  * application usually wants; see that property for why.
  */
 public class VizDirector(
     private val catalogue: List<Visualization>,
-    seed: Long = 20_260_910L,
+    seed: Long = Random.nextLong(),
     /** Minimum time between automatic changes. Reaching it does not schedule a change. */
     private val minimumHoldSeconds: Float = 8f,
 ) {
@@ -73,7 +78,7 @@ public class VizDirector(
     private val recent = ArrayDeque<String>()
 
     /** What is on screen. Snapshot state, so a control that names the drawing follows the director. */
-    public var current: Visualization by mutableStateOf(catalogue.first())
+    public var current: Visualization by mutableStateOf(catalogue[(nextRandom() * catalogue.size).toInt().coerceIn(0, catalogue.lastIndex)])
         private set
 
     /** What is arriving, while a change is under way. */

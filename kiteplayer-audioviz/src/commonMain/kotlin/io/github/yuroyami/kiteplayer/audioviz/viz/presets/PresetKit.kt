@@ -16,6 +16,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.PathShape
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.drawTravellers
+import kotlin.math.roundToInt
 
 /** How many of something a choice gene asks for: [base] plus [step] for each option. */
 internal fun ChoiceGene.count(base: Int, step: Int = 1): Int = base + step * value
@@ -122,23 +123,60 @@ internal fun TriangleMesh.bar(left: Float, right: Float, head: Float, foot: Floa
     quad(a, b, c, d)
 }
 
-/** Onsets this strong are real drums. A pad's own texture fires onsets too, but weaker than this. */
-private const val HIT = 0.5f
+/**
+ * How many things this frame's low transients should spawn, for a [base] count at full strength.
+ *
+ * The count follows how hard the hits were, so a quiet hit still shows and a hard one shows more.
+ * A hit always spawns at least one thing, and several hits in one frame are capped together.
+ */
+internal fun Gestures.kickSpawn(base: Int): Int = spawn(base, kickAccent)
 
-/** The kick, if it is strong enough to be a real drum, else 0. */
-internal val Gestures.kickHit: Float get() = if (kick >= HIT) kick else 0f
+/** How many things this frame's body transients should spawn. See [kickSpawn]. */
+internal fun Gestures.snareSpawn(base: Int): Int = spawn(base, snareAccent)
 
-/** The snare, if it is strong enough to be a real drum, else 0. */
-internal val Gestures.snareHit: Float get() = if (snare >= HIT) snare else 0f
+/** How many things this frame's high transients should spawn. See [kickSpawn]. */
+internal fun Gestures.hatSpawn(base: Int): Int = spawn(base, hatAccent)
 
-/** The hat, if it is strong enough to be a real drum, else 0. */
-internal val Gestures.hatHit: Float get() = if (hat >= HIT) hat else 0f
+private fun spawn(base: Int, accent: Float): Int =
+    if (accent <= 0f) 0 else (base * accent).roundToInt().coerceAtLeast(1)
 
-/** How much light the main parts give: about a third under a calm pad, nearly all of it under drums. */
-internal val VizRenderState.lift: Float get() = 0.25f + 0.75f * drive
+/**
+ * Fixed heights a band is compared with, under the one shared gain.
+ *
+ * A height means the same thing in every song, so these say how loud a band is rather than where
+ * it ranks inside one frame. A quiet passage crosses them less often, which is the contrast the
+ * standard asks for. On the loud drum fixture about three bands in ten are above [LOUD_BAND].
+ * *Judgement.*
+ */
+internal const val LOUD_BAND: Float = 0.2f
 
-/** A speed factor that keeps a calm passage moving, at about half the speed of a busy one. */
-internal val VizRenderState.tempo: Float get() = 0.4f + 0.8f * frame.motionRate
+/** A band with enough in it to light something. See [LOUD_BAND]. */
+internal const val LIT_BAND: Float = 0.1f
+
+/**
+ * How much light the main parts give: a little under a calm pad, nearly all of it under drums.
+ *
+ * It follows how loud the music is, not how hard it pushes. Drive mixes in mood and density, which
+ * are character rather than level, so a passage 12 dB down still read most of the way up on it and
+ * the picture hid how loud the music was. Speed uses drive; light uses this.
+ *
+ * The floor is what the picture shows when nothing is playing, so it stays small.
+ */
+internal val VizRenderState.lift: Float get() = 0.06f + 0.94f * frame.energy
+
+/**
+ * A speed factor that keeps a calm passage moving, at about a third of the speed of a busy one.
+ *
+ * Silence gets about a tenth, which reads as settled rather than frozen. A larger floor than that
+ * makes a still picture move nearly as much as a playing one.
+ */
+internal val VizRenderState.tempo: Float get() = 0.06f + 1.2f * frame.motionRate
+
+/**
+ * How fast a drawing's own paths should run: nearly still when nothing plays, full speed under
+ * busy music. Anything that moves on its own rather than on the audio is multiplied by this.
+ */
+internal val VizRenderState.idle: Float get() = 0.04f + 1.4f * frame.motionRate
 
 /**
  * A slow path the whole composition follows, one lap about every [seconds], so the picture eight
@@ -165,17 +203,22 @@ internal class Stage(private val seconds: Float = 16f, private val reachX: Float
 }
 
 /**
- * A bright body that crosses the whole screen on an arc, one always in flight, with a fresh launch
- * at an accepted section boundary. Drawn in the echo layer it leaves a tail. Its anchor gives a drawing a crossing when its own actors keep to one part.
+ * A bright body that crosses the whole screen on an arc, with a fresh launch at an accepted
+ * section boundary. Drawn in the echo layer it leaves a tail. Its anchor gives a drawing a
+ * crossing when its own actors keep to one part.
+ *
+ * One is in flight whenever there is something to hear. In a silence the last one finishes its
+ * crossing and no other follows, because a picture that keeps sending comets across an empty
+ * track says nothing about the music.
  */
 internal class Comets(capacity: Int = 3, private val kind: Int = Sprite.GLOW, private val size: Float = 0.035f) {
     val travellers: Travellers = Travellers(capacity)
     private val mesh = TriangleMesh(maxVertices = capacity * 12 + 8)
 
     fun advance(state: VizRenderState, gestures: Gestures, random: Rng) {
-        // Never a moment without one in flight; a section launches another once most of the way flown.
+        // One in flight while anything plays; a section launches another once most of the way flown.
         val flown = travellers.anyNewest && travellers.progress[travellers.newest] > 0.6f
-        if (!travellers.anyNewest || (gestures.section && flown)) {
+        if (!gestures.silence && (!travellers.anyNewest || (gestures.section && flown))) {
             travellers.across(random, gestures.cycleSeconds * 0.85f, PathShape.Arc, 0.18f * random.signed(), size, random.next(), 3f, kind)
         }
         travellers.advance(state.deltaSeconds)

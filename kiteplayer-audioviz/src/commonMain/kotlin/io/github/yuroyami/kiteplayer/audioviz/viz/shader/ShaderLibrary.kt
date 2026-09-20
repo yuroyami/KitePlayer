@@ -40,6 +40,8 @@ uniform float uEnergy;
 uniform float uMood;
 uniform float uDrive;
 uniform float uDensity;
+// How much light the picture gives: a floor when nothing plays, all of it under loud music.
+uniform float uExposure;
 
 uniform float uBeat;
 uniform float uPulse;
@@ -188,8 +190,12 @@ float3 paletteLoop(float where) {
 
 // Squashes bright values into the visible range instead of clipping them to white. Anything that
 // adds light needs this, or every overlap turns into a flat white patch.
+//
+// It also sets the exposure, because every program here ends on it. A quiet passage is drawn with
+// less light and a loud one with more, the way a camera would, and the exposure is applied before
+// the curve so the bright parts roll off rather than cut.
 float3 toneMap(float3 colour) {
-    float3 x = max(float3(0.0), colour);
+    float3 x = max(float3(0.0), colour) * uExposure;
     return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
 

@@ -48,7 +48,7 @@ internal class Kit(
         gestures.update(state)
         genes.advance(gestures, dt)
         camera.advance(state)
-        split.update(state.frame.bandsRel, dt)
+        split.update(state.frame.bandsRel)
         ground?.walk = genes.walk
         detail?.walk = genes.walk
         return if (dt == state.deltaSeconds) state
@@ -98,6 +98,36 @@ internal abstract class Layered(
 
     /** How far the front moves with the camera. A little more than the echo layer, so it reads as nearer. */
     protected open val frontParallax: Float get() = 1.15f
+
+    /**
+     * This drawing's declaration: the drives it names, with what it needs and what it can give up
+     * taken from the drawing itself, so those cannot drift from what it does.
+     *
+     * A drive covers the whole picture, including the ground, the detail layer and the camera,
+     * because that is what a viewer sees and what the tests measure. Read it as a delegate, so the
+     * drawing is fully built before its own properties are asked for:
+     * `override val mapping: VizMapping by mappingOf(...)`.
+     */
+    protected fun mappingOf(
+        vararg drives: VizDrive,
+        silence: VizSilence = VizSilence.Idle,
+        silenceSettleSeconds: Float = 2f,
+    ): Lazy<VizMapping> = lazy {
+        val needs = LinkedHashSet<VizNeed>()
+        val quality = ArrayList<VizQualityControl>()
+        if (isRuntimeShader) needs += VizNeed.RuntimeShader
+        if (warp != null || ground != null || detail != null) needs += VizNeed.ShaderLayers
+        if (trail > 0f || moodSpec != null) {
+            needs += VizNeed.EchoBuffer
+            quality += VizQualityControl.EchoResolution
+        }
+        if (bloom > 0) needs += VizNeed.SoftBuffer
+        quality += VizQualityControl.BoundedPool
+        VizMapping(drives.toList(), needs, silence, quality, silenceSettleSeconds)
+    }
+
+    /** True for a drawing whose whole picture is one runtime shader. */
+    protected open val isRuntimeShader: Boolean get() = false
 
     /** False for full-screen shaders, which apply the camera themselves. */
     protected open val cameraOnEcho: Boolean get() = true

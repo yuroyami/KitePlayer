@@ -16,6 +16,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Orbiter
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
@@ -53,6 +59,19 @@ internal class Bloom : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 109L, groundKind = GroundKind.Cloud, detailKind = DetailKind.Dots, camera = Camera2D(wander = 0.08f, seed = 109)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Level, VizProperty.Size),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.envelope(0.2f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(3f)),
+        VizDrive(VizDriver.HighHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(2.5f)),
+        VizDrive(VizDriver.Section, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Size, VizCurve.Discrete, VizResponse.envelope(2f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     override val moodSpec: MoodSpec = MoodSpec(
         calmTrail = 0.8f,
         livelyTrail = 0.68f,
@@ -94,24 +113,22 @@ internal class Bloom : Layered(
         if (gestures.drop) dropHold = gestures.cycleSeconds
         dropHold -= dt
         val dropping = dropHold > 0f
-        open.hit(if (dropping) 1f else gestures.kickHit * 0.9f + gestures.snareHit * 0.3f)
+        open.hit(if (dropping) 1f else gestures.kick * 0.9f + gestures.snare * 0.3f)
         open.advance(0.15f + 0.35f * state.energy, dt)
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         main.centreX = stage.x
         main.centreY = stage.y
         main.advance(state, gestures)
         kit.place(0, main.x, main.y)
         val way = 1f - 2f * backwards.weight(1)
         spin += dt * (1f * state.tempo + if (dropping) 3f else 0f) * way
-        // Soft onsets make the petals shiver, so a calm passage still breathes.
-        if (gestures.kickHit <= 0f) open.hit(0.2f * state.frame.snare)
         for (index in 0 until MEADOW) {
             val drum = when (index % 3) {
-                0 -> gestures.kickHit
-                1 -> gestures.snareHit
-                else -> gestures.hatHit * 0.7f
+                0 -> gestures.kick
+                1 -> gestures.snare
+                else -> gestures.hat * 0.7f
             }
-            meadowOpen[index].hit(if (dropping) 1f else maxOf(drum, gestures.snareHit * 0.6f))
+            meadowOpen[index].hit(if (dropping) 1f else maxOf(drum, gestures.snare * 0.6f))
             meadowOpen[index].advance(0.1f + 0.25f * state.energy, dt)
             meadow[index].direction = if (index % 2 == 0) 1f else -1f
             meadow[index].advance(state, gestures)
@@ -119,7 +136,7 @@ internal class Bloom : Layered(
         }
         // A petal leaves every bar, and on every snare while shedding is on. It flies over the middle,
         // so it crosses the screen instead of leaving by the nearest edge.
-        if (gestures.section || (gestures.snareHit > 0f && shedding.on)) {
+        if (gestures.section || (gestures.snare > 0f && shedding.on)) {
             val count = petals.count(8, 4)
             val petal = (random.next() * count).toInt()
             val over = atan2(0.5f - main.y, 0.5f - main.x) + random.signed() * 0.5f
@@ -128,9 +145,10 @@ internal class Bloom : Layered(
         shed.advance(dt)
         kit.follow(MEADOW + 1, shed)
         val blooming = flowers.count(3, 2)
-        if (shedding.on && gestures.hatHit > 0f) {
+        if (shedding.on && gestures.hat > 0f) {
             val index = (random.next() * blooming).toInt().coerceIn(0, MEADOW - 1)
-            falling.burst(meadow[index].x, meadow[index].y, 2, 0.1f, 2.5f, 0.012f, random.next(), Sprite.DIAMOND, PI.toFloat() / 2f, 1.5f)
+            falling.burst(meadow[index].x, meadow[index].y, gestures.hatSpawn(2), 0.1f, 2.5f, 0.012f,
+                random.next(), Sprite.DIAMOND, PI.toFloat() / 2f, 1.5f)
         }
         falling.advance(dt, drag = 0.6f, gravity = 0.15f)
         var targetX = main.x
@@ -224,7 +242,7 @@ internal class Bloom : Layered(
 }
 
 /**
- * A dial that wanders past the corners, swept one way once a bar and the other way once a beat. Loud
+ * A dial that wanders past the corners, swept one way once a cycle and the other way once a beat. Loud
  * parts of the spectrum leave marks the echo carries outward and off the screen, and contacts crossing
  * the screen light up when a sweep passes them.
  */
@@ -234,6 +252,17 @@ internal class Radar : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 110L, groundKind = GroundKind.Grid, detailKind = DetailKind.Scan, camera = Camera2D(wander = 0.06f, seed = 110)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Brightness),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.25f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.6f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Speed, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Pulse, VizProperty.Shape),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.93f, livelyTrail = 0.9f, calmZoom = 1.004f, livelyZoom = 1.012f)
 
     private val sweeps = genes.choice("Sweeps", 2, start = 1)
@@ -272,7 +301,7 @@ internal class Radar : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         val frame = state.frame
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         centre.centreX = stage.x
         centre.centreY = stage.y
         centre.advance(state, gestures)
@@ -286,12 +315,12 @@ internal class Radar : Layered(
         slowAngle = slow.advance(dt, frame, state.paced(0.25f)) * TAU + dropTurn
         fastAngle = -fast.advance(dt, frame, state.paced(0.7f)) * TAU - dropTurn
         kit.place(0, centre.x + sin(slowAngle) * 0.45f / kit.aspect, centre.y - cos(slowAngle) * 0.45f)
-        if (gestures.snareHit > 0f) {
-            extra = 1f
+        if (gestures.snare > 0f) {
+            extra = 0.4f + 0.6f * gestures.snare
             extraAngle = random.next() * TAU
         }
         extra = (extra - dt / (gestures.beatSeconds * 0.75f)).coerceAtLeast(0f)
-        flare.hit(gestures.kickHit)
+        flare.hit(gestures.kick)
         flare.advance(0f, dt)
         drift += dt * TAU / (gestures.cycleSeconds * 3f) * (0.6f + 0.6f * state.drive)
         val count = contacts.count(3)
@@ -309,10 +338,10 @@ internal class Radar : Layered(
                 sparks.burst(contactX[index], contactY[index], 8, 0.25f, 0.7f, 0.01f, index * 0.17f, Sprite.SPARK)
             }
         }
-        if (gestures.hatHit > 0f) {
+        if (gestures.hat > 0f) {
             val tipX = centre.x + sin(slowAngle) * 0.3f / kit.aspect
             val tipY = centre.y - cos(slowAngle) * 0.3f
-            sparks.burst(tipX, tipY, 4, 0.3f, 0.5f, 0.008f, 0.5f, Sprite.SPARK)
+            sparks.burst(tipX, tipY, gestures.hatSpawn(4), 0.3f, 0.5f, 0.008f, 0.5f, Sprite.SPARK)
         }
         sparks.advance(dt, drag = 1.2f)
     }
@@ -330,7 +359,7 @@ internal class Radar : Layered(
         val reach = sceneRadius * 1.3f
         val walk = genes.walk
         val thin = (size.minDimension * (0.002f + 0.003f * state.air)).coerceAtLeast(1f)
-        val ringColour = state.palette.mid.copy(alpha = (0.06f + 0.12f * state.energy + 0.25f * flare.value).coerceIn(0f, 1f))
+        val ringColour = state.palette.mid.copy(alpha = (0.02f + 0.18f * state.lift + 0.25f * flare.value).coerceIn(0f, 1f))
         val round = dial.weight(0)
         val corners = dial.weight(1)
         val lines = dial.weight(2)
@@ -362,11 +391,11 @@ internal class Radar : Layered(
         if (second > 0.01f) addSweep(state, at, reach, fastAngle, 1f, second * 0.8f, walk + 0.5f)
         if (extra > 0f) addSweep(state, at, reach * 0.8f, extraAngle + (1f - extra) * PI.toFloat(), -1f, extra, walk + 0.25f)
         drawMesh(wedge, BlendMode.Plus)
-        val line = state.palette.cap.copy(alpha = (0.35f + 0.5f * state.energy + 0.3f * flare.value).coerceIn(0f, 1f))
+        val line = state.palette.cap.copy(alpha = (0.1f + 0.85f * state.lift + 0.3f * flare.value).coerceIn(0f, 1f))
         val width = thin * (1.5f + 3f * flare.value)
         drawLine(line, at, polar(at, slowAngle, reach), width)
         if (second > 0.01f) drawLine(line.copy(alpha = line.alpha * second), at, polar(at, fastAngle, reach), width)
-        val loud = state.percentile(0.6f)
+        val loud = LIT_BAND
         val lift = state.lift
         val dot = size.minDimension * 0.007f
         for (sweep in 0 until 2) {
@@ -450,6 +479,17 @@ internal class Pulse : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 111L, groundKind = GroundKind.Plasma, groundDim = 0.7f, detailKind = DetailKind.Dots, camera = Camera2D(wander = 0.08f, seed = 111)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.25f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.HighHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.55f, livelyTrail = 0.42f, calmDriftX = 0.02f, livelyDriftX = 0.08f)
 
     private val stacks = genes.choice("Stacks", 3, start = 1)
@@ -481,12 +521,12 @@ internal class Pulse : Layered(
         val dt = state.deltaSeconds
         val frame = state.frame
         val count = stacks.count(2)
-        stage.advance(dt)
-        if (gestures.snareHit > 0f) shift = (shift + 1) % STACKS
+        stage.advance(dt * state.idle)
+        if (gestures.snare > 0f) shift = (shift + 1) % STACKS
         if (gestures.drop) mergeHold = gestures.cycleSeconds
         mergeHold -= dt
         merge.advance(if (mergeHold > 0f) 1f else 0f, dt)
-        core.kick(gestures.kickHit * 8f)
+        core.kick(gestures.kick * 8f)
         core.advance(dt)
         wobblePhase += dt * 2.4f * state.tempo
         for (index in 0 until STACKS) {
@@ -539,17 +579,15 @@ internal class Pulse : Layered(
         for (index in 0 until STACKS) kit.place(index, stackX[index], stackY[index])
         for (index in 0 until count) {
             val drum = when (index % 3) {
-                0 -> gestures.kickHit
-                1 -> gestures.snareHit
-                else -> gestures.hatHit
+                0 -> gestures.kick
+                1 -> gestures.snare
+                else -> gestures.hat
             }
-            if (drum > 0f) ripple(stackX[index], stackY[index], index * 0.25f, 1f)
-            if (gestures.kickHit > 0f) {
-                sparks.burst(stackX[index], stackY[index], 5 + (6 * gestures.kickHit).toInt(), 0.5f, 0.6f, 0.01f, index * 0.25f, Sprite.SPARK)
+            if (drum > 0f) ripple(stackX[index], stackY[index], index * 0.25f, 0.3f + 0.7f * drum)
+            if (gestures.kick > 0f) {
+                sparks.burst(stackX[index], stackY[index], gestures.kickSpawn(11), 0.5f, 0.6f, 0.01f, index * 0.25f, Sprite.SPARK)
             }
         }
-        // A soft onset under calm music leaves a faint ring on the lead stack, like rain on a pond.
-        if (gestures.kickHit <= 0f && frame.kick > 0f) ripple(stackX[0], stackY[0], 0.1f, 0.3f + 0.4f * frame.kick)
         for (slot in 0 until RIPPLES) {
             if (rippleAge[slot] <= 0f) continue
             rippleAge[slot] += dt / (gestures.beatSeconds * 2f)

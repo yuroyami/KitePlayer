@@ -144,6 +144,8 @@ internal class SongPlayer(
     warmupSeconds: Float = 3f,
     /** Left is mono plus side; right is mono minus side. Channel power remains independent. */
     private val side: FloatArray? = null,
+    /** A fixed loudness reference, as a song map supplies, so two levels can be compared. */
+    referencePower: Double? = null,
 ) {
     private val timeline = SpectrumTimeline(capacity = 512)
     private val analyzer = SpectrumAnalyzer(bandCount = bandCount, sampleRate = sampleRate).apply {
@@ -167,6 +169,7 @@ internal class SongPlayer(
 
     init {
         require(warmupSeconds.isFinite() && warmupSeconds >= 0f)
+        analyzer.setSongReferencePower(referencePower)
         val warmup = (warmupSeconds * sampleRate).toInt().coerceAtMost(source.size)
         if (warmup > 0) {
             feed(0, warmup)

@@ -36,7 +36,16 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - Adding a dependency can poison Kotlin's incremental-compilation cache, and the failure names a
   standard library function and reads like a compiler bug in your own code. Delete the module's
   `build/kotlin` and build again. The same failure on the web target wants
-  `build/classes/kotlin/wasmJs` deleted and a rerun with tasks forced.
+  `build/classes/kotlin/wasmJs` deleted and a rerun with tasks forced. A large edit across many
+  files in one module does the same in a second shape: the run fails with `NoClassDefFoundError`
+  for one of our own classes, usually a companion, because that class file was never written.
+  Delete `build/kotlin` and `build/classes/kotlin/jvm`.
+- A Gradle test run that is killed part way leaves its results directory unusable, and the next run
+  fails before any test with `NoSuchFileException ... in-progress-results-generic.bin`. Delete
+  `build/test-results/<task>` and run again.
+- `audiovizSurvey` takes its classpath from `jvmTest`, so it depends on it: one red fast test stops
+  the whole survey before it draws anything. The XML you then read is the previous run's, with the
+  previous numbers. Compare the file's timestamp with the source you edited before you believe it.
 - Scraping every Gradle configuration gives a load-dependent answer, because which configurations
   are realised depends on the rest of the task graph. The publication readiness check passed alone
   and failed inside a full gate run, reporting that a publishing module depended on the sample,
@@ -65,6 +74,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 
 ### Tests that fail for reasons that are not bugs
 
+- A visualiser fixture must outlast its render. The player hears three seconds before the first
+  frame, so a six second run needs at least nine seconds of audio. A shorter fixture ends inside
+  the run, every drawing answers the music stopping, and the held-tone check reports an invented
+  beat in six drawings at once. The giveaway is that every drawing spikes on the same frame.
 - The real-media suites fail under load with messages that read like correctness bugs, for example
   a seek landing 170 milliseconds off, or a status being Buffering when Playing was expected. They
   drive real files and wait on real time, so a busy machine samples the player before it settles.

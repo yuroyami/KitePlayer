@@ -21,6 +21,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.PathShape
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
@@ -78,6 +84,19 @@ internal open class Starfield(
     bucket = bucket,
     kit = Kit(seed = seed, groundKind = GroundKind.Cloud, groundDim = 0.8f, detailKind = DetailKind.Specks, detailStrength = 0.5f, camera = stillCamera(seed)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        // A body transient cuts the camera to a new lane. A cut is the same jump however hard
+        // the hit was, so it is declared as one rather than as an accent.
+        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Discrete),
+        VizDrive(VizDriver.Section, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val cameraOnEcho: Boolean get() = false
 
     private val starDensity = genes.number("Star density", 0.5f, 1f, 0.85f)
@@ -98,7 +117,7 @@ internal open class Starfield(
     private var laneX = 0f
     private var laneY = 0f
     private var look = 0f
-    private val rig = CameraRig(topSpeed = 48.5f, restSpeed = 10f, shove = 14f, sway = 0.4f, lean = 0.25f, baseFov = 82f, cuts = cuts, seed = 3_331)
+    private val rig = CameraRig(topSpeed = 48.5f, restSpeed = 1f, shove = 14f, sway = 0.4f, lean = 0.25f, baseFov = 82f, cuts = cuts, seed = 3_331)
 
     private val speedParam = VizParam("Speed", 0.1f, 3f, 1f)
     private val streakParam = VizParam("Streaks", 0f, 3f, streakScale)
@@ -126,13 +145,17 @@ internal open class Starfield(
             for (index in 0 until count) respawn(index, anywhere = true)
             seeded = true
         }
-        moved = rig.advance(state, speedScale * speedParam.value)
+        // Nothing playing, nothing flying. Without this the stars cross the screen in a silence
+        // at the rig's rest speed, which is the picture moving on its own.
+        val cruise = if (gestures.silence) 0f else -1f
+        moved = rig.advance(state, speedScale * speedParam.value, cruise)
         roll += dt * state.paced(0.55f) * 0.5f
         look += dt * TAU / 16f
         // A snare cuts to a new lane: the camera jumps sideways rather than sliding there.
-        if (gestures.snareHit > 0f && streakScale > 0f) {
-            laneX = random.signed() * 3f
-            laneY = random.signed() * 2f
+        if (gestures.snare > 0f && streakScale > 0f) {
+            val aside = 0.4f + 0.6f * gestures.snare
+            laneX = random.signed() * 3f * aside
+            laneY = random.signed() * 2f * aside
         }
         for (index in 0 until count) {
             z[index] += moved
@@ -188,7 +211,7 @@ internal open class Starfield(
         scene.lens(size, fovDegrees = rig.fov, near = 0.4f, far = depth)
         val banked = roll + rig.roll * (0.5f + bank.value * 3f)
         scene.camera(rig.eyeX + laneX, rig.eyeY + laneY, 0f, laneX + 1f * sin(look), laneY + 0.7f * cos(look), -1f, roll = banked)
-        val lift = 0.4f + 0.6f * state.lift
+        val lift = 0.1f + 1.2f * state.lift
         val live = (count * starDensity.value * (0.55f + 0.45f * state.texture)).toInt().coerceIn(40, count)
         val streak = (moved * streakParam.value * (4f + 4f * state.bassMotion)).coerceIn(0.05f, 7f)
         val round = streakParam.value <= 0.01f
@@ -317,17 +340,28 @@ internal class Drift : Starfield(
     count = 1400,
     cuts = false,
 ) {
+
+    // A drift flies too slowly for the streaks and planets the faster members of this family show.
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Timbre, VizProperty.Size),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Scaled),
+        VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     // A cloud of light on a slow circle, so the sky is lit somewhere else every few seconds.
     private val stage = Stage(reachX = 0.3f, reachY = 0.22f, start = 1.2f)
     private val nebula = TriangleMesh(maxVertices = 32)
 
     override fun onAdvance(state: VizRenderState) {
-        stage.advance(state.deltaSeconds)
+        stage.advance(state.deltaSeconds * state.idle)
     }
 
     override fun DrawScope.drawTop(state: VizRenderState) {
         nebula.clear()
-        val colour = state.palette.argb(0.7f + genes.walk, saturation = 0.6f, value = 0.8f, alpha = 0.5f * (0.4f + 0.6f * state.lift))
+        val colour = state.palette.argb(0.7f + genes.walk, saturation = 0.6f, value = 0.8f, alpha = 0.5f * (0.1f + 1.2f * state.lift))
         nebula.glow(stage.x * size.width, stage.y * size.height, size.minDimension * 0.5f, colour, sides = 24)
         drawMesh(nebula, BlendMode.Plus)
     }
@@ -351,6 +385,20 @@ internal class Terrain : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 721L, detailKind = DetailKind.Specks, detailStrength = 0.4f, camera = stillCamera(721L)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.SlowLevel, VizProperty.Shape),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(1.5f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape),
+        VizDrive(VizDriver.Mood, VizProperty.Shape),
+    )
     override val paintsWholeScreen: Boolean get() = true
     override val cameraOnEcho: Boolean get() = false
 
@@ -426,9 +474,9 @@ internal class Terrain : Layered(
         if (gestures.drop) drainHold = gestures.cycleSeconds
         drainHold -= dt
         drained.advance(if (drainHold > 0f) 1f else 0f, dt)
-        if (gestures.kickHit > 0f) {
+        if (gestures.kick > 0f) {
             waveAt = 0f
-            spray.burst(0.2f + 0.6f * random.next(), 0.8f, 24, 0.25f, 0.8f, 0.01f, 0.6f, Sprite.GLOW, UP, 1f)
+            spray.burst(0.2f + 0.6f * random.next(), 0.8f, gestures.kickSpawn(24), 0.25f, 0.8f, 0.01f, 0.6f, Sprite.GLOW, UP, 1f)
         }
         if (waveAt >= 0f) {
             waveAt += dt / (gestures.beatSeconds * 2f)
@@ -436,7 +484,7 @@ internal class Terrain : Layered(
         }
         spray.advance(dt, drag = 0.5f, gravity = 0.5f)
         // The flock crosses the sky, turning back on the snare.
-        if (gestures.snareHit > 0f) flockWay = -flockWay
+        if (gestures.snare > 0f) flockWay = -flockWay
         flockTravel += dt / (gestures.cycleSeconds * 2f) * flockWay
         flock.targetX = -0.1f + 1.2f * wrap(flockTravel)
         flock.targetY = 0.2f + 0.06f * sin(flockTravel * TAU * 2f)
@@ -451,7 +499,7 @@ internal class Terrain : Layered(
         kit.place(1, sumX / birds, sumY / birds)
         comets.advance(state, gestures, random)
         kit.follow(0, comets.travellers)
-        starCredit += dt * (80f + 120f * state.air)
+        starCredit += dt * (80f * state.idle + 120f * state.air)
         while (starCredit >= 1f) {
             starCredit -= 1f
             skyStars.burst(random.next(), 0.02f + 0.4f * random.next(), 1, 0.01f, 1.2f, 0.014f, random.next(), Sprite.SPARK)
@@ -696,6 +744,16 @@ internal class Wireframe : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 731L, groundKind = GroundKind.Grid, groundDim = 0.8f, detailKind = DetailKind.Scan, camera = stillCamera(731L)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.Treble, VizProperty.Speed),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.3f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.72f, livelyTrail = 0.5f)
     override val cameraOnEcho: Boolean get() = false
 
@@ -777,12 +835,12 @@ internal class Wireframe : Layered(
         spinX += dt * 1.4f * state.tempo * (0.5f + state.body)
         spinY += dt * 2f * state.tempo * (0.5f + state.air)
         orbit += dt * 0.5f * state.tempo
-        swell.kick(gestures.kickHit * 6f)
+        swell.kick(gestures.kick * 6f)
         swell.advance(dt)
         if (gestures.drop) explode = 1f
         explode = (explode - dt / gestures.cycleSeconds).coerceAtLeast(0f)
-        if (gestures.snareHit > 0f) for (index in 0 until 3) satPhase[index] += 1.2f
-        for (index in 0 until 3) satPhase[index] += dt * (1.5f + 0.4f * index) * state.tempo
+        if (gestures.snare > 0f) for (index in 0 until 3) satPhase[index] += 1.2f * gestures.snare
+        for (index in 0 until 3) satPhase[index] += dt * (1.5f * state.idle + 0.4f * index) * state.tempo
         comets.advance(state, gestures, random)
         kit.follow(0, comets.travellers)
         sparks.advance(dt, drag = 1.2f)
@@ -864,9 +922,12 @@ internal class Wireframe : Layered(
             drawLine(colour.copy(alpha = (alpha * 0.9f).coerceIn(0f, 1f)), start, end, width, StrokeCap.Round)
         }
         // Sparks fly off the corners on the kick.
-        if (gestures.kickHit > 0f && tint == 0f) {
+        if (gestures.kick > 0f && tint == 0f) {
             for (index in corners.indices step 3) {
-                if (visible[index]) sparks.burst(screenX[index] / size.width, screenY[index] / size.height, 3, 0.4f, 0.6f, 0.01f, random.next(), Sprite.SPARK)
+                if (visible[index]) {
+                    sparks.burst(screenX[index] / size.width, screenY[index] / size.height,
+                        gestures.kickSpawn(3), 0.4f, 0.6f, 0.01f, random.next(), Sprite.SPARK)
+                }
             }
         }
     }
@@ -899,6 +960,18 @@ internal class RingFlight : Layered(
     bucket = VizEnergy.High,
     kit = Kit(seed = 741L, groundKind = GroundKind.Stars, detailKind = DetailKind.Specks, detailStrength = 0.5f, camera = stillCamera(741L)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.Bass, VizProperty.Size),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape),
+    )
     override val trail: Float get() = 0.35f
     override val cameraOnEcho: Boolean get() = false
 
@@ -921,7 +994,7 @@ internal class RingFlight : Layered(
     private var course = 0f
     private var wobblePhase = 0f
     private val wander = Noise1(seed = 8_123)
-    private val rig = CameraRig(topSpeed = 14.4f, restSpeed = 1.4f, shove = 9f, sway = 0f, lean = 0.26f, baseFov = 76f, seed = 8_123)
+    private val rig = CameraRig(topSpeed = 14.4f, restSpeed = 0.7f, shove = 9f, sway = 0f, lean = 0.26f, baseFov = 76f, seed = 8_123)
     private val racerAhead = FloatArray(3) { 6f + 4f * it }
     private val racerPush = FloatArray(3)
     private var rollExtra = 0f
@@ -954,7 +1027,7 @@ internal class RingFlight : Layered(
             }
         }
         streamers.advance(dt, drag = 0.6f)
-        if (gestures.snareHit > 0f) racerPush[(random.next() * racers.count(1)).toInt().coerceIn(0, 2)] = -3f
+        if (gestures.snare > 0f) racerPush[(random.next() * racers.count(1)).toInt().coerceIn(0, 2)] = -3f * gestures.snare
         for (index in 0 until 3) {
             racerPush[index] += (0f - racerPush[index]) * (dt * 1.5f).coerceAtMost(1f)
             racerAhead[index] = 6f + 4f * index + 2f * sin(wobblePhase * 0.5f + index * 2f) + racerPush[index]
@@ -983,7 +1056,7 @@ internal class RingFlight : Layered(
             targetZ = -spacing * 3f,
             roll = roll,
         )
-        val lift = 0.4f + 0.6f * state.lift
+        val lift = 0.1f + 1.2f * state.lift
         drawFloor(state, lift)
         val shared = membrane.weight(1)
         for (index in gates - 1 downTo 0) {

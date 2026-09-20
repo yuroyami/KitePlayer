@@ -14,6 +14,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.PixelImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
@@ -79,8 +85,13 @@ private fun risingBand(now: FloatArray, before: FloatArray): Int {
     return best
 }
 
-/** -1, 0 or 1: which way a light at [angle] sits along one axis, for finding the neighbour it comes from. */
-private fun towards(component: Float): Int = if (component > 0.38f) 1 else if (component < -0.38f) -1 else 0
+/*
+ * How a lamp lights a grid: the slope of the picture towards it, from the neighbours on both sides.
+ *
+ * The first version stepped to one neighbour, in a direction rounded to -1, 0 or 1 per axis. Every
+ * cell then changed its shading in the same frame, each time the rounding moved, which is a flash
+ * about once a second with nothing in the music to cause it.
+ */
 
 /**
  * Coloured dye in a tank of moving water, stirred from places that move. A kick shoves the water up
@@ -96,6 +107,21 @@ internal class StableFluids : Layered(
     bucket = VizEnergy.High,
     kit = Kit(seed = 1_001L, camera = stillTank(1_001L)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Colour),
+        VizDrive(VizDriver.Level, VizProperty.Spawn),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.lifetime(2f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.lifetime(2f)),
+        VizDrive(VizDriver.HighHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.lifetime(2f)),
+        VizDrive(VizDriver.Section, VizProperty.Speed, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val paintsWholeScreen: Boolean get() = true
     override val cameraOnEcho: Boolean get() = false
 
@@ -124,32 +150,25 @@ internal class StableFluids : Layered(
         val dt = state.deltaSeconds
         val bands = state.frame.bandsRel
         if (before.size != bands.size) before = FloatArray(bands.size)
-        drift += dt * (0.3f + 0.4f * state.frame.motionRate)
-        shovePhase += dt * TAU / (gestures.cycleSeconds * 3f)
+        drift += dt * (0.3f * state.idle + 0.4f * state.frame.motionRate)
+        shovePhase += dt * TAU / (gestures.cycleSeconds * 3f) * state.idle
         // The kick shoves from a point sliding back and forth along the bottom.
-        if (gestures.kickHit > 0f) {
+        if (gestures.kick > 0f) {
             val x = 0.5f + 0.4f * sin(shovePhase)
             val colour = colourFor(x, state)
-            val strength = 0.6f + 0.8f * gestures.kickHit
+            val strength = 0.6f + 0.8f * gestures.kick
             grid.splat(x, 0.95f, 0.2f, random.signed() * 30f, -340f * strength, colour.red * strength * 1.4f, colour.green * strength * 1.4f, colour.blue * strength * 1.4f)
-        }
-        // A soft onset under calm music drops a little dye as well, so the tank never runs dry.
-        val soft = state.frame.kick
-        if (gestures.kickHit <= 0f && soft > 0f) {
-            val x = 0.5f + 0.4f * sin(shovePhase)
-            val colour = colourFor(x, state)
-            grid.splat(x, 0.9f, 0.1f, random.signed() * 20f, -120f * (0.3f + soft), colour.red * soft * 2f, colour.green * soft * 2f, colour.blue * soft * 2f)
         }
         // A slow fountain at the bottom that never stops, so there is always dye to stir.
         val spring = 0.5f + 0.35f * sin(shovePhase * 0.7f)
         val tint = colourFor(spring, state)
-        val flowing = dt * (6f + 4f * state.drive)
+        val flowing = dt * (1.5f + 9f * state.drive)
         grid.splat(spring, 0.96f, 0.1f, 0f, -90f, tint.red * flowing, tint.green * flowing, tint.blue * flowing)
         // And one pouring in from the top on the other side, in the other colour.
         val other = colourFor(1f - spring, state)
         grid.splat(1f - spring, 0.04f, 0.08f, 0f, 70f, other.red * flowing, other.green * flowing, other.blue * flowing)
         // Hats and snares drip dye in from the top, over the band that just rose.
-        val hit = maxOf(gestures.hatHit * 0.7f, gestures.snareHit)
+        val hit = maxOf(gestures.hat * 0.7f, gestures.snare)
         if (hit > 0f) {
             val x = if (bands.isEmpty()) random.next() else (risingBand(bands, before) + 0.5f) / bands.size
             val colour = colourFor(x, state)
@@ -157,8 +176,8 @@ internal class StableFluids : Layered(
         }
         bands.copyInto(before)
         // A steady trickle off the loudest bands, counted per second.
-        trickle += dt * (6f + 14f * state.drive)
-        val loud = state.percentile(0.7f)
+        trickle += dt * (6f * state.idle + 14f * state.drive)
+        val loud = LOUD_BAND
         while (trickle >= 1f && bands.isNotEmpty()) {
             trickle -= 1f
             val band = (random.next() * bands.size).toInt().coerceIn(0, bands.lastIndex)
@@ -182,7 +201,7 @@ internal class StableFluids : Layered(
         }
         // The whole tank turns slowly round its middle, the other way each slow visual cycle, so the dye never settles.
         if (gestures.section) swirlWay = -swirlWay
-        swirl(swirlWay * dt * (30f + 60f * state.drive))
+        swirl(swirlWay * dt * (8f + 105f * state.drive))
         grid.step(dt, curl = (8f + 34f * state.mood) * curl.value, dyeKept = 0.9f - 0.3f * state.mood, speedKept = 0.5f)
         // The discs drift, and the water stops dead inside them, so the dye has to flow round.
         val count = obstacles.count(1)
@@ -192,7 +211,7 @@ internal class StableFluids : Layered(
             if (disc < count) block(discX[disc], discY[disc])
         }
         kit.place(2, discX[0], discY[0])
-        bubbleCredit += dt * (4f + 10f * state.drive)
+        bubbleCredit += dt * (4f * state.idle + 10f * state.drive)
         while (bubbleCredit >= 1f) {
             bubbleCredit -= 1f
             bubbles.burst(stirX, stirY, 1, 0.12f, 1.5f, 0.01f, random.next(), Sprite.RING, UP, 0.8f)
@@ -228,7 +247,7 @@ internal class StableFluids : Layered(
         val pushX = ((stirX - lastX) / step * GRID_WIDTH * 0.6f).coerceIn(-300f, 300f)
         val pushY = ((stirY - lastY) / step * GRID_HEIGHT * 0.6f).coerceIn(-300f, 300f)
         val colour = colourFor(stirX, state)
-        val wake = 16f * dt * (0.6f + state.drive)
+        val wake = 16f * dt * (0.15f + 1.6f * state.drive)
         grid.splat(stirX, stirY, 0.05f, pushX, pushY, colour.red * wake, colour.green * wake, colour.blue * wake)
     }
 
@@ -327,7 +346,8 @@ internal class StableFluids : Layered(
 /**
  * Two chemicals that feed on each other and grow spots, stripes and mazes by themselves, over fog that
  * shows through wherever the pattern is empty. The recipe changes at each supported section boundary, from mazes to spots to
- * worms to coral. A seeder crosses the screen every two visual cycles, dropping a seed every beat, the whole
+ * worms to coral. A seeder crosses the screen every two visual cycles, dropping a seed on every supported
+ * beat, the whole
  * pattern slides sideways eight cells a beat, and a light circling the dish shades it from one side.
  * Drums drop seeds where their band sits, and a drop seeds everywhere at once.
  *
@@ -340,6 +360,19 @@ internal class ReactionDiffusion : Layered(
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 1_002L, groundKind = GroundKind.Fog, groundDim = 0.8f, camera = stillTank(1_002L)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Spawn),
+        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(1f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.HighHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Pulse, VizProperty.Spawn, VizCurve.Discrete),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Shape),
+    )
     override val cameraOnEcho: Boolean get() = false
 
     private val feed = genes.number("Feed", 0.029f, 0.0545f, 0.037f)
@@ -385,24 +418,28 @@ internal class ReactionDiffusion : Layered(
         seederY = 0.5f + 0.35f * sin(seederTravel * TAU * 0.5f)
         kit.place(1, seederX, seederY)
         val beat = (gestures.cyclePhase * 4f).toInt()
-        if (beat != lastBeat) {
+        if (beat != lastBeat && gestures.pulseUsable) {
             lastBeat = beat
             seed(seederX, seederY, 2f + 2f * state.drive)
         }
-        // The whole pattern slides sideways, eight cells a beat.
-        slideCredit += dt * 8f / gestures.beatSeconds
+        // The whole pattern slides sideways, eight cells a beat, while there is a beat to slide on.
+        // Without that guard a held note slides the picture on the tracker's guess, which is a beat
+        // the music does not have. The credit is dropped rather than banked when the pulse goes,
+        // because a tracker that flickers in and out on a held note otherwise saves up enough for
+        // one slide about once a second, and one slide moves the whole picture.
+        if (gestures.pulseUsable) slideCredit += dt * 8f / gestures.beatSeconds else slideCredit = 0f
         while (slideCredit >= 1f) {
             slideCredit -= 1f
             slide(if (scrollLeft.on) -1 else 1)
         }
-        if (gestures.kickHit > 0f) {
+        if (gestures.kick > 0f) {
             val x = 0.1f + 0.8f * random.next()
             val y = 0.1f + 0.8f * random.next()
-            seed(x, y, 2.5f + 3f * gestures.kickHit)
-            sparks.burst(x, y, 8, 0.3f, 0.6f, 0.01f, random.next(), Sprite.SPARK)
+            seed(x, y, 2.5f + 3f * gestures.kick)
+            sparks.burst(x, y, gestures.kickSpawn(8), 0.3f, 0.6f, 0.01f, random.next(), Sprite.SPARK)
         }
         val bands = state.frame.bandsRel
-        val hit = maxOf(gestures.snareHit, gestures.hatHit)
+        val hit = maxOf(gestures.snare, gestures.hat)
         if (hit > 0f && bands.isNotEmpty()) {
             var loudest = 0
             for (band in bands.indices) if (bands[band] > bands[loudest]) loudest = band
@@ -411,7 +448,7 @@ internal class ReactionDiffusion : Layered(
         if (gestures.drop) {
             for (index in 0 until 20) seed(random.next(), random.next(), 3f)
         }
-        owed += dt * (300f + 900f * state.drive)
+        owed += dt * (300f * state.idle + 900f * state.drive)
         // The pattern takes a few thousand steps to form, so the first second runs extra ones.
         if (grown < WARM_UP) owed += WARM_UP_PER_FRAME
         var steps = 0
@@ -422,7 +459,7 @@ internal class ReactionDiffusion : Layered(
         }
         grown += steps
         owed = owed.coerceAtMost(1f)
-        lightAngle += dt * (0.5f + 0.5f * state.frame.motionRate)
+        lightAngle += dt * (0.5f * state.idle + 0.5f * state.frame.motionRate)
         sparks.advance(dt, drag = 1f)
         comets.advance(state, gestures, random)
         kit.follow(0, comets.travellers)
@@ -490,21 +527,24 @@ internal class ReactionDiffusion : Layered(
     }
 
     override fun DrawScope.drawEcho(state: VizRenderState) {
-        val light = 0.55f + 0.45f * state.lift
+        val light = 0.14f + 1.25f * state.lift
         // The lamp circles the dish or swings across it, and each cell is lit by how it slopes towards it.
         val angle = if (lightPath.value == 0) lightAngle else sin(lightAngle) * 1.5f
-        val stepX = towards(cos(angle))
-        val stepY = towards(sin(angle))
+        val towardsX = cos(angle)
+        val towardsY = sin(angle)
         var pixel = 0
         for (y in 0 until GRID_HEIGHT) {
             val row = y * GRID_WIDTH
-            val other = ((y + stepY + GRID_HEIGHT) % GRID_HEIGHT) * GRID_WIDTH
+            val up = ((y - 1 + GRID_HEIGHT) % GRID_HEIGHT) * GRID_WIDTH
+            val down = ((y + 1) % GRID_HEIGHT) * GRID_WIDTH
             for (x in 0 until GRID_WIDTH) {
                 val amount = eater[row + x]
                 // A steep ramp gives the pattern a clean edge instead of a blur.
                 val ramp = ((amount - 0.08f) / 0.22f).coerceIn(0f, 1f)
                 val level = ramp * ramp * (3f - 2f * ramp)
-                val shade = (0.8f + (amount - eater[other + (x + stepX + GRID_WIDTH) % GRID_WIDTH]) * 6f).coerceIn(0.35f, 1.4f) * light
+                val slope = (eater[row + leftOf[x]] - eater[row + rightOf[x]]) * towardsX +
+                    (eater[up + x] - eater[down + x]) * towardsY
+                val shade = (0.8f + slope * 3f).coerceIn(0.35f, 1.4f) * light
                 val colour = state.palette.ramp(level)
                 // Empty cells let the fog through.
                 picture.pixels[pixel++] = see(colour.red * shade, colour.green * shade, colour.blue * shade, 0.12f + 0.88f * level)
@@ -515,7 +555,7 @@ internal class ReactionDiffusion : Layered(
     }
 
     override fun DrawScope.drawTop(state: VizRenderState) {
-        drawCircle(state.palette.cap.copy(alpha = 0.5f + 0.4f * state.lift), size.minDimension * 0.012f, Offset(seederX * size.width, seederY * size.height))
+        drawCircle(state.palette.cap.copy(alpha = 0.12f + 1.15f * state.lift), size.minDimension * 0.012f, Offset(seederX * size.width, seederY * size.height))
         with(sparks) { drawSprites(state.palette, genes.walk) }
         with(comets) { drawComets(state.palette, genes.walk, alpha = 0.4f + 0.5f * state.lift) }
     }
@@ -559,6 +599,18 @@ internal class SmokeRise : Layered(
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 1_003L, camera = stillTank(1_003L)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bass, VizProperty.Spawn),
+        VizDrive(VizDriver.Level, VizProperty.Spawn),
+        VizDrive(VizDriver.SlowLevel, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(2.5f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val paintsWholeScreen: Boolean get() = true
     override val cameraOnEcho: Boolean get() = false
 
@@ -595,14 +647,14 @@ internal class SmokeRise : Layered(
         // The ceiling hangs lower after a quiet stretch, and a drop lifts it out of the way.
         ceiling.advance(ceilingGene.value + 0.3f * (1f - frame.loudLong), dt)
         val count = if (emitters.on) 2 else 1
-        puffs += dt * (12f + 36f * frame.bassRel * (0.3f + 0.7f * state.drive))
+        puffs += dt * (12f * state.idle + 36f * frame.bassRel * (0.3f + 0.7f * state.drive))
         while (puffs >= 1f) {
             puffs -= 1f
             val index = (random.next() * count).toInt().coerceIn(0, 1)
             grid.splat(emitterX[index] + random.signed() * 0.04f, 0.92f, 0.07f, random.signed() * 12f, -30f, 0.5f + frame.bassRel)
         }
-        if (gestures.kickHit > 0f) {
-            for (index in 0 until count) grid.splat(emitterX[index], 0.95f, 0.1f, random.signed() * 20f, -120f * (0.5f + gestures.kickHit), 1.2f * gestures.kickHit)
+        if (gestures.kick > 0f) {
+            for (index in 0 until count) grid.splat(emitterX[index], 0.95f, 0.1f, random.signed() * 20f, -120f * (0.5f + gestures.kick), 1.2f * gestures.kick)
         }
         // In a silence a thin thread still rises, so the picture never freezes.
         grid.splat(emitterX[0], 0.97f, 0.03f, 0f, -10f, 0.4f * dt)
@@ -610,9 +662,9 @@ internal class SmokeRise : Layered(
         blow(wind.value * (8f + 10f * state.drive) * dt)
         cap((ceiling.value * (1f - lifted.value)).coerceIn(0f, 0.6f))
         grid.step(dt, curl = 8f + 28f * state.mood, dyeKept = 0.88f, speedKept = 0.8f)
-        lightAngle += dt * (0.4f + 0.5f * frame.motionRate)
-        shimmer += dt * (1f + 2.5f * state.drive)
-        emberCredit += dt * (30f + 60f * state.drive)
+        lightAngle += dt * (0.4f * state.idle + 0.5f * frame.motionRate)
+        shimmer += dt * (1f * state.idle + 2.5f * state.drive)
+        emberCredit += dt * (30f * state.idle + 60f * state.drive)
         while (emberCredit >= 1f) {
             emberCredit -= 1f
             val index = (random.next() * count).toInt().coerceIn(0, 1)
@@ -649,18 +701,21 @@ internal class SmokeRise : Layered(
         val light = 0.5f + 0.5f * state.lift
         // The lamp circles the tank or swings across it; the edge of the smoke that faces it is lit.
         val angle = if (lightPath.value == 0) lightAngle else sin(lightAngle) * 1.5f
-        val stepX = towards(cos(angle))
-        val stepY = towards(sin(angle))
+        val towardsX = cos(angle)
+        val towardsY = sin(angle)
         var pixel = 0
         for (y in 0 until GRID_HEIGHT) {
             val colour = state.palette.ramp(1f - y / (GRID_HEIGHT - 1f))
-            val otherY = (y + stepY).coerceIn(0, GRID_HEIGHT - 1)
+            val above = (y - 1).coerceAtLeast(0)
+            val below = (y + 1).coerceAtMost(GRID_HEIGHT - 1)
             for (x in 0 until GRID_WIDTH) {
                 val here = smoke[grid.index(x, y)]
-                val toward = smoke[grid.index((x + stepX).coerceIn(0, GRID_WIDTH - 1), otherY)]
+                val slope = (smoke[grid.index((x - 1).coerceAtLeast(0), y)] -
+                    smoke[grid.index((x + 1).coerceAtMost(GRID_WIDTH - 1), y)]) * towardsX +
+                    (smoke[grid.index(x, above)] - smoke[grid.index(x, below)]) * towardsY
                 // A faint haze everywhere, drifting in slow waves as if the room were lit, and the smoke thick over it.
                 val haze = 0.12f + 0.07f * sin(shimmer + x * 0.15f - y * 0.11f)
-                val thick = haze + soft(here * 4f) * light * (0.75f + (here - toward) * 1.5f).coerceIn(0.4f, 1.4f)
+                val thick = haze + soft(here * 4f) * light * (0.75f + slope * 0.75f).coerceIn(0.4f, 1.4f)
                 picture.pixels[pixel++] = opaque(
                     ground.red + (colour.red - ground.red) * thick,
                     ground.green + (colour.green - ground.green) * thick,

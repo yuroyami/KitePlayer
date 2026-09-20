@@ -22,6 +22,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.PathShape
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
@@ -53,6 +59,19 @@ internal class Reactor : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 601L, groundKind = GroundKind.Voronoi, detailKind = DetailKind.Specks, camera = Camera2D(wander = 0.08f, seed = 601)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.25f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(0.6f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.7f, livelyTrail = 0.56f, calmSpin = 0.1f, livelySpin = 0.6f)
 
     private val cores = genes.choice("Cores", 3, start = 2)
@@ -78,14 +97,14 @@ internal class Reactor : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stage.advance(dt)
-        orbit += dt * (0.5f + 2.2f * state.drive)
-        spin += dt * (0.4f + 2.4f * state.drive)
+        stage.advance(dt * state.idle)
+        orbit += dt * (0.5f * state.idle + 2.2f * state.drive)
+        spin += dt * (0.4f * state.idle + 2.4f * state.drive)
         if (gestures.drop) collide = 1f
         collide = (collide - dt / gestures.cycleSeconds).coerceAtLeast(0f)
-        swell.kick(gestures.kickHit * 9f)
+        swell.kick(gestures.kick * 9f)
         swell.advance(dt)
-        if (gestures.snareHit > 0f) step += TAU / 24f
+        if (gestures.snare > 0f) step += TAU / 24f * gestures.snare
         val apart = 0.3f * (1f - sin(collide * PI.toFloat()))
         val count = cores.count(1)
         for (index in 0 until 3) {
@@ -94,9 +113,9 @@ internal class Reactor : Layered(
             coreY[index] = stage.y + apart * sin(angle)
             kit.place(index + 1, coreX[index], coreY[index])
         }
-        // Arcs pass from core to core once a bar, once a beat or twice a beat.
+        // Arcs pass from core to core once a cycle, once a beat or twice a beat, while a pulse is supported.
         val beats = (gestures.cyclePhase * 8f).toInt()
-        if (beats != lastBeat) {
+        if (beats != lastBeat && gestures.pulseUsable) {
             lastBeat = beats
             val every = when (exchange.value) {
                 0 -> 8
@@ -111,9 +130,10 @@ internal class Reactor : Layered(
             }
         }
         arcs.advance(dt)
-        if (gestures.snareHit > 0f) {
+        if (gestures.snare > 0f) {
             val a = random.next() * TAU
-            sparks.burst(stage.x + cos(a) * 0.3f / kit.aspect, stage.y + sin(a) * 0.3f, 8, 0.4f, 0.6f, 0.012f, random.next(), Sprite.SPARK)
+            sparks.burst(stage.x + cos(a) * 0.3f / kit.aspect, stage.y + sin(a) * 0.3f,
+                gestures.snareSpawn(8), 0.4f, 0.6f, 0.012f, random.next(), Sprite.SPARK)
         }
         sparks.advance(dt, drag = 1f)
         comets.advance(state, gestures, random)
@@ -221,6 +241,23 @@ internal class Stereogram : Layered(
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 602L, groundKind = GroundKind.Spectrogram, groundDim = 0.85f, detailKind = DetailKind.Hatch, camera = Camera2D(wander = 0.06f, seed = 602)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        VizDrive(VizDriver.Width, VizProperty.Shape),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.LowHit, VizProperty.Camera, VizCurve.Scaled, VizResponse.spring(0.3f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Spawn, response = VizResponse.Rate),
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Level, VizProperty.Shape),
+    )
     // The lines of an old tube, which is what these traces grew up on.
     override val post: PostSpec get() = PostSpec.Retro.copy(glitch = false)
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.86f, livelyTrail = 0.7f)
@@ -256,14 +293,14 @@ internal class Stereogram : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         val frame = state.frame
         traceSampler.resample(frame.scopeLeft, left)
         traceSampler.resample(frame.scopeRight, right)
         lefts.push(left, state.timeSeconds)
         rights.push(right, state.timeSeconds)
         scale = frame.waveformGain
-        jump.kick(gestures.kickHit * 5f)
+        jump.kick(gestures.kick * 5f)
         jump.advance(dt)
         if (gestures.drop) separate = 1f
         separate = (separate - dt / gestures.cycleSeconds).coerceAtLeast(0f)

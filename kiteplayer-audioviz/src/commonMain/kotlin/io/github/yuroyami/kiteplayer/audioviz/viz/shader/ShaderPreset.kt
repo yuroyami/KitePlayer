@@ -56,6 +56,9 @@ internal abstract class ShaderPreset(
     /** The whole picture is the shader, so there is no separate ground. */
     override val paintsWholeScreen: Boolean get() = true
 
+    /** The whole picture is one runtime shader, so a device without them shows the stand-in. */
+    override val isRuntimeShader: Boolean get() = true
+
     /** The shader moves its own picture through the camera, rather than being moved as a flat picture. */
     override val cameraOnEcho: Boolean get() = false
 

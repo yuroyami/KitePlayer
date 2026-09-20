@@ -5,6 +5,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Orbiter
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
@@ -12,10 +18,8 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Comets
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hatSpawn
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.follow
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hatHit
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.kickHit
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.snareHit
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.pow
@@ -34,6 +38,16 @@ internal class Alchemy : ShaderPreset(
     family = VizFamily.Alchemy,
     bucket = VizEnergy.Mid,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.3f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Drop, VizProperty.Colour, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     // The look relies on sharp blue filigree and black negative space. A wide bloom
     // erases both. The filaments have their own analytical glow in the one scene draw.
     override val post: PostSpec get() = PostSpec.Off
@@ -59,12 +73,13 @@ internal class Alchemy : ShaderPreset(
         if (gestures.drop) jump += TAU / 3f
         // One circuit of the cardioid every eight phrases, from where the lobe gene starts it.
         walkAngle.advance(genes.walk * TAU + lobe.value * TAU / 3f + jump, dt)
-        if (gestures.snareHit > 0f) rayShift += 0.7f
-        punch.kick(gestures.kickHit * 5f)
+        if (gestures.snare > 0f) rayShift += 0.7f * gestures.snare
+        punch.kick(gestures.kick * 5f)
         punch.advance(dt)
-        if (gestures.hatHit > 0f) {
+        if (gestures.hat > 0f) {
             val a = random.next() * TAU
-            sparks.burst(centre.x + cos(a) * 0.32f / kit.aspect, centre.y + sin(a) * 0.32f, 5, 0.25f, 0.5f, 0.01f, 0.55f, Sprite.SPARK)
+            sparks.burst(centre.x + cos(a) * 0.32f / kit.aspect, centre.y + sin(a) * 0.32f,
+                gestures.hatSpawn(5), 0.25f, 0.5f, 0.01f, 0.55f, Sprite.SPARK)
         }
         sparks.advance(dt, drag = 1f)
         comets.advance(state, gestures, random)

@@ -183,7 +183,7 @@ internal class Orbiter(
     var direction: Float = 1f
 
     fun advance(state: VizRenderState, gestures: Gestures) {
-        angle += direction * state.deltaSeconds * lapsPerBar * TAU / gestures.cycleSeconds * (0.6f + 0.6f * state.drive)
+        angle += direction * state.deltaSeconds * lapsPerBar * TAU / gestures.cycleSeconds * (0.12f + 1.7f * state.drive)
         x = centreX + radiusX * cos(angle)
         y = centreY + radiusY * sin(angle)
     }
@@ -275,7 +275,7 @@ internal class Lane(var perBar: Float = 1f, var direction: Float = 1f) {
     private var travelled = 0f
 
     fun advance(state: VizRenderState, gestures: Gestures) {
-        travelled += direction * state.deltaSeconds * perBar / gestures.cycleSeconds * (0.5f + 0.7f * state.drive)
+        travelled += direction * state.deltaSeconds * perBar / gestures.cycleSeconds * (0.1f + 1.7f * state.drive)
         offset = travelled - floor(travelled)
     }
 

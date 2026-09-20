@@ -36,8 +36,10 @@ public class SpectrumFrame internal constructor(
     /** Energy above 2 kHz. Cymbals, consonants and air. */
     public val treble: Float,
     /**
-     * Scalar onset energy projection. Player views project delivered [events]; a raw analysis
-     * reports newly detected hits whose individual times are in [detections], not [ptsMicros].
+     * Scalar onset energy projection, from hits only. Player views project delivered [events]; a
+     * raw analysis reports newly detected hits whose individual times are in [detections], not
+     * [ptsMicros]. A detection below [AudioDetection.HIT_CONFIDENCE] stays in [events] and in
+     * [detections] with its own confidence, and is not projected here.
      */
     public val beat: Float,
     /** Jumps to [beat] when one lands, then falls away. This is what a flash or a kick reads. */
@@ -60,11 +62,11 @@ public class SpectrumFrame internal constructor(
 
     // What kind of hit it was.
 
-    /** Scalar low-transient energy projection, 0..1. Does not identify a kick drum. */
+    /** Strength of the strongest low-transient hit, 0..1. Does not identify a kick drum. */
     public val kick: Float = 0f,
-    /** Scalar body/crack-transient energy projection, 0..1. Does not identify a snare. */
+    /** Strength of the strongest body/crack-transient hit, 0..1. Does not identify a snare. */
     public val snare: Float = 0f,
-    /** Scalar high-transient energy projection, 0..1. Does not identify a hi-hat or cymbal. */
+    /** Strength of the strongest high-transient hit, 0..1. Does not identify a hi-hat or cymbal. */
     public val hat: Float = 0f,
     /** How hard the hit actually was, rather than how surprising. A soft hit reads soft. */
     public val onsetStrength: Float = 0f,
@@ -77,7 +79,7 @@ public class SpectrumFrame internal constructor(
      */
     public val novelty: Float = 0f,
 
-    /** Fast attack envelopes, measured in audio time so no display can miss a hit. */
+    /** Fast attack envelopes of hits, measured in audio time so no display can miss one. */
     public val kickPulse: Float = kick,
     public val snarePulse: Float = snare,
     public val hatPulse: Float = hat,
@@ -192,16 +194,23 @@ public class SpectrumFrame internal constructor(
     /** Recommended trace amplitude multiplier, from the same gain as every energy driver. */
     public val waveformGain: Float get() = sqrt(drivers?.powerGain ?: 1.0).toFloat()
 
-    /** Rate shared by clocks and continuous motion; attacks remain distinct from section mood. */
-    public val motionRate: Float get() = 0.08f + 0.57f * mood + 0.20f * energy + 0.15f * kickPulse
+    /**
+     * Rate shared by clocks and continuous motion; attacks remain distinct from section mood.
+     *
+     * The floor is what keeps a silence from freezing. It is small on purpose: the standard asks
+     * that silence produce at most a fifth of the change music produces, and a generous floor is
+     * the fastest way to fail that, because it runs whether or not anything is playing.
+     */
+    public val motionRate: Float get() = 0.03f + 0.57f * mood + 0.25f * energy + 0.15f * kickPulse
 
     /**
      * The bar value that [fraction] of the bars are below, using the relative bars.
      *
-     * This is how a drawing says "only the loud ones" without picking a number that is right for
-     * one song and wrong for the next. Asking for 0.6 and keeping anything above the answer keeps
-     * the loudest 40 percent, whatever is playing.
+     * A rank inside one frame keeps the same share of the picture whatever plays, so a quiet
+     * passage lights as many bars as a loud one. Every bar is already a height under one shared
+     * gain, so compare it with a fixed level instead.
      */
+    @Deprecated("A rank inside one frame hides how loud the music is. Compare the height with a fixed level.")
     public fun bandPercentile(fraction: Float): Float {
         if (bandsSorted.isEmpty()) return 0f
         val at = (fraction.coerceIn(0f, 1f) * (bandsSorted.size - 1)).toInt()
@@ -389,10 +398,10 @@ public class SpectrumFrame internal constructor(
         for (index in 0 until delivery.size) {
             val hit = delivery[index].event.detection
             when (hit.kind) {
-                AudioEventKind.Onset -> beat = maxOf(beat, hit.strength)
-                AudioEventKind.LowTransient -> kick = maxOf(kick, hit.strength)
-                AudioEventKind.BodyTransient -> snare = maxOf(snare, hit.strength)
-                AudioEventKind.HighTransient -> hat = maxOf(hat, hit.strength)
+                AudioEventKind.Onset -> if (hit.isHit) beat = maxOf(beat, hit.strength)
+                AudioEventKind.LowTransient -> if (hit.isHit) kick = maxOf(kick, hit.strength)
+                AudioEventKind.BodyTransient -> if (hit.isHit) snare = maxOf(snare, hit.strength)
+                AudioEventKind.HighTransient -> if (hit.isHit) hat = maxOf(hat, hit.strength)
                 AudioEventKind.EnergyRise -> drop = true
                 AudioEventKind.Drop -> drop = true
                 AudioEventKind.SectionBoundary, AudioEventKind.Breakdown -> Unit

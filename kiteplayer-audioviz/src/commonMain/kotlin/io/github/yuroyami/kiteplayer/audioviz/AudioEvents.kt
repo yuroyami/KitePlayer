@@ -49,7 +49,33 @@ public class AudioDetection internal constructor(
     public val confidence: Float,
     /** Change relative to recent context in 0..1, not an energy level. */
     public val surprise: Float,
-)
+) {
+    /**
+     * Whether this transient has enough detector support for a drawing to answer it.
+     *
+     * Confidence decides that the picture answers; [strength] decides how much. A quiet drum in a
+     * quiet passage is a hit with a small strength. The texture of a loud sound can pass the
+     * detector with a high strength and little support, and is not a hit.
+     */
+    public val isHit: Boolean
+        get() = confidence >= HIT_CONFIDENCE && when (kind) {
+            AudioEventKind.Onset, AudioEventKind.LowTransient,
+            AudioEventKind.BodyTransient, AudioEventKind.HighTransient -> true
+            else -> false
+        }
+
+    public companion object {
+        /**
+         * The support a transient needs to move a picture. *Judgement*, from development fixtures.
+         *
+         * On a synthetic drum loop 18 dB below the reference it keeps 97% of the detections,
+         * including hits whose strength is a fifth of what the old fixed strength gate wanted. On
+         * a loud noise texture with no drums in it, it refuses about three quarters of them. A
+         * soft pad produces no transient detections at all. Held-out scoring is separate.
+         */
+        public const val HIT_CONFIDENCE: Float = 0.35f
+    }
+}
 
 /** Immutable publication of all detections of one source through an inclusive media-time watermark. */
 @AudioVizAuthoringApi

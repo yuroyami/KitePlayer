@@ -18,6 +18,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
@@ -39,7 +45,7 @@ import kotlin.math.sin
  *
  * Each rib is a snapshot of the spectrum taken when it was born at the far end, and ribs travel
  * toward the camera, so flying forward means flying back through what was already played. Around
- * that there is a world: gates to fly through once a beat, debris rushing past, a light that runs
+ * that there is a world: gates to fly through on every supported beat, debris rushing past, a light that runs
  * down the wall on every kick, windows where the quiet bands open the wall onto the stars outside,
  * and a camera that cuts to a new lane on some bar lines. A drop widens the pipe for a visual cycle and turns
  * its twist the other way.
@@ -82,6 +88,19 @@ internal open class Pipe(
         camera = Camera2D(wander = 0f, punch = 0.03f, roll = 0f, shake = 0f, cuts = false, seed = seed.toInt()),
     ),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.Width, VizProperty.Shape),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     // The pipe has its own camera in three dimensions; the flat one would move it a second time.
     override val cameraOnEcho: Boolean get() = false
 
@@ -197,9 +216,9 @@ internal open class Pipe(
         }
         widenHold -= dt
         widen.advance(if (widenHold > 0f) 1f else 0f, dt)
-        // A gate every beat, born at the far end and flown through a few beats later.
+        // A gate on every supported beat, born at the far end and flown through a few beats later.
         val beat = (gestures.cyclePhase * 4f).toInt()
-        if (beat != lastBeat) {
+        if (beat != lastBeat && gestures.pulseUsable) {
             lastBeat = beat
             gateDistance[nextGate] = far * 0.95f
             gateTint[nextGate] = state.musicTime * colourRate.value + 0.5f
@@ -216,7 +235,7 @@ internal open class Pipe(
             if (debrisZ[index] > -1f) respawnDebris(index, far, anywhere = false)
         }
         // A kick sends a bright rib down the wall that reaches the camera in one beat.
-        if (gestures.kickHit > 0f) lightDistance = far * 0.6f
+        if (gestures.kick > 0f) lightDistance = far * (0.3f + 0.3f * gestures.kick)
         if (lightDistance >= 0f) {
             lightDistance -= dt * far * 0.6f / gestures.beatSeconds
             if (lightDistance < NEAR_CLIP) lightDistance = -1f
@@ -637,6 +656,23 @@ internal class Wormhole : Pipe(
     outside = GroundKind.Cloud,
     pace = 0.6f,
 ) {
+
+    // This one answers a low transient with a rib down the wall, which the shaft does not.
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.Width, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val dustRate: Float get() = 24f
 
     override fun onAdvance(state: VizRenderState) {
@@ -668,7 +704,25 @@ internal class AcidTunnel : Pipe(
         calmSpin = 0.08f,
         livelySpin = 0.34f,
     ),
-)
+) {
+
+    // This one answers a low transient with a rib down the wall, which the shaft does not.
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.Width, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
+}
 
 /** Pulled the other way: the echoes fall inward, so the whole picture drains towards the middle. */
 internal class Drain : Pipe(
@@ -690,4 +744,23 @@ internal class Drain : Pipe(
         calmSpin = -0.2f,
         livelySpin = -0.7f,
     ),
-)
+) {
+
+    // This one answers a low transient with a rib down the wall, which the shaft does not.
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.Width, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Scaled),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
+}

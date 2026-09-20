@@ -279,13 +279,13 @@ public class SpectrumTimeline(public val capacity: Int = 128) {
             if (candidate.ptsMicros <= from) break
             if (candidate.ptsMicros > ptsMicros) continue
             when (candidate.kind) {
-                AudioEventKind.Onset -> {
+                AudioEventKind.Onset -> if (candidate.isHit) {
                     beat = maxOf(beat, candidate.strength)
                     strength = maxOf(strength, candidate.strength)
                 }
-                AudioEventKind.LowTransient -> kick = maxOf(kick, candidate.strength)
-                AudioEventKind.BodyTransient -> snare = maxOf(snare, candidate.strength)
-                AudioEventKind.HighTransient -> hat = maxOf(hat, candidate.strength)
+                AudioEventKind.LowTransient -> if (candidate.isHit) kick = maxOf(kick, candidate.strength)
+                AudioEventKind.BodyTransient -> if (candidate.isHit) snare = maxOf(snare, candidate.strength)
+                AudioEventKind.HighTransient -> if (candidate.isHit) hat = maxOf(hat, candidate.strength)
                 AudioEventKind.EnergyRise -> drop = true
                 AudioEventKind.Drop -> drop = true
                 AudioEventKind.SectionBoundary, AudioEventKind.Breakdown -> Unit

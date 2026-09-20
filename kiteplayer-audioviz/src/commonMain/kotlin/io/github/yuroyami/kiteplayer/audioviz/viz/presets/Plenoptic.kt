@@ -16,6 +16,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Orbiter
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
@@ -55,6 +61,16 @@ internal class Ripple : ShaderPreset(
     bucket = VizEnergy.Mid,
     seed = 17f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(2f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(2f)),
+        VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     override val hasFallback: Boolean get() = true
 
     private val placement = genes.choice("Sources", 3, start = 2)
@@ -87,11 +103,11 @@ internal class Ripple : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         source.centreX = stage.x
         source.centreY = stage.y
         source.advance(state, gestures)
-        flow += dt * (1.6f + 1.6f * state.frame.motionRate)
+        flow += dt * (1.6f * state.idle + 1.6f * state.frame.motionRate)
         drift += dt * TAU / (gestures.cycleSeconds * 1.8f) * state.tempo
         for (index in 0 until 3) {
             figureX[index] = stage.x + 0.36f * sin(drift * FX[index] + index * 2.1f)
@@ -104,9 +120,9 @@ internal class Ripple : ShaderPreset(
             lightGoal += dt * 0.5f * state.tempo
         }
         light.advance(lightGoal, dt)
-        // Rings on every onset, weak ones faint, from wherever the sources are now.
-        if (state.frame.kick > 0f) born(state.frame.kick, 1f, state.bassMotion * 0.4f, sourceX(state), sourceY(), 1f)
-        if (state.frame.snare > 0f) born(state.frame.snare, 0.5f, 0.55f + 0.35f * state.air, sourceX(state), sourceY(), 1f)
+        // Rings on every hit, quiet ones faint, from wherever the sources are now.
+        if (gestures.kick > 0f) born(gestures.kick, 1f, state.bassMotion * 0.4f, sourceX(state), sourceY(), 1f)
+        if (gestures.snare > 0f) born(gestures.snare, 0.5f, 0.55f + 0.35f * state.air, sourceX(state), sourceY(), 1f)
         if (gestures.drop) born(1f, 2f, 0.2f, -0.6f, 0.5f, 4f)
         for (slot in 0 until RINGS) {
             if (strength[slot] <= 0f) continue
@@ -114,7 +130,7 @@ internal class Ripple : ShaderPreset(
             if (along[slot] >= 1f) strength[slot] = 0f
         }
         // Droplets fall in from the front and start small rings where they land.
-        if (gestures.hatHit > 0f || (state.frame.snare > 0f && random.next() < 0.25f)) {
+        if (gestures.hat > 0f || (gestures.snare > 0f && random.next() < 0.25f)) {
             val x = 0.1f + 0.8f * random.next()
             drops.spawn(x, -0.05f, x + random.signed() * 0.05f, 0.2f + 0.7f * random.next(), 0.5f, size = 0.018f, tint = random.next(), kind = Sprite.GLOW)
         }
@@ -293,6 +309,15 @@ internal class DanceOfTheFreq : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 401L, groundKind = GroundKind.Rings, detailKind = DetailKind.Specks, camera = Camera2D(wander = 0.08f, seed = 401)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.4f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Discrete),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(2f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.84f, livelyTrail = 0.8f, calmSpin = 0.1f, livelySpin = 0.3f)
 
     private val systems = genes.toggle("Second system", start = true)
@@ -314,13 +339,13 @@ internal class DanceOfTheFreq : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stage.advance(dt)
-        expand.kick(gestures.kickHit * 3f)
+        stage.advance(dt * state.idle)
+        expand.kick(gestures.kick * 3f)
         expand.advance(dt)
         if (gestures.drop) fling = 1f
         fling = (fling - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         val count = state.frame.bandsRel.size.coerceAtMost(MOST)
-        if (gestures.snareHit > 0f && count > 0) {
+        if (gestures.snare > 0f && count > 0) {
             val dot = (random.next() * count).toInt().coerceIn(0, count - 1)
             flip[dot] = -flip[dot]
         }
@@ -425,6 +450,19 @@ internal class Strands : Layered(
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 402L, groundKind = GroundKind.Fog, detailKind = DetailKind.Hatch, detailStrength = 0.7f, camera = Camera2D(wander = 0.06f, seed = 402)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.SlowLevel, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.lifetime(1.5f)),
+        VizDrive(VizDriver.Pulse, VizProperty.Spawn, VizCurve.Discrete),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.5f, livelyTrail = 0.5f)
 
     private val ribbons = genes.choice("Ribbons", 3, start = 2)
@@ -452,7 +490,7 @@ internal class Strands : Layered(
         travel += dt / (gestures.cycleSeconds * 2f)
         flow += dt * 0.6f * state.tempo
         rise.advance((state.frame.loudLong - 0.5f) * 0.1f, dt)
-        if (gestures.kickHit > 0f) {
+        if (gestures.kick > 0f) {
             pulseAt[nextPulse] = 0f
             nextPulse = (nextPulse + 1) % PULSES
         }
@@ -466,7 +504,7 @@ internal class Strands : Layered(
         val count = ribbons.count(12, 6)
         // Beads: every other ribbon, every ribbon, or two on every ribbon, each beat.
         val beat = (gestures.cyclePhase * 4f).toInt()
-        if (beat != lastBeat) {
+        if (beat != lastBeat && gestures.pulseUsable) {
             lastBeat = beat
             val step = if (beadRate.value == 0) 2 else 1
             val repeats = if (beadRate.value == 2) 2 else 1
@@ -580,6 +618,15 @@ internal class Contour : Layered(
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 403L, groundKind = GroundKind.Spectrogram, groundDim = 0.6f, detailKind = DetailKind.Dots, camera = Camera2D(wander = 0.06f, seed = 403)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.3f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.6f, livelyTrail = 0.5f)
 
     private val levels = genes.choice("Levels", 3, start = 1)
@@ -609,7 +656,7 @@ internal class Contour : Layered(
         val dt = state.deltaSeconds
         val bands = state.frame.bandsRel
         if (bands.isNotEmpty()) {
-            owed += dt * (6f + 8f * state.tempo)
+            owed += dt * (6f * state.idle + 8f * state.tempo)
             while (owed >= 1f) {
                 owed -= 1f
                 newest = (newest - 1 + ROWS) % ROWS
@@ -618,9 +665,9 @@ internal class Contour : Layered(
             }
         }
         spin = turn.advance(dt, state.frame, state.paced(0.05f)) * TAU
-        core.kick(gestures.kickHit * 7f)
+        core.kick(gestures.kick * 7f)
         core.advance(dt)
-        if (gestures.kickHit > 0f) {
+        if (gestures.kick > 0f) {
             ringAge[nextRing] = 0.001f
             nextRing = (nextRing + 1) % ringAge.size
         }
@@ -631,12 +678,12 @@ internal class Contour : Layered(
         }
         if (gestures.drop) inside = 1f
         inside = (inside - dt / gestures.cycleSeconds).coerceAtLeast(0f)
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         centre.centreX = stage.x
         centre.centreY = stage.y
         centre.advance(state, gestures)
         kit.place(0, centre.x, centre.y)
-        for (hiker in 0 until HIKERS) hikerAngle[hiker] += dt * (0.9f + 0.2f * hiker) * state.tempo * if (hiker % 2 == 0) 1f else -1f
+        for (hiker in 0 until HIKERS) hikerAngle[hiker] += dt * (0.9f * state.idle + 0.2f * hiker) * state.tempo * if (hiker % 2 == 0) 1f else -1f
         comets.advance(state, gestures, random)
         kit.follow(1, comets.travellers)
         val aspect = kit.aspect
@@ -657,7 +704,7 @@ internal class Contour : Layered(
         val inner = size.minDimension * 0.07f
         val outer = sceneRadius * 1.3f
         val set = LEVELS[levels.value]
-        val lift = 0.35f + 0.65f * state.lift
+        val lift = 0.09f + 1.17f * state.lift
         val second = maps.weight(1)
         for (level in set.indices) {
             val threshold = sorted[((sorted.size - 1) * set[level]).toInt()]
@@ -771,7 +818,7 @@ internal class Contour : Layered(
                 at.x + cos(hikerAngle[hiker]) * reach,
                 at.y + sin(hikerAngle[hiker]) * reach,
                 size.minDimension * 0.016f,
-                state.palette.argb(0.15f * hiker + genes.walk, saturation = 0.4f, value = 1f, alpha = 0.5f + 0.4f * state.lift),
+                state.palette.argb(0.15f * hiker + genes.walk, saturation = 0.4f, value = 1f, alpha = 0.12f + 1.15f * state.lift),
             )
         }
         drawMesh(hikerMesh, BlendMode.Plus)

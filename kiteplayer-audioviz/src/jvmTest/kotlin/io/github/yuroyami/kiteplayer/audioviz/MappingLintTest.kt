@@ -36,27 +36,24 @@ class MappingLintTest {
     }
 
     @Test
-    fun noDrawingComparesAudioToAFixedNumber() {
-        // "Draw it if the band is above 0.35" is right for exactly one song. Every other song is
-        // either always above it or never reaches it. Rank within the frame instead, with
-        // state.percentile, and the same share of the picture is drawn whatever plays.
-        // How sure we are of the tempo or the key is not a loudness. It is already a fixed scale
-        // that means the same thing on every song, so comparing it to a number is right.
-        val certainty = Regex("""(beatConfidence|keyConfidence)\s*(?:<|>|<=|>=)""")
-        val audio = """(?:energy|value|strength|loud|nodeEnergy\[\w+\]|state\.energy|state\.drive|state\.mood|state\.frame\.\w+)"""
-        val pattern = Regex("""$audio\s*(?:<|>|<=|>=)\s*(\d*\.\d+)f""")
-        val complaints = scan { line ->
-            if (certainty.containsMatchIn(line)) return@scan null
-            val found = pattern.find(line) ?: return@scan null
-            val threshold = found.groupValues[1].toFloat()
-            // Very small numbers are "is this worth drawing at all" guards against zero, not
-            // decisions about loudness, and they behave the same on every song.
-            if (threshold < NEGLIGIBLE) null
-            else "a fixed level of $threshold to compare audio against. Use state.percentile() instead"
+    fun noDrawingRanksTheBarsOfOneFrame() {
+        // "Keep the loudest 30 percent of the bars" draws the same share of the picture whatever
+        // plays, so a quiet passage looks as busy as a loud one. Every bar is already a height
+        // under one shared gain, so a fixed level means the same thing in every song, and a quiet
+        // passage crosses it less often. A range a drawing learns while the song plays does the
+        // same damage and cannot be seen in the text: the loud against quiet render catches that.
+        val rank = Regex("""\b(percentile|bandPercentile)\s*\(""")
+        val check: (String) -> String? = { line ->
+            if (rank.containsMatchIn(line)) {
+                "a rank inside one frame. Compare the height with a fixed level, such as LOUD_BAND"
+            } else {
+                null
+            }
         }
+        val complaints = scan(root, check) + scan(shaders, check)
         assertTrue(
             complaints.isEmpty(),
-            "levels that are right for one song and wrong for the next:\n" + complaints.joinToString("\n"),
+            "ranks that make a quiet passage as busy as a loud one:\n" + complaints.joinToString("\n"),
         )
     }
 
@@ -111,9 +108,6 @@ class MappingLintTest {
     }
 
     private companion object {
-        /** Below this a comparison is a guard against nothing, not a judgement about loudness. */
-        const val NEGLIGIBLE = 0.02f
-
         /**
          * Bursts allowed to be counted per frame rather than per second.
          *

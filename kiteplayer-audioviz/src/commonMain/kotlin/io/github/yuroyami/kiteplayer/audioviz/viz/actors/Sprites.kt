@@ -166,7 +166,9 @@ internal fun DrawScope.drawTravellers(
     for (slot in 0 until travellers.capacity) {
         if (!travellers.alive[slot]) continue
         val t = travellers.progress[slot]
-        val fade = ((1f - t) * 6f).coerceIn(0f, 1f) * alpha
+        // In as well as out. A body that appears at full brightness is a flash the music did not
+        // ask for, and on a held note a stream of them reads as a beat.
+        val fade = minOf(t * 6f, (1f - t) * 6f).coerceIn(0f, 1f) * alpha
         val argb = palette.cycled(travellers.tint[slot] + walk, saturation = 0.75f, value = 1f, alpha = fade.coerceIn(0f, 1f)).toArgb()
         val seconds = travellers.seconds[slot]
         val vx = (travellers.toX[slot] - travellers.fromX[slot]) / seconds * width * 0.06f

@@ -40,7 +40,7 @@ public class Detail(
     internal fun DrawScope.draw(state: VizRenderState, alpha: Float = 1f) {
         if (state.timeSeconds != advancedAt) {
             advancedAt = state.timeSeconds
-            phase += state.deltaSeconds * (0.3f + state.paced(2f))
+            phase += state.deltaSeconds * (0.06f + state.paced(2f))
         }
         if (strength <= 0f || !program.available || !canDrawRuntimeShaders()) return
         inputs.update(state)
@@ -53,7 +53,7 @@ public class Detail(
         }
         program.uniform("uPhase", phase)
         program.uniform("uTravel", phase)
-        program.uniform("uDim", strength * alpha)
+        program.uniform("uDim", strength * alpha * (0.3f + 0.7f * state.frame.level.coerceIn(0f, 1f)))
         program.uniform("uWalk", walk)
         val brush = program.brush() ?: return
         drawRect(brush, blendMode = BlendMode.Plus)

@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.lift
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 
 /** The readings every program gets. Strips are written once a frame, then handed to any number of programs. */
@@ -39,6 +40,7 @@ internal class ShaderInputs(private val seed: Float = 1f) {
         program.uniform("uEnergy", frame.energy)
         program.uniform("uMood", frame.mood)
         program.uniform("uDrive", state.drive)
+        program.uniform("uExposure", state.lift)
         program.uniform("uDensity", frame.density)
 
         program.uniform("uBeat", frame.beat)

@@ -23,8 +23,13 @@ import kotlin.math.sin
 public class CameraRig(
     /** World units a second at full drive. */
     private val topSpeed: Float,
-    /** World units a second in silence, so the picture still drifts. */
-    private val restSpeed: Float = topSpeed * 0.1f,
+    /**
+     * World units a second in silence, so the picture drifts rather than stops.
+     *
+     * Keep it small. A rest speed near the top speed flies about as far with nothing playing as it
+     * does under music, which is the clearest way to look unconnected to the song.
+     */
+    private val restSpeed: Float = topSpeed * 0.04f,
     /** How much faster a kick makes it at the top of the surge, in world units a second. */
     private val shove: Float = topSpeed * 0.5f,
     /** How far the camera wanders across, in world units. */

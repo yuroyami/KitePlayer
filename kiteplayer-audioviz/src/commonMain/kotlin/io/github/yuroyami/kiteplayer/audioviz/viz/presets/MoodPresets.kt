@@ -18,6 +18,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
@@ -75,6 +81,18 @@ internal class Breath : Layered(
         camera = Camera2D(wander = 0.05f, punch = 0.04f, roll = 0.04f, shake = 0f, cuts = false, seed = 306),
     ),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Size),
+        VizDrive(VizDriver.SlowLevel, VizProperty.Size),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Size, VizCurve.Discrete, VizResponse.envelope(2f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val bloom: Int get() = 2
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.86f, livelyTrail = 0.78f, calmSpin = 0.1f, livelySpin = 0.3f)
 
@@ -118,12 +136,12 @@ internal class Breath : Layered(
         orbY = 0.5f + y
         kit.place(0, orbX, orbY)
         swell.advance(0.2f + 0.8f * state.frame.loudLong, dt)
-        ground?.dim = 0.7f + 0.4f * swell.value
+        ground?.dim = (0.2f + 0.7f * swell.value) * (0.35f + 0.9f * state.lift)
         turn += dt * 1f * state.tempo
         if (gestures.drop) widen = 1f
         widen = (widen - dt / gestures.cycleSeconds).coerceAtLeast(0f)
         for (mote in 0 until MOTES) {
-            moteAngle[mote] += dt * (1.6f + (mote % 5) * 0.4f) * state.tempo * if (mote % 2 == 0) 1f else -1f
+            moteAngle[mote] += dt * (1.6f * state.idle + (mote % 5) * 0.4f) * state.tempo * if (mote % 2 == 0) 1f else -1f
         }
         wisps.advance(state, gestures, random)
         kit.follow(1, wisps.travellers)
@@ -134,7 +152,7 @@ internal class Breath : Layered(
     override fun DrawScope.drawEcho(state: VizRenderState) {
         val at = Offset(orbX * size.width, orbY * size.height)
         val tint = state.frame.keyHue * state.frame.keyConfidence + lean.value + genes.walk
-        val lift = 0.3f + 0.7f * state.lift
+        val lift = 0.075f + 1.15f * state.lift
         val radius = sceneRadius * (0.2f + 0.25f * swell.value)
         for (layer in 0 until 3) {
             val spread = (radius * (1f + layer * 0.6f)).coerceAtLeast(1f)
@@ -196,6 +214,21 @@ internal class Tide : Layered(
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 307L, groundKind = GroundKind.Water, detailKind = DetailKind.Specks, camera = Camera2D(wander = 0.05f, cuts = false, seed = 307)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.envelope(0.8f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Speed, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Shape),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.55f, livelyTrail = 0.45f)
 
     private val count = genes.choice("Bands", 3, start = 1)
@@ -238,15 +271,15 @@ internal class Tide : Layered(
             tall[band] = (0.6f + 0.9f * reach + 0.5f * swell[band]) / bands
             if (band < bands) y += tall[band]
         }
-        if (gestures.kickHit > 0f) {
+        if (gestures.kick > 0f) {
             var loudest = 0
             for (band in 1 until bands) if (heights[band].value > heights[loudest].value) loudest = band
-            swell[loudest] = 1f
+            swell[loudest] = 0.4f + 0.6f * gestures.kick
         }
         moonX = wrap(moonX + dt / (gestures.cycleSeconds * 8f))
         kit.place(0, wrap(scroll[0]), top[0] + tall[0] * 0.5f)
         kit.place(1, moonX, 0.12f)
-        foamCredit += dt * (16f + 30f * state.drive) + gestures.hatHit * 3f
+        foamCredit += dt * (16f * state.idle + 30f * state.drive) + gestures.hat * 3f
         while (foamCredit >= 1f) {
             foamCredit -= 1f
             val band = (random.next() * bands).toInt().coerceIn(0, MOST - 1)
@@ -328,7 +361,7 @@ internal class Tide : Layered(
 /**
  * A lamp swinging like a pendulum, one swing every two visual cycles, from a pivot that wanders the screen. A
  * second lamp hangs far behind, moths circle the flame, sparks climb off it and motes rise the full
- * height. A soft onset lets out a puff of motes and a kick makes the flame flare.
+ * height. Arriving energy lets out a puff of motes and a kick makes the flame flare.
  */
 internal class Lantern : Layered(
     name = "Lantern",
@@ -342,6 +375,14 @@ internal class Lantern : Layered(
         camera = Camera2D(wander = 0.05f, punch = 0.05f, cuts = false, seed = 308),
     ),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.SlowLevel, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.3f)),
+        VizDrive(VizDriver.Drop, VizProperty.Size, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val bloom: Int get() = 2
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.9f, livelyTrail = 0.84f)
 
@@ -372,7 +413,7 @@ internal class Lantern : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         // One swing from side to side every two visual cycles, hung from wherever the stage has got to.
         pendulum += dt * PI.toFloat() / (gestures.cycleSeconds * 2f)
         if (gestures.drop) wide = 1f
@@ -384,21 +425,21 @@ internal class Lantern : Layered(
         farX = stage.x - 0.6f * (lampX - stage.x)
         kit.place(0, lampX, lampY)
         kit.place(1, farX, stage.y - 0.28f, parallax = 0.5f)
-        flare.hit(gestures.kickHit)
+        flare.hit(gestures.kick)
         flare.advance(0f, dt)
         glow.advance((0.2f + 0.8f * state.frame.loudLong) * (0.25f + 0.75f * state.drive), dt)
         for (moth in 0 until MOTHS) {
-            mothAngle[moth] += dt * (2.5f + (moth % 4) * 0.6f) * state.tempo * if (moth % 2 == 0) 1f else -1f
+            mothAngle[moth] += dt * (2.5f * state.idle + (moth % 4) * 0.6f) * state.tempo * if (moth % 2 == 0) 1f else -1f
         }
-        // Motes rise the whole height; a soft onset lets out a puff of them.
-        credit += dt * (8f + 24f * state.drive) * moteRate.value + state.frame.onsetStrength * 1.2f
+        // Motes rise the whole height; arriving energy lets out a puff of them.
+        credit += dt * (8f * state.idle + 24f * state.drive) * moteRate.value + state.frame.onsetStrength * 1.2f
         while (credit >= 1f) {
             credit -= 1f
             motes.burst(random.next(), 1.02f, 1, 0.24f, 5f, 0.014f, 0.1f + 0.2f * random.next(), Sprite.GLOW, UP, 0.5f)
         }
         motes.advance(dt * (0.8f + 0.6f * state.drive), drag = 0f)
         // Sparks climb off the flame all the time, more of them the harder the music pushes.
-        sparkCredit += dt * (16f + 36f * state.drive) + gestures.kickHit * 10f
+        sparkCredit += dt * (16f * state.idle + 36f * state.drive) + gestures.kick * 10f
         while (sparkCredit >= 1f) {
             sparkCredit -= 1f
             sparks.burst(lampX, lampY, 1, 0.3f, 1.2f, 0.016f, 0.05f + 0.1f * random.next(), Sprite.SPARK, UP, 1.2f)
@@ -410,12 +451,12 @@ internal class Lantern : Layered(
         flies.targetX = lampX
         flies.targetY = lampY
         flies.advance(dt, speed = 0.35f + 0.3f * state.drive, pull = 0.4f)
-        blink += dt * (3.5f + 2.5f * state.tempo)
+        blink += dt * (3.5f * state.idle + 2.5f * state.tempo)
     }
 
     override fun DrawScope.drawEcho(state: VizRenderState) {
         val warmth = glow.value + 0.5f * flare.value
-        val lift = 0.3f + 0.7f * state.lift
+        val lift = 0.075f + 1.15f * state.lift
         val far = lamps.weight(1)
         if (far > 0.01f) {
             lamp(state, Offset(farX * size.width, (stage.y - 0.28f) * size.height), size.minDimension * 0.1f, warmth * 0.5f * far * lift)
@@ -440,7 +481,7 @@ internal class Lantern : Layered(
             radius = radius * 2.5f,
             center = at,
         )
-        drawCircle(state.palette.cap.copy(alpha = (0.55f + 0.4f * warmth).coerceIn(0f, 1f)), radius * 0.28f, at)
+        drawCircle(state.palette.cap.copy(alpha = (0.18f + 0.75f * warmth).coerceIn(0f, 1f)), radius * 0.28f, at)
     }
 
     override fun DrawScope.drawTop(state: VizRenderState) {
@@ -498,6 +539,16 @@ internal class Riot : Layered(
     bucket = VizEnergy.High,
     kit = Kit(seed = 112L, groundKind = GroundKind.Hatch, groundDim = 0.8f, detailKind = DetailKind.Grid, camera = Camera2D(wander = 0.1f, seed = 112)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(1.3f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(1.5f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Colour, VizCurve.Discrete, VizResponse.envelope(0.15f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.5f, livelyTrail = 0.42f, calmZoom = 1.01f, livelyZoom = 1.04f)
 
     private val shapes = genes.choice("Shapes", 3)
@@ -527,16 +578,16 @@ internal class Riot : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        val kick = gestures.kickHit
-        val snare = gestures.snareHit
-        val hat = gestures.hatHit
+        val kick = gestures.kick
+        val snare = gestures.snare
+        val hat = gestures.hat
         sinceHit = if (kick > 0f || snare > 0f) 0f else sinceHit + dt
         val drums = sinceHit < gestures.cycleSeconds
         kickFlash = maxOf(kickFlash - dt * 3.5f, kick)
         invert = (invert - dt / 0.15f).coerceAtLeast(0f)
         if (gestures.drop) invert = 1f
         val beat = (gestures.cyclePhase * 4f).toInt()
-        val newBeat = beat != lastBeat
+        val newBeat = beat != lastBeat && gestures.pulseUsable
         lastBeat = beat
         val flip = drums && when (strobe.value) {
             1 -> gestures.section
@@ -557,11 +608,11 @@ internal class Riot : Layered(
         }
         if (snare > 0f) launch(SNARE, (0.12f + 0.08f * snare) * big, 0.55f, 1.5f, twin = true)
         if (hat > 0f) {
-            launch(HAT, 0.04f, 0.3f, 1.8f, twin = true)
-            launch(HAT, 0.03f, 0.35f, 1.8f, twin = false)
-            confetti.sprinkle(12, 0.6f, 0.012f, random.next(), Sprite.SHARD, drift = 0.25f)
+            launch(HAT, 0.02f + 0.04f * hat, 0.3f, 1.8f, twin = true)
+            launch(HAT, 0.015f + 0.03f * hat, 0.35f, 1.8f, twin = false)
+            confetti.sprinkle(gestures.hatSpawn(12), 0.6f, 0.012f, random.next(), Sprite.SHARD, drift = 0.25f)
         }
-        // Without drums the beat throws one small, faint shape, so a quiet passage is not frozen.
+        // Without drums a supported beat throws one small, faint shape, so a quiet passage is not frozen.
         if (newBeat && !drums) launch(SOFT, 0.09f, 0.8f, 0.7f, twin = false)
         if (gestures.section) stripesLeft = 0.5f
         stripesLeft -= dt / gestures.cycleSeconds
@@ -689,6 +740,18 @@ internal class Shatter : Layered(
     bucket = VizEnergy.High,
     kit = Kit(seed = 811L, groundKind = GroundKind.Grid, groundDim = 0.6f, detailKind = DetailKind.Scan, camera = Camera2D(wander = 0.05f, seed = 811)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Camera, VizCurve.Scaled, VizResponse.spring(0.3f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Discrete),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Shape),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.975f, livelyTrail = 0.965f)
 
     private val shardCount = genes.choice("Shards", 3, start = 1)
@@ -728,11 +791,11 @@ internal class Shatter : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        jolt.kick(gestures.kickHit * 3f)
+        jolt.kick(gestures.kick * 3f)
         jolt.advance(dt)
         if (gestures.drop) {
             pending = shardCount.count(16, 8)
-        } else if (gestures.snareHit > 0f && smallShatter.on && life.all { it <= 0f }) {
+        } else if (gestures.snare > 0f && smallShatter.on && life.all { it <= 0f }) {
             pending = SMALL
         }
         for (slot in 0 until MOST) {
@@ -907,6 +970,19 @@ internal class Piston : Layered(
     bucket = VizEnergy.High,
     kit = Kit(seed = 206L, groundKind = GroundKind.Grid, detailKind = DetailKind.Scan, camera = Camera2D(wander = 0.05f, punch = 0.16f, seed = 206)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Level, VizProperty.Speed),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled),
+        VizDrive(VizDriver.BodyHit, VizProperty.Size, VizCurve.Scaled),
+        VizDrive(VizDriver.Section, VizProperty.Speed, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Size, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Mood, VizProperty.Shape),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.45f, livelyTrail = 0.35f, livelyZoom = 1.01f)
 
     private val pistons = genes.choice("Pistons", 3, start = 2)
@@ -935,14 +1011,14 @@ internal class Piston : Layered(
         val count = pistons.count(16, 8)
         if (gestures.section) direction = -direction
         // Everything runs at the pace the music pushes, so under a pad the machine all but stops.
-        stage.advance(dt * (0.3f + state.drive))
+        stage.advance(dt * (0.3f + state.drive) * state.idle)
         climb = wrap(climb + dt * (0.3f + 14f * state.drive))
         slide += dt * 10f * state.drive / gestures.cycleSeconds * direction * if (reversed.on) -1f else 1f
-        pump += dt * (0.5f + 4f * state.drive)
+        pump += dt * (0.5f * state.idle + 4f * state.drive)
         val all = gestures.drop
-        // Only real hits throw the pistons; the soft onsets of a pad leave the machine pumping.
-        val kick = if (all) 1f else gestures.kickHit
-        val snare = if (all) 1f else gestures.snareHit
+        // A hit throws the pistons as far as it was hard; a drop throws them all the way.
+        val kick = if (all) 1f else gestures.kick
+        val snare = if (all) 1f else gestures.snare
         var tallest = 0
         for (column in 0 until count) {
             val along = column.toFloat() / (count - 1)
@@ -956,7 +1032,7 @@ internal class Piston : Layered(
             val rest = 0.1f + 0.08f * sin(pump + column * 0.7f)
             bottom[column] = (bottom[column] - dt * 1.6f).coerceAtLeast(low * 0.3f + rest)
             top[column] = (top[column] - dt * 1.6f).coerceAtLeast(high * 0.3f + rest)
-            caps[column].kick(frame.kick * 4f * (0.4f + low))
+            caps[column].kick(kick * 4f * (0.4f + low))
             caps[column].advance(dt)
             if (bottom[column] > bottom[tallest]) tallest = column
         }
@@ -1085,6 +1161,13 @@ internal class Blackout : Layered(
         camera = Camera2D(wander = 0.06f, seed = 113),
     ),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.2f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.2f)),
+        VizDrive(VizDriver.Drop, VizProperty.Brightness, VizCurve.Discrete, VizResponse.envelope(0.4f)),
+        VizDrive(VizDriver.Pulse, VizProperty.Brightness, VizCurve.Discrete),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.9f, livelyTrail = 0.8f)
 
     private val figure = genes.choice("Figure", 3)
@@ -1113,21 +1196,21 @@ internal class Blackout : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         // Already rising before the hit, because the audio for it has been analysed and is waiting to be played.
         val coming = state.anticipation(window = 0.06f)
-        var landed = maxOf(gestures.kickHit, gestures.snareHit * 0.8f)
+        var landed = maxOf(gestures.kick, gestures.snare * 0.8f)
         val beat = (gestures.cyclePhase * 4f).toInt()
-        val newBeat = beat != lastBeat
+        val newBeat = beat != lastBeat && gestures.pulseUsable
         lastBeat = beat
-        if (strobe.on) landed = maxOf(landed, gestures.hatHit * 0.45f)
-        // Without drums the beat itself is a soft hit, so a quiet passage still shows faint figures.
+        if (strobe.on) landed = maxOf(landed, gestures.hat * 0.45f)
+        // Without drums a supported beat is a soft hit, so a quiet passage still shows faint figures.
         if (newBeat && landed <= 0f) landed = 0.4f
         if (landed > flash) move(landed)
         flash = maxOf(flash - dt * 5f, maxOf(landed, coming * 0.5f))
         if (gestures.drop) whiteOut = 1f
         whiteOut = (whiteOut - dt / 0.4f).coerceAtLeast(0f)
-        if (gestures.hatHit > 0f) sparkles.sprinkle(1, 0.15f, 0.025f, random.next(), Sprite.GLOW, drift = 0f)
+        if (gestures.hat > 0f) sparkles.sprinkle(gestures.hatSpawn(1), 0.15f, 0.025f, random.next(), Sprite.GLOW, drift = 0f)
         shards.advance(dt, drag = 0.3f)
         sparkles.advance(dt)
         kit.place(0, atX, atY)

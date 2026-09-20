@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizFuture
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.SOFT_BUFFER_SCALE
@@ -73,8 +74,29 @@ internal object RenderHarness {
         beforeDraw: (VizRenderState) -> Unit = {},
         onFrame: (ImageBitmap, Int) -> Unit,
     ) {
+        val player = player(song, frames / 60f + 4f)
+        forEachFrameOf(visualization, width, height, frames, palette, { player.next(1f / 60f) },
+            { player.future }, groundAt, onGround, beforeDraw, onFrame)
+    }
+
+    /**
+     * The same render, fed frame by frame from [source] rather than by an analyser. The injection
+     * tests build their frames by hand, so two runs differ only by what they changed.
+     */
+    fun forEachFrameOf(
+        visualization: Visualization,
+        width: Int,
+        height: Int,
+        frames: Int,
+        palette: VizPalette,
+        source: (Int) -> SpectrumFrame,
+        future: () -> VizFuture? = { null },
+        groundAt: (Int) -> Boolean = { false },
+        onGround: (ImageBitmap, Int) -> Unit = { _, _ -> },
+        beforeDraw: (VizRenderState) -> Unit = {},
+        onFrame: (ImageBitmap, Int) -> Unit,
+    ) {
         val delta = 1f / 60f
-        val player = player(song, frames * delta + 4f)
         val scale = if (visualization.bloom > 0) SOFT_BUFFER_SCALE else 1f
         val echoWidth = (width * scale).toInt().coerceAtLeast(1)
         val echoHeight = (height * scale).toInt().coerceAtLeast(1)
@@ -92,9 +114,9 @@ internal object RenderHarness {
         var echoes = 0
         for (step in 0 until frames) {
             elapsed += delta
-            val frame = player.next(delta)
+            val frame = source(step)
             musicTime += delta * frame.motionRate
-            val state = VizRenderState(frame, elapsed, delta, palette, musicTime, player.future)
+            val state = VizRenderState(frame, elapsed, delta, palette, musicTime, future())
             beforeDraw(state)
             if (visualization.trailAt(frame.mood) > 0f) {
                 val previous = if (echoes == 0) null else back

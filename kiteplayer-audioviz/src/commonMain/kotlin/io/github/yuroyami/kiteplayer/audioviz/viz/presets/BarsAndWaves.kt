@@ -23,6 +23,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Lane
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.PathShape
@@ -63,6 +69,15 @@ internal class Bars : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 201L, groundKind = GroundKind.Grid, groundDim = 0.85f, detailKind = DetailKind.Dots, camera = Camera2D(wander = 0.14f, seed = 201)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Level, VizProperty.Spawn),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
+        VizDrive(VizDriver.Pulse, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete, VizResponse.envelope(1f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.72f, livelyTrail = 0.62f, calmDriftY = 0.3f, livelyDriftY = 0.34f)
 
     private val floorDensity = genes.choice("Floor density", 3, start = 1)
@@ -91,7 +106,7 @@ internal class Bars : Layered(
         val dt = state.deltaSeconds
         val frame = state.frame
         val bands = frame.bands
-        stage.advance(dt)
+        stage.advance(dt * state.idle)
         history.push(bands, state.timeSeconds)
         scroll += 4f * dt / gestures.beatSeconds
         sweep.advance(gestures)
@@ -302,6 +317,18 @@ internal class Equaliser : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 202L, groundKind = GroundKind.Hatch, groundDim = 0.8f, detailKind = DetailKind.Grid, detailStrength = 0.6f, camera = Camera2D(wander = 0.05f, seed = 202)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.LowHit, VizProperty.Camera, VizCurve.Scaled, VizResponse.spring(0.3f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Pulse, VizProperty.Shape, VizCurve.Discrete),
+        VizDrive(VizDriver.Section, VizProperty.Colour, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Brightness, VizCurve.Discrete, VizResponse.envelope(0.5f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.62f, livelyTrail = 0.52f, calmDriftY = 0.05f, livelyDriftY = 0.12f)
 
     private val aspect = genes.number("Block aspect", 0.45f, 0.85f, 0.72f)
@@ -331,7 +358,7 @@ internal class Equaliser : Layered(
         if (gestures.section) rule.choose(1 - rule.value)
         val beat = (gestures.cyclePhase * 4f).toInt()
         beatFraction = gestures.cyclePhase * 4f - beat
-        if (beat != lastBeat && bands.isNotEmpty()) {
+        if (beat != lastBeat && gestures.pulseUsable && bands.isNotEmpty()) {
             lastBeat = beat
             newestPast = (newestPast + 1) % PAST
             val column = past[newestPast]
@@ -370,8 +397,8 @@ internal class Equaliser : Layered(
         val columnWidth = size.width / (PAST - 2)
         val rowHeight = size.height / PAST_ROWS
         val toLeft = !backwards.on
-        // Lit where a band was louder than most of this frame's spectrum, whatever the song's level.
-        val litLevel = state.percentile(0.45f)
+        // Lit above a fixed height, so a quiet passage lights fewer cells than a loud one.
+        val litLevel = LIT_BAND
         // Each row has just two hues shared by every history column. Converting them through
         // OKLCH per cell repeated the same expensive gamut mapping forty-eight times.
         for (row in 0 until PAST_ROWS) {
@@ -504,6 +531,18 @@ internal class OceanMist : Layered(
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 203L, groundKind = GroundKind.Water, detailKind = DetailKind.Specks, camera = Camera2D(wander = 0.08f, seed = 203)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Size),
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Size),
+        VizDrive(VizDriver.SlowLevel, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(1.5f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(1.5f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.62f, livelyTrail = 0.48f)
 
     private val traces = genes.choice("Traces", 3, start = 2)
@@ -675,6 +714,18 @@ internal class Scope : Layered(
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 204L, groundKind = GroundKind.Fog, detailKind = DetailKind.Scan, detailStrength = 0.6f, camera = Camera2D(wander = 0.07f, seed = 204)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Waveform, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Size),
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.3f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(0.8f)),
+        VizDrive(VizDriver.Section, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     // The lines of an old tube, which is what these traces grew up on.
     override val post: PostSpec get() = PostSpec.Retro
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.98f, livelyTrail = 0.975f)
@@ -722,11 +773,12 @@ internal class Scope : Layered(
         dotY = 0.5f - (if (scope.isNotEmpty()) scope.sampleAt(dotX).coerceIn(-1f, 1f) else 0f) * reach
         kit.place(0, dotX, dotY)
         // Sparks jump up where the trace rises through zero, on the hats and snares.
-        if (scope.size > 8 && (frame.hat > 0f || frame.snare > 0f || gestures.section)) {
+        val crossed = maxOf(gestures.hatSpawn(4), gestures.snareSpawn(4), if (gestures.section) 4 else 0)
+        if (scope.size > 8 && crossed > 0) {
             val step = maxOf(1, scope.size / 64)
             var index = step
             var thrown = 0
-            while (index < scope.size && thrown < 4) {
+            while (index < scope.size && thrown < crossed) {
                 if (scope[index - step] < 0f && scope[index] >= 0f) {
                     val x = index.toFloat() / (scope.size - 1)
                     sparks.burst(x, 0.5f, 3, 0.4f, 0.8f, 0.008f, x, Sprite.SPARK, UP, 0.7f)
@@ -752,7 +804,7 @@ internal class Scope : Layered(
                     else -> state.frame.scope
                 }
                 val colour = if (index == 0) state.palette.cap else state.palette.cycled(0.3f * index + walk)
-                drawTrace(samples, reach * size.height * (1f + 0.25f * index), colour.copy(alpha = (0.2f + 0.7f * state.lift) * presence / (1f + 0.3f * index)), thickness)
+                drawTrace(samples, reach * size.height * (1f + 0.25f * index), colour.copy(alpha = (0.05f + 1.05f * state.lift) * presence / (1f + 0.3f * index)), thickness)
             }
         }
     }
@@ -772,7 +824,7 @@ internal class Scope : Layered(
     override fun DrawScope.drawTop(state: VizRenderState) {
         val radius = (sceneRadius * glow.value * (0.8f + 0.3f * state.body)).coerceAtLeast(1f)
         drawCircle(
-            Brush.radialGradient(0f to state.palette.mid.copy(alpha = 0.04f + 0.25f * state.energy), 1f to Color.Transparent, center = center, radius = radius),
+            Brush.radialGradient(0f to state.palette.mid.copy(alpha = 0.01f + 0.35f * state.lift), 1f to Color.Transparent, center = center, radius = radius),
             radius,
             center,
             blendMode = BlendMode.Plus,
@@ -801,6 +853,18 @@ internal class FireStorm : Layered(
     bucket = VizEnergy.High,
     kit = Kit(seed = 205L, groundKind = GroundKind.Rays, detailKind = DetailKind.Hatch, detailStrength = 0.7f, camera = Camera2D(wander = 0.08f, seed = 205)),
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Spawn),
+        VizDrive(VizDriver.Level, VizProperty.Spawn),
+        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(2.5f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Scaled, VizResponse.spring(0.4f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.64f, livelyTrail = 0.52f, livelyZoom = 1.008f)
 
     private val embersParam = VizParam("Embers", 0f, 3f, 1f)
@@ -870,8 +934,8 @@ internal class FireStorm : Layered(
         for (index in bands.indices) if (bands[index] > bands[loudest]) loudest = index
         val x = bandX(loudest, bands.size)
         val y = 1f - bands[loudest] * 0.92f
-        if (gestures.kickHit > 0f) sparks.burst(x, y, (8 + 12 * gestures.kickHit).toInt(), 0.8f, 0.6f, 0.012f, bands[loudest], Sprite.SPARK, UP, 1.6f)
-        if (gestures.kickHit > 0f) {
+        if (gestures.kick > 0f) sparks.burst(x, y, (8 + 12 * gestures.kick).toInt(), 0.8f, 0.6f, 0.012f, bands[loudest], Sprite.SPARK, UP, 1.6f)
+        if (gestures.kick > 0f) {
             fireballs.spawn(x, y, x + wind.value * 0.5f + random.signed() * 0.25f, -0.12f, gestures.beatSeconds * 2.5f, PathShape.Arc, 0.12f * wind.value, 0.045f, bands[loudest], 0f, Sprite.GLOW)
         }
         kit.follow(2, fireballs)

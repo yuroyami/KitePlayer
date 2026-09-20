@@ -240,7 +240,15 @@ public class VizRenderState(
         return 1f - seconds / window
     }
 
-    /** The value that [fraction] of this frame's bars sit below. See [SpectrumFrame.bandPercentile]. */
+    /**
+     * The value that [fraction] of this frame's bars sit below.
+     *
+     * A rank inside one frame makes a quiet passage as busy as a loud one. Compare a bar's height
+     * with a fixed level instead: heights already share one gain, so a level means the same thing
+     * in every song.
+     */
+    @Suppress("DEPRECATION")
+    @Deprecated("A rank inside one frame hides how loud the music is. Compare the height with a fixed level.")
     public fun percentile(fraction: Float): Float = frame.bandPercentile(fraction)
 }
 
@@ -347,6 +355,14 @@ public interface Visualization {
     /** Settings a person may change while it runs. Most drawings have none. */
     public val params: List<VizParam> get() = emptyList()
 
+    /**
+     * What this drawing does with the audio, in a form a test and a menu can read.
+     *
+     * Every built-in drawing declares one. Null means a drawing has declared nothing, which is
+     * allowed for a drawing from outside this library and leaves it out of the mapping tests.
+     */
+    public val mapping: VizMapping? get() = null
+
     /** A live field drawn under everything else. Null keeps the plain background colour. */
     public val ground: Ground? get() = null
 
@@ -359,15 +375,22 @@ public interface Visualization {
     /** How the echo layer is laid over the ground. */
     public val echoBlend: EchoBlend get() = EchoBlend.Over
 
-    /** How the last frame comes back this frame. The default reads the zoom, spin and drift for the mood. */
+    /**
+     * How the last frame comes back this frame. The default reads the zoom, spin and drift for the
+     * mood, and settles all three towards neutral as the music goes quiet.
+     *
+     * The mood alone does not settle them. It reads 0 in a silence, which gives a drawing its calm
+     * zoom rather than none, and a trail that swims at the same rate with nothing playing is the
+     * clearest way for a drawing to look like a screen saver.
+     */
     public fun echo(state: VizRenderState): EchoFrame {
         val mood = state.frame.mood
-        val zoom = feedbackZoomAt(mood)
+        val pace = (0.08f + 1.6f * state.frame.energy).coerceIn(0f, 1f)
         return EchoFrame(
-            zoomX = zoom,
-            spin = feedbackSpinAt(mood),
-            driftX = moodSpec?.driftX(mood) ?: 0f,
-            driftY = moodSpec?.driftY(mood) ?: 0f,
+            zoomX = 1f + (feedbackZoomAt(mood) - 1f) * pace,
+            spin = feedbackSpinAt(mood) * pace,
+            driftX = (moodSpec?.driftX(mood) ?: 0f) * pace,
+            driftY = (moodSpec?.driftY(mood) ?: 0f) * pace,
         )
     }
 

@@ -56,6 +56,34 @@ final enum class io.github.yuroyami.kiteplayer.audioviz.viz/EchoBlend : kotlin/E
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/EchoBlend> // io.github.yuroyami.kiteplayer.audioviz.viz/EchoBlend.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver|null[0]
+    enum entry Bands // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Bands|null[0]
+    enum entry Bass // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Bass|null[0]
+    enum entry BodyHit // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.BodyHit|null[0]
+    enum entry Breakdown // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Breakdown|null[0]
+    enum entry Drop // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Drop|null[0]
+    enum entry HighHit // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.HighHit|null[0]
+    enum entry Key // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Key|null[0]
+    enum entry Level // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Level|null[0]
+    enum entry LowHit // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.LowHit|null[0]
+    enum entry Mid // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Mid|null[0]
+    enum entry Mood // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Mood|null[0]
+    enum entry Onset // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Onset|null[0]
+    enum entry Pulse // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Pulse|null[0]
+    enum entry Section // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Section|null[0]
+    enum entry SlowLevel // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.SlowLevel|null[0]
+    enum entry Timbre // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Timbre|null[0]
+    enum entry Treble // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Treble|null[0]
+    enum entry Waveform // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Waveform|null[0]
+    enum entry Width // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.Width|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver> // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver> // io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy|null[0]
     enum entry Calm // io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy.Calm|null[0]
     enum entry High // io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy.High|null[0]
@@ -86,6 +114,74 @@ final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily : kotlin/E
 
     final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.valueOf|valueOf#static(kotlin.String){}[0]
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily> // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed|null[0]
+    enum entry EchoBuffer // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.EchoBuffer|null[0]
+    enum entry RuntimeShader // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.RuntimeShader|null[0]
+    enum entry ShaderLayers // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.ShaderLayers|null[0]
+    enum entry SoftBuffer // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.SoftBuffer|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty|null[0]
+    enum entry Brightness // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Brightness|null[0]
+    enum entry Camera // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Camera|null[0]
+    enum entry Colour // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Colour|null[0]
+    enum entry Cut // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Cut|null[0]
+    enum entry Shape // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Shape|null[0]
+    enum entry Size // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Size|null[0]
+    enum entry Spawn // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Spawn|null[0]
+    enum entry Speed // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Speed|null[0]
+    enum entry Texture // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.Texture|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty> // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty> // io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl|null[0]
+    enum entry BoundedPool // io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl.BoundedPool|null[0]
+    enum entry EchoResolution // io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl.EchoResolution|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl> // io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl // io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl> // io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind|null[0]
+    enum entry Direct // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.Direct|null[0]
+    enum entry Envelope // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.Envelope|null[0]
+    enum entry Lifetime // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.Lifetime|null[0]
+    enum entry Rate // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.Rate|null[0]
+    enum entry Spring // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.Spring|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind> // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind> // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind.values|values#static(){}[0]
+}
+
+final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence|null[0]
+    enum entry Fade // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence.Fade|null[0]
+    enum entry Idle // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence.Idle|null[0]
+    enum entry Still // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence.Still|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence> // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence> // io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence.values|values#static(){}[0]
 }
 
 final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizTransition : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizTransition> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizTransition|null[0]
@@ -189,6 +285,8 @@ abstract interface io.github.yuroyami.kiteplayer.audioviz.viz/Visualization { //
         open fun <get-genes>(): io.github.yuroyami.kiteplayer.audioviz.viz.motion/Genes? // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.genes.<get-genes>|<get-genes>(){}[0]
     open val ground // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.ground|{}ground[0]
         open fun <get-ground>(): io.github.yuroyami.kiteplayer.audioviz.viz.ground/Ground? // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.ground.<get-ground>|<get-ground>(){}[0]
+    open val mapping // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.mapping|{}mapping[0]
+        open fun <get-mapping>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping? // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.mapping.<get-mapping>|<get-mapping>(){}[0]
     open val moodSpec // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.moodSpec|{}moodSpec[0]
         open fun <get-moodSpec>(): io.github.yuroyami.kiteplayer.audioviz.viz/MoodSpec? // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.moodSpec.<get-moodSpec>|<get-moodSpec>(){}[0]
     open val paintsWholeScreen // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.paintsWholeScreen|{}paintsWholeScreen[0]
@@ -368,8 +466,14 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures { // io.g
         final fun <get-drop>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.drop.<get-drop>|<get-drop>(){}[0]
     final var hat // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.hat|{}hat[0]
         final fun <get-hat>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.hat.<get-hat>|<get-hat>(){}[0]
+    final var hats // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.hats|{}hats[0]
+        final fun <get-hats>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.hats.<get-hats>|<get-hats>(){}[0]
     final var kick // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.kick|{}kick[0]
         final fun <get-kick>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.kick.<get-kick>|<get-kick>(){}[0]
+    final var kicks // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.kicks|{}kicks[0]
+        final fun <get-kicks>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.kicks.<get-kicks>|<get-kicks>(){}[0]
+    final var pulseUsable // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.pulseUsable|{}pulseUsable[0]
+        final fun <get-pulseUsable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.pulseUsable.<get-pulseUsable>|<get-pulseUsable>(){}[0]
     final var section // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.section|{}section[0]
         final fun <get-section>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.section.<get-section>|<get-section>(){}[0]
     final var sections // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.sections|{}sections[0]
@@ -382,6 +486,8 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures { // io.g
         final fun <get-slowCycles>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.slowCycles.<get-slowCycles>|<get-slowCycles>(){}[0]
     final var snare // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.snare|{}snare[0]
         final fun <get-snare>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.snare.<get-snare>|<get-snare>(){}[0]
+    final var snares // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.snares|{}snares[0]
+        final fun <get-snares>(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.snares.<get-snares>|<get-snares>(){}[0]
 
     final fun reset() // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.reset|reset(){}[0]
     final fun update(io.github.yuroyami.kiteplayer.audioviz.viz/VizRenderState) // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gestures.update|update(io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState){}[0]
@@ -787,6 +893,40 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz/VizDirector { // io.githu
     final fun startWith(kotlin/String) // io.github.yuroyami.kiteplayer.audioviz.viz/VizDirector.startWith|startWith(kotlin.String){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive { // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver, io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty, io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve = ..., io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse = ...) // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.<init>|<init>(io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver;io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty;io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve;io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse){}[0]
+
+    final val curve // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.curve|{}curve[0]
+        final fun <get-curve>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.curve.<get-curve>|<get-curve>(){}[0]
+    final val driver // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.driver|{}driver[0]
+        final fun <get-driver>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.driver.<get-driver>|<get-driver>(){}[0]
+    final val property // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.property|{}property[0]
+        final fun <get-property>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizProperty // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.property.<get-property>|<get-property>(){}[0]
+    final val response // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.response|{}response[0]
+        final fun <get-response>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.response.<get-response>|<get-response>(){}[0]
+
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive.toString|toString(){}[0]
+}
+
+final class io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping { // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping|null[0]
+    constructor <init>(kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive>, kotlin.collections/Set<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> = ..., io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl> = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.<init>|<init>(kotlin.collections.List<io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive>;kotlin.collections.Set<io.github.yuroyami.kiteplayer.audioviz.viz.VizNeed>;io.github.yuroyami.kiteplayer.audioviz.viz.VizSilence;kotlin.collections.List<io.github.yuroyami.kiteplayer.audioviz.viz.VizQualityControl>;kotlin.Float){}[0]
+
+    final val drivers // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.drivers|{}drivers[0]
+        final fun <get-drivers>(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver> // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.drivers.<get-drivers>|<get-drivers>(){}[0]
+    final val drives // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.drives|{}drives[0]
+        final fun <get-drives>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive> // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.drives.<get-drives>|<get-drives>(){}[0]
+    final val needs // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.needs|{}needs[0]
+        final fun <get-needs>(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.needs.<get-needs>|<get-needs>(){}[0]
+    final val quality // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.quality|{}quality[0]
+        final fun <get-quality>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/VizQualityControl> // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.quality.<get-quality>|<get-quality>(){}[0]
+    final val silence // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.silence|{}silence[0]
+        final fun <get-silence>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizSilence // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.silence.<get-silence>|<get-silence>(){}[0]
+    final val silenceSettleSeconds // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.silenceSettleSeconds|{}silenceSettleSeconds[0]
+        final fun <get-silenceSettleSeconds>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.silenceSettleSeconds.<get-silenceSettleSeconds>|<get-silenceSettleSeconds>(){}[0]
+
+    final fun of(io.github.yuroyami.kiteplayer.audioviz.viz/VizDriver): kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/VizDrive> // io.github.yuroyami.kiteplayer.audioviz.viz/VizMapping.of|of(io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.audioviz.viz/VizPalette { // io.github.yuroyami.kiteplayer.audioviz.viz/VizPalette|null[0]
     final val background // io.github.yuroyami.kiteplayer.audioviz.viz/VizPalette.background|{}background[0]
         final fun <get-background>(): androidx.compose.ui.graphics/Color // io.github.yuroyami.kiteplayer.audioviz.viz/VizPalette.background.<get-background>|<get-background>(){}[0]
@@ -905,6 +1045,30 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz/VizRenderState { // io.gi
     final fun percentile(kotlin/Float): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/VizRenderState.percentile|percentile(kotlin.Float){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse { // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind, kotlin/Float = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.<init>|<init>(io.github.yuroyami.kiteplayer.audioviz.viz.VizResponseKind;kotlin.Float;kotlin.Float){}[0]
+
+    final val delaySeconds // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.delaySeconds|{}delaySeconds[0]
+        final fun <get-delaySeconds>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.delaySeconds.<get-delaySeconds>|<get-delaySeconds>(){}[0]
+    final val kind // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.kind|{}kind[0]
+        final fun <get-kind>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponseKind // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.kind.<get-kind>|<get-kind>(){}[0]
+    final val seconds // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.seconds|{}seconds[0]
+        final fun <get-seconds>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.seconds.<get-seconds>|<get-seconds>(){}[0]
+
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.toString|toString(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion|null[0]
+        final val Direct // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion.Direct|{}Direct[0]
+            final fun <get-Direct>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion.Direct.<get-Direct>|<get-Direct>(){}[0]
+        final val Rate // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion.Rate|{}Rate[0]
+            final fun <get-Rate>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion.Rate.<get-Rate>|<get-Rate>(){}[0]
+
+        final fun envelope(kotlin/Float, kotlin/Float = ...): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion.envelope|envelope(kotlin.Float;kotlin.Float){}[0]
+        final fun lifetime(kotlin/Float, kotlin/Float = ...): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion.lifetime|lifetime(kotlin.Float;kotlin.Float){}[0]
+        final fun spring(kotlin/Float, kotlin/Float = ...): io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse // io.github.yuroyami.kiteplayer.audioviz.viz/VizResponse.Companion.spring|spring(kotlin.Float;kotlin.Float){}[0]
+    }
+}
+
 final class io.github.yuroyami.kiteplayer.audioviz/AnalysisWindow { // io.github.yuroyami.kiteplayer.audioviz/AnalysisWindow|null[0]
     final val durationSeconds // io.github.yuroyami.kiteplayer.audioviz/AnalysisWindow.durationSeconds|{}durationSeconds[0]
         final fun <get-durationSeconds>(): kotlin/Double // io.github.yuroyami.kiteplayer.audioviz/AnalysisWindow.durationSeconds.<get-durationSeconds>|<get-durationSeconds>(){}[0]
@@ -958,6 +1122,8 @@ final class io.github.yuroyami.kiteplayer.audioviz/AudioDetection { // io.github
         final fun <get-availableMicros>(): kotlin/Long // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.availableMicros.<get-availableMicros>|<get-availableMicros>(){}[0]
     final val confidence // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.confidence|{}confidence[0]
         final fun <get-confidence>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.confidence.<get-confidence>|<get-confidence>(){}[0]
+    final val isHit // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.isHit|{}isHit[0]
+        final fun <get-isHit>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.isHit.<get-isHit>|<get-isHit>(){}[0]
     final val kind // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.kind|{}kind[0]
         final fun <get-kind>(): io.github.yuroyami.kiteplayer.audioviz/AudioEventKind // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.kind.<get-kind>|<get-kind>(){}[0]
     final val ptsMicros // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.ptsMicros|{}ptsMicros[0]
@@ -966,6 +1132,11 @@ final class io.github.yuroyami.kiteplayer.audioviz/AudioDetection { // io.github
         final fun <get-strength>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.strength.<get-strength>|<get-strength>(){}[0]
     final val surprise // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.surprise|{}surprise[0]
         final fun <get-surprise>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.surprise.<get-surprise>|<get-surprise>(){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.Companion|null[0]
+        final const val HIT_CONFIDENCE // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.Companion.HIT_CONFIDENCE|{}HIT_CONFIDENCE[0]
+            final fun <get-HIT_CONFIDENCE>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz/AudioDetection.Companion.HIT_CONFIDENCE.<get-HIT_CONFIDENCE>|<get-HIT_CONFIDENCE>(){}[0]
+    }
 }
 
 final class io.github.yuroyami.kiteplayer.audioviz/AudioDetections { // io.github.yuroyami.kiteplayer.audioviz/AudioDetections|null[0]
@@ -1508,6 +1679,46 @@ sealed class io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gene { // io.gith
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Gene.name.<get-name>|<get-name>(){}[0]
 }
 
+sealed class io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve { // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve|null[0]
+    final class Range : io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve { // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Range|null[0]
+        constructor <init>(kotlin/Float, kotlin/Float) // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Range.<init>|<init>(kotlin.Float;kotlin.Float){}[0]
+
+        final val from // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Range.from|{}from[0]
+            final fun <get-from>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Range.from.<get-from>|<get-from>(){}[0]
+        final val to // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Range.to|{}to[0]
+            final fun <get-to>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Range.to.<get-to>|<get-to>(){}[0]
+
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Range.toString|toString(){}[0]
+    }
+
+    final class Threshold : io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve { // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Threshold|null[0]
+        constructor <init>(kotlin/Float) // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Threshold.<init>|<init>(kotlin.Float){}[0]
+
+        final val level // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Threshold.level|{}level[0]
+            final fun <get-level>(): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Threshold.level.<get-level>|<get-level>(){}[0]
+
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Threshold.toString|toString(){}[0]
+    }
+
+    final object Discrete : io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve { // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Discrete|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Discrete.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Discrete.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Discrete.toString|toString(){}[0]
+    }
+
+    final object Linear : io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve { // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Linear|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Linear.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Linear.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Linear.toString|toString(){}[0]
+    }
+
+    final object Scaled : io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve { // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Scaled|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Scaled.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Scaled.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/VizCurve.Scaled.toString|toString(){}[0]
+    }
+}
+
 final object io.github.yuroyami.kiteplayer.audioviz.viz.motion/Ease { // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Ease|null[0]
     final fun hump(kotlin/Float): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Ease.hump|hump(kotlin.Float){}[0]
     final fun inOut(kotlin/Float): kotlin/Float // io.github.yuroyami.kiteplayer.audioviz.viz.motion/Ease.inOut|inOut(kotlin.Float){}[0]
@@ -1577,10 +1788,19 @@ final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplay
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_RenderStats$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_RenderStats$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_RenderStats$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_Scene3D$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_Scene3D$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_Scene3D$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCatalog$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCatalog$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizCatalog$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Discrete$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Discrete$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Discrete$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Linear$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Linear$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Linear$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Range$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Range$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Range$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Scaled$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Scaled$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Scaled$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Threshold$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Threshold$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Threshold$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDirector$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDirector$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizDirector$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDrive$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDrive$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizDrive$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizMapping$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizMapping$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizMapping$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizPalette$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizPalette$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizPalette$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizParam$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizParam$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizParam$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizRenderState$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizRenderState$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizRenderState$stableprop[0]
+final val io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizResponse$stableprop // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizResponse$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_viz_VizResponse$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_AnalysisWindow$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_AnalysisWindow$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_AnalysisWindow$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_AudioAnalysisStats$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_AudioAnalysisStats$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_AudioAnalysisStats$stableprop[0]
 final val io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_AudioDetection$stableprop // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_AudioDetection$stableprop|#static{}io_github_yuroyami_kiteplayer_audioviz_AudioDetection$stableprop[0]
@@ -1658,10 +1878,19 @@ final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplay
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_RenderStats$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_RenderStats$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_RenderStats$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_Scene3D$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_Scene3D$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_Scene3D$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCatalog$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCatalog$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizCatalog$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Discrete$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Discrete$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Discrete$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Linear$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Linear$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Linear$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Range$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Range$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Range$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Scaled$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Scaled$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Scaled$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Threshold$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Threshold$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizCurve_Threshold$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDirector$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDirector$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizDirector$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDrive$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizDrive$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizDrive$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizMapping$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizMapping$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizMapping$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizPalette$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizPalette$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizPalette$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizParam$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizParam$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizParam$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizRenderState$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizRenderState$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizRenderState$stableprop_getter(){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizResponse$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz.viz/io_github_yuroyami_kiteplayer_audioviz_viz_VizResponse$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_viz_VizResponse$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/AudioVizBrowser(io.github.yuroyami.kiteplayer.audioviz/AudioVizState, androidx.compose.ui/Modifier?, kotlin/Function1<io.github.yuroyami.kiteplayer.audioviz.viz/Visualization, kotlin/Unit>?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.audioviz/AudioVizBrowser|AudioVizBrowser(io.github.yuroyami.kiteplayer.audioviz.AudioVizState;androidx.compose.ui.Modifier?;kotlin.Function1<io.github.yuroyami.kiteplayer.audioviz.viz.Visualization,kotlin.Unit>?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/AudioVizSettings(io.github.yuroyami.kiteplayer.audioviz/AudioVizState, androidx.compose.ui/Modifier?, kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/VizPalette>?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.audioviz/AudioVizSettings|AudioVizSettings(io.github.yuroyami.kiteplayer.audioviz.AudioVizState;androidx.compose.ui.Modifier?;kotlin.collections.List<io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette>?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/KiteAudioViz(io.github.yuroyami.kiteplayer.audioviz/AudioVizState, androidx.compose.ui/Modifier?, kotlin/Boolean, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer.audioviz/KiteAudioViz|KiteAudioViz(io.github.yuroyami.kiteplayer.audioviz.AudioVizState;androidx.compose.ui.Modifier?;kotlin.Boolean;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]

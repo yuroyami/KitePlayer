@@ -57,8 +57,8 @@ public class Ground(
         advancedAt = state.timeSeconds
         val dt = state.deltaSeconds
         val frame = state.frame
-        // Never slower than about a third of full pace, so a ground is alive even in silence.
-        phase += dt * (0.3f + state.paced(1f))
+        // A small floor keeps a ground alive in silence without making a silence look like music.
+        phase += dt * (0.06f + state.paced(1f))
         val locked = frame.rhythm?.usable == true
         travel += dt * if (locked) frame.bpm / 60f else state.paced(2f)
         if (fade < 1f) fade = (fade + dt / fadeSeconds.coerceAtLeast(0.05f)).coerceAtMost(1f)
@@ -93,7 +93,9 @@ public class Ground(
         }
         program.uniform("uPhase", phase)
         program.uniform("uTravel", travel)
-        program.uniform("uDim", dim)
+        // The bed follows the music too: a quiet passage that lights the room as brightly as a
+        // loud one hides how loud the music is.
+        program.uniform("uDim", dim * (0.3f + 0.7f * state.frame.level.coerceIn(0f, 1f)))
         program.uniform("uWalk", walk)
         val brush = program.brush() ?: return
         drawRect(brush, alpha = alpha)

@@ -4,6 +4,12 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
+import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.MusicClock
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Slew
@@ -22,12 +28,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Comets
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.follow
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.kickHit
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.snareHit
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.wrap
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.count
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.drawn
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hatHit
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.kickSpawn
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.hatSpawn
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.idle
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.lift
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.presence
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.tempo
@@ -51,6 +57,21 @@ internal class PlasmaField : ShaderPreset(
     bucket = VizEnergy.Mid,
     seed = 3f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.Treble, VizProperty.Shape),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.HighHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(0.5f)),
+        VizDrive(VizDriver.Section, VizProperty.Spawn, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     // Where a shader cannot run, the drawn Plasma stands in. It is the same picture, coarser.
     private val stripes = Plasma()
 
@@ -74,19 +95,19 @@ internal class PlasmaField : ShaderPreset(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         // Its own clock with a floor, so the field keeps flowing visibly under calm music.
-        flow += dt * (0.45f + 1.3f * state.frame.motionRate)
+        flow += dt * (0.45f * state.idle + 1.3f * state.frame.motionRate)
         for (index in 0 until SUNS) {
             val orbit = orbits[index]
             orbit.direction = if (index == 1) -1f else 1f
             orbit.advance(state, gestures)
             kit.place(index, orbit.x, orbit.y)
         }
-        flash.kick(state.frame.kick * 7f)
+        flash.kick(gestures.kick * 7f)
         flash.advance(dt)
-        if (state.frame.kick > 0f) {
-            sparks.burst(orbits[0].x, orbits[0].y, (8 + 12 * state.frame.kick).toInt(), 0.5f, 1f, 0.012f, 0.1f, Sprite.SPARK)
+        if (gestures.kick > 0f) {
+            sparks.burst(orbits[0].x, orbits[0].y, gestures.kickSpawn(20), 0.5f, 1f, 0.012f, 0.1f, Sprite.SPARK)
         }
-        if (state.frame.hat > 0f) sparks.sprinkle(3, 0.4f, 0.006f, 0.6f, Sprite.GLOW)
+        if (gestures.hat > 0f) sparks.sprinkle(gestures.hatSpawn(3), 0.4f, 0.006f, 0.6f, Sprite.GLOW)
         sparks.advance(dt, drag = 1f)
         if (gestures.section) {
             travellers.across(random, gestures.cycleSeconds * 0.75f, PathShape.Arc, 0.18f, 0.05f, random.next(), 0f, Sprite.STREAK)
@@ -235,6 +256,20 @@ internal class Cathedral : ShaderPreset(
     bucket = VizEnergy.Mid,
     seed = 11f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Mid, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.25f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+    )
     private val corridor = genes.choice("Corridor", 3)
     private val lightCount = genes.choice("Lights", 3, start = 2)
     private val banners = genes.toggle("Banners", start = true)
@@ -256,13 +291,13 @@ internal class Cathedral : ShaderPreset(
         // Fast enough to read as flight, and a new corridor at each supported section boundary.
         travelled += dt * 18f * (0.25f + state.drive) * speed.value
         stripes += dt * 20f * (0.4f + state.drive)
-        drift += dt * (0.6f + 0.8f * state.frame.motionRate)
+        drift += dt * (0.6f * state.idle + 0.8f * state.frame.motionRate)
         if (gestures.section) corridor.choose((corridor.value + 1) % 3)
         if (gestures.drop) gather = 1f
         gather = (gather - dt / gestures.cycleSeconds).coerceAtLeast(0f)
-        if (gestures.snareHit > 0f) snap = 1f
+        if (gestures.snare > 0f) snap = 0.4f + 0.6f * gestures.snare
         snap = (snap - dt * 3f).coerceAtLeast(0f)
-        flash.hit(gestures.kickHit)
+        flash.hit(gestures.kick)
         flash.advance(0f, dt)
         val pull = 1f - sin(gather * 3.1415927f)
         for (index in 0 until LIGHTS) {
@@ -277,7 +312,7 @@ internal class Cathedral : ShaderPreset(
         val eyeY = 0.1f + 0.4f * sin(drift * 0.21f)
         val depth = (lights[2] - travelled).coerceAtLeast(0.5f)
         kit.place(1, 0.5f + (lights[0] - eyeX) * 1.5f / depth / (2f * kit.aspect), 0.5f - (lights[1] - eyeY) * 1.5f / depth / 2f)
-        dustCredit += dt * (60f + 120f * state.drive)
+        dustCredit += dt * (60f * state.idle + 120f * state.drive)
         while (dustCredit >= 1f) {
             dustCredit -= 1f
             dust.sprinkle(1, 1.5f, 0.008f, 0.1f + 0.2f * random.next(), Sprite.GLOW, drift = 0.06f)
@@ -354,7 +389,7 @@ float banner(float3 point, float gap) {
     float index = floor(point.z / gap);
     float3 cell = point;
     cell.z = mod(cell.z, gap) - gap * 0.5;
-    float sway = sin(uDrift * 1.7 + index * 1.3 + cell.y * 1.5) * (0.2 + 0.5 * uMid) + uBanner.y * 0.6 * sin(index);
+    float sway = sin(uDrift * 1.7 + index * 1.3 + cell.y * 1.5) * (0.15 + 1.3 * uMid) + uBanner.y * 2.5 * sin(index);
     return sdBox(cell - float3(sway * (0.5 - 0.2 * cell.y), 0.9, 0.0), float3(0.7, 1.3, 0.03));
 }
 
@@ -455,6 +490,17 @@ internal class NeonCity : ShaderPreset(
     bucket = VizEnergy.High,
     seed = 23f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.25f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Brightness, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     private val bendGene = genes.number("Bend", 0.1f, 0.45f, 0.28f)
     private val traffic = genes.number("Traffic", 0.5f, 1.6f, 1f)
     private val signs = genes.number("Signs", 0.1f, 0.5f, 0.25f)
@@ -476,22 +522,22 @@ internal class NeonCity : ShaderPreset(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         travelled += dt * 4f * (0.25f + state.drive)
-        cars += dt * (6f + 10f * state.drive) * traffic.value
-        sway += dt * (0.4f + 0.6f * state.frame.motionRate)
+        cars += dt * (6f * state.idle + 10f * state.drive) * traffic.value
+        sway += dt * (0.4f * state.idle + 0.6f * state.frame.motionRate)
         // The street turns the other way every two phrases.
         if (gestures.section && gestures.sections % 2 == 0) way = -way
         bend.advance(way * bendGene.value, dt)
-        flash.hit(gestures.kickHit)
+        flash.hit(gestures.kick)
         flash.advance(0f, dt)
         if (gestures.drop) allOn = 1f
         allOn = (allOn - dt / gestures.cycleSeconds).coerceAtLeast(0f)
-        if (gestures.snareHit > 0f) beamPhase[(random.next() * searchlights.count(1)).toInt().coerceIn(0, 2)] += 1.2f
+        if (gestures.snare > 0f) beamPhase[(random.next() * searchlights.count(1)).toInt().coerceIn(0, 2)] += 1.2f * gestures.snare
         for (index in 0 until 3) {
-            beamPhase[index] += dt * (0.7f + 0.25f * index) * state.tempo
+            beamPhase[index] += dt * (0.7f * state.idle + 0.25f * index) * state.tempo
             beams[index] += (sin(beamPhase[index]) * 0.9f - beams[index]) * (dt * 4f).coerceAtMost(1f)
         }
         kit.place(1, 0.5f + 0.4f * sin(beams[0]), 0.12f)
-        rainCredit += dt * (60f + 140f * state.drive)
+        rainCredit += dt * (60f * state.idle + 140f * state.drive)
         while (rainCredit >= 1f) {
             rainCredit -= 1f
             rain.burst(random.next() * 1.1f - 0.05f, -0.02f, 1, 1.4f, 0.8f, 0.01f, 0.6f, Sprite.STREAK, 1.69f, 0.05f)
@@ -655,6 +701,17 @@ internal class Menger : ShaderPreset(
     bucket = VizEnergy.Mid,
     seed = 29f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.25f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.25f)),
+        VizDrive(VizDriver.HighHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.25f)),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Speed, VizCurve.Discrete),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     private val folds = genes.number("Folds", 2f, 4f, 3f)
     private val path = genes.toggle("Corkscrew", start = false)
     private val lightCount = genes.choice("Lights", 3, start = 2)
@@ -675,12 +732,12 @@ internal class Menger : ShaderPreset(
         if (gestures.section) folds.target = if (folds.value > 3f) 2f + random.next() else 3f + random.next()
         if (gestures.drop) rush = gestures.cycleSeconds
         rush -= dt
-        travelled += dt * 1.2f * (0.25f + state.drive) * if (rush > 0f) 3f else 1f
-        turn += dt * (0.5f + 0.7f * state.frame.motionRate)
+        travelled += dt * 1.2f * (0.06f + 1.35f * state.drive) * if (rush > 0f) 3f else 1f
+        turn += dt * (0.5f * state.idle + 0.7f * state.frame.motionRate)
         if (rush > 0f) roll += dt * TAU / gestures.cycleSeconds
-        drums[0].hit(gestures.kickHit)
-        drums[1].hit(gestures.snareHit)
-        drums[2].hit(gestures.hatHit)
+        drums[0].hit(gestures.kick)
+        drums[1].hit(gestures.snare)
+        drums[2].hit(gestures.hat)
         for (index in 0 until 3) {
             drums[index].advance(0f, dt)
             val angle = turn * (1f + 0.3f * index) + index * TAU / 3f
@@ -690,7 +747,7 @@ internal class Menger : ShaderPreset(
             lights[index * 4 + 3] = lightCount.presence(index, 1) * (0.3f + 1.2f * drums[index].value)
         }
         // Sparks out of the holes, speeding up as they rush past the camera.
-        credit += dt * (30f + 80f * state.drive) * particleRate.value
+        credit += dt * (30f * state.idle + 80f * state.drive) * particleRate.value
         while (credit >= 1f) {
             credit -= 1f
             particles.burst(0.5f, 0.5f, 1, 0.5f + 0.6f * state.drive, 1f, 0.01f, random.next(), Sprite.STREAK)
@@ -822,6 +879,18 @@ internal class Mandelbox : ShaderPreset(
     bucket = VizEnergy.High,
     seed = 37f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Treble, VizProperty.Brightness),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Pulse, VizProperty.Shape),
+    )
     private val scaleGene = genes.number("Scale", -2.1f, -1.6f, -2.1f)
     private val depth = genes.number("Flight depth", 5.5f, 7.5f, 6.5f)
     private val lightCount = genes.toggle("Second light", start = true)
@@ -846,17 +915,17 @@ internal class Mandelbox : ShaderPreset(
         cut -= dt
         dive = if (cut > 0f) 0f else gestures.slowCyclePhase
         if (gestures.section) scaleGene.target = -2.1f + 0.5f * random.next()
-        halo.hit(gestures.kickHit)
+        halo.hit(gestures.kick)
         halo.advance(0f, dt)
-        lightTurn += dt * (0.8f + 0.8f * state.frame.motionRate)
+        lightTurn += dt * (0.8f * state.idle + 0.8f * state.frame.motionRate)
         look += dt * TAU / 16f
-        sparkCredit += (dt * (30f + 70f * state.drive) + gestures.kickHit * 0.35f) * haloRate.value * 3f
+        sparkCredit += (dt * (30f + 70f * state.drive) + gestures.kick * 0.35f) * haloRate.value * 3f
         while (sparkCredit >= 1f) {
             sparkCredit -= 1f
             sparks.burst(0.5f, 0.45f, 1, 0.4f + 0.5f * state.drive, 1f, 0.012f, random.next(), Sprite.STREAK)
         }
         sparks.advance(dt, drag = -0.6f)
-        streakCredit += dt * (1.5f + 3f * state.drive)
+        streakCredit += dt * (1.5f * state.idle + 3f * state.drive)
         while (streakCredit >= 1f) {
             streakCredit -= 1f
             streaks.burst(random.next(), random.next() * 0.4f, 1, 0.8f, 0.6f, 0.008f, 0.6f, Sprite.STREAK, if (random.next() < 0.5f) 0.2f else 2.9f, 0.1f)
@@ -1017,6 +1086,15 @@ internal class TerrainMarch : ShaderPreset(
     bucket = VizEnergy.Calm,
     seed = 31f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.SlowLevel, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+    )
     private val curve = genes.number("Path curve", 0.5f, 1.5f, 1f)
     private val clouds = genes.number("Clouds", 0.2f, 0.8f, 0.5f)
     private val flockSize = genes.choice("Flock", 3, start = 2)
@@ -1041,14 +1119,14 @@ internal class TerrainMarch : ShaderPreset(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         travelled = flight.advance(state)
-        cloudScroll += dt * (0.15f + 0.1f * state.drive)
-        river.hit(gestures.kickHit)
+        cloudScroll += dt * (0.15f * state.idle + 0.1f * state.drive)
+        river.hit(gestures.kick)
         river.advance(0f, dt)
         if (gestures.drop) dawnHold = gestures.cycleSeconds * 2f
         dawnHold -= dt
         dawn.advance(if (dawnHold > 0f) 1f else 0f, dt)
         // The flock crosses the sky, turning back on the snare.
-        if (gestures.snareHit > 0f) flockWay = -flockWay
+        if (gestures.snare > 0f) flockWay = -flockWay
         flockTravel += dt / (gestures.cycleSeconds * 2f) * flockWay
         flock.targetX = -0.1f + 1.2f * wrap(flockTravel)
         flock.targetY = 0.18f + 0.06f * sin(flockTravel * TAU * 2f)
@@ -1235,6 +1313,18 @@ internal class BlobField : ShaderPreset(
     bucket = VizEnergy.Calm,
     seed = 7f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+        VizDrive(VizDriver.Level, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Pulse, VizProperty.Shape),
+    )
     private val count = genes.choice("Blobs", 3, start = 2)
     private val weld = genes.number("Weld", 0.05f, 0.5f, 0.2f)
     private val paths = genes.choice("Paths", 3)
@@ -1251,10 +1341,10 @@ internal class BlobField : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        phase += dt * TAU / (gestures.cycleSeconds * 2f) * (0.6f + 0.6f * state.drive)
-        ripple += dt * (0.5f + 0.8f * state.frame.motionRate)
+        phase += dt * TAU / (gestures.cycleSeconds * 2f) * (0.12f + 1.7f * state.drive)
+        ripple += dt * (0.5f * state.idle + 0.8f * state.frame.motionRate)
         if (gestures.section) weld.target = if (weld.value > 0.25f) 0.05f + 0.1f * random.next() else 0.35f + 0.15f * random.next()
-        merge.kick(gestures.kickHit * 3f)
+        merge.kick(gestures.kick * 3f)
         merge.advance(dt)
         if (gestures.drop) gather = 1f
         gather = (gather - dt / gestures.cycleSeconds).coerceAtLeast(0f)
@@ -1276,7 +1366,7 @@ internal class BlobField : ShaderPreset(
             blobs[index * 4 + 3] = count.presence(index, 8, 4)
             if (index == 0) kit.place(0, 0.5f + x * spread, 0.5f + y * spread)
         }
-        bubbleCredit += dt * (3f + 10f * state.drive) * bubbleRate.value + gestures.hatHit * 3f
+        bubbleCredit += dt * (3f * state.idle + 10f * state.drive) * bubbleRate.value + gestures.hat * 3f
         while (bubbleCredit >= 1f) {
             bubbleCredit -= 1f
             val index = (random.next() * count.count(8, 4)).toInt().coerceIn(0, MOST - 1)
@@ -1363,6 +1453,22 @@ internal class NebulaField : ShaderPreset(
     bucket = VizEnergy.Calm,
     seed = 19f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Treble, VizProperty.Brightness),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Mood, VizProperty.Shape),
+        VizDrive(VizDriver.Pulse, VizProperty.Shape),
+    )
     private val direction = genes.choice("Drift", 4)
     private val lanes = genes.number("Lane scale", 0.6f, 1.8f, 1f)
     private val stars = genes.number("Stars", 0.5f, 1.5f, 1f)
@@ -1388,7 +1494,7 @@ internal class NebulaField : ShaderPreset(
             driftX += share * DRIFT_X[option] * step
             driftY += share * DRIFT_Y[option] * step
         }
-        flow += dt * (0.7f + 0.6f * state.frame.motionRate)
+        flow += dt * (0.7f * state.idle + 0.6f * state.frame.motionRate)
         core.advance(state, gestures)
         val eight = corePath.weight(1)
         val figureX = 0.5f + 0.32f * sin(core.angle)
@@ -1400,10 +1506,10 @@ internal class NebulaField : ShaderPreset(
         coreX = x + (0.5f - x) * toCentre
         coreY = y + (0.5f - y) * toCentre
         kit.place(0, coreX, coreY)
-        flare.kick(gestures.kickHit * 6f)
+        flare.kick(gestures.kick * 6f)
         flare.advance(dt)
         if (gestures.section) lanes.target = 0.6f + 1.2f * random.next()
-        if (gestures.snareHit > 0f) snareComets.across(random, gestures.beatSeconds * 3f, PathShape.Arc, 0.15f, 0.02f, random.next(), 0f, Sprite.GLOW)
+        if (gestures.snare > 0f) snareComets.across(random, gestures.beatSeconds * 3f, PathShape.Arc, 0.15f, 0.02f, random.next(), 0f, Sprite.GLOW)
         snareComets.advance(dt)
         comets.advance(state, gestures, random)
         kit.follow(1, comets.travellers)
@@ -1498,6 +1604,16 @@ internal class AuroraField : ShaderPreset(
     bucket = VizEnergy.Calm,
     seed = 41f,
 ) {
+
+    override val mapping: VizMapping by mappingOf(
+        VizDrive(VizDriver.Level, VizProperty.Brightness),
+        VizDrive(VizDriver.Key, VizProperty.Colour),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled),
+        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Bands, VizProperty.Shape),
+    )
     private val stand = Aurora()
 
     override val hasFallback: Boolean get() = true
@@ -1518,11 +1634,11 @@ internal class AuroraField : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        sway += dt * (0.8f + 0.8f * state.frame.motionRate)
+        sway += dt * (0.8f * state.idle + 0.8f * state.frame.motionRate)
         for (layer in 0 until 4) scroll[layer] += 2f * dt / (gestures.cycleSeconds * BARS_PER_SCREEN[layer])
         lean += dt * TAU / 16f
         moonOrbit.advance(state, gestures)
-        if (gestures.kickHit > 0f) wave = 0f
+        if (gestures.kick > 0f) wave = 0f
         if (wave >= 0f) {
             wave += dt / (gestures.beatSeconds * 2f)
             if (wave > 1.2f) wave = -1f

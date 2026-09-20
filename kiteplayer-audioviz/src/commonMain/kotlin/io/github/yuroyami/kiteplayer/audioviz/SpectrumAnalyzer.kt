@@ -265,13 +265,21 @@ public class SpectrumAnalyzer(
         val sorted = smoothed.copyOf().also { it.sort() }
 
         val detectedBeat = if (ready) beatDetector.feed(magnitudes, usableBins) else 0f
-        fun hit(strength: Float, power: Double): Float =
-            if (ready && strength > 0f) powerHeight(power * displayScale.gain).toFloat() else 0f
-        val beat = hit(detectedBeat, spectralPower.totalPower.toDouble())
-        val kick = hit(beatDetector.kick, spectralPower.integratedPower(40.0, 150.0))
-        val snare = hit(beatDetector.snare,
+        // The strength a detection carries, whatever its confidence. The records keep this.
+        fun energy(detected: Float, power: Double): Float =
+            if (ready && detected > 0f) powerHeight(power * displayScale.gain).toFloat() else 0f
+        // What a picture answers: the same strength, but only where the detector has support.
+        fun hit(kind: AudioEventKind, strength: Float): Float =
+            if (beatDetector.confidence(kind) >= AudioDetection.HIT_CONFIDENCE) strength else 0f
+        val beatEnergy = energy(detectedBeat, spectralPower.totalPower.toDouble())
+        val kickEnergy = energy(beatDetector.kick, spectralPower.integratedPower(40.0, 150.0))
+        val snareEnergy = energy(beatDetector.snare,
             spectralPower.integratedPower(150.0, 300.0) + spectralPower.integratedPower(1_000.0, 5_000.0))
-        val hat = hit(beatDetector.hat, spectralPower.integratedPower(6_000.0, 16_000.0))
+        val hatEnergy = energy(beatDetector.hat, spectralPower.integratedPower(6_000.0, 16_000.0))
+        val beat = hit(AudioEventKind.Onset, beatEnergy)
+        val kick = hit(AudioEventKind.LowTransient, kickEnergy)
+        val snare = hit(AudioEventKind.BodyTransient, snareEnergy)
+        val hat = hit(AudioEventKind.HighTransient, hatEnergy)
         pulse = maxOf(pulse * exp(-secondsPerAnalysis / 0.07f), beat)
         kickPulse = maxOf(kick, kickPulse * exp(-secondsPerAnalysis / 0.18f))
         snarePulse = maxOf(snare, snarePulse * exp(-secondsPerAnalysis / 0.12f))
@@ -313,10 +321,10 @@ public class SpectrumAnalyzer(
                 if (detected) events.add(AudioDetection(kind, eventReference, available, strength,
                     beatDetector.confidence(kind), beatDetector.surprise(kind)))
             }
-            record(AudioEventKind.Onset, detectedBeat > 0f, beat)
-            record(AudioEventKind.LowTransient, beatDetector.kick > 0f, kick)
-            record(AudioEventKind.BodyTransient, beatDetector.snare > 0f, snare)
-            record(AudioEventKind.HighTransient, beatDetector.hat > 0f, hat)
+            record(AudioEventKind.Onset, detectedBeat > 0f, beatEnergy)
+            record(AudioEventKind.LowTransient, beatDetector.kick > 0f, kickEnergy)
+            record(AudioEventKind.BodyTransient, beatDetector.snare > 0f, snareEnergy)
+            record(AudioEventKind.HighTransient, beatDetector.hat > 0f, hatEnergy)
             record(AudioEventKind.EnergyRise, moodTracker.drop, drivers.overall.fast)
             AudioDetections(available, eventReference, events.toTypedArray())
         }

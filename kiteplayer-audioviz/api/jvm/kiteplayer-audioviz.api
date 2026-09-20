@@ -38,12 +38,18 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioAnalysisStats {
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioDetection {
 	public static final field $stable I
+	public static final field Companion Lio/github/yuroyami/kiteplayer/audioviz/AudioDetection$Companion;
+	public static final field HIT_CONFIDENCE F
 	public final fun getAvailableMicros ()J
 	public final fun getConfidence ()F
 	public final fun getKind ()Lio/github/yuroyami/kiteplayer/audioviz/AudioEventKind;
 	public final fun getPtsMicros ()J
 	public final fun getStrength ()F
 	public final fun getSurprise ()F
+	public final fun isHit ()Z
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/AudioDetection$Companion {
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioDetections {
@@ -699,6 +705,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/audioviz/viz/Visua
 	public fun getFeedbackZoom ()F
 	public fun getGenes ()Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;
 	public fun getGround ()Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Ground;
+	public fun getMapping ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizMapping;
 	public fun getMoodSpec ()Lio/github/yuroyami/kiteplayer/audioviz/viz/MoodSpec;
 	public abstract fun getName ()Ljava/lang/String;
 	public fun getPaintsWholeScreen ()Z
@@ -727,6 +734,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/Visualization$Defa
 	public static fun getFeedbackZoom (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)F
 	public static fun getGenes (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;
 	public static fun getGround (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Ground;
+	public static fun getMapping (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizMapping;
 	public static fun getMoodSpec (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Lio/github/yuroyami/kiteplayer/audioviz/viz/MoodSpec;
 	public static fun getPaintsWholeScreen (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Z
 	public static fun getParams (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)Ljava/util/List;
@@ -754,6 +762,49 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizCatalog {
 	public final fun create ()Ljava/util/List;
 }
 
+public abstract class io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve {
+	public static final field $stable I
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Discrete : io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve {
+	public static final field $stable I
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Discrete;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Linear : io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve {
+	public static final field $stable I
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Linear;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Range : io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve {
+	public static final field $stable I
+	public fun <init> (FF)V
+	public final fun getFrom ()F
+	public final fun getTo ()F
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Scaled : io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve {
+	public static final field $stable I
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Scaled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve$Threshold : io/github/yuroyami/kiteplayer/audioviz/viz/VizCurve {
+	public static final field $stable I
+	public fun <init> (F)V
+	public final fun getLevel ()F
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizDirector {
 	public static final field $stable I
 	public fun <init> (Ljava/util/List;JF)V
@@ -769,6 +820,42 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizDirector {
 	public final fun setPreferred (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizTransition;)V
 	public final fun show (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)V
 	public final fun startWith (Ljava/lang/String;)V
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizDrive {
+	public static final field $stable I
+	public fun <init> (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizCurve;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizCurve;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getCurve ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizCurve;
+	public final fun getDriver ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public final fun getProperty ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public final fun getResponse ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizDriver : java/lang/Enum {
+	public static final field Bands Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Bass Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field BodyHit Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Breakdown Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Drop Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field HighHit Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Key Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Level Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field LowHit Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Mid Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Mood Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Onset Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Pulse Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Section Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field SlowLevel Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Timbre Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Treble Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Waveform Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static final field Width Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizEnergy : java/lang/Enum {
@@ -805,6 +892,29 @@ public abstract interface class io/github/yuroyami/kiteplayer/audioviz/viz/VizFu
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizFuture$DefaultImpls {
 	public static fun nextEvent (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventKind;)Lio/github/yuroyami/kiteplayer/audioviz/UpcomingAudioEvent;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizMapping {
+	public static final field $stable I
+	public fun <init> (Ljava/util/List;Ljava/util/Set;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;Ljava/util/List;F)V
+	public synthetic fun <init> (Ljava/util/List;Ljava/util/Set;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;Ljava/util/List;FILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDrivers ()Ljava/util/Set;
+	public final fun getDrives ()Ljava/util/List;
+	public final fun getNeeds ()Ljava/util/Set;
+	public final fun getQuality ()Ljava/util/List;
+	public final fun getSilence ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;
+	public final fun getSilenceSettleSeconds ()F
+	public final fun of (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDriver;)Ljava/util/List;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizNeed : java/lang/Enum {
+	public static final field EchoBuffer Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
+	public static final field RuntimeShader Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
+	public static final field ShaderLayers Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
+	public static final field SoftBuffer Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizNeed;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizPalette {
@@ -855,6 +965,29 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizParam {
 	public final fun setValue (F)V
 }
 
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizProperty : java/lang/Enum {
+	public static final field Brightness Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Camera Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Colour Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Cut Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Shape Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Size Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Spawn Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Speed Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static final field Texture Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizProperty;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizQualityControl : java/lang/Enum {
+	public static final field BoundedPool Lio/github/yuroyami/kiteplayer/audioviz/viz/VizQualityControl;
+	public static final field EchoResolution Lio/github/yuroyami/kiteplayer/audioviz/viz/VizQualityControl;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizQualityControl;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizQualityControl;
+}
+
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState {
 	public static final field $stable I
 	public fun <init> (Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame;FFLio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;FLio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;)V
@@ -880,6 +1013,48 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState {
 	public final fun getTimeSeconds ()F
 	public final fun paced (F)F
 	public final fun percentile (F)F
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizResponse {
+	public static final field $stable I
+	public static final field Companion Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse$Companion;
+	public fun <init> (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;FF)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;FFILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getDelaySeconds ()F
+	public final fun getKind ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+	public final fun getSeconds ()F
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizResponse$Companion {
+	public final fun envelope (FF)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public static synthetic fun envelope$default (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse$Companion;FFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public final fun getDirect ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public final fun getRate ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public final fun lifetime (FF)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public static synthetic fun lifetime$default (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse$Companion;FFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public final fun spring (FF)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+	public static synthetic fun spring$default (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse$Companion;FFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponse;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind : java/lang/Enum {
+	public static final field Direct Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+	public static final field Envelope Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+	public static final field Lifetime Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+	public static final field Rate Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+	public static final field Spring Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizResponseKind;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizSilence : java/lang/Enum {
+	public static final field Fade Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;
+	public static final field Idle Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;
+	public static final field Still Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizSilence;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizTransition : java/lang/Enum {
@@ -1067,16 +1242,20 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/motion/Gestures {
 	public final fun getCycles ()I
 	public final fun getDrop ()Z
 	public final fun getHat ()F
+	public final fun getHats ()I
 	public final fun getKick ()F
+	public final fun getKicks ()I
 	public final fun getPhrase ()Z
 	public final fun getPhrasePhase ()F
 	public final fun getPhrases ()I
+	public final fun getPulseUsable ()Z
 	public final fun getSection ()Z
 	public final fun getSections ()I
 	public final fun getSilence ()Z
 	public final fun getSlowCyclePhase ()F
 	public final fun getSlowCycles ()I
 	public final fun getSnare ()F
+	public final fun getSnares ()I
 	public final fun reset ()V
 	public final fun update (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;)V
 }
@@ -1158,6 +1337,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/shader/LiveShader 
 	public fun getFeedbackZoom ()F
 	public fun getGenes ()Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;
 	public fun getGround ()Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Ground;
+	public fun getMapping ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizMapping;
 	public fun getMoodSpec ()Lio/github/yuroyami/kiteplayer/audioviz/viz/MoodSpec;
 	public fun getName ()Ljava/lang/String;
 	public fun getPaintsWholeScreen ()Z

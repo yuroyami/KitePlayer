@@ -8,6 +8,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
 
+## [0.0.26] - 2026-09-20
+
+### Added
+
+- `AudioVizState.framesPerSecond` caps how often the visualizer redraws; zero, the default, draws
+  every display frame. Both surfaces and the director pace by it. Fixes #146.
+
+- `KitePlayer.scanAudio` decodes an audio track a second time, without playing it, and hands
+  the samples to an `AudioScanSink`. A range limits it to part of the track.
+- `KitePlayer.audioClock` reports the audible position, its rate and its generation in one
+  read, so a tap and a picture agree on what is playing now.
+- The visualiser scans a song in the background, on half the cores and at most four, and builds
+  a song map: sections, drops, breakdowns and the key. `SongMapStore.inDirectory` keeps a
+  finished map between runs, so a song played before is mapped from its first note. `SongScanPolicy`
+  turns the scan off. Fixes #140.
+- Sections, drops and breakdowns are also detected live, and the key is estimated live, for a
+  song with no map yet. Late confirmations and map events are delivered on time only.
+- `VizDirector.maximumHoldSeconds` lets a long wait change the drawing on the next beat. Zero,
+  the default, still waits for a musical boundary however long that takes.
+- The sample carries five songs, arrows and a drag across the picture to change the drawing,
+  and a random button. Fixes #141.
+
+### Fixed
+
+- A flying drawing kept travelling while the player was paused, and drifted on through a
+  silence. A frame now says how much is audible (`SpectrumFrame.audible`, zero while paused or
+  silent), `motionRate` follows it, and every camera, ground and scrolling field moves by
+  `VizRenderState.stepSeconds`, the audible share of the frame, instead of the wall clock.
+  Fixes #144.
+- A video track change answered before the snapshot showed the new selection, so a caller that
+  read `KitePlayer.state` on return saw the track it had just turned off still selected. The
+  snapshot is published before the reply, as the audio and subtitle changes already did.
+  Fixes #142.
+- Every drawing is driven from the music rather than from its own clock, the flash counter is
+  calibrated, and quiet music stays visible.
+- On Android, a hardware frame counts as presented only when the display showed it, frame
+  releases are served as soon as the schedule hands them over, the Compose video view no longer
+  redraws on every display refresh, and the display is asked for the stream's real frame rate.
+  Fixes #137 and #138.
+- The sample no longer crashes on the song buttons or on a drag off the seek bar's left edge.
+
+### Changed
+
+- The visualizer opens on a drawing chosen at random and the director walks a different sequence
+  on every run. `VizDirector`'s seed is random unless one is given. Fixes #145.
+
+- `VizDirector.current` is Compose snapshot state, so a control that names the drawing on
+  screen follows the director. The signature is unchanged. Fixes #143.
+- Breaking: `rememberAudioVizState` takes a `songScan` policy and a `songMapStore`, both with
+  defaults, and `SpectrumAnalyzer.feed` and the `VisualizerSurface` composables are gone. The
+  analysis runs on calibrated power with one shared gain and timed events; the numbers a
+  drawing reads changed meaning, and a drawing written against 0.0.25 needs its thresholds read
+  again.
+
 ## [0.0.25] - 2026-09-15
 
 ### Added

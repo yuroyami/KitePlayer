@@ -17,7 +17,13 @@ public enum class VizTransition {
     /** The old one rushes past the viewer and the new one arrives from far away. For a drop. */
     ZoomThrough,
 
-    /** Three hard alternations and it is done. Only ever right when the music is loud. */
+    /**
+     * Three hard alternations and it is done.
+     *
+     * It is not in any default profile, and it is not covered by the flash policy: three whole
+     * screen alternations inside one change is a flash train whenever the two drawings differ in
+     * brightness. A caller that asks for it by name owns that decision.
+     */
     StrobeCut,
 
     /**
@@ -71,6 +77,14 @@ public class VizDirector(
      * a drawing with echoes to hand them to.
      */
     public var preferred: VizTransition? = null
+
+    /**
+     * True keeps every change to a plain fade, whatever a drawing offers.
+     *
+     * A reduced-motion setting turns it on. A preferred way still wins, so a caller that asks for
+     * one by name gets it.
+     */
+    public var calmChanges: Boolean = false
 
     /** Seconds until the next change, or -1 when it is not known. */
     public var nextChangeSeconds: Float = -1f
@@ -171,6 +185,7 @@ public class VizDirector(
     private fun chooseTransition(frame: SpectrumFrame, next: Visualization): VizTransition {
         val offered = next.transitions
         preferred?.let { if (it in offered) return it }
+        if (calmChanges) return VizTransition.Crossfade
         val suited = when {
             frame.mood > 0.7f -> LIVELY
             frame.mood > 0.45f -> MOVING
@@ -183,7 +198,7 @@ public class VizDirector(
 
     /** [how], unless a preferred way was set and [next] can arrive by it. */
     private fun allowed(how: VizTransition, next: Visualization): VizTransition {
-        val wanted = preferred ?: return how
+        val wanted = preferred ?: if (calmChanges) VizTransition.Crossfade else return how
         return if (wanted in next.transitions) wanted else how
     }
 
@@ -214,7 +229,10 @@ public class VizDirector(
         /** How many drawings back to avoid repeating. */
         const val REMEMBERED = 8
 
-        val LIVELY = listOf(VizTransition.StrobeCut, VizTransition.Iris, VizTransition.NoiseWipe, VizTransition.WarpHandoff)
+        // StrobeCut is not here on purpose. It alternates the two scenes about four times inside
+        // one change, which is a flash train by itself whenever the two differ in brightness. It
+        // stays in VizTransition for a caller that asks for it by name.
+        val LIVELY = listOf(VizTransition.Iris, VizTransition.NoiseWipe, VizTransition.WarpHandoff)
         val MOVING = listOf(VizTransition.Iris, VizTransition.NoiseWipe, VizTransition.WarpHandoff)
         val QUIET = listOf(VizTransition.Crossfade)
     }

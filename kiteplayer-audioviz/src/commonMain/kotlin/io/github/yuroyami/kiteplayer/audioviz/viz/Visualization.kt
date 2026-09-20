@@ -10,6 +10,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.ground.Detail
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.Ground
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.WarpSpec
+import kotlin.math.log2
 
 /** The kinds of drawing, kept apart because they feel different to watch. */
 public enum class VizFamily {
@@ -147,6 +148,14 @@ public class EchoCopy(
 public enum class EchoBlend { Over, Add }
 
 /**
+ * How much light a picture gives at this level, from a floor in silence to all of it when loud.
+ *
+ * Every drawing's brightness follows this, and the finishing pass watches it for the flash guard,
+ * so it lives here rather than in one family of drawings.
+ */
+internal fun lightFor(energy: Float): Float = 0.06f + 0.94f * energy.coerceIn(0f, 1f)
+
+/**
  * Everything a drawing needs to know about this instant.
  *
  * Two clocks live here on purpose. [timeSeconds] is the wall clock and never stops. [musicTime]
@@ -170,6 +179,27 @@ public class VizRenderState(
     /** The queued audio that has been analysed but not yet heard, when a player supplies one. */
     public val future: VizFuture? = null,
 ) {
+    /**
+     * How much of the picture's own movement to keep, 0 to 1.
+     *
+     * The surface sets it. It is 1 ordinarily and small under a reduced-motion setting, where it
+     * damps the camera's punch, shake and cuts, the trail's swim and the size of a flash, while
+     * leaving the spectrum, the colours and the shapes alone.
+     */
+    public var motionScale: Float = 1f
+        internal set
+
+    /**
+     * How much of the light the picture may give this frame, 0 to 1.
+     *
+     * The surface sets it from the flash guard. It is 1 nearly always, and less for the frames
+     * where giving the light a drawing asked for would be the fourth flash of a second. Every
+     * drawing's brightness follows it, through `lift`, so the guard works on what the drawings
+     * draw rather than on a guess at the finished frame.
+     */
+    public var lightScale: Float = 1f
+        internal set
+
     /** Calm at 0, lively at 1. */
     public val mood: Float get() = frame.mood
 
@@ -331,6 +361,20 @@ public interface Visualization {
     /** The trail for this mood. The surface calls this rather than reading [trail]. */
     public fun trailAt(mood: Float): Float = moodSpec?.trail(mood) ?: trail
 
+    /**
+     * How long the trail takes to fade to half, in seconds, for this mood.
+     *
+     * A drawing declares its trail as the share of the picture that survives one sixtieth of a
+     * second, which is how it was authored. This is the same number as a time, which is what the
+     * surface fades by, so a drawing fades at the same rate on any refresh rate. Most drawings sit
+     * between 50 and 250 ms; the ones built to look like a long exposure sit above that on purpose.
+     */
+    public fun trailHalfLifeAt(mood: Float): Float {
+        val share = trailAt(mood).coerceIn(0f, 0.995f)
+        if (share <= 0f) return 0f
+        return (-1.0 / (60.0 * log2(share.toDouble()))).toFloat()
+    }
+
     /** The feedback zoom for this mood. */
     public fun feedbackZoomAt(mood: Float): Float = moodSpec?.zoom(mood) ?: feedbackZoom
 
@@ -385,7 +429,7 @@ public interface Visualization {
      */
     public fun echo(state: VizRenderState): EchoFrame {
         val mood = state.frame.mood
-        val pace = (0.08f + 1.6f * state.frame.energy).coerceIn(0f, 1f)
+        val pace = (0.08f + 1.6f * state.frame.energy).coerceIn(0f, 1f) * state.motionScale
         return EchoFrame(
             zoomX = 1f + (feedbackZoomAt(mood) - 1f) * pace,
             spin = feedbackSpinAt(mood) * pace,

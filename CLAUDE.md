@@ -46,6 +46,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - `audiovizSurvey` takes its classpath from `jvmTest`, so it depends on it: one red fast test stops
   the whole survey before it draws anything. The XML you then read is the previous run's, with the
   previous numbers. Compare the file's timestamp with the source you edited before you believe it.
+- The survey takes tens of minutes and holds a test worker of its own. A second Gradle build in
+  this checkout while it runs rewrites the classes under it, and the survey dies part way with a
+  socket timeout or a missing class. Wait for it, or run the second build somewhere else.
 - Scraping every Gradle configuration gives a load-dependent answer, because which configurations
   are realised depends on the rest of the task graph. The publication readiness check passed alone
   and failed inside a full gate run, reporting that a publishing module depended on the sample,

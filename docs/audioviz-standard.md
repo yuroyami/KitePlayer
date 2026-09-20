@@ -477,9 +477,10 @@ overhaul, not the implementation's current status or a second issue tracker. The
 [event-delivery contract](audioviz-events-api.md),
 [onset method](audioviz-onset-method.md),
 [structure and key contract](audioviz-structure-api.md),
-[song scan contract](audioviz-song-scan-api.md) and
-[drawing mapping contract](audioviz-mapping-api.md) describe the subsequent implementation
-contracts and their qualification limits.
+[song scan contract](audioviz-song-scan-api.md),
+[drawing mapping contract](audioviz-mapping-api.md) and
+[rendering, motion and flash contract](audioviz-rendering-api.md) describe the subsequent
+implementation contracts and their qualification limits.
 
 | Area | Source at the baseline and implication for the overhaul |
 |---|---|

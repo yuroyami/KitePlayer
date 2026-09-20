@@ -86,6 +86,23 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
     /** Parts of the finishing pass to leave out, for every drawing. */
     public var switches: PostSwitches by mutableStateOf(PostSwitches.All)
 
+    /**
+     * Keeps the spectrum, the colours and the shapes, and damps what throws the picture about.
+     *
+     * The camera stops punching, shaking and cutting, the trail stops swimming, every change of
+     * drawing becomes a plain fade, and the flash limit drops to none at all. Follow the host's own
+     * reduced-motion setting where the platform has one.
+     */
+    public var reducedMotion: Boolean by mutableStateOf(false)
+
+    /**
+     * False draws the background alone.
+     *
+     * The audio is untouched: the analysis keeps running and the player keeps playing. A viewer who
+     * turns the picture off keeps the music.
+     */
+    public var visible: Boolean by mutableStateOf(true)
+
     /** How much of the canvas trailing drawings render at, and whether that may drop when frames run slow. */
     public val quality: RenderQuality = RenderQuality()
 

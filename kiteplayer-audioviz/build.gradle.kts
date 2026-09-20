@@ -80,6 +80,7 @@ val renderingSuites = listOf(
     "*.ScreenMotionTest",
     "*.ChangeTest",
     "*.DriverInjectionTest",
+    "*.FlashCaptureTest",
     "*.DriverMatrixReport",
     "*.MappingQualificationTest",
     "*.MoodRenderTest",

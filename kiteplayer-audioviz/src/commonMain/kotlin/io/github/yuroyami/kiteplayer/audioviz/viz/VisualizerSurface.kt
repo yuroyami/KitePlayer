@@ -34,6 +34,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.ground.drawGround
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.TransitionBlend
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.canDrawRuntimeShaders
 import kotlin.time.TimeSource
+import kotlin.math.pow
 
 /**
  * Draws [visualization] every display frame, in layers: the ground, the echo layer, the front, and
@@ -66,19 +67,35 @@ public fun VisualizerSurface(
     quality: RenderQuality? = null,
     /** Frames a second to redraw at, or 0 for every display frame. For thumbnails and previews. */
     framesPerSecond: Int = 0,
+    /**
+     * Keeps the spectrum, the colours and the shapes, and damps what throws the picture about:
+     * the camera's punch, shake and cuts, the trail's swim, and any flash at all.
+     */
+    reducedMotion: Boolean = false,
+    /**
+     * False draws the background alone. The audio is not touched: the analysis keeps running and
+     * the player keeps playing, so turning the picture off costs nothing but the picture.
+     */
+    visible: Boolean = true,
 ) {
     val renderQuality = quality ?: remember { RenderQuality() }
+    if (!visible) {
+        Canvas(modifier.fillMaxSize()) { drawRect(palette.background) }
+        return
+    }
+    val motion = if (reducedMotion) REDUCED_MOTION else 1f
+    val flashes = if (reducedMotion) 0 else FLASHES_PER_SECOND
     if (!post) {
-        VisualizerCanvas(visualization, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond)
+        VisualizerCanvas(visualization, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
         return
     }
     PostProcessedBox(
-        spec = { if (post) visualization.post.masked(switches) else PostSpec.Off },
+        spec = { if (post) visualization.post.masked(switches).calmed(reducedMotion) else PostSpec.Off },
         frame = frame,
         modifier = modifier,
         stats = stats,
     ) {
-        VisualizerCanvas(visualization, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond)
+        VisualizerCanvas(visualization, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality, framesPerSecond, motion, flashes)
     }
 }
 
@@ -93,7 +110,10 @@ private fun VisualizerCanvas(
     stats: RenderStats? = null,
     quality: RenderQuality? = null,
     framesPerSecond: Int = 0,
+    motionScale: Float = 1f,
+    flashesPerSecond: Int = FLASHES_PER_SECOND,
 ) {
+    val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
     val buffers = remember { FeedbackBuffers() }
     val fade = remember { PaletteFade() }
     var timeSeconds by remember { mutableFloatStateOf(0f) }
@@ -139,6 +159,8 @@ private fun VisualizerCanvas(
             musicTime = musicTime,
             future = future,
         )
+        state.motionScale = motionScale
+        state.lightScale = guard.allowance(lightFor(current.energy), deltaSeconds)
         val trail = visualization.trailAt(current.mood).coerceIn(0f, 0.995f)
         if (trail <= 0f) {
             composeFrame(visualization, state, null, stats)
@@ -240,13 +262,27 @@ internal fun DrawScope.drawEchoLayer(
     if (started != null) stats?.addScene(started.elapsedNow().inWholeMicroseconds / 1000f)
 }
 
+/**
+ * The share of the last frame that survives a frame that took [deltaSeconds].
+ *
+ * [trail] is the share that survives one sixtieth of a second, so this is 2^(-dt / half life) with
+ * that half life. Without it a drawing fades once a frame, and the same drawing holds its trail
+ * twice as long on a 120 Hz screen as on a 60 Hz one.
+ */
+internal fun retentionOf(trail: Float, deltaSeconds: Float): Float {
+    if (trail <= 0f) return 0f
+    val dt = deltaSeconds.takeIf { it.isFinite() && it > 0f } ?: (1f / 60f)
+    return trail.toDouble().pow((dt * 60f).toDouble()).toFloat().coerceIn(0f, 0.995f)
+}
+
 /** Paints the frame before this one back down, faded and moved. */
 private fun DrawScope.replayPrevious(
     previous: ImageBitmap,
     visualization: Visualization,
     state: VizRenderState,
-    trail: Float,
+    declaredTrail: Float,
 ) {
+    val trail = retentionOf(declaredTrail, state.deltaSeconds)
     val mood = state.frame.mood
     val echo = visualization.echo(state)
     // Per second rather than per frame, so the look does not change with the refresh rate.
@@ -484,19 +520,37 @@ public fun DirectedVisualizerSurface(
     stats: RenderStats? = null,
     /** How much of the canvas trailing drawings render at, and whether that may drop when slow. */
     quality: RenderQuality? = null,
+    /**
+     * Keeps the spectrum, the colours and the shapes, and damps what throws the picture about:
+     * the camera's punch, shake and cuts, the trail's swim, any flash, and every change of drawing
+     * becomes a plain fade.
+     */
+    reducedMotion: Boolean = false,
+    /**
+     * False draws the background alone. The audio is not touched: the analysis keeps running and
+     * the player keeps playing, so turning the picture off costs nothing but the picture.
+     */
+    visible: Boolean = true,
 ) {
     val renderQuality = quality ?: remember { RenderQuality() }
+    if (!visible) {
+        Canvas(modifier.fillMaxSize()) { drawRect(palette.background) }
+        return
+    }
+    val motion = if (reducedMotion) REDUCED_MOTION else 1f
+    val flashes = if (reducedMotion) 0 else FLASHES_PER_SECOND
+    director.calmChanges = reducedMotion
     if (!post) {
-        DirectedCanvas(director, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality)
+        DirectedCanvas(director, frame, palette, modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
         return
     }
     PostProcessedBox(
-        spec = { if (post) director.current.post.masked(switches) else PostSpec.Off },
+        spec = { if (post) director.current.post.masked(switches).calmed(reducedMotion) else PostSpec.Off },
         frame = frame,
         modifier = modifier,
         stats = stats,
     ) {
-        DirectedCanvas(director, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality)
+        DirectedCanvas(director, frame, palette, Modifier.fillMaxSize(), future, stats, renderQuality, motion, flashes)
     }
 }
 
@@ -510,7 +564,10 @@ private fun DirectedCanvas(
     future: VizFuture? = null,
     stats: RenderStats? = null,
     quality: RenderQuality? = null,
+    motionScale: Float = 1f,
+    flashesPerSecond: Int = FLASHES_PER_SECOND,
 ) {
+    val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
     val stage = remember { Stage() }
     val blend = remember { TransitionBlend() }
     val fade = remember { PaletteFade() }
@@ -537,6 +594,8 @@ private fun DirectedCanvas(
         val current = frame()
         val shown = fade.advance(palette, current, deltaSeconds)
         val state = VizRenderState(current, timeSeconds, deltaSeconds, shown, musicTime, future)
+        state.motionScale = motionScale
+        state.lightScale = guard.allowance(lightFor(current.energy), deltaSeconds)
         stage.follow(director)
         val next = director.incoming
         val scale = quality?.stepped ?: 1f
@@ -690,3 +749,14 @@ private inline fun DrawScope.withAlpha(alpha: Float, block: DrawScope.() -> Unit
 public fun DrawScope.drawVisualization(visualization: Visualization, state: VizRenderState) {
     composeFrame(visualization, state, null, null)
 }
+
+/**
+ * How much of a picture's own movement a reduced-motion setting keeps.
+ *
+ * Not zero: a still picture with a moving spectrum in it reads as broken rather than as calm. The
+ * camera still wanders slowly, and the flashes, cuts, shakes and punches are gone. *Judgement.*
+ */
+private const val REDUCED_MOTION = 0.15f
+
+/** The project's flash policy: at most three in any rolling second, with no area exception. */
+private const val FLASHES_PER_SECOND = 3

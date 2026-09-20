@@ -159,15 +159,19 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizState {
 	public final fun getLateEventDiscards ()J
 	public final fun getPalette ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;
 	public final fun getQuality ()Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;
+	public final fun getReducedMotion ()Z
 	public final fun getShowing ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
 	public final fun getStats ()Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;
 	public final fun getSwitches ()Lio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;
+	public final fun getVisible ()Z
 	public final fun mutate ()V
 	public final fun setDirected (Z)V
 	public final fun setDisplayDelay-BwNAW2A (Lkotlin/time/Duration;)V
 	public final fun setDrawing (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)V
 	public final fun setPalette (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;)V
+	public final fun setReducedMotion (Z)V
 	public final fun setSwitches (Lio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;)V
+	public final fun setVisible (Z)V
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizStateKt {
@@ -555,6 +559,18 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/EchoFrame {
 	public final fun getZoomY ()F
 }
 
+public final class io/github/yuroyami/kiteplayer/audioviz/viz/FlashGuard {
+	public static final field $stable I
+	public fun <init> ()V
+	public fun <init> (I)V
+	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun allowance (FF)F
+	public final fun getRecent ()I
+	public final fun getRecentRed ()I
+	public final fun limit (FFF)F
+	public final fun reset ()V
+}
+
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/MoodSpec {
 	public static final field $stable I
 	public fun <init> (FFFFFFFFFFFFFF)V
@@ -717,6 +733,7 @@ public abstract interface class io/github/yuroyami/kiteplayer/audioviz/viz/Visua
 	public fun onPreviousFrame (Landroidx/compose/ui/graphics/ImageBitmap;)V
 	public fun reset ()V
 	public fun trailAt (F)F
+	public fun trailHalfLifeAt (F)F
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/Visualization$DefaultImpls {
@@ -745,11 +762,12 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/Visualization$Defa
 	public static fun onPreviousFrame (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Landroidx/compose/ui/graphics/ImageBitmap;)V
 	public static fun reset (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)V
 	public static fun trailAt (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;F)F
+	public static fun trailHalfLifeAt (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;F)F
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VisualizerSurfaceKt {
-	public static final fun DirectedVisualizerSurface (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDirector;Lkotlin/jvm/functions/Function0;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;ZLio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;Landroidx/compose/runtime/Composer;II)V
-	public static final fun VisualizerSurface (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lkotlin/jvm/functions/Function0;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;ZLio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;ILandroidx/compose/runtime/Composer;II)V
+	public static final fun DirectedVisualizerSurface (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDirector;Lkotlin/jvm/functions/Function0;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;ZLio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;ZZLandroidx/compose/runtime/Composer;III)V
+	public static final fun VisualizerSurface (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lkotlin/jvm/functions/Function0;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;ZLio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;IZZLandroidx/compose/runtime/Composer;III)V
 	public static final fun drawComposedFrame (Landroidx/compose/ui/graphics/drawscope/DrawScope;Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;Landroidx/compose/ui/graphics/ImageBitmap;)V
 	public static final fun drawVisualization (Landroidx/compose/ui/graphics/drawscope/DrawScope;Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;)V
 	public static final fun drawVisualizationFrame (Landroidx/compose/ui/graphics/drawscope/DrawScope;Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;Landroidx/compose/ui/graphics/ImageBitmap;)V
@@ -810,6 +828,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizDirector {
 	public fun <init> (Ljava/util/List;JF)V
 	public synthetic fun <init> (Ljava/util/List;JFILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun advance (Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame;F)V
+	public final fun getCalmChanges ()Z
 	public final fun getChanging ()Z
 	public final fun getCurrent ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
 	public final fun getIncoming ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
@@ -817,6 +836,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizDirector {
 	public final fun getPreferred ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizTransition;
 	public final fun getProgress ()F
 	public final fun getTransition ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizTransition;
+	public final fun setCalmChanges (Z)V
 	public final fun setPreferred (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizTransition;)V
 	public final fun show (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)V
 	public final fun startWith (Ljava/lang/String;)V
@@ -1004,7 +1024,9 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState {
 	public final fun getEnergy ()F
 	public final fun getFrame ()Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame;
 	public final fun getFuture ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;
+	public final fun getLightScale ()F
 	public final fun getMood ()F
+	public final fun getMotionScale ()F
 	public final fun getMusicTime ()F
 	public final fun getNextOnsetIn ()F
 	public final fun getPalette ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;
@@ -1350,6 +1372,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/shader/LiveShader 
 	public final fun replace (Ljava/lang/String;)Ljava/lang/String;
 	public fun reset ()V
 	public fun trailAt (F)F
+	public fun trailHalfLifeAt (F)F
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/shader/ShaderProgram {

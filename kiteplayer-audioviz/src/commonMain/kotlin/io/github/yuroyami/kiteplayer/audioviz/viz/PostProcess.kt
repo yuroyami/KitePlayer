@@ -66,6 +66,10 @@ public data class PostSpec(
     internal val isOff: Boolean
         get() = bloom <= 0f && vignette <= 0f && grain <= 0f && !glitch && aberration <= 0f && scanlines <= 0f
 
+    /** The same pass with the parts that throw the picture about left out. */
+    internal fun calmed(reduced: Boolean): PostSpec =
+        if (!reduced) this else copy(glitch = false, aberration = 0f)
+
     public companion object {
         /** What most drawings get. */
         public val Default: PostSpec = PostSpec()
@@ -162,12 +166,12 @@ internal fun PostProcessedBox(
     Box(
         modifier.drawWithContent {
             val post = spec()
+            // The scene inside redraws on its own ticks; the shared analysis alone must not.
+            val current = Snapshot.withoutReadObservation { frame() }
             if (post.isOff) {
                 drawContent()
                 return@drawWithContent
             }
-            // The scene inside redraws on its own ticks; the shared analysis alone must not.
-            val current = Snapshot.withoutReadObservation { frame() }
             // The moment a drop lands the picture sticks for two frames, the way a signal catches,
             // and then it tears.
             if (!(post.glitch && hold.holding(current.dropPulse))) {
@@ -177,7 +181,10 @@ internal fun PostProcessedBox(
             val started = if (stats != null) TimeSource.Monotonic.markNow() else null
 
             val split = post.aberration * (0.25f + 0.75f * current.trebleRel + current.kick)
-            val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.5f * current.kick)).coerceIn(0f, 1f)
+            // The glow follows the level, and answers a hit only a little. A glow that pumps on
+            // every kick brightens the whole screen at the beat rate, which is the flash policy's
+            // own case: at 200 beats a minute that alone is more than three flashes a second.
+            val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.12f * current.kick)).coerceIn(0f, 1f)
             val tearing = post.glitch && current.dropPulse > 0.02f
             val combined = if (!tearing && (post.bloom > 0f || split > MIN_SPLIT)) {
                 effect.value.prepare(post, size.width, size.height, strength, if (split > MIN_SPLIT) split else 0f)

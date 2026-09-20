@@ -29,6 +29,8 @@ public fun KiteAudioViz(state: AudioVizState, modifier: Modifier = Modifier, pos
             switches = state.switches,
             stats = state.stats,
             quality = state.quality,
+            reducedMotion = state.reducedMotion,
+            visible = state.visible,
         )
     } else {
         VisualizerSurface(
@@ -41,6 +43,8 @@ public fun KiteAudioViz(state: AudioVizState, modifier: Modifier = Modifier, pos
             switches = state.switches,
             stats = state.stats,
             quality = state.quality,
+            reducedMotion = state.reducedMotion,
+            visible = state.visible,
         )
     }
 }

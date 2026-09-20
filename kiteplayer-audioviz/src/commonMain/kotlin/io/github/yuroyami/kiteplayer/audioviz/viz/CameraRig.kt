@@ -111,13 +111,14 @@ public class CameraRig(
         widen.advance(dt)
         if (boundary?.detection?.kind == AudioEventKind.Drop) widen.kick(boundary.detection.strength * WIDEN)
 
-        if (cuts && boundary != null && random.next() < 0.3f) {
+        if (cuts && boundary != null && random.next() < 0.3f * state.motionScale) {
             laneX = random.signed() * sway * 1.2f
             laneY = random.signed() * swayUp
         }
 
         val base = if (cruise >= 0f) cruise else restSpeed + (topSpeed - restSpeed) * state.drive
-        val speed = ((base + (surge.value + crouch) * shove) * speedScale).coerceAtLeast(0f)
+        val speed = ((base + (surge.value + crouch) * shove * state.motionScale) * speedScale)
+            .coerceAtLeast(0f)
         val moved = speed * dt
         travelled += moved
 

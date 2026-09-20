@@ -13,6 +13,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.Rng
+import io.github.yuroyami.kiteplayer.audioviz.viz.lightFor
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.PathShape
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.drawTravellers
@@ -162,7 +163,7 @@ internal const val LIT_BAND: Float = 0.1f
  *
  * The floor is what the picture shows when nothing is playing, so it stays small.
  */
-internal val VizRenderState.lift: Float get() = 0.06f + 0.94f * frame.energy
+internal val VizRenderState.lift: Float get() = lightFor(frame.energy) * lightScale
 
 /**
  * A speed factor that keeps a calm passage moving, at about a third of the speed of a busy one.

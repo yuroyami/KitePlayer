@@ -83,7 +83,7 @@ public class Camera2D(
             whip.kick(WHIP_KICK * boundary.detection.strength * if (random.next() < 0.5f) -1f else 1f)
         }
 
-        if (cuts && boundary != null && random.next() < CUT_CHANCE) {
+        if (cuts && boundary != null && random.next() < CUT_CHANCE * state.motionScale) {
             laneX = random.signed() * wander * 1.4f
             laneY = random.signed() * wander
             laneZoom = 1f + random.next() * 0.12f
@@ -93,15 +93,19 @@ public class Camera2D(
         drift += dt * state.paced(1.6f)
         bank += dt * state.paced(0.3f + 0.9f * frame.midRel)
         orbitPhase += dt * orbitRate * if (locked) frame.bpm / 240f else state.paced(0.5f)
-        val jitter = shake * frame.hatPulse
+        // A reduced-motion setting damps everything that throws the picture about and leaves the
+        // slow wander, so the drawing still breathes rather than freezing.
+        val scale = state.motionScale
+        val jitter = shake * frame.hatPulse * scale
 
-        panX = noise.layered(drift * 0.5f, 2) * wander + laneX + nudge.value * NUDGE +
+        panX = noise.layered(drift * 0.5f, 2) * wander + laneX * scale + nudge.value * NUDGE * scale +
             orbit * cos(orbitPhase * TAU) + random.signed() * jitter
-        panY = noise.layered(drift * 0.43f + 50f, 2) * wander * 0.8f + laneY +
+        panY = noise.layered(drift * 0.43f + 50f, 2) * wander * 0.8f + laneY * scale +
             orbit * 0.7f * sin(orbitPhase * TAU) + random.signed() * jitter
         val rest = 1f + 0.05f * frame.loudLong
-        zoom = (rest * laneZoom * (1f + punch * punchSpring.value.coerceIn(-0.5f, 1.5f))).coerceIn(minZoom, maxZoom)
-        angle = noise.at(bank + 90f) * roll + whip.value * WHIP
+        zoom = (rest * laneZoom * (1f + punch * scale * punchSpring.value.coerceIn(-0.5f, 1.5f)))
+            .coerceIn(minZoom, maxZoom)
+        angle = noise.at(bank + 90f) * roll + whip.value * WHIP * scale
     }
 
     /** Pushes the zoom the way a kick does, for a drawing's own hits. */

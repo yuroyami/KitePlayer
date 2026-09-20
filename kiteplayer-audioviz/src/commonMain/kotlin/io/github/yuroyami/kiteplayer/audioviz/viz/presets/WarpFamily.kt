@@ -1038,7 +1038,7 @@ internal class FlowField : Layered(
         pulse.kick(gestures.kick * 3f)
         pulse.advance(dt)
         warp.strength = amount.value * (if (doubleHold > 0f) 2f else 1f) * (1f + 0.5f * pulse.value.coerceIn(-0.5f, 1.5f))
-        scroll += dt * (0.1f * state.idle + 0.2f * state.drive) * if (scrollBack.on) -1f else 1f
+        scroll += state.stepSeconds * (0.1f * state.idle + 0.2f * state.drive) * if (scrollBack.on) -1f else 1f
         if (gestures.section) turnGoal += 0.5f
         turn.advance(turnGoal, dt)
         warp.params[0] = turn.value

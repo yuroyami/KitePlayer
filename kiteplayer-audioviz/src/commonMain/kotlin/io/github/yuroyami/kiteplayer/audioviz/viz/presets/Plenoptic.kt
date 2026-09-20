@@ -487,7 +487,7 @@ internal class Strands : Layered(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        travel += dt / (gestures.cycleSeconds * 2f)
+        travel += state.stepSeconds / (gestures.cycleSeconds * 2f)
         flow += dt * 0.6f * state.tempo
         rise.advance((state.frame.loudLong - 0.5f) * 0.1f, dt)
         if (gestures.kick > 0f) {

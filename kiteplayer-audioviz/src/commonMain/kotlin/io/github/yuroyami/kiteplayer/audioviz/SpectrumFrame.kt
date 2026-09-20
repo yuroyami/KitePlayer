@@ -158,6 +158,8 @@ public class SpectrumFrame internal constructor(
     public val programme: ProgrammeLoudness? = null,
     /** Fast/slow/peak energy heights with one shared bounded gain and saturation diagnostics. */
     public val drivers: EnergyDrivers? = null,
+    /** True while the playback clock stands still: the levels are kept, but nothing is heard. */
+    public val held: Boolean = false,
     /** Exact mono trace interval and trigger, null before a complete input window. */
     public val scopeMetadata: WaveformMetadata? = null,
     /** Exact paired trace interval and trigger, null before a complete input window. */
@@ -195,13 +197,23 @@ public class SpectrumFrame internal constructor(
     public val waveformGain: Float get() = sqrt(drivers?.powerGain ?: 1.0).toFloat()
 
     /**
+     * How much there is to hear, 0 to 1: zero while the clock is [held] or the audio is silent,
+     * one from a quiet pad upwards.
+     *
+     * Everything that travels moves by this. A paused player keeps its levels on screen, so the
+     * levels alone cannot tell a drawing to stand still, and a song's silent opening is silent
+     * whatever the section mood says.
+     */
+    public val audible: Float get() = if (held) 0f else ((level - AUDIBLE_FLOOR) / AUDIBLE_RAMP).coerceIn(0f, 1f)
+
+    /**
      * Rate shared by clocks and continuous motion; attacks remain distinct from section mood.
      *
-     * The floor is what keeps a silence from freezing. It is small on purpose: the standard asks
-     * that silence produce at most a fifth of the change music produces, and a generous floor is
-     * the fastest way to fail that, because it runs whether or not anything is playing.
+     * The floor is what keeps a quiet passage from freezing. It is small on purpose: the standard
+     * asks that a quiet passage produce at most a fifth of the change music produces. It runs only
+     * while something is [audible]: a paused player and a silence hold the picture still.
      */
-    public val motionRate: Float get() = 0.03f + 0.57f * mood + 0.25f * energy + 0.15f * kickPulse
+    public val motionRate: Float get() = audible * (0.03f + 0.57f * mood + 0.25f * energy + 0.15f * kickPulse)
 
     /**
      * The bar value that [fraction] of the bars are below, using the relative bars.
@@ -308,9 +320,9 @@ public class SpectrumFrame internal constructor(
      * The same moment with its pulse held, for a paused playback clock: no beat progression or
      * countdown, while the rate estimate stays readable as a diagnostic.
      */
-    internal fun withPulseHeld(): SpectrumFrame = if (rhythm?.usable != true && beatConfidence == 0f) this else
+    internal fun withPulseHeld(): SpectrumFrame = if (held) this else
         withEvents(beat, kick, snare, hat, onsetStrength, drop, events,
-            rhythm = rhythm?.held(), beatConfidence = 0f, beatInSeconds = -1f)
+            rhythm = rhythm?.held(), beatConfidence = 0f, beatInSeconds = -1f, held = true)
 
     /** Replace one-shot events without copying any sample buffers. */
     internal fun withEvents(
@@ -320,6 +332,7 @@ public class SpectrumFrame internal constructor(
         rhythm: RhythmEstimate? = this.rhythm,
         beatConfidence: Float = this.beatConfidence,
         beatInSeconds: Float = this.beatInSeconds,
+        held: Boolean = this.held,
     ): SpectrumFrame = SpectrumFrame(
         ptsMicros = ptsMicros,
         bands = bands,
@@ -375,6 +388,7 @@ public class SpectrumFrame internal constructor(
         power = power,
         programme = programme,
         drivers = drivers,
+        held = held,
         scopeMetadata = scopeMetadata,
         stereoScopeMetadata = stereoScopeMetadata,
         detections = detections,
@@ -414,6 +428,10 @@ public class SpectrumFrame internal constructor(
         private val EMPTY_CHROMA = FloatArray(12)
 
         /** What a visualiser draws before any audio has arrived. */
+        /** Below this height nothing is heard; a quiet pad reads about 0.10, well above the ramp. */
+        private const val AUDIBLE_FLOOR = 0.015f
+        private const val AUDIBLE_RAMP = 0.045f
+
         public fun silent(bandCount: Int, scopePoints: Int): SpectrumFrame {
             val empty = FloatArray(bandCount)
             return SpectrumFrame(

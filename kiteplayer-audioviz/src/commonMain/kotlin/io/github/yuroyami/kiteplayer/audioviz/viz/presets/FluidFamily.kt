@@ -224,7 +224,7 @@ internal class StableFluids : Layered(
     // The stirrer crosses the tank every two visual cycles and drags the water along its path.
     private fun stir(state: VizRenderState) {
         val dt = state.deltaSeconds
-        stirTravel += dt / (gestures.cycleSeconds * 2f)
+        stirTravel += state.stepSeconds / (gestures.cycleSeconds * 2f)
         if (gestures.section) stirPath.choose((stirPath.value + 1) % 3)
         val leg = stirTravel % 2f
         val along = if (leg < 1f) leg else 2f - leg
@@ -412,7 +412,7 @@ internal class ReactionDiffusion : Layered(
             feed.target = SPECIES[species * 2]
             kill.target = SPECIES[species * 2 + 1]
         }
-        seederTravel += dt / (gestures.cycleSeconds * 2f)
+        seederTravel += state.stepSeconds / (gestures.cycleSeconds * 2f)
         val leg = seederTravel % 2f
         seederX = 0.05f + 0.9f * (if (leg < 1f) leg else 2f - leg)
         seederY = 0.5f + 0.35f * sin(seederTravel * TAU * 0.5f)
@@ -427,7 +427,7 @@ internal class ReactionDiffusion : Layered(
         // the music does not have. The credit is dropped rather than banked when the pulse goes,
         // because a tracker that flickers in and out on a held note otherwise saves up enough for
         // one slide about once a second, and one slide moves the whole picture.
-        if (gestures.pulseUsable) slideCredit += dt * 8f / gestures.beatSeconds else slideCredit = 0f
+        if (gestures.pulseUsable) slideCredit += state.stepSeconds * 8f / gestures.beatSeconds else slideCredit = 0f
         while (slideCredit >= 1f) {
             slideCredit -= 1f
             slide(if (scrollLeft.on) -1 else 1)
@@ -637,7 +637,7 @@ internal class SmokeRise : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         val frame = state.frame
-        travel += dt * TAU / (gestures.cycleSeconds * 4f)
+        travel += state.stepSeconds * TAU / (gestures.cycleSeconds * 4f)
         for (index in 0 until 2) emitterX[index] = 0.5f + 0.4f * sin(travel + index * PI.toFloat())
         kit.place(1, emitterX[0], 0.92f)
         wind.advance(windGene.value * if (gestures.sections % 2 == 0) 1f else -1f, dt)

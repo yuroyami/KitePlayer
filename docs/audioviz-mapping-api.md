@@ -97,8 +97,14 @@ and still falls clearly from loud to quiet, 0.61 against 0.47 across 12 dB. The 
 what silence gets.
 
 A drawing's own paths run on `VizRenderState.idle` and `VizRenderState.tempo`. Both nearly stop in
-silence, at about a tenth of their speed under drums, so a still picture reads as settled rather
-than as a screen saver.
+a quiet passage, at about a tenth of their speed under drums, so a still picture reads as settled
+rather than as a screen saver.
+
+Nothing travels while the player is paused or the audio is silent. `SpectrumFrame.audible` is zero
+then: a held frame keeps its levels on screen but says so, and a level under the audible floor is
+silence whatever the section mood says. `motionRate`, `idle` and `VizRenderState.stepSeconds`
+follow it, and every camera, ground and scrolling field moves by `stepSeconds` rather than by the
+wall clock. Springs and fades keep settling on `deltaSeconds`, so a hit still lands and decays.
 
 The height curve has a top. A run whose power sits far above the loudness reference clips against
 it, and two runs 12 dB apart then read almost the same. The qualification suites therefore set the

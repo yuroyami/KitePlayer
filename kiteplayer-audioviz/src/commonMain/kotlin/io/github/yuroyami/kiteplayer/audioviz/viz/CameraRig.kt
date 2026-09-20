@@ -10,7 +10,8 @@ import kotlin.math.sin
 /**
  * One camera for every drawing that flies, so they all answer the music the same way.
  *
- * - Speed follows [VizRenderState.drive], from a slow drift in silence up to [topSpeed].
+ * - Speed follows [VizRenderState.drive], from a slow drift in a quiet passage up to [topSpeed].
+ *   It stands still while the player is paused or the audio is silent.
  * - A kick shoves it forward through a spring. When the queued audio shows a kick coming, the camera
  *   first sinks back a little, and the shove goes in early enough that the surge peaks on the kick.
  * - A snare nudges it sideways, a supported drop flings the lens wide for about two seconds, and it banks on noise
@@ -24,9 +25,10 @@ public class CameraRig(
     /** World units a second at full drive. */
     private val topSpeed: Float,
     /**
-     * World units a second in silence, so the picture drifts rather than stops.
+     * World units a second in a quiet passage, so the picture drifts rather than stops. Silence
+     * and a paused player still stop it: the flight moves by [VizRenderState.stepSeconds].
      *
-     * Keep it small. A rest speed near the top speed flies about as far with nothing playing as it
+     * Keep it small. A rest speed near the top speed flies about as far under a quiet passage as it
      * does under music, which is the clearest way to look unconnected to the song.
      */
     private val restSpeed: Float = topSpeed * 0.04f,
@@ -119,11 +121,13 @@ public class CameraRig(
         val base = if (cruise >= 0f) cruise else restSpeed + (topSpeed - restSpeed) * state.drive
         val speed = ((base + (surge.value + crouch) * shove * state.motionScale) * speedScale)
             .coerceAtLeast(0f)
-        val moved = speed * dt
+        // Audible seconds, not wall seconds: a paused player keeps its levels, and a silence
+        // has none, and the camera must stand still through both.
+        val moved = speed * state.stepSeconds
         travelled += moved
 
-        drift += dt * state.paced(1f)
-        banking += dt * (0.15f + 0.6f * frame.midRel)
+        drift += state.stepSeconds * state.paced(1f)
+        banking += state.stepSeconds * (0.15f + 0.6f * frame.midRel)
         nudgeX = sideways.value * sway
         eyeX = wander.at(drift * 0.35f) * sway + laneX + nudgeX
         eyeY = wander.at(drift * 0.29f + 40f) * swayUp + laneY

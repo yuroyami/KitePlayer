@@ -230,7 +230,7 @@ private class Flight(private val speed: Float) {
     private var travelled = 0f
 
     fun advance(state: VizRenderState): Float {
-        travelled += state.deltaSeconds * speed * (0.25f + state.drive)
+        travelled += state.stepSeconds * speed * (0.25f + state.drive)
         return travelled
     }
 
@@ -289,8 +289,8 @@ internal class Cathedral : ShaderPreset(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         // Fast enough to read as flight, and a new corridor at each supported section boundary.
-        travelled += dt * 18f * (0.25f + state.drive) * speed.value
-        stripes += dt * 20f * (0.4f + state.drive)
+        travelled += state.stepSeconds * 18f * (0.25f + state.drive) * speed.value
+        stripes += state.stepSeconds * 20f * (0.4f + state.drive)
         drift += dt * (0.6f * state.idle + 0.8f * state.frame.motionRate)
         if (gestures.section) corridor.choose((corridor.value + 1) % 3)
         if (gestures.drop) gather = 1f
@@ -521,7 +521,7 @@ internal class NeonCity : ShaderPreset(
 
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
-        travelled += dt * 4f * (0.25f + state.drive)
+        travelled += state.stepSeconds * 4f * (0.25f + state.drive)
         cars += dt * (6f * state.idle + 10f * state.drive) * traffic.value
         sway += dt * (0.4f * state.idle + 0.6f * state.frame.motionRate)
         // The street turns the other way every two phrases.
@@ -732,9 +732,9 @@ internal class Menger : ShaderPreset(
         if (gestures.section) folds.target = if (folds.value > 3f) 2f + random.next() else 3f + random.next()
         if (gestures.drop) rush = gestures.cycleSeconds
         rush -= dt
-        travelled += dt * 1.2f * (0.06f + 1.35f * state.drive) * if (rush > 0f) 3f else 1f
+        travelled += state.stepSeconds * 1.2f * (0.06f + 1.35f * state.drive) * if (rush > 0f) 3f else 1f
         turn += dt * (0.5f * state.idle + 0.7f * state.frame.motionRate)
-        if (rush > 0f) roll += dt * TAU / gestures.cycleSeconds
+        if (rush > 0f) roll += state.stepSeconds * TAU / gestures.cycleSeconds
         drums[0].hit(gestures.kick)
         drums[1].hit(gestures.snare)
         drums[2].hit(gestures.hat)
@@ -918,7 +918,7 @@ internal class Mandelbox : ShaderPreset(
         halo.hit(gestures.kick)
         halo.advance(0f, dt)
         lightTurn += dt * (0.8f * state.idle + 0.8f * state.frame.motionRate)
-        look += dt * TAU / 16f
+        look += state.stepSeconds * TAU / 16f
         sparkCredit += (dt * (30f + 70f * state.drive) + gestures.kick * 0.35f) * haloRate.value * 3f
         while (sparkCredit >= 1f) {
             sparkCredit -= 1f
@@ -1127,7 +1127,7 @@ internal class TerrainMarch : ShaderPreset(
         dawn.advance(if (dawnHold > 0f) 1f else 0f, dt)
         // The flock crosses the sky, turning back on the snare.
         if (gestures.snare > 0f) flockWay = -flockWay
-        flockTravel += dt / (gestures.cycleSeconds * 2f) * flockWay
+        flockTravel += state.stepSeconds / (gestures.cycleSeconds * 2f) * flockWay
         flock.targetX = -0.1f + 1.2f * wrap(flockTravel)
         flock.targetY = 0.18f + 0.06f * sin(flockTravel * TAU * 2f)
         flock.advance(dt, speed = 0.45f + 0.4f * state.drive)
@@ -1140,7 +1140,7 @@ internal class TerrainMarch : ShaderPreset(
         }
         kit.place(1, sumX / birds, sumY / birds)
         // Rain only in the loud stretches.
-        rainCredit += dt * 300f * rainGene.weight(1) * (state.frame.loudLong * 1.6f - 0.6f).coerceAtLeast(0f)
+        rainCredit += state.stepSeconds * 300f * rainGene.weight(1) * (state.frame.loudLong * 1.6f - 0.6f).coerceAtLeast(0f)
         while (rainCredit >= 1f) {
             rainCredit -= 1f
             rain.burst(random.next() * 1.1f - 0.05f, -0.02f, 1, 1.3f, 0.8f, 0.009f, 0.55f, Sprite.STREAK, 1.75f, 0.05f)
@@ -1636,11 +1636,11 @@ internal class AuroraField : ShaderPreset(
         val dt = state.deltaSeconds
         sway += dt * (0.8f * state.idle + 0.8f * state.frame.motionRate)
         for (layer in 0 until 4) scroll[layer] += 2f * dt / (gestures.cycleSeconds * BARS_PER_SCREEN[layer])
-        lean += dt * TAU / 16f
+        lean += state.stepSeconds * TAU / 16f
         moonOrbit.advance(state, gestures)
         if (gestures.kick > 0f) wave = 0f
         if (wave >= 0f) {
-            wave += dt / (gestures.beatSeconds * 2f)
+            wave += state.stepSeconds / (gestures.beatSeconds * 2f)
             if (wave > 1.2f) wave = -1f
         }
         if (gestures.drop) dropHold = gestures.cycleSeconds

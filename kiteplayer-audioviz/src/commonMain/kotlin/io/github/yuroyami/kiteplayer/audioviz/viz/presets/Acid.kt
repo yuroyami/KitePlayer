@@ -131,7 +131,7 @@ internal class Mandala : Layered(
         if (gestures.drop) dropLeft = gestures.cycleSeconds
         if (dropLeft > 0f) {
             dropLeft -= dt
-            extra += dt * TAU / gestures.cycleSeconds
+            extra += state.stepSeconds * TAU / gestures.cycleSeconds
         }
         flare.kick(gestures.kick * 7f)
         flare.advance(dt)
@@ -268,7 +268,7 @@ internal class Melt : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         warp.strength = flow.value
-        phase += dt * TAU / (gestures.cycleSeconds * 2f) * (0.12f + 1.7f * state.drive)
+        phase += state.stepSeconds * TAU / (gestures.cycleSeconds * 2f) * (0.12f + 1.7f * state.drive)
         if (gestures.section) paths.choose((paths.value + 1) % 3)
         if (gestures.drop) gather = 1f
         gather = (gather - dt / gestures.cycleSeconds).coerceAtLeast(0f)
@@ -688,7 +688,7 @@ internal class OilSlick : Layered(
         centre.centreY = stage.y
         centre.advance(state, gestures)
         kit.place(1, centre.x, centre.y)
-        sheen += dt * sheenRate.value
+        sheen += state.stepSeconds * sheenRate.value
         sheen += 0.2f * gestures.snare
         ripple += dt * 2f * state.tempo
         if (gestures.drop) rush = gestures.cycleSeconds

@@ -90,9 +90,11 @@ public class Camera2D(
         }
 
         val locked = frame.rhythm?.usable == true
-        drift += dt * state.paced(1.6f)
-        bank += dt * state.paced(0.3f + 0.9f * frame.midRel)
-        orbitPhase += dt * orbitRate * if (locked) frame.bpm / 240f else state.paced(0.5f)
+        // The wander and the orbit move by audible seconds, so a pause or a silence holds them.
+        val music = dt * frame.audible
+        drift += music * state.paced(1.6f)
+        bank += music * state.paced(0.3f + 0.9f * frame.midRel)
+        orbitPhase += music * orbitRate * if (locked) frame.bpm / 240f else state.paced(0.5f)
         // A reduced-motion setting damps everything that throws the picture about and leaves the
         // slow wander, so the drawing still breathes rather than freezing.
         val scale = state.motionScale

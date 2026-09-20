@@ -275,7 +275,7 @@ internal class Lane(var perBar: Float = 1f, var direction: Float = 1f) {
     private var travelled = 0f
 
     fun advance(state: VizRenderState, gestures: Gestures) {
-        travelled += direction * state.deltaSeconds * perBar / gestures.cycleSeconds * (0.1f + 1.7f * state.drive)
+        travelled += direction * state.stepSeconds * perBar / gestures.cycleSeconds * (0.1f + 1.7f * state.drive)
         offset = travelled - floor(travelled)
     }
 

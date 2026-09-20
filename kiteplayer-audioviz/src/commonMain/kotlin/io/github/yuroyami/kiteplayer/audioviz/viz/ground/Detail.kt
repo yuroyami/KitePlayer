@@ -40,7 +40,7 @@ public class Detail(
     internal fun DrawScope.draw(state: VizRenderState, alpha: Float = 1f) {
         if (state.timeSeconds != advancedAt) {
             advancedAt = state.timeSeconds
-            phase += state.deltaSeconds * (0.06f + state.paced(2f))
+            phase += state.stepSeconds * (0.06f + state.paced(2f))
         }
         if (strength <= 0f || !program.available || !canDrawRuntimeShaders()) return
         inputs.update(state)

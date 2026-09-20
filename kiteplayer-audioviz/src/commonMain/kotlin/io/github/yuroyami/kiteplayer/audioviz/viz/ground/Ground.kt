@@ -57,10 +57,11 @@ public class Ground(
         advancedAt = state.timeSeconds
         val dt = state.deltaSeconds
         val frame = state.frame
-        // A small floor keeps a ground alive in silence without making a silence look like music.
-        phase += dt * (0.06f + state.paced(1f))
+        // A small floor keeps a ground alive in a quiet passage; a pause or a silence holds it,
+        // because it moves by audible seconds.
+        phase += state.stepSeconds * (0.06f + state.paced(1f))
         val locked = frame.rhythm?.usable == true
-        travel += dt * if (locked) frame.bpm / 60f else state.paced(2f)
+        travel += state.stepSeconds * if (locked) frame.bpm / 60f else state.paced(2f)
         if (fade < 1f) fade = (fade + dt / fadeSeconds.coerceAtLeast(0.05f)).coerceAtMost(1f)
         if (fade >= 1f) leaving = null
     }

@@ -27,8 +27,9 @@ class CameraPresentationTimingTest {
                 val due = !delivered && at >= eventMicros
                 if (due) delivered = true
                 val events = if (due) arrayOf(DeliveredAudioEvent(event, 0L)) else emptyArray()
+                // Audible, or the flight would stand still and the surge would have no speed to peak.
                 val frame = SpectrumFrame(at, FloatArray(4), FloatArray(4), FloatArray(4),
-                    0f, 0f, 0f, 0f, 0f, 0f, events = AudioEventDelivery(Generation.Initial, 0L, at, events))
+                    0.5f, 0f, 0f, 0f, 0f, 0f, events = AudioEventDelivery(Generation.Initial, 0L, at, events))
                 val future = object : VizFuture {
                     override fun at(secondsAhead: Float): SpectrumFrame? = null
                     override val nextOnsetSeconds: Float = -1f

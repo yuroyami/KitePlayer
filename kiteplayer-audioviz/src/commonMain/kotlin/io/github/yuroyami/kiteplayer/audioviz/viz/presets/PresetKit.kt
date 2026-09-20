@@ -168,16 +168,18 @@ internal val VizRenderState.lift: Float get() = lightFor(frame.energy) * lightSc
 /**
  * A speed factor that keeps a calm passage moving, at about a third of the speed of a busy one.
  *
- * Silence gets about a tenth, which reads as settled rather than frozen. A larger floor than that
- * makes a still picture move nearly as much as a playing one.
+ * A quiet passage gets about a tenth, which reads as settled rather than frozen. A larger floor
+ * than that makes a still picture move nearly as much as a playing one. A pause or a silence gets
+ * nothing at all.
  */
-internal val VizRenderState.tempo: Float get() = 0.06f + 1.2f * frame.motionRate
+internal val VizRenderState.tempo: Float get() = frame.audible * (0.06f + 1.2f * frame.motionRate)
 
 /**
- * How fast a drawing's own paths should run: nearly still when nothing plays, full speed under
- * busy music. Anything that moves on its own rather than on the audio is multiplied by this.
+ * How fast a drawing's own paths should run: still while paused or silent, nearly still under a
+ * quiet passage, full speed under busy music. Anything that moves on its own rather than on the
+ * audio is multiplied by this.
  */
-internal val VizRenderState.idle: Float get() = 0.04f + 1.4f * frame.motionRate
+internal val VizRenderState.idle: Float get() = frame.audible * (0.04f + 1.4f * frame.motionRate)
 
 /**
  * A slow path the whole composition follows, one lap about every [seconds], so the picture eight

@@ -11,12 +11,12 @@ import kotlin.test.assertTrue
 /** The one camera the flying drawings share. */
 class CameraRigTest {
 
-    private fun frame(kick: Float = 0f, drop: Boolean = false): SpectrumFrame = SpectrumFrame(
+    private fun frame(kick: Float = 0f, drop: Boolean = false, level: Float = 0.5f): SpectrumFrame = SpectrumFrame(
         ptsMicros = 0L,
         bands = FloatArray(4),
         peaks = FloatArray(4),
         scope = FloatArray(4),
-        level = 0f,
+        level = level,
         bass = 0f,
         mid = 0f,
         treble = 0f,
@@ -31,6 +31,32 @@ class CameraRigTest {
             0L, 0L, arrayOf(DeliveredAudioEvent(AudioEvent(io.github.yuroyami.kiteplayer.Generation.Initial, 0L, 0L,
                 AudioDetection(AudioEventKind.Drop, 0L, 0L, 1f, 0.9f, 0.8f)), 0L))),
     )
+
+    /** A paused player keeps its levels on screen; a silence has none. The camera stands still in both. */
+    @Test
+    fun nothingFliesWhilePausedOrSilent() {
+        for ((name, still) in listOf("paused" to frame().withPulseHeld(), "silent" to frame(level = 0f))) {
+            val rig = CameraRig(topSpeed = 10f)
+            var time = 0f
+            rig.advance(VizRenderState(still, time, 1f / 60f, VizPalette.Classic, time))
+            val eyeX = rig.eyeX
+            val eyeY = rig.eyeY
+            repeat(240) {
+                time += 1f / 60f
+                rig.advance(VizRenderState(still, time, 1f / 60f, VizPalette.Classic, time))
+            }
+            assertTrue(rig.travelled == 0f, "$name: the camera flew ${rig.travelled} with nothing to hear")
+            assertTrue(rig.eyeX == eyeX && rig.eyeY == eyeY, "$name: the camera wandered from $eyeX, $eyeY to ${rig.eyeX}, ${rig.eyeY}")
+        }
+        // The same music, audible: it flies.
+        val rig = CameraRig(topSpeed = 10f)
+        var time = 0f
+        repeat(240) {
+            rig.advance(VizRenderState(frame(), time, 1f / 60f, VizPalette.Classic, time))
+            time += 1f / 60f
+        }
+        assertTrue(rig.travelled > 1f, "audible music should fly, travelled ${rig.travelled}")
+    }
 
     @Test
     fun withTheQueueTheSurgePeaksOnTheKick() {

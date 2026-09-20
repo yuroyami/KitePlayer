@@ -98,7 +98,7 @@ internal class Plasma : Layered(
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         flow += dt * 3.3f * state.tempo
-        travel += dt / (gestures.cycleSeconds * 2f) * if (backwards.on) -1f else 1f
+        travel += state.stepSeconds / (gestures.cycleSeconds * 2f) * if (backwards.on) -1f else 1f
         bend.kick(gestures.kick * 5f)
         bend.advance(dt)
         if (gestures.section) strips.choose((strips.value + 1) % 3)
@@ -431,11 +431,11 @@ internal class Aurora : Layered(
         val dt = state.deltaSeconds
         time += dt * state.tempo
         stage.advance(dt * state.idle)
-        for (layer in 0 until 3) scroll[layer] += dt / (gestures.cycleSeconds * BARS_PER_SCREEN[layer] / rates.value)
-        ridgeScroll += dt / (gestures.cycleSeconds * 8f)
+        for (layer in 0 until 3) scroll[layer] += state.stepSeconds / (gestures.cycleSeconds * BARS_PER_SCREEN[layer] / rates.value)
+        ridgeScroll += state.stepSeconds / (gestures.cycleSeconds * 8f)
         if (gestures.kick > 0f) wave = 0f
         if (wave >= 0f) {
-            wave += dt / (gestures.beatSeconds * 2f)
+            wave += state.stepSeconds / (gestures.beatSeconds * 2f)
             if (wave > 1.2f) wave = -1f
         }
         if (gestures.drop) dropHold = gestures.cycleSeconds
@@ -602,7 +602,7 @@ internal class Kaleidoscope : Layered(
         }
         if (fastLeft > 0f) {
             fastLeft -= dt
-            extra += dt * TAU / gestures.cycleSeconds
+            extra += state.stepSeconds * TAU / gestures.cycleSeconds
         }
         snap.kick(gestures.kick * 6f)
         snap.advance(dt)
@@ -739,10 +739,10 @@ internal class Tunnel : Layered(
         surge.advance(dt)
         if (gestures.drop) rushHold = gestures.cycleSeconds
         rushHold -= dt
-        travelled += dt * (0.2f * state.idle + 3.6f * state.drive + surge.value.coerceIn(0f, 3f)) * if (rushHold > 0f) 2f else 1f
+        travelled += state.stepSeconds * (0.2f * state.idle + 3.6f * state.drive + surge.value.coerceIn(0f, 3f)) * if (rushHold > 0f) 2f else 1f
         if (gestures.kick > 0f) sweepDepth = 0f
         if (sweepDepth >= 0f) {
-            sweepDepth += dt / gestures.beatSeconds
+            sweepDepth += state.stepSeconds / gestures.beatSeconds
             if (sweepDepth > 1f) sweepDepth = -1f
         }
         // Debris on the drums, and one piece a beat while a pulse is supported.

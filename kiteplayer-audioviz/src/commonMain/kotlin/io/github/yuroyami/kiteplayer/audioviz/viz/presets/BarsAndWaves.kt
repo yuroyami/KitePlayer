@@ -108,11 +108,11 @@ internal class Bars : Layered(
         val bands = frame.bands
         stage.advance(dt * state.idle)
         history.push(bands, state.timeSeconds)
-        scroll += 4f * dt / gestures.beatSeconds
+        scroll += 4f * state.stepSeconds / gestures.beatSeconds
         sweep.advance(gestures)
         if (frame.snare > 0f) snareSweep = 0f
         if (snareSweep >= 0f) {
-            snareSweep += dt / (gestures.cycleSeconds * 0.5f)
+            snareSweep += state.stepSeconds / (gestures.cycleSeconds * 0.5f)
             if (snareSweep >= 1f) snareSweep = -1f
         }
         if (gestures.drop) fanHold = gestures.cycleSeconds
@@ -368,7 +368,7 @@ internal class Equaliser : Layered(
         jump.advance(dt)
         if (frame.snare > 0f) sweepAt = 0f
         if (sweepAt >= 0f) {
-            sweepAt += dt / (gestures.cycleSeconds * 0.5f)
+            sweepAt += state.stepSeconds / (gestures.cycleSeconds * 0.5f)
             if (sweepAt >= 1f) sweepAt = -1f
         }
         if (gestures.drop) allLit = 1f
@@ -940,7 +940,7 @@ internal class FireStorm : Layered(
         }
         kit.follow(2, fireballs)
         kit.place(1, x, y)
-        ashCredit += dt * 5f
+        ashCredit += state.stepSeconds * 5f
         while (ashCredit >= 1f) {
             ashCredit -= 1f
             ash.sprinkle(1, 3f, 0.004f, 0.02f, Sprite.GLOW, drift = 0.02f)
@@ -949,7 +949,7 @@ internal class FireStorm : Layered(
 
     private fun advanceSmoke(state: VizRenderState) {
         val dt = state.deltaSeconds
-        smokeCredit += dt * 2.5f * smoke.weight(1)
+        smokeCredit += state.stepSeconds * 2.5f * smoke.weight(1)
         while (smokeCredit >= 1f) {
             smokeCredit -= 1f
             smokeX[nextSmoke] = random.next()

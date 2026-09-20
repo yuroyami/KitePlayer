@@ -166,7 +166,8 @@ internal fun lightFor(energy: Float): Float =
  *
  * Two clocks live here on purpose. [timeSeconds] is the wall clock and never stops. [musicTime]
  * only moves while there is something to listen to, so anything driven by it stands still in a
- * silence instead of drifting on alone.
+ * silence instead of drifting on alone. [stepSeconds] is the frame's share of that: the seconds
+ * to move a camera or a path by, and zero while the player is paused or the audio is silent.
  */
 @AudioVizAuthoringApi
 public class VizRenderState(
@@ -206,6 +207,13 @@ public class VizRenderState(
     public var lightScale: Float = 1f
         internal set
 
+    /**
+     * Seconds of audible time this frame, for anything that travels: [deltaSeconds] while there is
+     * something to hear, zero while the player is paused or the audio is silent. Springs and fades
+     * keep settling on [deltaSeconds]; a camera, a ground or a scrolling field moves by this.
+     */
+    public val stepSeconds: Float get() = deltaSeconds * frame.audible
+
     /** Calm at 0, lively at 1. */
     public val mood: Float get() = frame.mood
 
@@ -223,8 +231,12 @@ public class VizRenderState(
      * drum track. That is right for deciding how big to draw something, and wrong for deciding
      * how fast to fly: it would send the camera hurtling through a ballad. Mixing in [mood], which
      * knows how often things are happening, keeps a calm song calm while still letting it breathe.
+     *
+     * It is zero while nothing is audible. A paused player keeps its levels and its mood on
+     * screen, and a song's silent opening carries the section's mood, so the parts alone would
+     * keep pushing; the music pushes only while it is heard.
      */
-    public val drive: Float get() = (0.30f * frame.energy + 0.35f * frame.mood +
+    public val drive: Float get() = frame.audible * (0.30f * frame.energy + 0.35f * frame.mood +
         0.20f * frame.density + 0.15f * frame.kickPulse).coerceIn(0f, 1f)
 
     /** Weight and attack are separate from section mood: a kick moves the picture NOW. */

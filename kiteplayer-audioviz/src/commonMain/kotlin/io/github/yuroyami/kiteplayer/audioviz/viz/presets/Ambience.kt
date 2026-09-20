@@ -758,7 +758,7 @@ internal class Wave : Layered(
         val dt = state.deltaSeconds
         stage.advance(dt * state.idle)
         val way = if (backwards.on) -1f else 1f
-        travel += dt / (gestures.cycleSeconds * 2f) * way
+        travel += state.stepSeconds / (gestures.cycleSeconds * 2f) * way
         ripple += dt * 1.2f * state.tempo
         lean.kick(gestures.snare * 2f)
         lean.advance(dt)

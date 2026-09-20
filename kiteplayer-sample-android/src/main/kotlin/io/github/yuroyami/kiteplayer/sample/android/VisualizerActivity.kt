@@ -12,6 +12,8 @@ import io.github.yuroyami.kiteplayer.KitePlayerPlatform
 import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
 import io.github.yuroyami.kiteplayer.sample.shared.SampleButton
 import io.github.yuroyami.kiteplayer.sample.shared.SampleMedia
+import io.github.yuroyami.kiteplayer.sample.shared.SONG_TYPES
+import io.github.yuroyami.kiteplayer.sample.shared.SampleTrack
 import io.github.yuroyami.kiteplayer.sample.shared.SampleScreen
 import io.github.yuroyami.kiteplayer.session.KitePlayerMediaSession
 import io.github.yuroyami.kiteplayer.session.attachBackgroundHandling
@@ -51,8 +53,17 @@ internal class VisualizerActivity : ComponentActivity() {
         }
         // A scanned song map outlives the process here, so a song played before is mapped at once.
         val songMaps = SongMapStore.inDirectory(File(cacheDir, "songmaps").absolutePath)
-        val song = assets.list("")?.firstOrNull { name -> SONG_TYPES.any { name.endsWith(".$it", ignoreCase = true) } }
-        val media = SampleMedia(materialise(song ?: CLIP).absolutePath, songMissing = song == null)
+        // Every song in the APK, copied out once each. The player opens a path, so they all have
+        // to land in the app's own files; a song already there is left alone.
+        val songs = assets.list("").orEmpty()
+            .filter { name -> SONG_TYPES.any { name.endsWith(".$it", ignoreCase = true) } }
+            .sorted()
+        val media = if (songs.isEmpty()) {
+            SampleMedia(listOf(SampleTrack(materialise(CLIP).absolutePath, "Test clip")), songMissing = true)
+        } else {
+            SampleMedia(songs.map { SampleTrack(materialise(it).absolutePath, it.substringBeforeLast('.')) },
+                songMissing = false)
+        }
         setContent {
             if (player == null) {
                 BasicText(
@@ -95,6 +106,5 @@ internal class VisualizerActivity : ComponentActivity() {
 
     private companion object {
         const val CLIP = "sync1080p30.mp4"
-        val SONG_TYPES = listOf("mp3", "m4a", "flac", "ogg", "wav", "aac")
     }
 }

@@ -59,10 +59,13 @@ import kotlinx.coroutines.delay
 import kotlin.time.Duration
 
 /**
- * The sample's front screen: [media] playing on repeat, drawn by the audio visualiser when it has no
- * picture and shown as video when it has one. The drawing browser, the settings and the transport sit
- * over it, and the director chooses the drawings until someone picks one by hand. The file's
- * copyright tag shows as a credit. When the song file is missing, a note says so.
+ * The sample's front screen: one of [media]'s tracks playing on repeat, drawn by the audio
+ * visualiser when it has no picture and shown as video when it has one. It opens on a track picked
+ * at random, and the song buttons step through the rest.
+ *
+ * The drawing browser, the settings and the transport sit over it. The director chooses the
+ * drawings until someone picks one by hand, with the arrows or by dragging across the picture. The
+ * file's copyright tag shows as a credit. When no song file was found, a note says so.
  *
  * [videoPath] is how media with a picture is drawn. The controls sit over it, so a platform whose
  * native view hides Compose content needs [KiteRenderPath.ComposeCanvas]. [extra] adds a host's own
@@ -81,19 +84,36 @@ fun SampleScreen(
     val viz = rememberAudioVizState(player, songMapStore = songMapStore)
     val snapshot by player.state.collectAsState()
     var panel by remember { mutableStateOf(Panel.None) }
-    // The director changes the drawing without telling Compose, so the name is read again twice a second.
-    val showing by produceState(viz.showing.name, viz) {
+    // A different song each launch, so repeated runs do not always show the same one first.
+    var track by remember(media) { mutableStateOf(media.tracks.indices.random()) }
+    // The director changes the drawing without telling Compose, so its name is read again twice a
+    // second. A drawing picked by hand is Compose state already and shows at once.
+    val directedName by produceState(viz.showing.name, viz) {
         while (true) {
             value = viz.showing.name
             delay(500)
         }
     }
+    val showing = if (viz.directed) directedName else viz.showing.name
+
+    /** Shows the drawing [delta] along the catalogue, and stops the director taking it back. */
+    val stepDrawing = rememberUpdatedState<(Int) -> Unit> { delta ->
+        val list = viz.catalogue
+        val at = list.indexOfFirst { it.name == viz.showing.name }.coerceAtLeast(0)
+        viz.directed = false
+        viz.drawing = list[(at + delta).mod(list.size)]
+    }.value
+
+    val stepTrack: (Int) -> Unit = { delta -> track = (track + delta).mod(media.tracks.size) }
 
     LaunchedEffect(player, media) {
         viz.drawing = viz.catalogue.firstOrNull { it.name == FIRST_DRAWING } ?: viz.catalogue.first()
         viz.directed = true
         player.setLoop(LoopMode.One)
-        player.open(MediaItem(media.path))
+    }
+
+    LaunchedEffect(player, media, track) {
+        player.open(MediaItem(media.tracks[track].path))
         player.play()
     }
 
@@ -107,6 +127,14 @@ fun SampleScreen(
         }
 
         Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+            // Under everything else, so the bars keep their own taps: drag across the picture to
+            // change the drawing without opening the browser.
+            if (panel == Panel.None) {
+                SwipeArea(
+                    Modifier.fillMaxSize().padding(top = bar, bottom = BAR_HEIGHT),
+                    onStep = stepDrawing,
+                )
+            }
             when (panel) {
                 Panel.Browser -> AudioVizBrowser(
                     viz,
@@ -123,15 +151,18 @@ fun SampleScreen(
             val credit = snapshot.metadata["copyright"]
             if (credit != null && panel == Panel.None) Credit(credit, Modifier.align(Alignment.BottomStart))
             TopBar(
-                title = snapshot.metadata["title"] ?: media.path.substringAfterLast('/').substringBeforeLast('.'),
+                title = snapshot.metadata["title"] ?: media.tracks[track].label,
                 detail = listOfNotNull(snapshot.metadata["artist"], showing.takeIf { snapshot.isAudioOnly })
                     .joinToString("  ·  "),
                 height = bar,
                 narrow = narrow,
                 panel = panel,
                 directed = viz.directed,
+                tracks = media.tracks.size,
                 onPanel = { panel = if (panel == it) Panel.None else it },
                 onDirector = { viz.directed = !viz.directed },
+                onDrawing = stepDrawing,
+                onTrack = stepTrack,
                 extra = extra,
             )
             if (panel != Panel.Browser) Transport(player, snapshot.duration)
@@ -140,6 +171,30 @@ fun SampleScreen(
 }
 
 private enum class Panel { None, Browser, Settings }
+
+/**
+ * A drag across the picture, left for the drawing after and right for the drawing before.
+ *
+ * It answers the whole drag rather than each step of it, so one long sweep moves one drawing. A
+ * drag shorter than [SWIPE_MINIMUM] is somebody missing a button, not a swipe.
+ */
+@Composable
+private fun SwipeArea(modifier: Modifier, onStep: (Int) -> Unit) {
+    val step by rememberUpdatedState(onStep)
+    Box(
+        modifier.pointerInput(Unit) {
+            var travelled = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { travelled = 0f },
+                onDragEnd = {
+                    val minimum = SWIPE_MINIMUM.toPx()
+                    if (travelled <= -minimum) step(1) else if (travelled >= minimum) step(-1)
+                },
+                onHorizontalDrag = { _, amount -> travelled += amount },
+            )
+        },
+    )
+}
 
 /** The title and the buttons: one row when there is room, and on a narrow screen the buttons below the title. */
 @Composable
@@ -150,14 +205,24 @@ private fun TopBar(
     narrow: Boolean,
     panel: Panel,
     directed: Boolean,
+    tracks: Int,
     onPanel: (Panel) -> Unit,
     onDirector: () -> Unit,
+    onDrawing: (Int) -> Unit,
+    onTrack: (Int) -> Unit,
     extra: @Composable RowScope.() -> Unit,
 ) {
     val buttons: @Composable RowScope.() -> Unit = {
+        // The two most used controls come first: the drawing before and the drawing after.
+        SampleButton(PREVIOUS) { onDrawing(-1) }
+        SampleButton(NEXT) { onDrawing(1) }
         SampleButton("Drawings", on = panel == Panel.Browser) { onPanel(Panel.Browser) }
         SampleButton("Settings", on = panel == Panel.Settings) { onPanel(Panel.Settings) }
         SampleButton(if (directed) "Director on" else "Director off", on = directed, onClick = onDirector)
+        if (tracks > 1) {
+            SampleButton("Song $PREVIOUS") { onTrack(-1) }
+            SampleButton("Song $NEXT") { onTrack(1) }
+        }
         extra()
     }
     Column(
@@ -270,6 +335,13 @@ private fun clock(time: Duration): String {
 
 /** The drawing the sample opens on, before the director takes over. */
 private const val FIRST_DRAWING = "Acid Tunnel"
+
+/** Single angle quotation marks, which every platform font here carries. */
+private const val PREVIOUS = "\u2039"
+private const val NEXT = "\u203A"
+
+/** A drag shorter than this is a missed tap, not a swipe. */
+private val SWIPE_MINIMUM = 48.dp
 
 private val BAR_HEIGHT = 52.dp
 

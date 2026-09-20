@@ -1,4 +1,5 @@
 import io.github.yuroyami.kiteplayer.buildtools.PrepareAndroidSampleMediaTask
+import io.github.yuroyami.kiteplayer.buildtools.PrepareAndroidSampleSongsTask
 import java.util.Properties
 
 /*
@@ -113,24 +114,31 @@ val prepareSampleMedia = tasks.register<PrepareAndroidSampleMediaTask>("prepareA
     outputDirectory.set(layout.buildDirectory.dir("generated/s1cAssets"))
 }
 
-// The song the visualiser opens on: -Pkiteplayer.sample.song, else kiteplayer.sample.song in the root
-// local.properties, else the committed one in kiteplayer-sample-shared/media.
-val sampleSong: String = providers.gradleProperty("kiteplayer.sample.song")
+// The songs the visualiser offers: -Pkiteplayer.sample.song names one and only one, else
+// kiteplayer.sample.song in the root local.properties, else every song committed in
+// kiteplayer-sample-shared/media. The screen steps through whatever ends up here.
+val songTypes = listOf("mp3", "m4a", "flac", "ogg", "wav", "aac")
+val namedSong: String? = providers.gradleProperty("kiteplayer.sample.song")
     .orElse(
         providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText.map { text ->
             Properties().apply { load(text.reader()) }.getProperty("kiteplayer.sample.song").orEmpty()
         },
     )
     .orNull?.takeIf { it.isNotBlank() }
-    ?: rootProject.layout.projectDirectory.file("kiteplayer-sample-shared/media/bad-cat.mp3").asFile.absolutePath
 
-// The song goes in beside the clip, under its own name, and the visualiser screen opens it.
-val prepareSampleSong = tasks.register<PrepareAndroidSampleMediaTask>("prepareAndroidSampleSong") {
-    sourceMedia.set(file(sampleSong))
+val sampleSongs: List<File> = namedSong?.let { listOf(file(it)) }
+    ?: rootProject.layout.projectDirectory.dir("kiteplayer-sample-shared/media").asFile
+        .listFiles().orEmpty()
+        .filter { candidate -> candidate.isFile && songTypes.any { candidate.name.endsWith(".$it", true) } }
+        .sortedBy { it.name }
+
+// The songs go in beside the clip, under their own names, and the visualiser screen opens them.
+val prepareSampleSong = tasks.register<PrepareAndroidSampleSongsTask>("prepareAndroidSampleSong") {
+    sourceSongs.setFrom(sampleSongs)
     outputDirectory.set(layout.buildDirectory.dir("generated/songAssets"))
 }
 
 androidComponents.onVariants { variant ->
     variant.sources.assets?.addGeneratedSourceDirectory(prepareSampleMedia, PrepareAndroidSampleMediaTask::outputDirectory)
-    variant.sources.assets?.addGeneratedSourceDirectory(prepareSampleSong, PrepareAndroidSampleMediaTask::outputDirectory)
+    variant.sources.assets?.addGeneratedSourceDirectory(prepareSampleSong, PrepareAndroidSampleSongsTask::outputDirectory)
 }

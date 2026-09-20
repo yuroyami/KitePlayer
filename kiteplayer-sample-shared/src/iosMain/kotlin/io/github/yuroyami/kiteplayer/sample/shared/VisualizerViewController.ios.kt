@@ -48,9 +48,13 @@ fun visualizerViewController(): UIViewController = ComposeUIViewController {
     }
     val media = remember {
         val bundle = NSBundle.mainBundle
+        // sample-song, then sample-song-2 and up, so a build may carry several.
+        val names = listOf("sample-song") + (2..9).map { "sample-song-$it" }
         sampleMedia(
             requested = null,
-            song = SONG_TYPES.firstNotNullOfOrNull { bundle.pathForResource("sample-song", ofType = it) },
+            songs = names.mapNotNull { name ->
+                SONG_TYPES.firstNotNullOfOrNull { bundle.pathForResource(name, ofType = it) }
+            },
             clip = bundle.pathForResource("sync1080p30", ofType = "mp4").orEmpty(),
         ) { NSFileManager.defaultManager.fileExistsAtPath(it) }
     }
@@ -62,4 +66,3 @@ fun visualizerViewController(): UIViewController = ComposeUIViewController {
     SampleScreen(player, media, songMapStore = songMaps)
 }
 
-private val SONG_TYPES = listOf("mp3", "m4a", "flac", "ogg", "wav", "aac")

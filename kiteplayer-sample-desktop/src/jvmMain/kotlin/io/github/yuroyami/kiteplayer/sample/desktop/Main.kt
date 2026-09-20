@@ -9,6 +9,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import io.github.yuroyami.kiteplayer.sample.shared.SONG_TYPES
 import io.github.yuroyami.kiteplayer.sample.shared.sampleMedia
 import java.io.File
 
@@ -21,8 +22,8 @@ internal data class SampleOptions(
     val media: String,
     /** The media asked for by argument or property, or null. */
     val requested: String?,
-    /** The song the build passes in as `kiteplayer.sample.song`, or null. */
-    val song: String?,
+    /** The song `kiteplayer.sample.song` names, else every song in the shared media directory. */
+    val songs: List<String>,
     /** True shows the video screen with its modifier toggle instead of the visualiser. */
     val classic: Boolean,
     /** True runs the upload measurement and exits when it is written. */
@@ -46,7 +47,7 @@ internal data class SampleOptions(
             return SampleOptions(
                 media = File(path).absolutePath,
                 requested = requested?.let { File(it).absolutePath },
-                song = property("kiteplayer.sample.song"),
+                songs = property("kiteplayer.sample.song")?.let(::listOf) ?: sharedSongs(),
                 classic = measure || flags.contains("--modifiers"),
                 measure = measure,
                 frames = (flagValue(flags, "--frames") ?: property("kiteplayer.sample.frames"))
@@ -56,6 +57,17 @@ internal data class SampleOptions(
                 report = reportPath?.let(::File),
             )
         }
+
+        /**
+         * Every song committed beside the sample, in name order.
+         *
+         * The desktop sample runs from the repository, so the songs are read straight from the
+         * shared module rather than copied anywhere. An empty list means the clip plays.
+         */
+        private fun sharedSongs(): List<String> = File("kiteplayer-sample-shared/media").listFiles().orEmpty()
+            .filter { file -> file.isFile && SONG_TYPES.any { file.name.endsWith(".$it", ignoreCase = true) } }
+            .sortedBy { it.name }
+            .map { it.absolutePath }
 
         /** An empty value still counts as set, so `-Pkiteplayer.sample.measure` alone works. */
         private fun property(key: String): String? =
@@ -95,7 +107,7 @@ fun main(args: Array<String>) {
             if (options.classic) {
                 DesktopSample(options, onMeasurementDone = ::exitApplication)
             } else {
-                VisualizerSample(sampleMedia(options.requested, options.song, options.media) { File(it).isFile })
+                VisualizerSample(sampleMedia(options.requested, options.songs, options.media) { File(it).isFile })
             }
         }
     }

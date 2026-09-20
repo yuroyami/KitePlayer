@@ -1,5 +1,8 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import io.github.yuroyami.kiteplayer.audioviz.SpectrumFrame
 import io.github.yuroyami.kiteplayer.audioviz.AudioEventKind
 
@@ -69,8 +72,8 @@ public class VizDirector(
     private var random = seed
     private val recent = ArrayDeque<String>()
 
-    /** What is on screen. */
-    public var current: Visualization = catalogue.first()
+    /** What is on screen. Snapshot state, so a control that names the drawing follows the director. */
+    public var current: Visualization by mutableStateOf(catalogue.first())
         private set
 
     /** What is arriving, while a change is under way. */

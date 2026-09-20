@@ -191,7 +191,7 @@ class MappingQualificationTest {
     private fun eachDrawing(work: (Int, Visualization) -> Triple<String, String, List<String>>):
         List<Triple<String, String, List<String>>> {
         val catalogue = VizCatalog.create()
-        val chosen = System.getenv("AUDIOVIZ_SURVEY")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+        val chosen = System.getenv("AUDIOVIZ_SURVEY")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()?.takeIf { it.isNotEmpty() }
         val indices = catalogue.indices.filter { chosen == null || catalogue[it].name in chosen }
         return RenderHarness.inParallel(indices) { index ->
             val drawing = DriverProbe.drawing(index)

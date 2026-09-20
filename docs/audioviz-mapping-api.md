@@ -88,8 +88,13 @@ give. `VizRenderState.drive` says how hard the music pushes, which is speed.
 `lift` follows `frame.energy`, the height of this moment under the shared gain. It does not follow
 `drive`, because `drive` mixes in mood and density, and those say how busy the music is rather
 than how loud. With the light on `drive`, a passage 12 dB down still read most of the way up: the
-shared light fell only from 0.52 to 0.45, and every drawing that used it hid the change. On the
-level, the same pair reads 0.60 and 0.39.
+shared light fell only from 0.52 to 0.45, and every drawing that used it hid the change.
+
+The curve from level to light is not straight. Straight, a calm pad reading 0.10 was drawn at 0.15
+of full light, which put several drawings under the level a viewer can see at all. Quieter has to
+mean quieter, not invisible. The light is `0.06 + 0.94 * energy^0.6`, which draws that pad at 0.25
+and still falls clearly from loud to quiet, 0.61 against 0.47 across 12 dB. The floor of 0.06 is
+what silence gets.
 
 A drawing's own paths run on `VizRenderState.idle` and `VizRenderState.tempo`. Both nearly stop in
 silence, at about a tenth of their speed under drums, so a still picture reads as settled rather
@@ -243,6 +248,16 @@ and fails this one.
 
 **Source lint.** `MappingLintTest` refuses ranks within a frame and automatic ranges. It no longer
 asks for them.
+
+**Held-out music.** `CorpusScoreTest` scores the detectors against annotated clips and prints
+onset precision, recall and F1 at 70 ms, the signed median of the onset times, beat F1, and how
+long the tempo took to become usable. It skips when no clips are present, and it never fails on
+the numbers: a threshold tuned until the run looks good turns held-out music into development
+music, which is the one thing the standard says not to do. Clips go in
+`kiteplayer-audioviz/corpus` or wherever AUDIOVIZ_CORPUS points, as `name.wav` with
+`name.beats.txt`, `name.onsets.txt` and a `name.notes.txt` that records where the clip came from,
+its licence, who annotated it and which category it belongs to. Downbeats are not scored, because
+nothing here infers a downbeat.
 
 These checks do not establish that a viewer sees the music cause the picture. The standard's
 listening and viewing comparison, with aligned, shifted and unrelated audio of similar loudness,

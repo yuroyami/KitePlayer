@@ -43,20 +43,41 @@ not a flash, and passes untouched. Without that rule a guard that is already hol
 slow fade halfway, which is worse than the flash it was built to prevent.
 
 **What checks the rest.** `FlashCaptureTest` renders every drawing through the same surface, with
-the finishing pass on, and runs the composed frames through the same counter. The fixture is 200
-beats a minute with hits on the half beat, plus the ordinary drum loop. `FlashGuardTest` fixes the
-counter itself against known pass and fail signals.
+the finishing pass on, and counts the flashes in the composed frames. The fixture is 200 beats a
+minute with hits on the half beat, plus the ordinary drum loop, and each drawing is rendered again
+with reduced motion on, which must leave no flash at all. `FlashGuardTest` fixes the runtime
+guard's own counter against known pass and fail signals.
 
-**What it cannot see, measured.** Seventeen of the seventy-eight drawings pulse the whole picture
-on every beat hard enough to cross the policy at 200 beats a minute: the capture test counts four
-to six flashes in their busiest second, against a limit of three. Their pulse is drawn into the
-picture rather than taken from the shared light, so the guard cannot see it without reading the
-finished frame back, which the standard tells us not to do in the live path. The capture test
-prints the largest swing of each drawing as well as the count, and the two together say which is
-which: Stable Fluids swings 84 percent of the range and flashes none, because it swings slowly,
-while Hex Shaft swings 56 percent at beat rate and flashes six times. Bringing those seventeen
-inside the policy means reducing how much of the whole picture their beat brightens, which changes
-how they look, so it is a decision for the owner.
+It counts by area, the way a flash analyser does. Each frame is compared with the picture 0.3
+seconds earlier, which is the time a flash takes at the policy's own rate. Where at least a tenth
+of the picture has moved by at least 0.10 in the same direction, that is a leg, and a pair of
+opposing legs is one flash. A tenth of the picture is well below the quarter of a ten degree field
+that WCAG would excuse, which is what refusing the area exception means in practice.
+
+`FlashCounterTest` is what makes that number worth anything. It feeds the counter pictures whose
+answer is known: whole screen alternations at six, three, two and one a second, an alternation
+where both states are too bright to count, one whose step is too small, one over a twentieth of
+the screen and one over a fifth, a fade over four seconds, and a still picture. The counter has to
+report the rate it was given, and nothing at all for the rest.
+
+Three earlier versions of this counter each gave a different verdict on the catalogue, and none of
+them had been measured against anything. The first averaged the whole frame, which reads a drawing
+whose bars grow on the beat as a flash and called seventeen drawings unsafe. The second compared
+each frame with the last turning point, which cannot tell a jump after a long rest from a slow
+drift, and called sixty-five unsafe. Brightness changes were made against the first reading and
+then taken back out. Calibrate the counter before trusting it about a drawing.
+
+**What it cannot see, measured.** A drawing draws its own bright marks, and the guard reads only
+the shared light, so a picture that flashes through what it draws passes the guard. Seven of the
+seventy-eight cross the policy in the captured output: Pipe at eight flashes in its busiest second,
+then Hex Shaft, Ocean Mist, Wormhole, Ring Flight and Cathedral at five or six, and Pulse at four,
+against a limit of three. Four of them fly down a tunnel, where the walls brighten together as the
+camera surges on the beat. Damping the kick's light rib, which was the obvious suspect, moved Pipe
+from eight to seven and nothing else, so it was taken back out: bringing these seven inside the
+policy is a change to how they look, and the capture test is the tool to check any such change.
+
+The test also prints the widest area that swung together for every drawing, so one that is close to
+the limit is visible before it crosses it.
 
 **Also not covered.** A change of drawing composes two scenes, and the capture test renders one at
 a time. `StrobeCut` alternates the two scenes about four times inside one change, so it is out of
@@ -69,6 +90,12 @@ that decision.
 the picture about: the camera's punch, shake, roll and cuts, the trail's swim, and the flash limit
 drops to none at all. Every change of drawing becomes a plain fade. The camera still wanders
 slowly, because a still picture with a moving spectrum in it reads as broken rather than as calm.
+
+It also holds back the hits themselves, to about a third of their strength. Without that the
+setting kept none of its promise about flashes: a drawing flashes mostly through what it draws on a
+hit, not through the light it is given, and the captured output with reduced motion on was
+identical to the output without it. The hits are the one lever that reaches every drawing without
+each of them knowing about the setting.
 
 `AudioVizState.visible` draws the background alone. The analysis keeps running and the player keeps
 playing, so a viewer who turns the picture off keeps the music.

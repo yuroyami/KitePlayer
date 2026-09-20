@@ -114,6 +114,7 @@ private fun VisualizerCanvas(
     flashesPerSecond: Int = FLASHES_PER_SECOND,
 ) {
     val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
+    val calmReading = remember { CalmReading() }
     val buffers = remember { FeedbackBuffers() }
     val fade = remember { PaletteFade() }
     var timeSeconds by remember { mutableFloatStateOf(0f) }
@@ -148,7 +149,8 @@ private fun VisualizerCanvas(
     Canvas(modifier) {
         // Redraws follow this canvas's own ticks. Reading the shared analysis without observing it
         // keeps a throttled preview from redrawing, and advancing its drawing, on every change.
-        val current = Snapshot.withoutReadObservation { frame() }
+        val heard = Snapshot.withoutReadObservation { frame() }
+        val current = calmReading.of(heard, motionScale, deltaSeconds)
         // The palette asked for, faded in over eight usable pulses or three seconds, leaning towards the key.
         val shown = fade.advance(palette, current, deltaSeconds)
         val state = VizRenderState(
@@ -568,6 +570,7 @@ private fun DirectedCanvas(
     flashesPerSecond: Int = FLASHES_PER_SECOND,
 ) {
     val guard = remember(flashesPerSecond) { FlashGuard(flashesPerSecond) }
+    val calmReading = remember { CalmReading() }
     val stage = remember { Stage() }
     val blend = remember { TransitionBlend() }
     val fade = remember { PaletteFade() }
@@ -591,7 +594,7 @@ private fun DirectedCanvas(
     }
 
     Canvas(modifier) {
-        val current = frame()
+        val current = calmReading.of(frame(), motionScale, deltaSeconds)
         val shown = fade.advance(palette, current, deltaSeconds)
         val state = VizRenderState(current, timeSeconds, deltaSeconds, shown, musicTime, future)
         state.motionScale = motionScale
@@ -748,6 +751,38 @@ private inline fun DrawScope.withAlpha(alpha: Float, block: DrawScope.() -> Unit
 @AudioVizAuthoringApi
 public fun DrawScope.drawVisualization(visualization: Visualization, state: VizRenderState) {
     composeFrame(visualization, state, null, null)
+}
+
+/**
+ * The reading a drawing sees, slowed down while a reduced-motion setting is on.
+ *
+ * A drawing flashes mostly through what it draws from the spectrum: bars that jump on the beat
+ * change a tenth of the picture by more than the flash step, whatever the camera and the hits are
+ * doing. Holding the reading back is the only lever that reaches all of that, and the standard asks
+ * for a restrained spectrum rather than none.
+ *
+ * At full motion the reading passes through untouched.
+ */
+private class CalmReading {
+    private var last: SpectrumFrame? = null
+
+    fun of(heard: SpectrumFrame, motionScale: Float, deltaSeconds: Float): SpectrumFrame {
+        if (motionScale >= 1f) {
+            last = null
+            return heard
+        }
+        val before = last
+        val settled = if (before == null || !before.hasTimestamp || !heard.hasTimestamp ||
+            before.generation != heard.generation || before.analysisRevision != heard.analysisRevision
+        ) {
+            heard
+        } else {
+            // Half a second to cross, which is slower than any flash the policy counts.
+            before.blend(heard, (deltaSeconds / 0.5f).coerceIn(0f, 1f))
+        }
+        last = settled
+        return settled
+    }
 }
 
 /**

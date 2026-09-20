@@ -11,6 +11,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.ground.Ground
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Genes
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.WarpSpec
 import kotlin.math.log2
+import kotlin.math.pow
 
 /** The kinds of drawing, kept apart because they feel different to watch. */
 public enum class VizFamily {
@@ -150,10 +151,15 @@ public enum class EchoBlend { Over, Add }
 /**
  * How much light a picture gives at this level, from a floor in silence to all of it when loud.
  *
- * Every drawing's brightness follows this, and the finishing pass watches it for the flash guard,
- * so it lives here rather than in one family of drawings.
+ * Every drawing's brightness follows this, so it lives here rather than in one family of drawings.
+ *
+ * The curve is not straight. Straight, a calm pad reading 0.10 was drawn at 0.15 of full light,
+ * which put several drawings under the level a viewer can see at all: quieter has to mean quieter,
+ * not invisible. The power of 0.6 lifts that pad to 0.25 and still leaves a clear fall from loud to
+ * quiet, 0.61 against 0.47 across 12 dB, while silence keeps the floor. *Judgement.*
  */
-internal fun lightFor(energy: Float): Float = 0.06f + 0.94f * energy.coerceIn(0f, 1f)
+internal fun lightFor(energy: Float): Float =
+    0.06f + 0.94f * energy.coerceIn(0f, 1f).pow(0.6f)
 
 /**
  * Everything a drawing needs to know about this instant.

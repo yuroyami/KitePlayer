@@ -116,8 +116,11 @@ class FixtureLevelTest {
         // The standard's own rule for two passages 12 dB apart, with a map in place.
         val levelFall = (loud.meanLevel - quiet.meanLevel) / loud.meanLevel
         assertTrue(levelFall >= 0.3f, "the settled quiet level is only ${levelFall * 100} percent lower")
+        // The light falls less than the level does, on purpose: the curve from one to the other
+        // is bent so that quiet music stays visible. The standard's own rule is on the level above.
         val fall = (loud.meanLift - quiet.meanLift) / loud.meanLift
-        assertTrue(fall >= 0.25f, "12 dB down gives only ${fall * 100} percent less light to work with")
+        assertTrue(fall >= 0.15f, "12 dB down gives only ${fall * 100} percent less light to work with")
+        assertTrue(pad.meanLift >= 0.2f, "a calm pad is drawn at ${pad.meanLift} of full light, too dark to read")
         val settled = still.meanIdle / loud.meanIdle
         assertTrue(settled <= 0.15f, "silence runs a drawing's own paths at $settled of the speed of drums")
         assertTrue(still.meanDrive <= 0.05f, "silence reads a drive of ${still.meanDrive}")

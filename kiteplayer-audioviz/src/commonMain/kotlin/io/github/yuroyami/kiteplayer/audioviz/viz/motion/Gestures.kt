@@ -120,6 +120,14 @@ public class Gestures {
         val dt = (step.of(state) ?: return).coerceAtMost(0.1f)
         val frame = state.frame
         readHits(frame)
+        // A reduced-motion setting has to suppress flashes, and a drawing flashes mostly through
+        // what it draws on a hit rather than through the light it is given. Holding the hits back
+        // is the one lever that reaches every drawing without each of them knowing about it.
+        val calm = 0.25f + 0.75f * state.motionScale.coerceIn(0f, 1f)
+        if (calm < 1f) {
+            kick *= calm; snare *= calm; hat *= calm
+            kickTotal *= calm; snareTotal *= calm; hatTotal *= calm
+        }
         val boundary = boundaries.read(frame)
         section = boundary != null
         if (section) sections++

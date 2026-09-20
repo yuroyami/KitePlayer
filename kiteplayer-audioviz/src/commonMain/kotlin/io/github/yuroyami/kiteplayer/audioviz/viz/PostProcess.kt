@@ -181,10 +181,7 @@ internal fun PostProcessedBox(
             val started = if (stats != null) TimeSource.Monotonic.markNow() else null
 
             val split = post.aberration * (0.25f + 0.75f * current.trebleRel + current.kick)
-            // The glow follows the level, and answers a hit only a little. A glow that pumps on
-            // every kick brightens the whole screen at the beat rate, which is the flash policy's
-            // own case: at 200 beats a minute that alone is more than three flashes a second.
-            val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.12f * current.kick)).coerceIn(0f, 1f)
+            val strength = (post.bloom * (0.6f + 0.6f * current.energy + 0.5f * current.kick)).coerceIn(0f, 1f)
             val tearing = post.glitch && current.dropPulse > 0.02f
             val combined = if (!tearing && (post.bloom > 0f || split > MIN_SPLIT)) {
                 effect.value.prepare(post, size.width, size.height, strength, if (split > MIN_SPLIT) split else 0f)

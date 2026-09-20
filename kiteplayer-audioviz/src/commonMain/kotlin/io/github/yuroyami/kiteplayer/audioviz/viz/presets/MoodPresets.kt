@@ -785,7 +785,9 @@ internal class Shatter : Layered(
     // The echo carries the traces away from the edge they are drawn at, faster when a kick jolts it.
     override fun echo(state: VizRenderState): EchoFrame {
         val base = super.echo(state)
-        val speed = (0.35f + 0.4f * state.drive) * (1f + jolt.value.coerceIn(0f, 2f))
+        // Mostly the music, not mostly a floor: at a floor of 0.35 against 0.4 of drive, this ran
+        // at nine tenths of its drum speed under a quiet pad and said nothing about the music.
+        val speed = (0.08f + 1.1f * state.drive) * (1f + jolt.value.coerceIn(0f, 2f))
         return EchoFrame(zoomX = base.zoomX, driftY = if (rising()) -speed else speed)
     }
 

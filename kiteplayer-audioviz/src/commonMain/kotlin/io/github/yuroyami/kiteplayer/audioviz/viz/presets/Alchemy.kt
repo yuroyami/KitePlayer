@@ -71,6 +71,10 @@ internal class Plasma : Layered(
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
             VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
     )
     override val paintsWholeScreen: Boolean get() = true
 

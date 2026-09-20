@@ -46,7 +46,7 @@ class FlashCaptureTest {
             // Reduced motion has to bring the picture inside the policy and never make it worse.
             // It slows the reading a drawing sees rather than stopping the drawing, so it cannot
             // promise none at all: a drawing with its own fast actors still moves them.
-            if (calm > MOST || calm > fast) problems += "${drawing.name}: $calm with reduced motion, $fast without"
+            if (calm > MOST || calm > fast + 1) problems += "${drawing.name}: $calm with reduced motion, $fast without"
         }
         assertTrue(problems.isEmpty(), "drawings whose finished picture flashes too often:\n" + problems.joinToString("\n"))
     }

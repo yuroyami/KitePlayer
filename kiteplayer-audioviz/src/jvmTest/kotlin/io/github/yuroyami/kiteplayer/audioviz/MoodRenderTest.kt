@@ -43,7 +43,9 @@ class MoodRenderTest {
 
     @Test
     fun everyVisualizationTellsCalmFromLively() {
-        val selected = System.getenv("AUDIOVIZ_MOOD_PRESETS")?.split(',')?.toSet()
+        // An empty value means every drawing, not none: a set built from "" holds one empty name.
+        val selected = System.getenv("AUDIOVIZ_MOOD_PRESETS")
+            ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()?.takeIf { it.isNotEmpty() }
         val all = VizCatalog.create()
         val indices = all.indices.filter { selected == null || all[it].name in selected }
         assertTrue(indices.isNotEmpty(), "no matching presets")

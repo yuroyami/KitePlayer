@@ -67,7 +67,10 @@ class RecipeTest {
                 "ground $kind: drums ink ${Survey.number(drums[0])} alive ${Survey.number(drums[1])} busy ${Survey.number(drums[2])}" +
                     "  |  pad ink ${Survey.number(pad[0])} alive ${Survey.number(pad[1])} busy ${Survey.number(pad[2])}",
             )
-            if (drums[0] < 0.9f || drums[1] < 0.95f || pad[1] < 0.6f) weak += "$kind: drums ${drums.toList()}, pad ${pad.toList()}"
+            // The pad floor is low on purpose. A ground runs on the music now, so under a quiet
+            // pad it drifts rather than churns, and asking for most of it to change every half
+            // second would be asking for the screen saver back. This catches a dead ground.
+            if (drums[0] < 0.9f || drums[1] < 0.95f || pad[1] < 0.1f) weak += "$kind: drums ${drums.toList()}, pad ${pad.toList()}"
         }
         if (Survey.strict) assertTrue(weak.isEmpty(), "these grounds leave the screen idle:\n" + weak.joinToString("\n"))
     }

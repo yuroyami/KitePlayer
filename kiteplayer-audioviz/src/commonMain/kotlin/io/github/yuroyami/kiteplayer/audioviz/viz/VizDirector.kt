@@ -36,6 +36,9 @@ public enum class VizTransition {
 /**
  * Changes scenes only at a supported musical boundary. Tempo, elapsed time and energy-only
  * flags cannot authorize a change. A seeded choice matches the scene to current energy.
+ *
+ * Set [maximumHoldSeconds] to let a long wait change the drawing anyway, which a viewer-facing
+ * application usually wants; see that property for why.
  */
 public class VizDirector(
     private val catalogue: List<Visualization>,
@@ -47,6 +50,21 @@ public class VizDirector(
         require(catalogue.isNotEmpty()) { "the director needs something to choose from" }
         require(minimumHoldSeconds.isFinite() && minimumHoldSeconds >= 0f)
     }
+
+    /**
+     * Longest one drawing is held with no boundary at all, after which the next beat changes it.
+     *
+     * Zero, the default, waits for a boundary however long that takes, which is the rule this
+     * director is built on: elapsed time is not musical evidence. An application that shows the
+     * picture to somebody usually wants a number here, because plenty of real music offers no
+     * boundary the detector will support. Measured over the five sample songs, one offered none at
+     * all in four minutes and the rest offered between two and six, so with zero the director can
+     * appear to do nothing on exactly the music a viewer is watching.
+     *
+     * A change made this way still lands on a beat, and a boundary is still preferred whenever one
+     * arrives. Values below [minimumHoldSeconds] are treated as that minimum.
+     */
+    public var maximumHoldSeconds: Float = 0f
 
     private var random = seed
     private val recent = ArrayDeque<String>()
@@ -94,6 +112,7 @@ public class VizDirector(
     private var heldSeconds = 0f
     private var transitionSeconds = 0f
     private var transitionLength = 1f
+    private var lastBeatPhase = -1f
 
     /** Starts on a named drawing, or the first one if the name is not in the list. */
     public fun startWith(name: String) {
@@ -112,6 +131,8 @@ public class VizDirector(
         heldSeconds += dt
         // Consume identities even during a transition or cooldown, so they cannot replay later.
         val boundary = boundaries.read(frame)
+        // Tracked every frame, including during a change, so a beat is never counted twice.
+        val beat = passedBeat(frame)
         nextChangeSeconds = -1f
         if (incoming != null) {
             transitionSeconds += dt
@@ -119,7 +140,18 @@ public class VizDirector(
             if (progress >= 1f) finish()
             return
         }
-        if (boundary == null || heldSeconds < minimumHoldSeconds) return
+        if (heldSeconds < minimumHoldSeconds) return
+        if (boundary == null) {
+            // No boundary in all that time, so the music is not going to offer one. Land on a beat.
+            val longest = maximumHoldSeconds
+            if (longest.isFinite() && longest > 0f &&
+                heldSeconds >= maxOf(longest, minimumHoldSeconds) && beat
+            ) {
+                val next = pick(moodBucket(frame))
+                begin(next, chooseTransition(frame, next), frame, pulses = 8)
+            }
+            return
+        }
         when (boundary.detection.kind) {
             AudioEventKind.Drop -> {
                 val next = pick(upFrom(moodBucket(frame)))
@@ -167,6 +199,24 @@ public class VizDirector(
         incoming = null
         progress = 0f
         heldSeconds = 0f
+    }
+
+    /**
+     * Whether a beat has just passed, so a held-too-long change lands with the music.
+     *
+     * Answers true when the tempo is not usable, because there is then no beat to wait for and
+     * waiting would hold the drawing for ever.
+     */
+    private fun passedBeat(frame: SpectrumFrame): Boolean {
+        val rhythm = frame.rhythm
+        if (rhythm == null || !rhythm.usable) {
+            lastBeatPhase = -1f
+            return true
+        }
+        val phase = rhythm.beatPhase
+        val passed = lastBeatPhase >= 0f && phase < lastBeatPhase
+        lastBeatPhase = phase
+        return passed
     }
 
     /** Which shelf of the catalogue suits the music right now. */

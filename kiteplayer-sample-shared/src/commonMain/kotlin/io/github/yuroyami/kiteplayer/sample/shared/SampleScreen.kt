@@ -5,12 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
@@ -33,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -104,11 +106,20 @@ fun SampleScreen(
         viz.drawing = list[(at + delta).mod(list.size)]
     }.value
 
+    /** Any drawing at all, for when you want to be surprised rather than to browse. */
+    val randomDrawing: () -> Unit = {
+        viz.directed = false
+        viz.drawing = viz.catalogue.filter { it.name != viz.showing.name }.random()
+    }
+
     val stepTrack: (Int) -> Unit = { delta -> track = (track + delta).mod(media.tracks.size) }
 
     LaunchedEffect(player, media) {
         viz.drawing = viz.catalogue.firstOrNull { it.name == FIRST_DRAWING } ?: viz.catalogue.first()
         viz.directed = true
+        // Some songs offer the detector no section it will support, and Bad Cat is one of them, so
+        // without this the director can sit on one drawing for a whole track.
+        viz.director.maximumHoldSeconds = DIRECTOR_LONGEST_HOLD_SECONDS
         player.setLoop(LoopMode.One)
     }
 
@@ -119,7 +130,9 @@ fun SampleScreen(
 
     BoxWithConstraints(modifier.fillMaxSize().background(Color.Black)) {
         val narrow = maxWidth < NARROW_WIDTH
-        val bar = if (narrow) NARROW_BAR_HEIGHT else BAR_HEIGHT
+        // The bar wraps its buttons onto as many rows as the width needs, so nothing scrolls and
+        // nothing is hidden. Everything below it is placed under whatever height that came to.
+        var bar by remember { mutableStateOf(BAR_HEIGHT) }
         if (snapshot.isAudioOnly) {
             KiteAudioViz(viz, Modifier.fillMaxSize())
         } else {
@@ -154,7 +167,6 @@ fun SampleScreen(
                 title = snapshot.metadata["title"] ?: media.tracks[track].label,
                 detail = listOfNotNull(snapshot.metadata["artist"], showing.takeIf { snapshot.isAudioOnly })
                     .joinToString("  ·  "),
-                height = bar,
                 narrow = narrow,
                 panel = panel,
                 directed = viz.directed,
@@ -162,7 +174,9 @@ fun SampleScreen(
                 onPanel = { panel = if (panel == it) Panel.None else it },
                 onDirector = { viz.directed = !viz.directed },
                 onDrawing = stepDrawing,
+                onRandom = randomDrawing,
                 onTrack = stepTrack,
+                onHeight = { bar = it },
                 extra = extra,
             )
             if (panel != Panel.Browser) Transport(player, snapshot.duration)
@@ -196,12 +210,12 @@ private fun SwipeArea(modifier: Modifier, onStep: (Int) -> Unit) {
     )
 }
 
-/** The title and the buttons: one row when there is room, and on a narrow screen the buttons below the title. */
+/** The title and the buttons: one row when there is room, wrapping onto more rows when there is not. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TopBar(
     title: String,
     detail: String,
-    height: Dp,
     narrow: Boolean,
     panel: Panel,
     directed: Boolean,
@@ -209,37 +223,49 @@ private fun TopBar(
     onPanel: (Panel) -> Unit,
     onDirector: () -> Unit,
     onDrawing: (Int) -> Unit,
+    onRandom: () -> Unit,
     onTrack: (Int) -> Unit,
+    onHeight: (Dp) -> Unit,
     extra: @Composable RowScope.() -> Unit,
 ) {
-    val buttons: @Composable RowScope.() -> Unit = {
-        // The two most used controls come first: the drawing before and the drawing after.
+    val density = LocalDensity.current
+    val buttons: @Composable () -> Unit = {
+        // Most used first: the drawing before, the drawing after, and one at random.
         SampleButton(PREVIOUS) { onDrawing(-1) }
         SampleButton(NEXT) { onDrawing(1) }
+        SampleButton("Random", onClick = onRandom)
         SampleButton("Drawings", on = panel == Panel.Browser) { onPanel(Panel.Browser) }
+        SampleButton("Director", on = directed, onClick = onDirector)
         SampleButton("Settings", on = panel == Panel.Settings) { onPanel(Panel.Settings) }
-        SampleButton(if (directed) "Director on" else "Director off", on = directed, onClick = onDirector)
         if (tracks > 1) {
             SampleButton("Song $PREVIOUS") { onTrack(-1) }
             SampleButton("Song $NEXT") { onTrack(1) }
         }
-        extra()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), content = extra)
     }
     Column(
-        Modifier.fillMaxWidth().height(height).background(Color(0x99000000)).padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.Center,
+        Modifier.fillMaxWidth().background(Color(0x99000000))
+            .onSizeChanged { onHeight(with(density) { it.height.toDp() }) }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (narrow) {
             Titles(title, detail)
-            Row(
-                Modifier.padding(top = 6.dp).horizontalScroll(rememberScrollState()),
+            // Wrapping, never scrolling: on a narrow screen the buttons take a second row rather
+            // than sliding out of reach.
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                content = buttons,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                content = { buttons() },
             )
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Titles(title, detail, Modifier.weight(1f))
-                buttons()
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    content = { buttons() },
+                )
             }
         }
     }
@@ -333,8 +359,11 @@ private fun clock(time: Duration): String {
     return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
 }
 
+/** How long the sample lets the director sit on one drawing when the music offers no section. */
+private const val DIRECTOR_LONGEST_HOLD_SECONDS = 30f
+
 /** The drawing the sample opens on, before the director takes over. */
-private const val FIRST_DRAWING = "Acid Tunnel"
+private const val FIRST_DRAWING = "Menger"
 
 /** Single angle quotation marks, which every platform font here carries. */
 private const val PREVIOUS = "\u2039"

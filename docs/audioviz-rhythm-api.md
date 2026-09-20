@@ -52,6 +52,23 @@ The `VizDirector` constructor no longer takes `leastPhrases`, `mostPhrases` or
 which this contract forbids. `minimumHoldSeconds` replaces them as a cooldown. This is a declared
 authoring API migration: source and binary callers of the old constructor must update.
 
+### When the music offers no boundary at all
+
+The rule above leaves the director with nothing to do on music the detector finds no section in,
+and that is common. Measured over the five sample songs, one offered no supported boundary in four
+minutes and the rest offered between two and six. A viewer watching that first song sees one
+drawing for the whole track and reasonably concludes the director is broken.
+
+`VizDirector.maximumHoldSeconds` is how an application buys out of the rule, for itself, in the
+open. It is zero by default, so the contract above is what every caller gets until it asks for
+something else. Set it and a drawing held that long with no boundary changes on the next beat; with
+no usable tempo there is no beat to wait for, so the wait alone is enough. A boundary is still
+preferred whenever one arrives, and the cooldown still applies. The sample app sets 30 seconds.
+
+This is elapsed time authorizing a change, which the contract forbids by default and still forbids
+unless the application says otherwise. It is written down here rather than hidden in a default so
+that a picture nobody asked to shuffle never shuffles.
+
 `Gestures.section` and `sections` describe accepted structural edges. Its `cyclePhase`,
 `slowCyclePhase`, `cycles`, `slowCycles` and `cycleSeconds` describe artistic animation cycles.
 The old bar/phrase edges, counts and phases are deprecated and report unknown rather than

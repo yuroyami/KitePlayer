@@ -845,11 +845,13 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizDirector {
 	public final fun getChanging ()Z
 	public final fun getCurrent ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
 	public final fun getIncoming ()Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;
+	public final fun getMaximumHoldSeconds ()F
 	public final fun getNextChangeSeconds ()F
 	public final fun getPreferred ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizTransition;
 	public final fun getProgress ()F
 	public final fun getTransition ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizTransition;
 	public final fun setCalmChanges (Z)V
+	public final fun setMaximumHoldSeconds (F)V
 	public final fun setPreferred (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizTransition;)V
 	public final fun show (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)V
 	public final fun startWith (Ljava/lang/String;)V

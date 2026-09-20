@@ -6,12 +6,16 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNotSame
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -349,6 +353,30 @@ class CommandTruthTest {
 
         assertEquals(2, made.size, "the rebuild must ask the factory for its own reader")
         assertNotSame(first, made[1], "and must not be handed the first session's reader")
+        harness.close()
+    }
+
+    /**
+     * The caller resumes unconfined, so it runs the moment the reply completes, as a caller on
+     * another thread does on a device. On the test dispatcher it would instead be queued behind
+     * the rest of the actor's pass, which publishes the snapshot, and the stale read never shows.
+     * Red before the rebuild published before replying: a paused player's status stays Paused,
+     * so nothing else published, and the track list read the video it had just turned off.
+     */
+    @Test
+    fun `the snapshot carries a video change by the time its reply arrives`() = runTest {
+        val harness = CoreHarness(this)
+        harness.attachRenderer()
+        harness.core.open(MediaItem("scripted://media", io = { CountingIo() }))
+        assertNotNull(harness.core.snapshots.value.tracks.selectedVideo, "the open must select a video track")
+
+        val seen = withContext(Dispatchers.Unconfined) {
+            assertIs<TrackChange.Applied>(harness.core.selectTrack(TrackKind.Video, null))
+            harness.core.snapshots.value.tracks.selectedVideo
+        }
+
+        assertNull(seen, "the reply must not arrive before the snapshot")
+        harness.run(500.milliseconds)
         harness.close()
     }
 

@@ -3544,6 +3544,10 @@ internal class PlaybackCore(
             }
             refreshTypesetting()
             setStatus(if (wasPlaying) PlaybackStatus.Buffering else PlaybackStatus.Paused)
+            // Published before the replies, as the in-place audio and subtitle changes do. The
+            // status write above publishes only when the status moves, and a paused player's
+            // stays Paused, so a caller on another thread read the old selection on return.
+            publishSnapshot()
             requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
         } catch (cancellation: CancellationException) {
             requested.forEach {
@@ -3681,6 +3685,7 @@ internal class PlaybackCore(
                 requested.forEach { it.reply.complete(TrackChange.Discarded(PREEMPTED_SELECTION)) }
                 return
             }
+            publishSnapshot()
             requested.forEach { it.reply.complete(TrackChange.Applied(it.kind, it.track)) }
             if (userSeek != null) {
                 emitEvent(PlayerEvent.SeekCompleted(result.epoch, result.landedAt.asDuration))

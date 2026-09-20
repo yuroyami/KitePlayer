@@ -156,6 +156,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizState {
 	public final fun getDuplicateEventDiscards ()J
 	public final fun getEstimatedDisplayDelay-UwyO8pc ()J
 	public final fun getEventStats ()Lio/github/yuroyami/kiteplayer/audioviz/AudioEventHistoryStats;
+	public final fun getFramesPerSecond ()I
 	public final fun getLateEventDiscards ()J
 	public final fun getPalette ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;
 	public final fun getQuality ()Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;
@@ -168,6 +169,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizState {
 	public final fun setDirected (Z)V
 	public final fun setDisplayDelay-BwNAW2A (Lkotlin/time/Duration;)V
 	public final fun setDrawing (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;)V
+	public final fun setFramesPerSecond (I)V
 	public final fun setPalette (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;)V
 	public final fun setReducedMotion (Z)V
 	public final fun setSwitches (Lio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;)V
@@ -358,9 +360,10 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumAnalyzer {
 public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumFrame {
 	public static final field $stable I
 	public static final field Companion Lio/github/yuroyami/kiteplayer/audioviz/SpectrumFrame$Companion;
-	public synthetic fun <init> (J[F[F[FFFFFFF[F[FFFFFFFFFFFFFFFFFFFZFZFFFFFF[FFFFFF[F[FJZJLio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;Lio/github/yuroyami/kiteplayer/audioviz/PowerSpectrum;Lio/github/yuroyami/kiteplayer/audioviz/ProgrammeLoudness;Lio/github/yuroyami/kiteplayer/audioviz/EnergyDrivers;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery;Lio/github/yuroyami/kiteplayer/audioviz/RhythmEstimate;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/KeyEstimate;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (J[F[F[FFFFFFF[F[FFFFFFFFFFFFFFFFFFFZFZFFFFFF[FFFFFF[F[FJZJLio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;Lio/github/yuroyami/kiteplayer/audioviz/PowerSpectrum;Lio/github/yuroyami/kiteplayer/audioviz/ProgrammeLoudness;Lio/github/yuroyami/kiteplayer/audioviz/EnergyDrivers;ZLio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/WaveformMetadata;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/AudioEventDelivery;Lio/github/yuroyami/kiteplayer/audioviz/RhythmEstimate;Lio/github/yuroyami/kiteplayer/audioviz/AudioDetections;Lio/github/yuroyami/kiteplayer/audioviz/KeyEstimate;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun bandPercentile (F)F
 	public final fun getAnalysisRevision ()J
+	public final fun getAudible ()F
 	public final fun getAvailability ()Lio/github/yuroyami/kiteplayer/audioviz/AnalysisAvailability;
 	public final fun getBands ()[F
 	public final fun getBandsRel ()[F
@@ -387,6 +390,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SpectrumFrame {
 	public final fun getHasTimestamp ()Z
 	public final fun getHat ()F
 	public final fun getHatPulse ()F
+	public final fun getHeld ()Z
 	public final fun getKey ()Lio/github/yuroyami/kiteplayer/audioviz/KeyEstimate;
 	public final fun getKeyConfidence ()F
 	public final fun getKeyHue ()F
@@ -779,7 +783,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/Visualization$Defa
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VisualizerSurfaceKt {
-	public static final fun DirectedVisualizerSurface (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDirector;Lkotlin/jvm/functions/Function0;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;ZLio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;ZZLandroidx/compose/runtime/Composer;III)V
+	public static final fun DirectedVisualizerSurface (Lio/github/yuroyami/kiteplayer/audioviz/viz/VizDirector;Lkotlin/jvm/functions/Function0;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;ZLio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;ZZILandroidx/compose/runtime/Composer;III)V
 	public static final fun VisualizerSurface (Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lkotlin/jvm/functions/Function0;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;Landroidx/compose/ui/Modifier;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFuture;ZLio/github/yuroyami/kiteplayer/audioviz/viz/PostSwitches;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderStats;Lio/github/yuroyami/kiteplayer/audioviz/viz/RenderQuality;IZZLandroidx/compose/runtime/Composer;III)V
 	public static final fun drawComposedFrame (Landroidx/compose/ui/graphics/drawscope/DrawScope;Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;Landroidx/compose/ui/graphics/ImageBitmap;)V
 	public static final fun drawVisualization (Landroidx/compose/ui/graphics/drawscope/DrawScope;Lio/github/yuroyami/kiteplayer/audioviz/viz/Visualization;Lio/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState;)V
@@ -1046,6 +1050,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizRenderState {
 	public final fun getNextOnsetIn ()F
 	public final fun getPalette ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizPalette;
 	public final fun getPresence ()F
+	public final fun getStepSeconds ()F
 	public final fun getTexture ()F
 	public final fun getTimeSeconds ()F
 	public final fun paced (F)F

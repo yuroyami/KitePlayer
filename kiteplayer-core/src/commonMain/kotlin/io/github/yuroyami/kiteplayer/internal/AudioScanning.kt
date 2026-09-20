@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.internal
 
+import io.github.yuroyami.kiteplayer.AudioScanRange
 import io.github.yuroyami.kiteplayer.AudioScanResult
 import io.github.yuroyami.kiteplayer.AudioScanSink
 import io.github.yuroyami.kiteplayer.MediaItem
@@ -13,16 +14,20 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 
 /**
- * One scan of one audio track. See [io.github.yuroyami.kiteplayer.scanAudio].
+ * One scan of one audio track, or of one range of it. See [io.github.yuroyami.kiteplayer.scanAudio].
  *
  * The loop is the playback decode worker's, minus the queues and the epochs: offer each packet
  * until the decoder accepts it, taking buffers out in between, then drain with a null packet.
+ *
+ * A range seeks before the first read and stops at the first block that ends at or after its end.
+ * A range that stopped early never drains the decoder, because there is nothing after it to want.
  */
 internal suspend fun scanMediaAudio(
     backend: MediaBackend,
     media: MediaItem,
     track: TrackId?,
     preferredLanguages: List<String>,
+    range: AudioScanRange?,
     sink: AudioScanSink,
 ): AudioScanResult {
     val session = backend.open(media)
@@ -47,20 +52,25 @@ internal suspend fun scanMediaAudio(
             var frames = 0L
             var first: Pts? = null
             var end: Pts? = null
+            val untilMicros = range?.until?.micros
+            var stoppedAtLimit = false
             suspend fun deliver(buffer: AudioBuffer) {
                 try {
                     val count = buffer.frameCount
                     if (count <= 0) return
                     val samples = interleaver.interleave(buffer)
                     if (first == null) first = buffer.pts
-                    end = Pts(buffer.pts.micros + buffer.format.durationOf(count).micros)
+                    val finish = Pts(buffer.pts.micros + buffer.format.durationOf(count).micros)
+                    end = finish
+                    if (untilMicros != null && finish.micros >= untilMicros) stoppedAtLimit = true
                     frames += count
                     sink.onAudio(buffer.pts, samples, count, buffer.format)
                 } finally {
                     buffer.close()
                 }
             }
-            while (true) {
+            range?.from?.let { source.seekToKeyframe(it) }
+            while (!stoppedAtLimit) {
                 currentCoroutineContext().ensureActive()
                 val packet = source.readPacket() ?: break
                 try {
@@ -75,7 +85,7 @@ internal suspend fun scanMediaAudio(
             }
             var idle = 0
             var ending = false
-            while (!active.isDrained) {
+            while (!stoppedAtLimit && !active.isDrained) {
                 currentCoroutineContext().ensureActive()
                 if (!ending) {
                     ending = active.send(null)
@@ -90,7 +100,7 @@ internal suspend fun scanMediaAudio(
                     break
                 }
             }
-            return AudioScanResult(TrackId(stream.index), frames, first, end, active.isDrained)
+            return AudioScanResult(TrackId(stream.index), frames, first, end, !stoppedAtLimit && active.isDrained)
         } finally {
             active.close()
         }

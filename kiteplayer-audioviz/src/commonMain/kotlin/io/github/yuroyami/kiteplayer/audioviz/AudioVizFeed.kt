@@ -54,6 +54,9 @@ internal class AudioVizFeed(
 
     /** Which items a background scan may read. The newest view to attach sets it. */
     val scanPolicy = AtomicReference(SongScanPolicy.Default)
+
+    /** Where finished maps are kept between runs. The newest view to attach sets it. */
+    val mapStore = AtomicReference(SongMapStore.None)
     private val scanStarted = AtomicBoolean(false)
 
     /** Hands a finished map to the analysis worker, or removes the current one with null. Any thread. */
@@ -65,7 +68,7 @@ internal class AudioVizFeed(
     /** Starts following [source] for song scans, once, for as long as this feed lives. */
     fun startSongScan(source: SongScanSource, scanDispatcher: CoroutineDispatcher = Dispatchers.IO) {
         if (!scanStarted.compareAndSet(false, true) || closed.load()) return
-        SongScanner(source, this, { scanPolicy.load() }, scanDispatcher, clock).start(scope)
+        SongScanner(source, this, { scanPolicy.load() }, scanDispatcher, store = { mapStore.load() }).start(scope)
     }
 
     private val worker = scope.launch {

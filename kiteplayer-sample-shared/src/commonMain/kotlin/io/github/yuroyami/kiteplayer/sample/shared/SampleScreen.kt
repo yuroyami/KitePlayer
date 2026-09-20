@@ -50,6 +50,7 @@ import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizBrowser
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizSettings
 import io.github.yuroyami.kiteplayer.audioviz.KiteAudioViz
+import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
 import io.github.yuroyami.kiteplayer.audioviz.isAudioOnly
 import io.github.yuroyami.kiteplayer.audioviz.rememberAudioVizState
 import io.github.yuroyami.kiteplayer.compose.KitePlayerVideo
@@ -73,9 +74,11 @@ fun SampleScreen(
     media: SampleMedia,
     modifier: Modifier = Modifier,
     videoPath: KiteRenderPath = KiteRenderPath.Auto,
+    /** Where finished song maps are kept, so a song played before is mapped from its first note. */
+    songMapStore: SongMapStore = SongMapStore.None,
     extra: @Composable RowScope.() -> Unit = {},
 ) {
-    val viz = rememberAudioVizState(player)
+    val viz = rememberAudioVizState(player, songMapStore = songMapStore)
     val snapshot by player.state.collectAsState()
     var panel by remember { mutableStateOf(Panel.None) }
     // The director changes the drawing without telling Compose, so the name is read again twice a second.

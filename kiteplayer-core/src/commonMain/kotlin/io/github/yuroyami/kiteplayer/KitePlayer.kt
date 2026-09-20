@@ -866,9 +866,17 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * A reader factory must allow a second, concurrent open for the scan to be independent of a
      * session that is playing the same item. Run this from a context that may block.
+     *
+     * A [range] scans one stretch of the track instead of all of it, which lets several scans of
+     * the same item share the work. Each one opens its own session, so an item whose reader refuses
+     * a second concurrent open cannot be scanned this way.
      */
-    public suspend fun scanAudio(media: MediaItem, track: TrackId? = null, sink: AudioScanSink): AudioScanResult =
-        core.scanAudio(media, track, sink)
+    public suspend fun scanAudio(
+        media: MediaItem,
+        track: TrackId? = null,
+        range: AudioScanRange? = null,
+        sink: AudioScanSink,
+    ): AudioScanResult = core.scanAudio(media, track, range, sink)
 
     /**
      * Selects a track, or deselects the kind entirely with a null [track], and says what happened.

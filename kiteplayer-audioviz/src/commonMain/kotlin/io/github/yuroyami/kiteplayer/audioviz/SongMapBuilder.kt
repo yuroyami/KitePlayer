@@ -15,8 +15,17 @@ import kotlin.math.pow
  * keys use the same code and the same timestamp conventions as live analysis. It keeps a level
  * histogram for the reference, a 100 ms level curve for verification, the structural events, the
  * key segments, and thirty seconds of pitch-class profiles to place key changes.
+ *
+ * One builder may own only part of the song, which is how several scans share one map. It is fed
+ * audio from before [ownedFromMicros] so that every detector is warm by the time the owned part
+ * starts, and it records nothing outside [ownedFromMicros] until [ownedUntilMicros]. Owned parts
+ * do not overlap, so [mergeSongMapParts] joins them without having to drop anything.
  */
-internal class SongMapBuilder(private val track: TrackId) {
+internal class SongMapBuilder(
+    private val track: TrackId,
+    private val ownedFromMicros: Long = Long.MIN_VALUE,
+    private val ownedUntilMicros: Long = Long.MAX_VALUE,
+) {
     private var analyzer: SpectrumAnalyzer? = null
     private var format: AudioFormat? = null
     private var coveredThrough = 0L
@@ -57,6 +66,8 @@ internal class SongMapBuilder(private val track: TrackId) {
     private fun collect(frame: SpectrumFrame) {
         if (!frame.hasTimestamp) return
         val at = frame.ptsMicros
+        // Before the owned part this is warm-up, and after it another builder owns the answer.
+        if (at < ownedFromMicros || at >= ownedUntilMicros) return
         frame.programme?.let { programme ->
             val window = programme.window
             val meanSquare = programme.meanSquare
@@ -156,32 +167,27 @@ internal class SongMapBuilder(private val track: TrackId) {
         keyChanges += AudioDetection(AudioEventKind.SectionBoundary, at, maxOf(at, confirmedAt), 0f, confidence, 0f)
     }
 
-    /** The map so far. [scanned] names the track the scan actually decoded, when it differs. */
-    fun build(complete: Boolean, scanned: TrackId = track): SongMap {
-        closeKey(coveredThrough)
-        val reference = if (!complete || readings == 0) null else {
-            var needed = kotlin.math.ceil(readings * 0.95).toInt().coerceAtLeast(1)
-            var bin = 0
-            while (bin < HISTOGRAM_BINS - 1) {
-                needed -= histogram[bin]
-                if (needed <= 0) break
-                bin++
-            }
-            10.0.pow((HISTOGRAM_LOW_DB + (bin + 0.5) * HISTOGRAM_STEP_DB) / 10.0)
-        }
+    /** What this builder owns, for [mergeSongMapParts]. Closes the key segment left open. */
+    fun part(): SongMapPart {
+        val end = minOf(coveredThrough, ownedUntilMicros)
+        closeKey(end)
         // The live detector's decisions stand; a key change adds a boundary only where none lies within four seconds.
         val merged = ArrayList(structure)
         for (change in keyChanges) {
             if (structure.none { abs(it.ptsMicros - change.ptsMicros) <= KEY_BOUNDARY_SPACING_MICROS }) merged += change
         }
         merged.sortBy { it.ptsMicros }
-        return SongMap(SongMap.VERSION, scanned, coveredThrough, complete, reference, merged.toTypedArray(),
-            keys.toTypedArray(), curve.copyOf(curveSize), curveStart ?: 0L)
+        return SongMapPart(end, histogram.copyOf(), readings, curve.copyOf(curveSize), curveStart ?: 0L,
+            merged, ArrayList(keys))
     }
+
+    /** The map so far. [scanned] names the track the scan actually decoded, when it differs. */
+    fun build(complete: Boolean, scanned: TrackId = track): SongMap =
+        mergeSongMapParts(listOf(part()), scanned, complete)
 
     private fun toDb(meanSquare: Double): Double = if (meanSquare <= 0.0) SILENT_DB else 10.0 * log10(meanSquare)
 
-    private companion object {
+    internal companion object {
         const val SILENT_DB = -100.0
         const val HISTOGRAM_LOW_DB = -70.0
         const val HISTOGRAM_STEP_DB = 0.1
@@ -189,5 +195,103 @@ internal class SongMapBuilder(private val track: TrackId) {
         const val PROFILE_STEPS = 300
         const val KEY_GAP_MICROS = 8_000_000L
         const val KEY_BOUNDARY_SPACING_MICROS = 4_000_000L
+
+        /**
+         * Audio a part analyses before the stretch it owns, so every detector is warm at the seam.
+         *
+         * It covers the longest memory in the chain: the section detector's 12.8 second ring and
+         * 8 second look-back, the key tracker's 8 second time constant, and the 30 seconds of
+         * pitch-class profiles that place a key change.
+         */
+        const val WARM_UP_MICROS = 40_000_000L
+
+        /** Audio a part analyses past the stretch it owns, because the section detector looks ahead. */
+        const val LOOK_AHEAD_MICROS = 5_000_000L
     }
+}
+
+/** One builder's share of a song map, ready to be joined with the others by [mergeSongMapParts]. */
+internal class SongMapPart(
+    val coveredThroughMicros: Long,
+    val histogram: IntArray,
+    val readings: Int,
+    val curve: FloatArray,
+    val curveStartMicros: Long,
+    val structure: List<AudioDetection>,
+    val keys: List<KeySegment>,
+)
+
+/**
+ * Joins the parts of one song into one map. One part is the ordinary whole-song scan.
+ *
+ * The level histograms sum, so the reference is the one a single pass would have found. The level
+ * curves sit on one 100 ms grid and drop into their own places; a gap between two parts carries
+ * the previous reading forward rather than reading as silence. Structural events only sort,
+ * because no two parts own the same time. Key segments that meet at a seam with the same key join
+ * back into one, which is what a single pass would have produced.
+ */
+internal fun mergeSongMapParts(parts: List<SongMapPart>, track: TrackId, complete: Boolean): SongMap {
+    val coveredThrough = parts.maxOfOrNull { it.coveredThroughMicros } ?: 0L
+    var readings = 0
+    val histogram = IntArray(SongMapBuilder.HISTOGRAM_BINS)
+    for (part in parts) {
+        readings += part.readings
+        for (bin in histogram.indices) histogram[bin] += part.histogram[bin]
+    }
+    val reference = if (!complete || readings == 0) null else {
+        var needed = kotlin.math.ceil(readings * 0.95).toInt().coerceAtLeast(1)
+        var bin = 0
+        while (bin < SongMapBuilder.HISTOGRAM_BINS - 1) {
+            needed -= histogram[bin]
+            if (needed <= 0) break
+            bin++
+        }
+        10.0.pow((SongMapBuilder.HISTOGRAM_LOW_DB + (bin + 0.5) * SongMapBuilder.HISTOGRAM_STEP_DB) / 10.0)
+    }
+
+    val filled = parts.filter { it.curve.isNotEmpty() }
+    var curve = FloatArray(0)
+    var curveStart = 0L
+    if (filled.isNotEmpty()) {
+        curveStart = filled.minOf { it.curveStartMicros }
+        val end = filled.maxOf { it.curveStartMicros + it.curve.size * SongMap.CURVE_STEP_MICROS }
+        val size = ((end - curveStart) / SongMap.CURVE_STEP_MICROS).toInt().coerceAtLeast(0)
+        curve = FloatArray(size)
+        val written = BooleanArray(size)
+        for (part in filled) {
+            val offset = ((part.curveStartMicros - curveStart) / SongMap.CURVE_STEP_MICROS).toInt()
+            for (index in part.curve.indices) {
+                val at = offset + index
+                if (at in 0 until size) {
+                    curve[at] = part.curve[index]
+                    written[at] = true
+                }
+            }
+        }
+        // A seam that left a hole carries the last real reading across it, then the first one back.
+        var last = Float.NaN
+        for (index in 0 until size) {
+            if (written[index]) last = curve[index] else if (!last.isNaN()) curve[index] = last
+        }
+        var next = Float.NaN
+        for (index in size - 1 downTo 0) {
+            if (written[index]) next = curve[index] else if (!next.isNaN()) curve[index] = next
+        }
+    }
+
+    val structure = parts.flatMap { it.structure }.sortedBy { it.ptsMicros }
+    val keys = ArrayList<KeySegment>()
+    for (segment in parts.flatMap { it.keys }.sortedBy { it.startMicros }) {
+        val open = keys.lastOrNull()
+        if (open != null && open.tonic == segment.tonic && open.mode == segment.mode &&
+            segment.startMicros - open.endMicros <= SongMapBuilder.KEY_GAP_MICROS
+        ) {
+            keys[keys.lastIndex] = KeySegment(open.startMicros, maxOf(open.endMicros, segment.endMicros),
+                open.tonic, open.mode, maxOf(open.confidence, segment.confidence))
+        } else {
+            keys += segment
+        }
+    }
+    return SongMap(SongMap.VERSION, track, coveredThrough, complete, reference,
+        structure.toTypedArray(), keys.toTypedArray(), curve, curveStart)
 }

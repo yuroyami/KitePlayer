@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
+import java.io.File
 import io.github.yuroyami.kiteplayer.compose.KiteRenderPath
 import io.github.yuroyami.kiteplayer.sample.shared.SampleMedia
 import io.github.yuroyami.kiteplayer.sample.shared.SampleScreen
@@ -31,5 +33,9 @@ internal fun VisualizerSample(media: SampleMedia) {
     }
     DisposableEffect(player) { onDispose { player.close() } }
     // The controls sit over the picture, and on desktop only the Compose canvas lets them show and take clicks.
-    SampleScreen(player, media, videoPath = KiteRenderPath.ComposeCanvas)
+    // A scanned song map outlives the process here, so a song played before is mapped at once.
+    val songMaps = remember {
+        SongMapStore.inDirectory(File(System.getProperty("java.io.tmpdir"), "kiteplayer-songmaps").absolutePath)
+    }
+    SampleScreen(player, media, videoPath = KiteRenderPath.ComposeCanvas, songMapStore = songMaps)
 }

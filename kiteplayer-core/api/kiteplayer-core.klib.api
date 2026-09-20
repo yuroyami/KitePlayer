@@ -1810,6 +1810,15 @@ final class io.github.yuroyami.kiteplayer/AudioPlayback : kotlin/AutoCloseable {
     final suspend fun submitDecoded(io.github.yuroyami.kiteplayer/Pts?, kotlin/FloatArray, kotlin/Int, io.github.yuroyami.kiteplayer.spi/AudioFormat, kotlin/Function0<kotlin/Boolean> = ...) // io.github.yuroyami.kiteplayer/AudioPlayback.submitDecoded|submitDecoded(io.github.yuroyami.kiteplayer.Pts?;kotlin.FloatArray;kotlin.Int;io.github.yuroyami.kiteplayer.spi.AudioFormat;kotlin.Function0<kotlin.Boolean>){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/AudioScanRange { // io.github.yuroyami.kiteplayer/AudioScanRange|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/Pts? = ..., io.github.yuroyami.kiteplayer/Pts? = ...) // io.github.yuroyami.kiteplayer/AudioScanRange.<init>|<init>(io.github.yuroyami.kiteplayer.Pts?;io.github.yuroyami.kiteplayer.Pts?){}[0]
+
+    final val from // io.github.yuroyami.kiteplayer/AudioScanRange.from|{}from[0]
+        final fun <get-from>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer/AudioScanRange.from.<get-from>|<get-from>(){}[0]
+    final val until // io.github.yuroyami.kiteplayer/AudioScanRange.until|{}until[0]
+        final fun <get-until>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer/AudioScanRange.until.<get-until>|<get-until>(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/AudioScanResult { // io.github.yuroyami.kiteplayer/AudioScanResult|null[0]
     final val endPts // io.github.yuroyami.kiteplayer/AudioScanResult.endPts|{}endPts[0]
         final fun <get-endPts>(): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer/AudioScanResult.endPts.<get-endPts>|<get-endPts>(){}[0]
@@ -2045,7 +2054,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun previousChapter() // io.github.yuroyami.kiteplayer/KitePlayer.previousChapter|previousChapter(){}[0]
     final suspend fun removeFromQueue(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.removeFromQueue|removeFromQueue(kotlin.Int){}[0]
     final suspend fun restore(io.github.yuroyami.kiteplayer/PlayerMemento) // io.github.yuroyami.kiteplayer/KitePlayer.restore|restore(io.github.yuroyami.kiteplayer.PlayerMemento){}[0]
-    final suspend fun scanAudio(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/AudioScanSink): io.github.yuroyami.kiteplayer/AudioScanResult // io.github.yuroyami.kiteplayer/KitePlayer.scanAudio|scanAudio(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.AudioScanSink){}[0]
+    final suspend fun scanAudio(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/AudioScanRange? = ..., io.github.yuroyami.kiteplayer/AudioScanSink): io.github.yuroyami.kiteplayer/AudioScanResult // io.github.yuroyami.kiteplayer/KitePlayer.scanAudio|scanAudio(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.AudioScanRange?;io.github.yuroyami.kiteplayer.AudioScanSink){}[0]
     final suspend fun seek(kotlin.time/Duration, io.github.yuroyami.kiteplayer/SeekMode = ...) // io.github.yuroyami.kiteplayer/KitePlayer.seek|seek(kotlin.time.Duration;io.github.yuroyami.kiteplayer.SeekMode){}[0]
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.seekToChapter|seekToChapter(kotlin.Int){}[0]
     final suspend fun selectSecondarySubtitle(io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectSecondarySubtitle|selectSecondarySubtitle(io.github.yuroyami.kiteplayer.TrackId?){}[0]
@@ -3688,7 +3697,7 @@ final fun (io.github.yuroyami.kiteplayer.spi/SubtitleOverlay).io.github.yuroyami
 final fun (io.github.yuroyami.kiteplayer/MediaIo.Companion).io.github.yuroyami.kiteplayer/ofBytes(kotlin/ByteArray): io.github.yuroyami.kiteplayer/MediaIoFactory // io.github.yuroyami.kiteplayer/ofBytes|ofBytes@io.github.yuroyami.kiteplayer.MediaIo.Companion(kotlin.ByteArray){}[0]
 final fun (io.github.yuroyami.kiteplayer/MediaItem.Companion).io.github.yuroyami.kiteplayer/from(io.github.yuroyami.kiteplayer/MediaIoFactory, kotlin/String): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/from|from@io.github.yuroyami.kiteplayer.MediaItem.Companion(io.github.yuroyami.kiteplayer.MediaIoFactory;kotlin.String){}[0]
 final suspend fun io.github.yuroyami.kiteplayer/inspect(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/inspect|inspect(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend){}[0]
-final suspend fun io.github.yuroyami.kiteplayer/scanAudio(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend, io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/AudioScanSink): io.github.yuroyami.kiteplayer/AudioScanResult // io.github.yuroyami.kiteplayer/scanAudio|scanAudio(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.AudioScanSink){}[0]
+final suspend fun io.github.yuroyami.kiteplayer/scanAudio(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend, io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/AudioScanRange? = ..., io.github.yuroyami.kiteplayer/AudioScanSink): io.github.yuroyami.kiteplayer/AudioScanResult // io.github.yuroyami.kiteplayer/scanAudio|scanAudio(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.AudioScanRange?;io.github.yuroyami.kiteplayer.AudioScanSink){}[0]
 
 // Targets: [native]
 open annotation class io.github.yuroyami.kiteplayer.spi/RawRingApi : kotlin/Annotation { // io.github.yuroyami.kiteplayer.spi/RawRingApi|null[0]

@@ -1,9 +1,9 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.AudioScanRange
 import io.github.yuroyami.kiteplayer.AudioScanSink
 import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
-import io.github.yuroyami.kiteplayer.MonotonicClock
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.TrackId
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
@@ -27,33 +27,46 @@ import kotlin.test.assertTrue
 class SongScannerTest {
     private val song = SyntheticSong.drumLoop(6f)
 
-    private inner class FakeSource : SongScanSource {
+    private inner class FakeSource(private val audio: FloatArray = song) : SongScanSource {
         val flow = MutableStateFlow<ScanTarget?>(null)
         override val targets = flow
         var scans = 0
         var cancelled = 0
         var gate: CompletableDeferred<Unit>? = null
         val started = MutableStateFlow(0)
+        val ranges = ArrayList<AudioScanRange?>()
 
-        override suspend fun scan(target: ScanTarget, sink: AudioScanSink): ScanOutcome {
+        /** A reader that refuses the second concurrent open a range needs. */
+        var refuseRanges = false
+
+        override suspend fun scan(target: ScanTarget, range: AudioScanRange?, sink: AudioScanSink): ScanOutcome {
             scans++
             started.value++
+            ranges += range
+            if (refuseRanges && range != null) error("this reader cannot be opened twice")
             val format = AudioFormat(48_000, 2, SampleFormat.F32)
             val block = FloatArray(2048)
-            var start = 0
+            // A seek lands on a block boundary at or before what was asked for, as a container does.
+            var start = (((range?.from?.micros ?: 0L) * 48_000 / 1_000_000L) / 1024 * 1024)
+                .toInt().coerceIn(0, audio.size)
+            val until = range?.until?.micros
+            var first = true
+            var end = 0L
             try {
-                while (start < song.size) {
-                    val frames = minOf(1024, song.size - start)
-                    for (i in 0 until frames) { block[2 * i] = song[start + i]; block[2 * i + 1] = song[start + i] }
+                while (start < audio.size) {
+                    val frames = minOf(1024, audio.size - start)
+                    for (i in 0 until frames) { block[2 * i] = audio[start + i]; block[2 * i + 1] = audio[start + i] }
                     sink.onAudio(Pts(start * 1_000_000L / 48_000), block, frames, format)
-                    if (start == 0) gate?.await()
+                    end = (start + frames) * 1_000_000L / 48_000
+                    if (first) { first = false; gate?.await() }
                     start += frames
+                    if (until != null && end >= until) break
                 }
             } catch (cancellation: kotlinx.coroutines.CancellationException) {
                 cancelled++
                 throw cancellation
             }
-            return ScanOutcome(target.track ?: TrackId(0), reachedEnd = true)
+            return ScanOutcome(target.track ?: TrackId(0), reachedEnd = start >= audio.size, end)
         }
     }
 
@@ -76,7 +89,12 @@ class SongScannerTest {
     }
 
     /** One scanner on a hand-run dispatcher. Its settle waits end only when [settleAll] releases them. */
-    private inner class Rig(val source: FakeSource = FakeSource(), policy: SongScanPolicy = SongScanPolicy.Default) {
+    private inner class Rig(
+        val source: FakeSource = FakeSource(),
+        policy: SongScanPolicy = SongScanPolicy.Default,
+        val store: SongMapStore = SongMapStore.None,
+        val workers: Int = 1,
+    ) {
         val dispatcher = ManualVizDispatcher()
         val installs = Installs()
         val waits = ArrayList<CompletableDeferred<Unit>>()
@@ -84,7 +102,8 @@ class SongScannerTest {
 
         init {
             SongScanner(source, installs, { policy }, dispatcher,
-                pacerFactory = { ScanPacer(0.25, MonotonicClock.System) { } },
+                store = { store },
+                workers = { workers },
                 wait = { CompletableDeferred<Unit>().also { waits += it }.await() },
             ).start(scope)
             dispatcher.runAll()
@@ -206,21 +225,115 @@ class SongScannerTest {
         assertFalse(key == SongMapCache.key(other), "different URIs hash differently")
     }
 
+
+    private class MemoryStore : SongMapStore {
+        val entries = HashMap<String, ByteArray>()
+        var reads = 0
+        var writes = 0
+        override suspend fun read(key: String): ByteArray? { reads++; return entries[key] }
+        override suspend fun write(key: String, bytes: ByteArray) { writes++; entries[key] = bytes }
+        override suspend fun remove(key: String) { entries.remove(key) }
+    }
+
+    /**
+     * The whole point of scanning ranges: it must answer what one pass answers.
+     *
+     * The fake source seeks the way a container does, to a block boundary at or before what was
+     * asked for, so this also covers a seek that lands early.
+     */
     @Test
-    fun thePacerHoldsAQuarterOfOneCore() {
-        var now = 0L
-        val clock = object : MonotonicClock { override fun nanos(): Long = now }
-        val pacer = ScanPacer(0.25, clock) { nanos -> now += nanos }
-        val dispatcher = ManualVizDispatcher()
-        CoroutineScope(dispatcher).launch {
-            repeat(200) {
-                now += 3_000_000L
-                pacer.pace()
-            }
+    fun aLongSongScannedInRangesAnswersWhatOnePassAnswers() {
+        val audio = SyntheticSong.drumLoop(130f)
+        val item = ScanTarget(MediaItem("file:///long.flac"), TrackId(1), null, 130_000_000L, true)
+
+        val one = Rig(FakeSource(audio), workers = 1)
+        one.target(item)
+        one.settleAll()
+        val single = one.installs.maps.single().map
+        one.close()
+
+        SongMapCache.clear()
+        val many = Rig(FakeSource(audio), workers = 3)
+        many.target(item)
+        many.settleAll()
+        val merged = many.installs.maps.single().map
+
+        // Three workers were offered, but a range shorter than a minute is not worth its
+        // warm-up, so a 130 second song takes two.
+        assertEquals(2, many.source.scans, "the song was cut into two ranges")
+        assertTrue(many.source.ranges.all { it != null }, "every worker was given a range")
+        assertTrue(merged.complete, "the merged map is complete")
+        assertNotNull(merged.referencePower, "the merged map carries a reference")
+        val reference = 10.0 * kotlin.math.log10(checkNotNull(merged.referencePower) /
+            checkNotNull(single.referencePower))
+        assertTrue(kotlin.math.abs(reference) <= 0.5,
+            "the reference moved ${reference} dB away from one pass")
+        assertTrue(kotlin.math.abs(merged.levelCurve.size - single.levelCurve.size) <= 2,
+            "curve ${merged.levelCurve.size} against ${single.levelCurve.size}")
+        var worst = 0f
+        for (index in 0 until minOf(merged.levelCurve.size, single.levelCurve.size)) {
+            val gap = kotlin.math.abs(merged.levelCurve[index] - single.levelCurve[index])
+            if (gap > worst) worst = gap
         }
-        dispatcher.runAll()
-        val busy = 200 * 3_000_000L
-        assertTrue(busy.toDouble() / now <= 0.26, "busy share ${busy.toDouble() / now}")
-        assertTrue(busy.toDouble() / now >= 0.2, "the pacer should not idle far below its share: ${busy.toDouble() / now}")
+        assertTrue(worst <= 1.5f, "the level curves differ by up to $worst dB")
+        many.close()
+    }
+
+    @Test
+    fun aStoredMapIsInstalledWithoutDecodingAnything() {
+        val store = MemoryStore()
+        val first = Rig(store = store)
+        first.target(target("file:///song.flac"))
+        first.settleAll()
+        assertEquals(1, first.source.scans)
+        assertEquals(1, store.writes, "a complete map was kept")
+        first.close()
+
+        // A new process keeps the store but loses the memory cache.
+        SongMapCache.clear()
+        val second = Rig(store = store)
+        second.target(target("file:///song.flac"))
+        second.settleAll()
+        assertEquals(0, second.source.scans, "the stored map was used instead of a scan")
+        assertTrue(second.installs.maps.single().map.complete)
+        second.close()
+    }
+
+    @Test
+    fun aRejectedMapIsDroppedFromTheStoreSoItCannotComeBack() {
+        val store = MemoryStore()
+        val rig = Rig(store = store)
+        rig.target(target("file:///song.flac"))
+        rig.settleAll()
+        assertEquals(1, store.entries.size)
+        rig.installs.maps.last().onRejected()
+        rig.dispatcher.runAll()
+        assertTrue(store.entries.isEmpty(), "a map live audio disagreed with stayed on disk")
+        rig.close()
+    }
+
+    /** A range needs a second concurrent open, and a reader may refuse it. The map still arrives. */
+    @Test
+    fun aReaderThatRefusesARangeStillGetsAWholeMap() {
+        val source = FakeSource(SyntheticSong.drumLoop(130f))
+        source.refuseRanges = true
+        val rig = Rig(source, workers = 2)
+        rig.target(ScanTarget(MediaItem("file:///long.flac"), TrackId(1), null, 130_000_000L, true))
+        rig.settleAll()
+        assertTrue(source.ranges.any { it == null }, "no whole-song pass was tried")
+        val map = rig.installs.maps.single().map
+        assertTrue(map.complete, "the fallback pass produced no complete map")
+        assertNotNull(map.referencePower, "the fallback map carries a reference")
+        rig.close()
+    }
+
+    @Test
+    fun aShortSongIsNeverWorthCuttingUp() {
+        val rig = Rig(workers = 4)
+        rig.target(target("file:///song.flac"))
+        rig.settleAll()
+        assertEquals(1, rig.source.scans, "a six second song scanned in one pass")
+        assertNull(rig.source.ranges.single(), "one pass asks for no range")
+        rig.close()
     }
 }

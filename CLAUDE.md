@@ -272,7 +272,30 @@ Each line is something that bit someone. Delete a line when it stops being true.
   70,000 cues; short clean files hide these bugs.
 - The player's own counters cannot see judder, so measure Android video cadence with
   `adb shell dumpsys SurfaceFlinger --latency '<layer>'`, whose rows hold each frame's requested and
-  real on-screen time for the last 127 frames (#137).
+  real on-screen time for the last 127 frames (#137). Two traps in using it: `dumpsys SurfaceFlinger
+  --list` prints each name wrapped in `RequestedLayerState{...}`, so a bare-name grep finds
+  nothing, and the layer id changes when the surface is recreated, so re-read it for every sample.
+- `dumpsys gfxinfo` and the compositor disagree on purpose, and only the compositor answers the
+  question a viewer asks. On one visualiser run gfxinfo reported 21 to 41 percent janky frames
+  while the compositor showed not one dropped frame over four samples. gfxinfo counts a frame's
+  whole duration against a deadline, and the render pipeline is two to three frames deep, so a
+  14 ms frame still presents on every 8.33 ms refresh. A gfxinfo window also covers surface
+  recreations and screen transitions, which a per-layer latency sample does not.
+- A debug install is `run-from-apk`, with no ahead-of-time code, so a hot Kotlin loop starts
+  interpreted and stays slow until the just-in-time compiler catches up. It made the visualiser's
+  song scan three times slower than the same code in a release build. Debug-build timing is not
+  release-build timing; check `dumpsys package <pkg> | grep -A3 'Dexopt state'` before believing a
+  measurement, and force the comparison with `cmd package compile -m speed -f <pkg>`.
+- `/proc/<pid>/fd` belongs to the application's own user, so `ls` from `adb shell` is denied and
+  `grep -c` on the denial counts zero, which reads exactly like "nothing is open". Use
+  `run-as <pkg>`, which needs a debuggable build; on a release install, measure the application's
+  processor time from `/proc/<pid>/stat` instead, which anyone may read.
+- Android's `date` has no `%N`, so nanosecond timing in a device shell loop silently produces
+  garbage and the arithmetic overflows into negative numbers. Use `date +%s` and second resolution.
+- A processor-time reading means nothing without the screen state: on a dozing screen the
+  visualiser stops drawing and the application's use falls to about half a core from audio alone.
+  Check `dumpsys power | grep mWakefulness` first, and hold the screen awake with
+  `adb shell input keyevent 0` during a long measurement (#138).
 - One Matroska timestamp gap misstates a frame rate by up to 2 percent, because Matroska rounds to
   whole milliseconds, and a phone asked for 24.39 fps instead of 23.976 picked a 48 Hz mode that
   put a third of the frames on the wrong refresh (#137).

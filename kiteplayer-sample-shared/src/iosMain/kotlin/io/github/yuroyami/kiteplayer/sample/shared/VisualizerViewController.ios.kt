@@ -10,7 +10,11 @@ import io.github.yuroyami.kiteplayer.KitePlayerPlatform
 import io.github.yuroyami.kiteplayer.session.KitePlayerMediaSession
 import io.github.yuroyami.kiteplayer.session.attachBackgroundHandling
 import io.github.yuroyami.kiteplayer.session.attachInterruptionHandling
+import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
 import platform.Foundation.NSBundle
+import platform.Foundation.NSCachesDirectory
+import platform.Foundation.NSSearchPathForDirectoriesInDomains
+import platform.Foundation.NSUserDomainMask
 import platform.Foundation.NSFileManager
 import platform.UIKit.UIViewController
 
@@ -50,7 +54,12 @@ fun visualizerViewController(): UIViewController = ComposeUIViewController {
             clip = bundle.pathForResource("sync1080p30", ofType = "mp4").orEmpty(),
         ) { NSFileManager.defaultManager.fileExistsAtPath(it) }
     }
-    SampleScreen(player, media)
+    // A scanned song map outlives the process here, so a song played before is mapped at once.
+    val songMaps = remember {
+        val caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, true).firstOrNull()
+        if (caches == null) SongMapStore.None else SongMapStore.inDirectory("$caches/kiteplayer-songmaps")
+    }
+    SampleScreen(player, media, songMapStore = songMaps)
 }
 
 private val SONG_TYPES = listOf("mp3", "m4a", "flac", "ogg", "wav", "aac")

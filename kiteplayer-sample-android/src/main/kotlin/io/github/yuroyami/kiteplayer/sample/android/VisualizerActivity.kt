@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import io.github.yuroyami.kiteplayer.KitePlayer
 import io.github.yuroyami.kiteplayer.KitePlayerPlatform
+import io.github.yuroyami.kiteplayer.audioviz.SongMapStore
 import io.github.yuroyami.kiteplayer.sample.shared.SampleButton
 import io.github.yuroyami.kiteplayer.sample.shared.SampleMedia
 import io.github.yuroyami.kiteplayer.sample.shared.SampleScreen
@@ -48,6 +49,8 @@ internal class VisualizerActivity : ComponentActivity() {
             handles += KitePlayerPlatform.attachBackgroundHandling(player, this)
             notification = SampleMediaNotification(this, session.platformToken).also { it.follow(player, scope) }
         }
+        // A scanned song map outlives the process here, so a song played before is mapped at once.
+        val songMaps = SongMapStore.inDirectory(File(cacheDir, "songmaps").absolutePath)
         val song = assets.list("")?.firstOrNull { name -> SONG_TYPES.any { name.endsWith(".$it", ignoreCase = true) } }
         val media = SampleMedia(materialise(song ?: CLIP).absolutePath, songMissing = song == null)
         setContent {
@@ -57,7 +60,7 @@ internal class VisualizerActivity : ComponentActivity() {
                     style = TextStyle(color = Color.White),
                 )
             } else {
-                SampleScreen(player, media) {
+                SampleScreen(player, media, songMapStore = songMaps) {
                     SampleButton("Other samples") {
                         // The other samples play their own clip, so this one pauses first. Leaving
                         // any other way keeps the song going, which is what the lock screen is for.

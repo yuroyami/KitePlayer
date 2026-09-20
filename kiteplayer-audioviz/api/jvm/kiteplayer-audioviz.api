@@ -175,7 +175,7 @@ public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizState {
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/AudioVizStateKt {
-	public static final fun rememberAudioVizState (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/audioviz/SongScanPolicy;Landroidx/compose/runtime/Composer;II)Lio/github/yuroyami/kiteplayer/audioviz/AudioVizState;
+	public static final fun rememberAudioVizState (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/audioviz/SongScanPolicy;Lio/github/yuroyami/kiteplayer/audioviz/SongMapStore;Landroidx/compose/runtime/Composer;II)Lio/github/yuroyami/kiteplayer/audioviz/AudioVizState;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/DeliveredAudioEvent {
@@ -301,6 +301,19 @@ public final class io/github/yuroyami/kiteplayer/audioviz/SongMap {
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/SongMap$Companion {
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/audioviz/SongMapStore {
+	public static final field Companion Lio/github/yuroyami/kiteplayer/audioviz/SongMapStore$Companion;
+	public abstract fun read (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun write (Ljava/lang/String;[BLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class io/github/yuroyami/kiteplayer/audioviz/SongMapStore$Companion {
+	public final fun getNone ()Lio/github/yuroyami/kiteplayer/audioviz/SongMapStore;
+	public final fun inDirectory (Ljava/lang/String;I)Lio/github/yuroyami/kiteplayer/audioviz/SongMapStore;
+	public static synthetic fun inDirectory$default (Lio/github/yuroyami/kiteplayer/audioviz/SongMapStore$Companion;Ljava/lang/String;IILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/audioviz/SongMapStore;
 }
 
 public final class io/github/yuroyami/kiteplayer/audioviz/SongScanPolicy {

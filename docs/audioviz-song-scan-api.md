@@ -90,8 +90,36 @@ playback, so a quick skip through a queue scans nothing.
 At most one scan runs at a time in the process by default, whatever the number of players and
 views. A newer request cancels an older one for the same player. A result is installed only when
 its item, track and audio generation lineage still match; a late result from a replaced request is
-dropped. The scan runs on a background dispatcher and paces itself to use at most a quarter of one
-core, measured as busy time over wall time. Low thread priority alone is not the budget.
+dropped. Scans run on a background dispatcher.
+
+## Ranges
+
+One scan of a whole song used to arrive after the song had finished, which helped nobody. A song
+is now cut into ranges that are scanned at the same time, on half the device's cores and at most
+four, and the parts are joined into one map.
+
+A range is used only when each one is at least a minute long, because a shorter range spends more
+time warming up than it saves. A song under two minutes is scanned in one pass.
+
+Each worker analyses 40 seconds of audio before the stretch it owns and 5 seconds past its end,
+and records nothing outside what it owns. The 40 seconds cover the longest memory in the analysis:
+the section detector's 12.8 second ring and 8 second look-back, the key tracker's 8 second time
+constant, and the 30 seconds of pitch-class profiles that place a key change. The 5 seconds cover
+the section detector's look-ahead.
+
+Joining the parts: the level histograms sum, so the loudness reference is the one a single pass
+would have found. The level curves share one 100 ms grid and drop into their own places, and a gap
+carries the previous reading forward rather than reading as silence. Structural events only sort,
+because no two parts own the same time. Key segments that meet at a seam with the same key join
+back into one.
+
+A container that seeks by estimate can land late enough to leave a hole between two parts, so the
+parts are checked for continuity before they are joined. A short one falls back to a single pass
+over the whole song, which is also what an item with no duration gets.
+
+`KitePlayer.scanAudio` takes an `AudioScanRange` for this. A range seeks first, so it needs a
+seekable item, and it stops at the first block that ends at or after the range's end. Two ranges
+that meet therefore cover every sample between them.
 
 ## Cache
 
@@ -100,6 +128,30 @@ stream index, the stream's declared duration, sample rate and channel count, and
 version. The URI is hashed and never stored, and headers never enter the key, so authentication
 material does not reach the cache. A URI alone does not prove identical content, so a cached map
 is also verified against live audio before it is used.
+
+## Keeping maps between runs
+
+The session cache dies with the process, so without a store every launch scans every song again.
+`SongMapStore` is where a finished map is kept. The application owns the location, because only it
+knows which of its directories the system may clear and which are backed up.
+
+```kotlin
+val maps = SongMapStore.inDirectory(File(context.cacheDir, "songmaps").absolutePath)
+val viz = rememberAudioVizState(player, songMapStore = maps)
+```
+
+`inDirectory` writes one file per map and deletes the oldest when there are more than it keeps,
+128 by default. A map of a four minute song is about ten kilobytes. Give it a directory of its own.
+
+An application with its own database may implement the interface instead. It receives an opaque
+key that is safe in a file name and already carries the analysis version, and bytes to store
+unchanged. It answers null for anything missing or unreadable rather than raising. Calls happen on
+a background dispatcher, so they may block.
+
+The stored form is checked on every read: a file from another analysis version, a half-written
+file and a file that is not a map at all are all misses, never wrong numbers. A map that live
+audio disagrees with is dropped from the store as well as from the session cache, so it cannot
+come back on the next launch.
 
 ## Applying a map
 
@@ -118,8 +170,8 @@ This catches changed content behind the same URI and any timestamp convention mi
 `rememberAudioVizState(player, songScan)` sets the policy for that player's shared analysis
 session; the newest view to attach sets it. The parameter has a default, so source callers keep
 compiling, but compiled callers of the old signature must recompile. `SongScanPolicy.Off` turns
-scans off. `AudioAnalysisStats.rejectedSongMaps` counts maps withdrawn after verification.
-Scans read on the platform's blocking-capable dispatcher.
+scans off, and `songMapStore` says where finished maps are kept. `AudioAnalysisStats.rejectedSongMaps`
+counts maps withdrawn after verification. Scans read on the platform's blocking-capable dispatcher.
 
 ## Development evidence on 2026-09-19
 

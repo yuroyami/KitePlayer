@@ -322,6 +322,19 @@ abstract interface io.github.yuroyami.kiteplayer.audioviz.viz/VizFuture { // io.
     open fun nextEvent(io.github.yuroyami.kiteplayer.audioviz/AudioEventKind): io.github.yuroyami.kiteplayer.audioviz/UpcomingAudioEvent? // io.github.yuroyami.kiteplayer.audioviz.viz/VizFuture.nextEvent|nextEvent(io.github.yuroyami.kiteplayer.audioviz.AudioEventKind){}[0]
 }
 
+abstract interface io.github.yuroyami.kiteplayer.audioviz/SongMapStore { // io.github.yuroyami.kiteplayer.audioviz/SongMapStore|null[0]
+    abstract suspend fun read(kotlin/String): kotlin/ByteArray? // io.github.yuroyami.kiteplayer.audioviz/SongMapStore.read|read(kotlin.String){}[0]
+    abstract suspend fun remove(kotlin/String) // io.github.yuroyami.kiteplayer.audioviz/SongMapStore.remove|remove(kotlin.String){}[0]
+    abstract suspend fun write(kotlin/String, kotlin/ByteArray) // io.github.yuroyami.kiteplayer.audioviz/SongMapStore.write|write(kotlin.String;kotlin.ByteArray){}[0]
+
+    final object Companion { // io.github.yuroyami.kiteplayer.audioviz/SongMapStore.Companion|null[0]
+        final val None // io.github.yuroyami.kiteplayer.audioviz/SongMapStore.Companion.None|{}None[0]
+            final fun <get-None>(): io.github.yuroyami.kiteplayer.audioviz/SongMapStore // io.github.yuroyami.kiteplayer.audioviz/SongMapStore.Companion.None.<get-None>|<get-None>(){}[0]
+
+        final fun inDirectory(kotlin/String, kotlin/Int = ...): io.github.yuroyami.kiteplayer.audioviz/SongMapStore // io.github.yuroyami.kiteplayer.audioviz/SongMapStore.Companion.inDirectory|inDirectory(kotlin.String;kotlin.Int){}[0]
+    }
+}
+
 final class io.github.yuroyami.kiteplayer.audioviz.viz.ground/Detail { // io.github.yuroyami.kiteplayer.audioviz.viz.ground/Detail|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer.audioviz.viz.ground/DetailKind, kotlin/Float = ..., io.github.yuroyami.kiteplayer.audioviz.viz/Camera2D? = ..., kotlin/Float = ...) // io.github.yuroyami.kiteplayer.audioviz.viz.ground/Detail.<init>|<init>(io.github.yuroyami.kiteplayer.audioviz.viz.ground.DetailKind;kotlin.Float;io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D?;kotlin.Float){}[0]
 
@@ -1951,5 +1964,5 @@ final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_a
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_SpectrumTimeline$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_SpectrumTimeline$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_SpectrumTimeline$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_UpcomingAudioEvent$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_UpcomingAudioEvent$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_UpcomingAudioEvent$stableprop_getter(){}[0]
 final fun io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_WaveformMetadata$stableprop_getter(): kotlin/Int // io.github.yuroyami.kiteplayer.audioviz/io_github_yuroyami_kiteplayer_audioviz_WaveformMetadata$stableprop_getter|io_github_yuroyami_kiteplayer_audioviz_WaveformMetadata$stableprop_getter(){}[0]
-final fun io.github.yuroyami.kiteplayer.audioviz/rememberAudioVizState(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.audioviz/SongScanPolicy?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int): io.github.yuroyami.kiteplayer.audioviz/AudioVizState // io.github.yuroyami.kiteplayer.audioviz/rememberAudioVizState|rememberAudioVizState(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.audioviz.SongScanPolicy?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
+final fun io.github.yuroyami.kiteplayer.audioviz/rememberAudioVizState(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.audioviz/SongScanPolicy?, io.github.yuroyami.kiteplayer.audioviz/SongMapStore?, androidx.compose.runtime/Composer?, kotlin/Int, kotlin/Int): io.github.yuroyami.kiteplayer.audioviz/AudioVizState // io.github.yuroyami.kiteplayer.audioviz/rememberAudioVizState|rememberAudioVizState(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.audioviz.SongScanPolicy?;io.github.yuroyami.kiteplayer.audioviz.SongMapStore?;androidx.compose.runtime.Composer?;kotlin.Int;kotlin.Int){}[0]
 final inline fun (androidx.compose.ui.graphics.drawscope/DrawScope).io.github.yuroyami.kiteplayer.audioviz.viz/withCamera(io.github.yuroyami.kiteplayer.audioviz.viz/Camera2D?, kotlin/Float = ..., kotlin/Function1<androidx.compose.ui.graphics.drawscope/DrawScope, kotlin/Unit>) // io.github.yuroyami.kiteplayer.audioviz.viz/withCamera|withCamera@androidx.compose.ui.graphics.drawscope.DrawScope(io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D?;kotlin.Float;kotlin.Function1<androidx.compose.ui.graphics.drawscope.DrawScope,kotlin.Unit>){}[0]

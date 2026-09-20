@@ -236,9 +236,17 @@ public class AudioVizState internal constructor(feed: AudioVizFeed? = null, priv
  * Remember it next to the player rather than inside the audio-only branch, so the analysis is
  * already running when a song starts. [songScan] decides which items a background scan may read
  * to build a song map; see docs/audioviz-song-scan-api.md.
+ *
+ * [songMapStore] keeps finished maps between runs, so a song played before is mapped from its
+ * first note instead of scanned again. Give it a directory of the application's own, with
+ * [SongMapStore.inDirectory]. Without one, a map lives only as long as the process.
  */
 @Composable
-public fun rememberAudioVizState(player: KitePlayer, songScan: SongScanPolicy = SongScanPolicy.Default): AudioVizState {
+public fun rememberAudioVizState(
+    player: KitePlayer,
+    songScan: SongScanPolicy = SongScanPolicy.Default,
+    songMapStore: SongMapStore = SongMapStore.None,
+): AudioVizState {
     val state = remember(player) {
         AudioVizState {
             val reading = player.audioClock()
@@ -248,6 +256,7 @@ public fun rememberAudioVizState(player: KitePlayer, songScan: SongScanPolicy = 
     DisposableEffect(player, state) {
         val lease = playerAudioVizSessions.acquire(player)
         lease.feed.scanPolicy.store(songScan)
+        lease.feed.mapStore.store(songMapStore)
         state.bind(lease.feed)
         onDispose {
             state.bind(null)

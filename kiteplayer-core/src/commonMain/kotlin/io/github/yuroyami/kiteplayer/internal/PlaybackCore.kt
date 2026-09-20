@@ -863,12 +863,13 @@ internal class PlaybackCore(
 
     /** Decodes one audio track without playing it, with playback's reader rules. See [KitePlayer.scanAudio]. */
     suspend fun scanAudio(media: MediaItem, track: io.github.yuroyami.kiteplayer.TrackId?,
+        range: io.github.yuroyami.kiteplayer.AudioScanRange?,
         sink: io.github.yuroyami.kiteplayer.AudioScanSink): io.github.yuroyami.kiteplayer.AudioScanResult {
         // The backend playback itself opens through, so a scan decodes exactly what playback would.
         val io = resolveMediaIo(media, config.network)
         val item = if (io == null) media else media.copy(io = { io })
         return try {
-            scanMediaAudio(backend, item, track, config.audio.preferredLanguages, sink)
+            scanMediaAudio(backend, item, track, config.audio.preferredLanguages, range, sink)
         } catch (failure: Throwable) {
             // A reader the backend never took over is closed here; close tolerates a second call.
             if (io != null) runCatching { io.close() }

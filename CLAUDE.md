@@ -59,6 +59,9 @@ Each line is something that bit someone. Delete a line when it stops being true.
   and failed inside a full gate run, reporting that a publishing module depended on the sample,
   which no build file says. Only `api`, `implementation`, `compileOnly` and `runtimeOnly` can reach
   a POM.
+- A dependency bump that changes a JavaScript package, such as Ktor's, needs `./gradlew
+  kotlinUpgradeYarnLock` in the same commit. Without it every local web test run ends in `BUILD
+  FAILED` at `:kotlinStoreYarnLock` after the tests passed, and no CI job runs that check (#150).
 - The local Maven repository is opt-in here, behind a flag, and the build says so when it is on.
   Never re-enable it unconditionally: the same version string with different bytes is
   indistinguishable from the published one.

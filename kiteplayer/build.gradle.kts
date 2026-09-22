@@ -58,7 +58,7 @@ kotlin {
             // The typesetting engine rides the standard runtime the way the network transport does:
             // adding this entry point is what makes ASS tracks render through libass.
             api(project(":kiteplayer-libass"))
-            // The input doors for platform types: a JVM File or stream, an Android content URI.
+            // The input doors for platform types: a JVM File or stream, a native file path, an Apple file URL.
             api(project(":kiteplayer-io"))
         }
         androidMain.dependencies {

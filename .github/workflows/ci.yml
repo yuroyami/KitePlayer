@@ -239,6 +239,7 @@ jobs:
           ./gradlew --stacktrace -Pkiteplayer.noAudioHardware=true \
             :kiteplayer-core:macosArm64Test \
             :kiteplayer-subtitles:macosArm64Test \
+            :kiteplayer-io:macosArm64Test \
             :kiteplayer-output:macosArm64Test \
             :kiteplayer-rt:macosArm64Test \
             :kiteplayer-libass:macosArm64Test \
@@ -322,6 +323,7 @@ jobs:
           ./gradlew --stacktrace \
             :kiteplayer-core:iosSimulatorArm64Test \
             :kiteplayer-subtitles:iosSimulatorArm64Test \
+            :kiteplayer-io:iosSimulatorArm64Test \
             :kiteplayer-rt:iosSimulatorArm64Test \
             :kiteplayer-view:iosSimulatorArm64Test \
             :kiteplayer-network:iosSimulatorArm64Test \
@@ -456,6 +458,7 @@ jobs:
           ./gradlew --stacktrace \
             :kiteplayer-core:linuxX64Test \
             :kiteplayer-subtitles:linuxX64Test \
+            :kiteplayer-io:linuxX64Test \
             :kiteplayer-output:linuxX64Test \
             :kiteplayer-rt:linuxX64Test \
             :kiteplayer-libass:linuxX64Test

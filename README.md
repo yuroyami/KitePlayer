@@ -280,7 +280,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-core` | The engine and its service interfaces. Depends on coroutines only. |
 | `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg. Also snapshots, thumbnails, waveforms and the subtitle parsers. |
 | `kiteplayer-network` | HTTP and HTTPS transport through Ktor. Registers itself. |
-| `kiteplayer-io` | Input doors for platform types: a JVM `File`, `Path`, `FileChannel` or `InputStream`. Comes with `kiteplayer`. |
+| `kiteplayer-io` | Input doors for platform types: a JVM `File`, `Path`, `FileChannel` or `InputStream`, a file path on Apple and Linux, and an Apple file URL. Comes with `kiteplayer`. |
 | `kiteplayer-libass` | The libass typesetter for ASS and SSA. Registers itself. |
 | `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |
 | `kiteplayer-subtitles` | SubRip, WebVTT and ASS dialogue parsers, in Kotlin. |

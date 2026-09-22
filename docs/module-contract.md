@@ -111,3 +111,10 @@ targets as `kiteplayer-subtitles`.
 `kiteplayer-compose-ui` does not. A plain local path still goes to FFmpeg by name and needs no
 door. Each file door opens its own channel per open and reads it by position. `ofChannel` reads
 a channel the caller owns and never closes it or moves its position.
+
+On Apple and Linux, `MediaIo.ofPath(String)` opens the file for each open and reads it with
+`pread`. On Apple, `MediaIo.ofUrl(NSURL)` does the same for a file URL. It also starts the URL's
+security scope when it opens and stops it when it closes, so a file from the document picker needs
+no cleanup from the caller. A door that cannot open its file throws `MediaIoException`, which names
+the file. Android native and Windows have no path door: `pread` takes a 32-bit offset on the two
+32-bit Android native targets, and Windows has no `pread`.

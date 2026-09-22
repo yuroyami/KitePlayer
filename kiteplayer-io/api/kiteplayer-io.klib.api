@@ -1,8 +1,19 @@
 // Klib ABI Dump
 // Targets: [androidNativeArm32, androidNativeArm64, androidNativeX64, androidNativeX86, iosArm64, iosSimulatorArm64, iosX64, js, linuxArm64, linuxX64, macosArm64, mingwX64, tvosArm64, tvosSimulatorArm64, wasmJs, watchosArm32, watchosArm64, watchosDeviceArm64, watchosSimulatorArm64]
+// Alias: apple => [iosArm64, iosSimulatorArm64, iosX64, macosArm64, tvosArm64, tvosSimulatorArm64, watchosArm32, watchosArm64, watchosDeviceArm64, watchosSimulatorArm64]
+// Alias: linux => [linuxArm64, linuxX64]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-io>
+final class io.github.yuroyami.kiteplayer.io/MediaIoException : kotlin/Exception { // io.github.yuroyami.kiteplayer.io/MediaIoException|null[0]
+    constructor <init>(kotlin/String) // io.github.yuroyami.kiteplayer.io/MediaIoException.<init>|<init>(kotlin.String){}[0]
+}
+
+// Targets: [apple, linux]
+final fun (io.github.yuroyami.kiteplayer/MediaIo.Companion).io.github.yuroyami.kiteplayer.io/ofPath(kotlin/String): io.github.yuroyami.kiteplayer/MediaIoFactory // io.github.yuroyami.kiteplayer.io/ofPath|ofPath@io.github.yuroyami.kiteplayer.MediaIo.Companion(kotlin.String){}[0]
+
+// Targets: [apple]
+final fun (io.github.yuroyami.kiteplayer/MediaIo.Companion).io.github.yuroyami.kiteplayer.io/ofUrl(platform.Foundation/NSURL): io.github.yuroyami.kiteplayer/MediaIoFactory // io.github.yuroyami.kiteplayer.io/ofUrl|ofUrl@io.github.yuroyami.kiteplayer.MediaIo.Companion(platform.Foundation.NSURL){}[0]

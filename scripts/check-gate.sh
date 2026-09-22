@@ -91,7 +91,7 @@ publication() {
     run ./scripts/check-dependency-hygiene.sh
 }
 macos() {
-    gradle :kiteplayer-core:macosArm64Test :kiteplayer-subtitles:macosArm64Test \
+    gradle :kiteplayer-core:macosArm64Test :kiteplayer-subtitles:macosArm64Test :kiteplayer-io:macosArm64Test \
         :kiteplayer-output:macosArm64Test :kiteplayer-rt:macosArm64Test \
         :kiteplayer-libass:macosArm64Test :kiteplayer-network:macosArm64Test \
         :kiteplayer-ffmpeg:macosArm64Test

@@ -113,18 +113,6 @@ player.seek(90.seconds)
 player.closeAndAwait()
 ```
 
-For a file already held in memory, use a factory that gives each open its own reader:
-
-```kotlin
-import io.github.yuroyami.kiteplayer.from
-import io.github.yuroyami.kiteplayer.ofBytes
-
-player.open(MediaItem.from(MediaIo.ofBytes(bytes), label = "song.flac"))
-player.play()
-```
-
-The bytes are not copied. Keep the array unchanged while playback can read it.
-
 `KitePlayerVideo` has two ways to draw. `KiteRenderPath.NativeView` hosts the platform's video
 view: the system compositor presents the frames and the GPU stays idle, which is the right default
 for long playback. `KiteRenderPath.ComposeCanvas` draws the frames inside Compose, so the video
@@ -134,6 +122,57 @@ You can switch at runtime; the Android sample app has a button for it.
 One desktop detail: macOS gives a click to the topmost native view, so Compose controls drawn over
 a native view video are painted but never pressed. Use the canvas path there, or keep the controls
 beside the video.
+
+## Media that is not a URL
+
+A file path or a URL needs nothing more. `MediaItem("/sdcard/movie.mkv")` goes straight to
+FFmpeg's own file reader, which is the fastest way to read a local file.
+
+For anything else, use a door. A door is a function that turns what you have into a
+`MediaIoFactory` for the item's `io` field. Each open of the item gets a new reader from it,
+because a track switch, a loop or a recovery opens the item again.
+
+| You have | Door | Where |
+|---|---|---|
+| A `ByteArray` | `MediaIo.ofBytes(bytes)` | Everywhere |
+| Bytes that your code pushes, from a socket or a decryptor | `PipedMediaIo`, a new one in each open | Everywhere |
+| A `File` or a `Path` | `MediaIo.ofFile(file)`, `MediaIo.ofPath(path)` | JVM, Android |
+| A `FileChannel` that you keep open | `MediaIo.ofChannel(channel)` | JVM, Android |
+| An `InputStream` | `MediaIo.ofStream { openStream() }` | JVM, Android |
+| A `content://` URI, such as one from the file picker | `MediaIo.ofUri(contentResolver, uri)` | Android |
+| A file in the app's `assets` | `MediaIo.ofAsset(assets, "clip.mp4")` | Android |
+| A path that every read must pass through Kotlin | `MediaIo.ofPath("/path/to/clip.mp4")` | Apple, Linux |
+| A file URL, such as one from the document picker | `MediaIo.ofUrl(url)` | Apple |
+
+The first two are in `kiteplayer-core`. The others are in `kiteplayer-io`, which comes with
+`kiteplayer`. A stream and a pipe read forward only, so the player cannot seek in them.
+
+```kotlin
+import io.github.yuroyami.kiteplayer.from
+import io.github.yuroyami.kiteplayer.io.ofUri
+
+player.open(MediaItem.from(MediaIo.ofUri(contentResolver, uri), label = "picked.mkv"))
+player.play()
+```
+
+The label names the item in logs and helps FFmpeg guess the format. `MediaIo.ofBytes` does not
+copy the array, so keep the array unchanged while playback can read it.
+
+To set several things on one item, build it in a block. An empty block gives the same item as
+`MediaItem(uri)`.
+
+```kotlin
+val item = mediaItem("https://cdn.example.com/live/channel.ts") {
+    header("Authorization", "Bearer $token")
+    probe(ProbeDepth.Fast)
+    corruptPackets(CorruptPackets.Drop)
+    lowLatency()
+}
+```
+
+`probe`, `corruptPackets`, `lowLatency` and the other demux settings say how the container opens.
+They fill the item's `demux` field. Raw FFmpeg options still go in `openOptions`, but an option
+that a typed field also sets refuses the open with a typed error.
 
 ## What you can control
 
@@ -165,8 +204,8 @@ nearest keyframe at once and replaces it with the exact frame a moment later, wh
 scrubbing feel instant on large files.
 
 `MediaItem` carries the per-item settings: `headers` for HTTP, `startPosition` to begin partway in,
-`externalSubtitles`, `videoFilter` for an FFmpeg filter chain, and `formatHint` when a container
-needs naming.
+`externalSubtitles`, `videoFilter` for an FFmpeg filter chain, `formatHint` when a container
+needs naming, and `demux` for how the container opens.
 
 Anything the player cannot do is refused with a typed error, never accepted and ignored. Two
 players in one process work and are tested.

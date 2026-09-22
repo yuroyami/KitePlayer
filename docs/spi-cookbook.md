@@ -26,6 +26,19 @@ dump. Throwing from `open` is how a backend refuses: the engine maps the failure
 `PlaybackError` and the player reports it. Nothing else about your backend is called until open
 succeeds.
 
+## What `open` receives
+
+`media.io` carries the bytes when the caller used a door: a function that turns a byte array, a
+file, a stream or a content URI into a `MediaIoFactory`. `MediaIo` is the one byte contract. Call
+the factory once in `open`, and close the reader it returns with the session. A backend that reads
+through `MediaIo` plays what every door makes, and no door ever reaches it as a separate case.
+
+`media.demux` is a `DemuxPolicy`: probe depth, damaged packets, timestamp generation, low latency
+and bytes to skip. A backend that opens a container owes each field one of two answers. It applies
+the field, or it refuses the open with a typed `PlaybackError`. It never ignores one, because a
+caller cannot tell an ignored setting from an applied one. The FFmpeg backend turns each field into
+FFmpeg options, and refuses a value that FFmpeg cannot take with `PlaybackError.ConfigurationInvalid`.
+
 ## The source: `ScriptedSource`
 
 A `PlayerMediaSource` answers five questions and one command:

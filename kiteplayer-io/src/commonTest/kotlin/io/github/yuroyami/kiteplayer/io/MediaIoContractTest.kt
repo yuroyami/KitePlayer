@@ -1,7 +1,9 @@
-// kiteplayer-io/src/commonTest keeps a copy of both contract classes for the platform doors.
-// Change both copies in the same commit.
-package io.github.yuroyami.kiteplayer
+// A copy of kiteplayer-core/src/commonTest/.../MediaIoContractTest.kt, because Kotlin Multiplatform
+// shares no test code between modules. Change both copies in the same commit.
+package io.github.yuroyami.kiteplayer.io
 
+import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.MediaIoFactory
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -194,18 +196,5 @@ abstract class MediaIoContractTest : ForwardMediaIoContractTest() {
             assertEquals(0, reader.read(byteArrayOf(), 0, 0))
             assertEquals(-1, reader.read(ByteArray(1), 0, 1))
         }
-    }
-}
-
-class ByteArrayMediaIoTest : MediaIoContractTest() {
-    override fun factory(bytes: ByteArray): MediaIoFactory = MediaIo.ofBytes(bytes)
-
-    @Test
-    fun itemUsesTheSuppliedFactoryAndLabel() = runTest {
-        val factory = MediaIo.ofBytes(byteArrayOf(3))
-        val item = MediaItem.from(factory, "track.mkv")
-        assertEquals("track.mkv", item.uri)
-        assertEquals("track.mkv", item.label)
-        assertTrue(factory === item.io)
     }
 }

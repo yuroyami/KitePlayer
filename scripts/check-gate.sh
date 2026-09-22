@@ -78,7 +78,7 @@ fixtures() { run ./scripts/testmedia.sh; }
 base() {
     # Gradle validates declared inputs and reuses unchanged compilation outputs.
     gradle checkKitertCoupling checkKotlinAbi \
-        :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest
+        :kiteplayer-core:jvmTest :kiteplayer-subtitles:jvmTest :kiteplayer-io:jvmTest
     run kiteplayer-rt/native/scripts/build-host.sh plain
     run kiteplayer-rt/native/scripts/run-c-tests.sh plain
     run kiteplayer-rt/native/scripts/render-audit.sh

@@ -72,6 +72,13 @@ Each line is something that bit someone. Delete a line when it stops being true.
   the portal yourself. Publishing from the maintainer's machine still works the same way, with the
   same five credentials read from `~/.gradle/gradle.properties`.
 
+- A published module needs at least one source file in `commonMain`. A target with no source makes
+  no klib, and its publication then fails with `FileNotFoundException` naming the missing klib.
+  Compiling and testing never notice, so only a publish finds it.
+- A test task that finds test classes but no test to run fails the build ("did not discover any
+  tests"), on the Android host and on a native target alike. A module whose common tests are only
+  abstract contract classes therefore breaks `./gradlew macosArm64Test` for the whole repository.
+  Keep one concrete test in `commonTest`.
 - `updateKotlinAbi` is per module, and the module you edited is often not the only one that moved.
   Adding a member to an interface in one module changes the dump of every published module that
   implements it, because the override joins their public surface too. The host gate catches it, one

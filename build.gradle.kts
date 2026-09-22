@@ -168,6 +168,7 @@ dependencies {
     dokka(project(":kiteplayer-ffmpeg"))
     dokka(project(":kiteplayer-output"))
     dokka(project(":kiteplayer-subtitles"))
+    dokka(project(":kiteplayer-io"))
     dokka(project(":kiteplayer-view"))
     dokka(project(":kiteplayer-view-bindings"))
     dokka(project(":kiteplayer"))

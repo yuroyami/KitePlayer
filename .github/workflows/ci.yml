@@ -211,6 +211,7 @@ jobs:
           ./gradlew --stacktrace \
             :kiteplayer-core:jvmTest \
             :kiteplayer-subtitles:jvmTest \
+            :kiteplayer-io:jvmTest \
             :kiteplayer-output:jvmTest \
             :kiteplayer-view:jvmTest \
             :kiteplayer-network:jvmTest \
@@ -389,6 +390,7 @@ jobs:
           ./gradlew --stacktrace \
             :kiteplayer-core:jvmTest \
             :kiteplayer-subtitles:jvmTest \
+            :kiteplayer-io:jvmTest \
             :kiteplayer-output:jvmTest \
             :kiteplayer-view:jvmTest \
             :kiteplayer-network:jvmTest
@@ -400,6 +402,7 @@ jobs:
           ./gradlew --stacktrace \
             :kiteplayer-core:testAndroidHostTest \
             :kiteplayer-subtitles:testAndroidHostTest \
+            :kiteplayer-io:testAndroidHostTest \
             :kiteplayer-output:testAndroidHostTest \
             :kiteplayer-view:testAndroidHostTest \
             :kiteplayer-network:testAndroidHostTest

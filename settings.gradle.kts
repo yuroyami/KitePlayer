@@ -64,6 +64,10 @@ include(":kiteplayer-core")
 // dialogue tier. Cue timing, layout and rasterisation live in the engine and :kiteplayer-output.
 include(":kiteplayer-subtitles")
 
+// :kiteplayer-io holds the input doors that need a platform type: a JVM File, Path, FileChannel or
+// InputStream. Each door returns a MediaIoFactory from the core, so the engine never sees a door.
+include(":kiteplayer-io")
+
 // :kiteplayer-rt is KitePlayer's real-time audio core, in C, with the symbol prefix `kprt_`. It
 // publishes a declaration-free main klib required by the Kotlin publication model beside one
 // callable surface: the `kitert` cinterop klib over `native/include/kite_rt.h`, plus the static

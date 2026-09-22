@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer
 
+import io.github.yuroyami.kiteplayer.io.ofFile
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -27,11 +28,21 @@ class DesktopPlaybackTest {
     @Test
     fun theDefaultDesktopStackPlaysARealFileAndTheClockMoves() = runBlocking {
         val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
-        if (AudioSystem.getMixerInfo().isEmpty()) return@runBlocking println("SKIP: no audio mixer")
+        playsAndTheClockMoves(MediaItem(file.absolutePath))
+    }
+
+    @Test
+    fun theSameFilePlaysThroughTheFileDoor() = runBlocking {
+        val file = media ?: return@runBlocking println("SKIP: no $MEDIA to play")
+        playsAndTheClockMoves(MediaItem.from(MediaIo.ofFile(file), file.name))
+    }
+
+    private suspend fun playsAndTheClockMoves(item: MediaItem) {
+        if (AudioSystem.getMixerInfo().isEmpty()) return println("SKIP: no audio mixer")
 
         val player = assertNotNull(KitePlayerPlatform.createOrNull(), "no default desktop player")
         try {
-            player.open(MediaItem(file.absolutePath))
+            player.open(item)
             player.play()
 
             // Two seconds of wall clock is enough to prove the pipeline turns; the assertion is on

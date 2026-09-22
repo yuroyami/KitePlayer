@@ -1,0 +1,10 @@
+public final class io/github/yuroyami/kiteplayer/io/FileChannelMediaIoKt {
+	public static final fun ofChannel (Lio/github/yuroyami/kiteplayer/MediaIo$Companion;Ljava/nio/channels/FileChannel;)Lio/github/yuroyami/kiteplayer/MediaIoFactory;
+	public static final fun ofFile (Lio/github/yuroyami/kiteplayer/MediaIo$Companion;Ljava/io/File;)Lio/github/yuroyami/kiteplayer/MediaIoFactory;
+	public static final fun ofPath (Lio/github/yuroyami/kiteplayer/MediaIo$Companion;Ljava/nio/file/Path;)Lio/github/yuroyami/kiteplayer/MediaIoFactory;
+}
+
+public final class io/github/yuroyami/kiteplayer/io/InputStreamMediaIoKt {
+	public static final fun ofStream (Lio/github/yuroyami/kiteplayer/MediaIo$Companion;Lkotlin/jvm/functions/Function0;)Lio/github/yuroyami/kiteplayer/MediaIoFactory;
+}
+

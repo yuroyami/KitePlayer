@@ -98,3 +98,16 @@ moving the cursor. Empty reads return zero, including at EOF; other EOF reads re
 URI for probing and display. Both functions are companion extensions in the core package,
 so future platform input factories can use the same entry point without platform dependencies
 in core. Existing constructors and custom reader factories remain source compatible.
+
+## Platform input doors
+
+`kiteplayer-io` holds the doors that need a platform type. On the JVM and Android these are
+`MediaIo.ofFile`, `MediaIo.ofPath`, `MediaIo.ofChannel` and `MediaIo.ofStream`, in the package
+`io.github.yuroyami.kiteplayer.io`. Each returns a `MediaIoFactory`, so the engine and the
+backends never see a door. The module depends on `kiteplayer-core` only and declares the same
+targets as `kiteplayer-subtitles`.
+
+`kiteplayer` depends on it with `api`, so `kiteplayer-compose` gets the doors too, and
+`kiteplayer-compose-ui` does not. A plain local path still goes to FFmpeg by name and needs no
+door. Each file door opens its own channel per open and reads it by position. `ofChannel` reads
+a channel the caller owns and never closes it or moves its position.

@@ -60,7 +60,8 @@ kiteplayer-compose
 │   ├── kiteplayer-view-bindings     adapters for the native views
 │   │   └── kiteplayer-view
 │   ├── kiteplayer-network           HTTP and HTTPS
-│   └── kiteplayer-libass            ASS and SSA typesetting
+│   ├── kiteplayer-libass            ASS and SSA typesetting
+│   └── kiteplayer-io                input doors for files and streams
 ├── kiteplayer-compose-ui
 │   ├── kiteplayer-compose-interop   Compose hosting the native view
 │   └── kiteplayer-compose-video     Compose drawing the frames itself
@@ -269,7 +270,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | Artifact | What it is |
 |---|---|
 | `kiteplayer-compose` | Everything in `kiteplayer`, plus both Compose video paths and the switch between them. The complete Compose entry point. |
-| `kiteplayer` | The default playback stack for native views: engine, FFmpeg decoders, audio output, view adapters, HTTP and HTTPS, libass. |
+| `kiteplayer` | The default playback stack for native views: engine, FFmpeg decoders, audio output, view adapters, HTTP and HTTPS, libass, input doors. |
 | `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
 | `kiteplayer-compose-interop` | Compose hosting the platform's native video view. |
 | `kiteplayer-compose-video` | Video drawn by Compose itself. |
@@ -279,6 +280,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-core` | The engine and its service interfaces. Depends on coroutines only. |
 | `kiteplayer-ffmpeg` | Media source and decoders over KiteFFmpeg. Also snapshots, thumbnails, waveforms and the subtitle parsers. |
 | `kiteplayer-network` | HTTP and HTTPS transport through Ktor. Registers itself. |
+| `kiteplayer-io` | Input doors for platform types: a JVM `File`, `Path`, `FileChannel` or `InputStream`. Comes with `kiteplayer`. |
 | `kiteplayer-libass` | The libass typesetter for ASS and SSA. Registers itself. |
 | `kiteplayer-output` | Platform audio output, render support and the subtitle rasterisers. |
 | `kiteplayer-subtitles` | SubRip, WebVTT and ASS dialogue parsers, in Kotlin. |

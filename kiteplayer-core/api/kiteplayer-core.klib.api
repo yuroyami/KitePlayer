@@ -2176,6 +2176,22 @@ final class io.github.yuroyami.kiteplayer/NetworkConfig { // io.github.yuroyami.
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/NetworkConfig.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/PipedMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer/PipedMediaIo|null[0]
+    constructor <init>(kotlin/Int = ...) // io.github.yuroyami.kiteplayer/PipedMediaIo.<init>|<init>(kotlin.Int){}[0]
+
+    final val seekable // io.github.yuroyami.kiteplayer/PipedMediaIo.seekable|{}seekable[0]
+        final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/PipedMediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
+    final val size // io.github.yuroyami.kiteplayer/PipedMediaIo.size|{}size[0]
+        final fun <get-size>(): kotlin/Long? // io.github.yuroyami.kiteplayer/PipedMediaIo.size.<get-size>|<get-size>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer/PipedMediaIo.close|close(){}[0]
+    final fun fail(kotlin/Throwable) // io.github.yuroyami.kiteplayer/PipedMediaIo.fail|fail(kotlin.Throwable){}[0]
+    final fun finish() // io.github.yuroyami.kiteplayer/PipedMediaIo.finish|finish(){}[0]
+    final suspend fun read(kotlin/ByteArray, kotlin/Int, kotlin/Int): kotlin/Int // io.github.yuroyami.kiteplayer/PipedMediaIo.read|read(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+    final suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer/PipedMediaIo.seek|seek(kotlin.Long){}[0]
+    final suspend fun write(kotlin/ByteArray, kotlin/Int = ..., kotlin/Int = ...) // io.github.yuroyami.kiteplayer/PipedMediaIo.write|write(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/PlaybackException : kotlin/Exception { // io.github.yuroyami.kiteplayer/PlaybackException|null[0]
     constructor <init>(io.github.yuroyami.kiteplayer/PlaybackError) // io.github.yuroyami.kiteplayer/PlaybackException.<init>|<init>(io.github.yuroyami.kiteplayer.PlaybackError){}[0]
 

@@ -611,6 +611,21 @@ public final class io/github/yuroyami/kiteplayer/NetworkConfig {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PipedMediaIo : io/github/yuroyami/kiteplayer/MediaIo {
+	public fun <init> ()V
+	public fun <init> (I)V
+	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun close ()V
+	public final fun fail (Ljava/lang/Throwable;)V
+	public final fun finish ()V
+	public fun getSeekable ()Z
+	public fun getSize ()Ljava/lang/Long;
+	public fun read ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun seek (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun write ([BIILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun write$default (Lio/github/yuroyami/kiteplayer/PipedMediaIo;[BIILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
 public abstract class io/github/yuroyami/kiteplayer/PlaybackError {
 	public fun getCause ()Ljava/lang/Throwable;
 	public abstract fun getMessage ()Ljava/lang/String;

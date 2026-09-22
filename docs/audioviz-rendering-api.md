@@ -13,11 +13,226 @@ number as a time, and the surface fades by `2^(-dt / half life)`.
 - At sixty frames a second nothing changes. At any other rate the drawing now fades at the same
   rate in seconds. Before this, a 120 Hz screen held every trail twice as long as a 60 Hz one.
 - The zoom, spin and drift of the trail were already applied per second rather than per frame.
-- The standard's ordinary range is 50 to 250 ms, as judgement rather than as a limit. Measured,
-  this catalogue sits mostly below it: many drawings are between 11 and 35 ms, which is a smear on
-  a moving edge rather than a trail, and that is what those drawings were drawn for. Two sit far
-  above it on purpose, Scope at 571 ms being the longest. `TrailHalfLifeTest` prints all of them
-  and fails only on a trail that cannot survive one frame or that holds the picture for seconds.
+- The standard's ordinary range is 50 to 250 ms, as judgement rather than as a limit. Patterns can
+  choose shorter edge smears or longer exposures. Ocean Mist keeps its live waveform outside the
+  feedback buffer and exposes the background trail as a control; it also owns the optional stereo
+  traces previously shown by Scope. `TrailHalfLifeTest` prints the catalogue's half lives and fails
+  only on a trail that cannot survive one frame or that holds the picture for seconds.
+
+## One journey through generated shapes
+
+`Odyssey` is one distance field made of districts. Each district is a recipe: eight fold steps
+applied to a point, ending in a box, a sphere or a cross. A step is one operation and three
+numbers. The operations are mirror, box fold, sphere fold, plane fold, scale and shift, Menger
+fold, rotate in the xy plane and rotate in the yz plane. A cavern repeats its shape around the
+eye. A sculpture stands once in the middle of its district, with the sky visible around it.
+Districts are adjacent, finite regions of one field, with physical doorways and shared lighting.
+A ray can see the next district through the current one before the camera gets there. Changing
+districts does not crossfade two pictures or reset the camera.
+
+The host composes the recipes. Five templates (sponge, kaleidoscope, folded cavern, foam and
+sculpture) fix most of their operations and give every number a range. A seed drawn at launch
+picks the numbers. The next district mutates one to three steps of the current one, and after
+three to five districts the composer jumps to the template shown least recently. Before a recipe
+is shown, a Kotlin copy of the field samples it along the route, at the full fold depth and at the
+lowest depth the detail control allows, and refuses a recipe that is solid, that is empty (too few
+of its rays reach a surface), or that needs more march steps than the budget. The screening march
+steps the way the shader steps, at rest and at full music. `OdysseyRecipeFieldTest` holds the
+shader to that Kotlin copy on 200 random recipes at two fold depths. Two launches show two
+different worlds; a fixed seed makes the tests repeat.
+
+The shader holds no trigonometry. The host packs rotations as cosine and sine pairs and plane
+folds as unit normals, and it moves the numbers with the music: bass pushes the mirror offsets,
+hits breathe the scale steps and mids turn the rotations. Impact fronts breathe the primitive as
+they travel. The step numbers reach the shader as uniform arrays read with unrolled loop indices,
+which Android accepts; a dynamically indexed uniform array does not compile there.
+
+Odyssey first searches a conservative depth grid at one quarter of the canvas width and height,
+in one 112-step program that reads the field through a distance child compiled at that
+resolution. A native-resolution pass starts behind the nearest neighbouring bound and resolves
+every pixel with the adjustable 64..112 step budget, through a second instance of the child. Each
+recipe carries its own march safety (how much of a distance estimate a ray may trust), and a
+doorway takes the most cautious of the six districts around it. The final pass lights those hits
+with a numerical normal of the whole scene and a glow from the fold trace: the chain records how
+close a point came to a fold axis, and those seams shine on any shape. Colour is never upscaled
+from the depth grid. Measured with the probe on a phone, one coarse program through the child was
+20 to 30 percent faster than seven programs holding the field inline, and trigonometry inside the
+fold steps cost two to four times the frame.
+
+A recipe whose primitive does not reach its own cell wall makes the field overestimate the
+distance near that wall (the field only knows the copy in the point's own cell), so the coarse
+search steps into the neighbour's copy and loses depth at a banked view. The template ranges keep
+the primitives fat for that reason, and `OdysseyWorldTest` checks the coarse depth against a
+full-ray reference for every template, straight and banked.
+
+`./scripts/check-odyssey-android.sh DEVICE_SERIAL` exports the shader strings and twelve composed
+districts, compiles every program with the device's `RuntimeShader`, renders each district,
+compares accelerated depth with a full-ray search, checks that music changes geometry with the
+camera locked, and reports median frame times. Pass `DEVICE_SERIAL 1080 2400 30` for
+phone-resolution timing. Images land under `kiteplayer-audioviz/build/odyssey-android-probe/`.
+Neither the stills nor the timings certify musical response or sustained 60 FPS.
+
+The flight follows an S-shaped route with audible thrust, banked lateral sweeps and changes in
+pitch. Quiet passages slow almost to suspension. Busy audio raises thrust; delivered low/body
+attacks add short acceleration and launch two bounded fronts through the surrounding structure.
+Drops sustain a launch, and breakdowns release speed into a raised view. Motion is integrated in
+seconds and settles between targets, without cuts or orbit resets. Held playback freezes flight
+and stored impulses; reduced motion suppresses camera excursions and impact fronts.
+
+The pattern exposes flight, lens, curvature, banking, camera sweeps, impact waves, recipe detail,
+architecture response, lighting, colour, atmosphere, particles, draw distance and ray-step
+controls. Recipe detail runs four to eight of a recipe's folds. World particles have depth and
+are hidden by nearer surfaces.
+
+For offline listening/viewing checks, `OdysseyPlaybackCaptureTest` accepts `ODYSSEY_PCM`, a path to
+48 kHz mono float32 little-endian samples. It feeds the production analyser and delivered-event
+cursor, skips three seconds of warmup, and saves up to 30 seconds of 384 x 240 frames at 12 FPS in
+`build/odyssey-playback`. This is a CPU-rendered inspection clip, not a playback FPS measurement.
+Normal test runs skip it when no PCM path is supplied. Force the selected test to rerun when only
+the input file changes.
+
+## Continuous forms and landscape travel
+
+The catalogue keeps two continuous form families and the Neon Lo-Fi musical landscape below.
+Their internal changes transform geometry and scene weights without crossfading preset pictures.
+
+| Catalogue entry | Forms inside it |
+| --- | --- |
+| Mandala | Mandala, Wireframe, Strobe Web, Strands, Wave |
+| Pipe | Pipe, Tunnel, Radar's converging horizon planes |
+| Neon Lo-Fi | Highway, mountain pass, city and coast in one musical night drive |
+
+Plasma also remains independently selectable. The other consumed forms have no separate catalogue
+entries or duplicate implementations. Mandala and Pipe have `Journey` enabled by default; turn
+it off to choose a `Form`. Neon Lo-Fi uses its own `Scene` control, whose default is `Auto`.
+Manual choices still transform continuously.
+
+
+Mandala carries thirty permanent filaments with sixty-five samples each. The same samples move
+between radial strings, the thirty edges of an icosahedron, a connected angular web, loose curves
+and a coherent wave sheet. Wire and web junctions stay welded, including under sound deformation.
+Spectrum and waveform change their geometry; density and novelty change their movement and
+curvature. Camera rotation reveals depth without a full-screen feedback smear.
+
+Pipe keeps its recorded spectrum rings and longitudinal rails while their cross sections become
+hexagonal and then open into broad parallel planes. Gates use the same cross-section transform.
+The default camera has no cuts, and a change of twist direction eases through zero.
+
+The shared journey director weights destinations by the music and recent visits. It waits between
+changes and eases material weights with zero-velocity arrival. Delivered structural boundaries,
+sustained feature contrast and accumulated musical activity can invite a new destination. A
+confident, identity-matched boundary in the prestudied lookahead can start preparation 1.2 seconds
+early. Continuous exploration is an artistic choice, not a claimed beat or section detection.
+There is no fixed ordered loop. Pause freezes the journey, and reduced motion damps its travel.
+
+Neon Lo-Fi replaces Terrain March. One analytic shader draws the native-resolution sky, striped
+sun, prepared ridge profiles, road/grid and optional coast reflection. Four bounded mesh batches
+supply stars, a world-anchored city, opaque spectrum terraces/palms and rain. There is no terrain
+height march, rolling terrain tile, depth/refinement chain or underwater volume.
+
+Each shoulder has sixteen lanes over twelve depth rows and a protected 7.2-unit road corridor.
+The complete input spectrum is area-aggregated into the display lanes with the shared analysis
+gain. High frequencies are closest to the road and bass is outside, preventing tall bass cells
+from concealing quieter lanes. Current levels raise the terraces, local change bends their
+response, and delivered transient records add bounded regional crests and travelling edge marks.
+Opaque tops, front faces and road-facing sides are submitted far to near, outer to inner. A
+bounded anamorphic horizontal projection keeps the shoulders visible in a tall viewport;
+the sun retains its circular angular presentation and explicit screen bounds.
+
+The mountains remember heard music using a 64-band, 360-row ring sampled at 4 Hz of media time.
+Rows carry timestamps and validity. Late attachment creates no invented past; gaps remain unknown,
+presented silence records zero, and seek/revision changes start a fresh epoch. Two host-prepared
+256-sample profiles represent the most recent 30 and 90 seconds. They place newer sound beside
+the protected horizon opening and older sound toward the outside. Silence holds the last visible
+ridge while measured zero rows continue recording. Camera speed never changes that history span.
+
+Auto regions need a supported structural record or sustained contrast in several features, with
+at least 60 audible seconds between transition starts. There is no timed exploration carousel.
+A critically damped controller converges over approximately 8-16 seconds and preserves motion
+when retargeted. Manual regions bypass the dwell only. Forward motion ranges from 6 to 24 artistic
+units/second before controls, with bounded acceleration; Flight speed zero stops world progression.
+Local bands, window groups, ribbons and attack cues continue working. Pause freezes the world,
+history and finishing grain. Silence settles the foreground/travel within about three seconds.
+Reduced motion scales travel, bank, bob, weather phase and travelling accents without removing
+local spectrum response.
+
+The thirteen parameters are Scene, Spectrum floor, Musical mountains, Brightness, Tape finish,
+Journey pace, Flight speed, Sun size, Sky ribbons, Rain, Hit accents, Neon intensity and Vividness.
+The existing Variation action changes a coherent route/layout gene. Browser instances copy both
+the chosen parameters and this layout configuration, retaining independent histories and actors.
+Searching for Terrain March finds the single Neon Lo-Fi entry; `VizDirector.startWith` resolves
+that former name too. No external app's persisted settings format is assumed.
+
+The CPU and shader share explicit palette roles and one linear-light exposure/tone transfer.
+Default post is restrained bloom (0.25, radius 0.018, threshold 0.65), vignette 0.18, grain 0.006,
+scanlines 0.05, no aberration and no glitch. Native cores remain visible with post off. Android
+26-32/software backgrounds use a simpler Canvas sky, sun, history ridge, grid, road and coast;
+the same musical world and foreground mesh remain active. API 26-28 uses eight fully aggregated
+lanes per shoulder, five depth rows and smaller decoration pools, bounded below 1,500 triangles.
+The portable path omits expensive post. Runtime views retain the existing sample 60 FPS cap and
+browser cap of at most 15 FPS (or a lower configured cap).
+
+Plasma's grid now has 28 cells across the shorter screen dimension by default, instead of broad
+rotated strips based on the canvas diagonal. Its dots bend the field and the grid through the same
+coordinate deformation. Brightness remains tone-mapped with the same palette and exposure in the
+menu and selected view. The CPU fallback shares the field and distortion equations.
+
+`JourneyMotionTest`, `JourneyRenderTest` and `JourneyCatalogTest` cover continuity, welded joints,
+plane geometry, navigation clearance, musical momentum, lookahead, history, pause, reduced motion,
+reset determinism, shader compilation, portrait output, fallback visibility and Plasma interaction.
+`JourneyPlaybackCaptureTest` optionally accepts `JOURNEY_PCM` (48 kHz mono f32le), warms the real
+analyser for three seconds, and makes 512 x 288 offline clips at 12 FPS. These directed demos select
+forms every seven seconds so all forms can be reviewed in one clip; automatic destination choice
+is tested separately. Neither host captures nor an APK build establish phone presentation FPS.
+
+`NeonLoFiHistoryTest`, `NeonLoFiWorldTest`, `NeonLoFiMusicTest`, `NeonLoFiCatalogTest`,
+`NeonLoFiRenderTest`, `NeonLoFiQualificationTest` and `NeonLoFiLightTest` cover the replacement's
+clock/history, event accounting, scene policy, real Variation/preview transfer, fixed-camera
+musical response, native phone-sized output, portable output, framing, bounded geometry,
+finished light and host CPU cost. The light fixture uses decoded linear sRGB and a separate
+saturated-red swing trace; it is a bounded fixture, not general photosensitivity certification.
+
+`NeonLoFiCaptureTest` accepts `NEON_PCM_DIRECTORY` containing named 48 kHz mono f32le files and
+optional comma-separated `NEON_SONGS`. It warms the production analyzer for three seconds, then
+records twelve seconds at 15 FPS with travel stopped and moving. The first visual frame corresponds
+to decoded input time 3.066666667 seconds, which the muxed audio must match. These are offline
+inspection clips, not presentation FPS measurements. `scripts/check-neonlofi-android.sh` exports
+and pushes the exact shader, textures and ordered mesh batches for an explicit offscreen device
+run. Its blocking draw/readback duration includes synchronization and is not isolated GPU scene
+cost or app cadence. Neither that script nor an APK build establishes ten-minute presentation
+performance. Current implementation evidence and pending physical checks are indexed in
+[`audioviz-revamp/neonlofi-implementation-report.md`](../audioviz-revamp/neonlofi-implementation-report.md).
+
+## Smoke shaped by moving horizons
+
+`Smoke Rise` absorbs the former `Stable Fluids` catalogue entry. It retains its rising smoke,
+moving emitters, directional lighting and embers. Two invisible moving sinks are enabled by
+default. There are no drawn discs, rings, rims or accretion sprites: their visible form comes
+entirely from the surrounding smoke gathering, stretching, bending and disappearing.
+
+The existing 128 x 72 velocity solver supplies circulation and the wakes of the moving centres.
+Its incompressible projection removes inward divergence, so a separate density-transport step
+follows that solve. Backward characteristics and their compression Jacobian concentrate existing
+density outside each horizon. Inward travel slows at the shoulder; smoke crossing into the interior
+is absorbed. No density or light is manufactured to illustrate the boundary. Local lensing bends
+both density sampling and its colour field, while embers follow the force and fade through the
+same absorbing interior. This is an artistic fluid model, not a general-relativistic solver.
+
+Travel integrates an audible rate driven by activity and density, so equally loud calm and busy
+passages have different momentum. Low/body transients add a decaying accent. Pause freezes smoke
+and travel; reduced motion suppresses travel and the added fluid transport and forces.
+
+Controls include zero, one or two black holes, influence size, travel speed, curl, attraction,
+lensing and horizon absorption, plus smoke density, directional detail, brightness, embers,
+emitters, wind, light path and ceiling. Setting the count to zero removes the added fluid effects.
+
+Focused tests cover the absence of drawn black-hole objects, concentration outside the horizon
+and absorption inside after the actual fluid solve, bending/fading embers, empty-field preservation,
+control limits, musical pace, pause, reduced motion, display cadence, portrait output and reset.
+The optional `SMOKE_RISE_PCM` path accepts 48 kHz mono f32le audio, warms the production analyser
+for three seconds and captures up to twelve seconds through the composed renderer. It simulates
+at 60 Hz and saves 640 x 360 images at 30 FPS. This host capture does not measure phone performance.
+Force the selected test to rerun when only the PCM file changes.
 
 ## The flash guard
 

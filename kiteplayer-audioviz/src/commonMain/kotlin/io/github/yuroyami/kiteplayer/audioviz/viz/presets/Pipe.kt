@@ -11,7 +11,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.EchoFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.CameraRig
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
-import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.Scene3D
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
@@ -34,10 +33,14 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.headlight
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
+import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Journey
+import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.floor
+import kotlin.math.exp
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -50,42 +53,16 @@ import kotlin.math.sin
  * and a camera that cuts to a new lane on some bar lines. A drop widens the pipe for a visual cycle and turns
  * its twist the other way.
  */
-internal open class Pipe(
-    name: String = "Pipe",
-    /** Points around the circumference. More is rounder and costs one path each. */
-    protected val sides: Int = 24,
-    /** How many ribs are alive at once. This is also the length of the history. */
-    protected val ribs: Int = 32,
-    /** World units between ribs. */
-    protected val spacing: Float = 1.4f,
-    /** Radians of twist per world unit of depth. */
-    protected val twist: Float = 0.12f,
-    override val trail: Float = 0f,
-    override val feedbackZoom: Float = 1f,
-    override val feedbackSpin: Float = 0f,
-    override val bloom: Int = 0,
-    override val moodSpec: MoodSpec? = null,
-    bucket: VizEnergy = VizEnergy.Mid,
-    /** Solid lit walls, or the plain wire frame. The feedback tunnels keep the wire. */
-    protected val filled: Boolean = true,
-    /** Whether a bar line may jump the camera to a new lane of the shaft. */
-    cuts: Boolean = true,
-    family: VizFamily = VizFamily.Immersion,
-    seed: Long = 701L,
-    /** What shows through the windows in the wall. */
-    outside: GroundKind = GroundKind.Stars,
-    /** Multiplies every speed, for the slow pipes. */
-    private val pace: Float = 1f,
-) : Layered(
-    name = name,
-    family = family,
-    bucket = bucket,
+internal class Pipe : Layered(
+    name = "Pipe",
+    family = VizFamily.Immersion,
+    bucket = VizEnergy.Mid,
     kit = Kit(
-        seed = seed,
-        groundKind = outside,
+        seed = 701L,
+        groundKind = GroundKind.Stars,
         detailKind = DetailKind.Specks,
         detailStrength = 0.6f,
-        camera = Camera2D(wander = 0f, punch = 0.03f, roll = 0f, shake = 0f, cuts = false, seed = seed.toInt()),
+        camera = Camera2D(wander = 0f, punch = 0.03f, roll = 0f, shake = 0f, cuts = false, seed = 701),
     ),
 ) {
 
@@ -95,41 +72,92 @@ internal open class Pipe(
         VizDrive(VizDriver.Bass, VizProperty.Shape),
         VizDrive(VizDriver.Mid, VizProperty.Shape),
         VizDrive(VizDriver.Width, VizProperty.Shape),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
+        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Scaled),
+        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
+            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
         VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
             VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
         VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
             VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        echoes = true,
+        softBuffer = true,
     )
     // The pipe has its own camera in three dimensions; the flat one would move it a second time.
     override val cameraOnEcho: Boolean get() = false
+    override val frontParallax: Float get() = 0f
+    override val post: PostSpec get() = PostSpec.Off
 
-    protected val twistGene = genes.number("Twist", 0f, 1f, 0.5f)
+    private val automatic = VizParam("Journey", 0f, 1f, 1f).apply { toggle = true; step = 1f }
+    private val form = VizParam("Form", 0f, 2f, 0f).apply {
+        step = 1f; choices = listOf("Pipe", "Tunnel", "Horizon planes")
+        shownWhen = { automatic.value < 0.5f }
+    }
+    private val pace = VizParam("Transformation pace", 0.35f, 2f, 1f)
+    internal val journey = Journey(3, 7_018L)
+    private val affinity = FloatArray(3)
+    private val shapePoint = FloatArray(2)
+
+    private val twistGene = genes.number("Twist", 0f, 1f, 0.5f)
     private val radiusRule = genes.choice("Radius rule", 2)
     private val gateKind = genes.choice("Gates", 3)
     private val holes = genes.number("Holes", 0.1f, 0.4f, 0.28f)
     private val colourRate = genes.number("Colour rate", 0.15f, 0.6f, 0.34f)
 
+    private val speed = VizParam("Speed", 0.25f, 3f, 1f)
+    private val twistAmount = VizParam("Twist", 0f, 1f, 0.12f)
+    private val twistDrift = VizParam("Twist drift", 0f, 1f, 0f)
+    private val sidesParam = VizParam("Sides", 6f, MAX_SIDES.toFloat(), 24f).apply { step = 1f }
+    private val ribsParam = VizParam("Rings", 16f, MAX_RIBS.toFloat(), 32f).apply { step = 1f }
+    private val spacingParam = VizParam("Ring spacing", 0.8f, 2f, 1.4f)
+    private val wallParam = VizParam("Solid walls", 0f, 1f, 1f).apply { step = 1f; toggle = true }
+    private val panelParam = VizParam("Panel lights", 0f, 1f, 0f).apply { step = 1f; toggle = true }
+    private val nestedParam = VizParam("Inner shaft", 0f, 1f, 0f).apply { step = 1f; toggle = true }
+    private val cutsParam = VizParam("Camera cuts", 0f, 1f, 0f).apply { step = 1f; toggle = true }
+    private val cloudParam = VizParam("Cloud background", 0f, 1f, 0f).apply { step = 1f; toggle = true }
+    private val dustParam = VizParam("Dust", 0f, 40f, 20f)
+    private val trailParam = VizParam("Echo trail", 0f, 0.94f, 0f)
+    private val zoomParam = VizParam("Echo expansion", -1f, 1f, 0f)
+    private val spinParam = VizParam("Echo rotation", -1f, 1f, 0f)
+    private val glowParam = VizParam("Echo glow", 0f, 2f, 0f).apply { step = 1f }
+    override val params: List<VizParam> = listOf(
+        automatic, form, pace,
+        speed, twistAmount, twistDrift, sidesParam, ribsParam, spacingParam, wallParam, panelParam,
+        nestedParam, cutsParam, cloudParam, dustParam, trailParam, zoomParam, spinParam, glowParam,
+    )
+    override val trail: Float get() = trailParam.value
+    override val feedbackZoom: Float get() = 1f + zoomParam.value * 0.03f
+    override val feedbackSpin: Float get() = spinParam.value
+    override val bloom: Int get() = glowParam.value.roundToInt()
+
+    private var sides = 24
+    private var ribs = 32
+    private var spacing = 1.4f
+    private val filled: Boolean get() = wallParam.value >= 0.5f
+    private val panelLights: Boolean get() = panelParam.value >= 0.5f
+    private val nestedShaft: Boolean get() = nestedParam.value >= 0.5f
+
     private val scene = Scene3D()
     private val path = Path()
 
     // One spectrum snapshot per rib. Slot [writeSlot] is the newest, at the far end.
-    private val ribRadius = Array(ribs) { FloatArray(sides) { 1f } }
-    private val ribTint = FloatArray(ribs)
+    private val ribRadius = Array(MAX_RIBS) { FloatArray(MAX_SIDES) { 1f } }
+    private val ribTint = FloatArray(MAX_RIBS)
     private var writeSlot = 0
 
     // Projected screen positions for the whole pipe, so the long lines need no second projection.
-    private val pointX = FloatArray(ribs * sides)
-    private val pointY = FloatArray(ribs * sides)
-    private val pointOk = BooleanArray(ribs * sides)
-    private val ribFog = FloatArray(ribs)
-    private val smoothing = FloatArray(sides)
-    private val ribDistance = FloatArray(ribs)
-    private val pointRadius = FloatArray(ribs * sides)
+    private val pointX = FloatArray(MAX_RIBS * MAX_SIDES)
+    private val pointY = FloatArray(MAX_RIBS * MAX_SIDES)
+    private val pointOk = BooleanArray(MAX_RIBS * MAX_SIDES)
+    private val ribFog = FloatArray(MAX_RIBS)
+    private val smoothing = FloatArray(MAX_SIDES)
+    private val ribDistance = FloatArray(MAX_RIBS)
+    private val pointRadius = FloatArray(MAX_RIBS * MAX_SIDES)
 
     // The walls, as one batch of triangles, and which corner number each projected point became.
-    private val mesh = TriangleMesh(maxVertices = ribs * sides, maxIndices = ribs * sides * 6)
-    private val vertexOf = IntArray(ribs * sides)
+    private val mesh = TriangleMesh(maxVertices = MAX_RIBS * MAX_SIDES, maxIndices = MAX_RIBS * MAX_SIDES * 6)
+    private val vertexOf = IntArray(MAX_RIBS * MAX_SIDES)
     // Cached colour conversion; the mesh interpolates the small steps between vertices.
     private val wallColours = IntArray(128 * 64)
     private var wallPalette: VizPalette? = null
@@ -143,13 +171,9 @@ internal open class Pipe(
         sway = 1.1f,
         lean = 0.3f,
         baseFov = 74f,
-        cuts = cuts,
+        cuts = true,
         seed = 7_717,
     )
-
-    private val speed = VizParam("Speed", 0.25f, 3f, 1f)
-    private val twistAmount = VizParam("Twist", 0f, 1f, twist)
-    override val params: List<VizParam> = listOf(speed, twistAmount)
 
     private val gateDistance = FloatArray(GATES) { -1f }
     private val gateTint = FloatArray(GATES)
@@ -161,29 +185,17 @@ internal open class Pipe(
     private var seeded = false
     private var lightDistance = -1f
     private var twistSign = 1f
+    private var targetTwistSign = 1f
     private var widenHold = 0f
     private val widen = Envelope(attackPerSecond = 3f, releasePerSecond = 1.5f)
     /** How far the panel lights have scrolled, in ribs. */
-    protected var laneShift: Float = 0f
-        private set
+    private var laneShift: Float = 0f
     private val comets = Comets(kind = Sprite.STREAK, size = 0.03f)
-    private val dust = Sprites(160, seed + 1L)
+    private val dust = Sprites(160, 702L)
     private var vanishX = 0.5f
     private var vanishY = 0.5f
     private var look = 0f
     private var dustCredit = 0f
-
-    /** Motes a second drifting in the headlight. */
-    protected open val dustRate: Float get() = 20f
-
-    /** Lights on the walls in stripes that scroll along the shaft. */
-    protected open val panelLights: Boolean get() = false
-
-    /** A thinner shaft inside this one, turning the other way. */
-    protected open val nestedShaft: Boolean get() = false
-
-    /** For a subclass to move its own things on each frame. */
-    protected open fun onAdvance(state: VizRenderState) {}
 
     // The echoes grow from the far end of the shaft, wherever the camera has turned it.
     override fun echo(state: VizRenderState): EchoFrame {
@@ -192,14 +204,22 @@ internal open class Pipe(
     }
 
     override fun advance(state: VizRenderState) {
-        val dt = state.deltaSeconds
+        if (state.frame.held) return
+        val dt = state.stepSeconds.coerceIn(0f, 0.1f) * state.motionScale
+        affinity[0] = 0.35f + state.bassMotion
+        affinity[1] = 0.2f + state.frame.density + state.frame.novelty.coerceIn(0f, 2f) * 0.3f
+        affinity[2] = 0.25f + (1f - state.drive) * 0.7f + state.frame.width * 0.4f
+        journey.advance(state, gestures, affinity, automatic.value >= 0.5f, form.value.toInt(), pace.value)
+        updateGeometry(state)
+        rig.cutsEnabled = cutsParam.value >= 0.5f
+        ground?.kind = if (cloudParam.value >= 0.5f) GroundKind.Cloud else GroundKind.Stars
         val far = ribs * spacing
         if (!seeded) {
             for (index in 0 until DEBRIS) respawnDebris(index, far, anywhere = true)
             seeded = true
         }
         // Speed answers the music, and the kick shoves a spring rather than adding straight to it.
-        moved = rig.advance(state, speed.value * pace)
+        moved = rig.advance(state, speed.value * state.motionScale)
         travel += moved
         while (travel >= spacing) {
             travel -= spacing
@@ -212,8 +232,9 @@ internal open class Pipe(
         }
         if (gestures.drop) {
             widenHold = gestures.cycleSeconds
-            twistSign = -twistSign
+            targetTwistSign = -targetTwistSign
         }
+        twistSign += (targetTwistSign - twistSign) * (1f - exp(-dt * 0.7f))
         widenHold -= dt
         widen.advance(if (widenHold > 0f) 1f else 0f, dt)
         // A gate on every supported beat, born at the far end and flown through a few beats later.
@@ -231,7 +252,7 @@ internal open class Pipe(
         }
         // Debris rushes past faster than the walls.
         for (index in 0 until DEBRIS) {
-            debrisZ[index] += moved * 1.6f + dt * 2f * pace
+            debrisZ[index] += moved * 1.6f + dt * 2f * speed.value
             if (debrisZ[index] > -1f) respawnDebris(index, far, anywhere = false)
         }
         // A kick sends a bright rib down the wall that reaches the camera in one beat.
@@ -240,9 +261,9 @@ internal open class Pipe(
             lightDistance -= dt * far * 0.6f / gestures.beatSeconds
             if (lightDistance < NEAR_CLIP) lightDistance = -1f
         }
-        laneShift += dt / gestures.beatSeconds * pace
-        look += dt * TAU / 16f
-        dustCredit += dt * dustRate * (0.5f + state.drive)
+        laneShift += dt / gestures.beatSeconds * speed.value
+        look += dt * (0.04f + state.drive * 0.2f + state.frame.density * 0.12f)
+        dustCredit += dt * dustParam.value * (0.5f + state.drive)
         while (dustCredit >= 1f) {
             dustCredit -= 1f
             val a = random.next() * TAU
@@ -252,7 +273,23 @@ internal open class Pipe(
         dust.advance(dt, drag = 0.5f)
         comets.advance(state, gestures, random)
         kit.follow(0, comets.travellers)
-        onAdvance(state)
+    }
+
+    /** Re-sample the wall when its topology changes; the buffers already cover every setting. */
+    private fun updateGeometry(state: VizRenderState) {
+        val nextSides = sidesParam.value.roundToInt()
+        val nextRibs = ribsParam.value.roundToInt()
+        val nextSpacing = spacingParam.value
+        if (nextSides == sides && nextRibs == ribs && nextSpacing == spacing) return
+        sides = nextSides
+        ribs = nextRibs
+        spacing = nextSpacing
+        travel = 0f
+        writeSlot = 0
+        for (slot in 0 until ribs) captureInto(slot, state)
+        gateDistance.fill(-1f)
+        lightDistance = -1f
+        seeded = false
     }
 
     private fun respawnDebris(index: Int, far: Float, anywhere: Boolean) {
@@ -318,8 +355,12 @@ internal open class Pipe(
         return (breathing + (2.6f - breathing) * radiusRule.weight(1)) * (1f + widen.value)
     }
 
-    private fun spinAt(distance: Float, body: Float): Float =
-        distance * twistAmount.value * (0.3f + 1.4f * twistGene.value) * twistSign + sin(distance * 0.28f + travel * 0.18f) * body * 0.18f
+    private fun spinAt(distance: Float, body: Float): Float {
+        val drifting = 0.5f + 0.5f * sin(genes.walk * TAU)
+        val twist = twistGene.value + (drifting - twistGene.value) * twistDrift.value
+        return distance * (twistAmount.value + journey.weights[1] * 0.12f) * (0.3f + 1.4f * twist) * twistSign +
+            sin(distance * 0.28f + travel * 0.18f) * body * 0.18f
+    }
 
     private fun projectPipe(bass: Float, body: Float, width: Float, screenWidth: Float, screenHeight: Float) {
         val baseRadius = baseRadius(bass)
@@ -343,10 +384,11 @@ internal open class Pipe(
             val radii = ribRadius[slot]
             val base = index * sides
             for (side in 0 until sides) {
-                val angle = TAU * side / sides + spin
-                val radius = baseRadius * radii[side]
+                val angle = TAU * side / sides
+                val radius = baseRadius * (radii[side] * (1f - journey.weights[2] * 0.9f) + journey.weights[2] * 0.9f)
                 pointRadius[base + side] = radius
-                val ok = scene.project(cos(angle) * radius * (1f + width * 0.22f), sin(angle) * radius, z)
+                PipeShape.point(shapePoint, angle, radius, spin, journey.weights)
+                val ok = scene.project(shapePoint[0] * (1f + width * 0.22f), shapePoint[1], z)
                 pointOk[base + side] = ok
                 if (ok) {
                     pointX[base + side] = scene.screenX
@@ -355,7 +397,8 @@ internal open class Pipe(
                     if (filled && firstVisible) {
                         val x = scene.screenX - screenWidth * 0.5f
                         val y = scene.screenY - screenHeight * 0.5f
-                        val stretch = (hypot(screenWidth, screenHeight) * 0.7f / hypot(x, y).coerceAtLeast(1f)).coerceAtLeast(1f)
+                        val fullStretch = (hypot(screenWidth, screenHeight) * 0.7f / hypot(x, y).coerceAtLeast(1f)).coerceAtLeast(1f)
+                        val stretch = 1f + (fullStretch - 1f) * (1f - journey.weights[2])
                         pointX[base + side] = screenWidth * 0.5f + x * stretch
                         pointY[base + side] = screenHeight * 0.5f + y * stretch
                     }
@@ -418,7 +461,8 @@ internal open class Pipe(
                 val red = (((colour ushr 16) and 255) * fade + ((background ushr 16) and 255) * rest) / 255
                 val green = (((colour ushr 8) and 255) * fade + ((background ushr 8) and 255) * rest) / 255
                 val blue = ((colour and 255) * fade + (background and 255) * rest) / 255
-                vertexOf[at] = mesh.vertex(pointX[at], pointY[at], (255 shl 24) or (red shl 16) or (green shl 8) or blue)
+                val opacity = (255f * (1f - 0.88f * journey.weights[1] - 0.82f * journey.weights[2])).toInt().coerceIn(0, 255)
+                vertexOf[at] = mesh.vertex(pointX[at], pointY[at], (opacity shl 24) or (red shl 16) or (green shl 8) or blue)
             }
         }
         // Far to near, so the near walls are laid over the far ones.
@@ -442,7 +486,7 @@ internal open class Pipe(
     /** The rings, drawn far to near so the close ones sit on top. */
     private fun DrawScope.drawRibs(state: VizRenderState) {
         // Over solid walls the rings are seams, not the picture, so they step back.
-        val seamStrength = if (filled) 0.5f else 1f
+        val seamStrength = if (filled) 0.5f + 0.5f * (1f - journey.weights[0]) else 1f
         for (index in ribs - 1 downTo 0) {
             val fog = ribFog[index]
             if (fog <= 0.02f) continue
@@ -519,8 +563,9 @@ internal open class Pipe(
             path.reset()
             var started = false
             for (side in 0..sides) {
-                val angle = TAU * side / sides + spin
-                if (!scene.project(cos(angle) * radius, sin(angle) * radius, -distance)) {
+                val angle = TAU * side / sides
+                PipeShape.point(shapePoint, angle, radius, spin, journey.weights)
+                if (!scene.project(shapePoint[0], shapePoint[1], -distance)) {
                     started = false
                     continue
                 }
@@ -544,8 +589,9 @@ internal open class Pipe(
             val turn = distance * 0.1f
             when (gateKind.value) {
                 2 -> for (point in 0 until 12) {
-                    val angle = TAU * point / 12 + turn
-                    if (!scene.project(cos(angle) * radius, sin(angle) * radius, -distance)) continue
+                    val angle = TAU * point / 12
+                    PipeShape.point(shapePoint, angle, radius, turn, journey.weights)
+                    if (!scene.project(shapePoint[0], shapePoint[1], -distance)) continue
                     drawCircle(colour, (size.minDimension * 0.012f * fog).coerceAtLeast(1f), Offset(scene.screenX, scene.screenY))
                 }
                 else -> {
@@ -553,8 +599,9 @@ internal open class Pipe(
                     path.reset()
                     var started = false
                     for (point in 0..points) {
-                        val angle = TAU * point / points + turn
-                        if (!scene.project(cos(angle) * radius, sin(angle) * radius, -distance)) {
+                        val angle = TAU * point / points
+                        PipeShape.point(shapePoint, angle, radius, turn, journey.weights)
+                        if (!scene.project(shapePoint[0], shapePoint[1], -distance)) {
                             started = false
                             continue
                         }
@@ -594,6 +641,7 @@ internal open class Pipe(
     }
 
     override fun onReset() {
+        journey.reset()
         for (rib in ribRadius) rib.fill(1f)
         ribTint.fill(0f)
         writeSlot = 0
@@ -606,6 +654,7 @@ internal open class Pipe(
         seeded = false
         lightDistance = -1f
         twistSign = 1f
+        targetTwistSign = 1f
         widenHold = 0f
         widen.reset()
         laneShift = 0f
@@ -620,147 +669,12 @@ internal open class Pipe(
     private companion object {
         /** World units in front of the camera where the shaft starts being worth drawing. */
         const val NEAR_CLIP = 1.6f
+        const val MAX_SIDES = 34
+        const val MAX_RIBS = 48
 
         /** How far it takes to fade in from there. */
         const val NEAR_FADE = 0.4f
         const val GATES = 12
         const val DEBRIS = 90
     }
-}
-
-/** The same flight down a shaft with flat sides, with panel lights scrolling along it and a thinner shaft inside turning the other way. */
-internal class HexShaft : Pipe(
-    name = "Hex Shaft",
-    sides = 6,
-    ribs = 48,
-    spacing = 0.95f,
-    twist = 0.05f,
-    cuts = true,
-    seed = 702L,
-) {
-    override val panelLights: Boolean get() = true
-    override val nestedShaft: Boolean get() = true
-}
-
-/** A wider, slower pipe with more sides and a hard twist that walks its whole range every eight phrases, cloud outside and motes drifting in the hole. */
-internal class Wormhole : Pipe(
-    name = "Wormhole",
-    sides = 34,
-    ribs = 36,
-    spacing = 1.3f,
-    twist = 0.3f,
-    bucket = VizEnergy.Calm,
-    moodSpec = MoodSpec(calmTrail = 0.7f, livelyTrail = 0.58f),
-    cuts = false,
-    seed = 703L,
-    outside = GroundKind.Cloud,
-    pace = 0.6f,
-) {
-
-    // This one answers a low transient with a rib down the wall, which the shaft does not.
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Bands, VizProperty.Shape),
-        VizDrive(VizDriver.Level, VizProperty.Speed),
-        VizDrive(VizDriver.Bass, VizProperty.Shape),
-        VizDrive(VizDriver.Mid, VizProperty.Shape),
-        VizDrive(VizDriver.Width, VizProperty.Shape),
-        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-    )
-    override val dustRate: Float get() = 24f
-
-    override fun onAdvance(state: VizRenderState) {
-        twistGene.target = 0.5f + 0.5f * sin(genes.walk * TAU)
-    }
-}
-
-/**
- * The same flight with the last frame coming back larger and turned, so every rib leaves an echo that
- * keeps growing behind it: a corridor inside a corridor with no end. Calm music gets a long slow echo
- * and a gentle turn, a chorus a short hard one that rushes.
- */
-internal class AcidTunnel : Pipe(
-    name = "Acid Tunnel",
-    sides = 22,
-    ribs = 28,
-    spacing = 1.5f,
-    twist = 0.42f,
-    bloom = 1,
-    bucket = VizEnergy.High,
-    filled = false,
-    family = VizFamily.Acid,
-    seed = 704L,
-    moodSpec = MoodSpec(
-        calmTrail = 0.9f,
-        livelyTrail = 0.8f,
-        calmZoom = 1.006f,
-        livelyZoom = 1.026f,
-        calmSpin = 0.08f,
-        livelySpin = 0.34f,
-    ),
-) {
-
-    // This one answers a low transient with a rib down the wall, which the shaft does not.
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Bands, VizProperty.Shape),
-        VizDrive(VizDriver.Level, VizProperty.Speed),
-        VizDrive(VizDriver.Bass, VizProperty.Shape),
-        VizDrive(VizDriver.Mid, VizProperty.Shape),
-        VizDrive(VizDriver.Width, VizProperty.Shape),
-        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-    )
-}
-
-/** Pulled the other way: the echoes fall inward, so the whole picture drains towards the middle. */
-internal class Drain : Pipe(
-    name = "Drain",
-    sides = 30,
-    ribs = 26,
-    spacing = 1.7f,
-    twist = 0.55f,
-    bloom = 1,
-    bucket = VizEnergy.High,
-    filled = false,
-    family = VizFamily.Acid,
-    seed = 705L,
-    moodSpec = MoodSpec(
-        calmTrail = 0.92f,
-        livelyTrail = 0.85f,
-        calmZoom = 0.994f,
-        livelyZoom = 0.978f,
-        calmSpin = -0.2f,
-        livelySpin = -0.7f,
-    ),
-) {
-
-    // This one answers a low transient with a rib down the wall, which the shaft does not.
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Bands, VizProperty.Shape),
-        VizDrive(VizDriver.Level, VizProperty.Speed),
-        VizDrive(VizDriver.Bass, VizProperty.Shape),
-        VizDrive(VizDriver.Mid, VizProperty.Shape),
-        VizDrive(VizDriver.Width, VizProperty.Shape),
-        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.5f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Scaled),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Section, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-    )
 }

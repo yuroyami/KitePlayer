@@ -5,11 +5,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
-import io.github.yuroyami.kiteplayer.audioviz.viz.EchoFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
@@ -36,13 +34,10 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.MusicClock
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
-import io.github.yuroyami.kiteplayer.audioviz.viz.polar
 import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import io.github.yuroyami.kiteplayer.audioviz.viz.sceneRadius
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -238,233 +233,6 @@ internal class Bloom : Layered(
 
     private companion object {
         const val MEADOW = 7
-    }
-}
-
-/**
- * A dial that wanders past the corners, swept one way once a cycle and the other way once a beat. Loud
- * parts of the spectrum leave marks the echo carries outward and off the screen, and contacts crossing
- * the screen light up when a sweep passes them.
- */
-internal class Radar : Layered(
-    name = "Radar",
-    family = VizFamily.Battery,
-    bucket = VizEnergy.Mid,
-    kit = Kit(seed = 110L, groundKind = GroundKind.Grid, detailKind = DetailKind.Scan, camera = Camera2D(wander = 0.06f, seed = 110)),
-) {
-
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Bands, VizProperty.Brightness),
-        VizDrive(VizDriver.Level, VizProperty.Brightness),
-        VizDrive(VizDriver.LowHit, VizProperty.Brightness, VizCurve.Scaled, VizResponse.envelope(0.25f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled, VizResponse.envelope(0.6f)),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Drop, VizProperty.Speed, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Pulse, VizProperty.Shape),
-    )
-    override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.93f, livelyTrail = 0.9f, calmZoom = 1.004f, livelyZoom = 1.012f)
-
-    private val sweeps = genes.choice("Sweeps", 2, start = 1)
-    private val contacts = genes.choice("Contacts", 4, start = 2)
-    private val dial = genes.choice("Dial", 3)
-    private val persistence = genes.number("Mark persistence", -0.05f, 0.04f, 0f)
-
-    private val stage = Stage(start = 1.7f)
-    private val centre = Orbiter(radiusX = 0.2f, radiusY = 0.16f, lapsPerBar = 0.2f)
-    private val slow = MusicClock(beatsPerCycle = 4f)
-    private val fast = MusicClock(beatsPerCycle = 1f)
-    private var slowAngle = 0f
-    private var fastAngle = 0f
-    private var extra = 0f
-    private var extraAngle = 0f
-    private var dropLeft = 0f
-    private var dropTurn = 0f
-    private val flare = Envelope(attackPerSecond = 60f, releasePerSecond = 4f)
-    private var drift = 0f
-    private val contactX = FloatArray(CONTACTS) { 0.5f }
-    private val contactY = FloatArray(CONTACTS) { 0.5f }
-    private val lit = FloatArray(CONTACTS)
-    private val sparks = Sprites(240, 1_110L)
-    private val wedge = TriangleMesh(maxVertices = 3 * (WEDGE + 2) + 16)
-    private val hexagon = Path()
-
-    override fun trailAt(mood: Float): Float = (super.trailAt(mood) + persistence.value).coerceIn(0f, 0.97f)
-
-    // The echo grows from the dial's centre, so marks drift outward from wherever the dial has got to.
-    override fun echo(state: VizRenderState): EchoFrame {
-        val base = super.echo(state)
-        val dial = anchors.getOrNull(DIAL)
-        return EchoFrame(zoomX = base.zoomX, spin = base.spin, centreX = dial?.x ?: 0.5f, centreY = dial?.y ?: 0.5f)
-    }
-
-    override fun advance(state: VizRenderState) {
-        val dt = state.deltaSeconds
-        val frame = state.frame
-        stage.advance(dt * state.idle)
-        centre.centreX = stage.x
-        centre.centreY = stage.y
-        centre.advance(state, gestures)
-        kit.place(DIAL, centre.x, centre.y)
-        if (gestures.drop) dropLeft = 1f
-        if (dropLeft > 0f) {
-            val step = minOf(dropLeft, dt / gestures.cycleSeconds)
-            dropLeft -= step
-            dropTurn += step * TAU
-        }
-        slowAngle = slow.advance(dt, frame, state.paced(0.25f)) * TAU + dropTurn
-        fastAngle = -fast.advance(dt, frame, state.paced(0.7f)) * TAU - dropTurn
-        kit.place(0, centre.x + sin(slowAngle) * 0.45f / kit.aspect, centre.y - cos(slowAngle) * 0.45f)
-        if (gestures.snare > 0f) {
-            extra = 0.4f + 0.6f * gestures.snare
-            extraAngle = random.next() * TAU
-        }
-        extra = (extra - dt / (gestures.beatSeconds * 0.75f)).coerceAtLeast(0f)
-        flare.hit(gestures.kick)
-        flare.advance(0f, dt)
-        drift += dt * TAU / (gestures.cycleSeconds * 3f) * (0.6f + 0.6f * state.drive)
-        val count = contacts.count(3)
-        val second = sweeps.value == 1
-        for (index in 0 until CONTACTS) {
-            contactX[index] = 0.5f + 0.46f * sin(drift * FX[index] + index * 1.9f)
-            contactY[index] = 0.5f + 0.42f * sin(drift * FY[index] + index * 2.3f)
-            kit.place(index + 1, contactX[index], contactY[index])
-            lit[index] = (lit[index] - dt * 1.5f).coerceAtLeast(0f)
-            if (index >= count) continue
-            val angle = atan2((contactX[index] - centre.x) * kit.aspect, centre.y - contactY[index])
-            val passed = near(angle, slowAngle, 0.22f) || (second && near(angle, fastAngle, 0.4f))
-            if (passed && lit[index] < 0.5f) {
-                lit[index] = 1f
-                sparks.burst(contactX[index], contactY[index], 8, 0.25f, 0.7f, 0.01f, index * 0.17f, Sprite.SPARK)
-            }
-        }
-        if (gestures.hat > 0f) {
-            val tipX = centre.x + sin(slowAngle) * 0.3f / kit.aspect
-            val tipY = centre.y - cos(slowAngle) * 0.3f
-            sparks.burst(tipX, tipY, gestures.hatSpawn(4), 0.3f, 0.5f, 0.008f, 0.5f, Sprite.SPARK)
-        }
-        sparks.advance(dt, drag = 1.2f)
-    }
-
-    // Angles follow polar(): clockwise from straight up, the same as the sweep lines.
-    private fun near(a: Float, b: Float, window: Float): Boolean {
-        var difference = (a - b) % TAU
-        if (difference > TAU / 2f) difference -= TAU
-        if (difference < -TAU / 2f) difference += TAU
-        return abs(difference) < window
-    }
-
-    override fun DrawScope.drawEcho(state: VizRenderState) {
-        val at = Offset(centre.x * size.width, centre.y * size.height)
-        val reach = sceneRadius * 1.3f
-        val walk = genes.walk
-        val thin = (size.minDimension * (0.002f + 0.003f * state.air)).coerceAtLeast(1f)
-        val ringColour = state.palette.mid.copy(alpha = (0.02f + 0.18f * state.lift + 0.25f * flare.value).coerceIn(0f, 1f))
-        val round = dial.weight(0)
-        val corners = dial.weight(1)
-        val lines = dial.weight(2)
-        for (ring in 1..4) {
-            val radius = reach * ring / 4f
-            if (round > 0.01f) drawCircle(ringColour.copy(alpha = ringColour.alpha * round), radius, at, style = Stroke(thin))
-            if (corners > 0.01f) {
-                hexagon.reset()
-                for (corner in 0..6) {
-                    val point = polar(at, dropTurn + TAU * corner / 6f, radius)
-                    if (corner == 0) hexagon.moveTo(point.x, point.y) else hexagon.lineTo(point.x, point.y)
-                }
-                drawPath(hexagon, ringColour.copy(alpha = ringColour.alpha * corners), style = Stroke(thin))
-            }
-        }
-        if (lines > 0.01f) {
-            val step = reach / 4f
-            val colour = ringColour.copy(alpha = ringColour.alpha * lines)
-            for (k in -8..8) {
-                val x = at.x + k * step
-                if (x in 0f..size.width) drawLine(colour, Offset(x, 0f), Offset(x, size.height), thin)
-                val y = at.y + k * step
-                if (y in 0f..size.height) drawLine(colour, Offset(0f, y), Offset(size.width, y), thin)
-            }
-        }
-        wedge.clear()
-        addSweep(state, at, reach, slowAngle, -1f, 1f, walk)
-        val second = sweeps.weight(1)
-        if (second > 0.01f) addSweep(state, at, reach, fastAngle, 1f, second * 0.8f, walk + 0.5f)
-        if (extra > 0f) addSweep(state, at, reach * 0.8f, extraAngle + (1f - extra) * PI.toFloat(), -1f, extra, walk + 0.25f)
-        drawMesh(wedge, BlendMode.Plus)
-        val line = state.palette.cap.copy(alpha = (0.1f + 0.85f * state.lift + 0.3f * flare.value).coerceIn(0f, 1f))
-        val width = thin * (1.5f + 3f * flare.value)
-        drawLine(line, at, polar(at, slowAngle, reach), width)
-        if (second > 0.01f) drawLine(line.copy(alpha = line.alpha * second), at, polar(at, fastAngle, reach), width)
-        val loud = LIT_BAND
-        val lift = state.lift
-        val dot = size.minDimension * 0.007f
-        for (sweep in 0 until 2) {
-            val strength = if (sweep == 0) 1f else second
-            if (strength <= 0.01f) continue
-            val angle = if (sweep == 0) slowAngle else fastAngle
-            for (mark in 1..MARKS) {
-                val along = mark.toFloat() / MARKS
-                val energy = state.frame.bandsRel.sampleAt(along)
-                if (energy <= loud) continue
-                drawCircle(
-                    state.palette.cycled(along + walk, value = 0.4f + 0.6f * energy, alpha = (energy * lift * strength).coerceIn(0f, 1f)),
-                    dot * (0.5f + 2.5f * energy),
-                    polar(at, angle, reach * 0.85f * along),
-                )
-            }
-        }
-        for (index in 0 until contacts.drawn(3)) {
-            val presence = contacts.presence(index, 3)
-            if (presence <= 0.01f) continue
-            val glow = 0.3f + 0.7f * lit[index]
-            drawCircle(
-                state.palette.cycled(index * 0.17f + walk, value = 1f, alpha = (glow * presence).coerceIn(0f, 1f)),
-                size.minDimension * (0.007f + 0.012f * lit[index]),
-                Offset(contactX[index] * size.width, contactY[index] * size.height),
-            )
-        }
-    }
-
-    // A fan of thin triangles behind the sweep line, fading with distance from it.
-    private fun addSweep(state: VizRenderState, at: Offset, reach: Float, angle: Float, behind: Float, strength: Float, tint: Float) {
-        val middle = wedge.vertex(at.x, at.y, state.palette.argb(tint, value = 1f, alpha = 0f))
-        var previous = -1
-        for (index in 0..WEDGE) {
-            val a = angle + behind * 0.07f * index
-            val alpha = strength * 0.4f * (1f - index.toFloat() / WEDGE)
-            val point = wedge.vertex(at.x + sin(a) * reach, at.y - cos(a) * reach, state.palette.argb(tint + index * 0.01f, value = 0.8f, alpha = alpha))
-            if (previous >= 0) wedge.triangle(middle, previous, point)
-            previous = point
-        }
-    }
-
-    override fun DrawScope.drawTop(state: VizRenderState) {
-        with(sparks) { drawSprites(state.palette, genes.walk) }
-    }
-
-    override fun onReset() {
-        stage.reset()
-        centre.reset()
-        slow.reset()
-        fast.reset()
-        slowAngle = 0f
-        fastAngle = 0f
-        extra = 0f
-        dropLeft = 0f
-        dropTurn = 0f
-        flare.reset()
-        drift = 0f
-        lit.fill(0f)
-        sparks.clear()
-    }
-
-    private companion object {
-        const val CONTACTS = 6
-        const val DIAL = CONTACTS + 1
-        const val MARKS = 16
-        const val WEDGE = 10
-        val FX = floatArrayOf(1f, 1.3f, 0.7f, 1.7f, 0.9f, 1.45f)
-        val FY = floatArrayOf(1.4f, 0.8f, 1.9f, 1.1f, 1.6f, 0.75f)
     }
 }
 

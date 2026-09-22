@@ -46,6 +46,9 @@ public class CameraRig(
     private val cuts: Boolean = false,
     seed: Int = 1,
 ) {
+    /** Built-in patterns can change camera cuts while running. */
+    internal var cutsEnabled: Boolean = cuts
+
     /** How far it has flown in all. */
     public var travelled: Float = 0f
         private set
@@ -113,7 +116,7 @@ public class CameraRig(
         widen.advance(dt)
         if (boundary?.detection?.kind == AudioEventKind.Drop) widen.kick(boundary.detection.strength * WIDEN)
 
-        if (cuts && boundary != null && random.next() < 0.3f * state.motionScale) {
+        if (cutsEnabled && boundary != null && random.next() < 0.3f * state.motionScale) {
             laneX = random.signed() * sway * 1.2f
             laneY = random.signed() * swayUp
         }

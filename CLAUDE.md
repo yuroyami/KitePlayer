@@ -152,6 +152,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - ExplicitBackingFields only buys something when the field's TYPE differs from the property's, as
   with a `MutableList` behind a `List`. For a Boolean or a Float there is no such pair, and a
   private var with a `get()` is the honest form.
+- Trigonometry inside a runtime shader's fold steps costs two to four times the frame on a phone.
+  Pass cosine and sine pairs and unit normals from the host instead (#147).
+- A depth pass that reads its step budget from `uFinish.w` renders black when that uniform is
+  unset, which reads like a broken field rather than a missing budget (#147).
 
 ### Engine invariants, each of which caused a real bug when violated
 

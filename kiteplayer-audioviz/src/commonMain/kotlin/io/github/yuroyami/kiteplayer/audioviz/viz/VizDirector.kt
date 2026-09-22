@@ -124,7 +124,7 @@ public class VizDirector(
 
     /** Starts on a named drawing, or the first one if the name is not in the list. */
     public fun startWith(name: String) {
-        current = catalogue.firstOrNull { it.name == name } ?: catalogue.first()
+        current = catalogue.firstOrNull { it.name == VizCatalog.canonicalName(name) } ?: catalogue.first()
         remember(current)
     }
 

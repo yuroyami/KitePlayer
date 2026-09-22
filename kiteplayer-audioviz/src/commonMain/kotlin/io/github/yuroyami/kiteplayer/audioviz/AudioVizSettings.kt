@@ -119,12 +119,22 @@ private fun Params(params: List<VizParam>, tick: Int) {
     }
     var resets by remember(params) { mutableIntStateOf(0) }
     for (param in params) {
+        if (!param.shownWhen()) continue
         var value by remember(param) { mutableFloatStateOf(param.value) }
         LaunchedEffect(param, tick, resets) { value = param.value }
-        Note("${param.name}  ${value.hundredths()}")
-        Slider(value, param.min..param.max) {
-            value = it
-            param.value = it
+        if (param.toggle) {
+            Toggle(param.name, value >= 0.5f) {
+                param.value = if (it) 1f else 0f
+                value = param.value
+            }
+        } else {
+            val label = param.choices.getOrNull((value - param.min).roundToInt())
+                ?: if (param.step >= 1f) value.roundToInt().toString() else value.hundredths()
+            Note("${param.name}  $label")
+            Slider(value, param.min..param.max) {
+                param.value = it
+                value = param.value
+            }
         }
     }
     PanelButton("Reset") {

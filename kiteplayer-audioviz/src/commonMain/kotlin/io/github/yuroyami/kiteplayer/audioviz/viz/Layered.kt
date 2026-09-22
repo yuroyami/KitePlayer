@@ -52,7 +52,10 @@ internal class Kit(
         ground?.walk = genes.walk
         detail?.walk = genes.walk
         return if (dt == state.deltaSeconds) state
-            else VizRenderState(state.frame, state.timeSeconds, dt, state.palette, state.musicTime, state.future)
+            else VizRenderState(state.frame, state.timeSeconds, dt, state.palette, state.musicTime, state.future).also {
+                it.motionScale = state.motionScale
+                it.lightScale = state.lightScale
+            }
     }
 
     /** Sets anchor [index] to a point given in shares of the screen before the camera. */
@@ -107,21 +110,24 @@ internal abstract class Layered(
      * because that is what a viewer sees and what the tests measure. Read it as a delegate, so the
      * drawing is fully built before its own properties are asked for:
      * `override val mapping: VizMapping by mappingOf(...)`.
+     * [echoes] and [softBuffer] also declare effects a person's controls can enable later.
      */
     protected fun mappingOf(
         vararg drives: VizDrive,
         silence: VizSilence = VizSilence.Idle,
         silenceSettleSeconds: Float = 2f,
+        echoes: Boolean = false,
+        softBuffer: Boolean = false,
     ): Lazy<VizMapping> = lazy {
         val needs = LinkedHashSet<VizNeed>()
         val quality = ArrayList<VizQualityControl>()
         if (isRuntimeShader) needs += VizNeed.RuntimeShader
         if (warp != null || ground != null || detail != null) needs += VizNeed.ShaderLayers
-        if (trail > 0f || moodSpec != null) {
+        if (echoes || trail > 0f || moodSpec != null) {
             needs += VizNeed.EchoBuffer
             quality += VizQualityControl.EchoResolution
         }
-        if (bloom > 0) needs += VizNeed.SoftBuffer
+        if (softBuffer || bloom > 0) needs += VizNeed.SoftBuffer
         quality += VizQualityControl.BoundedPool
         VizMapping(drives.toList(), needs, silence, quality, silenceSettleSeconds)
     }

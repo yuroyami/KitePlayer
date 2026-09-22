@@ -28,7 +28,7 @@ import kotlin.test.assertTrue
 class DesktopRenderPerformanceTest {
     @Test
     fun measureDesktopFrameCadence() {
-        for (name in listOf("Alchemy", "Twist", "Flow Field", "Cathedral")) {
+        for (name in listOf("Alchemy", "Twist", "Flow Field", "Odyssey")) {
             val drawing = VizCatalog.create().first { it.name == name }
             val song = RenderHarness.player(RenderHarness.Song.Lively, 8f)
             val frames = List(180) { song.next(1f / 60f) }

@@ -29,6 +29,19 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   the default, still waits for a musical boundary however long that takes.
 - The sample carries five songs, arrows and a drag across the picture to change the drawing,
   and a random button. Fixes #141.
+- `Odyssey` is one distance field made of districts. Each district is a recipe of eight fold
+  steps, composed on the host from five templates and a seed drawn at launch, so two runs show
+  two different worlds. The shader holds no trigonometry: the host passes cosine and sine pairs
+  and unit normals. A Kotlin copy of the field screens every recipe before it is shown. See #147.
+- `Neon Lo-Fi` replaces `Terrain March`: live spectrum terraces, a media-time musical horizon and
+  four continuous regions. A caller that saved the name `Terrain March` still resolves to it, and
+  the browser's search finds it under either name.
+- `Bars`, `Mandala`, `Ocean Mist`, `Pipe`, `Plasma` and `Smoke Vortices` are rewritten as one
+  drawing each, with their own controls. `Ocean Mist` keeps its live waveform outside the feedback
+  buffer and owns the stereo traces `Scope` used to show.
+- A control can be a switch or a named choice, and a control that does not apply is hidden.
+- The browser's tiles follow the settings of the drawing they preview, and obey a lower
+  `AudioVizState.framesPerSecond` cap.
 
 ### Fixed
 
@@ -61,6 +74,15 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   analysis runs on calibrated power with one shared gain and timed events; the numbers a
   drawing reads changed meaning, and a drawing written against 0.0.25 needs its thresholds read
   again.
+- The catalogue is 46 drawings, down from 78. These 34 are gone: Acid Tunnel, Blackout,
+  Cathedral, Dance of the Freq, Drain, Equaliser, Fire Storm, Hex Shaft, Hyperdrive, Implosion,
+  Ionizer, Lock On, Mandelbox, Menger, Neon City, Piston, Plasma Field, Radar, Rainbow Bar, Riot,
+  Ripple, Scope, Spikes, Stable Fluids, Starfield, Strands, Strobe Web, Terrain, Terrain March,
+  Tunnel, Vortex, Wave, Wireframe and Wormhole. Only `Terrain March` has a replacement that
+  answers to its old name. A caller that stored any other name finds nothing and must fall back
+  to the first drawing in the catalogue. Every removed class was internal, so no published symbol
+  changed.
+- The sample opens on `Alchemy` or `Bars`, chosen at random, because `Menger` is gone.
 
 ## [0.0.25] - 2026-09-15
 

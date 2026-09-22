@@ -123,7 +123,11 @@ fun SampleScreen(
     }
 
     LaunchedEffect(player, media) {
-        viz.drawing = viz.catalogue.firstOrNull { it.name == FIRST_DRAWING } ?: viz.catalogue.first()
+        // Use the visualiser's frame cap even on phones with a faster display.
+        viz.framesPerSecond = 60
+        viz.drawing = FIRST_DRAWINGS.shuffled()
+            .firstNotNullOfOrNull { wanted -> viz.catalogue.firstOrNull { it.name == wanted } }
+            ?: viz.catalogue.first()
         viz.directed = true
         // Some songs offer the detector no section it will support, and Bad Cat is one of them, so
         // without this the director can sit on one drawing for a whole track.
@@ -374,8 +378,11 @@ private fun clock(time: Duration): String {
 /** How long the sample lets the director sit on one drawing when the music offers no section. */
 private const val DIRECTOR_LONGEST_HOLD_SECONDS = 30f
 
-/** The drawing the sample opens on, before the director takes over. */
-private const val FIRST_DRAWING = "Menger"
+/**
+ * The drawings the sample may open on, one of them at random, before the director takes over.
+ * A target without runtime shaders has no Alchemy, so the list is tried in shuffled order.
+ */
+private val FIRST_DRAWINGS = listOf("Alchemy", "Bars")
 
 /** Single angle quotation marks, which every platform font here carries. */
 private const val PREVIOUS = "\u2039"

@@ -160,6 +160,7 @@ internal fun PostProcessedBox(
     val random = remember { Rng(4_096L) }
     val filters = remember { HashMap<Float, ColorFilter>() }
     val hold = remember { Hold() }
+    val grainOffset = remember { FloatArray(2) }
     val effect = remember { lazy { ScenePostEffect() } }
     DisposableEffect(effect) { onDispose { if (effect.isInitialized()) effect.value.close() } }
 
@@ -254,8 +255,12 @@ internal fun PostProcessedBox(
             if (post.grain > 0f) {
                 // Moved to a new place every frame, so the grain crawls the way film does instead of
                 // sitting still like a dirty screen.
-                val shiftX = -random.next() * GRAIN_SIZE
-                val shiftY = -random.next() * GRAIN_SIZE
+                if (current.audible > 0f) {
+                    grainOffset[0] = -random.next() * GRAIN_SIZE
+                    grainOffset[1] = -random.next() * GRAIN_SIZE
+                }
+                val shiftX = grainOffset[0]
+                val shiftY = grainOffset[1]
                 translate(shiftX, shiftY) {
                     drawRect(
                         brush = grain.value,

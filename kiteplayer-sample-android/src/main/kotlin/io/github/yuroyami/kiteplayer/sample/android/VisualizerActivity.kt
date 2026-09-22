@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer.sample.android
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.text.BasicText
@@ -42,6 +43,8 @@ internal class VisualizerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Keep the display awake while this sample is visible, including between tracks.
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val player = KitePlayerPlatform.createOrNull()
         this.player = player
         if (player != null) {

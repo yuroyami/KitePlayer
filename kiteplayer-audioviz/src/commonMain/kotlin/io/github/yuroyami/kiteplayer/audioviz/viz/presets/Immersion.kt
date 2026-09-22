@@ -3,19 +3,15 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.toArgb
 import io.github.yuroyami.kiteplayer.audioviz.viz.Camera2D
 import io.github.yuroyami.kiteplayer.audioviz.viz.CameraRig
 import io.github.yuroyami.kiteplayer.audioviz.viz.EchoCopy
 import io.github.yuroyami.kiteplayer.audioviz.viz.EchoFrame
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
-import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.Scene3D
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
@@ -31,7 +27,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.PathShape
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
-import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Swarm
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Travellers
 import io.github.yuroyami.kiteplayer.audioviz.viz.foldedAt
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.DetailKind
@@ -39,63 +34,43 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.ground.GroundKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glow
-import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.glyph
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.polygon
 import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.streak
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Envelope
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Noise1
-import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
-import io.github.yuroyami.kiteplayer.audioviz.viz.sampleAt
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
-import kotlin.math.sqrt
 
 /** The flat camera that goes with a drawing flown by its own camera in three dimensions: it only punches. */
 private fun stillCamera(seed: Long): Camera2D = Camera2D(wander = 0f, punch = 0.03f, roll = 0f, shake = 0f, cuts = false, seed = seed.toInt())
 
 /**
- * Points rushing past the camera on three depths, drawn as streaks, over a cloud that scrolls with the
- * camera. A planet lobed by the spectrum drifts past every couple of phrases, asteroids tumble across,
- * the camera banks, a snare cuts to a new lane, and a drop sends a planet right through the frame.
- *
- * A dot moving fast between two frames looks like a dot that jumped; the line between where it was and
- * where it is turns the same motion into speed.
+ * A configurable flight through stars, with short luminous dashes by default, a drifting cloud,
+ * planets and asteroids. Speed, dot shape and echoes can change without selecting another pattern.
  */
-internal open class Starfield(
-    name: String = "Starfield",
-    override val trail: Float = 0.3f,
-    override val feedbackZoom: Float = 1f,
-    override val bloom: Int = 0,
-    override val moodSpec: MoodSpec? = null,
-    bucket: VizEnergy = VizEnergy.Mid,
-    /** Multiplies the whole flight. Below 1 this is a drift rather than a warp. */
-    private val speedScale: Float = 1f,
-    /** How long a streak is drawn for the same speed. Zero draws round stars instead. */
-    private val streakScale: Float = 1f,
-    family: VizFamily = VizFamily.Immersion,
-    seed: Long = 711L,
-    private val count: Int = 4200,
-    cuts: Boolean = true,
-) : Layered(
-    name = name,
-    family = family,
-    bucket = bucket,
-    kit = Kit(seed = seed, groundKind = GroundKind.Cloud, groundDim = 0.8f, detailKind = DetailKind.Specks, detailStrength = 0.5f, camera = stillCamera(seed)),
+internal class Drift : Layered(
+    name = "Drift",
+    family = VizFamily.Immersion,
+    bucket = VizEnergy.Calm,
+    kit = Kit(seed = 712L, groundKind = GroundKind.Cloud, groundDim = 0.8f, detailKind = DetailKind.Specks, detailStrength = 0.5f, camera = stillCamera(712L)),
 ) {
 
     override val mapping: VizMapping by mappingOf(
         VizDrive(VizDriver.Level, VizProperty.Brightness),
         VizDrive(VizDriver.Bass, VizProperty.Shape),
+        VizDrive(VizDriver.Timbre, VizProperty.Size),
+        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled),
         VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        // A body transient cuts the camera to a new lane. A cut is the same jump however hard
-        // the hit was, so it is declared as one rather than as an accent.
-        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Discrete),
+        // Camera nudges remain active; the separate cuts control permits larger lane jumps.
+        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Scaled),
         VizDrive(VizDriver.Section, VizProperty.Spawn, VizCurve.Discrete,
             VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
         VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete,
             VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
+        echoes = true,
+        softBuffer = true,
     )
     override val cameraOnEcho: Boolean get() = false
 
@@ -104,6 +79,7 @@ internal open class Starfield(
     private val asteroidRate = genes.number("Asteroids", 0.5f, 2f, 1f)
     private val bank = genes.number("Bank", 0f, 0.6f, 0.3f)
 
+    private val count = 2400
     private val spread = 26f
     private val depth = 52f
     private val scene = Scene3D()
@@ -117,14 +93,43 @@ internal open class Starfield(
     private var laneX = 0f
     private var laneY = 0f
     private var look = 0f
-    private val rig = CameraRig(topSpeed = 48.5f, restSpeed = 1f, shove = 14f, sway = 0.4f, lean = 0.25f, baseFov = 82f, cuts = cuts, seed = 3_331)
+    private val rig = CameraRig(topSpeed = 48.5f, restSpeed = 1f, shove = 14f, sway = 0.4f, lean = 0.25f, baseFov = 82f, cuts = false, seed = 3_331)
 
-    private val speedParam = VizParam("Speed", 0.1f, 3f, 1f)
-    private val streakParam = VizParam("Streaks", 0f, 3f, streakScale)
-    override val params: List<VizParam> = listOf(speedParam, streakParam)
+    private val speedParam = VizParam("Speed", 0.1f, 3f, 0.65f)
+    private val streakParam = VizParam("Dot length", 0f, 3f, 0.35f)
+    private val sizeParam = VizParam("Dot size", 0.4f, 2f, 1f)
+    private val countParam = VizParam("Dot count", 200f, count.toFloat(), 1400f).apply { step = 100f }
+    private val cutsParam = VizParam("Camera cuts", 0f, 1f, 0f).apply { step = 1f; toggle = true }
+    private val trailParam = VizParam("Echo trail", 0f, 0.94f, 0.62f)
+    private val zoomParam = VizParam("Echo expansion", -1f, 1f, 0f)
+    private val glowParam = VizParam("Echo glow", 0f, 2f, 0f).apply { step = 1f }
+    private val wanderParam = VizParam("Echo drift", 0f, 1f, 0f)
+    private val copyParam = VizParam("Rotated echo", 0f, 0.4f, 0f)
+    override val params: List<VizParam> = listOf(
+        speedParam, streakParam, sizeParam, countParam, cutsParam, trailParam,
+        zoomParam, glowParam, wanderParam, copyParam,
+    )
+    override val trail: Float get() = trailParam.value
+    override val feedbackZoom: Float get() = 1f + zoomParam.value * 0.05f
+    override val bloom: Int get() = glowParam.value.roundToInt()
 
-    // Twelve corners a round star, four a streak; a mesh holds at most 32767, and a full one just stops adding.
-    private val mesh = TriangleMesh(maxVertices = (count * 12 + 16).coerceAtMost(32_767))
+    private var wander = 0f
+    private val stage = Stage(reachX = 0.3f, reachY = 0.22f, start = 1.2f)
+    private val nebula = TriangleMesh(maxVertices = 32)
+
+    override fun echo(state: VizRenderState): EchoFrame {
+        val base = super.echo(state)
+        return EchoFrame(
+            zoomX = base.zoomX,
+            spin = base.spin,
+            centreX = 0.5f + 0.25f * sin(wander) * wanderParam.value,
+            centreY = 0.5f + 0.2f * cos(wander * 0.8f) * wanderParam.value,
+            copy = if (copyParam.value > 0f) EchoCopy(angle = PI.toFloat(), share = copyParam.value) else null,
+        )
+    }
+
+    // A glowing dot uses at most twelve vertices, including its core. All 2400 fit in one mesh.
+    private val mesh = TriangleMesh(maxVertices = count * 12)
     private var planet = -1f
     private var planetBig = false
     private var planetSide = 1f
@@ -136,9 +141,6 @@ internal open class Starfield(
     private var rockCredit = 0f
     private val shape = Path()
 
-    /** For a subclass to move its own things on each frame. */
-    protected open fun onAdvance(state: VizRenderState) {}
-
     override fun advance(state: VizRenderState) {
         val dt = state.deltaSeconds
         if (!seeded) {
@@ -148,11 +150,12 @@ internal open class Starfield(
         // Nothing playing, nothing flying. Without this the stars cross the screen in a silence
         // at the rig's rest speed, which is the picture moving on its own.
         val cruise = if (gestures.silence) 0f else -1f
-        moved = rig.advance(state, speedScale * speedParam.value, cruise)
+        rig.cutsEnabled = cutsParam.value >= 0.5f
+        moved = rig.advance(state, speedParam.value, cruise)
         roll += dt * state.paced(0.55f) * 0.5f
         look += dt * TAU / 16f
         // A snare cuts to a new lane: the camera jumps sideways rather than sliding there.
-        if (gestures.snare > 0f && streakScale > 0f) {
+        if (gestures.snare > 0f && cutsParam.value >= 0.5f) {
             val aside = 0.4f + 0.6f * gestures.snare
             laneX = random.signed() * 3f * aside
             laneY = random.signed() * 2f * aside
@@ -173,7 +176,7 @@ internal open class Starfield(
         }
         if (gestures.drop) startPlanet(big = true)
         if (planet >= 0f) {
-            planet += dt / (gestures.cycleSeconds * if (planetBig) 1f else 3f) * speedScale.coerceAtLeast(0.3f)
+            planet += dt / (gestures.cycleSeconds * if (planetBig) 1f else 3f) * speedParam.value.coerceAtLeast(0.3f)
             if (planet > 1f) planet = -1f
         }
         // Asteroids tumble across, one a bar at least and more when the music drives.
@@ -181,12 +184,13 @@ internal open class Starfield(
         val flown = asteroids.anyNewest && asteroids.progress[asteroids.newest] > 0.6f
         if (!asteroids.anyNewest || ((gestures.section || rockCredit >= 1f) && flown)) {
             rockCredit = 0f
-            asteroids.across(random, gestures.cycleSeconds * 0.7f / speedScale.coerceAtLeast(0.6f), PathShape.Line, 0f, 0.025f + 0.03f * random.next(), random.next(), random.signed() * 3f, Sprite.HEX)
+            asteroids.across(random, gestures.cycleSeconds * 0.7f / speedParam.value.coerceAtLeast(0.6f), PathShape.Line, 0f, 0.025f + 0.03f * random.next(), random.next(), random.signed() * 3f, Sprite.HEX)
         }
         asteroids.advance(dt)
         kit.follow(0, asteroids)
         if (planet >= 0f) kit.place(1, planetX(), planetY)
-        onAdvance(state)
+        stage.advance(state.deltaSeconds * state.idle)
+        wander += state.stepSeconds * 0.4f * state.tempo
     }
 
     private fun startPlanet(big: Boolean) {
@@ -212,8 +216,10 @@ internal open class Starfield(
         val banked = roll + rig.roll * (0.5f + bank.value * 3f)
         scene.camera(rig.eyeX + laneX, rig.eyeY + laneY, 0f, laneX + 1f * sin(look), laneY + 0.7f * cos(look), -1f, roll = banked)
         val lift = 0.1f + 1.2f * state.lift
-        val live = (count * starDensity.value * (0.55f + 0.45f * state.texture)).toInt().coerceIn(40, count)
-        val streak = (moved * streakParam.value * (4f + 4f * state.bassMotion)).coerceIn(0.05f, 7f)
+        val live = (countParam.value * starDensity.value * (0.55f + 0.45f * state.texture)).toInt().coerceIn(40, count)
+        // A reference exposure keeps dots equally long at 60 Hz and 120 Hz.
+        val exposure = if (state.deltaSeconds > 0f) moved / state.deltaSeconds / 60f else 0f
+        val streak = ((0.25f + exposure * (4f + 4f * state.bassMotion)) * streakParam.value).coerceIn(0f, 7f)
         val round = streakParam.value <= 0.01f
         mesh.clear()
         for (index in 0 until live) {
@@ -222,14 +228,21 @@ internal open class Starfield(
             val headY = scene.screenY
             val fog = scene.fog(-z[index])
             val colour = state.palette.argb(tint[index], saturation = 0.75f, value = 1f, alpha = (0.5f + 0.5f * fog) * lift)
-            if (round) {
-                mesh.glow(headX, headY, (size.minDimension * 0.016f * fog).coerceAtLeast(1f), colour)
-                // A hard core in the glow, so a slow star still reads as a point that moves.
-                mesh.polygon(headX, headY, (size.minDimension * 0.005f * fog).coerceAtLeast(0.8f), 4, 0.785f, colour)
+            val dotSize = sizeParam.value
+            val coreWidth = (size.minDimension * 0.01f * fog).coerceAtLeast(1.6f) * dotSize
+            mesh.glow(headX, headY, (size.minDimension * 0.016f * fog).coerceAtLeast(1f) * dotSize, colour)
+            if (round || !scene.project(x[index], y[index], z[index] - streak)) {
+                mesh.polygon(headX, headY, coreWidth * 0.5f, 4, 0.785f, colour)
                 continue
             }
-            if (!scene.project(x[index], y[index], z[index] - streak)) continue
-            mesh.streak(scene.screenX, scene.screenY, headX, headY, (size.minDimension * 0.016f * fog).coerceAtLeast(1f), colour)
+            val dx = headX - scene.screenX
+            val dy = headY - scene.screenY
+            val length = hypot(dx, dy)
+            // A little elongation remains visible even in distant, slow-moving dots.
+            val drawnLength = length.coerceAtLeast(coreWidth * (0.5f + streakParam.value * 2f))
+            val directionX = if (length > 0.001f) dx / length else 0f
+            val directionY = if (length > 0.001f) dy / length else 1f
+            mesh.streak(headX - directionX * drawnLength, headY - directionY * drawnLength, headX, headY, coreWidth, colour)
         }
         drawMesh(mesh, BlendMode.Plus)
         if (planet >= 0f) drawPlanet(state)
@@ -269,6 +282,13 @@ internal open class Starfield(
         drawPath(shape, state.palette.cap.copy(alpha = 0.35f), style = Stroke((size.minDimension * 0.004f).coerceAtLeast(1f)))
     }
 
+    override fun DrawScope.drawTop(state: VizRenderState) {
+        nebula.clear()
+        val colour = state.palette.argb(0.7f + genes.walk, saturation = 0.6f, value = 0.8f, alpha = 0.5f * (0.1f + 1.2f * state.lift))
+        nebula.glow(stage.x * size.width, stage.y * size.height, size.minDimension * 0.5f, colour, sides = 24)
+        drawMesh(nebula, BlendMode.Plus)
+    }
+
     override fun onReset() {
         seeded = false
         roll = 0f
@@ -281,670 +301,8 @@ internal open class Starfield(
         phrasesSeen = 0
         asteroids.clear()
         rockCredit = 0f
-    }
-}
-
-/**
- * The same stars with the frame coming back larger, so every streak keeps stretching outward. The
- * zoom centre wanders and a half-turned copy of the echo lays the streaks into a lattice.
- */
-internal class Hyperdrive : Starfield(
-    name = "Hyperdrive",
-    bloom = 2,
-    count = 3200,
-    bucket = VizEnergy.High,
-    family = VizFamily.Acid,
-    seed = 713L,
-    moodSpec = MoodSpec(
-        calmTrail = 0.9f,
-        livelyTrail = 0.84f,
-        calmZoom = 1.012f,
-        livelyZoom = 1.05f,
-    ),
-) {
-    private var wander = 0f
-
-    override fun onAdvance(state: VizRenderState) {
-        wander += state.deltaSeconds * 0.4f * state.tempo
-    }
-
-    override fun echo(state: VizRenderState): EchoFrame {
-        val base = super.echo(state)
-        return EchoFrame(
-            zoomX = base.zoomX,
-            spin = base.spin,
-            centreX = 0.5f + 0.25f * sin(wander),
-            centreY = 0.5f + 0.2f * cos(wander * 0.8f),
-            copy = EchoCopy(angle = PI.toFloat(), share = 0.22f),
-        )
-    }
-
-    override fun onReset() {
-        super.onReset()
-        wander = 0f
-    }
-}
-
-/**
- * The starfield slowed right down, with fourteen hundred round stars instead of streaks, a cloud of
- * light drifting round the sky, a slow planet and no cuts. It is the drawing for the two minutes of an album where nothing much happens, and it would
- * be wrong under a drum break.
- */
-internal class Drift : Starfield(
-    name = "Drift",
-    trail = 0.62f,
-    bucket = VizEnergy.Calm,
-    speedScale = 0.65f,
-    streakScale = 0f,
-    seed = 712L,
-    count = 1400,
-    cuts = false,
-) {
-
-    // A drift flies too slowly for the streaks and planets the faster members of this family show.
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Level, VizProperty.Brightness),
-        VizDrive(VizDriver.Timbre, VizProperty.Size),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.LowHit, VizProperty.Shape, VizCurve.Scaled),
-        VizDrive(VizDriver.BodyHit, VizProperty.Camera, VizCurve.Scaled),
-        VizDrive(VizDriver.Drop, VizProperty.Spawn, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-    )
-    // A cloud of light on a slow circle, so the sky is lit somewhere else every few seconds.
-    private val stage = Stage(reachX = 0.3f, reachY = 0.22f, start = 1.2f)
-    private val nebula = TriangleMesh(maxVertices = 32)
-
-    override fun onAdvance(state: VizRenderState) {
-        stage.advance(state.deltaSeconds * state.idle)
-    }
-
-    override fun DrawScope.drawTop(state: VizRenderState) {
-        nebula.clear()
-        val colour = state.palette.argb(0.7f + genes.walk, saturation = 0.6f, value = 0.8f, alpha = 0.5f * (0.1f + 1.2f * state.lift))
-        nebula.glow(stage.x * size.width, stage.y * size.height, size.minDimension * 0.5f, colour, sides = 24)
-        drawMesh(nebula, BlendMode.Plus)
-    }
-
-    override fun onReset() {
-        super.onReset()
         stage.reset()
-    }
-}
-
-/**
- * A landscape built from the last few seconds of spectrum, flown over. Every row of ground is one
- * snapshot, so the mountains ahead are the music coming up and the ones below already played. Around it:
- * cloud lines rushing overhead, a flock crossing the sky that turns on the snare, a sun swinging across once a phrase, light towers on
- * the peaks in loud passages, water that mirrors the sky, a wave across it on every kick, and a drop that
- * drains the water and lights every peak.
- */
-internal class Terrain : Layered(
-    name = "Terrain",
-    family = VizFamily.Immersion,
-    bucket = VizEnergy.Mid,
-    kit = Kit(seed = 721L, detailKind = DetailKind.Specks, detailStrength = 0.4f, camera = stillCamera(721L)),
-) {
-
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Bands, VizProperty.Shape),
-        VizDrive(VizDriver.Level, VizProperty.Brightness),
-        VizDrive(VizDriver.SlowLevel, VizProperty.Shape),
-        VizDrive(VizDriver.Mid, VizProperty.Shape),
-        VizDrive(VizDriver.Key, VizProperty.Colour),
-        VizDrive(VizDriver.LowHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(1.5f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
-        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.LowHit, VizProperty.Shape),
-        VizDrive(VizDriver.Mood, VizProperty.Shape),
-    )
-    override val paintsWholeScreen: Boolean get() = true
-    override val cameraOnEcho: Boolean get() = false
-
-    private val reliefGene = genes.number("Relief", 0.5f, 1.6f, 1f)
-    private val waterRule = genes.choice("Water rule", 2)
-    private val flockSize = genes.choice("Flock", 3, start = 2)
-    private val towers = genes.toggle("Towers", start = true)
-
-    private val rows = 46
-    private val columns = 40
-    private val spacing = 1.15f
-    private val across = 26f
-
-    private val scene = Scene3D()
-    private val path = Path()
-    private val height = Array(rows) { FloatArray(columns) }
-    private val rowTint = FloatArray(rows)
-    private var writeSlot = 0
-    private var travel = 0f
-    private val rig = CameraRig(topSpeed = 22f, restSpeed = 0.6f, shove = 5f, sway = 6f, swayUp = 0f, lean = 0.2f, baseFov = 70f, seed = 5_501)
-    private val lift = Spring(stiffness = 45f, damping = 0.7f)
-
-    private val water = VizParam("Water", -1f, 1f, 0f)
-    private val relief = VizParam("Height", 0.3f, 2f, 1f)
-    override val params: List<VizParam> = listOf(water, relief)
-
-    private val pointX = FloatArray(rows * columns)
-    private val pointY = FloatArray(rows * columns)
-    private val pointOk = BooleanArray(rows * columns)
-    private val rowFog = FloatArray(rows)
-    private val pointHeight = FloatArray(rows * columns)
-    private val pointWater = BooleanArray(rows * columns)
-    private val mesh = TriangleMesh(maxVertices = rows * columns, maxIndices = rows * columns * 6)
-    private val vertexOf = IntArray(rows * columns)
-    private var waterLevel = 1f
-
-    private val flock = Swarm(40, 2_721L)
-    private var look = 0f
-    private var cloudTravel = 0f
-    private var flockTravel = 0f
-    private var flockWay = 1f
-    private val birdMesh = TriangleMesh(maxVertices = 40 * 8 + 8)
-    private var waveAt = -1f
-    private var drainHold = 0f
-    private val drained = Envelope(attackPerSecond = 3f, releasePerSecond = 1f)
-    private val spray = Sprites(160, 3_721L)
-    private val comets = Comets(size = 0.025f)
-    private val skyStars = Sprites(120, 4_721L)
-    private var starCredit = 0f
-    private var hueShift = 0f
-    private val peakX = FloatArray(PEAKS)
-    private val peakY = FloatArray(PEAKS)
-
-    override fun advance(state: VizRenderState) {
-        val dt = state.deltaSeconds
-        val moved = rig.advance(state)
-        travel += moved
-        cloudTravel = (cloudTravel + moved) % (CLOUDS * CLOUD_GAP)
-        look += dt * TAU / 16f
-        while (travel >= spacing) {
-            travel -= spacing
-            writeSlot = (writeSlot - 1 + rows) % rows
-            capture(writeSlot, state)
-        }
-        // The camera climbs through a loud section and settles back in a quiet one.
-        lift.target = 2.4f + 2.6f * state.frame.loudLong
-        lift.advance(dt)
-        if (gestures.section) {
-            reliefGene.target = 0.5f + 1.1f * random.next()
-            waterRule.choose(1 - waterRule.value)
-            hueShift += 0.25f
-        }
-        if (gestures.drop) drainHold = gestures.cycleSeconds
-        drainHold -= dt
-        drained.advance(if (drainHold > 0f) 1f else 0f, dt)
-        if (gestures.kick > 0f) {
-            waveAt = 0f
-            spray.burst(0.2f + 0.6f * random.next(), 0.8f, gestures.kickSpawn(24), 0.25f, 0.8f, 0.01f, 0.6f, Sprite.GLOW, UP, 1f)
-        }
-        if (waveAt >= 0f) {
-            waveAt += dt / (gestures.beatSeconds * 2f)
-            if (waveAt > 1.2f) waveAt = -1f
-        }
-        spray.advance(dt, drag = 0.5f, gravity = 0.5f)
-        // The flock crosses the sky, turning back on the snare.
-        if (gestures.snare > 0f) flockWay = -flockWay
-        flockTravel += dt / (gestures.cycleSeconds * 2f) * flockWay
-        flock.targetX = -0.1f + 1.2f * wrap(flockTravel)
-        flock.targetY = 0.2f + 0.06f * sin(flockTravel * TAU * 2f)
-        flock.advance(dt, speed = 0.45f + 0.4f * state.drive)
-        var sumX = 0f
-        var sumY = 0f
-        val birds = flockSize.count(16, 12)
-        for (index in 0 until birds) {
-            sumX += flock.x[index]
-            sumY += flock.y[index]
-        }
-        kit.place(1, sumX / birds, sumY / birds)
-        comets.advance(state, gestures, random)
-        kit.follow(0, comets.travellers)
-        starCredit += dt * (80f * state.idle + 120f * state.air)
-        while (starCredit >= 1f) {
-            starCredit -= 1f
-            skyStars.burst(random.next(), 0.02f + 0.4f * random.next(), 1, 0.01f, 1.2f, 0.014f, random.next(), Sprite.SPARK)
-        }
-        skyStars.advance(dt, drag = 0.5f)
-    }
-
-    override fun DrawScope.drawEcho(state: VizRenderState) {
-        // The sky, with the water below mirroring it.
-        val hue = state.musicTime * 0.035f + state.frame.keyHue * state.frame.keyConfidence + hueShift
-        drawRect(Brush.verticalGradient(
-            0f to state.palette.cycled(hue + 0.62f, value = 0.015f + 0.08f * state.energy),
-            0.48f to state.palette.cycled(hue + 0.4f, value = 0.12f + 0.25f * state.body),
-            1f to state.palette.cycled(hue + 0.7f, value = 0.025f + 0.1f * state.energy),
-        ))
-        // A sun swinging across the sky once a phrase.
-        val swing = TAU * gestures.slowCyclePhase
-        val sun = Offset((0.5f + 0.35f * sin(swing)) * size.width, (0.16f + 0.06f * cos(swing)) * size.height)
-        val glow = size.minDimension * 0.18f
-        drawCircle(Brush.radialGradient(0f to state.palette.cap.copy(alpha = 0.35f + 0.3f * state.lift), 1f to Color.Transparent, center = sun, radius = glow), glow, sun)
-        drawCircle(state.palette.cap.copy(alpha = 0.8f), size.minDimension * 0.045f, sun)
-
-        var total = 0f
-        for (row in height) for (value in row) total += value
-        val meanHeight = total / (rows * columns)
-        val loudness = if (waterRule.value == 0) state.frame.loudLong else 0.5f
-        waterLevel = meanHeight * (1.15f - 0.95f * loudness + water.value) * (1f - drained.value)
-        scene.lens(size, fovDegrees = rig.fov, near = 0.6f, far = rows * spacing)
-        scene.camera(
-            eyeX = rig.eyeX,
-            eyeY = lift.value.coerceIn(1.4f, 6f),
-            eyeZ = 0f,
-            targetX = rig.eyeX * 0.3f + 2.5f * sin(look * 0.7f),
-            targetY = 1.1f,
-            targetZ = -spacing * 10f,
-            // A slow lean of the horizon, so the sky is not always the top of the picture.
-            roll = rig.roll + 0.25f * sin(look),
-        )
-        // A ceiling of cloud lines rushing overhead at the speed of the flight.
-        val cloudWidth = (size.minDimension * 0.006f).coerceAtLeast(1f)
-        for (line in 0 until CLOUDS) {
-            val distance = 1.5f + ((line * CLOUD_GAP - cloudTravel) % (CLOUDS * CLOUD_GAP) + CLOUDS * CLOUD_GAP) % (CLOUDS * CLOUD_GAP)
-            val fog = scene.fog(distance)
-            if (fog <= 0.02f || !scene.project(-across, CLOUD_HEIGHT, -distance)) continue
-            val fromX = scene.screenX
-            val fromY = scene.screenY
-            if (!scene.project(across, CLOUD_HEIGHT, -distance)) continue
-            val colour = state.palette.cycled(hue + 0.55f + line * 0.07f, value = 0.6f + 0.4f * fog, alpha = (0.15f + 0.45f * fog) * (0.4f + 0.6f * state.lift))
-            drawLine(colour, Offset(fromX, fromY), Offset(scene.screenX, scene.screenY), cloudWidth * (0.5f + fog), StrokeCap.Round)
-        }
-        for (row in 0 until rows) {
-            val slot = (writeSlot + row) % rows
-            // Held well in front of the eye: a row level with the camera projects to nonsense.
-            val distance = 2.2f + row * spacing - travel
-            rowFog[row] = scene.fog(distance)
-            val heights = height[slot]
-            val base = row * columns
-            for (column in 0 until columns) {
-                val worldX = (column.toFloat() / (columns - 1) - 0.5f) * across
-                val raw = heights[column]
-                val drowned = raw < waterLevel
-                pointHeight[base + column] = raw
-                pointWater[base + column] = drowned
-                val ok = scene.project(worldX, if (drowned) waterLevel else raw, -distance)
-                pointOk[base + column] = ok
-                if (ok) {
-                    pointX[base + column] = scene.screenX
-                    pointY[base + column] = scene.screenY
-                }
-            }
-        }
-        drawGround(state, hue)
-        // Contour lines over the solid ground, far to near.
-        for (row in rows - 1 downTo 0 step 2) {
-            val fog = rowFog[row]
-            if (fog <= 0.02f) continue
-            val base = row * columns
-            path.reset()
-            var started = false
-            for (column in 0 until columns) {
-                val at = base + column
-                if (!pointOk[at]) {
-                    started = false
-                    continue
-                }
-                if (started) path.lineTo(pointX[at], pointY[at]) else path.moveTo(pointX[at], pointY[at])
-                started = true
-            }
-            drawPath(path, state.palette.cycled(rowTint[(writeSlot + row) % rows], value = 0.35f + 0.65f * fog, alpha = fog * 0.6f), style = Stroke((size.minDimension * 0.007f * fog).coerceAtLeast(1f)))
-        }
-        drawTowers(state)
-    }
-
-    // Beams from the highest peaks in loud passages, and from every peak on a drop.
-    private fun DrawScope.drawTowers(state: VizRenderState) {
-        val draining = drained.value
-        // The towers fade in as the drive rises rather than switching on at one level.
-        val glow = maxOf(draining, if (towers.on) (state.drive - 0.3f) * 2f else 0f).coerceIn(0f, 1f)
-        if (glow <= 0f) return
-        peakY.fill(Float.MAX_VALUE)
-        val wanted = if (draining > 0.05f) PEAKS else 3
-        for (row in 2 until rows / 2) {
-            val base = row * columns
-            for (column in 1 until columns - 1) {
-                val at = base + column
-                if (!pointOk[at] || pointWater[at]) continue
-                if (pointHeight[at] < pointHeight[at - 1] || pointHeight[at] < pointHeight[at + 1]) continue
-                // Keep the highest on screen, which are the smallest screen y.
-                var worst = 0
-                for (slot in 1 until wanted) if (peakY[slot] > peakY[worst]) worst = slot
-                if (pointY[at] < peakY[worst]) {
-                    peakY[worst] = pointY[at]
-                    peakX[worst] = pointX[at]
-                }
-            }
-        }
-        val beam = size.minDimension * 0.012f
-        for (slot in 0 until wanted) {
-            if (peakY[slot] == Float.MAX_VALUE) continue
-            drawRect(
-                Brush.verticalGradient(0f to Color.Transparent, 1f to state.palette.cap.copy(alpha = 0.5f * glow), startY = 0f, endY = peakY[slot]),
-                topLeft = Offset(peakX[slot] - beam / 2f, 0f),
-                size = androidx.compose.ui.geometry.Size(beam, peakY[slot]),
-                blendMode = BlendMode.Plus,
-            )
-            drawCircle(state.palette.cap.copy(alpha = glow), beam, Offset(peakX[slot], peakY[slot]))
-        }
-    }
-
-    /**
-     * The ground as one solid surface, far to near in one call. Land is lit from the side, peaks catch
-     * more light, and water takes the sky's own colours and ripples, brightest where a kick's wave is.
-     */
-    private fun DrawScope.drawGround(state: VizRenderState, hue: Float) {
-        mesh.clear()
-        vertexOf.fill(-1)
-        val shimmer = state.musicTime * 5f
-        val light = 0.3f + 0.7f * state.drive
-        for (row in 0 until rows) {
-            val fog = rowFog[row]
-            if (fog <= 0.02f) continue
-            val slot = (writeSlot + row) % rows
-            val base = row * columns
-            for (column in 0 until columns) {
-                val at = base + column
-                if (!pointOk[at]) continue
-                val colour = if (pointWater[at]) {
-                    val ripple = 0.5f + 0.5f * sin(shimmer + column * 0.7f + row * 0.4f)
-                    val wave = if (waveAt >= 0f) (1f - abs(column.toFloat() / columns - waveAt) / 0.08f).coerceIn(0f, 1f) else 0f
-                    state.palette.cycled(hue + 0.4f, saturation = 0.55f, value = ((0.16f + 0.3f * ripple + 0.2f * state.energy) * light + 0.4f * wave).coerceIn(0f, 1f), alpha = fog)
-                } else {
-                    val beside = if (column + 1 < columns) pointHeight[at + 1] else pointHeight[at]
-                    val slope = ((pointHeight[at] - beside) * 0.6f + 0.5f).coerceIn(0f, 1f)
-                    val peak = (pointHeight[at] / 3.4f).coerceIn(0f, 1f)
-                    state.palette.cycled(rowTint[slot], saturation = 0.75f, value = (0.12f + 0.45f * peak + 0.35f * slope) * light, alpha = fog)
-                }
-                vertexOf[at] = mesh.vertex(pointX[at], pointY[at], colour.toArgb())
-            }
-        }
-        for (row in rows - 2 downTo 0) {
-            val here = row * columns
-            val there = (row + 1) * columns
-            for (column in 0 until columns - 1) {
-                val a = vertexOf[here + column]
-                val b = vertexOf[here + column + 1]
-                val c = vertexOf[there + column + 1]
-                val d = vertexOf[there + column]
-                if (a < 0 || b < 0 || c < 0 || d < 0) continue
-                mesh.quad(a, b, c, d)
-            }
-        }
-        drawMesh(mesh)
-    }
-
-    override fun DrawScope.drawTop(state: VizRenderState) {
-        birdMesh.clear()
-        val colour = state.palette.argb(genes.walk + 0.1f, saturation = 0.2f, value = 0.9f, alpha = 0.85f)
-        for (index in 0 until flockSize.drawn(16, 12)) {
-            val presence = flockSize.presence(index, 16, 12)
-            if (presence <= 0.01f) continue
-            val heading = kotlin.math.atan2(flock.vy[index], flock.vx[index])
-            birdMesh.glyph(2, flock.x[index] * size.width, flock.y[index] * size.height, size.minDimension * 0.016f, heading + PI.toFloat() / 2f, colour)
-        }
-        drawMesh(birdMesh)
-        with(spray) { drawSprites(state.palette, genes.walk, saturation = 0.3f) }
-        with(skyStars) { drawSprites(state.palette, genes.walk, alpha = 0.7f, saturation = 0.3f) }
-        with(comets) { drawComets(state.palette, genes.walk) }
-    }
-
-    private fun capture(slot: Int, state: VizRenderState) {
-        val bands = state.frame.bandsRel
-        val target = height[slot]
-        for (column in 0 until columns) {
-            // Mirrored with the bass in the middle, straight ahead, and the treble out at the edges.
-            val fromMiddle = abs(column.toFloat() / (columns - 1) - 0.5f) * 2f
-            target[column] = (if (bands.isEmpty()) 0f else bands.sampleAt(fromMiddle)) * 3.4f * relief.value * reliefGene.value * (0.55f + 0.65f * state.drive)
-        }
-        rowTint[slot] = state.musicTime * 0.24f + hueShift
-    }
-
-    override fun onReset() {
-        for (row in height) row.fill(0f)
-        rowTint.fill(0f)
-        writeSlot = 0
-        travel = 0f
-        rig.reset()
-        lift.reset()
-        flock.scatter()
-        flockTravel = 0f
-        flockWay = 1f
-        waveAt = -1f
-        drainHold = 0f
-        drained.reset()
-        spray.clear()
-        hueShift = 0f
-        look = 0f
-        cloudTravel = 0f
-        comets.clear()
-        skyStars.clear()
-        starCredit = 0f
-    }
-
-    private companion object {
-        const val PEAKS = 8
-        const val CLOUDS = 14
-        const val CLOUD_GAP = 3f
-        const val CLOUD_HEIGHT = 9f
-    }
-}
-
-/**
- * A solid turning in a room, orbiting and tumbling, with its dual inside turning the other way, the two
- * trading shapes over each slow visual cycle. Three satellites circle it and jump on the snare, sparks fly off its
- * corners on the kick, and a drop blows it apart and puts it back together over a visual cycle.
- *
- * The outer shape is an icosahedron; its dual, the dodecahedron, has a corner at the middle of each of
- * its faces.
- */
-internal class Wireframe : Layered(
-    name = "Wireframe",
-    family = VizFamily.Immersion,
-    bucket = VizEnergy.Mid,
-    kit = Kit(seed = 731L, groundKind = GroundKind.Grid, groundDim = 0.8f, detailKind = DetailKind.Scan, camera = stillCamera(731L)),
-) {
-
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Level, VizProperty.Speed),
-        VizDrive(VizDriver.Treble, VizProperty.Speed),
-        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.3f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Shape, VizCurve.Scaled),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-    )
-    override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.72f, livelyTrail = 0.5f)
-    override val cameraOnEcho: Boolean get() = false
-
-    private val blend = genes.number("Shape blend", 0f, 1f, 0f)
-    private val satellites = genes.choice("Satellites", 3, start = 2)
-    private val room = genes.toggle("Hatched room", start = false)
-    private val edgeGlow = genes.number("Edge glow", 0.3f, 1.2f, 0.7f)
-
-    private val scene = Scene3D()
-    private val ico: Array<FloatArray>
-    private val icoEdges: Array<IntArray>
-    private val dual: Array<FloatArray>
-    private val dualEdges: Array<IntArray>
-    private val screenX = FloatArray(20)
-    private val screenY = FloatArray(20)
-    private val visible = BooleanArray(20)
-    private var spinX = 0f
-    private var spinY = 0f
-    private var orbit = 0f
-    private val swell = Spring(stiffness = 190f, damping = 0.42f)
-    private var explode = 0f
-    private val satPhase = FloatArray(3) { it * TAU / 3f }
-    private val sparks = Sprites(240, 1_731L)
-    private val comets = Comets()
-    private val satMesh = TriangleMesh(maxVertices = 3 * 8 + 8)
-
-    init {
-        val phi = 1.618034f
-        ico = arrayOf(
-            floatArrayOf(-1f, phi, 0f), floatArrayOf(1f, phi, 0f),
-            floatArrayOf(-1f, -phi, 0f), floatArrayOf(1f, -phi, 0f),
-            floatArrayOf(0f, -1f, phi), floatArrayOf(0f, 1f, phi),
-            floatArrayOf(0f, -1f, -phi), floatArrayOf(0f, 1f, -phi),
-            floatArrayOf(phi, 0f, -1f), floatArrayOf(phi, 0f, 1f),
-            floatArrayOf(-phi, 0f, -1f), floatArrayOf(-phi, 0f, 1f),
-        )
-        icoEdges = arrayOf(
-            intArrayOf(0, 1), intArrayOf(0, 5), intArrayOf(0, 7), intArrayOf(0, 10), intArrayOf(0, 11),
-            intArrayOf(1, 5), intArrayOf(1, 7), intArrayOf(1, 8), intArrayOf(1, 9),
-            intArrayOf(2, 3), intArrayOf(2, 4), intArrayOf(2, 6), intArrayOf(2, 10), intArrayOf(2, 11),
-            intArrayOf(3, 4), intArrayOf(3, 6), intArrayOf(3, 8), intArrayOf(3, 9),
-            intArrayOf(4, 5), intArrayOf(4, 9), intArrayOf(4, 11),
-            intArrayOf(5, 9), intArrayOf(5, 11),
-            intArrayOf(6, 7), intArrayOf(6, 8), intArrayOf(6, 10),
-            intArrayOf(7, 8), intArrayOf(7, 10),
-            intArrayOf(8, 9), intArrayOf(10, 11),
-        )
-        // The faces are the triples whose three pairs are all edges; their middles are the dual's corners.
-        val linked = Array(12) { BooleanArray(12) }
-        for (edge in icoEdges) {
-            linked[edge[0]][edge[1]] = true
-            linked[edge[1]][edge[0]] = true
-        }
-        val faces = ArrayList<IntArray>()
-        for (a in 0 until 12) for (b in a + 1 until 12) for (c in b + 1 until 12) {
-            if (linked[a][b] && linked[b][c] && linked[a][c]) faces += intArrayOf(a, b, c)
-        }
-        val reach = sqrt(1f + phi * phi)
-        dual = Array(faces.size) { index ->
-            val face = faces[index]
-            val mx = (ico[face[0]][0] + ico[face[1]][0] + ico[face[2]][0]) / 3f
-            val my = (ico[face[0]][1] + ico[face[1]][1] + ico[face[2]][1]) / 3f
-            val mz = (ico[face[0]][2] + ico[face[1]][2] + ico[face[2]][2]) / 3f
-            val length = sqrt(mx * mx + my * my + mz * mz)
-            floatArrayOf(mx / length * reach, my / length * reach, mz / length * reach)
-        }
-        val pairs = ArrayList<IntArray>()
-        for (a in faces.indices) for (b in a + 1 until faces.size) {
-            var shared = 0
-            for (corner in faces[a]) if (corner in faces[b]) shared++
-            if (shared == 2) pairs += intArrayOf(a, b)
-        }
-        dualEdges = pairs.toTypedArray()
-    }
-
-    override fun advance(state: VizRenderState) {
-        val dt = state.deltaSeconds
-        ground?.kind = if (room.on) GroundKind.Hatch else GroundKind.Grid
-        spinX += dt * 1.4f * state.tempo * (0.5f + state.body)
-        spinY += dt * 2f * state.tempo * (0.5f + state.air)
-        orbit += dt * 0.5f * state.tempo
-        swell.kick(gestures.kick * 6f)
-        swell.advance(dt)
-        if (gestures.drop) explode = 1f
-        explode = (explode - dt / gestures.cycleSeconds).coerceAtLeast(0f)
-        if (gestures.snare > 0f) for (index in 0 until 3) satPhase[index] += 1.2f * gestures.snare
-        for (index in 0 until 3) satPhase[index] += dt * (1.5f * state.idle + 0.4f * index) * state.tempo
-        comets.advance(state, gestures, random)
-        kit.follow(0, comets.travellers)
-        sparks.advance(dt, drag = 1.2f)
-    }
-
-    override fun DrawScope.drawEcho(state: VizRenderState) {
-        scene.lens(size, fovDegrees = 55f, near = 0.5f, far = 40f)
-        scene.camera(0f, 0f, 0f, 0f, 0f, -1f, roll = sin(spinX * 0.3f) * 0.2f)
-        val burst = 1f + 1.5f * sin(explode * PI.toFloat())
-        val scale = 3.8f * (0.7f + 0.4f * state.lift + 0.22f * swell.value.coerceIn(-0.5f, 1.6f)) * burst
-        val centreX = 6f * cos(orbit)
-        val centreY = 2.6f * sin(orbit * 0.7f)
-        val distance = 11f
-        // The two shapes trade places over each slow visual cycle, the gene shifting where in the phrase it happens.
-        val morph = 0.5f - 0.5f * cos(TAU * (gestures.slowCyclePhase + blend.value))
-        val lift = 0.35f + 0.65f * state.lift
-        solid(state, ico, icoEdges, scale, centreX, centreY, distance, spinX, spinY, (1f - morph) * lift, 0f)
-        solid(state, dual, dualEdges, scale, centreX, centreY, distance, spinX, spinY, morph * lift, 0.5f)
-        // The inner solid turns the other way at half the size.
-        solid(state, if (morph > 0.5f) ico else dual, if (morph > 0.5f) icoEdges else dualEdges, scale * 0.45f, centreX, centreY, distance, -spinX * 1.3f, -spinY * 1.3f, 0.7f * lift, 0.25f)
-        if (scene.project(centreX, centreY, -distance)) kit.place(1, scene.screenX / size.width, scene.screenY / size.height)
-        // Satellites circling the solid.
-        satMesh.clear()
-        for (index in 0 until satellites.drawn(1)) {
-            val presence = satellites.presence(index, 1)
-            if (presence <= 0.01f) continue
-            val a = satPhase[index]
-            val sx = centreX + cos(a) * scale * 1.9f
-            val sy = centreY + sin(a) * scale * 0.9f
-            val sz = -distance + sin(a) * scale * 1.2f
-            if (!scene.project(sx, sy, sz)) continue
-            satMesh.glow(scene.screenX, scene.screenY, size.minDimension * 0.02f, state.palette.argb(index * 0.33f + genes.walk, value = 1f, alpha = presence * lift))
-            kit.place(index + 2, scene.screenX / size.width, scene.screenY / size.height)
-        }
-        drawMesh(satMesh, BlendMode.Plus)
-        with(comets) { drawComets(state.palette, genes.walk, alpha = lift) }
-    }
-
-    private fun DrawScope.solid(
-        state: VizRenderState,
-        corners: Array<FloatArray>,
-        lines: Array<IntArray>,
-        scale: Float,
-        centreX: Float,
-        centreY: Float,
-        distance: Float,
-        turnX: Float,
-        turnY: Float,
-        alpha: Float,
-        tint: Float,
-    ) {
-        if (alpha <= 0.01f) return
-        val cosX = cos(turnX)
-        val sinX = sin(turnX)
-        val cosY = cos(turnY)
-        val sinY = sin(turnY)
-        for (index in corners.indices) {
-            val vertex = corners[index]
-            // About y, then about x: two steps show every face over time.
-            val x1 = vertex[0] * cosY + vertex[2] * sinY
-            val z1 = -vertex[0] * sinY + vertex[2] * cosY
-            val y2 = vertex[1] * cosX - z1 * sinX
-            val z2 = vertex[1] * sinX + z1 * cosX
-            visible[index] = scene.project(centreX + x1 * scale, centreY + y2 * scale, z2 * scale - distance)
-            if (visible[index]) {
-                screenX[index] = scene.screenX
-                screenY[index] = scene.screenY
-            }
-        }
-        val width = (size.minDimension * 0.011f).coerceAtLeast(1.2f)
-        for (edge in lines.indices) {
-            val from = lines[edge][0]
-            val to = lines[edge][1]
-            if (!visible[from] || !visible[to]) continue
-            val colour = state.palette.cycled(edge.toFloat() / lines.size + tint + genes.walk, value = (0.4f + 0.6f * state.energy).coerceIn(0f, 1f))
-            val start = Offset(screenX[from], screenY[from])
-            val end = Offset(screenX[to], screenY[to])
-            drawLine(colour.copy(alpha = (alpha * 0.5f * edgeGlow.value).coerceIn(0f, 1f)), start, end, width * 4f, StrokeCap.Round)
-            drawLine(colour.copy(alpha = (alpha * 0.9f).coerceIn(0f, 1f)), start, end, width, StrokeCap.Round)
-        }
-        // Sparks fly off the corners on the kick.
-        if (gestures.kick > 0f && tint == 0f) {
-            for (index in corners.indices step 3) {
-                if (visible[index]) {
-                    sparks.burst(screenX[index] / size.width, screenY[index] / size.height,
-                        gestures.kickSpawn(3), 0.4f, 0.6f, 0.01f, random.next(), Sprite.SPARK)
-                }
-            }
-        }
-    }
-
-    override fun DrawScope.drawTop(state: VizRenderState) {
-        with(sparks) { drawSprites(state.palette, genes.walk) }
-    }
-
-    override fun onReset() {
-        spinX = 0f
-        spinY = 0f
-        orbit = 0f
-        swell.reset()
-        explode = 0f
-        for (index in 0 until 3) satPhase[index] = index * TAU / 3f
-        sparks.clear()
-        comets.clear()
+        wander = 0f
     }
 }
 

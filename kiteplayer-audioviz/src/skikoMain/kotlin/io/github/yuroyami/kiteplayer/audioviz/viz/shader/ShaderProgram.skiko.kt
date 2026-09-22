@@ -8,9 +8,13 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.asComposeShader
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.nativeCanvas
 import io.github.yuroyami.kiteplayer.audioviz.AudioVizAuthoringApi
 import org.jetbrains.skia.FilterTileMode
 import org.jetbrains.skia.Image
+import org.jetbrains.skia.ImageFilter
+import org.jetbrains.skia.Paint
+import org.jetbrains.skia.Rect
 import org.jetbrains.skia.RuntimeEffect
 import org.jetbrains.skia.RuntimeShaderBuilder
 import org.jetbrains.skia.SamplingMode
@@ -111,6 +115,45 @@ public actual class ShaderProgram actual constructor(source: String) {
     public actual fun brush(): Brush? {
         val holder = builder ?: return null
         return SkiaProgramBrush(holder.makeShader().asComposeShader())
+    }
+
+    internal actual fun childProgram(name: String, program: ShaderProgram) {
+        val target = checkNotNull(builder) { error ?: "parent shader is unavailable" }
+        val child = checkNotNull(program.builder) { program.error ?: "child shader is unavailable" }
+        child.makeShader().use { target.child(name, it) }
+    }
+
+    internal actual fun drawPasses(scope: DrawScope, input: ShaderProgram, width: Float, height: Float,
+        passes: List<ShaderProgram>, sampler: String) {
+        var filter: ImageFilter? = null
+        try {
+            for (pass in passes + this) {
+                val next = ImageFilter.makeRuntimeShader(checkNotNull(pass.builder), arrayOf(sampler), arrayOf(filter))
+                filter?.close()
+                filter = next
+            }
+            Paint().use { paint ->
+                paint.imageFilter = filter
+                val canvas = scope.drawContext.canvas.nativeCanvas
+                canvas.saveLayer(Rect.makeWH(scope.size.width, scope.size.height), paint)
+                try {
+                    Paint().use { background ->
+                        background.color = 0xff000000.toInt()
+                        canvas.drawRect(Rect.makeWH(scope.size.width, scope.size.height), background)
+                    }
+                    checkNotNull(input.builder).makeShader().use { shader ->
+                        Paint().use { source ->
+                            source.shader = shader
+                            canvas.drawRect(Rect.makeWH(kotlin.math.ceil(width), kotlin.math.ceil(height)), source)
+                        }
+                    }
+                } finally {
+                    canvas.restore()
+                }
+            }
+        } finally {
+            filter?.close()
+        }
     }
 }
 

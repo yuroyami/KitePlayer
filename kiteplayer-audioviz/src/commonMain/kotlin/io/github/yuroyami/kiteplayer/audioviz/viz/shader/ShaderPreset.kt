@@ -42,10 +42,12 @@ internal abstract class ShaderPreset(
     override val post: PostSpec get() = if (bucket == VizEnergy.Calm) SHADER_POST_CALM else SHADER_POST
 
     /** True when this device ran the program. Useful for a catalogue that hides what cannot run. */
-    val runs: Boolean get() = program.available
+    val runs: Boolean get() = program.available && additionalCompileError == null
 
     /** What the compiler said, so a failure is visible rather than a black screen. */
-    val compileError: String? get() = program.error
+    val compileError: String? get() = program.error ?: additionalCompileError
+
+    protected open val additionalCompileError: String? get() = null
 
     /** Whether this drawing has something to show where shaders cannot run. Without one it is left out there. */
     open val hasFallback: Boolean get() = false
@@ -70,25 +72,38 @@ internal abstract class ShaderPreset(
     /** Moves this drawing's own actors on by one frame. Most shader drawings do it in [extraUniforms]. */
     override fun advance(state: VizRenderState) {}
 
+    /** Scene-owned projection must not also receive the flat camera on its portable path. */
+    protected open val fallbackParallax: Float get() = 1f
+
+    /** Allows the same portable branch to be exercised without changing platform capabilities. */
+    protected open val useRuntimeShader: Boolean get() = true
+
+    protected open fun shaderSize(width: Float, height: Float) {}
+
     /** Values belonging to this drawing alone, on top of the ones every drawing gets. */
     open fun extraUniforms(program: ShaderProgram, state: VizRenderState) {}
 
     /** What to draw where a shader cannot run. The default is an empty screen. */
     open fun DrawScope.drawFallback(state: VizRenderState) {}
 
+    protected open fun DrawScope.drawShader(program: ShaderProgram, state: VizRenderState) {
+        val brush = program.brush() ?: return
+        drawRect(brush)
+    }
+
     final override fun DrawScope.drawEcho(state: VizRenderState) {
         // A snapshot into a bitmap during a change of drawing lands here on Android.
-        if (!program.available || !canDrawRuntimeShaders()) {
-            withCamera(camera, 1f) { drawFallback(state) }
+        if (!useRuntimeShader || !runs || !canDrawRuntimeShaders()) {
+            withCamera(camera, fallbackParallax) { drawFallback(state) }
             return
         }
         inputs.update(state)
         inputs.publish(program, state, size.width, size.height)
         program.uniform("uCam", camera.panX, camera.panY, camera.zoom, camera.angle)
         program.uniform("uWalk", genes.walk)
+        shaderSize(size.width, size.height)
         extraUniforms(program, state)
-        val brush = program.brush() ?: return
-        drawRect(brush)
+        drawShader(program, state)
     }
 }
 

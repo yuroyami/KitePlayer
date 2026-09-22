@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.audioviz
 
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,23 +42,42 @@ import kotlinx.coroutines.delay
  * Tapping a tile shows that drawing in [state], then calls [onPick] so the caller can close the panel.
  *
  * The tiles draw their own copies of the drawings, so their trails stay apart from the big one, and
- * redraw fifteen times a second. Show it over a [KiteAudioViz] of the same state, which keeps the
- * analysis moving.
+ * redraw at most fifteen times a second, respecting a lower [AudioVizState.framesPerSecond] cap.
+ * Parameter values follow the configured drawings. Show it over a [KiteAudioViz] of the same state,
+ * which keeps the analysis moving.
  */
 @Composable
 public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, onPick: (Visualization) -> Unit = {}) {
     val tiles = remember { VizCatalog.create() }
+    val previewParams = remember(state, tiles) {
+        tiles.flatMap { tile ->
+            val configured = state.catalogue.firstOrNull { it.name == tile.name }
+            tile.params.mapNotNull { preview ->
+                configured?.params?.firstOrNull { it.name == preview.name }?.let { it to preview }
+            }
+        }
+    }
+    val neonPreviews = remember(state, tiles) {
+        tiles.filterIsInstance<NeonLoFi>().mapNotNull { tile ->
+            state.catalogue.filterIsInstance<NeonLoFi>()
+                .firstOrNull()?.let { it to tile }
+        }
+    }
     var query by remember { mutableStateOf("") }
     var shown by remember { mutableStateOf(state.frame) }
-    LaunchedEffect(state) {
+    val tileRate = if (state.framesPerSecond > 0) minOf(TILE_RATE, state.framesPerSecond) else TILE_RATE
+    LaunchedEffect(state, tileRate, previewParams) {
         while (true) {
+            // Separate animation state, but the same settings as the drawing being previewed.
+            for ((configured, preview) in previewParams) preview.value = configured.value
+            for ((configured, preview) in neonPreviews) preview.copyRecipeFrom(configured)
             shown = state.frame
-            delay(1_000L / TILE_RATE)
+            delay(1_000L / tileRate)
         }
     }
 
     val wanted = query.trim()
-    val groups = tiles.filter { wanted.isEmpty() || it.name.contains(wanted, ignoreCase = true) }.groupBy { it.family }
+    val groups = tiles.filter { VizCatalog.matchesSearch(it.name, wanted) }.groupBy { it.family }
 
     Column(modifier.fillMaxSize().background(Color(0xE6070910)).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -99,7 +119,7 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
                             palette = state.palette,
                             modifier = Modifier.size(172.dp, 96.dp).clip(RoundedCornerShape(6.dp)),
                             post = false,
-                            framesPerSecond = TILE_RATE,
+                            framesPerSecond = tileRate,
                         )
                         Note(tile.name, Modifier.padding(top = 4.dp))
                     }

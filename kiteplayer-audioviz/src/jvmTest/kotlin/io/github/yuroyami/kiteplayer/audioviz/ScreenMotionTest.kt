@@ -47,5 +47,5 @@ class ScreenMotionTest {
     }
 }
 
-/** The eight drawings only the director reaches for: four for loud music, four for quiet music. */
-private val DIRECTOR_ONLY = setOf("Piston", "Riot", "Blackout", "Shatter", "Breath", "Tide", "Lantern", "Drift")
+/** Drawings with a deliberate preference for either lively or quiet music. */
+private val DIRECTOR_ONLY = setOf("Shatter", "Breath", "Tide", "Lantern", "Drift")

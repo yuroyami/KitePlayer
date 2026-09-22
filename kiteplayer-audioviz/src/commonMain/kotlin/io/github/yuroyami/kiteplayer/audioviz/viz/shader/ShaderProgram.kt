@@ -58,6 +58,13 @@ public expect class ShaderProgram(source: String) {
      */
     public fun child(name: String, image: ImageBitmap, tiled: Boolean = false)
 
+    /** Binds an internal continuation program after its uniforms and children have been updated. */
+    internal fun childProgram(name: String, program: ShaderProgram)
+
+    /** Cache the input on the GPU, then evaluate each pass over that image, in order. */
+    internal fun drawPasses(scope: DrawScope, input: ShaderProgram, width: Float, height: Float,
+        passes: List<ShaderProgram>, sampler: String)
+
     /** Something to paint with, or null when this device cannot run the program. */
     public fun brush(): Brush?
 }

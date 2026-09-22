@@ -64,25 +64,10 @@ import kotlin.math.roundToLong
  */
 public class KiteFFmpegSourceFactory : MediaSourceFactory {
     override suspend fun open(media: MediaItem): PlayerMediaSource {
-        // The same funnel KiteFFmpegMediaBackend.open runs: this factory used to
-        // drop headers, openOptions, formatHint and videoFilter on the floor and skip the
-        // FFmpeg identity mapping, so the documented SPI door behaved differently from the
-        // backend door for the same MediaItem.
-        val options = preOpenOptions(media)
-        rewindFdOption(options)
-        // Once per open, like the backend door: what the factory answers with is this source's
-        // reader and is closed with it.
-        val io = media.io?.open()
-        val source = mappingFFmpegRuntimeRejection {
-            KiteFFmpegSource(
-                when {
-                    // The custom AVIO bridge: an item's own byte reader carries the media.
-                    io != null -> MediaSource.open(BlockingMediaIo(io), options)
-                    options.isEmpty() -> MediaSource.open(media.uri)
-                    else -> MediaSource.open(media.uri, options)
-                },
-            )
-        }
+        // The same open KiteFFmpegMediaBackend.open runs. This factory once dropped headers,
+        // openOptions, formatHint and videoFilter and skipped the FFmpeg identity mapping, so the
+        // documented SPI door behaved differently from the backend door for the same MediaItem.
+        val source = mappingFFmpegRuntimeRejection { KiteFFmpegSource(openSource(media)) }
         source.videoFilterDescription = media.videoFilter
         return source
     }

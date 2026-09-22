@@ -16,7 +16,6 @@ import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.SubtitleDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteffmpeg.KiteFFmpegLowLevelApi
-import io.github.yuroyami.kiteffmpeg.MediaSource
 
 /**
  * The FFmpeg backend, as one session-shaped object.
@@ -64,24 +63,7 @@ public class KiteFFmpegMediaBackend(
         // match the headers KiteFFmpeg was compiled against, so every open fails and retrying is pointless.
         // Mapping it here is what stops the engine from reporting it as SourceUnavailable, which would
         // say the bytes could not be reached. See FFmpegRuntimeCheck.kt.
-        val options = preOpenOptions(media)
-        rewindFdOption(options)
-        // Invoked exactly once: the item carries a factory, and the reader it makes belongs to this
-        // session and is closed with it.
-        val io = media.io?.open()
-        val source = mappingFFmpegRuntimeRejection {
-            KiteFFmpegSource(
-                when {
-                    // The custom AVIO bridge: the item's own byte reader carries the media,
-                    // demuxed by FFmpeg with no path and no FFmpeg protocol involved.
-                    io != null -> MediaSource.open(BlockingMediaIo(io), options)
-                    options.isEmpty() -> MediaSource.open(media.uri)
-                    // The pre-open funnel. Unconsumed keys are reported by KiteFFmpeg rather
-                    // than dropped, so a typo surfaces instead of quietly doing nothing.
-                    else -> MediaSource.open(media.uri, options)
-                },
-            )
-        }
+        val source = mappingFFmpegRuntimeRejection { KiteFFmpegSource(openSource(media)) }
         source.onWarning = onWarning
         source.videoFilterDescription = media.videoFilter
         // The option echo's honest half: a key the demuxer never consumed did nothing,

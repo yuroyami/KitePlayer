@@ -81,6 +81,11 @@ public data class MediaItem(
      * with `"fd"` set to a descriptor number, and that number is different for every file.
      */
     val openOptions: Map<String, String> = emptyMap(),
+    /**
+     * Typed settings for opening the container: how far to probe, what to do with damaged packets,
+     * low latency, and bytes to skip at the start. The default changes nothing. See [DemuxPolicy].
+     */
+    val demux: DemuxPolicy = DemuxPolicy(),
 ) {
     public companion object {}
 

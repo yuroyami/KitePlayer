@@ -285,6 +285,17 @@ final enum class io.github.yuroyami.kiteplayer.subtitle/CueWrap : kotlin/Enum<io
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.subtitle/CueWrap> // io.github.yuroyami.kiteplayer.subtitle/CueWrap.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/CorruptPackets : kotlin/Enum<io.github.yuroyami.kiteplayer/CorruptPackets> { // io.github.yuroyami.kiteplayer/CorruptPackets|null[0]
+    enum entry Drop // io.github.yuroyami.kiteplayer/CorruptPackets.Drop|null[0]
+    enum entry Keep // io.github.yuroyami.kiteplayer/CorruptPackets.Keep|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/CorruptPackets.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/CorruptPackets> // io.github.yuroyami.kiteplayer/CorruptPackets.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/CorruptPackets.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/CorruptPackets> // io.github.yuroyami.kiteplayer/CorruptPackets.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/FrameDropPolicy : kotlin/Enum<io.github.yuroyami.kiteplayer/FrameDropPolicy> { // io.github.yuroyami.kiteplayer/FrameDropPolicy|null[0]
     enum entry LateAndDecode // io.github.yuroyami.kiteplayer/FrameDropPolicy.LateAndDecode|null[0]
     enum entry LateOnly // io.github.yuroyami.kiteplayer/FrameDropPolicy.LateOnly|null[0]
@@ -1093,6 +1104,42 @@ sealed interface io.github.yuroyami.kiteplayer/PlayerEvent { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlayerEvent.Ended.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlayerEvent.Ended.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlayerEvent.Ended.toString|toString(){}[0]
+    }
+}
+
+sealed interface io.github.yuroyami.kiteplayer/ProbeDepth { // io.github.yuroyami.kiteplayer/ProbeDepth|null[0]
+    final class Custom : io.github.yuroyami.kiteplayer/ProbeDepth { // io.github.yuroyami.kiteplayer/ProbeDepth.Custom|null[0]
+        constructor <init>(kotlin/Long, kotlin.time/Duration) // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.<init>|<init>(kotlin.Long;kotlin.time.Duration){}[0]
+
+        final val bytes // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.bytes|{}bytes[0]
+            final fun <get-bytes>(): kotlin/Long // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.bytes.<get-bytes>|<get-bytes>(){}[0]
+        final val duration // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.duration|{}duration[0]
+            final fun <get-duration>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.duration.<get-duration>|<get-duration>(){}[0]
+
+        final fun component1(): kotlin/Long // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.component1|component1(){}[0]
+        final fun component2(): kotlin.time/Duration // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.component2|component2(){}[0]
+        final fun copy(kotlin/Long = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer/ProbeDepth.Custom // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.copy|copy(kotlin.Long;kotlin.time.Duration){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/ProbeDepth.Custom.toString|toString(){}[0]
+    }
+
+    final object Default : io.github.yuroyami.kiteplayer/ProbeDepth { // io.github.yuroyami.kiteplayer/ProbeDepth.Default|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/ProbeDepth.Default.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/ProbeDepth.Default.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/ProbeDepth.Default.toString|toString(){}[0]
+    }
+
+    final object Fast : io.github.yuroyami.kiteplayer/ProbeDepth { // io.github.yuroyami.kiteplayer/ProbeDepth.Fast|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/ProbeDepth.Fast.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/ProbeDepth.Fast.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/ProbeDepth.Fast.toString|toString(){}[0]
+    }
+
+    final object Thorough : io.github.yuroyami.kiteplayer/ProbeDepth { // io.github.yuroyami.kiteplayer/ProbeDepth.Thorough|null[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/ProbeDepth.Thorough.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/ProbeDepth.Thorough.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/ProbeDepth.Thorough.toString|toString(){}[0]
     }
 }
 
@@ -1926,6 +1973,31 @@ final class io.github.yuroyami.kiteplayer/Chapter { // io.github.yuroyami.kitepl
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/Chapter.toString|toString(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer/DemuxPolicy { // io.github.yuroyami.kiteplayer/DemuxPolicy|null[0]
+    constructor <init>(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ...) // io.github.yuroyami.kiteplayer/DemuxPolicy.<init>|<init>(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long){}[0]
+
+    final val corruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets|{}corruptPackets[0]
+        final fun <get-corruptPackets>(): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.corruptPackets.<get-corruptPackets>|<get-corruptPackets>(){}[0]
+    final val generateTimestamps // io.github.yuroyami.kiteplayer/DemuxPolicy.generateTimestamps|{}generateTimestamps[0]
+        final fun <get-generateTimestamps>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.generateTimestamps.<get-generateTimestamps>|<get-generateTimestamps>(){}[0]
+    final val lowLatency // io.github.yuroyami.kiteplayer/DemuxPolicy.lowLatency|{}lowLatency[0]
+        final fun <get-lowLatency>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.lowLatency.<get-lowLatency>|<get-lowLatency>(){}[0]
+    final val probe // io.github.yuroyami.kiteplayer/DemuxPolicy.probe|{}probe[0]
+        final fun <get-probe>(): io.github.yuroyami.kiteplayer/ProbeDepth // io.github.yuroyami.kiteplayer/DemuxPolicy.probe.<get-probe>|<get-probe>(){}[0]
+    final val skipInitialBytes // io.github.yuroyami.kiteplayer/DemuxPolicy.skipInitialBytes|{}skipInitialBytes[0]
+        final fun <get-skipInitialBytes>(): kotlin/Long // io.github.yuroyami.kiteplayer/DemuxPolicy.skipInitialBytes.<get-skipInitialBytes>|<get-skipInitialBytes>(){}[0]
+
+    final fun component1(): io.github.yuroyami.kiteplayer/ProbeDepth // io.github.yuroyami.kiteplayer/DemuxPolicy.component1|component1(){}[0]
+    final fun component2(): io.github.yuroyami.kiteplayer/CorruptPackets // io.github.yuroyami.kiteplayer/DemuxPolicy.component2|component2(){}[0]
+    final fun component3(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.component3|component3(){}[0]
+    final fun component4(): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.component4|component4(){}[0]
+    final fun component5(): kotlin/Long // io.github.yuroyami.kiteplayer/DemuxPolicy.component5|component5(){}[0]
+    final fun copy(io.github.yuroyami.kiteplayer/ProbeDepth = ..., io.github.yuroyami.kiteplayer/CorruptPackets = ..., kotlin/Boolean = ..., kotlin/Boolean = ..., kotlin/Long = ...): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/DemuxPolicy.copy|copy(io.github.yuroyami.kiteplayer.ProbeDepth;io.github.yuroyami.kiteplayer.CorruptPackets;kotlin.Boolean;kotlin.Boolean;kotlin.Long){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/DemuxPolicy.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/DemuxPolicy.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/DemuxPolicy.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer/DownmixConfig { // io.github.yuroyami.kiteplayer/DownmixConfig|null[0]
     constructor <init>(kotlin/Boolean = ..., kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/DownmixConfig.<init>|<init>(kotlin.Boolean;kotlin.Boolean){}[0]
 
@@ -2120,8 +2192,10 @@ final class io.github.yuroyami.kiteplayer/MediaInspection { // io.github.yuroyam
 }
 
 final class io.github.yuroyami.kiteplayer/MediaItem { // io.github.yuroyami.kiteplayer/MediaItem|null[0]
-    constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin/String? = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIoFactory? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer/MediaItem.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.String?;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIoFactory?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    constructor <init>(kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin/String? = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIoFactory? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer/DemuxPolicy = ...) // io.github.yuroyami.kiteplayer/MediaItem.<init>|<init>(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.String?;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIoFactory?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.DemuxPolicy){}[0]
 
+    final val demux // io.github.yuroyami.kiteplayer/MediaItem.demux|{}demux[0]
+        final fun <get-demux>(): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/MediaItem.demux.<get-demux>|<get-demux>(){}[0]
     final val externalSubtitles // io.github.yuroyami.kiteplayer/MediaItem.externalSubtitles|{}externalSubtitles[0]
         final fun <get-externalSubtitles>(): kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> // io.github.yuroyami.kiteplayer/MediaItem.externalSubtitles.<get-externalSubtitles>|<get-externalSubtitles>(){}[0]
     final val formatHint // io.github.yuroyami.kiteplayer/MediaItem.formatHint|{}formatHint[0]
@@ -2149,12 +2223,29 @@ final class io.github.yuroyami.kiteplayer/MediaItem { // io.github.yuroyami.kite
     final fun component6(): io.github.yuroyami.kiteplayer/MediaIoFactory? // io.github.yuroyami.kiteplayer/MediaItem.component6|component6(){}[0]
     final fun component7(): kotlin/String? // io.github.yuroyami.kiteplayer/MediaItem.component7|component7(){}[0]
     final fun component8(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer/MediaItem.component8|component8(){}[0]
-    final fun copy(kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin/String? = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIoFactory? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/MediaItem.copy|copy(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.String?;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIoFactory?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    final fun component9(): io.github.yuroyami.kiteplayer/DemuxPolicy // io.github.yuroyami.kiteplayer/MediaItem.component9|component9(){}[0]
+    final fun copy(kotlin/String = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., kotlin.collections/List<io.github.yuroyami.kiteplayer/SubtitleSource> = ..., kotlin/String? = ..., kotlin.time/Duration? = ..., io.github.yuroyami.kiteplayer/MediaIoFactory? = ..., kotlin/String? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer/DemuxPolicy = ...): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/MediaItem.copy|copy(kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>;kotlin.collections.List<io.github.yuroyami.kiteplayer.SubtitleSource>;kotlin.String?;kotlin.time.Duration?;io.github.yuroyami.kiteplayer.MediaIoFactory?;kotlin.String?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.DemuxPolicy){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/MediaItem.equals|equals(kotlin.Any?){}[0]
     final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/MediaItem.hashCode|hashCode(){}[0]
     final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/MediaItem.toString|toString(){}[0]
 
     final object Companion // io.github.yuroyami.kiteplayer/MediaItem.Companion|null[0]
+}
+
+final class io.github.yuroyami.kiteplayer/MediaItemBuilder { // io.github.yuroyami.kiteplayer/MediaItemBuilder|null[0]
+    final fun corruptPackets(io.github.yuroyami.kiteplayer/CorruptPackets) // io.github.yuroyami.kiteplayer/MediaItemBuilder.corruptPackets|corruptPackets(io.github.yuroyami.kiteplayer.CorruptPackets){}[0]
+    final fun externalSubtitle(io.github.yuroyami.kiteplayer/SubtitleSource) // io.github.yuroyami.kiteplayer/MediaItemBuilder.externalSubtitle|externalSubtitle(io.github.yuroyami.kiteplayer.SubtitleSource){}[0]
+    final fun formatHint(kotlin/String) // io.github.yuroyami.kiteplayer/MediaItemBuilder.formatHint|formatHint(kotlin.String){}[0]
+    final fun generateTimestamps() // io.github.yuroyami.kiteplayer/MediaItemBuilder.generateTimestamps|generateTimestamps(){}[0]
+    final fun header(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/MediaItemBuilder.header|header(kotlin.String;kotlin.String){}[0]
+    final fun headers(kotlin/Array<out kotlin/Pair<kotlin/String, kotlin/String>>...) // io.github.yuroyami.kiteplayer/MediaItemBuilder.headers|headers(kotlin.Array<out|kotlin.Pair<kotlin.String,kotlin.String>>...){}[0]
+    final fun io(io.github.yuroyami.kiteplayer/MediaIoFactory) // io.github.yuroyami.kiteplayer/MediaItemBuilder.io|io(io.github.yuroyami.kiteplayer.MediaIoFactory){}[0]
+    final fun lowLatency() // io.github.yuroyami.kiteplayer/MediaItemBuilder.lowLatency|lowLatency(){}[0]
+    final fun openOption(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/MediaItemBuilder.openOption|openOption(kotlin.String;kotlin.String){}[0]
+    final fun probe(io.github.yuroyami.kiteplayer/ProbeDepth) // io.github.yuroyami.kiteplayer/MediaItemBuilder.probe|probe(io.github.yuroyami.kiteplayer.ProbeDepth){}[0]
+    final fun skipInitialBytes(kotlin/Long) // io.github.yuroyami.kiteplayer/MediaItemBuilder.skipInitialBytes|skipInitialBytes(kotlin.Long){}[0]
+    final fun startPosition(kotlin.time/Duration) // io.github.yuroyami.kiteplayer/MediaItemBuilder.startPosition|startPosition(kotlin.time.Duration){}[0]
+    final fun videoFilter(kotlin/String) // io.github.yuroyami.kiteplayer/MediaItemBuilder.videoFilter|videoFilter(kotlin.String){}[0]
 }
 
 final class io.github.yuroyami.kiteplayer/NetworkConfig { // io.github.yuroyami.kiteplayer/NetworkConfig|null[0]
@@ -3712,6 +3803,7 @@ final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kitep
 final fun (io.github.yuroyami.kiteplayer.spi/SubtitleOverlay).io.github.yuroyami.kiteplayer/drawOver(kotlin/ByteArray, kotlin/Int, kotlin/Int) // io.github.yuroyami.kiteplayer/drawOver|drawOver@io.github.yuroyami.kiteplayer.spi.SubtitleOverlay(kotlin.ByteArray;kotlin.Int;kotlin.Int){}[0]
 final fun (io.github.yuroyami.kiteplayer/MediaIo.Companion).io.github.yuroyami.kiteplayer/ofBytes(kotlin/ByteArray): io.github.yuroyami.kiteplayer/MediaIoFactory // io.github.yuroyami.kiteplayer/ofBytes|ofBytes@io.github.yuroyami.kiteplayer.MediaIo.Companion(kotlin.ByteArray){}[0]
 final fun (io.github.yuroyami.kiteplayer/MediaItem.Companion).io.github.yuroyami.kiteplayer/from(io.github.yuroyami.kiteplayer/MediaIoFactory, kotlin/String): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/from|from@io.github.yuroyami.kiteplayer.MediaItem.Companion(io.github.yuroyami.kiteplayer.MediaIoFactory;kotlin.String){}[0]
+final fun io.github.yuroyami.kiteplayer/mediaItem(kotlin/String, kotlin/Function1<io.github.yuroyami.kiteplayer/MediaItemBuilder, kotlin/Unit> = ...): io.github.yuroyami.kiteplayer/MediaItem // io.github.yuroyami.kiteplayer/mediaItem|mediaItem(kotlin.String;kotlin.Function1<io.github.yuroyami.kiteplayer.MediaItemBuilder,kotlin.Unit>){}[0]
 final suspend fun io.github.yuroyami.kiteplayer/inspect(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend): io.github.yuroyami.kiteplayer/MediaInspection // io.github.yuroyami.kiteplayer/inspect|inspect(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend){}[0]
 final suspend fun io.github.yuroyami.kiteplayer/scanAudio(io.github.yuroyami.kiteplayer/MediaItem, io.github.yuroyami.kiteplayer.spi/MediaBackend, io.github.yuroyami.kiteplayer/TrackId? = ..., io.github.yuroyami.kiteplayer/AudioScanRange? = ..., io.github.yuroyami.kiteplayer/AudioScanSink): io.github.yuroyami.kiteplayer/AudioScanResult // io.github.yuroyami.kiteplayer/scanAudio|scanAudio(io.github.yuroyami.kiteplayer.MediaItem;io.github.yuroyami.kiteplayer.spi.MediaBackend;io.github.yuroyami.kiteplayer.TrackId?;io.github.yuroyami.kiteplayer.AudioScanRange?;io.github.yuroyami.kiteplayer.AudioScanSink){}[0]
 

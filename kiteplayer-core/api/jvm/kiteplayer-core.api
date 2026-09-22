@@ -184,6 +184,35 @@ public final class io/github/yuroyami/kiteplayer/Chapter {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/CorruptPackets : java/lang/Enum {
+	public static final field Drop Lio/github/yuroyami/kiteplayer/CorruptPackets;
+	public static final field Keep Lio/github/yuroyami/kiteplayer/CorruptPackets;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/CorruptPackets;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/CorruptPackets;
+}
+
+public final class io/github/yuroyami/kiteplayer/DemuxPolicy {
+	public fun <init> ()V
+	public fun <init> (Lio/github/yuroyami/kiteplayer/ProbeDepth;Lio/github/yuroyami/kiteplayer/CorruptPackets;ZZJ)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/ProbeDepth;Lio/github/yuroyami/kiteplayer/CorruptPackets;ZZJILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lio/github/yuroyami/kiteplayer/ProbeDepth;
+	public final fun component2 ()Lio/github/yuroyami/kiteplayer/CorruptPackets;
+	public final fun component3 ()Z
+	public final fun component4 ()Z
+	public final fun component5 ()J
+	public final fun copy (Lio/github/yuroyami/kiteplayer/ProbeDepth;Lio/github/yuroyami/kiteplayer/CorruptPackets;ZZJ)Lio/github/yuroyami/kiteplayer/DemuxPolicy;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/DemuxPolicy;Lio/github/yuroyami/kiteplayer/ProbeDepth;Lio/github/yuroyami/kiteplayer/CorruptPackets;ZZJILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/DemuxPolicy;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCorruptPackets ()Lio/github/yuroyami/kiteplayer/CorruptPackets;
+	public final fun getGenerateTimestamps ()Z
+	public final fun getLowLatency ()Z
+	public final fun getProbe ()Lio/github/yuroyami/kiteplayer/ProbeDepth;
+	public final fun getSkipInitialBytes ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/DownmixConfig {
 	public fun <init> ()V
 	public fun <init> (ZZ)V
@@ -556,8 +585,8 @@ public final class io/github/yuroyami/kiteplayer/MediaIoResolver$DefaultImpls {
 
 public final class io/github/yuroyami/kiteplayer/MediaItem {
 	public static final field Companion Lio/github/yuroyami/kiteplayer/MediaItem$Companion;
-	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/util/Map;
 	public final fun component3 ()Ljava/util/List;
@@ -566,9 +595,11 @@ public final class io/github/yuroyami/kiteplayer/MediaItem {
 	public final fun component6 ()Lio/github/yuroyami/kiteplayer/MediaIoFactory;
 	public final fun component7 ()Ljava/lang/String;
 	public final fun component8 ()Ljava/util/Map;
-	public final fun copy-dp_umgU (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;)Lio/github/yuroyami/kiteplayer/MediaItem;
-	public static synthetic fun copy-dp_umgU$default (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public final fun component9 ()Lio/github/yuroyami/kiteplayer/DemuxPolicy;
+	public final fun copy-Q9yt8Vw (Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public static synthetic fun copy-Q9yt8Vw$default (Lio/github/yuroyami/kiteplayer/MediaItem;Ljava/lang/String;Ljava/util/Map;Ljava/util/List;Ljava/lang/String;Lkotlin/time/Duration;Lio/github/yuroyami/kiteplayer/MediaIoFactory;Ljava/lang/String;Ljava/util/Map;Lio/github/yuroyami/kiteplayer/DemuxPolicy;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItem;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDemux ()Lio/github/yuroyami/kiteplayer/DemuxPolicy;
 	public final fun getExternalSubtitles ()Ljava/util/List;
 	public final fun getFormatHint ()Ljava/lang/String;
 	public final fun getHeaders ()Ljava/util/Map;
@@ -583,6 +614,27 @@ public final class io/github/yuroyami/kiteplayer/MediaItem {
 }
 
 public final class io/github/yuroyami/kiteplayer/MediaItem$Companion {
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaItemBuilder {
+	public final fun corruptPackets (Lio/github/yuroyami/kiteplayer/CorruptPackets;)V
+	public final fun externalSubtitle (Lio/github/yuroyami/kiteplayer/SubtitleSource;)V
+	public final fun formatHint (Ljava/lang/String;)V
+	public final fun generateTimestamps ()V
+	public final fun header (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun headers ([Lkotlin/Pair;)V
+	public final fun io (Lio/github/yuroyami/kiteplayer/MediaIoFactory;)V
+	public final fun lowLatency ()V
+	public final fun openOption (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun probe (Lio/github/yuroyami/kiteplayer/ProbeDepth;)V
+	public final fun skipInitialBytes (J)V
+	public final fun startPosition-LRDsOJo (J)V
+	public final fun videoFilter (Ljava/lang/String;)V
+}
+
+public final class io/github/yuroyami/kiteplayer/MediaItemBuilderKt {
+	public static final fun mediaItem (Ljava/lang/String;Lkotlin/jvm/functions/Function1;)Lio/github/yuroyami/kiteplayer/MediaItem;
+	public static synthetic fun mediaItem$default (Ljava/lang/String;Lkotlin/jvm/functions/Function1;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/MediaItem;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/MonotonicClock {
@@ -1537,6 +1589,43 @@ public final class io/github/yuroyami/kiteplayer/PlayerSnapshot {
 	public final fun getVideoSize ()Lio/github/yuroyami/kiteplayer/VideoSize;
 	public final fun getVideoTransform ()Lio/github/yuroyami/kiteplayer/VideoTransform;
 	public final fun getVolume ()F
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/ProbeDepth {
+}
+
+public final class io/github/yuroyami/kiteplayer/ProbeDepth$Custom : io/github/yuroyami/kiteplayer/ProbeDepth {
+	public synthetic fun <init> (JJLkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()J
+	public final fun component2-UwyO8pc ()J
+	public final fun copy-HG0u8IE (JJ)Lio/github/yuroyami/kiteplayer/ProbeDepth$Custom;
+	public static synthetic fun copy-HG0u8IE$default (Lio/github/yuroyami/kiteplayer/ProbeDepth$Custom;JJILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/ProbeDepth$Custom;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBytes ()J
+	public final fun getDuration-UwyO8pc ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ProbeDepth$Default : io/github/yuroyami/kiteplayer/ProbeDepth {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ProbeDepth$Default;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ProbeDepth$Fast : io/github/yuroyami/kiteplayer/ProbeDepth {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ProbeDepth$Fast;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/ProbeDepth$Thorough : io/github/yuroyami/kiteplayer/ProbeDepth {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ProbeDepth$Thorough;
+	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }

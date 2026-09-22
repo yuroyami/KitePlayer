@@ -12,7 +12,7 @@ import kotlin.time.Duration.Companion.microseconds
  * What the text form cannot carry: [MediaItem.io] factories, which nobody can store,
  * [MediaItem.externalSubtitles] and [MediaItem.videoFilter]. [asProperties] drops all three, and
  * an item that needs one is rebuilt by the application before [KitePlayer.restore]. Headers, raw
- * open options, the format hint and the start position are strings and travel.
+ * open options, the format hint, the demux settings and the start position are strings and travel.
  *
  * Tracks are remembered by LANGUAGE rather than by id, because ids belong to one open of one
  * container and a memento outlives both.
@@ -55,8 +55,8 @@ public data class PlayerMemento(
     /**
      * Flat string pairs, version-stamped. Keys: `version`, `queue.size`, then per item
      * `queue.N.uri`, `queue.N.formatHint`, `queue.N.startPosition` (microseconds),
-     * `queue.N.header.<name>` and `queue.N.option.<key>`; then one key per setting, durations
-     * in microseconds, and `audioLanguage` and `subtitleLanguage` only when known.
+     * `queue.N.header.<name>`, `queue.N.option.<key>` and `queue.N.demux.<field>`; then one key per
+     * setting, durations in microseconds, and `audioLanguage` and `subtitleLanguage` only when known.
      */
     @OptIn(KitePlayerLowLevelApi::class)
     public fun asProperties(): Map<String, String> = buildMap {
@@ -68,6 +68,7 @@ public data class PlayerMemento(
             item.startPosition?.let { put("queue.$n.startPosition", it.inWholeMicroseconds.toString()) }
             item.headers.forEach { (name, value) -> put("queue.$n.header.$name", value) }
             item.openOptions.forEach { (key, value) -> put("queue.$n.option.$key", value) }
+            putDemux("queue.$n.demux.", item.demux)
         }
         put("queueIndex", queueIndex.toString())
         put("position", position.inWholeMicroseconds.toString())
@@ -123,7 +124,7 @@ public data class PlayerMemento(
 
     public companion object {
         /** The version [asProperties] stamps. [fromProperties] also reads every older one. */
-        public const val FORMAT_VERSION: Int = 2
+        public const val FORMAT_VERSION: Int = 3
 
         /**
          * Reads what [asProperties] wrote.
@@ -134,8 +135,9 @@ public data class PlayerMemento(
         public fun fromProperties(properties: Map<String, String>): PlayerMemento {
             val version = properties["version"]?.toIntOrNull()
             // Version 1 knew nothing about balance, the equaliser or any picture and subtitle
-            // setting. It reads back with the defaults for those, which is what a player that had
-            // never been told about them would have had anyway.
+            // setting, and version 2 nothing about the demux settings. Both read back with the
+            // defaults for those, which is what a player that had never been told about them would
+            // have had anyway.
             require(version != null && version in 1..FORMAT_VERSION) {
                 "unsupported memento format version $version; this build reads 1 to $FORMAT_VERSION"
             }
@@ -153,6 +155,7 @@ public data class PlayerMemento(
                     startPosition = properties["queue.$n.startPosition"]?.toLong()?.microseconds,
                     formatHint = properties["queue.$n.formatHint"],
                     openOptions = tagged("queue.$n.option."),
+                    demux = demuxFrom(properties, "queue.$n.demux."),
                 )
             }
             return PlayerMemento(
@@ -227,4 +230,42 @@ public data class PlayerMemento(
             )
         }
     }
+}
+
+/** Writes only what differs from the default policy, so an item with the default adds no keys. */
+private fun MutableMap<String, String>.putDemux(prefix: String, demux: DemuxPolicy) {
+    when (val probe = demux.probe) {
+        ProbeDepth.Default -> Unit
+        ProbeDepth.Fast -> put("${prefix}probe", "Fast")
+        ProbeDepth.Thorough -> put("${prefix}probe", "Thorough")
+        is ProbeDepth.Custom -> {
+            put("${prefix}probe", "Custom")
+            put("${prefix}probeBytes", probe.bytes.toString())
+            // ISO text keeps every duration exact, even one finer than a microsecond.
+            put("${prefix}probeDuration", probe.duration.toIsoString())
+        }
+    }
+    if (demux.corruptPackets != CorruptPackets.Keep) put("${prefix}corruptPackets", demux.corruptPackets.name)
+    if (demux.generateTimestamps) put("${prefix}generateTimestamps", "true")
+    if (demux.lowLatency) put("${prefix}lowLatency", "true")
+    if (demux.skipInitialBytes != 0L) put("${prefix}skipInitialBytes", demux.skipInitialBytes.toString())
+}
+
+/** Reads what [putDemux] wrote. A missing key is the default for its field. */
+private fun demuxFrom(properties: Map<String, String>, prefix: String): DemuxPolicy {
+    fun need(key: String): String = requireNotNull(properties[prefix + key]) { "memento is missing $prefix$key" }
+    val probe = when (val name = properties["${prefix}probe"]) {
+        null, "Default" -> ProbeDepth.Default
+        "Fast" -> ProbeDepth.Fast
+        "Thorough" -> ProbeDepth.Thorough
+        "Custom" -> ProbeDepth.Custom(need("probeBytes").toLong(), Duration.parseIsoString(need("probeDuration")))
+        else -> throw IllegalArgumentException("unknown probe depth $name at ${prefix}probe")
+    }
+    return DemuxPolicy(
+        probe = probe,
+        corruptPackets = properties["${prefix}corruptPackets"]?.let { CorruptPackets.valueOf(it) } ?: CorruptPackets.Keep,
+        generateTimestamps = properties["${prefix}generateTimestamps"]?.toBooleanStrict() ?: false,
+        lowLatency = properties["${prefix}lowLatency"]?.toBooleanStrict() ?: false,
+        skipInitialBytes = properties["${prefix}skipInitialBytes"]?.toLong() ?: 0,
+    )
 }

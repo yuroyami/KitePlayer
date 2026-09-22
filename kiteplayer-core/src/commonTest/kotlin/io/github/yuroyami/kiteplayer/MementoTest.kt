@@ -10,6 +10,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -129,7 +130,7 @@ class MementoTest {
             subtitlesOff = false,
         ).asProperties()
         val failure = assertFailsWith<IllegalArgumentException> {
-            PlayerMemento.fromProperties(complete + ("version" to "3"))
+            PlayerMemento.fromProperties(complete + ("version" to (PlayerMemento.FORMAT_VERSION + 1).toString()))
         }
         assertTrue("version" in failure.message.orEmpty(), "the refusal names the version: ${failure.message}")
     }
@@ -254,6 +255,43 @@ class MementoTest {
             videoAdjustments = VideoAdjustments(saturation = 0.5f),
             renderQuality = RenderQuality(dither = true, scaler = VideoScaler.CatmullRom),
             videoEnabled = false,
+        )
+        assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
+    }
+
+    @Test
+    fun `the text form carries every demux setting`() {
+        val memento = PlayerMemento(
+            queue = listOf(
+                MediaItem(
+                    "https://example.test/live.ts",
+                    demux = DemuxPolicy(
+                        probe = ProbeDepth.Custom(bytes = 2_000_000, duration = 1500.milliseconds),
+                        corruptPackets = CorruptPackets.Drop,
+                        generateTimestamps = true,
+                        lowLatency = true,
+                        skipInitialBytes = 188,
+                    ),
+                ),
+                MediaItem("fast.mp4", demux = DemuxPolicy(probe = ProbeDepth.Fast)),
+                MediaItem("thorough.mkv", demux = DemuxPolicy(probe = ProbeDepth.Thorough)),
+                // A duration finer than a microsecond still comes back exactly.
+                MediaItem("fine.mkv", demux = DemuxPolicy(probe = ProbeDepth.Custom(4096, 500.nanoseconds))),
+                MediaItem("plain.mkv"),
+            ),
+            queueIndex = 0,
+            position = 0.seconds,
+            speed = 1.0,
+            preservePitch = true,
+            volume = 1f,
+            muted = false,
+            loop = LoopMode.Off,
+            shuffle = false,
+            subtitleDelay = 0.seconds,
+            audioDelay = 0.seconds,
+            audioLanguage = null,
+            subtitleLanguage = null,
+            subtitlesOff = false,
         )
         assertEquals(memento, PlayerMemento.fromProperties(memento.asProperties()))
     }

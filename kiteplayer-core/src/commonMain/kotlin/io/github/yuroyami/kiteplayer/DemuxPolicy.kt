@@ -44,7 +44,11 @@ public data class DemuxPolicy(
     val corruptPackets: CorruptPackets = CorruptPackets.Keep,
     /** Rebuilds missing presentation timestamps from the decode order, for a file whose muxer wrote none. */
     val generateTimestamps: Boolean = false,
-    /** Hands packets on as they arrive, with no read-ahead. For a live source. On a file it costs smoothness. */
+    /**
+     * Drops the packets read while probing instead of keeping them for playback, and does not wait
+     * to reorder network packets. For a live source only: on a file, playback can start after the
+     * true beginning.
+     */
     val lowLatency: Boolean = false,
     /** Bytes to skip before probing, for a file with junk in front of its header. */
     val skipInitialBytes: Long = 0,

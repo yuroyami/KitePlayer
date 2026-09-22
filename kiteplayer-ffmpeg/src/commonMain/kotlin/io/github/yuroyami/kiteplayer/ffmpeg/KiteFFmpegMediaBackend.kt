@@ -6,6 +6,8 @@
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.PlaybackError
+import io.github.yuroyami.kiteplayer.PlaybackException
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.spi.AudioDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.BackendSession
@@ -128,23 +130,37 @@ private class KiteFFmpegBackendSession(private val kiteCodec: KiteFFmpegSource) 
 }
 
 /**
- * The item's typed fields respelled as the pre-open options they are: `headers` is
- * the http protocol's own option, one CRLF-joined block exactly as the protocol documents it,
- * and `formatHint` is a format whitelist of one, which is what forcing a demuxer means to
- * libavformat. An explicit [MediaItem.openOptions] key wins over the typed field, because the
- * raw funnel is the escape hatch and an escape hatch that sugar can override is not one. On
- * media an option cannot apply to (headers on a local file), the open path's unused-option
- * warning says so, typed.
+ * The item's typed fields respelled as the pre-open options they are, followed by the raw
+ * [MediaItem.openOptions]. `headers` is the http protocol's own option, one CRLF-joined block
+ * exactly as the protocol documents it. `formatHint` is a format whitelist of one, which is what
+ * forcing a demuxer means to libavformat. [MediaItem.demux] becomes the keys that
+ * [toFFmpegOptions] lists. On media an option cannot apply to (headers on a local file), the open
+ * path's unused-option warning says so, typed.
+ *
+ * A raw key that a typed field also sets is refused, naming both. Letting either side win would
+ * quietly undo a setting the caller made on purpose.
  *
  * Internal rather than private for exactly one reason: its unit test, which needs no FFmpeg.
+ *
+ * @throws PlaybackException with [PlaybackError.ConfigurationInvalid] for such a collision.
  */
-internal fun preOpenOptions(media: MediaItem): Map<String, String> = buildMap {
-    putAll(media.openOptions)
-    if (media.headers.isNotEmpty() && !containsKey("headers")) {
-        put("headers", media.headers.entries.joinToString(separator = "") { (key, value) -> "$key: $value\r\n" })
+internal fun preOpenOptions(media: MediaItem): Map<String, String> {
+    // Each typed option with the name of the item field that sets it.
+    val typed = LinkedHashMap<String, Pair<String, String>>()
+    if (media.headers.isNotEmpty()) {
+        val block = media.headers.entries.joinToString(separator = "") { (key, value) -> "$key: $value\r\n" }
+        typed["headers"] = block to "headers"
     }
-    val hint = media.formatHint
-    if (hint != null && !containsKey("format_whitelist")) {
-        put("format_whitelist", hint)
+    media.formatHint?.let { hint -> typed["format_whitelist"] = hint to "formatHint" }
+    for ((key, value) in media.demux.toFFmpegOptions()) typed[key] = value to "demux"
+
+    for (key in media.openOptions.keys) {
+        val field = typed[key]?.second ?: continue
+        throw PlaybackException(
+            PlaybackError.ConfigurationInvalid(
+                "MediaItem.openOptions sets \"$key\", and MediaItem.$field sets it too. Set it in one place only.",
+            ),
+        )
     }
+    return typed.mapValues { it.value.first } + media.openOptions
 }

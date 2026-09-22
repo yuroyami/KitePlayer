@@ -82,9 +82,9 @@ public sealed class PlaybackError {
 
     /**
      * The player was asked to exist without something it cannot invent, or against a runtime it cannot
-     * use.
+     * use, or an item it was asked to open sets one option twice.
      *
-     * Two cases today. A missing backend: Kotlin/Native has no classpath service lookup, so there is no
+     * Three cases today. A missing backend: Kotlin/Native has no classpath service lookup, so there is no
      * such thing as finding the platform's decoder or its audio device at runtime, and whoever creates
      * the player passes both in. Saying so as a typed error is the alternative to reflection, and it
      * names what to pass rather than failing later with a null.
@@ -93,6 +93,10 @@ public sealed class PlaybackError {
      * against. Nothing about that failure depends on the media: every file fails, the next file will fail
      * too, and retrying is pointless, which is what separates it from [SourceUnavailable]. The detail
      * carries both version columns for all six libraries and one actionable sentence.
+     *
+     * The third is an item that sets one FFmpeg option through a typed field, such as
+     * [MediaItem.formatHint] or [MediaItem.demux], and through [MediaItem.openOptions] as well. The
+     * FFmpeg backend refuses it at open, and the detail names the option and the field.
      */
     public data class ConfigurationInvalid(val detail: String) : PlaybackError() {
         override val message: String get() = "the player cannot be built as configured: $detail"

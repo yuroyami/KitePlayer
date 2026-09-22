@@ -14,10 +14,9 @@ public data class MediaItem(
      * [MediaIoResolver] when it supplies the transport.
      *
      * Respelled by the FFmpeg backend as the http protocol's own `headers` option, one
-     * CRLF-joined block, through the same pre-open funnel [openOptions] uses. When the backend
-     * handles the URI itself, an explicit `headers` key there wins over this field. On media
-     * no http protocol opens (a local
-     * file), the unused-option warning reports them, typed.
+     * CRLF-joined block, through the same pre-open funnel [openOptions] uses. A `headers` key in
+     * [openOptions] as well refuses the open. On media no http protocol opens (a local file), the
+     * unused-option warning reports them, typed.
      */
     val headers: Map<String, String> = emptyMap(),
     /**
@@ -67,8 +66,8 @@ public data class MediaItem(
      *
      * Respelled by the FFmpeg backend as a `format_whitelist` of exactly this name, which is
      * what forcing a demuxer means to libavformat: probing is confined to the named format and
-     * the open FAILS rather than falling back when the bytes are not that format. An explicit
-     * [openOptions] `format_whitelist` key wins over this field.
+     * the open FAILS rather than falling back when the bytes are not that format. A
+     * `format_whitelist` key in [openOptions] as well refuses the open.
      */
     val formatHint: String? = null,
     /**
@@ -79,6 +78,9 @@ public data class MediaItem(
      * These belong to the ITEM and not to the backend because the useful ones differ per file. The
      * motivating case is Android: a picked `content://` file reaches FFmpeg as the `fd:` protocol
      * with `"fd"` set to a descriptor number, and that number is different for every file.
+     *
+     * A key that a typed field also sets, such as `format_whitelist` next to [formatHint], refuses
+     * the open with [PlaybackError.ConfigurationInvalid] naming both. Neither side wins quietly.
      */
     val openOptions: Map<String, String> = emptyMap(),
     /**

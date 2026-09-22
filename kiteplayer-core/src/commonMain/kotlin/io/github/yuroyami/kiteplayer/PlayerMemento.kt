@@ -58,6 +58,7 @@ public data class PlayerMemento(
      * `queue.N.header.<name>` and `queue.N.option.<key>`; then one key per setting, durations
      * in microseconds, and `audioLanguage` and `subtitleLanguage` only when known.
      */
+    @OptIn(KitePlayerLowLevelApi::class)
     public fun asProperties(): Map<String, String> = buildMap {
         put("version", FORMAT_VERSION.toString())
         put("queue.size", queue.size.toString())

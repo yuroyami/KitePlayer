@@ -82,6 +82,7 @@ public data class MediaItem(
      * A key that a typed field also sets, such as `format_whitelist` next to [formatHint], refuses
      * the open with [PlaybackError.ConfigurationInvalid] naming both. Neither side wins quietly.
      */
+    @property:KitePlayerLowLevelApi
     val openOptions: Map<String, String> = emptyMap(),
     /**
      * Typed settings for opening the container: how far to probe, what to do with damaged packets,
@@ -92,6 +93,11 @@ public data class MediaItem(
     public companion object {}
 
     init {
+        refuseSeekBreakingOptions()
+    }
+
+    @OptIn(KitePlayerLowLevelApi::class)
+    private fun refuseSeekBreakingOptions() {
         // MP3 seeking is only correct when the table of contents is used AND fast seek is unset.
         // Either key on its own gives seeking that lands in the wrong place, looks like a player
         // bug, and is invisible until somebody compares against another player. The engine owns

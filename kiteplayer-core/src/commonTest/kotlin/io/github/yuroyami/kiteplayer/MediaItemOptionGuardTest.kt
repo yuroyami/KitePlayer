@@ -55,6 +55,7 @@ class MediaItemOptionGuardTest {
     }
 
     @Test
+    @OptIn(KitePlayerLowLevelApi::class)
     fun `an item with no options is built as before`() {
         assertTrue(MediaItem("a.mp4").openOptions.isEmpty())
     }

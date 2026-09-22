@@ -53,6 +53,7 @@ public class MediaItemBuilder internal constructor(private val uri: String) {
     }
 
     /** Adds one raw demuxer option. See [MediaItem.openOptions]. */
+    @KitePlayerLowLevelApi
     public fun openOption(key: String, value: String) {
         openOptions[key] = value
     }

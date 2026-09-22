@@ -1,3 +1,6 @@
+// This module speaks FFmpeg, so it reads the item's raw FFmpeg options.
+@file:OptIn(io.github.yuroyami.kiteplayer.KitePlayerLowLevelApi::class)
+
 package io.github.yuroyami.kiteplayer.ffmpeg
 
 import io.github.yuroyami.kiteffmpeg.MediaSource

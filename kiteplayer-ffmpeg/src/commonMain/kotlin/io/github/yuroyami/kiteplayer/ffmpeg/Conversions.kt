@@ -336,12 +336,12 @@ private fun writePackedRgba(
     chromaR: Int,
 ): Int {
     val y = (luma - coefficients.lumaOffset) * coefficients.lumaScale
-    val cb = (chromaB - 128) * coefficients.chromaScale
-    val cr = (chromaR - 128) * coefficients.chromaScale
+    val cb = (chromaB - coefficients.chromaZero) * coefficients.chromaScale
+    val cr = (chromaR - coefficients.chromaZero) * coefficients.chromaScale
     var at = index
-    out[at++] = (y + coefficients.rCb * cb + coefficients.rCr * cr).packedByte()
-    out[at++] = (y + coefficients.gCb * cb + coefficients.gCr * cr).packedByte()
-    out[at++] = (y + coefficients.bCb * cb + coefficients.bCr * cr).packedByte()
+    out[at++] = (coefficients.rY * y + coefficients.rCb * cb + coefficients.rCr * cr).packedByte()
+    out[at++] = (coefficients.gY * y + coefficients.gCb * cb + coefficients.gCr * cr).packedByte()
+    out[at++] = (coefficients.bY * y + coefficients.bCb * cb + coefficients.bCr * cr).packedByte()
     out[at++] = -1
     return at
 }
@@ -382,6 +382,17 @@ private class PackedCoefficients(
     val gCr: Double,
     val bCb: Double,
     val bCr: Double,
+    /**
+     * The luma column and the value that stands for zero on the second and third planes.
+     *
+     * Every YCbCr matrix adds all of luma to each colour and centres chroma on 128, which is what
+     * the defaults say. Identity has no luma and no chroma: its planes hold G, B and R, each one a
+     * colour with its own black level, so it needs other values here.
+     */
+    val rY: Double = 1.0,
+    val gY: Double = 1.0,
+    val bY: Double = 1.0,
+    val chromaZero: Int = 128,
 ) {
     companion object {
         fun of(colorSpace: ColorSpaceInfo): PackedCoefficients {
@@ -407,12 +418,18 @@ private class PackedCoefficients(
                     offset, lumaScale, chromaScale,
                     rCb = -1.0, rCr = 1.0, gCb = 1.0, gCr = 0.0, bCb = -1.0, bCr = -1.0,
                 )
-                // BT.709 and the two that carry no usable answer of their own. Listed rather than
+                // The planes are G, B and R, in the slots Y, Cb and Cr use. No matrix, only a plane
+                // reorder, and studio range scales all three the way it scales luma.
+                ColorMatrix.Identity -> PackedCoefficients(
+                    offset, lumaScale, chromaScale = lumaScale,
+                    rCb = 0.0, rCr = 1.0, gCb = 0.0, gCr = 0.0, bCb = 1.0, bCr = 0.0,
+                    rY = 0.0, gY = 1.0, bY = 0.0, chromaZero = offset,
+                )
+                // BT.709 and the ones that carry no usable answer of their own. Listed rather than
                 // caught by an else, so a new entry in the enum is a compile error here instead of
-                // silently becoming BT.709. ICtCp and Identity are NOT this transform and are
-                // approximated; see #129.
-                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc,
-                ColorMatrix.ICtCp, ColorMatrix.Identity,
+                // silently becoming BT.709. ICtCp is NOT this transform: its inverse needs the PQ
+                // curve between two matrices, so it is approximated here and the source warns once.
+                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc, ColorMatrix.ICtCp,
                 -> PackedCoefficients(
                     offset, lumaScale, chromaScale,
                     rCb = 0.0, rCr = 1.5748, gCb = -0.187324, gCr = -0.468124, bCb = 1.8556, bCr = 0.0,

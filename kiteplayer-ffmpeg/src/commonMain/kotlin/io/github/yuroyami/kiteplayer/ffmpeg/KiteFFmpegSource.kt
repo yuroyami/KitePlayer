@@ -676,9 +676,13 @@ private class KiteFFmpegVideoDecoder(
      * as `RendererEvent.ToneMapEngaged` from the renderer that did it.
      */
     private fun warnIfColorIsApproximated(color: ColorSpaceInfo) {
-        if (color.matrix != ColorMatrix.Bt2020Cl) return
-        val detail = "BT.2020 constant luminance converted with the non-constant luminance matrix " +
-            "on stream ${stream.index}"
+        val detail = when (color.matrix) {
+            ColorMatrix.Bt2020Cl ->
+                "BT.2020 constant luminance converted with the non-constant luminance matrix"
+            // Its inverse runs the PQ curve between two matrices, which no converter here does.
+            ColorMatrix.ICtCp -> "ICtCp converted with the BT.709 matrix"
+            else -> return
+        } + " on stream ${stream.index}"
         if (!continuity.claimColorWarning()) return
         // Latched before the callback runs, so a callback that throws cannot turn a one-time warning
         // into one per frame.

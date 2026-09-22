@@ -235,6 +235,33 @@ ffmpeg -v error -y \
   -vf "format=yuv420p10le,$cl_tag" \
   -c:v libx265 -preset ultrafast -x265-params log-level=error -tag:v hvc1 -g 1 colors-bt2020cl.mp4
 
+echo "ICtCp tagged clip"
+# No reference dump either. ICtCp needs the PQ curve inside its inverse, so the converters approximate
+# it and the source warns once, and this clip exists so that warning can be counted.
+ictcp_tag="setparams=colorspace=ictcp:color_trc=smpte2084:color_primaries=bt2020:range=tv:chroma_location=left"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 5 \
+  -vf "format=yuv420p10le,$ictcp_tag" \
+  -c:v libx265 -preset ultrafast -x265-params log-level=error -tag:v hvc1 -g 1 colors-ictcp.mp4
+
+echo "Identity (GBR) clip plus its reference dump"
+# Identity means the three planes hold G, B and R in the slots where YCbCr keeps Y, Cb and Cr. The
+# H.264, HEVC and VP9 decoders turn such a stream into planar GBR, which the engine does not model, so
+# this clip stores the planes losslessly as 4:4:4 and tags them. dav1d also hands over 4:4:4 tagged
+# Identity, for AV1 whose primaries and transfer are not BT.709 and sRGB.
+# The planes are a planar GBR picture relabelled as 4:4:4 with no conversion: the raw bytes are
+# written once and read back under the other name. So the reference is the original picture. The
+# range and matrix are codec options on both sides, because setparams alone let the encoder's range
+# negotiation squeeze the planes to studio range, measured.
+ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 2 \
+  -vf "format=gbrp" -f rawvideo colors-gbr.planes
+ffmpeg -v error -y -f rawvideo -pixel_format yuv444p -video_size 320x240 -framerate 25 \
+  -color_range pc -colorspace rgb -i colors-gbr.planes \
+  -c:v ffv1 -color_range pc -colorspace rgb colors-gbr.mkv
+rm colors-gbr.planes
+ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 1 \
+  -vf "format=rgba" -f rawvideo colors-gbr.rgba
+
 echo "Rotated clip, for the renderer's quarter turn"
 # What a phone writes: the pixels are stored landscape and a display matrix in the container tells the
 # player to turn them. -display_rotation is an INPUT option and its own unit is counter-clockwise

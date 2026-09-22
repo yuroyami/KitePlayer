@@ -257,12 +257,12 @@ public object SoftwareConverter {
         // spans 16 to 235, which is 219 levels, but studio-range chroma spans 16 to 240, which is
         // 224. Scaling both by the luma factor leaves every colour about 14 percent undersaturated:
         // a systematic error, not a rounding one, and invisible unless compared against a reference.
-        val cb = (chromaB - 128) * c.chromaScale
-        val cr = (chromaR - 128) * c.chromaScale
+        val cb = (chromaB - c.chromaZero) * c.chromaScale
+        val cr = (chromaR - c.chromaZero) * c.chromaScale
 
-        val red = y + c.rCb * cb + c.rCr * cr
-        val green = y + c.gCb * cb + c.gCr * cr
-        val blue = y + c.bCb * cb + c.bCr * cr
+        val red = c.rY * y + c.rCb * cb + c.rCr * cr
+        val green = c.gY * y + c.gCb * cb + c.gCr * cr
+        val blue = c.bY * y + c.bCb * cb + c.bCr * cr
 
         var at = index
         out[at++] = red.clampToByte()
@@ -348,6 +348,17 @@ public object SoftwareConverter {
         val gCr: Double,
         val bCb: Double,
         val bCr: Double,
+        /**
+         * The luma column and the value that stands for zero on the second and third planes.
+         *
+         * Every YCbCr matrix adds all of luma to each colour and centres chroma on 128, which is
+         * what the defaults say. Identity has no luma and no chroma: its planes hold G, B and R,
+         * each one a colour with its own black level, so it needs other values here.
+         */
+        val rY: Double = 1.0,
+        val gY: Double = 1.0,
+        val bY: Double = 1.0,
+        val chromaZero: Int = 128,
     ) {
         companion object {
             /**
@@ -392,13 +403,20 @@ public object SoftwareConverter {
                         offset, lumaScale, chromaScale,
                         rCb = -1.0, rCr = 1.0, gCb = 1.0, gCr = 0.0, bCb = -1.0, bCr = -1.0,
                     )
+                    // The planes are G, B and R, in the slots Y, Cb and Cr use. No matrix, only a
+                    // plane reorder, and studio range scales all three the way it scales luma.
+                    ColorMatrix.Identity -> Coefficients(
+                        offset, lumaScale, chromaScale = lumaScale,
+                        rCb = 0.0, rCr = 1.0, gCb = 0.0, gCr = 0.0, bCb = 1.0, bCr = 0.0,
+                        rY = 0.0, gY = 1.0, bY = 0.0, chromaZero = offset,
+                    )
                     // BT.709, and the right default for anything unspecified above standard
                     // definition. See ColorInfo.guessFor, which KiteFFmpeg applies before this.
                     // Listed rather than caught by an else, so a new entry in the enum is a compile
-                    // error here instead of silently becoming BT.709. ICtCp and Identity are NOT
-                    // this transform and are approximated; see #129.
-                    ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc,
-                    ColorMatrix.ICtCp, ColorMatrix.Identity,
+                    // error here instead of silently becoming BT.709. ICtCp is NOT this transform:
+                    // its inverse needs the PQ curve between two matrices, so it is approximated
+                    // here and the source warns once.
+                    ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc, ColorMatrix.ICtCp,
                     -> Coefficients(
                         offset, lumaScale, chromaScale,
                         rCb = 0.0, rCr = 1.5748, gCb = -0.187324, gCr = -0.468124, bCb = 1.8556, bCr = 0.0,

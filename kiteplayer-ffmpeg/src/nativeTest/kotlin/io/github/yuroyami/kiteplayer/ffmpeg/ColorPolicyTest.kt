@@ -132,6 +132,29 @@ class ColorPolicyTest {
     }
 
     @Test
+    fun `an ICtCp clip reports an approximation once`() = runBlocking {
+        // ICtCp is not a YCbCr matrix. Its inverse runs the PQ curve between two matrices, and no
+        // converter here does that, so the frame is converted with the BT.709 matrix. Known at open,
+        // like constant luminance, so the source says so once.
+        val (warnings, frames) = warningsFromDecodingAll("colors-ictcp.mp4")
+        try {
+            assertEquals(
+                ColorMatrix.ICtCp,
+                frames.first().colorSpace.matrix,
+                "the fixture must decode as ICtCp",
+            )
+            assertEquals(1, warnings.size, "once per stream. Got: ${warnings.map { it.message }}")
+            val warning = assertNotNull(warnings.single() as? PlaybackWarning.ColorApproximated)
+            assertTrue(
+                warning.detail.contains("ICtCp"),
+                "the detail must say which approximation was made: ${warning.detail}",
+            )
+        } finally {
+            frames.forEach { it.close() }
+        }
+    }
+
+    @Test
     fun `an ordinary clip reports nothing`() = runBlocking {
         // The other half of a one-time warning: a warning nobody needs is noise, and noise is what
         // stops the ones that matter from being read.

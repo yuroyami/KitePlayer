@@ -105,7 +105,7 @@ class WarningAuditTest {
         )
         is PlaybackWarning.ColorApproximated -> listOf(
             "KiteFFmpegSource.warnIfColorIsApproximated in :kiteplayer-ffmpeg, once per stream, for " +
-                "BT.2020 constant luminance alone since 2026-08-25",
+                "BT.2020 constant luminance since 2026-08-25 and for ICtCp since 2026-09-23",
         )
         // DELIBERATELY NEVER EMITTED. Deprecated 2026-08-25: it conflated a true
         // BT.2020 CL claim with an HDR claim that was false on every built-in display path. Kept

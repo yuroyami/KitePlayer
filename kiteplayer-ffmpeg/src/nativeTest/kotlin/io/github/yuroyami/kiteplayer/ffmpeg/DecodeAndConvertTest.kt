@@ -174,6 +174,39 @@ class DecodeAndConvertTest {
     }
 
     @Test
+    fun `an Identity frame converts to exactly the picture its planes hold`() = runBlocking {
+        // Identity means the three planes hold G, B and R. Converted with BT.709 instead, this clip
+        // misses its own picture by a mean of 21.5 of 255. Full-range Identity is a copy with the
+        // planes reordered, so nothing may round and the match is exact rather than close.
+        val expected = readFile("$mediaDir/colors-gbr.rgba")
+        val (source, frame) = firstVideoFrame("colors-gbr.mkv")
+        val actual = try {
+            assertEquals(
+                PlayerPixelFormat.Yuv444p,
+                frame.pixelFormat,
+                "the fixture must decode as 4:4:4, or it never reaches the matrix",
+            )
+            assertEquals(ColorMatrix.Identity, frame.colorSpace.matrix, "the fixture must be tagged Identity")
+            assertTrue(frame.colorSpace.fullRange, "the fixture must be full range, or the copy is not exact")
+            SoftwareConverter.toRgba(frame)
+        } finally {
+            frame.close()
+            source.close()
+        }
+        // Counted rather than compared whole: a failed whole-array comparison prints both frames, and
+        // 300 KB of bytes overflows the test reporter before anyone reads it.
+        assertEquals(expected.size, actual.size, "the converted frame is the wrong size")
+        val differing = expected.indices.count { expected[it] != actual[it] }
+        val first = expected.indices.firstOrNull { expected[it] != actual[it] }
+        assertEquals(
+            0,
+            differing,
+            "an Identity frame must come out as its planes, reordered. First difference at byte $first: " +
+                "expected ${first?.let { expected[it].toInt() and 0xFF }}, got ${first?.let { actual[it].toInt() and 0xFF }}",
+        )
+    }
+
+    @Test
     fun `centre-sited NV12 conversion matches the FFmpeg reference`() = runBlocking {
         // Two things at once, and nothing covered either before: an NV12 frame converted at all, and
         // its chroma column rule read from the same place the planar path reads it. The clip is tagged

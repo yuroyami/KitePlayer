@@ -122,6 +122,12 @@ struct ColorUniforms {
     float gCr;
     float bCb;
     float bCr;
+    // The luma column and the value that stands for zero on the second and third planes. Every
+    // YCbCr matrix has 1, 1, 1 and 128 here. Identity, whose planes hold G, B and R, does not.
+    float rY;
+    float gY;
+    float bY;
+    float chromaZero;   // 0..255 space
     // Where the chroma sample sits relative to the luma one, in NORMALIZED texture coordinates,
     // worked out from the declared siting and the format's own subsampling. Zero on any axis that
     // is not subsampled, which is what makes 4:4:4 correct.
@@ -433,11 +439,11 @@ fragment float4 kp_picture(
             rawY += (kp_hash(in.position.xy + 17.0, q.frameSeed) - 0.5) * q.debandGrain;
         }
         float y = (rawY * c.sampleScale * 255.0 - c.lumaOffset) * c.lumaScale;
-        float cb = (rawCb * c.sampleScale * 255.0 - 128.0) * c.chromaScale;
-        float cr = (rawCr * c.sampleScale * 255.0 - 128.0) * c.chromaScale;
-        float r = y + c.rCb * cb + c.rCr * cr;
-        float g = y + c.gCb * cb + c.gCr * cr;
-        float b = y + c.bCb * cb + c.bCr * cr;
+        float cb = (rawCb * c.sampleScale * 255.0 - c.chromaZero) * c.chromaScale;
+        float cr = (rawCr * c.sampleScale * 255.0 - c.chromaZero) * c.chromaScale;
+        float r = c.rY * y + c.rCb * cb + c.rCr * cr;
+        float g = c.gY * y + c.gCb * cb + c.gCr * cr;
+        float b = c.bY * y + c.bCb * cb + c.bCr * cr;
         rgb = clamp(float3(r, g, b) / 255.0, 0.0, 1.0);
     }
     if (tone.mode != 0) {
@@ -579,7 +585,7 @@ internal fun packAdjustUniforms(adjustments: io.github.yuroyami.kiteplayer.Video
     )
 }
 
-/** The eleven colour uniforms, mirrored from SoftwareConverter so both paths agree numerically. */
+/** The colour uniforms, mirrored from SoftwareConverter so both paths agree numerically. */
 internal class MetalColorUniforms private constructor(
     val lumaOffset: Float,
     val lumaScale: Float,
@@ -590,6 +596,12 @@ internal class MetalColorUniforms private constructor(
     val gCr: Float,
     val bCb: Float,
     val bCr: Float,
+    // Every YCbCr matrix adds all of luma to each colour and centres chroma on 128. Identity does
+    // neither: its planes hold G, B and R, each one a colour with its own black level.
+    val rY: Float = 1f,
+    val gY: Float = 1f,
+    val bY: Float = 1f,
+    val chromaZero: Float = 128f,
 ) {
     // The order here IS the shader's struct layout. Adding a field in the wrong place reads a
     // neighbouring one and answers something plausible.
@@ -600,6 +612,7 @@ internal class MetalColorUniforms private constructor(
         chromaOffsetY: Float = 0f,
     ): FloatArray = floatArrayOf(
         lumaOffset, lumaScale, chromaScale, rCb, rCr, gCb, gCr, bCb, bCr,
+        rY, gY, bY, chromaZero,
         chromaOffsetX, chromaOffsetY, sampleScale,
         Float.fromBits(mode), // reinterpreted as int in the shader's layout
     )
@@ -628,11 +641,18 @@ internal class MetalColorUniforms private constructor(
                     offset, lumaScale, chromaScale,
                     rCb = -1f, rCr = 1f, gCb = 1f, gCr = 0f, bCb = -1f, bCr = -1f,
                 )
+                // The planes are G, B and R, in the slots Y, Cb and Cr use. No matrix, only a plane
+                // reorder, and studio range scales all three the way it scales luma.
+                ColorMatrix.Identity -> MetalColorUniforms(
+                    offset, lumaScale, chromaScale = lumaScale,
+                    rCb = 0f, rCr = 1f, gCb = 0f, gCr = 0f, bCb = 1f, bCr = 0f,
+                    rY = 0f, gY = 1f, bY = 0f, chromaZero = offset,
+                )
                 // Listed rather than caught by an else, so a new entry in the enum is a compile
-                // error here instead of silently becoming BT.709. ICtCp and Identity are NOT this
-                // transform and are approximated; see #129.
-                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc,
-                ColorMatrix.ICtCp, ColorMatrix.Identity,
+                // error here instead of silently becoming BT.709. ICtCp is NOT this transform: its
+                // inverse needs the PQ curve between two matrices, so it is approximated here and the
+                // source warns once.
+                ColorMatrix.Bt709, ColorMatrix.Unspecified, ColorMatrix.Fcc, ColorMatrix.ICtCp,
                 -> MetalColorUniforms(
                     offset, lumaScale, chromaScale,
                     rCb = 0f, rCr = 1.5748f, gCb = -0.187324f, gCr = -0.468124f, bCb = 1.8556f, bCr = 0f,

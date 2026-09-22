@@ -93,6 +93,17 @@ class ColourInstrumentTest {
         )
     }
 
+    /** Three full-size planes, one value each: 4:4:4, the only shape an Identity frame comes in. */
+    private fun solid444(width: Int, height: Int, first: Int, second: Int, third: Int): MetalPicture.SoftwarePlanes {
+        fun plane(value: Int) = MetalPicture.SoftwarePlanes.Plane(ByteArray(width * height) { value.toByte() }, width, height)
+        return MetalPicture.SoftwarePlanes(
+            width = width,
+            height = height,
+            format = PlayerPixelFormat.Yuv444p,
+            planes = listOf(plane(first), plane(second), plane(third)),
+        )
+    }
+
     /** P010: the 10-bit value sits in the HIGH bits of each 16-bit sample. */
     private fun solidP010(width: Int, height: Int, y10: Int, cb10: Int, cr10: Int): MetalPicture.SoftwarePlanes {
         fun le16(value: Int): Pair<Byte, Byte> {
@@ -258,6 +269,39 @@ class ColourInstrumentTest {
             delta <= TOLERANCE,
             "P010 got rgb(${got.toList()}), expected rgb(${expected.toList()}), delta $delta",
         )
+    }
+
+    /**
+     * Identity: the planes hold G, B and R, so the picture is the planes reordered. Full range is a
+     * copy, and studio range scales every plane over 16 to 235, because each plane is a colour and
+     * none is a colour difference. Converted with BT.709, the full-range probe renders (153, 8, 25).
+     */
+    @Test
+    fun `an Identity frame renders as its planes reordered`() {
+        val composer = MetalFrameComposer(device())
+        val (green, blue, red) = Triple(40, 120, 200)
+        val failures = buildList {
+            for (fullRange in listOf(true, false)) {
+                val bytes = render(
+                    composer,
+                    InstrumentFrame(64, 64, space(ColorMatrix.Identity, fullRange), PlayerPixelFormat.Yuv444p),
+                    solid444(64, 64, green, blue, red),
+                )
+                val got = rgbAt(bytes, 64, 32, 32)
+                fun level(value: Int) =
+                    if (fullRange) value else ((value - 16) * (255.0 / 219.0)).coerceIn(0.0, 255.0).roundToInt()
+                val expected = intArrayOf(level(red), level(green), level(blue))
+                val delta = maxDelta(got, expected)
+                if (delta > TOLERANCE) {
+                    add(
+                        "Identity ${if (fullRange) "full" else "studio"}: got rgb(${got.toList()}), " +
+                            "expected rgb(${expected.toList()}), delta $delta",
+                    )
+                }
+            }
+        }
+        composer.close()
+        assertEquals(emptyList(), failures, "Identity out of tolerance ($TOLERANCE per channel)")
     }
 
     /**

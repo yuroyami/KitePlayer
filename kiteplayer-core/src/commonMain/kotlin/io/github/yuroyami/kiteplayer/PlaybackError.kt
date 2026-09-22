@@ -294,11 +294,14 @@ public sealed class PlaybackWarning {
     /**
      * The colour of this stream is APPROXIMATED, and it is shown anyway. Emitted once per stream.
      *
-     * BT.2020 constant luminance encodes luma AFTER the transfer function rather than before it, so
-     * the non-constant luminance matrix every conversion path here runs is the wrong inverse for it
-     * and chroma-heavy areas shift. Unlike HDR, this is not fixable by rolling off a curve; it needs
-     * the transfer function inside the conversion loop, which is the colour-managed pipeline this
-     * engine does not have.
+     * Two cases today. Both need the transfer function inside the conversion loop, which is the
+     * colour-managed pipeline this engine does not have, so neither is fixable by rolling off a curve:
+     *
+     * - BT.2020 constant luminance encodes luma AFTER the transfer function rather than before it, so
+     *   the non-constant luminance matrix every conversion path here runs is the wrong inverse for it
+     *   and chroma-heavy areas shift.
+     * - ICtCp is not a YCbCr matrix at all. Its inverse runs the PQ curve between two matrices, so
+     *   every conversion path here uses the BT.709 matrix instead and the colours shift.
      *
      * Metadata-based on purpose, unlike [HdrToneMapped]: the approximation is a property of the
      * conversion the engine WILL do, it is known at open, and it is true of every path that

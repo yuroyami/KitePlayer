@@ -20,3 +20,11 @@ testmedia/
 
 # Native binaries fetched or built for the JNI bridge and the FFmpeg link.
 native-libs/
+
+# Audioviz pattern revamp specifications, plans and their evidence. The folder holds device
+# videos and stills, so it stays on the working machine and out of the history.
+audioviz-revamp/
+
+# An owner-supplied sample song whose tags name no artist and no licence. It stays on the
+# working machine until its licence is known.
+kiteplayer-sample-shared/media/SynthyBattle.mp3

@@ -10,6 +10,11 @@ what reading the code or running the gate would not teach you.
 
 ## How work happens here
 
+- Future audioviz pattern revamp specs, analyses and implementation plans live only in
+  `audioviz-revamp/`; start with its `README.md`. That folder is not tracked, because its evidence
+  is device video and stills, so it exists only on the owner's machine. Revamp patterns
+  individually on the accepted technical base. Keep documentation of implemented public contracts
+  in `docs/`.
 - Work on `main`. Never create a branch without asking. Commit locally, never push. The owner
   pushes, publishes and cuts every release.
 - Commit subject is one imperative sentence about the outcome. Short prose body. No trailers.

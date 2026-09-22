@@ -4,6 +4,7 @@ package io.github.yuroyami.kiteplayer.sample
 
 import io.github.yuroyami.kiteplayer.KiteLog
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.MediaIo
 import io.github.yuroyami.kiteplayer.MediaItem
 import io.github.yuroyami.kiteplayer.PlaybackStatus
 import io.github.yuroyami.kiteplayer.PlayerConfig
@@ -11,6 +12,8 @@ import io.github.yuroyami.kiteplayer.PlayerEvent
 import io.github.yuroyami.kiteplayer.RenderQuality
 import io.github.yuroyami.kiteplayer.HwdecPolicy
 import io.github.yuroyami.kiteplayer.SeekMode
+import io.github.yuroyami.kiteplayer.from
+import io.github.yuroyami.kiteplayer.io.ofUrl
 import io.github.yuroyami.kiteplayer.mobile.mobileBackends
 import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
 import io.github.yuroyami.kiteplayer.sample.shared.visualizerViewController
@@ -36,6 +39,7 @@ import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSSelectorFromString
+import platform.Foundation.NSURL
 import platform.Foundation.NSUserDomainMask
 import platform.UIKit.UIApplication
 import platform.UIKit.UIButton
@@ -43,7 +47,12 @@ import platform.UIKit.UIButtonTypeSystem
 import platform.UIKit.UIColor
 import platform.UIKit.UIControlEventTouchUpInside
 import platform.UIKit.UIControlStateNormal
+import platform.UIKit.UIDocumentPickerDelegateProtocol
+import platform.UIKit.UIDocumentPickerViewController
 import platform.UIKit.UIViewController
+import platform.UniformTypeIdentifiers.UTTypeAudio
+import platform.UniformTypeIdentifiers.UTTypeMovie
+import platform.darwin.NSObject
 import platform.posix.fclose
 import platform.posix.fflush
 import platform.posix.fileno
@@ -98,6 +107,10 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
     private val debandOn = NSProcessInfo.processInfo.arguments.contains(DEBAND_ARGUMENT)
     private var scenarioStarted = false
     private val controlButtons = mutableListOf<UIButton>()
+    private var openFileButton: UIButton? = null
+
+    // UIKit holds a picker's delegate weakly, so the controller keeps it.
+    private val pickerDelegate = PickerDelegate { url -> scope.launch { openPicked(url) } }
 
     private var smokeStarted = false
     private var sampleStarted = false
@@ -145,9 +158,10 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         addControl("Play", "playSample")
         addControl("Pause", "pauseSample")
         addControl("Seek 5s", "seekSample")
+        openFileButton = addControl("Open file", "pickFile")
     }
 
-    private fun addControl(title: String, action: String) {
+    private fun addControl(title: String, action: String): UIButton {
         val button = UIButton.buttonWithType(UIButtonTypeSystem)
         button.setTitle(title, forState = UIControlStateNormal)
         button.setTitleColor(UIColor.whiteColor, forState = UIControlStateNormal)
@@ -161,6 +175,7 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         )
         view.addSubview(button)
         controlButtons += button
+        return button
     }
 
     private fun layoutControls() {
@@ -255,8 +270,38 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
         }
     }
 
+    /** Presents the system document picker for movie and audio files. */
+    @ObjCAction
+    private fun pickFile() {
+        if (sampleClosing) return
+        val picker = UIDocumentPickerViewController(forOpeningContentTypes = listOfNotNull(UTTypeMovie, UTTypeAudio))
+        picker.delegate = pickerDelegate
+        presentViewController(picker, animated = true, completion = null)
+    }
+
+    /** Plays a picked file through the Apple file URL door, which holds the file's security scope. */
+    private suspend fun openPicked(url: NSURL) {
+        val activePlayer = samplePlayer ?: return
+        if (sampleClosing) return
+        setControlsEnabled(false)
+        try {
+            // Open is legal only from Idle, Ended or Failed, and the bundled clip may still be loaded.
+            activePlayer.stop()
+            activePlayer.open(MediaItem.from(MediaIo.ofUrl(url), label = url.lastPathComponent ?: "picked file"))
+            activePlayer.play()
+            printSampleSummary("picked ${url.lastPathComponent} (${activePlayer.state.value.status})", activePlayer)
+        } catch (failure: Throwable) {
+            if (!sampleClosing) {
+                println("iOS sample could not open the picked file: ${failure.message ?: failure::class.simpleName}")
+            }
+        } finally {
+            if (samplePlayer === activePlayer && !sampleClosing) setControlsEnabled(true)
+        }
+    }
+
+    // Open file stays usable after playback ends, so a user can pick another file.
     private fun setControlsEnabled(enabled: Boolean) {
-        controlButtons.forEach { it.enabled = enabled }
+        controlButtons.forEach { it.enabled = enabled || (it === openFileButton && !sampleClosing) }
     }
 
     private fun closeSample() {
@@ -546,6 +591,13 @@ private class SampleController : UIViewController(nibName = null, bundle = null)
  * The stats flow is published by the actor, so it freezes while the actor sits inside a long open.
  * This reads the same state directly, which is the only way to see WHICH side is starving there.
  */
+/** Hands the first picked URL to [onPick]. A cancelled picker calls nothing. */
+private class PickerDelegate(private val onPick: (NSURL) -> Unit) : NSObject(), UIDocumentPickerDelegateProtocol {
+    override fun documentPicker(controller: UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+        (didPickDocumentsAtURLs.firstOrNull() as? NSURL)?.let(onPick)
+    }
+}
+
 private fun liveActorState(player: KitePlayer): String =
     runCatching {
         player.diagnosticsDump().lineSequence().first { it.contains("actor passes=") }.trim()

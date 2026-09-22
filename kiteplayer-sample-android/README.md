@@ -14,6 +14,10 @@ four deliberately separate playback Activities:
 - `ComposeSwapActivity`: `KitePlayerVideo`, with a button that swaps between the native view and
   the Compose drawn path while it plays.
 
+Two more buttons open `MainActivity` on other input. Play a file you pick opens the system file
+picker and plays the content URI it returns through `MediaIo.ofUri`. Play the bundled clip from
+assets reads the clip inside the APK through `MediaIo.ofAsset`.
+
 Each Activity owns a separate player but shares the sample-only controls and media preparation.
 That keeps renderer attachment and teardown visible instead of hiding three different ownership
 models behind one generic sample abstraction.

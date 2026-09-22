@@ -336,15 +336,19 @@ Custom assemblies start from `kiteplayer-core` and supply their own backends thr
 ## Samples
 
 Four sample apps live in this repository, and three of them share one screen. None of them is
-published. The desktop, Android and iOS apps open on the audio visualiser, playing *Bad Cat* by
-Skullbeatz, from the [Newgrounds Audio Portal](https://www.newgrounds.com/audio/listen/376737), under
-[CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/). To play your own song, set
-`kiteplayer.sample.song=/path/to/song.mp3` in `local.properties`.
+published. The desktop, Android and iOS apps open on the audio visualiser, playing five songs by
+Skullbeatz from the [Newgrounds Audio Portal](https://www.newgrounds.com/audio), under
+[CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/).
+[`kiteplayer-sample-shared/media/README.md`](kiteplayer-sample-shared/media/README.md) credits each
+one. To play your own song, set `kiteplayer.sample.song=/path/to/song.mp3` in `local.properties`.
+
+To play a file you pick: on Android, open Other samples and choose Play a file you pick. On iOS,
+launch the app with the `--uikit` argument and tap Open file.
 
 | Module | What it shows | Run it |
 |---|---|---|
-| `kiteplayer-sample` | A macOS window on the native views, and an iOS app that opens on the shared screen | `./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64`, then `kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe testmedia/sync1080p30.mp4 --window`. For iOS, `./gradlew :kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64` and open `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj` |
-| `kiteplayer-sample-android` | The shared screen, and behind Other samples the XML view, Compose hosting the native view, Compose drawing the frames, and a button that swaps between the two | `./gradlew :kiteplayer-sample-android:installDebug` |
+| `kiteplayer-sample` | A macOS window on the native views, and an iOS app that opens on the shared screen. With `--uikit`, the iOS app shows the native view with Play, Pause, Seek and Open file | `./gradlew :kiteplayer-sample:linkDebugExecutableMacosArm64`, then `kiteplayer-sample/build/bin/macosArm64/debugExecutable/kiteplayer.kexe testmedia/sync1080p30.mp4 --window`. For iOS, `./gradlew :kiteplayer-sample:linkDebugFrameworkIosSimulatorArm64` and open `kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj` |
+| `kiteplayer-sample-android` | The shared screen, and behind Other samples the XML view, Compose hosting the native view, Compose drawing the frames, a button that swaps between the two, and a file picker | `./gradlew :kiteplayer-sample-android:installDebug` |
 | `kiteplayer-sample-desktop` | The shared screen in a window; with `--modifiers`, the Compose drawn path, clipped and animated | `./gradlew :kiteplayer-sample-desktop:run`, or add `--args='--modifiers'` |
 | `kiteplayer-sample-shared` | The screen the three apps share: the visualiser, the drawing browser, the settings and the transport | Used by the three above |
 | `kiteplayer-sample-web` | The wasmJs measurement harness, not a demo | `./gradlew :kiteplayer-sample-web:wasmJsBrowserDistribution`, then read `kiteplayer-sample-web/MEASUREMENTS.md` |

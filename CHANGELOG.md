@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 The entries under a version are drafted by `scripts/release-notes.sh`, which groups the commits since the previous tag by their prefix. `publish.yml` refuses a version that has no section here.
 
+## [Unreleased]
+
+### Upgrading from 0.0.26
+
+- On Android, replace your own content-resolver code with one call:
+  `MediaItem.from(MediaIo.ofUri(contentResolver, uri), label)`. Each open gets a new descriptor
+  and closes it. Bundled assets play through `MediaIo.ofAsset(assets, name)`. Both are in the new
+  `kiteplayer-io` module, which comes with `kiteplayer`.
+- Reading `MediaItem.openOptions`, or calling `openOption` in a `mediaItem { }` block, needs
+  `@OptIn(KitePlayerLowLevelApi::class)`. Building an item with `openOptions = ...` does not. If
+  the Android door replaces your raw `fd` option, you need neither.
+- A raw option that a typed field also sets now refuses the open with
+  `PlaybackError.ConfigurationInvalid`. Before, the raw key won without a word. The typed fields
+  are `headers`, `formatHint` and the new `demux`. Set each option in one place.
+- `MediaItem` gains `demux`, which changes the generated data-class methods. Recompile.
+- `PlayerMemento.FORMAT_VERSION` is 3. A build older than this one refuses a memento that this one
+  wrote.
+
 ## [0.0.26] - 2026-09-20
 
 ### Added

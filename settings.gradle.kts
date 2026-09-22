@@ -64,9 +64,9 @@ include(":kiteplayer-core")
 // dialogue tier. Cue timing, layout and rasterisation live in the engine and :kiteplayer-output.
 include(":kiteplayer-subtitles")
 
-// :kiteplayer-io holds the input doors that need a platform type: a JVM File or stream, a file path
-// on Apple and Linux, or an Apple file URL. Each door returns a MediaIoFactory from the core, so the
-// engine never sees a door.
+// :kiteplayer-io holds the input doors that need a platform type: a JVM File or stream, an Android
+// content URI or asset, a file path on Apple and Linux, or an Apple file URL. Each door returns a
+// MediaIoFactory from the core, so the engine never sees a door.
 include(":kiteplayer-io")
 
 // :kiteplayer-rt is KitePlayer's real-time audio core, in C, with the symbol prefix `kprt_`. It

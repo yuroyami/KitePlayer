@@ -15,7 +15,7 @@ public fun MediaIo.Companion.ofFile(file: File): MediaIoFactory = ofPath(file.to
 public fun MediaIo.Companion.ofPath(path: Path): MediaIoFactory = MediaIoFactory {
     val channel = FileChannel.open(path, StandardOpenOption.READ)
     try {
-        FileChannelMediaIo(channel, ownsChannel = true)
+        FileChannelMediaIo(channel, owner = channel)
     } catch (failure: Throwable) {
         channel.close()
         throw failure
@@ -28,15 +28,25 @@ public fun MediaIo.Companion.ofPath(path: Path): MediaIoFactory = MediaIoFactory
  * factory is open, and close it yourself.
  */
 public fun MediaIo.Companion.ofChannel(channel: FileChannel): MediaIoFactory = MediaIoFactory {
-    FileChannelMediaIo(channel, ownsChannel = false)
+    FileChannelMediaIo(channel, owner = null)
 }
 
-/** Positional reads over [channel]. The size is read once, when the reader opens. */
+/**
+ * Positional reads over the [length] bytes that start at [start] in [channel]. The size is fixed
+ * when the reader opens. Closing the reader closes [owner], which is null when the caller owns the
+ * channel.
+ */
 internal class FileChannelMediaIo(
     private val channel: FileChannel,
-    private val ownsChannel: Boolean,
+    private val owner: AutoCloseable?,
+    private val start: Long = 0,
+    length: Long = channel.size() - start,
 ) : MediaIo {
-    override val size: Long = channel.size()
+    init {
+        require(start >= 0 && length >= 0) { "The window at $start of $length bytes is not valid" }
+    }
+
+    override val size: Long = length
     override val seekable: Boolean get() = true
 
     private var position = 0L
@@ -50,7 +60,7 @@ internal class FileChannelMediaIo(
         if (length == 0) return 0
         if (position >= size) return -1
         val want = minOf(length.toLong(), size - position).toInt()
-        val count = channel.read(ByteBuffer.wrap(into, offset, want), position)
+        val count = channel.read(ByteBuffer.wrap(into, offset, want), start + position)
         if (count <= 0) return -1
         position += count
         return count
@@ -65,6 +75,6 @@ internal class FileChannelMediaIo(
     override fun close() {
         if (closed) return
         closed = true
-        if (ownsChannel) channel.close()
+        owner?.close()
     }
 }

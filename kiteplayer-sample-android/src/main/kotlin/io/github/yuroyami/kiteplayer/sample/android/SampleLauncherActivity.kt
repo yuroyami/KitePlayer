@@ -31,6 +31,26 @@ internal class SampleLauncherActivity : Activity() {
         findViewById<Button>(R.id.compose_swap).setOnClickListener {
             open(ComposeSwapActivity::class.java)
         }
+        findViewById<Button>(R.id.picked_file).setOnClickListener {
+            val pick = Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+            startActivityForResult(pick, PICK_FILE)
+        }
+        findViewById<Button>(R.id.asset_door).setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_SOURCE, MainActivity.SOURCE_ASSET))
+        }
+    }
+
+    /** Plays the picked file through the content door. The read grant travels with the intent. */
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val picked = data?.data
+        if (requestCode != PICK_FILE || resultCode != RESULT_OK || picked == null) return
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .setData(picked)
+                .putExtra(MainActivity.EXTRA_SOURCE, MainActivity.SOURCE_PICKED)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+        )
     }
 
     private fun open(activity: Class<out Activity>) {
@@ -39,5 +59,6 @@ internal class SampleLauncherActivity : Activity() {
 
     private companion object {
         const val SMOKE_EXTRA = "s1c_smoke"
+        const val PICK_FILE = 1
     }
 }

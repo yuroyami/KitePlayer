@@ -118,3 +118,11 @@ security scope when it opens and stops it when it closes, so a file from the doc
 no cleanup from the caller. A door that cannot open its file throws `MediaIoException`, which names
 the file. Android native and Windows have no path door: `pread` takes a 32-bit offset on the two
 32-bit Android native targets, and Windows has no `pread`.
+
+On Android, `MediaIo.ofUri(ContentResolver, Uri)` plays what a content provider serves, such as a
+file from the system picker, and `MediaIo.ofAsset(AssetManager, String)` plays a file from the
+app's `assets` directory. Each open gets a new descriptor from the provider or the asset manager
+and reads it by position, so a reopen never moves a descriptor that the caller holds. An asset is
+a window inside the app package, and the door reads only that window. A provider that answers
+with a pipe plays forward only. An asset must be stored uncompressed; the Android build already
+stores common media extensions that way.

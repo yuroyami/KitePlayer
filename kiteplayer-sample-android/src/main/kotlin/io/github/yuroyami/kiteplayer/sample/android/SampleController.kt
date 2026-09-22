@@ -28,6 +28,9 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
+/** The clip the sample bundles in its assets, stored uncompressed so the asset door can open it. */
+internal const val BUNDLED_CLIP = "sync1080p30.mp4"
+
 /**
  * Sample-private glue for the mobile stack: one Activity-scoped player assembled from
  * `mobileBackends()`, renderer-neutral controls, and the direct-view smoke workflow the jq
@@ -47,9 +50,9 @@ internal class SampleController(
 
     /** Copies the bundled clip to app-private storage and returns its path. */
     private fun materialiseClip(): File {
-        val out = File(context.filesDir, "sync1080p30.mp4")
+        val out = File(context.filesDir, BUNDLED_CLIP)
         if (!out.isFile || out.length() == 0L) {
-            context.assets.open("sync1080p30.mp4").use { asset ->
+            context.assets.open(BUNDLED_CLIP).use { asset ->
                 out.outputStream().use { asset.copyTo(it) }
             }
         }
@@ -63,13 +66,13 @@ internal class SampleController(
         ),
     )
 
-    /** The ordinary controls: open the private copy paused, with the picture on [view]. */
-    fun openNormally(view: KitePlayerView) {
+    /** The ordinary controls: open [item] paused, with the picture on [view]. Null opens the private copy. */
+    fun openNormally(view: KitePlayerView, item: MediaItem? = null) {
         if (!openStarted.compareAndSet(false, true)) return
         scope.launch {
             // The view's members are main-thread only, like every Android view.
             withContext(Dispatchers.Main) { view.player = player }
-            player.open(MediaItem(uri = materialiseClip().absolutePath))
+            player.open(item ?: MediaItem(uri = materialiseClip().absolutePath))
         }
     }
 
@@ -159,7 +162,7 @@ internal class SampleController(
      * then the atomic eleven-key oracle. The presentation evidence now comes from the view's
      * cumulative counters instead of a hand-built renderer.
      */
-    fun runSmoke(view: KitePlayerView) {
+    fun runSmoke(view: KitePlayerView, item: MediaItem? = null) {
         if (!openStarted.compareAndSet(false, true)) return
         scope.launch {
             var seekRequested = false
@@ -171,7 +174,7 @@ internal class SampleController(
             try {
                 withTimeout(45_000) {
                     withContext(Dispatchers.Main) { view.player = p }
-                    p.open(MediaItem(uri = materialiseClip().absolutePath))
+                    p.open(item ?: MediaItem(uri = materialiseClip().absolutePath))
                     p.play()
                     p.state.first { it.status == PlaybackStatus.Playing }
 

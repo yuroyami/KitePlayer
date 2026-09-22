@@ -9,10 +9,10 @@ plugins {
 }
 
 /*
- * :kiteplayer-io holds the input doors that need a platform type, such as a JVM File or stream, a
- * file path on Apple and Linux, or an Apple file URL. Each door is a MediaIoFactory, so the engine
- * never learns that doors exist. They live here and not in the core, because the core calls no
- * platform API.
+ * :kiteplayer-io holds the input doors that need a platform type, such as a JVM File or stream, an
+ * Android content URI or asset, a file path on Apple and Linux, or an Apple file URL. Each door is a
+ * MediaIoFactory, so the engine never learns that doors exist. They live here and not in the core,
+ * because the core calls no platform API.
  *
  * The target list is the subtitles module's, the widest pure-Kotlin list in the tree, so this module
  * never narrows what a module above it can declare. A target with no door yet still needs a klib to
@@ -35,6 +35,12 @@ kotlin {
         compileSdk = 36
         minSdk = 26
         withHostTest {}
+        // The device tests see commonTest, so the contract tests run against the real descriptor classes.
+        withDeviceTestBuilder {
+            sourceSetTreeName = "test"
+        }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
     }
 
     iosSimulatorArm64(); iosArm64(); iosX64()
@@ -75,6 +81,12 @@ kotlin {
         val jvmAndAndroidTest = maybeCreate("jvmAndAndroidTest").apply { dependsOn(getByName("commonTest")) }
         getByName("jvmTest").dependsOn(jvmAndAndroidTest)
         getByName("androidHostTest").dependsOn(jvmAndAndroidTest)
+        getByName("androidDeviceTest").dependsOn(jvmAndAndroidTest)
+        getByName("androidDeviceTest").dependencies {
+            implementation(libs.androidx.test.core)
+            implementation(libs.androidx.test.runner)
+            implementation(libs.androidx.test.ext.junit)
+        }
         // The path door reads with pread, which the Apple and Linux targets share. Android native is
         // left out because pread takes a 32-bit offset on its two 32-bit targets, and Windows has no
         // pread. Those targets have no path door.

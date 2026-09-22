@@ -6,6 +6,10 @@ import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import io.github.yuroyami.kiteplayer.HwdecPolicy
+import io.github.yuroyami.kiteplayer.MediaIo
+import io.github.yuroyami.kiteplayer.MediaItem
+import io.github.yuroyami.kiteplayer.io.ofAsset
+import io.github.yuroyami.kiteplayer.io.ofUri
 import io.github.yuroyami.kiteplayer.mobile.installMobileRenderer
 import io.github.yuroyami.kiteplayer.view.KitePlayerView
 
@@ -49,7 +53,18 @@ internal class MainActivity : Activity() {
 
         // No surface wait: the view attaches its headless-capable renderer before open, then forwards
         // Surface lifecycle changes without rebuilding the decoder.
-        if (smoke) controller.runSmoke(playerView) else controller.openNormally(playerView)
+        val item = requestedItem()
+        if (smoke) controller.runSmoke(playerView, item) else controller.openNormally(playerView, item)
+    }
+
+    /**
+     * The door the launcher asked for: a picked file through the content door, or the bundled clip
+     * through the asset door. Null plays the private copy of the bundled clip by its path.
+     */
+    private fun requestedItem(): MediaItem? = when (intent.getStringExtra(EXTRA_SOURCE)) {
+        SOURCE_PICKED -> intent.data?.let { uri -> MediaItem(uri = uri.toString(), io = MediaIo.ofUri(contentResolver, uri)) }
+        SOURCE_ASSET -> MediaItem(uri = BUNDLED_CLIP, io = MediaIo.ofAsset(assets, BUNDLED_CLIP))
+        else -> null
     }
 
     override fun onPause() {
@@ -68,5 +83,12 @@ internal class MainActivity : Activity() {
                 super.onDestroy()
             }
         }
+    }
+
+    companion object {
+        /** Which door to open: [SOURCE_PICKED] with the file as the intent's data, or [SOURCE_ASSET]. */
+        const val EXTRA_SOURCE = "kite_source"
+        const val SOURCE_PICKED = "picked"
+        const val SOURCE_ASSET = "asset"
     }
 }

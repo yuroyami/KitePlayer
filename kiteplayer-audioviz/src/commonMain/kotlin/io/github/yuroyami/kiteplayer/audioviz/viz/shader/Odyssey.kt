@@ -8,7 +8,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
@@ -31,7 +30,6 @@ import kotlin.random.Random
 internal class Odyssey(worldSeed: Long = Random.nextLong()) : ShaderPreset(
     source = OdysseyScene.SOURCE,
     name = "Odyssey",
-    family = VizFamily.Raymarch,
     bucket = VizEnergy.Mid,
     seed = 29f,
     kit = Kit(seed = 2_029L, detailKind = null,

@@ -13,7 +13,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
@@ -51,7 +50,6 @@ import kotlin.math.sin
  */
 internal class Bars : Layered(
     name = "Bars",
-    family = VizFamily.BarsAndWaves,
     bucket = VizEnergy.Mid,
     kit = Kit(seed = 201L, groundKind = GroundKind.Grid, groundDim = 0.85f, detailKind = DetailKind.Dots, camera = Camera2D(wander = 0.14f, seed = 201)),
 ) {

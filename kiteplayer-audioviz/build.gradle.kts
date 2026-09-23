@@ -8,8 +8,8 @@ plugins {
 }
 
 /*
- * :kiteplayer-audioviz draws what the player is playing when there is no picture: seventy eight
- * drawings in eleven families, a director that changes them on the song's phrases, palettes, and
+ * :kiteplayer-audioviz draws what the player is playing when there is no picture: independent
+ * presets in one flat catalogue, a director that changes them on the song's phrases, palettes, and
  * each drawing's recipe. Its analyser takes plain samples, so it needs nothing from a decoder or an
  * audio device.
  *
@@ -87,7 +87,6 @@ val renderingSuites = listOf(
     "*.DrawCostTest",
     "*.RecipeTest",
     "*.ContactSheetTest",
-    "*.FamilySheetTest",
     "*.PostSheetTest",
     "*.RenderPerformanceTest",
     "*.DesktopRenderPerformanceTest",

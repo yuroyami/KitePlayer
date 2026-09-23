@@ -2,7 +2,6 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderPreset
@@ -62,7 +61,7 @@ internal object Survey {
         val millis: Float,
     )
 
-    class Row(val name: String, val family: VizFamily, val bucket: VizEnergy, val drums: Measure, val pad: Measure)
+    class Row(val name: String, val bucket: VizEnergy, val drums: Measure, val pad: Measure)
 
     val rows: List<Row> by lazy { run() }
 
@@ -75,7 +74,6 @@ internal object Survey {
             val drawing = VizCatalog.create()[index]
             Row(
                 drawing.name,
-                drawing.family,
                 drawing.bucket,
                 measure(drawing, RenderHarness.Song.Lively, DRUM_FRAMES),
                 measure(drawing, RenderHarness.Song.Calm, PAD_FRAMES),

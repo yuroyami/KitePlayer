@@ -15,7 +15,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
@@ -46,7 +45,6 @@ import kotlin.math.sin
  */
 internal class Contour : Layered(
     name = "Contour",
-    family = VizFamily.Plenoptic,
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 403L, groundKind = GroundKind.Spectrogram, groundDim = 0.6f, detailKind = DetailKind.Dots, camera = Camera2D(wander = 0.06f, seed = 403)),
 ) {

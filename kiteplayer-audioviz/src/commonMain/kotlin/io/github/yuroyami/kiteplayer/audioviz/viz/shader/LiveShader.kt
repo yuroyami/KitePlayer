@@ -3,7 +3,6 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 
@@ -20,7 +19,7 @@ public class LiveShader(
     override val name: String,
     source: String,
 ) : Visualization {
-    override val family: VizFamily get() = VizFamily.Alchemy
+
     override val bucket: VizEnergy get() = VizEnergy.Mid
 
     private var body = LiveBody(name, source)
@@ -57,5 +56,4 @@ public class LiveShader(
 private class LiveBody(name: String, source: String) : ShaderPreset(
     source = source,
     name = name,
-    family = VizFamily.Alchemy,
-)
+    )

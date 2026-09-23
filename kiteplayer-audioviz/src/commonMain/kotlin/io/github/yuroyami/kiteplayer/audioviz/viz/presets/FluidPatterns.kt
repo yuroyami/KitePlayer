@@ -11,7 +11,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.PixelImage
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
@@ -83,7 +82,6 @@ private fun see(red: Float, green: Float, blue: Float, alpha: Float): Int {
  */
 internal class ReactionDiffusion : Layered(
     name = "Reaction Diffusion",
-    family = VizFamily.Fluid,
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 1_002L, groundKind = GroundKind.Fog, groundDim = 0.8f, camera = stillTank(1_002L)),
 ) {
@@ -323,7 +321,6 @@ internal class ReactionDiffusion : Layered(
  */
 internal class SmokeRise : Layered(
     name = "Smoke Rise",
-    family = VizFamily.Fluid,
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 1_003L, camera = stillTank(1_003L)),
 ) {

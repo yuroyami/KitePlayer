@@ -6,8 +6,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
 import kotlin.math.*
 
 /** A musical night drive: today's spectrum underfoot, the heard song along the horizon. */
-internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizFamily.Raymarch,
-    VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
+internal class NeonLoFi : ShaderPreset(NeonLoFiSky.SOURCE, "Neon Lo-Fi", VizEnergy.Mid, 31f, Kit(31_007L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f,
         shake = 0f, cuts = false, minZoom = 1f, maxZoom = 1f))) {
     override val hasFallback: Boolean get() = true
     override val frontParallax: Float get() = 0f

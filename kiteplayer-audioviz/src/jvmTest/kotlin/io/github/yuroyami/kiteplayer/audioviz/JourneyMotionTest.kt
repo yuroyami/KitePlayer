@@ -4,7 +4,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.*
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Gestures
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Journey
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.PipeShape
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.StrandGeometry
 import kotlin.math.*
 import kotlin.test.*
 
@@ -42,25 +41,6 @@ class JourneyMotionTest {
         assertEquals(1f, journey.weights[1], 0.00001f)
         repeat(60) { journey.advance(journeyState(901 + it, held = true), gestures, FloatArray(5) { 1f }, false, 0) }
         assertContentEquals(previous, journey.weights)
-    }
-
-    @Test
-    fun sharedWireAndWebKeepEveryJunctionWelded() {
-        val mesh = StrandGeometry()
-        for (form in listOf(1, 2)) {
-            val weights = FloatArray(5).apply { this[form] = 1f }
-            mesh.update(weights, 3f, 0.8f, FloatArray(30) { it / 30f }, FloatArray(65), 0.8f, 1.7f, 1f, 1f)
-            val seen = mutableMapOf<Int, List<Float>>()
-            for (edge in 0 until 30) for (end in 0..1) {
-                val index = (edge * 65 + end * 64) * 3
-                val point = mesh.positions.slice(index until index + 3)
-                val node = mesh.edges[edge * 2 + end]
-                val before = seen[node]
-                if (before != null) for (axis in 0..2) assertEquals(before[axis], point[axis], 0.000001f)
-                seen[node] = point
-            }
-            assertEquals(12, seen.size)
-        }
     }
 
     @Test

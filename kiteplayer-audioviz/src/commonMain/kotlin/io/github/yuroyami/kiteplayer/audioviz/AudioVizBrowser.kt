@@ -4,15 +4,14 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,11 +33,10 @@ import androidx.compose.ui.unit.sp
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
 import io.github.yuroyami.kiteplayer.audioviz.viz.VisualizerSurface
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import kotlinx.coroutines.delay
 
 /**
- * Every drawing at once, each live in a small tile, grouped by family and searchable by name.
+ * Every drawing at once, each live in a small tile, in one flat grid searchable by name.
  * Tapping a tile shows that drawing in [state], then calls [onPick] so the caller can close the panel.
  *
  * The tiles draw their own copies of the drawings, so their trails stay apart from the big one, and
@@ -77,7 +75,7 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
     }
 
     val wanted = query.trim()
-    val groups = tiles.filter { VizCatalog.matchesSearch(it.name, wanted) }.groupBy { it.family }
+    val matches = tiles.filter { VizCatalog.matchesSearch(it.name, wanted) }
 
     Column(modifier.fillMaxSize().background(Color(0xE6070910)).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -93,56 +91,35 @@ public fun AudioVizBrowser(state: AudioVizState, modifier: Modifier = Modifier, 
             )
         }
         Note(
-            "${tiles.size} drawings. Tap one to show it.",
+            "${tiles.size} presets. Tap one to show it.",
             Modifier.padding(top = 8.dp, bottom = 4.dp),
             PanelColors.Faint,
         )
-        LazyVerticalGrid(columns = GridCells.Adaptive(184.dp), modifier = Modifier.fillMaxSize()) {
-            for ((family, members) in groups) {
-                item(span = { GridItemSpan(maxLineSpan) }, key = "family ${family.name}") {
-                    Heading(family.label, Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 6.dp))
-                }
-                items(members, key = { it.name }) { tile ->
-                    Column(
-                        Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                val picked = state.catalogue.firstOrNull { it.name == tile.name } ?: return@clickable
-                                state.drawing = picked
-                                onPick(picked)
-                            }
-                            .padding(6.dp),
-                    ) {
-                        VisualizerSurface(
-                            visualization = tile,
-                            frame = { shown },
-                            palette = state.palette,
-                            modifier = Modifier.size(172.dp, 96.dp).clip(RoundedCornerShape(6.dp)),
-                            post = false,
-                            framesPerSecond = tileRate,
-                        )
-                        Note(tile.name, Modifier.padding(top = 4.dp))
-                    }
+        LazyVerticalGrid(columns = GridCells.Adaptive(160.dp), modifier = Modifier.fillMaxSize()) {
+            items(matches, key = { it.name }) { tile ->
+                Column(
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            val picked = state.catalogue.firstOrNull { it.name == tile.name } ?: return@clickable
+                            state.drawing = picked
+                            onPick(picked)
+                        }
+                        .padding(6.dp),
+                ) {
+                    VisualizerSurface(
+                        visualization = tile,
+                        frame = { shown },
+                        palette = state.palette,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(6.dp)),
+                        post = false,
+                        framesPerSecond = tileRate,
+                    )
+                    Note(tile.name, Modifier.padding(top = 4.dp))
                 }
             }
         }
     }
 }
-
-/** A family's name the way a person would write it. */
-internal val VizFamily.label: String
-    get() = when (this) {
-        VizFamily.BarsAndWaves -> "Bars and waves"
-        VizFamily.Battery -> "Battery"
-        VizFamily.Ambience -> "Ambience"
-        VizFamily.Plenoptic -> "Plenoptic"
-        VizFamily.Alchemy -> "Alchemy"
-        VizFamily.MusicalColors -> "Musical colours"
-        VizFamily.Immersion -> "Immersion"
-        VizFamily.Acid -> "Acid"
-        VizFamily.Warp -> "Warp"
-        VizFamily.Raymarch -> "Raymarch"
-        VizFamily.Fluid -> "Fluid"
-    }
 
 private const val TILE_RATE = 15

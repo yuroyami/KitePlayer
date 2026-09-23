@@ -20,7 +20,7 @@ class WarpDeterminismTest {
     @Test
     fun aWarpReplaysExactly() {
         val catalogue = VizCatalog.create()
-        for (name in listOf("Twist", "Flow Field", "Fractal Zoom", "Ink")) {
+        for (name in listOf("Ripple Well")) {
             val drawing = catalogue.first { it.name == name }
             val first = RenderHarness.render(drawing, 200, 125, 120, VizPalette.Prism)
             val second = RenderHarness.render(drawing, 200, 125, 120, VizPalette.Prism)

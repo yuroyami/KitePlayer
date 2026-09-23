@@ -317,7 +317,7 @@ Everything else that is open lives in [GitHub Issues](https://github.com/yuroyam
 | `kiteplayer-compose-ui` | Compose presentation only: `KitePlayerVideo` and both video paths. No player factory, no network. |
 | `kiteplayer-compose-interop` | Compose hosting the platform's native video view. |
 | `kiteplayer-compose-video` | Video drawn by Compose itself. |
-| `kiteplayer-audioviz` | Optional. An audio visualiser for files with no picture: 78 drawings, palettes, and a director that changes drawings with the music. |
+| `kiteplayer-audioviz` | Optional. An audio visualiser for files with no picture: independent presets in a flat catalogue, palettes, and a director that changes drawings with the music. |
 | `kiteplayer-view` | The native views: `KitePlayerView` on Android, `KitePlayerUIView` on iOS, `KitePlayerAwtView` on the desktop JVM. |
 | `kiteplayer-view-bindings` | The FFmpeg adapters those views need. |
 | `kiteplayer-core` | The engine and its service interfaces. Depends on coroutines only. |

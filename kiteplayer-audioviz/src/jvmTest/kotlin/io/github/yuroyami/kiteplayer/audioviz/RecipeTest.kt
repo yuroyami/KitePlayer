@@ -2,7 +2,6 @@ package io.github.yuroyami.kiteplayer.audioviz
 
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCatalog
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.Visualization
@@ -129,7 +128,7 @@ class RecipeTest {
     /** A drawing that is nothing but a ground, for measuring grounds alone. */
     private class GroundOnly(override val ground: Ground) : Visualization {
         override val name: String get() = "Ground only"
-        override val family: VizFamily get() = VizFamily.Ambience
+
         override fun DrawScope.draw(state: VizRenderState) {}
     }
 }

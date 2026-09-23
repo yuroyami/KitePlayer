@@ -30,6 +30,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `AudioConfig` gains `resampler`, which changes the generated data-class methods. The
   `AudioPlayback` constructor gains the same parameter. Calls in source compile unchanged.
   Recompile.
+- `kiteplayer-audioviz` has no categories any more. `VizFamily`, `Visualization.family`,
+  `VizCatalog.byFamily()` and the category argument of the drawing constructors are gone. Use
+  `VizCatalog.create()`, which returns every drawing in one list. Twenty-six drawings were
+  removed, so an app that saved the name of one of them finds no match and needs a fallback.
 
 ## [0.0.26] - 2026-09-20
 

@@ -1,12 +1,9 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz.presets
 
 import io.github.yuroyami.kiteplayer.audioviz.viz.WaveformResampler
-
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -19,9 +16,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.MoodSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
-import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
@@ -29,203 +24,12 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizResponse
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
-import io.github.yuroyami.kiteplayer.audioviz.viz.actors.PathShape
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprite
 import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Sprites
-import io.github.yuroyami.kiteplayer.audioviz.viz.actors.Travellers
-import io.github.yuroyami.kiteplayer.audioviz.viz.actors.drawTravellers
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.DetailKind
 import io.github.yuroyami.kiteplayer.audioviz.viz.ground.GroundKind
-import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.TriangleMesh
-import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.drawMesh
-import io.github.yuroyami.kiteplayer.audioviz.viz.mesh.polygon
 import io.github.yuroyami.kiteplayer.audioviz.viz.motion.Spring
-import io.github.yuroyami.kiteplayer.audioviz.viz.polar
-import io.github.yuroyami.kiteplayer.audioviz.viz.sceneRadius
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
-
-/**
- * Three cores, one for each part of the spectrum, orbiting each other and throwing arcs between them,
- * inside shells of spectrum that reach the corners. The colours come from the key, so a change of chord
- * changes the picture. A kick swells the cores, a snare steps the shells round, and a drop collides the
- * cores into one before they fly apart again.
- */
-internal class Reactor : Layered(
-    name = "Reactor",
-    family = VizFamily.MusicalColors,
-    bucket = VizEnergy.Mid,
-    kit = Kit(seed = 601L, groundKind = GroundKind.Voronoi, detailKind = DetailKind.Specks, camera = Camera2D(wander = 0.08f, seed = 601)),
-) {
-
-    override val mapping: VizMapping by mappingOf(
-        VizDrive(VizDriver.Bands, VizProperty.Size),
-        VizDrive(VizDriver.Level, VizProperty.Speed),
-        VizDrive(VizDriver.Key, VizProperty.Colour),
-        VizDrive(VizDriver.LowHit, VizProperty.Size, VizCurve.Scaled, VizResponse.spring(0.25f)),
-        VizDrive(VizDriver.BodyHit, VizProperty.Spawn, VizCurve.Scaled, VizResponse.lifetime(0.6f)),
-        VizDrive(VizDriver.Drop, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-        VizDrive(VizDriver.Mood, VizProperty.Speed, response = VizResponse.Rate),
-        VizDrive(VizDriver.Breakdown, VizProperty.Shape, VizCurve.Discrete,
-            VizResponse.envelope(0.5f, delaySeconds = 0.8f)),
-    )
-    override val moodSpec: MoodSpec = MoodSpec(calmTrail = 0.7f, livelyTrail = 0.56f, calmSpin = 0.1f, livelySpin = 0.6f)
-
-    private val cores = genes.choice("Cores", 3, start = 2)
-    private val shells = genes.choice("Shells", 3, start = 1)
-    private val arcDensity = genes.number("Arc density", 0.6f, 1.6f, 1f)
-    private val exchange = genes.choice("Arc exchange", 3, start = 1)
-
-    private val stage = Stage(reachX = 0.2f, reachY = 0.15f, start = 0.5f)
-    private var orbit = 0f
-    private var spin = 0f
-    private var step = 0f
-    private val swell = Spring(stiffness = 250f, damping = 0.42f)
-    private var collide = 0f
-    private val coreX = FloatArray(3) { 0.5f }
-    private val coreY = FloatArray(3) { 0.5f }
-    private val arcs = Travellers(16)
-    private val arcMesh = TriangleMesh(maxVertices = 16 * 12 + 8)
-    private val electronMesh = TriangleMesh(maxVertices = ELECTRONS * 5 + 8)
-    private val sparks = Sprites(260, 1_601L)
-    private val comets = Comets()
-    private var lastBeat = -1
-    private var nextCore = 0
-
-    override fun advance(state: VizRenderState) {
-        val dt = state.deltaSeconds
-        stage.advance(dt * state.idle)
-        orbit += dt * (0.5f * state.idle + 2.2f * state.drive)
-        spin += dt * (0.4f * state.idle + 2.4f * state.drive)
-        if (gestures.drop) collide = 1f
-        collide = (collide - dt / gestures.cycleSeconds).coerceAtLeast(0f)
-        swell.kick(gestures.kick * 9f)
-        swell.advance(dt)
-        if (gestures.snare > 0f) step += TAU / 24f * gestures.snare
-        val apart = 0.3f * (1f - sin(collide * PI.toFloat()))
-        val count = cores.count(1)
-        for (index in 0 until 3) {
-            val angle = orbit + index * TAU / count
-            coreX[index] = stage.x + apart * cos(angle) / kit.aspect * 1.6f
-            coreY[index] = stage.y + apart * sin(angle)
-            kit.place(index + 1, coreX[index], coreY[index])
-        }
-        // Arcs pass from core to core once a cycle, once a beat or twice a beat, while a pulse is supported.
-        val beats = (gestures.cyclePhase * 8f).toInt()
-        if (beats != lastBeat && gestures.pulseUsable) {
-            lastBeat = beats
-            val every = when (exchange.value) {
-                0 -> 8
-                1 -> 2
-                else -> 1
-            }
-            if (beats % every == 0 && count > 1) {
-                val from = nextCore % count
-                val to = (from + 1) % count
-                nextCore++
-                arcs.spawn(coreX[from], coreY[from], coreX[to], coreY[to], gestures.beatSeconds * 0.8f, PathShape.Arc, 0.25f, 0.022f, random.next(), 0f, Sprite.SPARK)
-            }
-        }
-        arcs.advance(dt)
-        if (gestures.snare > 0f) {
-            val a = random.next() * TAU
-            sparks.burst(stage.x + cos(a) * 0.3f / kit.aspect, stage.y + sin(a) * 0.3f,
-                gestures.snareSpawn(8), 0.4f, 0.6f, 0.012f, random.next(), Sprite.SPARK)
-        }
-        sparks.advance(dt, drag = 1f)
-        comets.advance(state, gestures, random)
-        kit.follow(0, comets.travellers)
-    }
-
-    override fun DrawScope.drawEcho(state: VizRenderState) {
-        val bands = state.frame.bandsRel
-        if (bands.isEmpty()) return
-        val key = state.frame.keyHue * state.frame.keyConfidence + genes.walk
-        val lift = 0.2f + 0.8f * state.lift
-        val middle = Offset(stage.x * size.width, stage.y * size.height)
-        val stroke = (size.minDimension * 0.018f).coerceAtLeast(1.4f)
-        for (shell in 0 until shells.drawn(2)) {
-            val presence = shells.presence(shell, 2)
-            if (presence <= 0.01f) continue
-            val radius = sceneRadius * (0.35f + 0.28f * shell)
-            val way = if (shell % 2 == 0) 1f else -1f
-            val turn = (spin * (1f - shell * 0.25f) + step) * way
-            val count = ((56 + shell * 28) * arcDensity.value).toInt()
-            for (arc in 0 until count) {
-                val along = arc.toFloat() / count
-                val energy = bands[(along * (bands.size - 1)).toInt()]
-                if (energy <= 0.01f) continue
-                val angle = TAU * along + turn
-                drawLine(
-                    color = state.palette.cycled(key + along * 0.3f + shell * 0.2f, value = 0.45f + 0.55f * energy, alpha = (lift * presence).coerceIn(0f, 1f)),
-                    start = polar(middle, angle, radius),
-                    end = polar(middle, angle, radius + size.minDimension * 0.3f * energy),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-            }
-        }
-        val grow = swell.value.coerceIn(-0.3f, 1.6f)
-        for (index in 0 until cores.drawn(1)) {
-            val presence = cores.presence(index, 1)
-            if (presence <= 0.01f) continue
-            val at = Offset(coreX[index] * size.width, coreY[index] * size.height)
-            val core = size.minDimension * (0.035f + 0.04f * split.level(index) + 0.04f * grow)
-            val halo = (core * 3.4f).coerceAtLeast(1f)
-            drawCircle(
-                Brush.radialGradient(
-                    0f to state.palette.cycled(key + index * 0.2f, saturation = 0.5f, alpha = (0.75f * presence * lift).coerceIn(0f, 1f)),
-                    0.35f to state.palette.mid.copy(alpha = (0.4f * presence).coerceIn(0f, 1f)),
-                    1f to Color.Transparent,
-                    center = at,
-                    radius = halo,
-                ),
-                halo,
-                at,
-            )
-            drawCircle(state.palette.cap.copy(alpha = presence), core.coerceAtLeast(1f), at)
-        }
-        drawTravellers(arcs, arcMesh, state.palette, key)
-    }
-
-    override fun DrawScope.drawTop(state: VizRenderState) {
-        // Electrons circling the cores: hard points that never stop.
-        electronMesh.clear()
-        val count = cores.count(1)
-        for (index in 0 until ELECTRONS) {
-            val core = index % count
-            val reach = size.minDimension * (0.08f + 0.02f * (index * 7 % 10))
-            val way = if (index % 2 == 0) 1f else -1f
-            val angle = orbit * (3.5f + (index % 4) * 0.8f) * way + index * 2.4f
-            val colour = state.palette.argb(core * 0.2f + index * 0.01f + genes.walk, saturation = 0.5f, value = 1f, alpha = 0.4f + 0.5f * state.lift)
-            electronMesh.polygon(coreX[core] * size.width + cos(angle) * reach, coreY[core] * size.height + sin(angle) * reach * 0.8f, size.minDimension * 0.012f, 4, angle, colour)
-        }
-        drawMesh(electronMesh, BlendMode.Plus)
-        with(sparks) { drawSprites(state.palette, genes.walk) }
-        with(comets) { drawComets(state.palette, genes.walk) }
-    }
-
-    override fun onReset() {
-        stage.reset()
-        orbit = 0f
-        spin = 0f
-        step = 0f
-        swell.reset()
-        collide = 0f
-        arcs.clear()
-        sparks.clear()
-        comets.clear()
-        lastBeat = -1
-        nextCore = 0
-    }
-
-    private companion object {
-        const val ELECTRONS = 180
-    }
-}
 
 /**
  * Left against right, turned so that mono stands upright, filling the screen, with the traces from one
@@ -237,7 +41,6 @@ internal class Reactor : Layered(
  */
 internal class Stereogram : Layered(
     name = "Stereogram",
-    family = VizFamily.MusicalColors,
     bucket = VizEnergy.Calm,
     kit = Kit(seed = 602L, groundKind = GroundKind.Spectrogram, groundDim = 0.85f, detailKind = DetailKind.Hatch, camera = Camera2D(wander = 0.06f, seed = 602)),
 ) {

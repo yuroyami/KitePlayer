@@ -96,26 +96,6 @@ final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy : kotlin/E
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy> // io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy.values|values#static(){}[0]
 }
 
-final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily|null[0]
-    enum entry Acid // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Acid|null[0]
-    enum entry Alchemy // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Alchemy|null[0]
-    enum entry Ambience // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Ambience|null[0]
-    enum entry BarsAndWaves // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.BarsAndWaves|null[0]
-    enum entry Battery // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Battery|null[0]
-    enum entry Fluid // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Fluid|null[0]
-    enum entry Immersion // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Immersion|null[0]
-    enum entry MusicalColors // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.MusicalColors|null[0]
-    enum entry Plenoptic // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Plenoptic|null[0]
-    enum entry Raymarch // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Raymarch|null[0]
-    enum entry Warp // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.Warp|null[0]
-
-    final val entries // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.entries|#static{}entries[0]
-        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily> // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.entries.<get-entries>|<get-entries>#static(){}[0]
-
-    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.valueOf|valueOf#static(kotlin.String){}[0]
-    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily> // io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily.values|values#static(){}[0]
-}
-
 final enum class io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed : kotlin/Enum<io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed> { // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed|null[0]
     enum entry EchoBuffer // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.EchoBuffer|null[0]
     enum entry RuntimeShader // io.github.yuroyami.kiteplayer.audioviz.viz/VizNeed.RuntimeShader|null[0]
@@ -263,8 +243,6 @@ final enum class io.github.yuroyami.kiteplayer.audioviz/WaveformChannels : kotli
 }
 
 abstract interface io.github.yuroyami.kiteplayer.audioviz.viz/Visualization { // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization|null[0]
-    abstract val family // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.family|{}family[0]
-        abstract fun <get-family>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.family.<get-family>|<get-family>(){}[0]
     abstract val name // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.name|{}name[0]
         abstract fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.name.<get-name>|<get-name>(){}[0]
     open val anchors // io.github.yuroyami.kiteplayer.audioviz.viz/Visualization.anchors|{}anchors[0]
@@ -574,8 +552,6 @@ final class io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader : io.gi
 
     final val bucket // io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader.bucket|{}bucket[0]
         final fun <get-bucket>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizEnergy // io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader.bucket.<get-bucket>|<get-bucket>(){}[0]
-    final val family // io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader.family|{}family[0]
-        final fun <get-family>(): io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily // io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader.family.<get-family>|<get-family>(){}[0]
     final val name // io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader.name|{}name[0]
         final fun <get-name>(): kotlin/String // io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader.name.<get-name>|<get-name>(){}[0]
     final val post // io.github.yuroyami.kiteplayer.audioviz.viz.shader/LiveShader.post|{}post[0]
@@ -1806,7 +1782,6 @@ final object io.github.yuroyami.kiteplayer.audioviz.viz.shader/WarpFields { // i
 }
 
 final object io.github.yuroyami.kiteplayer.audioviz.viz/VizCatalog { // io.github.yuroyami.kiteplayer.audioviz.viz/VizCatalog|null[0]
-    final fun byFamily(): kotlin.collections/Map<io.github.yuroyami.kiteplayer.audioviz.viz/VizFamily, kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/Visualization>> // io.github.yuroyami.kiteplayer.audioviz.viz/VizCatalog.byFamily|byFamily(){}[0]
     final fun create(): kotlin.collections/List<io.github.yuroyami.kiteplayer.audioviz.viz/Visualization> // io.github.yuroyami.kiteplayer.audioviz.viz/VizCatalog.create|create(){}[0]
 }
 

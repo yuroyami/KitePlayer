@@ -733,7 +733,6 @@ public abstract interface class io/github/yuroyami/kiteplayer/audioviz/viz/Visua
 	public fun getBucket ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizEnergy;
 	public fun getDetail ()Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Detail;
 	public fun getEchoBlend ()Lio/github/yuroyami/kiteplayer/audioviz/viz/EchoBlend;
-	public abstract fun getFamily ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
 	public fun getFeedbackSpin ()F
 	public fun getFeedbackZoom ()F
 	public fun getGenes ()Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;
@@ -793,7 +792,6 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VisualizerSurfaceK
 public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizCatalog {
 	public static final field $stable I
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/audioviz/viz/VizCatalog;
-	public final fun byFamily ()Ljava/util/Map;
 	public final fun create ()Ljava/util/List;
 }
 
@@ -904,23 +902,6 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizEnergy : java/l
 	public static fun getEntries ()Lkotlin/enums/EnumEntries;
 	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizEnergy;
 	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizEnergy;
-}
-
-public final class io/github/yuroyami/kiteplayer/audioviz/viz/VizFamily : java/lang/Enum {
-	public static final field Acid Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Alchemy Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Ambience Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field BarsAndWaves Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Battery Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Fluid Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Immersion Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field MusicalColors Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Plenoptic Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Raymarch Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static final field Warp Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static fun getEntries ()Lkotlin/enums/EnumEntries;
-	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
-	public static fun values ()[Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/audioviz/viz/VizFuture {
@@ -1374,7 +1355,6 @@ public final class io/github/yuroyami/kiteplayer/audioviz/viz/shader/LiveShader 
 	public fun getDetail ()Lio/github/yuroyami/kiteplayer/audioviz/viz/ground/Detail;
 	public fun getEchoBlend ()Lio/github/yuroyami/kiteplayer/audioviz/viz/EchoBlend;
 	public final fun getError ()Ljava/lang/String;
-	public fun getFamily ()Lio/github/yuroyami/kiteplayer/audioviz/viz/VizFamily;
 	public fun getFeedbackSpin ()F
 	public fun getFeedbackZoom ()F
 	public fun getGenes ()Lio/github/yuroyami/kiteplayer/audioviz/viz/motion/Genes;

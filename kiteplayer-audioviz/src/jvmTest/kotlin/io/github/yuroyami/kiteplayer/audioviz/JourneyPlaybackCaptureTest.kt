@@ -7,7 +7,6 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.*
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Mandala
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Pipe
 import java.io.File
 import java.nio.ByteBuffer
@@ -28,15 +27,11 @@ class JourneyPlaybackCaptureTest {
         val samples = FloatArray(buffer.remaining()).also { buffer.get(it) }
         val seconds = minOf(36, samples.size / 48000 - 3)
         assertTrue(seconds >= 30)
-        for (viz in listOf(Mandala(), Pipe())) {
+        for (viz in listOf(Pipe())) {
             viz.restart()
             viz.params.single { it.name == "Journey" }.value = 0f
             val selector = viz.params.single { it.name == "Form" }
-            val forms = when (viz) {
-                is Mandala -> listOf(0, 1, 2, 3, 4)
-                is Pipe -> listOf(0, 1, 2, 0)
-                else -> listOf(0, 1, 2, 3, 4)
-            }
+            val forms = listOf(0, 1, 2, 0)
             val directory = File("build/journey-preview/music/${viz.name.replace(' ', '-')}").apply { mkdirs() }
             directory.listFiles()?.filter { it.extension == "png" }?.forEach { it.delete() }
             val player = SongPlayer(samples, bandCount = 40)

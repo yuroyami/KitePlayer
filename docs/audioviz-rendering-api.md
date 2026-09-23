@@ -91,28 +91,33 @@ cursor, skips three seconds of warmup, and saves up to 30 seconds of 384 x 240 f
 Normal test runs skip it when no PCM path is supplied. Force the selected test to rerun when only
 the input file changes.
 
+## Flat preset catalogue
+
+`VizCatalog.create()` returns independent preset instances in one flat display order.
+`AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
+preset categories, category headers or grouped-catalogue entry points.
+
+The category contract has been removed: custom `Visualization` implementations no longer declare
+`family`; `VizFamily` and `VizCatalog.byFamily()` are no longer exposed. Clients that used those
+APIs should use `VizCatalog.create()` and the preset's own `name`. This is an intentional source
+and binary compatibility change. Musical energy metadata remains for the automatic director;
+it is not a picker grouping.
+
 ## Continuous forms and landscape travel
 
-The catalogue keeps two continuous form families and the Neon Lo-Fi musical landscape below.
+The flat catalogue includes the continuous Pipe preset and the Neon Lo-Fi musical landscape below.
 Their internal changes transform geometry and scene weights without crossfading preset pictures.
 
 | Catalogue entry | Forms inside it |
 | --- | --- |
-| Mandala | Mandala, Wireframe, Strobe Web, Strands, Wave |
 | Pipe | Pipe, Tunnel, Radar's converging horizon planes |
 | Neon Lo-Fi | Highway, mountain pass, city and coast in one musical night drive |
 
 Plasma also remains independently selectable. The other consumed forms have no separate catalogue
-entries or duplicate implementations. Mandala and Pipe have `Journey` enabled by default; turn
+entries or duplicate implementations. Pipe has `Journey` enabled by default; turn
 it off to choose a `Form`. Neon Lo-Fi uses its own `Scene` control, whose default is `Auto`.
 Manual choices still transform continuously.
 
-
-Mandala carries thirty permanent filaments with sixty-five samples each. The same samples move
-between radial strings, the thirty edges of an icosahedron, a connected angular web, loose curves
-and a coherent wave sheet. Wire and web junctions stay welded, including under sound deformation.
-Spectrum and waveform change their geometry; density and novelty change their movement and
-curvature. Camera rotation reveals depth without a full-screen feedback smear.
 
 Pipe keeps its recorded spectrum rings and longitudinal rails while their cross sections become
 hexagonal and then open into broad parallel planes. Gates use the same cross-section transform.

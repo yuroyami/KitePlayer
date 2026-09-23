@@ -141,19 +141,13 @@ class ContactSheetTest {
         return Run(picture, peakInk, peakBlown)
     }
 
-    /** Each family gets the palette it was designed against. */
-    private fun paletteFor(visualization: Visualization): VizPalette = when (visualization.family) {
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.BarsAndWaves -> VizPalette.Classic
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Battery -> VizPalette.Prism
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Ambience -> VizPalette.Ambience
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Plenoptic -> VizPalette.Fire
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Alchemy -> VizPalette.Prism
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.MusicalColors -> VizPalette.Classic
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Immersion -> VizPalette.Prism
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Acid -> VizPalette.Ambience
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Warp -> VizPalette.Vapor
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Raymarch -> VizPalette.Prism
-        io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily.Fluid -> VizPalette.Vapor
+    /** Each preset retains its authored inspection palette without a category assignment. */
+    private fun paletteFor(visualization: Visualization): VizPalette = when (visualization.name) {
+        "Bars", "Ocean Mist", "Stereogram" -> VizPalette.Classic
+        "Contour", "Fluctus" -> VizPalette.Fire
+        "Shatter" -> VizPalette.Ambience
+        "Ripple Well", "Reaction Diffusion", "Smoke Rise" -> VizPalette.Vapor
+        else -> VizPalette.Prism
     }
 
 
@@ -201,7 +195,7 @@ class ContactSheetTest {
             graphics.drawImage(image, x, y, null)
             graphics.color = AwtColor(200, 205, 215)
             graphics.drawString(
-                "${visualization.name}  (${visualization.family})",
+                visualization.name,
                 x + 2,
                 y + cellHeight + 15,
             )

@@ -14,7 +14,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
 import io.github.yuroyami.kiteplayer.audioviz.viz.Scene3D
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
@@ -55,7 +54,6 @@ import kotlin.math.sin
  */
 internal class Pipe : Layered(
     name = "Pipe",
-    family = VizFamily.Immersion,
     bucket = VizEnergy.Mid,
     kit = Kit(
         seed = 701L,

@@ -4,7 +4,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.TAU
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
@@ -35,7 +34,6 @@ import kotlin.math.sin
 internal class Alchemy : ShaderPreset(
     source = SOURCE,
     name = "Alchemy",
-    family = VizFamily.Alchemy,
     bucket = VizEnergy.Mid,
 ) {
 

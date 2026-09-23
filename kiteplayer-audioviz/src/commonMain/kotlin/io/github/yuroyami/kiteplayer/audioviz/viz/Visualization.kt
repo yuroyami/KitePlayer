@@ -13,42 +13,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.shader.WarpSpec
 import kotlin.math.log2
 import kotlin.math.pow
 
-/** The kinds of drawing, kept apart because they feel different to watch. */
-public enum class VizFamily {
-    /** Literal pictures of the spectrum: bars, traces, meters. */
-    BarsAndWaves,
-
-    /** Geometry that answers the beat: spikes, rings, rotation. */
-    Battery,
-
-    /** Soft, slow and smeared. These lean on the trail buffer. */
-    Ambience,
-
-    /** Abstract fields and flows, further from the spectrum than the rest. */
-    Plenoptic,
-
-    /** Colour fields: plasma, cloud and haze. */
-    Alchemy,
-
-    /** Straight readings of the signal, drawn as colour rather than as height. */
-    MusicalColors,
-
-    /** Drawn in perspective, with the camera moving through the scene. */
-    Immersion,
-
-    /** Built on the feedback loop: light adds up, and every mark leaves an echo that moves. */
-    Acid,
-
-    /** Built on the per pixel warp: the picture folds through a shape of its own, frame after frame. */
-    Warp,
-
-    /** Scenes found by walking a ray out from the eye for every pixel. No geometry, only distances. */
-    Raymarch,
-
-    /** A simulated liquid or smoke. The music stirs it, and it keeps moving after the push is over. */
-    Fluid,
-}
-
 /**
  * How busy a drawing is, so something choosing for the listener can match it to the music.
  *
@@ -151,7 +115,7 @@ public enum class EchoBlend { Over, Add }
 /**
  * How much light a picture gives at this level, from a floor in silence to all of it when loud.
  *
- * Every drawing's brightness follows this, so it lives here rather than in one family of drawings.
+ * Every drawing's brightness follows this shared contract.
  *
  * The curve is not straight. Straight, a calm pad reading 0.10 was drawn at 0.15 of full light,
  * which put several drawings under the level a viewer can see at all: quieter has to mean quieter,
@@ -325,8 +289,6 @@ public interface VizFuture {
 public interface Visualization {
 
     public val name: String
-
-    public val family: VizFamily
 
     /** How busy this drawing is, so something choosing for the listener can match it to the music. */
     public val bucket: VizEnergy get() = VizEnergy.Mid

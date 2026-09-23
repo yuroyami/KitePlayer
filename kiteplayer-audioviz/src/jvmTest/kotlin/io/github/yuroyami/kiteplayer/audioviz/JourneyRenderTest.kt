@@ -41,16 +41,16 @@ class JourneyRenderTest {
     }
 
     @Test
-    fun filamentAndPipeFormsRenderAtBothAspectRatios() {
-        for (kind in 0..1) for (form in 0..if (kind == 0) 4 else 2) {
-            val viz = if (kind == 0) Mandala() else Pipe()
+    fun pipeFormsRenderAtBothAspectRatios() {
+        for (form in 0..2) {
+            val viz = Pipe()
             RenderHarness.forEachFrame(viz, 160, 90, 390, VizPalette.Prism, RenderHarness.Song.Lively,
                 beforeDraw = {
                     viz.params.single { it.name == "Journey" }.value = 0f
                     viz.params.single { it.name == "Form" }.value = form.toFloat()
                 }) { _, _ -> }
-            snapshot(viz, if (kind == 0) "mandala-$form" else "pipe-$form")
-            if (form == 0 || form == 2) snapshot(viz, if (kind == 0) "mandala-$form-portrait" else "pipe-$form-portrait", 360, 640)
+            snapshot(viz, "pipe-$form")
+            if (form == 0 || form == 2) snapshot(viz, "pipe-$form-portrait", 360, 640)
         }
     }
 

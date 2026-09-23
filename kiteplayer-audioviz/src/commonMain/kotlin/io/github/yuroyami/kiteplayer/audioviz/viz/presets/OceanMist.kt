@@ -17,7 +17,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
@@ -44,7 +43,6 @@ import kotlin.math.sin
  */
 internal class OceanMist : Layered(
     name = "Ocean Mist",
-    family = VizFamily.BarsAndWaves,
     bucket = VizEnergy.Mid,
     kit = Kit(
         seed = 203L, groundKind = GroundKind.Water, groundDim = 0.1f, groundParallax = 0f,

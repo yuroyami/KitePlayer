@@ -85,7 +85,6 @@ internal class Kit(
  */
 internal abstract class Layered(
     final override val name: String,
-    final override val family: VizFamily,
     final override val bucket: VizEnergy,
     protected val kit: Kit,
 ) : Visualization {

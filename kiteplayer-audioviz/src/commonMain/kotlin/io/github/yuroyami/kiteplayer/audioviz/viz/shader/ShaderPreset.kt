@@ -3,7 +3,6 @@ package io.github.yuroyami.kiteplayer.audioviz.viz.shader
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import io.github.yuroyami.kiteplayer.audioviz.viz.PostSpec
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizRenderState
 import io.github.yuroyami.kiteplayer.audioviz.viz.Kit
 import io.github.yuroyami.kiteplayer.audioviz.viz.Layered
@@ -22,12 +21,11 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.withCamera
 internal abstract class ShaderPreset(
     private val source: String,
     name: String,
-    family: VizFamily,
     bucket: VizEnergy = VizEnergy.Mid,
     /** A number that makes this preset's randomness its own. */
     private val seed: Float = 1f,
     kit: Kit = Kit((seed * 7_919f).toLong() + 13L, detailKind = null),
-) : Layered(name, family, bucket, kit) {
+) : Layered(name, bucket, kit) {
 
     private val program: ShaderProgram by lazy { ShaderProgram(ShaderLibrary.HEADER + source) }
     private val inputs = ShaderInputs(seed)

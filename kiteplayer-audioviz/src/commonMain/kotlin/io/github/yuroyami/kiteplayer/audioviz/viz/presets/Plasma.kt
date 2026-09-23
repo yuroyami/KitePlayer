@@ -14,7 +14,6 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizCurve
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDrive
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizDriver
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizEnergy
-import io.github.yuroyami.kiteplayer.audioviz.viz.VizFamily
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizMapping
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizParam
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizProperty
@@ -47,7 +46,6 @@ import kotlin.math.sqrt
 internal class Plasma : ShaderPreset(
     source = SOURCE,
     name = "Plasma",
-    family = VizFamily.Alchemy,
     bucket = VizEnergy.Mid,
     seed = 3f,
     kit = Kit(seed = 501L, camera = Camera2D(wander = 0f, punch = 0f, roll = 0f, shake = 0f, cuts = false, seed = 501)),

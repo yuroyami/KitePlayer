@@ -13,12 +13,12 @@ class JourneyCatalogTest {
     fun relatedFormsLiveInsideTheirJourneys() {
         val catalog = VizCatalog.create()
         val names = catalog.map { it.name }
-        for (name in listOf("Mandala", "Pipe")) {
+        for (name in listOf("Pipe")) {
             assertEquals(1, names.count { it == name })
             assertTrue(catalog.single { it.name == name }.params.any { it.name == "Journey" },
                 "$name needs automatic travel and selectable former forms")
         }
-        for (name in listOf("Wireframe", "Strobe Web", "Strands", "Wave", "Tunnel", "Radar", "Terrain", "Ripple", "Terrain March")) {
+        for (name in listOf("Mandala", "Wireframe", "Strobe Web", "Strands", "Wave", "Tunnel", "Radar", "Terrain", "Ripple", "Terrain March")) {
             assertFalse(name in names, "$name is a form of its journey rather than a duplicate menu entry")
         }
     }

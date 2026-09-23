@@ -135,6 +135,39 @@ what keeps the cadence cheap. Answer an empty list when the picture became nothi
 return are positioned in the output surface's pixels and are owned by the engine from then on, so
 never reuse their byte arrays.
 
+## An audio resampler
+
+The engine converts the decoder's sample rate to the rate that the audio device accepted. By
+default it uses its own windowed-sinc filter, written in Kotlin. `AudioResampler` is the optional
+seam that replaces that filter. Give the engine an `AudioResamplerFactory` in
+`AudioConfig.resampler`. `KiteFFmpegResampler` in `kiteplayer-ffmpeg` is the one implementation,
+and it runs FFmpeg's libswresample.
+
+```kotlin
+val player = KitePlayerPlatform.createOrNull(
+    PlayerConfig(audio = AudioConfig(resampler = KiteFFmpegResampler())),
+)
+```
+
+The engine calls `create(inputRate, outputRate, channels)` for each audio stream, and again after
+a format change. It asks only when the two rates differ. While pitch correction is off, the
+playback speed is folded into `inputRate`, so expect any rate, not only the standard ones.
+
+- The resampler runs after the channel mix, so `channels` is the device's channel count. Samples
+  are interleaved floats.
+- `outputCapacity(inputFrames)` is the most frames that the next `process` call can write, counting
+  what the resampler holds from earlier calls. The engine sizes the output array from this answer.
+  With zero input, it is the most frames that `flush` can write.
+- `process` may answer zero while the filter fills. `flush` writes what is held at the end of the
+  stream. `reset` drops everything held, for a seek.
+- The engine never calls two members at the same time, so hold no lock. It closes a resampler when
+  it makes a new one, and when the session closes.
+
+When `create` throws, the engine keeps its own sinc for that stream and reports
+`PlaybackWarning.ResamplerUnavailable` once per player. `KiteFFmpegResampler` throws on the web,
+because the web build of the library has no filter graph. An exception from any other member stops
+the session with an error, the same as any other failure in the audio feeder.
+
 ## Diagnostics
 
 Implement `describeForDiagnostics()` to echo whatever configuration your backend carries; the

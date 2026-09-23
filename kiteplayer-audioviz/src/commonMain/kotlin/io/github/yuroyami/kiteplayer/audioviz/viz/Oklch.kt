@@ -89,3 +89,68 @@ private val GAMMA = FloatArray(GAMMA_STEPS) { step ->
     val linear = step.toFloat() / (GAMMA_STEPS - 1)
     if (linear <= 0.0031308f) linear * 12.92f else 1.055f * linear.pow(1f / 2.4f) - 0.055f
 }
+
+/**
+ * The most colourful a screen can show at this [lightness] and [hue], as Oklch chroma.
+ *
+ * The converter above clamps a channel that a screen cannot show, and clamping bends the hue: a
+ * blue asked for beyond the screen's range comes back as a different, greyer blue. The drawings
+ * want the opposite, the strongest colour that is still the colour asked for. That limit depends
+ * on both lightness and hue (a screen shows a far stronger blue at low lightness than a yellow, and
+ * the other way round near white), so it is searched once per cell of a small table and read back
+ * between neighbours.
+ */
+internal fun mostChroma(lightness: Float, hue: Float): Float {
+    val l = lightness.coerceIn(0f, 1f) * (CHROMA_LIGHTNESS_STEPS - 1)
+    var h = hue % 360f
+    if (h < 0f) h += 360f
+    val hIndex = h / 360f * CHROMA_HUE_STEPS
+    val l0 = l.toInt().coerceIn(0, CHROMA_LIGHTNESS_STEPS - 2)
+    val h0 = hIndex.toInt().coerceIn(0, CHROMA_HUE_STEPS - 1)
+    val h1 = (h0 + 1) % CHROMA_HUE_STEPS
+    // The least of the four neighbours rather than a blend of them: the limit bends between cells,
+    // and a blend can land a little outside the screen, which is exactly the clipping this avoids.
+    return minOf(
+        minOf(CHROMA_LIMIT[l0 * CHROMA_HUE_STEPS + h0], CHROMA_LIMIT[l0 * CHROMA_HUE_STEPS + h1]),
+        minOf(CHROMA_LIMIT[(l0 + 1) * CHROMA_HUE_STEPS + h0], CHROMA_LIMIT[(l0 + 1) * CHROMA_HUE_STEPS + h1]),
+    )
+}
+
+/** Whether every linear channel of this colour is one a screen can show. */
+internal fun inGamut(lightness: Float, chroma: Float, hue: Float): Boolean {
+    val radians = hue * DEGREES_TO_RADIANS
+    val a = chroma * cos(radians)
+    val b = chroma * sin(radians)
+    val longCone = lightness + 0.3963377774f * a + 0.2158037573f * b
+    val mediumCone = lightness - 0.1055613458f * a - 0.0638541728f * b
+    val shortCone = lightness - 0.0894841775f * a - 1.2914855480f * b
+    val l = longCone * longCone * longCone
+    val m = mediumCone * mediumCone * mediumCone
+    val s = shortCone * shortCone * shortCone
+    val red = 4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s
+    val green = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s
+    val blue = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s
+    return red in -GAMUT_SLACK..1f + GAMUT_SLACK && green in -GAMUT_SLACK..1f + GAMUT_SLACK && blue in -GAMUT_SLACK..1f + GAMUT_SLACK
+}
+
+private const val GAMUT_SLACK = 0.002f
+
+private const val CHROMA_LIGHTNESS_STEPS = 65
+
+private const val CHROMA_HUE_STEPS = 360
+
+/** The limit for every cell, found by halving the interval a dozen times. Built once, on first use, in a few milliseconds. */
+private val CHROMA_LIMIT: FloatArray by lazy {
+    FloatArray(CHROMA_LIGHTNESS_STEPS * CHROMA_HUE_STEPS) { cell ->
+        val lightness = (cell / CHROMA_HUE_STEPS).toFloat() / (CHROMA_LIGHTNESS_STEPS - 1)
+        val hue = (cell % CHROMA_HUE_STEPS).toFloat() / CHROMA_HUE_STEPS * 360f
+        var lower = 0f
+        var upper = 0.4f
+        repeat(14) {
+            val middle = (lower + upper) * 0.5f
+            if (inGamut(lightness, middle, hue)) lower = middle else upper = middle
+        }
+        lower
+    }
+}
+

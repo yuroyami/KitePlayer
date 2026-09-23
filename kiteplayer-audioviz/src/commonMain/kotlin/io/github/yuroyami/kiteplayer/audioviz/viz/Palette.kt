@@ -73,6 +73,33 @@ public class VizPalette internal constructor(
         )
     }
 
+    /**
+     * A colour from this palette's span at the strongest chroma a screen can show for it.
+     *
+     * [cycled] stops well inside the screen's range so that a full turn keeps one brightness,
+     * which is right for a ramp and wrong for a foreground: it is why the drawings read as pastel.
+     * This reads the same hue at [lightness] and pushes the chroma to the limit found by
+     * [mostChroma], less [headroom], so the colour is as vivid as the screen allows and still the
+     * colour asked for. Lines read well at a lightness of 0.75 to 0.9; fills at 0.45 to 0.65.
+     */
+    internal fun vivid(position: Float, lightness: Float = 0.8f, alpha: Float = 1f, headroom: Float = 0.03f): Color {
+        val wrapped = position - floor(position)
+        val hue = baseHue + wrapped * hueSpan
+        val l = lightness.coerceIn(0f, 1f)
+        return colourOf(l, (mostChroma(l, hue) - headroom).coerceAtLeast(0f), hue, alpha)
+    }
+
+    /**
+     * The ramp's hue at [position], at the ramp's own lightness there, at the strongest chroma a
+     * screen can show. The ramp's designed stops keep their darkness and lightness; only the
+     * greyness goes. Use it where a drawing reads the ramp for a sharp foreground.
+     */
+    internal fun vividRamp(position: Float, alpha: Float = 1f, headroom: Float = 0.03f): Color {
+        val at = position.coerceIn(0f, 1f)
+        val stop = if (at < 0.5f) lowStop.blend(midStop, at * 2f) else midStop.blend(highStop, (at - 0.5f) * 2f)
+        return colourOf(stop.lightness, (mostChroma(stop.lightness, stop.hue) - headroom).coerceAtLeast(0f), stop.hue, alpha)
+    }
+
     private val table: Array<Color> = Array(RAMP_STEPS) { step ->
         val at = step.toFloat() / (RAMP_STEPS - 1)
         if (at < 0.5f) {

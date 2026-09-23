@@ -11,6 +11,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.dominantColors
 import io.github.yuroyami.kiteplayer.audioviz.viz.toOklab
+import io.github.yuroyami.kiteplayer.audioviz.viz.inGamut
+import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.PaletteFade
 import kotlin.math.abs
 import kotlin.test.Test
@@ -34,6 +36,37 @@ class PaletteTest {
         println("lightness spread over a full turn: $spread here, $hsvSpread with plain HSV")
         assertTrue(spread < 0.06f, "a full turn should keep its brightness, it moved by $spread")
         assertTrue(spread < hsvSpread / 3f, "and do far better than plain HSV, $spread against $hsvSpread")
+    }
+
+    @Test
+    fun vividReachesTheScreenLimitWithoutClipping() {
+        // The limit must be a real limit: inside the screen's range, and a little more outside it.
+        for (hue in listOf(0f, 60f, 120f, 200f, 264f, 300f, 340f)) {
+            for (lightness in listOf(0.3f, 0.5f, 0.7f, 0.85f)) {
+                val most = mostChroma(lightness, hue)
+                assertTrue(inGamut(lightness, most, hue), "hue $hue at $lightness: $most is outside the screen")
+                assertTrue(!inGamut(lightness, most + 0.03f, hue), "hue $hue at $lightness: $most is not the limit")
+            }
+        }
+        // A screen shows a far stronger blue in the dark than a yellow, and the other way round near white.
+        assertTrue(mostChroma(0.45f, 264f) > 0.25f, "dark blue should reach past 0.25, had ${mostChroma(0.45f, 264f)}")
+        assertTrue(mostChroma(0.45f, 264f) > mostChroma(0.45f, 100f) * 2f)
+        assertTrue(mostChroma(0.95f, 100f) > mostChroma(0.95f, 264f))
+        // At the hues where a screen is wide (blue, violet, magenta, red) a vivid colour is far
+        // more colourful than the cycled one. At the narrow hues the cycled constant already
+        // clips, so no claim is made there beyond the gamut check above.
+        var bestGain = 0f
+        for (palette in VizPalette.entries) {
+            for (step in 0 until 36) {
+                val position = step / 36f
+                val vivid = palette.vivid(position, lightness = 0.6f).toOklab()
+                val cycled = palette.cycled(position, value = (0.6f - 0.24f) / 0.64f).toOklab()
+                val vividChroma = kotlin.math.sqrt(vivid.a * vivid.a + vivid.b * vivid.b)
+                val cycledChroma = kotlin.math.sqrt(cycled.a * cycled.a + cycled.b * cycled.b)
+                bestGain = maxOf(bestGain, vividChroma / cycledChroma)
+            }
+        }
+        assertTrue(bestGain > 1.5f, "somewhere the screen allows far more colour than cycled gives, best gain was $bestGain")
     }
 
     @Test

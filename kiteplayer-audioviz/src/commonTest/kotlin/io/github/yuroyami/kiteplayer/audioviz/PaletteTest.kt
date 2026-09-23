@@ -12,6 +12,7 @@ import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.dominantColors
 import io.github.yuroyami.kiteplayer.audioviz.viz.toOklab
 import io.github.yuroyami.kiteplayer.audioviz.viz.cuspLightness
+import io.github.yuroyami.kiteplayer.audioviz.viz.vividColour
 import io.github.yuroyami.kiteplayer.audioviz.viz.inGamut
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.PaletteFade
@@ -59,6 +60,10 @@ class PaletteTest {
         // The cusp sits low for blue and high for yellow, which is the whole reason it is looked up.
         assertTrue(cuspLightness(264f) in 0.40f..0.58f, "blue's cusp should sit low, had ${cuspLightness(264f)}")
         assertTrue(cuspLightness(105f) in 0.85f..0.99f, "yellow's cusp should sit high, had ${cuspLightness(105f)}")
+        // A lift never leaves a narrow hue nearly white: yellow at +0.1 keeps 80 percent of its peak.
+        val yellow = vividColour(105f, lift = 0.1f).toOklab()
+        val yellowChroma = kotlin.math.sqrt(yellow.a * yellow.a + yellow.b * yellow.b)
+        assertTrue(yellowChroma >= mostChroma(cuspLightness(105f), 105f) * 0.8f - 0.035f, "yellow lifted should keep its chroma, had $yellowChroma")
         var bestGain = 0f
         for (palette in VizPalette.entries) {
             for (step in 0 until 36) {

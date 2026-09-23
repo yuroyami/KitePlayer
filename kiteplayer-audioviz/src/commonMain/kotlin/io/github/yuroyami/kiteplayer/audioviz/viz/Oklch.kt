@@ -133,6 +133,34 @@ internal fun cuspLightness(hue: Float): Float {
     return CUSP[h0] * (1f - mix) + CUSP[h1] * mix
 }
 
+/**
+ * [hue] at its cusp lightness moved by [lift], at the strongest chroma the screen shows there.
+ *
+ * The lightness is pulled back toward the cusp until the chroma is at least 80 percent of the
+ * hue's peak, so a lift that would leave a narrow hue such as yellow nearly white is refused. Lines
+ * read well at a lift of 0 to +0.1 and fills at -0.1 to 0. For a colour that must be dark or
+ * near white, call [colourOf] with an explicit lightness instead.
+ */
+internal fun vividColour(hue: Float, lift: Float = 0f, alpha: Float = 1f, headroom: Float = 0.03f): Color {
+    val cusp = cuspLightness(hue)
+    val lightness = vividLightness(hue, cusp, (cusp + lift).coerceIn(0f, 1f))
+    return colourOf(lightness, (mostChroma(lightness, hue) - headroom).coerceAtLeast(0f), hue, alpha)
+}
+
+/** [wanted] pulled toward [cusp] until the chroma there is at least 80 percent of the peak. */
+internal fun vividLightness(hue: Float, cusp: Float, wanted: Float): Float {
+    val floor = mostChroma(cusp, hue) * VIVID_FLOOR
+    var lightness = wanted
+    var steps = 0
+    while (mostChroma(lightness, hue) < floor && steps < 40) {
+        lightness += (cusp - lightness).coerceIn(-0.005f, 0.005f)
+        steps++
+    }
+    return lightness
+}
+
+private const val VIVID_FLOOR = 0.8f
+
 /** Whether every linear channel of this colour is one a screen can show. */
 internal fun inGamut(lightness: Float, chroma: Float, hue: Float): Boolean {
     val radians = hue * DEGREES_TO_RADIANS

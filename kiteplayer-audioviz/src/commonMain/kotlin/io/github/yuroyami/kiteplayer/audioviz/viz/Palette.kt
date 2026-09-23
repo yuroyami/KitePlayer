@@ -85,8 +85,7 @@ public class VizPalette internal constructor(
      */
     internal fun vivid(position: Float, lift: Float = 0f, alpha: Float = 1f, headroom: Float = 0.03f): Color {
         val wrapped = position - floor(position)
-        val hue = baseHue + wrapped * hueSpan
-        return vividHue(hue, (cuspLightness(hue) + lift).coerceIn(0f, 1f), alpha, headroom)
+        return vividColour(baseHue + wrapped * hueSpan, lift, alpha, headroom)
     }
 
     /** [vivid] at an explicit [lightness], for dark roots and near-white tips. */

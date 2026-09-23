@@ -36,7 +36,7 @@ class DiagnosticsTest {
         assertTrue("config" in dump && "hardwareDecode" in dump, "the dump must carry the resolved config")
         assertTrue("tracks" in dump && "scripted-video" in dump, "the dump must list the tracks")
         assertTrue("stats" in dump && "decoded=" in dump, "the dump must carry the stats snapshot")
-        assertTrue("kd artifacts" in dump, "the dump must carry the KD section (KD-7)")
+        assertTrue("kd artifacts" in dump, "the dump must carry the KD section")
         assertTrue("warnings (" in dump, "the dump must carry the warning history section")
         harness.close()
     }

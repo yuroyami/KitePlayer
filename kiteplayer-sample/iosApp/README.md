@@ -48,8 +48,7 @@ it, and atomically replaces `s1b-smoke.json`, so the check never accepts a parti
 ## Link the unsigned device app
 
 ```bash
-./gradlew :kiteplayer-sample:linkReleaseFrameworkIosArm64 \
-  -Pkiteffmpeg.ffmpeg.localRoot="$PWD/../KiteFFmpeg/native-libs" --rerun-tasks
+./gradlew :kiteplayer-sample:linkReleaseFrameworkIosArm64 --rerun-tasks
 xcodebuild \
   -project kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj \
   -scheme KitePlayerSample -configuration Release \

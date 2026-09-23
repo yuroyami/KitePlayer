@@ -59,21 +59,21 @@ class SincResamplerTest {
 
     /** Feeds [input] in one go and returns everything that came out. */
     private fun runAll(resampler: SincResampler, input: FloatArray, frames: Int): FloatArray {
-        val output = FloatArray(resampler.outputCapacityFor(frames))
-        val produced = resampler.resample(input, frames, output)
+        val output = FloatArray(resampler.outputCapacity(frames))
+        val produced = resampler.process(input, frames, output)
         return output.copyOf(produced)
     }
 
     @Test
     fun `the ratio holds buffer after buffer`() {
         val resampler = resampler(44_100, 48_000)
-        val output = FloatArray(resampler.outputCapacityFor(441))
+        val output = FloatArray(resampler.outputCapacity(441))
         var produced = 0L
         // Twenty buffers of exactly 10 ms. The first is short by the kernel's lookahead, which is
         // inherent to every windowed filter, so the property is the TOTAL: 200 ms in, 200 ms out.
         repeat(20) { buffer ->
             val input = tone(441, 44_100, startFrame = buffer * 441)
-            produced += resampler.resample(input, 441, output)
+            produced += resampler.process(input, 441, output)
         }
         val expected = 20L * 480
         assertTrue(
@@ -111,10 +111,10 @@ class SincResamplerTest {
         // The same frames, handed over in thirty pieces. The outputs that fall between the pieces
         // are exactly the ones the running buffer exists for.
         val splitOutput = mutableListOf<Float>()
-        val piece = FloatArray(split.outputCapacityFor(147))
+        val piece = FloatArray(split.outputCapacity(147))
         for (chunk in 0 until 30) {
             val part = FloatArray(147) { input[chunk * 147 + it] }
-            val frames = split.resample(part, 147, piece)
+            val frames = split.process(part, 147, piece)
             for (i in 0 until frames) splitOutput += piece[i]
         }
 
@@ -135,8 +135,8 @@ class SincResamplerTest {
         // Left constant one, right constant minus one. An interleaving mistake shows up as anything
         // between the two; the kernel's own fade-in at the start is skipped.
         val input = FloatArray(4410 * 2) { if (it % 2 == 0) 1f else -1f }
-        val output = FloatArray(resampler.outputCapacityFor(4410) * 2)
-        val produced = resampler.resample(input, 4410, output)
+        val output = FloatArray(resampler.outputCapacity(4410) * 2)
+        val produced = resampler.process(input, 4410, output)
 
         for (frame in SincResampler.TAPS until produced) {
             assertEquals(1f, output[frame * 2], 1e-3f, "left at frame $frame")
@@ -168,12 +168,12 @@ class SincResamplerTest {
     }
 
     @Test
-    fun `the drain releases the tail the kernel was holding`() {
+    fun `the flush releases the tail the kernel was holding`() {
         val resampler = resampler(44_100, 48_000)
         val input = tone(4410, 44_100)
         val played = runAll(resampler, input, 4410).size
-        val tail = FloatArray(resampler.drainCapacity())
-        val drained = resampler.drain(tail)
+        val tail = FloatArray(resampler.outputCapacity(0))
+        val drained = resampler.flush(tail)
 
         assertTrue(drained > 0, "the filter holds half a kernel at the end and it is real audio")
         val expected = 4410L * 48_000 / 44_100

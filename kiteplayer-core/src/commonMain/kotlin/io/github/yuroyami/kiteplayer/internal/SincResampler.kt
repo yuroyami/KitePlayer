@@ -1,5 +1,6 @@
 package io.github.yuroyami.kiteplayer.internal
 
+import io.github.yuroyami.kiteplayer.spi.AudioResampler
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -47,7 +48,7 @@ import kotlin.math.sin
  * `k * source / target` and the kernel is centred on it, so the output is aligned with the input
  * exactly; what the lookahead delays is when a frame can be PRODUCED, not where it sits in time. The
  * stream does start with [TAPS] / 2 input frames of implied silence before it, which fades the first
- * 0.36 ms in at 44.1 kHz, and ends holding the same amount until [drain] pushes it out.
+ * 0.36 ms in at 44.1 kHz, and ends holding the same amount until [flush] pushes it out.
  *
  * One instance per format pair, held by [AudioPipeline]. Not thread safe: it belongs to the audio
  * feeder, and [reset] belongs to the seek path, which runs with the feeder quiescent.
@@ -56,7 +57,7 @@ internal class SincResampler(
     private val sourceRate: Int,
     private val targetRate: Int,
     private val channels: Int,
-) {
+) : AudioResampler {
     init {
         require(sourceRate > 0) { "a source rate of $sourceRate is not a rate" }
         require(targetRate > 0) { "a target rate of $targetRate is not a rate" }
@@ -91,14 +92,14 @@ internal class SincResampler(
     /**
      * Converts [frames] sample frames of interleaved [input] into interleaved [output].
      *
-     * @return frames written to [output]. Never more than [outputCapacityFor] of [frames].
+     * @return frames written to [output]. Never more than [outputCapacity] of [frames].
      */
-    fun resample(input: FloatArray, frames: Int, output: FloatArray): Int {
+    override fun process(input: FloatArray, frames: Int, output: FloatArray): Int {
         if (frames <= 0) return 0
         require(input.size >= frames * channels) {
             "$frames frames of $channels channels need ${frames * channels} values, got ${input.size}"
         }
-        val capacity = outputCapacityFor(frames)
+        val capacity = outputCapacity(frames)
         require(output.size >= capacity * channels) {
             "$frames input frames can produce $capacity output frames, which need " +
                 "${capacity * channels} values, got ${output.size}"
@@ -118,16 +119,13 @@ internal class SincResampler(
      *
      * @return frames written to [output]. Call once, at end of stream.
      */
-    fun drain(output: FloatArray): Int {
+    override fun flush(output: FloatArray): Int {
         if (isPassThrough) return 0
         append(FloatArray(half * channels), half)
         val produced = produce(output)
         dropConsumed()
         return produced
     }
-
-    /** Frames [drain] can produce, at most. */
-    fun drainCapacity(): Int = outputCapacityFor(half)
 
     private fun append(input: FloatArray, frames: Int) {
         val needed = (pendingFrames + frames) * channels
@@ -178,13 +176,14 @@ internal class SincResampler(
     }
 
     /**
-     * How many output frames [frames] input frames can produce, at most.
+     * How many output frames [inputFrames] input frames can produce, at most.
      *
      * Counted against the backlog as well as the input, because a call that arrives after several
-     * short ones releases what they left behind as well as its own.
+     * short ones releases what they left behind as well as its own. Zero input sizes a [flush],
+     * which feeds [half] frames of silence.
      */
-    fun outputCapacityFor(frames: Int): Int {
-        if (frames <= 0) return 0
+    override fun outputCapacity(inputFrames: Int): Int {
+        val frames = if (inputFrames <= 0) half else inputFrames
         return ((frames + TAPS).toLong() * targetRate / sourceRate).toInt() + 2
     }
 
@@ -194,12 +193,15 @@ internal class SincResampler(
      * Filtering across a seek would mix the old position into the new one, and carrying the
      * fractional position would offset the new position by a fraction of a frame.
      */
-    fun reset() {
+    override fun reset() {
         pending.fill(0f, 0, min(pending.size, half * channels))
         pendingFrames = half
         readIndex = half
         remainder = 0
     }
+
+    /** Nothing to release: the kernel and the backlog are ordinary arrays. */
+    override fun close() = Unit
 
     /**
      * The weights, once, for every position an output can fall at between two input frames.

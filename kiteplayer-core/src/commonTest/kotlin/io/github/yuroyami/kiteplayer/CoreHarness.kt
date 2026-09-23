@@ -48,6 +48,8 @@ internal class CoreHarness(
     sinkLatencyNanos: Long = 0L,
     /** The platform effect handle the scripted device claims while open. Null on every platform but Android. */
     sinkSessionId: Int? = null,
+    /** The format the scripted device answers every open with. Null accepts what was asked. */
+    sinkAccepts: io.github.yuroyami.kiteplayer.spi.AudioFormat? = null,
 ) {
     val scheduler: TestCoroutineScheduler = scope.testScheduler
     val clock: VirtualClock = VirtualClock(scheduler)
@@ -56,6 +58,7 @@ internal class CoreHarness(
     val trace: ScriptTrace = ScriptTrace()
     val backend: ScriptedBackend = ScriptedBackend(script, ledger, faults, trace)
     val sink: ScriptedSink = ScriptedSink(
+        accepts = sinkAccepts,
         faults = faults,
         trace = trace,
         publishesEvents = publishesSinkEvents,

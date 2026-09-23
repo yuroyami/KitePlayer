@@ -2,6 +2,9 @@ package io.github.yuroyami.kiteplayer.internal
 
 import io.github.yuroyami.kiteplayer.PlaybackWarning
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import io.github.yuroyami.kiteplayer.spi.AudioResampler
+import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlin.time.Duration
 
@@ -12,7 +15,8 @@ import kotlin.time.Duration
  *
  * 1. [ChannelMixer] puts the channels in the speakers the device has. Downmixing first means the rate
  *    conversion runs on two channels instead of eight.
- * 2. [SincResampler] makes the rate the one the device accepted.
+ * 2. The resampler makes the rate the one the device accepted: [SincResampler], or what the
+ *    configured [AudioResamplerFactory] makes.
  * 3. [TempoStage] makes the sound take `1/speed` as long without moving its pitch. After the
  *    resampler, so pitch detection runs at one known rate; before the gain, so mute stays the
  *    last word.
@@ -55,7 +59,19 @@ internal class AudioPipeline(
     /** The LFE and headroom policy the downmix applies; see `DownmixConfig`. */
     private val downmix: io.github.yuroyami.kiteplayer.DownmixConfig =
         io.github.yuroyami.kiteplayer.DownmixConfig(),
-) {
+    /**
+     * Makes the rate conversion when the rates differ. Null uses [SincResampler]. Dropped after
+     * its first refusal, so a later speed change does not ask again.
+     */
+    private var resamplerFactory: AudioResamplerFactory? = null,
+    /** Told when [resamplerFactory] throws, after this pipeline fell back to [SincResampler]. */
+    private val onResamplerRefused: (Throwable) -> Unit = {},
+    /**
+     * The epoch's speed. Without pitch correction it is folded into the resampler, so a pipeline
+     * built mid-epoch makes its resampler once, at the right rate.
+     */
+    initialSpeed: Double = 1.0,
+) : AutoCloseable {
     private val mixer = ChannelMixer(sourceFormat, targetFormat, onWarning, downmix)
 
     /**
@@ -63,19 +79,31 @@ internal class AudioPipeline(
      * the rate is folded into the resampler below: playing S times as fast IS resampling from
      * `source * S` to the device rate, and pitch moves with it by that same arithmetic.
      */
-    private var resampleSpeed: Double = 1.0
+    private var resampleSpeed: Double = if (preservePitch) 1.0 else checkedSpeed(initialSpeed)
 
-    private var resampler = buildResampler()
+    /** The rate conversion, or null when the rates match and there is nothing to convert. */
+    private var resampler: AudioResampler? = buildResampler()
 
-    private fun buildResampler(): SincResampler = SincResampler(
-        sourceRate = if (resampleSpeed == 1.0) {
+    private fun buildResampler(): AudioResampler? {
+        val sourceRate = if (resampleSpeed == 1.0) {
             sourceFormat.sampleRate
         } else {
             (sourceFormat.sampleRate * resampleSpeed).roundToInt().coerceAtLeast(1)
-        },
-        targetRate = targetFormat.sampleRate,
-        channels = targetFormat.channels,
-    )
+        }
+        val targetRate = targetFormat.sampleRate
+        if (sourceRate == targetRate) return null
+        val channels = targetFormat.channels
+        val factory = resamplerFactory ?: return SincResampler(sourceRate, targetRate, channels)
+        return try {
+            factory.create(sourceRate, targetRate, channels)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            resamplerFactory = null
+            onResamplerRefused(failure)
+            SincResampler(sourceRate, targetRate, channels)
+        }
+    }
 
     private val tempo = TempoStage(targetFormat.channels, targetFormat.sampleRate)
 
@@ -116,13 +144,19 @@ internal class AudioPipeline(
                 tempo.speed = value
                 return
             }
-            require(value.isFinite() && value >= TempoStage.MIN_SPEED && value <= TempoStage.MAX_SPEED) {
-                "speed must be within ${TempoStage.MIN_SPEED}..${TempoStage.MAX_SPEED}, was $value"
-            }
+            checkedSpeed(value)
             if (resampleSpeed == value) return
             resampleSpeed = value
+            resampler?.close()
             resampler = buildResampler()
         }
+
+    private fun checkedSpeed(value: Double): Double {
+        require(value.isFinite() && value >= TempoStage.MIN_SPEED && value <= TempoStage.MAX_SPEED) {
+            "speed must be within ${TempoStage.MIN_SPEED}..${TempoStage.MAX_SPEED}, was $value"
+        }
+        return value
+    }
 
     /** Frames the tempo stage has emitted since the last [reset]. The pts law reads this. */
     val tempoEmittedFrames: Long get() = tempo.emittedFrames
@@ -135,10 +169,18 @@ internal class AudioPipeline(
      *
      * The rate conversion's carried frame is deliberately not carried over: it belongs to the old
      * format and interpolating it into the new one is exactly the discontinuity the new pipeline
-     * exists to avoid.
+     * exists to avoid. The caller closes this pipeline once it has the new one.
      */
-    fun rebuiltFor(decoderFormat: AudioFormat, preservePitch: Boolean = this.preservePitch): AudioPipeline =
-        AudioPipeline(decoderFormat, targetFormat, onWarning, preservePitch, downmix).also {
+    fun rebuiltFor(
+        decoderFormat: AudioFormat,
+        preservePitch: Boolean = this.preservePitch,
+        speed: Double = this.speed,
+        resamplerFactory: AudioResamplerFactory? = this.resamplerFactory,
+    ): AudioPipeline =
+        AudioPipeline(
+            decoderFormat, targetFormat, onWarning, preservePitch, downmix,
+            resamplerFactory, onResamplerRefused, initialSpeed = speed,
+        ).also {
             it.speed = speed
             // No gain crosses here any more, and none needs to: the gain lives in the ring, which
             // outlives every pipeline rebuild. A rebuild used to have to carry the ramp POSITION
@@ -173,9 +215,10 @@ internal class AudioPipeline(
             mixer.mix(input, mixed, frames)
             result = mixed
         }
-        if (!resampler.isPassThrough) {
-            resampled = grown(resampled, resampler.outputCapacityFor(frames) * targetChannels)
-            produced = resampler.resample(result, frames, resampled)
+        val conversion = resampler
+        if (conversion != null) {
+            resampled = grown(resampled, conversion.outputCapacity(frames) * targetChannels)
+            produced = conversion.process(result, frames, resampled)
             result = resampled
         }
 
@@ -239,9 +282,10 @@ internal class AudioPipeline(
     fun finish(): Int {
         var total = 0
         // 1. The rate conversion's tail, through the tempo stage like any other buffer.
-        if (!resampler.isPassThrough) {
-            resampled = grown(resampled, resampler.drainCapacity() * targetChannels)
-            val drained = resampler.drain(resampled)
+        val conversion = resampler
+        if (conversion != null) {
+            resampled = grown(resampled, conversion.outputCapacity(0) * targetChannels)
+            val drained = conversion.flush(resampled)
             if (drained > 0) {
                 if (tempo.speed != 1.0 || tempo.hasQueuedInput) {
                     val stretched = tempo.process(resampled, drained)
@@ -279,11 +323,17 @@ internal class AudioPipeline(
      * flush. The gain keeps its position: the volume did not change because the position did.
      */
     fun reset() {
-        resampler.reset()
+        resampler?.reset()
         tempo.reset()
         // The filters ring for a few dozen samples, so a seek that kept their history would splice
         // the tail of the old position onto the head of the new one.
         equalizer.reset()
+    }
+
+    /** Releases the rate conversion. The owner calls it when it replaces this pipeline or closes. */
+    override fun close() {
+        resampler?.close()
+        resampler = null
     }
 
     private fun grown(buffer: FloatArray, values: Int): FloatArray =

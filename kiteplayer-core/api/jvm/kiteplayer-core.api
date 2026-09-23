@@ -9,8 +9,8 @@ public final class io/github/yuroyami/kiteplayer/AudioClockSnapshot {
 
 public final class io/github/yuroyami/kiteplayer/AudioConfig {
 	public fun <init> ()V
-	public fun <init> (Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FF)V
-	public synthetic fun <init> (Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FFILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FFLio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;)V
+	public synthetic fun <init> (Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FFLio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/util/List;
 	public final fun component2 ()Z
 	public final fun component3 ()Lio/github/yuroyami/kiteplayer/DownmixConfig;
@@ -19,8 +19,9 @@ public final class io/github/yuroyami/kiteplayer/AudioConfig {
 	public final fun component6 ()Lio/github/yuroyami/kiteplayer/ReplayGainMode;
 	public final fun component7 ()F
 	public final fun component8 ()F
-	public final fun copy (Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FF)Lio/github/yuroyami/kiteplayer/AudioConfig;
-	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/AudioConfig;Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FFILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/AudioConfig;
+	public final fun component9 ()Lio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;
+	public final fun copy (Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FFLio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;)Lio/github/yuroyami/kiteplayer/AudioConfig;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/AudioConfig;Ljava/util/List;ZLio/github/yuroyami/kiteplayer/DownmixConfig;FLio/github/yuroyami/kiteplayer/EqualizerSettings;Lio/github/yuroyami/kiteplayer/ReplayGainMode;FFLio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/AudioConfig;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDownmix ()Lio/github/yuroyami/kiteplayer/DownmixConfig;
 	public final fun getEqualizer ()Lio/github/yuroyami/kiteplayer/EqualizerSettings;
@@ -29,14 +30,15 @@ public final class io/github/yuroyami/kiteplayer/AudioConfig {
 	public final fun getReplayGain ()Lio/github/yuroyami/kiteplayer/ReplayGainMode;
 	public final fun getReplayGainFallbackDb ()F
 	public final fun getReplayGainPreampDb ()F
+	public final fun getResampler ()Lio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;
 	public final fun getVolumeCeiling ()F
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/yuroyami/kiteplayer/AudioPlayback : java/lang/AutoCloseable {
-	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/spi/AudioSink;Lio/github/yuroyami/kiteplayer/MonotonicClock;JLkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/DownmixConfig;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/spi/AudioSink;Lio/github/yuroyami/kiteplayer/MonotonicClock;JLkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/DownmixConfig;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/spi/AudioSink;Lio/github/yuroyami/kiteplayer/MonotonicClock;JLkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/DownmixConfig;Lio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/yuroyami/kiteplayer/spi/AudioSink;Lio/github/yuroyami/kiteplayer/MonotonicClock;JLkotlin/jvm/functions/Function1;Lio/github/yuroyami/kiteplayer/DownmixConfig;Lio/github/yuroyami/kiteplayer/spi/AudioResamplerFactory;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun anchorClock ()V
 	public fun close ()V
 	public final fun drain (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -1196,6 +1198,19 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RendererFailed 
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ResamplerUnavailable : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ResamplerUnavailable;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$ResamplerUnavailable;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$ResamplerUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getFields ()Ljava/util/Map;
+	public fun getMessage ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/PlaybackWarning$ResourcesNotReleased : io/github/yuroyami/kiteplayer/PlaybackWarning {
 	public fun <init> (Ljava/lang/String;)V
 	public final fun component1 ()Ljava/lang/String;
@@ -2189,6 +2204,18 @@ public final class io/github/yuroyami/kiteplayer/spi/AudioFormat {
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioRenderCallback {
 	public abstract fun onRender (Lio/github/yuroyami/kiteplayer/spi/AudioSinkBuffer;IJ)I
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioResampler : java/lang/AutoCloseable {
+	public abstract fun close ()V
+	public abstract fun flush ([F)I
+	public abstract fun outputCapacity (I)I
+	public abstract fun process ([FI[F)I
+	public abstract fun reset ()V
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioResamplerFactory {
+	public abstract fun create (III)Lio/github/yuroyami/kiteplayer/spi/AudioResampler;
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/AudioSink : java/lang/AutoCloseable {

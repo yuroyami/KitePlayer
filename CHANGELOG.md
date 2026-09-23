@@ -27,6 +27,9 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
   wrote.
 - `KitePlayer.stepFrame` takes a `StepDirection`, which defaults to `Forward`. Calls in source
   compile unchanged, but the compiled signature changed. Recompile.
+- `AudioConfig` gains `resampler`, which changes the generated data-class methods. The
+  `AudioPlayback` constructor gains the same parameter. Calls in source compile unchanged.
+  Recompile.
 
 ## [0.0.26] - 2026-09-20
 

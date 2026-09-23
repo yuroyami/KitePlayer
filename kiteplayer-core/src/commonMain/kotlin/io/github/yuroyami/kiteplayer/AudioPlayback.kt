@@ -9,6 +9,7 @@ import io.github.yuroyami.kiteplayer.internal.TempoStage
 import io.github.yuroyami.kiteplayer.internal.framesToMicros
 import io.github.yuroyami.kiteplayer.internal.openAudioPath
 import io.github.yuroyami.kiteplayer.spi.AudioFormat
+import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
 import io.github.yuroyami.kiteplayer.spi.AudioSink
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
@@ -71,6 +72,8 @@ public class AudioPlayback(
     private val onWarning: (PlaybackWarning) -> Unit = {},
     /** The LFE and headroom policy the downmix applies; see [DownmixConfig]. */
     private val downmix: DownmixConfig = DownmixConfig(),
+    /** Makes the rate conversion when the rates differ. Null uses the engine's own sinc. */
+    private val resampler: AudioResamplerFactory? = null,
 ) : AutoCloseable {
 
     /**
@@ -92,6 +95,19 @@ public class AudioPlayback(
      * its own and uses [submit] never has one.
      */
     private var pipeline: AudioPipeline? = null
+
+    /**
+     * The factory each new pipeline asks for its resampler, until it refuses once. Then null, and
+     * the engine's own sinc from there on. Read and written by the feeder only.
+     */
+    private var resamplerFactory: AudioResamplerFactory? = resampler
+
+    private val onResamplerRefused: (Throwable) -> Unit = { failure ->
+        resamplerFactory = null
+        onWarning(
+            PlaybackWarning.ResamplerUnavailable(failure.message ?: failure::class.simpleName ?: "failed to start"),
+        )
+    }
 
     /** Guards the media clock against the members that may be called from more than one thread. */
     private val lock = SynchronizedObject()
@@ -329,12 +345,18 @@ public class AudioPlayback(
         // and a pipeline built under the old law is rebuilt rather than reconfigured, the same
         // rule a format change follows.
         val pitchNow = synchronized(lock) { epochPreservePitch }
+        // The epoch's rate. Read before a stage is built, because without pitch correction the
+        // resampler is built for it.
+        val speedNow = synchronized(lock) { epochSpeed }
         val existing = pipeline
         val stage = when {
-            existing == null ->
-                AudioPipeline(sourceFormat, negotiated, onWarning, preservePitch = pitchNow, downmix = downmix)
+            existing == null -> AudioPipeline(
+                sourceFormat, negotiated, onWarning, preservePitch = pitchNow, downmix = downmix,
+                resamplerFactory = resamplerFactory, onResamplerRefused = onResamplerRefused,
+                initialSpeed = speedNow,
+            )
             existing.matches(sourceFormat) && existing.preservePitch == pitchNow -> existing
-            else -> existing.rebuiltFor(sourceFormat, pitchNow)
+            else -> existing.rebuiltFor(sourceFormat, pitchNow, speedNow, resamplerFactory)
         }
         // Only a FORMAT change is worth saying out loud. A pitch-law change rebuilds the same
         // stage too, and that one the caller asked for, so it is not news.
@@ -358,6 +380,8 @@ public class AudioPlayback(
             // its base and re-anchor on the next timestamped buffer. Keeping the
             // old base dated every post-rebuild buffer back at the start of the epoch.
             synchronized(lock) { scaledBaseUs = null }
+            // The old stage's resampler may hold native memory.
+            existing.close()
         }
         pipeline = stage
         // The gain is NOT picked up here any more. It moved to the ring's read side, because a gain
@@ -365,7 +389,6 @@ public class AudioPlayback(
         // the whole ring depth of the old volume before the change arrives. See AudioRingHandle.setGain.
         // The epoch's rate, reasserted per buffer for the same one-owner reason. It only ever
         // differs across a flush, so mid-epoch this is an assignment of the value it already has.
-        val speedNow = synchronized(lock) { epochSpeed }
         stage.speed = speedNow
         // Reasserted per buffer for the same reason the rate is: a pipeline rebuilt for a format
         // change starts at unity, and the trim has to survive that without the rebuild knowing.
@@ -773,6 +796,8 @@ public class AudioPlayback(
         // which is correct and necessary: the sink's own teardown fences the device callback out,
         // and holding a lock across it would put the session owner behind the audio device.
         synchronized(lock) { ring = null }
+        // The feeder is joined before the owner closes, so no conversion is running.
+        pipeline?.close()
         pipeline = null
         sink.close()
     }

@@ -431,6 +431,19 @@ public sealed class PlaybackWarning {
     }
 
     /**
+     * The configured `AudioConfig.resampler` could not make a resampler, so the engine converts
+     * the sample rate with its own windowed sinc instead. The usual cause is a factory with no
+     * implementation on this platform: `KiteFFmpegResampler` has none on the web. Once per
+     * player; the audio plays.
+     */
+    public data class ResamplerUnavailable(val detail: String) : PlaybackWarning() {
+        override val fields: Map<String, String>
+            get() = super.fields + mapOf("detail" to detail)
+
+        override val message: String get() = "audio resampler unavailable, using the built-in one: $detail"
+    }
+
+    /**
      * A control the engine could not honour, named so a fire-and-forget caller still finds out
      * The suspending form of the same member throws instead; this
      * warning is how the refusal reaches [KitePlayer.events] and the warning history when the

@@ -596,6 +596,12 @@ internal class PlaybackCore(
     /** True once the installed typesetter failed to start or threw: this player stays on the Kotlin tier. */
     private var typesetterRefused: Boolean = false
 
+    /**
+     * True once `AudioConfig.resampler` refused: this player stays on the engine's own sinc. Set on
+     * the audio feeder, read by the actor when it builds the next audio path.
+     */
+    private val resamplerRefused = atomic(false)
+
     /** The viewer's style override, seeded from config, applied at the next rasterisation. */
     private var subtitleStyle: io.github.yuroyami.kiteplayer.subtitle.SubtitleStyleOverride? = config.subtitles.style
 
@@ -2454,12 +2460,7 @@ internal class PlaybackCore(
                 // idempotent). The window between the sink's creation and that construction is one
                 // non-suspending line, and the playback entry below covers everything after it,
                 // including a throw from AudioPlayback.open itself, which used to leak the sink.
-                val createdPlayback = AudioPlayback(
-                    createdSink,
-                    clock,
-                    onWarning = { warn(it) },
-                    downmix = config.audio.downmix,
-                )
+                val createdPlayback = newAudioPlayback(createdSink)
                 audioPlayback = createdPlayback
                 rollback += { createdPlayback.close() }
                 // Before open: open() captures the wanted rate as the fresh path's epoch, so a
@@ -3246,17 +3247,26 @@ internal class PlaybackCore(
         )
     }
 
+    /** Every audio path is built here, so the open path and a track switch cannot disagree. */
+    private fun newAudioPlayback(sink: AudioSink): AudioPlayback = AudioPlayback(
+        sink,
+        clock,
+        onWarning = { warning ->
+            // A refusal is reported once for the player, and the factory is not asked again.
+            if (warning !is PlaybackWarning.ResamplerUnavailable || resamplerRefused.compareAndSet(false, true)) {
+                warn(warning)
+            }
+        },
+        downmix = config.audio.downmix,
+        resampler = config.audio.resampler.takeUnless { resamplerRefused.value },
+    )
+
     /** Builds a dormant device path; ownership transfers only when the lane transaction commits. */
     private suspend fun prepareAudioPath(decoder: AudioDecoder, stream: PlayerStreamInfo?): PreparedAudioPath {
         val createdSink = output.audioSink.create()
         var createdPlayback: AudioPlayback? = null
         try {
-            val playback = AudioPlayback(
-                createdSink,
-                clock,
-                onWarning = { warn(it) },
-                downmix = config.audio.downmix,
-            )
+            val playback = newAudioPlayback(createdSink)
             createdPlayback = playback
             playback.speed = speed
             playback.preservePitch = preservePitch

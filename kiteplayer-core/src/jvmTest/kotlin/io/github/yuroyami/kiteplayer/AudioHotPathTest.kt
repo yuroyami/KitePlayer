@@ -37,9 +37,9 @@ class AudioHotPathTest {
         var produced = 0
         hotPathGate("resample 10 s of stereo from 48000 Hz to 44100 Hz", RESAMPLE_BOUND_MS) {
             val resampler = SincResampler(sourceRate = RATE, targetRate = 44_100, channels = CHANNELS)
-            val output = FloatArray(resampler.outputCapacityFor(CHUNK_FRAMES) * CHANNELS)
+            val output = FloatArray(resampler.outputCapacity(CHUNK_FRAMES) * CHANNELS)
             produced = 0
-            inChunks { chunk, frames -> produced += resampler.resample(chunk, frames, output) }
+            inChunks { chunk, frames -> produced += resampler.process(chunk, frames, output) }
         }
         // Not vacuous: a resampler that stopped producing would time an empty loop.
         assertTrue(produced in 440_000..441_000, "10 s at 44100 Hz is 441000 frames, less the lookahead; got $produced")

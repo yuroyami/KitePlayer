@@ -1,6 +1,7 @@
 package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.GAIN_MAX
+import io.github.yuroyami.kiteplayer.spi.AudioResamplerFactory
 import io.github.yuroyami.kiteplayer.spi.MediaBackend
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import kotlin.time.Duration
@@ -224,6 +225,12 @@ public data class AudioConfig(
     val replayGainPreampDb: Float = 0f,
     /** Applied when [replayGain] is on and the media carries no usable tag, in dB. */
     val replayGainFallbackDb: Float = 0f,
+    /**
+     * Replaces the engine's own rate conversion, a windowed sinc written in Kotlin. Null keeps
+     * that sinc. `KiteFFmpegResampler` in `kiteplayer-ffmpeg` runs FFmpeg's libswresample
+     * instead. A factory that throws leaves the sinc in place; see [AudioResamplerFactory].
+     */
+    val resampler: AudioResamplerFactory? = null,
 ) {
     init {
         require(volumeCeiling.isFinite() && volumeCeiling >= 1f && volumeCeiling <= GAIN_MAX) {

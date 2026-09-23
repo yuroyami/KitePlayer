@@ -2,6 +2,7 @@ import com.android.build.api.variant.KotlinMultiplatformAndroidComponentsExtensi
 import io.github.yuroyami.kiteplayer.buildtools.BuildLibassHostJniTask
 import io.github.yuroyami.kiteplayer.buildtools.FetchAssChainTask
 import io.github.yuroyami.kiteplayer.buildtools.MergeAssChainTask
+import io.github.yuroyami.kiteplayer.buildtools.newestNdk
 import org.gradle.api.tasks.PathSensitivity
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
@@ -145,8 +146,8 @@ fun resolveNdk(): File? {
         File(System.getProperty("user.home"), "Library/Android/sdk"),
         File(System.getProperty("user.home"), "Android/Sdk"),
     )
-    return sdkDirs.map { it.resolve("ndk") }.firstOrNull { it.isDirectory }
-        ?.listFiles { f: File -> f.isDirectory }?.maxByOrNull { it.name }
+    // By version, not by name: as strings, 29.10 sorts below 29.2.
+    return sdkDirs.map { it.resolve("ndk") }.firstOrNull { it.isDirectory }?.let(::newestNdk)
 }
 
 // The media fixtures live at the repo root; a test's working directory is not something to rely on.

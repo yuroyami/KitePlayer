@@ -115,6 +115,14 @@ kotlin {
         }
         getByName("jvmMain").dependsOn(jvmAndAndroidMain)
         getByName("androidMain").dependsOn(jvmAndAndroidMain)
+        // A caller's descriptor is read with pread, which the Apple and Linux targets share. Windows
+        // has no pread, and its off_t is 32 bit, so it stays out.
+        val posixMain = maybeCreate("posixMain").apply { dependsOn(getByName("nativeMain")) }
+        getByName("appleMain").dependsOn(posixMain)
+        getByName("linuxMain").dependsOn(posixMain)
+        val posixTest = maybeCreate("posixTest").apply { dependsOn(getByName("nativeTest")) }
+        getByName("appleTest").dependsOn(posixTest)
+        getByName("linuxTest").dependsOn(posixTest)
 
         // Real-media and FFmpeg-runtime tests belong to every source set that reaches a REAL
         // backend. That is direct-link native and, since KiteFFmpeg's jvm variant gained its

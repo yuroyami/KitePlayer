@@ -79,6 +79,10 @@ public data class MediaItem(
      * motivating case is Android: a picked `content://` file reaches FFmpeg as the `fd:` protocol
      * with `"fd"` set to a descriptor number, and that number is different for every file.
      *
+     * On Android, Apple platforms and Linux, the FFmpeg backend reads such a descriptor by position
+     * when it holds a regular file, so no open moves the file offset of the caller. You still own
+     * the descriptor and close it. A pipe is read as a stream.
+     *
      * A key that a typed field also sets, such as `format_whitelist` next to [formatHint], refuses
      * the open with [PlaybackError.ConfigurationInvalid] naming both. Neither side wins quietly.
      */

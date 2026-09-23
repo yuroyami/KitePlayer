@@ -367,6 +367,22 @@ jobs:
             :kiteplayer-view:compileKotlinIosArm64 \
             :kiteplayer-audioviz:compileKotlinIosArm64
 
+      # The sample app itself, which no step above builds: a framework that links and an app that
+      # shows a frame are different claims. The app bundles testmedia/sync1080p30.mp4, so the clips
+      # are generated here with the macOS job's pinned generator. The script builds the Xcode
+      # project for the newest iPhone simulator, installs it, launches it with --s1b-smoke and
+      # checks the record the app writes: the seek landed, playback ended, frames were presented
+      # and the teardown completed.
+      - name: Install the ffmpeg CLI the clips are recorded against
+        run: |
+          brew update --quiet
+          brew install ffmpeg@8
+          echo "$(brew --prefix ffmpeg@8)/bin" >> "$GITHUB_PATH"
+      - name: Generate the test clips
+        run: ./scripts/testmedia.sh
+      - name: The iOS sample app, built, installed and launched in its smoke mode
+        run: ./scripts/ios-sample-smoke.sh
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

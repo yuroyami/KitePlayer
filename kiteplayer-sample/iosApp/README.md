@@ -27,57 +27,23 @@ configuration for `iphoneos`, rejects every other platform, and copies in the so
 
 KiteFFmpeg resolves from Maven Central, so no local publication step is needed.
 
-## Build and run the named simulator
+## Build and run the smoke on a simulator
 
 ```bash
 ./scripts/testmedia.sh
-xcrun simctl shutdown 5DBA149A-E990-4197-8A7D-31E97658B568 >/dev/null 2>&1 || :
-xcrun simctl boot 5DBA149A-E990-4197-8A7D-31E97658B568
-xcrun simctl bootstatus 5DBA149A-E990-4197-8A7D-31E97658B568 -b
-xcodebuild \
-  -project kiteplayer-sample/iosApp/KitePlayerSample.xcodeproj \
-  -scheme KitePlayerSample -configuration Debug \
-  -destination 'platform=iOS Simulator,id=5DBA149A-E990-4197-8A7D-31E97658B568' \
-  -derivedDataPath kiteplayer-sample/iosApp/build/DerivedData \
-  CODE_SIGNING_ALLOWED=NO build
-xcrun simctl uninstall 5DBA149A-E990-4197-8A7D-31E97658B568 \
-  io.github.yuroyami.kiteplayer.sample.ios || :
-xcrun simctl install 5DBA149A-E990-4197-8A7D-31E97658B568 \
-  kiteplayer-sample/iosApp/build/DerivedData/Build/Products/Debug-iphonesimulator/KitePlayerSample.app
-xcrun simctl launch --terminate-running-process \
-  5DBA149A-E990-4197-8A7D-31E97658B568 \
-  io.github.yuroyami.kiteplayer.sample.ios --s1b-smoke
-
-S1B_DATA="$(xcrun simctl get_app_container \
-  5DBA149A-E990-4197-8A7D-31E97658B568 \
-  io.github.yuroyami.kiteplayer.sample.ios data)"
-S1B_RESULT="$S1B_DATA/Documents/s1b-smoke.json"
-S1B_TRIES=0
-while [ ! -s "$S1B_RESULT" ] && [ "$S1B_TRIES" -lt 60 ]; do
-  sleep 1
-  S1B_TRIES=$((S1B_TRIES + 1))
-done
-test -s "$S1B_RESULT"
-/usr/bin/jq -e '
-  (keys | sort) == [
-    "audioUnderruns", "decodedFrames", "layerImage", "presentedFrames",
-    "seekLanded", "seekRequested", "submittedFrames", "teardownCompleted", "terminalState"
-  ] and .seekRequested == true and
-  .seekLanded == true and
-  .terminalState == "Ended" and
-  (.decodedFrames | type) == "number" and .decodedFrames > 0 and
-  (.submittedFrames | type) == "number" and .submittedFrames > 0 and
-  (.presentedFrames | type) == "number" and .presentedFrames > 0 and
-  .layerImage == true and
-  (.audioUnderruns | type) == "number" and .audioUnderruns >= 0 and
-  .teardownCompleted == true
-' "$S1B_RESULT"
+./scripts/ios-sample-smoke.sh
 ```
 
-The result must contain exactly those nine keys. `teardownCompleted` is true only after the awaited
-player teardown, final healthy Idle state and synchronous renderer close have all completed. The app
-writes a temporary file, flushes and closes it, and atomically replaces `s1b-smoke.json`, so this check
-never accepts a partial record.
+The script picks the newest available iPhone simulator; pass `--simulator UDID` to name one. It
+links the framework, builds the app, installs it, launches it with `--s1b-smoke` and waits for
+`Documents/s1b-smoke.json`. The smoke opens the bundled clip, makes a precise seek, plays to the end
+and closes the player. CI runs the same script in its iOS job.
+
+The result must contain exactly nine keys, and the script checks each one: the seek landed,
+playback ended, frames were decoded, submitted and presented, and the layer held a picture.
+`teardownCompleted` is true only after the awaited player teardown, final healthy Idle state and
+synchronous renderer close have all completed. The app writes a temporary file, flushes and closes
+it, and atomically replaces `s1b-smoke.json`, so the check never accepts a partial record.
 
 ## Link the unsigned device app
 

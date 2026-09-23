@@ -262,6 +262,13 @@ rm colors-gbr.planes
 ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 1 \
   -vf "format=rgba" -f rawvideo colors-gbr.rgba
 
+echo "RGB-coded H.264 clip, which decodes to planar GBR"
+# What a lossless screen capture looks like: H.264 coded as RGB, which the decoder hands over as
+# gbrp. Lossless, so its first frame is the same picture as colors-gbr.rgba. The pattern is drawn in
+# bgr0: drawn in rgb24 or bgr24 it differs from that reference before the encoder sees it, measured.
+ffmpeg -v error -y -f lavfi -i "testsrc2=size=320x240:rate=25:duration=1" -frames:v 2 \
+  -vf "format=bgr0" -c:v libx264rgb -qp 0 colors-rgb-h264.mp4
+
 echo "Rotated clip, for the renderer's quarter turn"
 # What a phone writes: the pixels are stored landscape and a display matrix in the container tells the
 # player to turn them. -display_rotation is an INPUT option and its own unit is counter-clockwise

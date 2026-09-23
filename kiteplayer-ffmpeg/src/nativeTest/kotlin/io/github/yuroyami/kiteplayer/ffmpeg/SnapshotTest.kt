@@ -12,8 +12,13 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.runBlocking
+import platform.posix.SEEK_END
+import platform.posix.SEEK_SET
 import platform.posix.fclose
 import platform.posix.fopen
+import platform.posix.fread
+import platform.posix.fseek
+import platform.posix.ftell
 import platform.posix.fwrite
 import platform.posix.getenv
 import kotlin.test.Test
@@ -28,6 +33,23 @@ import kotlin.test.assertNotNull
 class SnapshotTest {
 
     private val mediaDir: String = getenv("KITEPLAYER_TESTMEDIA")?.toKString() ?: "testmedia"
+
+    private fun readFile(path: String): ByteArray {
+        val file = fopen(path, "rb") ?: error("cannot open $path. Run scripts/testmedia.sh first.")
+        try {
+            fseek(file, 0, SEEK_END)
+            val size = ftell(file).toInt()
+            fseek(file, 0, SEEK_SET)
+            val bytes = ByteArray(size)
+            bytes.usePinned { pinned ->
+                val read = fread(pinned.addressOf(0), 1uL, size.toULong(), file)
+                check(read.toInt() == size) { "short read on $path: $read of $size" }
+            }
+            return bytes
+        } finally {
+            fclose(file)
+        }
+    }
 
     private fun writeFile(path: String, bytes: ByteArray) {
         val file = fopen(path, "wb") ?: error("cannot write $path")
@@ -93,6 +115,34 @@ class SnapshotTest {
         } finally {
             frame.close()
             source.close()
+        }
+    }
+
+    @Test
+    fun `an Identity frame snapshots as the picture its planes hold`() = runBlocking {
+        // FFmpeg's scaler reads a 4:4:4 frame named yuv444p through a YCbCr matrix, and it has no
+        // Identity matrix. Named gbrp, the same planes are the picture. PNG is lossless, so the
+        // image decodes back to the source picture byte for byte.
+        val expected = readFile("$mediaDir/colors-gbr.rgba")
+        for (clip in listOf("colors-gbr.mkv", "colors-rgb-h264.mp4")) {
+            val (source, frame) = firstVideoFrame(clip)
+            val png = try {
+                frame.encode(SnapshotFormat.Png)
+            } finally {
+                frame.close()
+                source.close()
+            }
+            writeFile("$mediaDir/../build/snapshot-identity.png", png)
+            val (imageSource, image) = firstVideoFrame("../build/snapshot-identity.png")
+            val actual = try {
+                SoftwareConverter.toRgba(image)
+            } finally {
+                image.close()
+                imageSource.close()
+            }
+            assertEquals(expected.size, actual.size, "the snapshot of $clip is the wrong size")
+            val differing = expected.indices.count { expected[it] != actual[it] }
+            assertEquals(0, differing, "the snapshot of $clip must be the picture its planes hold")
         }
     }
 

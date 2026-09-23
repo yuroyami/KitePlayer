@@ -28,7 +28,10 @@ internal fun PixelFormat.toPlayerFormat(): PlayerPixelFormat = when (name) {
     // full-range streams, and the range itself arrives through ColorInfo, not the format name.
     "yuv420p", "yuvj420p" -> PlayerPixelFormat.Yuv420p
     "yuv422p", "yuvj422p" -> PlayerPixelFormat.Yuv422p
-    "yuv444p", "yuvj444p" -> PlayerPixelFormat.Yuv444p
+    // Planar GBR is the Identity layout: G, B and R in the three planes where 4:4:4 keeps Y, Cb and
+    // Cr. It is what the H.264, HEVC and VP9 decoders hand over for video coded as RGB, and
+    // toPlayerColorSpace(PixelFormat) gives it the Identity matrix.
+    "yuv444p", "yuvj444p", "gbrp" -> PlayerPixelFormat.Yuv444p
     "yuv420p10le" -> PlayerPixelFormat.Yuv420p10le
     "yuv422p10le" -> PlayerPixelFormat.Yuv422p10le
     "nv12" -> PlayerPixelFormat.Nv12
@@ -39,6 +42,23 @@ internal fun PixelFormat.toPlayerFormat(): PlayerPixelFormat = when (name) {
     // Everything else, including every hardware format, is opaque to the engine. Only a renderer
     // matched to the decoder that produced it can draw it, and the engine does not need to know more.
     else -> PlayerPixelFormat.Opaque
+}
+
+/**
+ * The colour of a frame or stream in [pixelFormat].
+ *
+ * Planar GBR takes the Identity matrix whatever its tag says, because the format itself says the
+ * planes are G, B and R. With no declared range it is full range, which is how RGB video is coded;
+ * read as studio range, black and white would each lose 16 levels.
+ */
+internal fun ColorInfo.toPlayerColorSpace(pixelFormat: PixelFormat): ColorSpaceInfo {
+    val declared = toPlayerColorSpace()
+    if (pixelFormat.name != "gbrp") return declared
+    return declared.copy(
+        matrix = ColorMatrix.Identity,
+        matrixSpecified = true,
+        fullRange = declared.fullRange || !declared.rangeSpecified,
+    )
 }
 
 internal fun ColorInfo.toPlayerColorSpace(): ColorSpaceInfo = ColorSpaceInfo(

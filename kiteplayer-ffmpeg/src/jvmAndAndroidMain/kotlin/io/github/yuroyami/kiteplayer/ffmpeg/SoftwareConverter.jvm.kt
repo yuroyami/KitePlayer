@@ -26,7 +26,7 @@ public object SoftwareConverter {
             width = frame.size.width,
             height = frame.size.height,
             pixelFormat = info.pixelFormat.toPlayerFormat(),
-            colorSpace = info.color.toPlayerColorSpace(),
+            colorSpace = info.color.toPlayerColorSpace(info.pixelFormat),
         )
     }
 

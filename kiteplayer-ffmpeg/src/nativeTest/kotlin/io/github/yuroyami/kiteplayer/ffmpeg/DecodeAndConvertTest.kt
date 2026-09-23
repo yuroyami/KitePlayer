@@ -193,16 +193,39 @@ class DecodeAndConvertTest {
             frame.close()
             source.close()
         }
-        // Counted rather than compared whole: a failed whole-array comparison prints both frames, and
-        // 300 KB of bytes overflows the test reporter before anyone reads it.
+        assertSamePicture(expected, actual, "an Identity frame must come out as its planes, reordered")
+    }
+
+    @Test
+    fun `an RGB-coded H264 frame converts to exactly its source picture`() = runBlocking {
+        // The decoder hands H.264 coded as RGB over as planar GBR, which is the Identity layout.
+        // The clip is lossless, so its first frame is the source picture byte for byte.
+        val expected = readFile("$mediaDir/colors-gbr.rgba")
+        val (source, frame) = firstVideoFrame("colors-rgb-h264.mp4")
+        val actual = try {
+            assertEquals(PlayerPixelFormat.Yuv444p, frame.pixelFormat, "planar GBR is modelled as 4:4:4")
+            assertEquals(ColorMatrix.Identity, frame.colorSpace.matrix, "under the Identity matrix")
+            SoftwareConverter.toRgba(frame)
+        } finally {
+            frame.close()
+            source.close()
+        }
+        assertSamePicture(expected, actual, "an RGB-coded frame must come out as the picture it codes")
+    }
+
+    /**
+     * Counted rather than compared whole: a failed whole-array comparison prints both frames, and
+     * 300 KB of bytes overflows the test reporter before anyone reads it.
+     */
+    private fun assertSamePicture(expected: ByteArray, actual: ByteArray, what: String) {
         assertEquals(expected.size, actual.size, "the converted frame is the wrong size")
         val differing = expected.indices.count { expected[it] != actual[it] }
         val first = expected.indices.firstOrNull { expected[it] != actual[it] }
         assertEquals(
             0,
             differing,
-            "an Identity frame must come out as its planes, reordered. First difference at byte $first: " +
-                "expected ${first?.let { expected[it].toInt() and 0xFF }}, got ${first?.let { actual[it].toInt() and 0xFF }}",
+            "$what. First difference at byte $first: expected " +
+                "${first?.let { expected[it].toInt() and 0xFF }}, got ${first?.let { actual[it].toInt() and 0xFF }}",
         )
     }
 

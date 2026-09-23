@@ -87,6 +87,8 @@ public enum class PlayerPixelFormat(
 ) {
     Yuv420p(3, 8, true),
     Yuv422p(3, 8, true),
+
+    /** Under [ColorMatrix.Identity] the three planes hold G, B and R. Video coded as RGB arrives so. */
     Yuv444p(3, 8, true),
     Yuv420p10le(3, 10, true),
     Yuv422p10le(3, 10, true),
@@ -202,6 +204,8 @@ public enum class ColorMatrix {
     Bt2020Ncl,
     Bt2020Cl,
     ICtCp,
+
+    /** No matrix: the three planes hold G, B and R rather than Y, Cb and Cr. */
     Identity,
 }
 

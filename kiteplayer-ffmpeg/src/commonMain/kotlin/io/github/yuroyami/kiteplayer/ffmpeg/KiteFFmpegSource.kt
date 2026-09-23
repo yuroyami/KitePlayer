@@ -452,7 +452,7 @@ internal fun StreamInfo.toPlayerStream(mapper: TimestampMapper): PlayerStreamInf
         // no stream kind has to be excluded here.
         rotationDegrees = rotationDegrees,
         frameRate = video?.frameRate?.let { if (it.den == 0) null else it.num.toDouble() / it.den },
-        colorSpace = video?.color?.toPlayerColorSpace(),
+        colorSpace = video?.let { it.color.toPlayerColorSpace(it.pixelFormat) },
         // A stream with exactly one frame of cover art must never carry the timeline or drive
         // synchronisation. Treating it as normal video makes the player hang at the end of every
         // audio file that has album art.
@@ -890,7 +890,7 @@ public class KiteFFmpegVideoFrame internal constructor(
 
     override val pixelFormat: PlayerPixelFormat = info.pixelFormat.toPlayerFormat()
 
-    override val colorSpace: ColorSpaceInfo = info.color.toPlayerColorSpace()
+    override val colorSpace: ColorSpaceInfo = info.color.toPlayerColorSpace(info.pixelFormat)
 
     override val hardwareSurface: HwSurfaceKind? =
         if (info.isHardware) hardwareKindFor(info.pixelFormat.name) else null

@@ -3,6 +3,7 @@ package io.github.yuroyami.kiteplayer.ffmpeg
 import io.github.yuroyami.kiteffmpeg.CodecId
 import io.github.yuroyami.kiteffmpeg.Frame
 import io.github.yuroyami.kiteffmpeg.PixelFormat
+import io.github.yuroyami.kiteplayer.spi.ColorMatrix
 import io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat
 import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
 
@@ -21,8 +22,14 @@ public enum class SnapshotFormat { Png, Jpeg }
  * @throws io.github.yuroyami.kiteffmpeg.FFmpegException when the encoder refuses the frame
  */
 public fun SoftwareReadableFrame.encode(format: SnapshotFormat = SnapshotFormat.Jpeg): ByteArray {
-    val name = pixelFormat.ffmpegName()
-        ?: throw UnsupportedOperationException("a $pixelFormat frame has no pixels an image encoder can take")
+    // FFmpeg's scaler has no Identity matrix: named yuv444p, these planes would be read as YCbCr.
+    // Named gbrp, they are the picture.
+    val name = if (pixelFormat == PlayerPixelFormat.Yuv444p && colorSpace.matrix == ColorMatrix.Identity) {
+        "gbrp"
+    } else {
+        pixelFormat.ffmpegName()
+            ?: throw UnsupportedOperationException("a $pixelFormat frame has no pixels an image encoder can take")
+    }
     val frame = Frame.ofVideo(tightlyPackedPlanes(), size.width, size.height, PixelFormat(name))
     try {
         return frame.encodeImage(if (format == SnapshotFormat.Png) CodecId.Png else CodecId.Mjpeg)

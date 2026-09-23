@@ -26,6 +26,16 @@
 #include <stdatomic.h>
 #include <stddef.h>
 
+/* The real-time reader loads the 64-bit counters below, so each must be a lock-free atomic on
+ * every target. Where one is not, the compiler calls the atomic library, which may take a lock,
+ * and the ring clicks and drifts instead of failing. 32-bit ARM passes from ARMv7-A, which has a
+ * doubleword exclusive load and store, and ARMv5 does not build. scripts/render-audit.sh compiles
+ * this header for both. */
+_Static_assert(__atomic_always_lock_free(sizeof(int64_t), 0),
+               "a 64-bit atomic is not lock free on this target, and the real-time reader cannot take a lock");
+_Static_assert(__atomic_always_lock_free(sizeof(int32_t), 0),
+               "a 32-bit atomic is not lock free on this target, and the real-time reader cannot take a lock");
+
 /* Cache line on every target this library is built for. Contended counters are padded onto
  * their own line so the producer's stores do not invalidate the line the consumer reads. */
 #define KPRT_CACHELINE 64

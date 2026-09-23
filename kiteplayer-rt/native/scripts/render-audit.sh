@@ -551,6 +551,36 @@ else
     say "      run ./gradlew :kiteplayer-rt:compileKotlinLinuxArm64 to build it"
 fi
 
+# ---- 5c. The counters are lock free on 32-bit ARM ----
+#
+# kite_rt_ring_internal.h asserts at compile time that 64-bit and 32-bit atomics are lock free. A
+# target where they are not builds a ring whose real-time reader calls the atomic library, which may
+# take a lock, and no symbol scan above runs on such a target. 32-bit ARM is where the answer
+# changes: ARMv7-A, the armeabi-v7a Android ABI, has a doubleword exclusive load and store, and
+# ARMv5 has not. So the header is compiled for both. The first must pass, and the second must be
+# refused by the assertion itself, which proves the assertion can fire.
+LOCKFREE_UNIT="$WORK/lockfree.c"
+printf '#include "kite_rt_ring_internal.h"\n' > "$LOCKFREE_UNIT"
+compile_header_for() {
+    # compile_header_for <target triple>. Freestanding, so no sysroot is needed for either target.
+    "$CC" --target="$1" -std=c11 -ffreestanding -fsyntax-only -Wall -Wextra -Werror \
+        -I "$ROOT/include" -I "$ROOT/src" "$LOCKFREE_UNIT" 2>"$WORK/lockfree-$1.log"
+}
+if compile_header_for armv7a-none-linux-androideabi24; then
+    ok "the ring's atomics are lock free on armv7a, the 32-bit ARM Android ABI"
+else
+    bad "the ring header does not compile for armv7a, the 32-bit ARM Android ABI"
+    sed 's/^/      /' "$WORK/lockfree-armv7a-none-linux-androideabi24.log"
+fi
+if compile_header_for armv5te-none-linux-androideabi; then
+    bad "the ring header compiled for armv5te, where 64-bit atomics take a lock, so the assertion cannot fire"
+elif grep -q 'static assertion failed' "$WORK/lockfree-armv5te-none-linux-androideabi.log"; then
+    ok "the lock-free assertion refuses armv5te, where 64-bit atomics take a lock"
+else
+    bad "armv5te was refused, but not by the lock-free assertion"
+    sed 's/^/      /' "$WORK/lockfree-armv5te-none-linux-androideabi.log"
+fi
+
 # ---- 6. The negative control, which is the only thing that makes any of the above evidence ----
 
 if [ "${1:-}" = "--prove-it-can-fail" ]; then

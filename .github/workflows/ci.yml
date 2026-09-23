@@ -223,6 +223,21 @@ jobs:
             :kiteplayer-audioviz:jvmTest \
             :kiteplayer-sample-shared:jvmTest
 
+      # One line per hot path gate (HotPathGate.kt in the core and FFmpeg JVM tests). A slow drift
+      # shows here long before it reaches a bound of ten times the measured median. The harness's
+      # own test prints a line too, so its report is left out.
+      - name: The hot path numbers
+        if: always()
+        run: |
+          {
+            echo "### Hot paths on $RUNNER_OS, median of seven runs"
+            echo
+            echo "| Hot path | Median | Bound |"
+            echo "|---|---:|---:|"
+            find . -path '*/build/test-results/jvmTest/*.xml' ! -name '*HotPathGateTest.xml' -exec cat {} + |
+              grep -o 'HOTPATH | .*' | sed 's/^HOTPATH //' || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the format conformance matrix
       # against real clips.
       #
@@ -403,6 +418,21 @@ jobs:
             :kiteplayer-output:jvmTest \
             :kiteplayer-view:jvmTest \
             :kiteplayer-network:jvmTest
+
+      # One line per hot path gate (HotPathGate.kt in the core and FFmpeg JVM tests). A slow drift
+      # shows here long before it reaches a bound of ten times the measured median. The harness's
+      # own test prints a line too, so its report is left out.
+      - name: The hot path numbers
+        if: always()
+        run: |
+          {
+            echo "### Hot paths on $RUNNER_OS, median of seven runs"
+            echo
+            echo "| Hot path | Median | Bound |"
+            echo "|---|---:|---:|"
+            find . -path '*/build/test-results/jvmTest/*.xml' ! -name '*HotPathGateTest.xml' -exec cat {} + |
+              grep -o 'HOTPATH | .*' | sed 's/^HOTPATH //' || true
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Android HOST tests, which are ordinary JVM tests against the Android variant. Device tests
       # are a different claim and are not made here.

@@ -96,12 +96,14 @@ fi
 
 # ---- 3. Repositories belong to the settings of the named builds ----
 #
-# buildSrc and the network distribution fixture are separate builds. The fixture must resolve
-# staged Maven bytes exclusively, without inheriting project dependencies or Maven Local. Its
-# one settings file owns resolution for every fixture target, including the conditional Android
-# application. Allow that exact file, not arbitrary repositories anywhere under verification/.
+# buildSrc and the two verification consumers are separate builds. The network distribution
+# fixture must resolve staged Maven bytes exclusively, without inheriting project dependencies or
+# Maven Local. Its one settings file owns resolution for every fixture target, including the
+# conditional Android application. The Central consumer must resolve from the public repositories
+# alone, which is its whole point. Allow those exact files, not arbitrary repositories anywhere
+# under verification/.
 repos=$(build_files | xargs grep -ln '^[[:space:]]*repositories[[:space:]]*{' 2>/dev/null | \
-    grep -vE '^\./(settings\.gradle\.kts|buildSrc/(build|settings)\.gradle\.kts|verification/network-consumer/settings\.gradle\.kts)$' || true)
+    grep -vE '^\./(settings\.gradle\.kts|buildSrc/(build|settings)\.gradle\.kts|verification/(network|central)-consumer/settings\.gradle\.kts)$' || true)
 if [ -n "$repos" ]; then
     fail "a module declares its own repositories, so settings no longer owns resolution"
     printf '%s\n' "$repos" | while IFS= read -r f; do note "$f"; done

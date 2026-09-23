@@ -1,0 +1,40 @@
+# Builds the README's install lines from Maven Central on a clean runner, the way a stranger would.
+#
+# It checks the published artifacts, not the commit that triggers it. So it runs weekly, on demand,
+# and when the README or the check itself changes, and a red here never blocks a push to CI.
+#
+# macOS arm64 only, for now: it is the one desktop platform whose FFmpeg JVM library is published.
+# On Linux and Windows the default backend cannot load from Central, and the check would say so.
+name: Central consumer
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - scripts/verify-central-consumer.sh
+      - verification/central-consumer/**
+      - .github/workflows/central-consumer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  central-consumer:
+    name: README install lines from Maven Central (macOS arm64)
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # No setup-gradle and no cache on purpose. The Gradle home starts empty, so every artifact
+      # comes from the public repositories, and the log names each one.
+      - name: Build the install lines from Maven Central with an empty Gradle cache
+        run: ./scripts/verify-central-consumer.sh --user-home "$RUNNER_TEMP/gradle-home"

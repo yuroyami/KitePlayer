@@ -118,7 +118,9 @@ step and for a publish.
 The sample smoke uses the four original house clips; the format-matrix suites cover the wider set.
 The Node gate does not claim browser execution, and Windows links do not claim Windows execution.
 CI runs those environments separately. Distribution-only integration checks remain additional
-checks for changes to published dependency metadata or automatic provider discovery.
+checks for changes to published dependency metadata or automatic provider discovery. After a
+release, `./scripts/verify-central-consumer.sh` builds the README's install lines from Maven Central
+with an empty Gradle cache, and a weekly CI workflow runs the same script.
 
 ### Tier 3
 

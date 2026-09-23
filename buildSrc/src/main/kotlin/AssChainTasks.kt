@@ -276,7 +276,8 @@ abstract class BuildLibassHostJniTask @Inject constructor(
                 val arch = if (triple == "macos-arm64") "arm64" else "x86_64"
                 listOf(
                     "/usr/bin/clang", "-dynamiclib", "-arch", arch,
-                    "-isysroot", xcrunSdkPath("macosx"), "-mmacosx-version-min=11.0",
+                    // 12.0 is Kotlin/Native's macOS floor, so the JVM adapter and a native consumer need the same macOS.
+                    "-isysroot", xcrunSdkPath("macosx"), "-mmacosx-version-min=12.0",
                     "-install_name", "@rpath/$libraryName",
                     "-I${jniInclude.resolve("darwin").absolutePath}",
                 ) + common + listOf(

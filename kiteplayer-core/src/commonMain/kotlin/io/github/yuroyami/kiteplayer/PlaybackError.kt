@@ -492,4 +492,17 @@ public sealed class PlaybackWarning {
     public data class NoRenderSurface(val detail: String) : PlaybackWarning() {
         override val message: String get() = "no render surface: $detail"
     }
+
+    /**
+     * A recording ended without [KitePlayer.stopRecording], [KitePlayer.stop] or
+     * [KitePlayer.close], or its file could not be finished. The file at [path] keeps what was
+     * recorded until then.
+     *
+     * [reason] names the cause: a seek, a move to another queue item, a video track switch, or a
+     * write that failed. A seek always ends a recording, because a file with a jump in it is not a
+     * recording.
+     */
+    public data class RecordingStopped(val path: String, val reason: String) : PlaybackWarning() {
+        override val message: String get() = "the recording to $path stopped: $reason"
+    }
 }

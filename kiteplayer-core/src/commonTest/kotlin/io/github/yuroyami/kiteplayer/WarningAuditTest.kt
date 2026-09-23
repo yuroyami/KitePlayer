@@ -41,9 +41,15 @@ class WarningAuditTest {
         PlaybackWarning.ContainerDeclarationDiverged(0, "Width", "1920", "1440"),
         PlaybackWarning.TypesetterUnavailable("io.github.yuroyami.kiteplayer.libass", "x"),
         PlaybackWarning.AudioTapFailed("x"),
+        PlaybackWarning.RecordingStopped("x.mkv", "x"),
     )
 
     private fun documentedEmissionSites(warning: PlaybackWarning): List<String> = when (warning) {
+        is PlaybackWarning.RecordingStopped -> listOf(
+            "PlaybackCore.endRecording, when a seek, a queue move or any session end other than " +
+                "stopRecording, stop and close ends a running recording, or the file cannot be finished",
+            "KiteFFmpegSource's packet copy in :kiteplayer-ffmpeg, when a write to the recording fails",
+        )
         is PlaybackWarning.AudioTapFailed -> listOf(
             "PlaybackCore.dropTap, when an attached AudioTap throws from onAudio on the feed worker " +
                 "or from onDiscontinuity where the ring is flushed; the tap is detached first",

@@ -26,6 +26,7 @@ import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerPacket
 import io.github.yuroyami.kiteplayer.spi.MediaAttachment
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
+import io.github.yuroyami.kiteplayer.spi.RecordingCapable
 import io.github.yuroyami.kiteplayer.spi.SoftwareReadableFrame
 import io.github.yuroyami.kiteplayer.spi.SampleFormat
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
@@ -73,7 +74,7 @@ public class KiteFFmpegSourceFactory : MediaSourceFactory {
     }
 }
 
-public class KiteFFmpegSource internal constructor(private val source: MediaSource) : PlayerMediaSource {
+public class KiteFFmpegSource internal constructor(private val source: MediaSource) : PlayerMediaSource, RecordingCapable {
 
     private var reader: PacketReader? = null
 
@@ -88,6 +89,12 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
      * must be cheap and must not block. Set it before decoding starts. The default discards.
      */
     public var onWarning: (PlaybackWarning) -> Unit = {}
+
+    /** Reads [onWarning] when it warns, because the engine replaces that listener after construction. */
+    private val recorder = SourceRecorder(source) { onWarning(it) }
+
+    /** The streams the reader delivers, which are the streams a recording copies. */
+    private var readStreams: List<StreamInfo> = emptyList()
 
     /**
      * The single place the container's timeline becomes the engine's. Declared before [streams]
@@ -187,6 +194,22 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
         val selected = indices.map { byIndex.getValue(it) }
         require(selected.isNotEmpty()) { "selectStreams needs at least one stream" }
         reader = source.openPacketReader(selected)
+        readStreams = selected
+    }
+
+    override val recordingPath: String? get() = recorder.path
+
+    /**
+     * Records every stream this source reads, except cover art, which is one picture the file
+     * would never show again, and a subtitle format Matroska cannot hold.
+     */
+    override fun startRecording(path: String) {
+        check(readStreams.isNotEmpty()) { "streams must be selected before a recording starts" }
+        recorder.start(path, readStreams.filterNot { it.disposition.attachedPicture })
+    }
+
+    override fun stopRecording() {
+        recorder.stop()
     }
 
     override fun interrupt(): Boolean {
@@ -198,11 +221,14 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
 
     override suspend fun readPacket(): PlayerPacket? {
         val reader = reader ?: error("selectStreams must be called before readPacket")
-        return reader.read()?.let { KiteFFmpegPacket(it, mapper) }
+        val packet = reader.read() ?: return null
+        recorder.copy(packet)
+        return KiteFFmpegPacket(packet, mapper)
     }
 
     override suspend fun seekToKeyframe(target: Pts): Pts? {
         val reader = reader ?: error("selectStreams must be called before seeking")
+        recorder.endForSeek()
         // [target] needs no conversion. KiteFFmpeg's seek already speaks the content-relative
         // timeline, and every timestamp this class produces is now on that same timeline.
         seekBackward(target.micros) { micros, floor ->
@@ -214,6 +240,7 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
     }
 
     override fun close() {
+        recorder.close()
         reader?.close()
         reader = null
         source.close()

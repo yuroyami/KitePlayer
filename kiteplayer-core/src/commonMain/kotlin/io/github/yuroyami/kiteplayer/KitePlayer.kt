@@ -701,6 +701,36 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
         core.captureFrame(withSubtitles)
 
     /**
+     * Starts copying what plays into a Matroska file at [path], with no re-encode.
+     *
+     * The file holds the selected video track and every audio and subtitle track, because the
+     * player reads all of them. It starts at the next video keyframe, so its first picture decodes.
+     *
+     * The recording copies packets as the player reads them, and the player reads ahead of the
+     * picture on screen, by up to [BufferPolicy.totalDuration]. So the file starts and ends that
+     * far ahead of what the viewer saw. On a live stream the read-ahead stays short, because the
+     * data arrives in real time.
+     *
+     * [stopRecording], [stop] and [close] end the recording without a warning. Every other end
+     * warns [PlaybackWarning.RecordingStopped]: a seek, a move to another queue item, a video track
+     * switch, or a write that failed. A seek always ends a recording, because a file with a jump in
+     * it is not a recording.
+     *
+     * @throws IllegalStateException when nothing is open, or when a recording already runs.
+     * @throws UnsupportedOperationException when the backend cannot record. The FFmpeg backend
+     *         records on every platform except the web, where a page has no file to write.
+     * @throws IllegalArgumentException when the file at [path] cannot be created.
+     */
+    public suspend fun startRecording(path: String) {
+        core.startRecording(path)
+    }
+
+    /** Stops the recording and finishes its file. Does nothing when no recording runs. */
+    public suspend fun stopRecording() {
+        core.stopRecording()
+    }
+
+    /**
      * The chapter whose span holds [position], or null before the first chapter or in media with
      * no chapter table. Pure over the published snapshot; pair it with [position] for the
      * chapter now playing.

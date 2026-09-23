@@ -633,6 +633,14 @@ abstract interface io.github.yuroyami.kiteplayer.spi/PlayerPacket : kotlin/AutoC
     abstract fun copyBytes(): kotlin/ByteArray // io.github.yuroyami.kiteplayer.spi/PlayerPacket.copyBytes|copyBytes(){}[0]
 }
 
+abstract interface io.github.yuroyami.kiteplayer.spi/RecordingCapable { // io.github.yuroyami.kiteplayer.spi/RecordingCapable|null[0]
+    abstract val recordingPath // io.github.yuroyami.kiteplayer.spi/RecordingCapable.recordingPath|{}recordingPath[0]
+        abstract fun <get-recordingPath>(): kotlin/String? // io.github.yuroyami.kiteplayer.spi/RecordingCapable.recordingPath.<get-recordingPath>|<get-recordingPath>(){}[0]
+
+    abstract fun startRecording(kotlin/String) // io.github.yuroyami.kiteplayer.spi/RecordingCapable.startRecording|startRecording(kotlin.String){}[0]
+    abstract fun stopRecording() // io.github.yuroyami.kiteplayer.spi/RecordingCapable.stopRecording|stopRecording(){}[0]
+}
+
 abstract interface io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame : io.github.yuroyami.kiteplayer.spi/VideoFrame { // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame|null[0]
     abstract val planeCount // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.planeCount|{}planeCount[0]
         abstract fun <get-planeCount>(): kotlin/Int // io.github.yuroyami.kiteplayer.spi/SoftwareReadableFrame.planeCount.<get-planeCount>|<get-planeCount>(){}[0]
@@ -2142,8 +2150,10 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.seekToChapter|seekToChapter(kotlin.Int){}[0]
     final suspend fun selectSecondarySubtitle(io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectSecondarySubtitle|selectSecondarySubtitle(io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectTrack(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectTrack|selectTrack(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
+    final suspend fun startRecording(kotlin/String) // io.github.yuroyami.kiteplayer/KitePlayer.startRecording|startRecording(kotlin.String){}[0]
     final suspend fun stepFrame(io.github.yuroyami.kiteplayer/StepDirection = ...) // io.github.yuroyami.kiteplayer/KitePlayer.stepFrame|stepFrame(io.github.yuroyami.kiteplayer.StepDirection){}[0]
     final suspend fun stop() // io.github.yuroyami.kiteplayer/KitePlayer.stop|stop(){}[0]
+    final suspend fun stopRecording() // io.github.yuroyami.kiteplayer/KitePlayer.stopRecording|stopRecording(){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer/KitePlayer.Companion|null[0]
         final const val SPEED_MAX // io.github.yuroyami.kiteplayer/KitePlayer.Companion.SPEED_MAX|{}SPEED_MAX[0]
@@ -3620,6 +3630,24 @@ sealed class io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroya
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.hashCode|hashCode(){}[0]
         final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.PathologicalInterleaving.toString|toString(){}[0]
+    }
+
+    final class RecordingStopped : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped|null[0]
+        constructor <init>(kotlin/String, kotlin/String) // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.<init>|<init>(kotlin.String;kotlin.String){}[0]
+
+        final val message // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.message|{}message[0]
+            final fun <get-message>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.message.<get-message>|<get-message>(){}[0]
+        final val path // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.path|{}path[0]
+            final fun <get-path>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.path.<get-path>|<get-path>(){}[0]
+        final val reason // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.reason|{}reason[0]
+            final fun <get-reason>(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.reason.<get-reason>|<get-reason>(){}[0]
+
+        final fun component1(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.component1|component1(){}[0]
+        final fun component2(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.component2|component2(){}[0]
+        final fun copy(kotlin/String = ..., kotlin/String = ...): io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.copy|copy(kotlin.String;kotlin.String){}[0]
+        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.equals|equals(kotlin.Any?){}[0]
+        final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.hashCode|hashCode(){}[0]
+        final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer/PlaybackWarning.RecordingStopped.toString|toString(){}[0]
     }
 
     final class RendererFailed : io.github.yuroyami.kiteplayer/PlaybackWarning { // io.github.yuroyami.kiteplayer/PlaybackWarning.RendererFailed|null[0]

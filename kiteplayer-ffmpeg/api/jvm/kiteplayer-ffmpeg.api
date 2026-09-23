@@ -22,7 +22,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegMediaBackend :
 	public fun subtitleFileParser ()Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;
 }
 
-public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource {
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource, io/github/yuroyami/kiteplayer/spi/RecordingCapable {
 	public final fun audioDecoderFactories ()Ljava/util/List;
 	public fun close ()V
 	public fun getAttachments ()Ljava/util/List;
@@ -33,6 +33,7 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public final fun getFirstVideo ()Lio/github/yuroyami/kiteplayer/spi/PlayerStreamInfo;
 	public fun getMetadata ()Ljava/util/Map;
 	public final fun getOnWarning ()Lkotlin/jvm/functions/Function1;
+	public fun getRecordingPath ()Ljava/lang/String;
 	public fun getSeekable ()Z
 	public fun getStreamDivergences ()Ljava/util/List;
 	public fun getStreams ()Ljava/util/List;
@@ -42,6 +43,8 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/gi
 	public fun seekToKeyframe-HwpeAyI (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun selectStreams (Ljava/util/Set;)V
 	public final fun setOnWarning (Lkotlin/jvm/functions/Function1;)V
+	public fun startRecording (Ljava/lang/String;)V
+	public fun stopRecording ()V
 	public final fun videoDecoderFactories ()Ljava/util/List;
 }
 

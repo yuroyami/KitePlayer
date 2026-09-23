@@ -193,6 +193,7 @@ read it back.
 | Chapters | `chapterAt`, `seekToChapter`, `nextChapter`, `previousChapter` |
 | Resume | `memento()` saves item, position, tracks and speed. `restore(memento)` puts them back |
 | Screenshots | `captureFrame`. `kiteplayer-ffmpeg` encodes the frame to PNG or JPEG, and makes thumbnails and waveforms |
+| Recording | `startRecording` copies what the player reads into a Matroska file, with no re-encode. `stopRecording` finishes the file. A seek ends a recording |
 | Rendering | `attachRenderer`, `detachRenderer`, swappable while media plays |
 | Diagnosis | `diagnosticsDump`, `warningHistory`, `supportBundle`, and `KiteLog` as the one logging seam, silent by default |
 

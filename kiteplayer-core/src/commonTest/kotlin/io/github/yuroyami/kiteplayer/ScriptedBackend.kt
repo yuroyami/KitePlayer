@@ -176,6 +176,8 @@ internal class MediaScript(
     val streamDivergences: List<io.github.yuroyami.kiteplayer.spi.StreamDivergence> = emptyList(),
     /** Extra container subtitle tracks. Explicit indices make identity assertions unambiguous. */
     val additionalSubtitleTracks: List<ScriptedSubtitleTrack> = emptyList(),
+    /** True gives the source the recording capability. It writes nothing and logs each call. */
+    val recordable: Boolean = false,
 ) {
     val videoIndex: Int = 0
     val audioIndex: Int = if (hasVideo) 1 else 0
@@ -578,7 +580,11 @@ internal class ScriptedSession(
 
     val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace, io)
 
-    override val source: PlayerMediaSource get() = scriptedSource
+    /** The same source with the recording capability, when the script asks for it. */
+    val recordingSource: ScriptedRecordingSource? =
+        if (script.recordable) ScriptedRecordingSource(scriptedSource) else null
+
+    override val source: PlayerMediaSource get() = recordingSource ?: scriptedSource
 
     val videoDecoderPolicies: MutableList<HwdecPolicy> = mutableListOf()
 
@@ -614,6 +620,29 @@ internal class ScriptedSession(
         closeCount++
         scriptedSource.close()
         if (faults.sessionCloseThrows) error("the scripted session refuses to close")
+    }
+}
+
+/** A scripted source that can record. It writes no file and logs each call instead. */
+internal class ScriptedRecordingSource(private val inner: ScriptedSource) :
+    PlayerMediaSource by inner, io.github.yuroyami.kiteplayer.spi.RecordingCapable {
+
+    /** Each call in order, as "start <path>" or "stop". */
+    val calls: MutableList<String> = mutableListOf()
+
+    override var recordingPath: String? = null
+        private set
+
+    override fun startRecording(path: String) {
+        check(recordingPath == null) { "a recording to $recordingPath already runs" }
+        calls += "start $path"
+        recordingPath = path
+    }
+
+    override fun stopRecording() {
+        if (recordingPath == null) return
+        calls += "stop"
+        recordingPath = null
     }
 }
 

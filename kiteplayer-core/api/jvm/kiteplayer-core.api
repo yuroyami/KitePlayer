@@ -471,9 +471,11 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun setVideoScale (Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public final fun setVideoTransform (Lio/github/yuroyami/kiteplayer/VideoTransform;)V
 	public final fun setVolume (F)V
+	public final fun startRecording (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun stepFrame (Lio/github/yuroyami/kiteplayer/StepDirection;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static synthetic fun stepFrame$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/StepDirection;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun stopRecording (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun supportBundle ()Ljava/lang/String;
 	public final fun warningHistory ()Ljava/util/List;
 }
@@ -1146,6 +1148,20 @@ public final class io/github/yuroyami/kiteplayer/PlaybackWarning$PathologicalInt
 	public final fun getDroppedPackets ()I
 	public fun getMessage ()Ljava/lang/String;
 	public final fun getStarvedTrack-fQpssaM ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/PlaybackWarning$RecordingStopped : io/github/yuroyami/kiteplayer/PlaybackWarning {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$RecordingStopped;
+	public static synthetic fun copy$default (Lio/github/yuroyami/kiteplayer/PlaybackWarning$RecordingStopped;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/yuroyami/kiteplayer/PlaybackWarning$RecordingStopped;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getMessage ()Ljava/lang/String;
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getReason ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -2549,6 +2565,12 @@ public final class io/github/yuroyami/kiteplayer/spi/PlayerStreamInfo {
 	public final fun isForced ()Z
 	public final fun isSparse ()Z
 	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/spi/RecordingCapable {
+	public abstract fun getRecordingPath ()Ljava/lang/String;
+	public abstract fun startRecording (Ljava/lang/String;)V
+	public abstract fun stopRecording ()V
 }
 
 public abstract interface class io/github/yuroyami/kiteplayer/spi/RendererEvent {

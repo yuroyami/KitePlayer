@@ -82,7 +82,7 @@ tries the next factory and deselects the stream when every candidate refused, wi
 
 - One thread per role: your source is only ever touched from the demux worker, each decoder from
   its own decode worker, and `flush` from that same worker during seeks. No backend object needs
-  its own locking for engine calls.
+  its own locking for engine calls. The one exception is a recording, below.
 - Quiescence before mutation: seeks stop the sink, park the workers and flush the decoders in a
   fixed, tested order (the `ScriptTrace` assertions in the seek suite pin it).
 - Ownership is absolute: anything you hand over is closed exactly once by the engine; anything
@@ -104,9 +104,25 @@ assertEquals(PlaybackStatus.Ended, harness.core.snapshots.value.status)
 A new backend can be developed the same way: point the harness at yours, keep the ledger at
 zero, and the engine's own suites become your conformance tests.
 
+## A recording source
+
+`RecordingCapable` is an optional interface on the source. Implement it, and
+`KitePlayer.startRecording` works with your backend. Without it, that call throws
+`UnsupportedOperationException`.
+
+- `startRecording(path)` starts copying the packets your source reads into a file.
+- `stopRecording()` finishes the file. Closing the source does the same.
+- `recordingPath` is null when no recording runs.
+
+The engine calls these three members from its own thread while the demux worker reads, so guard
+the recording state with a lock. The engine ends a recording before it seeks or retires the
+session, so a file never gets a jump in it. `ScriptedRecordingSource` logs the calls and writes
+nothing. `SourceRecorder` in `kiteplayer-ffmpeg` is the real one, and it writes Matroska with no
+re-encode.
+
 ## A subtitle typesetter
 
-`SubtitleTypesetter` is the other optional seam, and `kiteplayer-libass` is its one implementation.
+`SubtitleTypesetter` is another optional seam, and `kiteplayer-libass` is its one implementation.
 Implement the interface, wrap it in a `SubtitleTypesetterProvider` with a stable id, and install
 the provider the way the transport providers install: a `META-INF/services` entry on the JVM and
 Android, an eagerly initialised `SubtitleTypesetters.register(...)` on native and the web.

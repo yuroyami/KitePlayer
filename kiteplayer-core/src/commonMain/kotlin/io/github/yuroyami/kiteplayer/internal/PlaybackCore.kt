@@ -58,6 +58,7 @@ import kotlin.math.log10
 import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
+import io.github.yuroyami.kiteplayer.spi.RecordingCapable
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
@@ -939,6 +940,18 @@ internal class PlaybackCore(
         awaitReply(reply)
     }
 
+    suspend fun startRecording(path: String) {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.StartRecording(path, reply))
+        awaitReply(reply)
+    }
+
+    suspend fun stopRecording() {
+        val reply = CompletableDeferred<Unit>()
+        send(CoreCommand.StopRecording(reply))
+        awaitReply(reply)
+    }
+
     suspend fun captureFrame(withSubtitles: Boolean = false): io.github.yuroyami.kiteplayer.CapturedFrame {
         val reply = CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>()
         send(CoreCommand.CaptureFrame(reply))
@@ -1401,6 +1414,13 @@ internal class PlaybackCore(
             is CoreCommand.Play, is CoreCommand.Pause -> null
             is CoreCommand.Seek -> seekRejection()
             is CoreCommand.SeekLater -> null
+            is CoreCommand.StartRecording -> when {
+                session == null -> IllegalStateException("startRecording needs an open media item")
+                session?.source !is RecordingCapable -> UnsupportedOperationException(
+                    "this backend cannot record: its source does not implement RecordingCapable",
+                )
+                else -> null
+            }
             is CoreCommand.SelectTrack -> when {
                 command.kind == TrackKind.Subtitle && command.track != null &&
                     command.track == tracks.selectedSecondarySubtitle ->
@@ -1529,6 +1549,20 @@ internal class PlaybackCore(
             is CoreCommand.StepFrame -> when (command.direction) {
                 StepDirection.Forward -> stepOneFrame(command.reply)
                 StepDirection.Backward -> stepOneFrameBack(command.reply)
+            }
+            is CoreCommand.StartRecording -> {
+                val recorder = session?.source as RecordingCapable
+                try {
+                    recorder.startRecording(command.path)
+                    command.reply.complete(Unit)
+                } catch (refusal: Exception) {
+                    // A second start or a file that cannot be created. Playback goes on either way.
+                    command.reply.completeExceptionally(refusal)
+                }
+            }
+            is CoreCommand.StopRecording -> {
+                session?.let { endRecording(it, reason = null) }
+                command.reply.complete(Unit)
             }
             is CoreCommand.CaptureFrame -> requestCapture(command.reply)
             is CoreCommand.WithdrawCapture ->
@@ -5558,6 +5592,9 @@ internal class PlaybackCore(
             if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
             return
         }
+        // After the quiesce, so an aborted seek keeps the recording, and before the container seek,
+        // so no packet from the new position reaches the file.
+        endRecording(session, reason = "a seek moved the playback position")
 
         var attempt = 0
         var landed: Pts? = null
@@ -5896,6 +5933,8 @@ internal class PlaybackCore(
         pendingSeek = null
         discardPendingSelections("stop() tore the session down before the selection could be applied")
         resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+        // The caller's own end, so it warns nothing. The teardown below would warn.
+        session?.let { endRecording(it, reason = null) }
         teardownSession()
         media = null
         tracks = Tracks.Empty
@@ -5926,6 +5965,8 @@ internal class PlaybackCore(
         playRequested = false
         pendingVideoRecovery = null
         pendingSeek = null
+        // The caller's own end, so it warns nothing. The detach below would warn.
+        session?.let { endRecording(it, reason = null) }
         // The session comes off the actor FIRST, so that everything below is about a graph nothing
         // else can reach, and the release can then run somewhere this coroutine is able to stop
         // waiting for.
@@ -6169,6 +6210,9 @@ internal class PlaybackCore(
     private fun detachSession(): OpenSession? {
         val detached = session ?: return null
         session = null
+        // Every path that retires a session comes through here: the next queue item, a video track
+        // switch, a failure. None of them is an end the caller asked for.
+        endRecording(detached, reason = "the player closed the media being recorded")
         // The retiring worker keeps its old identity even if its final callback is still running.
         tapsDiscontinuous(active = null)
         // No session, no cues. A stop or a close that left the last line published would have an
@@ -6180,6 +6224,25 @@ internal class PlaybackCore(
 
     private suspend fun teardownSession() {
         releaseSession(detachSession() ?: return)
+    }
+
+    /**
+     * Ends the recording that [session]'s source makes, if one runs. A null [reason] is an end the
+     * caller asked for and warns nothing. A file that cannot be finished warns in every case.
+     */
+    private fun endRecording(session: OpenSession, reason: String?) {
+        val recorder = session.source as? RecordingCapable ?: return
+        val path = recorder.recordingPath ?: return
+        val failure = try {
+            recorder.stopRecording()
+            null
+        } catch (failure: Exception) {
+            failure
+        }
+        val why = failure?.let { "the file could not be finished: ${it.message ?: it::class.simpleName}" }
+            ?: reason
+            ?: return
+        warn(PlaybackWarning.RecordingStopped(path, why))
     }
 
     /** Folds one finished session's counters into the player's totals. Once per session, exactly. */
@@ -8379,6 +8442,8 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class WithdrawCapture(
         val request: CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>,
     ) : CoreCommand("withdrawCapture", CompletableDeferred(Unit))
+    class StartRecording(val path: String, val reply: CompletableDeferred<Unit>) : CoreCommand("startRecording", reply)
+    class StopRecording(val reply: CompletableDeferred<Unit>) : CoreCommand("stopRecording", reply)
     class Play(val reply: CompletableDeferred<Unit>) : CoreCommand("play", reply)
     class Pause(val reply: CompletableDeferred<Unit>) : CoreCommand("pause", reply)
     class Seek(val request: SeekRequest, val reply: CompletableDeferred<SeekResult>) : CoreCommand("seek", reply)

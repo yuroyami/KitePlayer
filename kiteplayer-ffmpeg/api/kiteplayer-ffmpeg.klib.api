@@ -33,7 +33,7 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegMediaBackend : io.git
     final suspend fun open(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.spi/BackendSession // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegMediaBackend.open|open(io.github.yuroyami.kiteplayer.MediaItem){}[0]
 }
 
-final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yuroyami.kiteplayer.spi/PlayerMediaSource { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource|null[0]
+final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yuroyami.kiteplayer.spi/PlayerMediaSource, io.github.yuroyami.kiteplayer.spi/RecordingCapable { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource|null[0]
     final val attachments // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.attachments|{}attachments[0]
         final fun <get-attachments>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/MediaAttachment> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.attachments.<get-attachments>|<get-attachments>(){}[0]
     final val chapters // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.chapters|{}chapters[0]
@@ -48,6 +48,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
         final fun <get-firstVideo>(): io.github.yuroyami.kiteplayer.spi/PlayerStreamInfo? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.firstVideo.<get-firstVideo>|<get-firstVideo>(){}[0]
     final val metadata // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.metadata|{}metadata[0]
         final fun <get-metadata>(): kotlin.collections/Map<kotlin/String, kotlin/String> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.metadata.<get-metadata>|<get-metadata>(){}[0]
+    final val recordingPath // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.recordingPath|{}recordingPath[0]
+        final fun <get-recordingPath>(): kotlin/String? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.recordingPath.<get-recordingPath>|<get-recordingPath>(){}[0]
     final val seekable // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekable|{}seekable[0]
         final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekable.<get-seekable>|<get-seekable>(){}[0]
     final val streamDivergences // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.streamDivergences|{}streamDivergences[0]
@@ -65,6 +67,8 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yu
     final fun close() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.close|close(){}[0]
     final fun interrupt(): kotlin/Boolean // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.interrupt|interrupt(){}[0]
     final fun selectStreams(kotlin.collections/Set<kotlin/Int>) // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.selectStreams|selectStreams(kotlin.collections.Set<kotlin.Int>){}[0]
+    final fun startRecording(kotlin/String) // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.startRecording|startRecording(kotlin.String){}[0]
+    final fun stopRecording() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.stopRecording|stopRecording(){}[0]
     final fun videoDecoderFactories(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/VideoDecoderFactory> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.videoDecoderFactories|videoDecoderFactories(){}[0]
     final suspend fun readPacket(): io.github.yuroyami.kiteplayer.spi/PlayerPacket? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.readPacket|readPacket(){}[0]
     final suspend fun seekToKeyframe(io.github.yuroyami.kiteplayer/Pts): io.github.yuroyami.kiteplayer/Pts? // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.seekToKeyframe|seekToKeyframe(io.github.yuroyami.kiteplayer.Pts){}[0]

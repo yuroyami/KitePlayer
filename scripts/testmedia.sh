@@ -332,6 +332,16 @@ ffmpeg -v error -y \
   -f lavfi -i "sine=frequency=200:sample_rate=48000:duration=1800" \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac -shortest soak30min.mp4
 
+echo "MP4 with an MP4 text subtitle track, which a Matroska recording cannot hold"
+ffmpeg -v error -y \
+  -f lavfi -i "testsrc2=size=320x240:rate=30:duration=4" \
+  -f lavfi -i "sine=frequency=440:sample_rate=48000:duration=4" \
+  -i subs.srt \
+  -map 0:v -map 1:a -map 2:0 \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+  -c:a aac -b:a 96k -c:s mov_text \
+  movtext.mp4
+
 # ---------------------------------------------------------------------------------------------
 # The format conformance matrix. Every clip below is a matrix row; the
 # table itself is FormatMatrix.kt in kiteplayer-ffmpeg. Small and short on purpose: the matrix

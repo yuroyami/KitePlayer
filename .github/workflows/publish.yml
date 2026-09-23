@@ -16,6 +16,12 @@
 # red test stops the run before anything reaches the portal, and a release run takes as long as CI
 # plus the upload.
 #
+# BILL OF MATERIALS. Before the upload, the run writes an SPDX document of the native code that
+# kiteplayer-libass bundles (scripts/native-sbom.sh), and keeps it as the native-sbom-<version>
+# artifact of the run. Attach that file to the GitHub release page. A pin that does not match its
+# archive, or a NOTICE that does not name a version inside the artifacts, stops the run before the
+# upload. A publish from the maintainer's machine gets no document; run the script by hand there.
+#
 # PREREQUISITES
 #   Repository secrets, the same five KiteFFmpeg uses:
 #     MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD   Central Portal user token
@@ -24,7 +30,8 @@
 #
 # WHAT IS PUBLISHED. Every library module that applies the publish plugin. FFmpeg is NOT built here:
 # KitePlayer resolves io.github.yuroyami:kiteffmpeg from Central and that artifact carries FFmpeg
-# inside it, so this workflow needs no vendored tree and no emscripten.
+# inside it, so this workflow needs no vendored FFmpeg tree. It installs emscripten only for the
+# libass web module.
 #
 # WHY macOS. Apple klibs can only be produced on a macOS host, and the publication covers them.
 name: Publish release
@@ -126,6 +133,19 @@ jobs:
         run: brew install emscripten
       - name: Warm the Kotlin/Native toolchain
         run: ./gradlew :kiteplayer-core:compileKotlinMacosArm64 --stacktrace || true
+
+      # The SPDX document of the native code that kiteplayer-libass bundles. It exports the same NDK
+      # as the publish step below, so the document names the NDK that the build uses.
+      - name: Bill of materials for bundled native code
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          ./scripts/native-sbom.sh
+      - name: Keep the bill of materials
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-sbom-${{ inputs.version }}
+          path: build/sbom/
+          if-no-files-found: error
 
       # Refuses before any repository work if the POMs would be rejected: missing name, description,
       # url, licence, developer or scm, an unsigned publication, or a published module depending on

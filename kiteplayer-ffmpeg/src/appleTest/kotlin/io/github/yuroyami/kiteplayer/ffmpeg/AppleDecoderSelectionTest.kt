@@ -19,6 +19,10 @@ class AppleDecoderSelectionTest {
 
     private val videoToolbox = HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox)
 
+    /** By name, because FFmpeg finds dav1d first for AV1 and dav1d cannot take the attach. */
+    private val videoToolboxAv1 =
+        HardwareRoute.Accel(HardwareAccel.VideoToolbox, HwdecKind.VideoToolbox, decoder = CodecId("av1"))
+
     private fun routeOf(codec: String, policy: HwdecPolicy = HwdecPolicy.Auto): HardwareRoute? =
         platformDecoderSelection(codec, policy).hardware
 
@@ -27,25 +31,26 @@ class AppleDecoderSelectionTest {
         listOf(
             "h264", "H264", "avc1",
             "hevc", "HEVC", "h265", "hev1",
-            "av1", "AV1", " av1 ",
         ).forEach { codec ->
             assertEquals(videoToolbox, routeOf(codec), "$codec must route to VideoToolbox")
+        }
+        listOf("av1", "AV1", " av1 ").forEach { codec ->
+            assertEquals(videoToolboxAv1, routeOf(codec), "$codec must route to VideoToolbox on FFmpeg's own decoder")
         }
     }
 
     /**
-     * An eligible AV1 route still authorises the software attempt, because a pre-A17-Pro device
-     * refuses the attach. That the software attempt then ALSO fails without dav1d is FFmpeg's
-     * answer, not this table's business.
+     * An eligible AV1 route still authorises the software attempt, because a device before A17 Pro
+     * refuses the attach. The software attempt opens the decoder FFmpeg finds first, which is dav1d.
      */
     @Test
     fun av1RidesTheOrdinaryFallbackContract() {
         val auto = platformDecoderSelection("av1", HwdecPolicy.Auto)
-        assertEquals(videoToolbox, auto.hardware)
+        assertEquals(videoToolboxAv1, auto.hardware)
         assertTrue(auto.mayFallback)
 
         val required = platformDecoderSelection("av1", HwdecPolicy.Require)
-        assertEquals(videoToolbox, required.hardware)
+        assertEquals(videoToolboxAv1, required.hardware)
         assertTrue(required.requiresHardware)
     }
 
@@ -59,7 +64,7 @@ class AppleDecoderSelectionTest {
         assertNull(routeOf("h264", HwdecPolicy.Off))
         assertNull(routeOf("av1", HwdecPolicy.Prefer(listOf(HwdecKind.MediaCodec))))
         assertEquals(
-            videoToolbox,
+            videoToolboxAv1,
             routeOf("av1", HwdecPolicy.Prefer(listOf(HwdecKind.VideoToolbox))),
         )
     }

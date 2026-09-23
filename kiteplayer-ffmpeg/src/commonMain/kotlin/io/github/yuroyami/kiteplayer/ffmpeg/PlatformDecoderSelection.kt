@@ -23,6 +23,11 @@ internal sealed class HardwareRoute {
     internal data class Accel(
         val accel: HardwareAccel,
         override val kind: HwdecKind,
+        /**
+         * The decoder to attach [accel] to, by name, or null for the one FFmpeg finds first for
+         * the codec. Needed when that first one cannot take the attach, as dav1d cannot for AV1.
+         */
+        val decoder: CodecId? = null,
     ) : HardwareRoute()
 }
 

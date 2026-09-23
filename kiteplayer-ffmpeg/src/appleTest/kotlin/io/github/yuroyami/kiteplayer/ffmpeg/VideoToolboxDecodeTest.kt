@@ -48,6 +48,28 @@ class VideoToolboxDecodeTest {
         }
     }
 
+    /**
+     * AV1 has two decoders in the build. FFmpeg finds dav1d first for the codec, and VideoToolbox
+     * can attach only to FFmpeg's own AV1 decoder (#95). So the status has to match the frame:
+     * hardware only when a VideoToolbox frame came out. A Mac without AV1 silicon proves the refusal
+     * and the software fallback here. A newer one proves the hardware frame.
+     */
+    @Test
+    fun anAv1FrameComesFromTheDecoderItsStatusNames() = runBlocking {
+        val (source, decoder, frame) = firstVideoFrameAuto("av1.mkv")
+        try {
+            val hardwareFrame = frame.hardwareSurface == HwSurfaceKind.CoreVideoPixelBuffer
+            assertEquals(
+                if (hardwareFrame) HwdecStatus.HardwareWithDownload(HwdecKind.VideoToolbox) else HwdecStatus.Software,
+                decoder.hardware,
+                "the status must name the decoder that made the frame",
+            )
+        } finally {
+            frame.close()
+            source.close()
+        }
+    }
+
     /** Decodes the first frame with the platform's own hwdec policy, for the hardware decode arm. */
     private suspend fun firstVideoFrameAuto(file: String): Triple<KiteFFmpegSource, VideoDecoder, KiteFFmpegVideoFrame> {
         val source = KiteFFmpegSourceFactory().open(MediaItem("$mediaDir/$file")) as KiteFFmpegSource

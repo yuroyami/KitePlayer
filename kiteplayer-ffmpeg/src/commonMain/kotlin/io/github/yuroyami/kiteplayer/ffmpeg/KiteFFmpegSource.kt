@@ -536,7 +536,11 @@ public class KiteFFmpegVideoDecoderFactory internal constructor(
             open = { route ->
                 source.newVideoDecoder(
                     stream = stream,
-                    decoder = (route as? HardwareRoute.NamedDecoder)?.decoder,
+                    decoder = when (route) {
+                        is HardwareRoute.NamedDecoder -> route.decoder
+                        is HardwareRoute.Accel -> route.decoder
+                        null -> null
+                    },
                     hardwareAccel = (route as? HardwareRoute.Accel)?.accel,
                     // HardwareWithDownload is the honest status for BOTH shapes: mediacodec
                     // downloads inside FFmpeg's wrapper, and every current renderer reads a

@@ -240,10 +240,12 @@ public class KiteFFmpegSource internal constructor(private val source: MediaSour
     }
 
     override fun close() {
-        recorder.close()
-        reader?.close()
-        reader = null
-        source.close()
+        closeInOrder(
+            recorder::close,
+            { reader?.close() },
+            { reader = null },
+            source::close,
+        )
     }
 
     /**

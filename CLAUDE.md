@@ -71,9 +71,11 @@ Each line is something that bit someone. Delete a line when it stops being true.
   repository is pushed and published.
 - The five Actions secrets are set, so `publish.yml` can upload. Dispatch it with the version as
   an input; it is compared against `VERSION` in `gradle.properties` and a mismatch fails before any
-  work. Leave the `release` input off to land the deployment as USER_MANAGED and press Publish on
-  the portal yourself. Publishing from the maintainer's machine still works the same way, with the
-  same five credentials read from `~/.gradle/gradle.properties`.
+  work. It then runs the whole of `ci.yml` on the same commit, and the upload waits for it, so a
+  release run takes as long as CI plus the upload and one flaky test stops a release. Leave the
+  `release` input off to land the deployment as USER_MANAGED and press Publish on the portal
+  yourself. Publishing from the maintainer's machine still works the same way, with the same five
+  credentials read from `~/.gradle/gradle.properties`, and runs no tests.
 
 - A published module needs at least one source file in `commonMain`. A target with no source makes
   no klib, and its publication then fails with `FileNotFoundException` naming the missing klib.

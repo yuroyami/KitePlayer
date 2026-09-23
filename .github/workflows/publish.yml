@@ -8,6 +8,14 @@
 # Either path leaves the deployment staged as USER_MANAGED on the Central Portal. The final Publish
 # click is human, deliberately: Central is immutable and a version cannot be withdrawn.
 #
+# THE ONE STEP THAT IS NOT ATOMIC is the release itself: the upload stages a deployment, and a
+# person releases it. Nothing in a deployment is public until the Publish click releases all of it
+# together, so drop a failed or wrong deployment on the portal instead of releasing it.
+#
+# TESTS FIRST. The whole of CI runs on the commit being published, and the upload waits for it. A
+# red test stops the run before anything reaches the portal, and a release run takes as long as CI
+# plus the upload.
+#
 # PREREQUISITES
 #   Repository secrets, the same five KiteFFmpeg uses:
 #     MAVEN_CENTRAL_USERNAME / MAVEN_CENTRAL_PASSWORD   Central Portal user token
@@ -65,9 +73,15 @@ jobs:
           fi
           echo "Publishing version ${gradle_version}"
 
+  # ci.yml, called on this commit. Its jobs appear in this run under this job's name.
+  tests:
+    name: CI on the commit being published
+    needs: check-version
+    uses: ./.github/workflows/ci.yml
+
   publish:
     name: every publishing module → Maven Central
-    needs: check-version
+    needs: [check-version, tests]
     runs-on: macos-latest
     timeout-minutes: 90
     steps:

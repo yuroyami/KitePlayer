@@ -110,6 +110,35 @@ class RealMediaStepTest {
         }
     }
 
+    @Test
+    fun `play after ten forward steps carries on from the picture`() = runBlocking {
+        val player = player()
+        try {
+            player.open(MediaItem("$mediaDir/truevfr720.mp4"))
+            player.play()
+            withTimeoutOrNull(10.seconds) { while (player.position() < 1.seconds) delay(5.milliseconds) }
+            player.pause()
+            repeat(STEPS) { player.stepFrame(StepDirection.Forward) }
+            val picture = player.position()
+
+            player.play()
+            // The device takes some milliseconds to start, which the clock may show as a small step
+            // back. The fault this guards against went back by all ten steps, about 300 ms.
+            var lowest = picture
+            repeat(80) {
+                lowest = minOf(lowest, player.position())
+                delay(5.milliseconds)
+            }
+            assertTrue(
+                lowest >= picture - 100.milliseconds,
+                "the position went back to $lowest from the picture at $picture after play",
+            )
+            assertTrue(player.position() > picture, "playback moves on from the picture")
+        } finally {
+            closeAndAwait(player)
+        }
+    }
+
     /** Close returns at once, so the next test waits for this player's threads to finish first. */
     private suspend fun closeAndAwait(player: KitePlayer) {
         player.close()

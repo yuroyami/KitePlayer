@@ -3917,6 +3917,16 @@ internal class PlaybackCore(
         if (seekPhase.isRunning) return
         if (status == PlaybackStatus.Ended || status == PlaybackStatus.Failed) return
         if (!playRequested) return
+        // After frame steps the picture can be ahead of the paused sound. Started as it stands, the
+        // sound would restart where playback paused and the picture would stand still until the
+        // sound caught up, so play first seeks to the frame on screen. The seek clears the flag.
+        val picture = session.video?.shownPts()
+        if (session.pictureHoldsPosition && picture != null && session.source.seekable &&
+            soundLagsPicture(session, picture)
+        ) {
+            if (pendingSeek == null) queueSeek(SeekRequest(SeekTarget.Absolute(picture), SeekMode.Precise), null)
+            return
+        }
         // A live audio swap intentionally leaves status and video scheduling untouched. Start the
         // emptied device only after the new lane has submitted data, avoiding a burst of synthetic
         // underruns while the picture continues on its own clock.
@@ -3957,6 +3967,19 @@ internal class PlaybackCore(
         // The clocks run again, so they carry the position from here.
         session.pictureHoldsPosition = false
         session.schedulerMode.value = SCHEDULER_RUNNING
+    }
+
+    /**
+     * True when the sound would restart more than the sync law tolerates before [picture].
+     *
+     * A sound clock with no reading counts as lagging. That is what a seek leaves until the device
+     * plays, and a backward step is a seek, so the sound would restart at that step's target and
+     * not at a picture that forward steps moved on from there.
+     */
+    private fun soundLagsPicture(session: OpenSession, picture: Pts): Boolean {
+        if (session.audioLane == null) return false
+        val sound = session.audio?.position() ?: return true
+        return picture.micros - sound.micros > SyncLaw.SYNC_THRESHOLD_MAX_US
     }
 
     private suspend fun applyPause() {

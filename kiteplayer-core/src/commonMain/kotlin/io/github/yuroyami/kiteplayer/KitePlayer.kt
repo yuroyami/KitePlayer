@@ -663,7 +663,8 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
      *
      * Await each step before you send the next. Two backward steps sent together merge like two
      * seeks do, so they move one frame. Until playback resumes, [position] reports the frame on
-     * screen.
+     * screen. [play] resumes from that frame: when the sound is more than 100 ms behind it, play
+     * first seeks to it.
      *
      * @throws IllegalStateException when nothing is open, while playing (a playing player is
      *         already stepping sixty times a second), when no frame arrived going forward, which at

@@ -348,6 +348,8 @@ public class VideoPlayback(
                     .takeIf { following.generation == generation && it > 0 && it <= maxFrameDurationUs }
                     ?: nominalUs
                 if (now > frameTimerNanos + (candidateUs * 1_000L / appliedSpeed).toLong()) {
+                    // Before the drop, which closes the frame.
+                    if (KiteTrace.enabled) KiteTrace.instant("video", "drop", now, mapOf("pts" to next.pts.micros.toString()))
                     queue.dropNext()
                     droppedLate++
                     departures.trySend(Unit)
@@ -420,6 +422,9 @@ public class VideoPlayback(
         // The renderer owns the frame from here, including on failure, so it must not be touched
         // afterwards.
         rememberTarget(frame.pts.micros, targetNanos)
+        // The timestamp is read before present, because the renderer owns the frame after it.
+        val traced = if (KiteTrace.perFrame) frame.pts.micros.toString() else null
+        val presentBegin = if (traced != null) clock.nanos() else 0L
         if (renderer.present(frame, targetNanos)) {
             submitted++
             // Read after present returns: a renderer that blocks while it draws is late by that much.
@@ -427,6 +432,7 @@ public class VideoPlayback(
         } else {
             refused++
         }
+        if (traced != null) KiteTrace.span("video", "present", presentBegin, clock.nanos(), mapOf("pts" to traced))
         // After present, never before: by now a hardware renderer has queued its release.
         departures.trySend(Unit)
         return Duration.ZERO

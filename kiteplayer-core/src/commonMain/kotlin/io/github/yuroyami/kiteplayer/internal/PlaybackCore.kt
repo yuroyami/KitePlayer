@@ -59,6 +59,7 @@ import io.github.yuroyami.kiteplayer.spi.OutputBackend
 import io.github.yuroyami.kiteplayer.spi.PlayerMediaSource
 import io.github.yuroyami.kiteplayer.spi.PlayerStreamInfo
 import io.github.yuroyami.kiteplayer.spi.RecordingCapable
+import io.github.yuroyami.kiteplayer.KiteTrace
 import io.github.yuroyami.kiteplayer.spi.VideoDecoder
 import io.github.yuroyami.kiteplayer.spi.VideoDecoderFactory
 import io.github.yuroyami.kiteplayer.spi.VideoFrame
@@ -1596,6 +1597,9 @@ internal class PlaybackCore(
             is CoreCommand.Close -> runClose(command.reply)
             is CoreCommand.SelectSecondarySubtitle -> applySecondarySubtitle(command)
             is CoreCommand.SelectTrack -> {
+                traceUntilReplied(command.reply, "track", "switch") {
+                    mapOf("kind" to command.kind.name, "track" to (command.track?.value?.toString() ?: "none"))
+                }
                 val externalTarget = command.track?.takeIf { isExternalSubtitle(it) }
                 val externalActive = selectedExternalSubtitle != null
                 if (command.kind == TrackKind.Subtitle &&
@@ -2092,6 +2096,7 @@ internal class PlaybackCore(
     }
 
     private suspend fun runOpen(command: CoreCommand.Open) {
+        traceUntilReplied(command.reply, "session", "open") { mapOf("uri" to redactUri(command.media.uri)) }
         // Open is legal from Ended, and Ended keeps its session alive so the viewer can seek back.
         // That session must be fully torn down and awaited BEFORE the new one is installed:
         // overwriting the field would strand its source, workers, decoders, sink and queues live
@@ -5555,6 +5560,8 @@ internal class PlaybackCore(
      */
     private suspend fun runSeek(request: SeekRequest) {
         val session = session ?: return
+        val tracing = KiteTrace.enabled
+        var phaseBegin = if (tracing) clock.nanos() else 0L
         val target = request.resolve(currentPosition(), session.source.duration)
         val landsBefore = request.landing == SeekLanding.Before
         session.pictureHoldsPosition = false
@@ -5700,6 +5707,11 @@ internal class PlaybackCore(
                     // pays its decode-forward. The mask keeps reporting the exact target
                     // throughout, so no observer mistakes the keyframe for the answer.
                     presentFirstFrame(session)
+                    if (tracing) {
+                        val now = clock.nanos()
+                        KiteTrace.span("seek", "keyframe", phaseBegin, now, seekTraceArgs(target, landed))
+                        phaseBegin = now
+                    }
                     refining = true
                     attempt = 0
                     session.schedulerMode.value = SCHEDULER_IDLE
@@ -5725,6 +5737,14 @@ internal class PlaybackCore(
         }
 
         // 8
+        if (tracing) {
+            val phase = when {
+                refining -> "refine"
+                request.mode == SeekMode.Precise -> "precise"
+                else -> "keyframe"
+            }
+            KiteTrace.span("seek", phase, phaseBegin, clock.nanos(), seekTraceArgs(target, landed))
+        }
         seekPhase = SeekPhase.Idle
         session.discardBeforeUs.value = Long.MIN_VALUE
         session.landsBeforeTarget.value = false
@@ -6245,6 +6265,27 @@ internal class PlaybackCore(
         warn(PlaybackWarning.RecordingStopped(path, why))
     }
 
+    /**
+     * Traces the time from now until [reply] completes, when a trace sink is installed. [args] is
+     * built only then.
+     */
+    private inline fun traceUntilReplied(
+        reply: CompletableDeferred<*>,
+        category: String,
+        name: String,
+        args: () -> Map<String, String>,
+    ) {
+        if (!KiteTrace.enabled) return
+        val begin = clock.nanos()
+        val fixed = args()
+        reply.invokeOnCompletion { cause ->
+            KiteTrace.span(category, name, begin, clock.nanos(), fixed + ("outcome" to if (cause == null) "done" else "failed"))
+        }
+    }
+
+    private fun seekTraceArgs(target: Pts, landed: Pts?): Map<String, String> =
+        mapOf("target" to target.micros.toString(), "landed" to (landed?.micros?.toString() ?: "none"))
+
     /** Folds one finished session's counters into the player's totals. Once per session, exactly. */
     private fun retireCounters(session: OpenSession) {
         retiredDecodedVideo += session.decodedVideoFrames.value
@@ -6567,6 +6608,11 @@ internal class PlaybackCore(
             val underrunsNow = retiredUnderruns + (session?.audio?.underruns ?: 0)
             if (underrunsNow > lastStatsUnderruns) {
                 warn(PlaybackWarning.AudioUnderrun(underrunsNow))
+                // Seen by this pass, not at the moment the device ran dry: the device thread runs
+                // no managed code, so the instant is as late as one stats interval.
+                if (KiteTrace.enabled) {
+                    KiteTrace.instant("audio", "underrun", clock.nanos(), mapOf("total" to underrunsNow.toString()))
+                }
             }
             lastStatsUnderruns = underrunsNow
             val droppedLateNow = retiredDroppedLate + (session?.video?.droppedFrames ?: 0)
@@ -7275,7 +7321,13 @@ internal class PlaybackCore(
     private suspend fun timedVideoReceive(session: OpenSession, decoder: VideoDecoder): VideoFrame? {
         val startedNanos = clock.nanos()
         val frame = videoDecoderReceive(decoder)
-        if (frame != null) session.decodeTimes.add(clock.nanos() - startedNanos)
+        if (frame != null) {
+            val endedNanos = clock.nanos()
+            session.decodeTimes.add(endedNanos - startedNanos)
+            if (KiteTrace.perFrame) {
+                KiteTrace.span("video", "decode", startedNanos, endedNanos, mapOf("pts" to frame.pts.micros.toString()))
+            }
+        }
         return frame
     }
 

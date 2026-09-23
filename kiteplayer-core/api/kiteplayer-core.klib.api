@@ -3822,6 +3822,11 @@ final object io.github.yuroyami.kiteplayer.subtitle/CueSelector { // io.github.y
     final fun nextChangeAfter(kotlin.collections/List<io.github.yuroyami.kiteplayer.subtitle/SubtitleCue>, kotlin/Long): kotlin/Long? // io.github.yuroyami.kiteplayer.subtitle/CueSelector.nextChangeAfter|nextChangeAfter(kotlin.collections.List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>;kotlin.Long){}[0]
 }
 
+final object io.github.yuroyami.kiteplayer/ChromeTraceFormat { // io.github.yuroyami.kiteplayer/ChromeTraceFormat|null[0]
+    final fun instant(kotlin/Int, kotlin/Int, kotlin/String, kotlin/String, kotlin/Long, kotlin.collections/Map<kotlin/String, kotlin/String>): kotlin/String // io.github.yuroyami.kiteplayer/ChromeTraceFormat.instant|instant(kotlin.Int;kotlin.Int;kotlin.String;kotlin.String;kotlin.Long;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    final fun span(kotlin/Int, kotlin/Int, kotlin/String, kotlin/String, kotlin/Long, kotlin/Long, kotlin.collections/Map<kotlin/String, kotlin/String>): kotlin/String // io.github.yuroyami.kiteplayer/ChromeTraceFormat.span|span(kotlin.Int;kotlin.Int;kotlin.String;kotlin.String;kotlin.Long;kotlin.Long;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kiteplayer/KiteLog|null[0]
     final var redactUris // io.github.yuroyami.kiteplayer/KiteLog.redactUris|{}redactUris[0]
         final fun <get-redactUris>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KiteLog.redactUris.<get-redactUris>|<get-redactUris>(){}[0]
@@ -3836,6 +3841,18 @@ final object io.github.yuroyami.kiteplayer/KiteLog { // io.github.yuroyami.kitep
 
     abstract fun interface StructuredSink { // io.github.yuroyami.kiteplayer/KiteLog.StructuredSink|null[0]
         abstract fun event(kotlin/String, kotlin/String, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteLog.StructuredSink.event|event(kotlin.String;kotlin.String;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    }
+}
+
+final object io.github.yuroyami.kiteplayer/KiteTrace { // io.github.yuroyami.kiteplayer/KiteTrace|null[0]
+    final val enabled // io.github.yuroyami.kiteplayer/KiteTrace.enabled|{}enabled[0]
+        final fun <get-enabled>(): kotlin/Boolean // io.github.yuroyami.kiteplayer/KiteTrace.enabled.<get-enabled>|<get-enabled>(){}[0]
+
+    final fun install(io.github.yuroyami.kiteplayer/KiteTrace.Sink?, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer/KiteTrace.install|install(io.github.yuroyami.kiteplayer.KiteTrace.Sink?;kotlin.Boolean){}[0]
+
+    abstract interface Sink { // io.github.yuroyami.kiteplayer/KiteTrace.Sink|null[0]
+        abstract fun instant(kotlin/String, kotlin/String, kotlin/Long, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteTrace.Sink.instant|instant(kotlin.String;kotlin.String;kotlin.Long;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+        abstract fun span(kotlin/String, kotlin/String, kotlin/Long, kotlin/Long, kotlin.collections/Map<kotlin/String, kotlin/String>) // io.github.yuroyami.kiteplayer/KiteTrace.Sink.span|span(kotlin.String;kotlin.String;kotlin.Long;kotlin.Long;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
     }
 }
 

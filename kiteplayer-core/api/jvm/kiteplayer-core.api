@@ -184,6 +184,12 @@ public final class io/github/yuroyami/kiteplayer/Chapter {
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class io/github/yuroyami/kiteplayer/ChromeTraceFormat {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/ChromeTraceFormat;
+	public final fun instant (IILjava/lang/String;Ljava/lang/String;JLjava/util/Map;)Ljava/lang/String;
+	public final fun span (IILjava/lang/String;Ljava/lang/String;JJLjava/util/Map;)Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/CorruptPackets : java/lang/Enum {
 	public static final field Drop Lio/github/yuroyami/kiteplayer/CorruptPackets;
 	public static final field Keep Lio/github/yuroyami/kiteplayer/CorruptPackets;
@@ -487,6 +493,18 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer$Companion {
 }
 
 public abstract interface annotation class io/github/yuroyami/kiteplayer/KitePlayerLowLevelApi : java/lang/annotation/Annotation {
+}
+
+public final class io/github/yuroyami/kiteplayer/KiteTrace {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/KiteTrace;
+	public final fun getEnabled ()Z
+	public final fun install (Lio/github/yuroyami/kiteplayer/KiteTrace$Sink;Z)V
+	public static synthetic fun install$default (Lio/github/yuroyami/kiteplayer/KiteTrace;Lio/github/yuroyami/kiteplayer/KiteTrace$Sink;ZILjava/lang/Object;)V
+}
+
+public abstract interface class io/github/yuroyami/kiteplayer/KiteTrace$Sink {
+	public abstract fun instant (Ljava/lang/String;Ljava/lang/String;JLjava/util/Map;)V
+	public abstract fun span (Ljava/lang/String;Ljava/lang/String;JJLjava/util/Map;)V
 }
 
 public final class io/github/yuroyami/kiteplayer/LatencyQuality : java/lang/Enum {

@@ -128,7 +128,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A state flow's `first { }` samples the current element before it waits, so a test that seeks and
   then waits for "the position advanced" can match the reading from before the seek and return
   instantly, proving nothing. Wait for a reading that reflects the new position first.
-- Four iOS simulator test failures are artifacts of how the simulator spawns a process, not bugs.
+- The iOS simulator run of `kiteplayer-ffmpeg` fails every test that drives the whole player, and
+  the VideoToolbox test. These are artifacts of how the simulator spawns a process, not bugs: the
+  CoreAudio output unit does not initialise, and VideoToolbox gives no hardware frame. That was
+  eight tests on 2026-09-23 (#155).
 - Television simulator tests cannot run on a developer Mac at all, for a missing runtime rather
   than a missing SDK, so the aggregate all-tests task can never pass there. Name targets
   explicitly.

@@ -8,11 +8,10 @@ import kotlinx.cinterop.toKString
 internal actual fun formatMatrixMediaDir(): String? =
     platform.posix.getenv("KITEPLAYER_TESTMEDIA")?.toKString() ?: "testmedia"
 
-/** The reports directory the CI jobs upload, beside the module's other build output. */
+/** The reports directory the CI jobs upload, beside the module's other build output. The Gradle test task makes it. */
 private const val REPORT_DIR = "build/reports/conformance"
 
 internal actual fun writeConformanceReport(fileName: String, markdown: String): String? {
-    platform.posix.system("mkdir -p $REPORT_DIR")
     val path = "$REPORT_DIR/$fileName"
     val file = platform.posix.fopen(path, "w") ?: return null
     return try {

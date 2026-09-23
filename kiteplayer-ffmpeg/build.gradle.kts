@@ -18,6 +18,7 @@ plugins {
  * adapter from KiteFFmpeg's published artifacts. The JVM was once a placeholder: it now
  * carries a real FFmpeg backend and runs the same real-media suites the native targets run.
  */
+val conformanceReports = layout.buildDirectory.dir("reports/conformance")
 // The media fixtures live at the repo root and a native test's working directory is not something
 // to rely on, so the location is passed in explicitly.
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
@@ -25,6 +26,11 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     // `simctl spawn` forwards only SIMCTL_CHILD_-prefixed variables to the spawned binary, so a
     // simulator test sees the plain name only through this twin.
     environment("SIMCTL_CHILD_KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+    // The format matrix writes its report here. A test binary has no call that makes a directory on
+    // every native target, because iOS has no system() and Windows has a different mkdir. A local
+    // copy, because the configuration cache cannot store a reference to the script itself.
+    val reports = conformanceReports
+    doFirst { reports.get().asFile.mkdirs() }
 }
 
 // Same reason for the JVM: a Test task's working directory is the module, not the repo root.

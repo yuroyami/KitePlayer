@@ -462,7 +462,8 @@ typedef struct {
  *
  * `worst_callback_nanos` is the measured wall time of the slowest single callback body, taken from a
  * `mach_absolute_time` pair around it. It is the number that says whether the real-time deadline is
- * being met: at 512 frames and 48 kHz the period is 10,666,666 ns and B10's budget is half of it. */
+ * being met: at 512 frames and 48 kHz the period is 10,666,666 ns, and the budget for one callback
+ * is half of that. */
 typedef struct {
     int64_t callbacks;
     /* Callbacks whose timestamp did not carry a valid host time, so the anchor was taken from the

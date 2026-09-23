@@ -135,7 +135,7 @@ class RealTimeSoakTest {
 
     private val format = AudioFormat(sampleRate = 48_000, channels = 2, sampleFormat = SampleFormat.F32)
 
-    /** Half the device period at 512 frames and 48 kHz, which is B10's budget: 5,333,333 ns. */
+    /** The budget for one callback: half the device period at 512 frames and 48 kHz, 5,333,333 ns. */
     private val budgetNanos = 512L * 1_000_000_000L / 2 / 48_000
 
     private val enabled: Boolean get() = getenv("KPRT_DEVICE_SOAK") != null

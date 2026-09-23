@@ -33,11 +33,10 @@ GRADLE_TASKS=()
 for module in "${MODULES[@]}"; do
   GRADLE_TASKS+=(":$module:linkDebugTest$LINK_SUFFIX")
 done
-# kiteplayer-ffmpeg links the cross-built FFmpeg from the sibling KiteFFmpeg checkout. Without the
-# localRoot the kiteffmpeg plugin looks for a SYSTEM FFmpeg and no host has a linux one.
-FFMPEG_ROOT="${KITE_FFMPEG_ROOT:-$ROOT/../KiteFFmpeg/native-libs}"
+# The published kiteffmpeg klibs carry FFmpeg for both Linux targets, so the link needs nothing from
+# the sibling KiteFFmpeg checkout.
 echo "== linking ${GRADLE_TASKS[*]}"
-"$ROOT/gradlew" -p "$ROOT" "${GRADLE_TASKS[@]}" "-Pkiteffmpeg.ffmpeg.localRoot=$FFMPEG_ROOT"
+"$ROOT/gradlew" -p "$ROOT" "${GRADLE_TASKS[@]}"
 
 status=0
 for module in "${MODULES[@]}"; do

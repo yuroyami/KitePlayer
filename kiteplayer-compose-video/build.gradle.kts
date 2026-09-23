@@ -22,6 +22,8 @@ plugins {
 kotlin {
     explicitApi()
     jvmToolchain(21)
+    // FrameImagePool is an expect class; the flag only silences the beta note the compiler prints for that shape.
+    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
 
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation {}

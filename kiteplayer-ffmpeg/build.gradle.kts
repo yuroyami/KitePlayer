@@ -53,6 +53,8 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 kotlin {
     explicitApi()
     jvmToolchain(21)
+    // BlockingMediaIo is an expect class; the flag only silences the beta note the compiler prints for that shape.
+    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
 
     // Keep Kotlin's normal Apple/native hierarchy while adding the one explicit JVM+Android share.
     applyDefaultHierarchyTemplate()

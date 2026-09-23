@@ -25,7 +25,7 @@ class DirectorDiscontinuityTest {
 
     @Test
     fun aSeekDuringAChangeFinishesItAndReplaysNothing() {
-        val director = VizDirector(catalogue, minimumHoldSeconds = 0f)
+        val director = VizDirector(catalogue, seed = 0L, minimumHoldSeconds = 0f)
         val before = director.current
         director.advance(frame(Generation.Initial, 0L), 1f / 60f)
         assertTrue(director.changing, "an accepted boundary starts a change")

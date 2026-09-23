@@ -81,6 +81,9 @@ public class VizDirector(
     public var current: Visualization by mutableStateOf(catalogue[(nextRandom() * catalogue.size).toInt().coerceIn(0, catalogue.lastIndex)])
         private set
 
+    // The opening drawing counts as shown, so the first boundary cannot pick it again and change nothing.
+    init { remember(current) }
+
     /** What is arriving, while a change is under way. */
     public var incoming: Visualization? = null
         private set

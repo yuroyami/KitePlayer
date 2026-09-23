@@ -22,6 +22,11 @@ public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegMediaBackend :
 	public fun subtitleFileParser ()Lio/github/yuroyami/kiteplayer/spi/SubtitleFileParser;
 }
 
+public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegResampler : io/github/yuroyami/kiteplayer/spi/AudioResamplerFactory {
+	public fun <init> ()V
+	public fun create (III)Lio/github/yuroyami/kiteplayer/spi/AudioResampler;
+}
+
 public final class io/github/yuroyami/kiteplayer/ffmpeg/KiteFFmpegSource : io/github/yuroyami/kiteplayer/spi/PlayerMediaSource, io/github/yuroyami/kiteplayer/spi/RecordingCapable {
 	public final fun audioDecoderFactories ()Ljava/util/List;
 	public fun close ()V

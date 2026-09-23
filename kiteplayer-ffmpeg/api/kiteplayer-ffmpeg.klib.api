@@ -33,6 +33,12 @@ final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegMediaBackend : io.git
     final suspend fun open(io.github.yuroyami.kiteplayer/MediaItem): io.github.yuroyami.kiteplayer.spi/BackendSession // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegMediaBackend.open|open(io.github.yuroyami.kiteplayer.MediaItem){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegResampler : io.github.yuroyami.kiteplayer.spi/AudioResamplerFactory { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegResampler|null[0]
+    constructor <init>() // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegResampler.<init>|<init>(){}[0]
+
+    final fun create(kotlin/Int, kotlin/Int, kotlin/Int): io.github.yuroyami.kiteplayer.spi/AudioResampler // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegResampler.create|create(kotlin.Int;kotlin.Int;kotlin.Int){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource : io.github.yuroyami.kiteplayer.spi/PlayerMediaSource, io.github.yuroyami.kiteplayer.spi/RecordingCapable { // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource|null[0]
     final val attachments // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.attachments|{}attachments[0]
         final fun <get-attachments>(): kotlin.collections/List<io.github.yuroyami.kiteplayer.spi/MediaAttachment> // io.github.yuroyami.kiteplayer.ffmpeg/KiteFFmpegSource.attachments.<get-attachments>|<get-attachments>(){}[0]

@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import io.github.yuroyami.kiteplayer.audioviz.viz.VizPalette
 import io.github.yuroyami.kiteplayer.audioviz.viz.dominantColors
 import io.github.yuroyami.kiteplayer.audioviz.viz.toOklab
+import io.github.yuroyami.kiteplayer.audioviz.viz.cuspLightness
 import io.github.yuroyami.kiteplayer.audioviz.viz.inGamut
 import io.github.yuroyami.kiteplayer.audioviz.viz.mostChroma
 import io.github.yuroyami.kiteplayer.audioviz.viz.PaletteFade
@@ -55,11 +56,14 @@ class PaletteTest {
         // At the hues where a screen is wide (blue, violet, magenta, red) a vivid colour is far
         // more colourful than the cycled one. At the narrow hues the cycled constant already
         // clips, so no claim is made there beyond the gamut check above.
+        // The cusp sits low for blue and high for yellow, which is the whole reason it is looked up.
+        assertTrue(cuspLightness(264f) in 0.40f..0.58f, "blue's cusp should sit low, had ${cuspLightness(264f)}")
+        assertTrue(cuspLightness(105f) in 0.85f..0.99f, "yellow's cusp should sit high, had ${cuspLightness(105f)}")
         var bestGain = 0f
         for (palette in VizPalette.entries) {
             for (step in 0 until 36) {
                 val position = step / 36f
-                val vivid = palette.vivid(position, lightness = 0.6f).toOklab()
+                val vivid = palette.vividAt(position, lightness = 0.6f).toOklab()
                 val cycled = palette.cycled(position, value = (0.6f - 0.24f) / 0.64f).toOklab()
                 val vividChroma = kotlin.math.sqrt(vivid.a * vivid.a + vivid.b * vivid.b)
                 val cycledChroma = kotlin.math.sqrt(cycled.a * cycled.a + cycled.b * cycled.b)

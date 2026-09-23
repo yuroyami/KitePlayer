@@ -48,6 +48,31 @@ public class Gestures {
     public var silence: Boolean = false
         private set
 
+    /**
+     * A moment to change the picture: an accepted boundary, or the eighth cycle since the last
+     * turn while something plays.
+     *
+     * A drawing that changes its shape only at a boundary never changes in a song where the
+     * detector accepts none, and many songs give it none. This adds a slow visual cadence for
+     * those songs. It is a cadence, not a structural claim; [section] stays the honest one.
+     */
+    public var turn: Boolean = false
+        private set
+    public var turns: Int = 0
+        private set
+
+    /**
+     * A moment for a drawing's biggest gesture: an accepted drop, or the first strong rise in
+     * energy after six quiet seconds, at most once a minute.
+     *
+     * Like [turn], the second half is a fallback for songs where the detector accepts nothing,
+     * so a drawing's signature moment is seen at all. [drop] stays the honest one.
+     */
+    public var surge: Boolean = false
+        private set
+    public var surges: Int = 0
+        private set
+
     /** Artistic four-pulse cycle, with level-driven free motion when rhythm is unavailable. */
     public var cyclePhase: Float = 0f
         private set
@@ -110,6 +135,10 @@ public class Gestures {
     private val cycleClock = MusicClock(4f)
     private val slowClock = MusicClock(16f)
     private var quietFor = 0f
+    private var cyclesAtTurn = 0
+    private var energySlow = 0f
+    private var quietStretch = 0f
+    private var sinceSurge = SURGE_SPACING
     private val step = DisplayStep()
 
     /**
@@ -144,6 +173,24 @@ public class Gestures {
         if (slow < slowCyclePhase - 0.5f) slowCycles++
         cyclePhase = next
         slowCyclePhase = slow
+
+        turn = section || (!silence && cycles - cyclesAtTurn >= TURN_CYCLES)
+        if (turn) {
+            turns++
+            cyclesAtTurn = cycles
+        }
+        // The slow energy lags a rise by seconds, so a stretch that was quiet still reads as quiet
+        // for the first moments of the rise, which is when the rise is seen.
+        energySlow += (frame.energy - energySlow) * (dt / SLOW_ENERGY_SECONDS).coerceAtMost(1f)
+        quietStretch = if (energySlow < QUIET_ENERGY) quietStretch + dt else 0f
+        sinceSurge += dt
+        val rise = quietStretch >= QUIET_SECONDS && frame.energy > energySlow + SURGE_RISE && sinceSurge >= SURGE_SPACING
+        surge = drop || rise
+        if (surge) {
+            surges++
+            sinceSurge = 0f
+            quietStretch = 0f
+        }
     }
 
     /**
@@ -208,6 +255,14 @@ public class Gestures {
         slowClock.reset()
         boundaries = MusicalBoundaryGate()
         quietFor = 0f
+        turn = false
+        turns = 0
+        surge = false
+        surges = 0
+        cyclesAtTurn = 0
+        energySlow = 0f
+        quietStretch = 0f
+        sinceSurge = SURGE_SPACING
         step.reset()
     }
 
@@ -217,5 +272,21 @@ public class Gestures {
 
         /** What the softest hit still asks for, as a share of a full-strength one. *Judgement.* */
         const val LEAST_ACCENT = 0.35f
+
+        /** Cycles without a boundary before a turn is called. *Judgement.* */
+        const val TURN_CYCLES = 8
+
+        /** How long the energy is averaged over for the surge fallback, in seconds. *Judgement.* */
+        const val SLOW_ENERGY_SECONDS = 6f
+
+        /** The slow energy that counts as quiet, and how long it must stay there. *Judgement.* */
+        const val QUIET_ENERGY = 0.4f
+        const val QUIET_SECONDS = 6f
+
+        /** How far the energy must rise above its slow average to count as a surge. *Judgement.* */
+        const val SURGE_RISE = 0.3f
+
+        /** The least time between two fallback surges, in seconds. */
+        const val SURGE_SPACING = 60f
     }
 }

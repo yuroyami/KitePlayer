@@ -116,6 +116,23 @@ internal fun mostChroma(lightness: Float, hue: Float): Float {
     )
 }
 
+/**
+ * The lightness at which [hue] reaches the most chroma a screen can show, its cusp.
+ *
+ * A screen's blue is strongest well below mid lightness and its yellow just under white, so a
+ * line drawn at one lightness for every hue comes out pastel for some and muddy for others. A
+ * foreground colour reads at full strength when its lightness sits near this point.
+ */
+internal fun cuspLightness(hue: Float): Float {
+    var h = hue % 360f
+    if (h < 0f) h += 360f
+    val hIndex = h / 360f * CHROMA_HUE_STEPS
+    val h0 = hIndex.toInt().coerceIn(0, CHROMA_HUE_STEPS - 1)
+    val h1 = (h0 + 1) % CHROMA_HUE_STEPS
+    val mix = hIndex - h0
+    return CUSP[h0] * (1f - mix) + CUSP[h1] * mix
+}
+
 /** Whether every linear channel of this colour is one a screen can show. */
 internal fun inGamut(lightness: Float, chroma: Float, hue: Float): Boolean {
     val radians = hue * DEGREES_TO_RADIANS
@@ -138,6 +155,17 @@ private const val GAMUT_SLACK = 0.002f
 private const val CHROMA_LIGHTNESS_STEPS = 65
 
 private const val CHROMA_HUE_STEPS = 360
+
+/** The lightness of the most colourful cell of every hue column, read from the table below. */
+private val CUSP: FloatArray by lazy {
+    FloatArray(CHROMA_HUE_STEPS) { hueStep ->
+        var best = 0
+        for (lightStep in 0 until CHROMA_LIGHTNESS_STEPS) {
+            if (CHROMA_LIMIT[lightStep * CHROMA_HUE_STEPS + hueStep] > CHROMA_LIMIT[best * CHROMA_HUE_STEPS + hueStep]) best = lightStep
+        }
+        best.toFloat() / (CHROMA_LIGHTNESS_STEPS - 1)
+    }
+}
 
 /** The limit for every cell, found by halving the interval a dozen times. Built once, on first use, in a few milliseconds. */
 private val CHROMA_LIMIT: FloatArray by lazy {

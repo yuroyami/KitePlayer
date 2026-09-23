@@ -78,16 +78,25 @@ public class VizPalette internal constructor(
      *
      * [cycled] stops well inside the screen's range so that a full turn keeps one brightness,
      * which is right for a ramp and wrong for a foreground: it is why the drawings read as pastel.
-     * This reads the same hue at [lightness] and pushes the chroma to the limit found by
-     * [mostChroma], less [headroom], so the colour is as vivid as the screen allows and still the
-     * colour asked for. Lines read well at a lightness of 0.75 to 0.9; fills at 0.45 to 0.65.
+     * This reads the same hue at the lightness where that hue is most colourful (its cusp, see
+     * [cuspLightness]) moved by [lift], and pushes the chroma to the limit found by [mostChroma],
+     * less [headroom]. Lines sit at a lift of 0 to +0.1 and fills at -0.1 to 0. A foreground that
+     * must be dark or near white asks for its lightness with [vividAt] instead.
      */
-    internal fun vivid(position: Float, lightness: Float = 0.8f, alpha: Float = 1f, headroom: Float = 0.03f): Color {
+    internal fun vivid(position: Float, lift: Float = 0f, alpha: Float = 1f, headroom: Float = 0.03f): Color {
         val wrapped = position - floor(position)
         val hue = baseHue + wrapped * hueSpan
-        val l = lightness.coerceIn(0f, 1f)
-        return colourOf(l, (mostChroma(l, hue) - headroom).coerceAtLeast(0f), hue, alpha)
+        return vividHue(hue, (cuspLightness(hue) + lift).coerceIn(0f, 1f), alpha, headroom)
     }
+
+    /** [vivid] at an explicit [lightness], for dark roots and near-white tips. */
+    internal fun vividAt(position: Float, lightness: Float, alpha: Float = 1f, headroom: Float = 0.03f): Color {
+        val wrapped = position - floor(position)
+        return vividHue(baseHue + wrapped * hueSpan, lightness.coerceIn(0f, 1f), alpha, headroom)
+    }
+
+    private fun vividHue(hue: Float, lightness: Float, alpha: Float, headroom: Float): Color =
+        colourOf(lightness, (mostChroma(lightness, hue) - headroom).coerceAtLeast(0f), hue, alpha)
 
     /**
      * The ramp's hue at [position], at the ramp's own lightness there, at the strongest chroma a

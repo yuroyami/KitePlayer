@@ -41,6 +41,7 @@ import kotlin.test.Test
  * the processor runs their program one pixel at a time here). `VIZ_PALETTE` names a palette.
  * `VIZ_OUT` is the output directory (`build/stills` by default). One strip per drawing lands
  * there, all its stills side by side with the second and the song's readings printed under each.
+ * `VIZ_CLASS` names drawings by fully qualified class, for one that is not in the catalogue yet.
  *
  * The analyser runs at sixty frames a second from the start of the file, so every still hears
  * the same history a window would. Only the last frames before each still are drawn, so trails
@@ -65,7 +66,11 @@ class StillsTool {
             catalogue.firstOrNull { it.name.equals(wanted, ignoreCase = true) }
                 ?: run { println("no drawing named $wanted"); null }
         }
-        for (drawing in chosen) {
+        // A drawing that is not in the catalogue yet can be named by class, for looking at it
+        // while it is being built.
+        val byClass = (System.getenv("VIZ_CLASS") ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            .map { Class.forName(it).getDeclaredConstructor().newInstance() as Visualization }
+        for (drawing in chosen + byClass) {
             val shader = drawing is ShaderPreset || drawing.warp != null
             val width = if (shader) size[0] / 2 else size[0]
             val height = if (shader) size[1] / 2 else size[1]

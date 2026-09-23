@@ -371,6 +371,11 @@ run {
             group = "kiteplayer"
             description = "The libass web module as one zip, attached to the wasmJs publication."
             from(buildWasm.map { it.outputDir })
+            // The module contains the chain, so its licence texts travel with it. libiconv is Windows only.
+            from(project.file("src/jvmMain/resources/META-INF/licenses/kiteplayer-libass")) {
+                into("licenses")
+                exclude("libiconv-*")
+            }
             archiveBaseName.set("kiteplayer-libass-wasm-js")
             archiveClassifier.set("web")
             destinationDirectory.set(layout.buildDirectory.dir("kiteass-zip"))

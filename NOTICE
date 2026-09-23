@@ -27,11 +27,22 @@ kiteplayer-libass links, statically, into its published artifacts:
 libass 0.17.4 (ISC, https://github.com/libass/libass), HarfBuzz 14.2.1 (MIT,
 https://github.com/harfbuzz/harfbuzz), FreeType 2.14.3 (FreeType License,
 https://freetype.org) and FriBidi 1.0.16 (LGPL-2.1-or-later,
-https://github.com/fribidi/fribidi). Their license texts ship inside the
-artifacts under META-INF/licenses/kiteplayer-libass/. FriBidi's LGPL terms
-apply to those artifacts; its source is the tagged upstream release, and the
-archives are built by KiteFFmpeg's buildAssChainFor* tasks and published as
-release assets of that repository.
+https://github.com/fribidi/fribidi). Their license texts ship inside the JVM
+and Android artifacts under META-INF/licenses/kiteplayer-libass/, and inside
+the web zip under licenses/. The native klibs have no place for them, so for
+those the texts are in this repository, under
+kiteplayer-libass/src/jvmMain/resources/META-INF/licenses/kiteplayer-libass/.
+FriBidi's LGPL terms apply to those artifacts; its source is the tagged
+upstream release, and the archives are built by KiteFFmpeg's
+buildAssChainFor* tasks and published as release assets of that repository.
+
+The Windows adapter in the kiteplayer-libass JVM artifact also links GNU
+libiconv 1.16 (LGPL-2.0-or-later, https://www.gnu.org/software/libiconv/)
+statically. The Kotlin/Native MinGW toolchain supplies it, and a Windows
+executable that Kotlin/Native links against kiteplayer-libass links it the
+same way. Its license text ships beside the others in the JVM artifact. Its
+LGPL terms apply as FriBidi's do; its source is GNU libiconv 1.16 as MSYS2
+packages it, which is where that toolchain comes from.
 
 Sample media
 ------------

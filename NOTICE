@@ -35,9 +35,11 @@ release assets of that repository.
 
 Sample media
 ------------
-kiteplayer-sample-shared/media/bad-cat.mp3 is "Bad Cat [Master Version]" by
-Skullbeatz (https://www.newgrounds.com/audio/listen/376737), licensed under
-Creative Commons Attribution-NonCommercial-ShareAlike 3.0
-(https://creativecommons.org/licenses/by-nc-sa/3.0/). It is not covered by
-KitePlayer's Apache-2.0 license. Only the sample apps use it, and no published
-artifact contains it.
+The five songs in kiteplayer-sample-shared/media are by Skullbeatz, from the
+Newgrounds Audio Portal, and are licensed under Creative Commons
+Attribution-ShareAlike 3.0 (https://creativecommons.org/licenses/by-sa/3.0/):
+bad-cat.mp3, blue.mp3, helios.mp3, hurry-up-2021.mp3 and
+what-a-horrible-night.mp3. kiteplayer-sample-shared/media/README.md gives the
+title and page of each one. They are not covered by KitePlayer's Apache-2.0
+license. Only the sample apps use them, and no published artifact contains
+them.

@@ -36,6 +36,7 @@ import io.github.yuroyami.kiteplayer.SleepTimer
 import io.github.yuroyami.kiteplayer.AudioTap
 import io.github.yuroyami.kiteplayer.Pts
 import io.github.yuroyami.kiteplayer.SeekMode
+import io.github.yuroyami.kiteplayer.StepDirection
 import io.github.yuroyami.kiteplayer.FrameDropPolicy
 import io.github.yuroyami.kiteplayer.SyncMode
 import io.github.yuroyami.kiteplayer.TrackChange
@@ -929,12 +930,12 @@ internal class PlaybackCore(
     /**
      * Cancellable on its own, like every request that does not own the session.
      *
-     * The step is an ordinary seek that has already been accepted; abandoning the wait abandons
-     * the answer, not the position and not the player.
+     * The step has already been accepted, and a backward step is an ordinary seek; abandoning the
+     * wait abandons the answer, not the position and not the player.
      */
-    suspend fun stepFrame() {
+    suspend fun stepFrame(direction: StepDirection = StepDirection.Forward) {
         val reply = CompletableDeferred<Unit>()
-        send(CoreCommand.StepFrame(reply))
+        send(CoreCommand.StepFrame(direction, reply))
         awaitReply(reply)
     }
 
@@ -1525,7 +1526,10 @@ internal class PlaybackCore(
                 publishSnapshot()
                 command.reply.complete(Unit)
             }
-            is CoreCommand.StepFrame -> stepOneFrame(command.reply)
+            is CoreCommand.StepFrame -> when (command.direction) {
+                StepDirection.Forward -> stepOneFrame(command.reply)
+                StepDirection.Backward -> stepOneFrameBack(command.reply)
+            }
             is CoreCommand.CaptureFrame -> requestCapture(command.reply)
             is CoreCommand.WithdrawCapture ->
                 session?.video?.captureRequest?.compareAndSet(command.request, null)
@@ -3950,6 +3954,8 @@ internal class PlaybackCore(
             if (!startedAudioThisPass && session.audioLane != null) session.audio?.play()
             setStatus(PlaybackStatus.Playing)
         }
+        // The clocks run again, so they carry the position from here.
+        session.pictureHoldsPosition = false
         session.schedulerMode.value = SCHEDULER_RUNNING
     }
 
@@ -5033,11 +5039,11 @@ internal class PlaybackCore(
                 when (presentFirstFrame(active, STEP_DEADLINE)) {
                     FirstFrame.Submitted, FirstFrame.Headless, FirstFrame.Refused -> {
                         // The picture IS the position while paused, so the step publishes the
-                        // frame it just put on screen rather than waiting for a clock that is
-                        // frozen to notice.
-                        active.lastVideoPtsUs.value
-                            .takeIf { it != NO_POSITION }
-                            ?.let { publishedPositionMicros.value = it }
+                        // timestamp of the frame it just put on screen. Not the video clock: that
+                        // reads a little past the frame, and the scheduler records it only after
+                        // this pass can already have seen the frame go out.
+                        active.pictureHoldsPosition = true
+                        active.video?.shownPts()?.let { publishedPositionMicros.value = it.micros }
                         publishSnapshot()
                         reply.complete(Unit)
                     }
@@ -5049,6 +5055,67 @@ internal class PlaybackCore(
                     FirstFrame.NoVideo -> reply.completeExceptionally(
                         UnsupportedOperationException("stepFrame needs a selected video track"),
                     )
+                }
+            }
+        }
+    }
+
+    /**
+     * Steps a PAUSED player back to the last frame before the one on screen.
+     *
+     * The decoder has thrown that frame away, so this is a precise seek with the other landing: the
+     * container seek aims just under the picture, and the video lane keeps the newest frame below it
+     * until the picture's own frame arrives. The step answers when that seek does. A landing that is
+     * not before the picture means the picture is the first frame, and the step says so.
+     *
+     * A seek still waiting to run is the timeline the caller asked for, so the step goes back from
+     * that seek's target instead of from the picture the seek is about to replace.
+     */
+    private fun stepOneFrameBack(reply: CompletableDeferred<Unit>) {
+        val active = session
+        val waitingTargetUs = maskedSeekTargetMicros.value.takeIf { pendingSeek != null && it != NO_SEEK_MASK }
+        val onScreenUs = waitingTargetUs ?: active?.video?.shownPts()?.micros ?: NO_POSITION
+        when {
+            active == null ->
+                reply.completeExceptionally(IllegalStateException("stepFrame needs an open media item"))
+            playRequested ->
+                reply.completeExceptionally(IllegalStateException("stepFrame steps a PAUSED player; pause first"))
+            active.videoStream == null || active.video == null ->
+                reply.completeExceptionally(UnsupportedOperationException("stepFrame needs a selected video track"))
+            !active.source.seekable ->
+                reply.completeExceptionally(
+                    UnsupportedOperationException(
+                        "a backward step seeks to the keyframe before the picture, and this source is not seekable",
+                    ),
+                )
+            onScreenUs == NO_POSITION ->
+                reply.completeExceptionally(IllegalStateException("no frame is on screen yet, so there is nothing to step back from"))
+            else -> {
+                val landing = CompletableDeferred<SeekResult>()
+                queueSeek(
+                    SeekRequest(SeekTarget.Absolute(Pts(onScreenUs)), SeekMode.Precise, SeekLanding.Before),
+                    landing,
+                )
+                // Every seek reply completes exactly once, so this answers the step exactly once too.
+                landing.invokeOnCompletion { cause ->
+                    if (cause != null) {
+                        reply.completeExceptionally(cause)
+                        return@invokeOnCompletion
+                    }
+                    when (val result = landing.getCompleted()) {
+                        is SeekResult.Applied -> if (result.landedAt.micros < onScreenUs) {
+                            reply.complete(Unit)
+                        } else {
+                            reply.completeExceptionally(
+                                IllegalStateException(
+                                    "no frame comes before the one at ${onScreenUs}us; it is the first frame of the media",
+                                ),
+                            )
+                        }
+                        // Like seek(): a request that a newer one replaced is not a failure.
+                        is SeekResult.Superseded -> reply.complete(Unit)
+                        is SeekResult.Rejected -> reply.completeExceptionally(IllegalStateException(result.reason))
+                    }
                 }
             }
         }
@@ -5432,6 +5499,8 @@ internal class PlaybackCore(
     private suspend fun runSeek(request: SeekRequest) {
         val session = session ?: return
         val target = request.resolve(currentPosition(), session.source.duration)
+        val landsBefore = request.landing == SeekLanding.Before
+        session.pictureHoldsPosition = false
 
         // 1
         requestedEpoch = requestedEpoch.next()
@@ -5460,6 +5529,7 @@ internal class PlaybackCore(
             warn(PlaybackWarning.BadTimestamps(reason))
             seekPhase = SeekPhase.Idle
             session.discardBeforeUs.value = Long.MIN_VALUE
+            session.landsBeforeTarget.value = false
             releaseWorkers(session, epoch)
             resolveSeekReplies(SeekResult.Rejected(reason))
             if (!playRequested && status != PlaybackStatus.Ended) setStatus(PlaybackStatus.Paused)
@@ -5482,7 +5552,10 @@ internal class PlaybackCore(
             // 3 is implicit and is the point of step 2: the scheduler is parked, so no frame of the old
             // epoch can reach the renderer from here on.
             val backoff = SeekTiming.OVERSHOOT_BACKOFF_US[attempt]
-            val aim = Pts((target.micros - backoff).coerceAtLeast(0L))
+            // A backward landing aims one microsecond under the frame on screen, so the container
+            // seek resolves to the keyframe before it even when that frame is itself a keyframe.
+            val under = if (landsBefore) 1L else 0L
+            val aim = Pts((target.micros - backoff - under).coerceAtLeast(0L))
 
             // 4
             flushDecoders(session, epoch)
@@ -5513,6 +5586,7 @@ internal class PlaybackCore(
                 val reason = "the container seek did not complete: ${failure.message}"
                 seekPhase = SeekPhase.Idle
                 session.discardBeforeUs.value = Long.MIN_VALUE
+                session.landsBeforeTarget.value = false
                 val error = PlaybackError.SourceUnavailable(media?.uri ?: "", failure, reason)
                 // Fail first, answer last: a caller resumed by the rejection must observe the
                 // final Failed state, not a session halfway through its teardown.
@@ -5532,6 +5606,7 @@ internal class PlaybackCore(
                 SeekMode.Keyframe -> Long.MIN_VALUE
                 else -> target.micros
             }
+            session.landsBeforeTarget.value = landsBefore && phaseMode != SeekMode.Keyframe
             session.firstVideo.clear()
             session.firstDecodedVideo.clear()
             session.firstAudio.clear()
@@ -5546,7 +5621,13 @@ internal class PlaybackCore(
             // index resolves it by byte position and can land after it. The first frame the decoder
             // produced is the evidence, so that is what is judged here.
             val decoded = session.firstDecodedVideo.of(epoch) ?: session.firstAudio.of(epoch)
-            val overshot = decoded != null && decoded.micros > target.micros + SeekTiming.PRECISE_TOLERANCE_US
+            // A backward landing has overshot as soon as the first frame is not before the
+            // target, because then there is no earlier frame to show.
+            val overshot = decoded != null && if (landsBefore) {
+                decoded.micros >= target.micros
+            } else {
+                decoded.micros > target.micros + SeekTiming.PRECISE_TOLERANCE_US
+            }
             val laddered = attempt < SeekTiming.OVERSHOOT_BACKOFF_US.lastIndex && aim.micros > 0L
             if (!overshot || !laddered || preempted() || seekSuperseded()) {
                 val keyframeShort = landed != null && landed.micros < target.micros
@@ -5586,6 +5667,7 @@ internal class PlaybackCore(
         // 8
         seekPhase = SeekPhase.Idle
         session.discardBeforeUs.value = Long.MIN_VALUE
+        session.landsBeforeTarget.value = false
         lastSeekAtNanos = clock.nanos()
         framesShownAtLastSeek = session.framesReleased(session.video)
         // No landing frame is a real answer, not a formality to paper over. It is legitimate in
@@ -5600,6 +5682,12 @@ internal class PlaybackCore(
             resolveSeekReplies(SeekResult.Superseded(epoch))
             return
         }
+        // A backward step cut short by stop or close has no picture to report, and the target it
+        // would report instead is the frame it was stepping away from.
+        if (landed == null && landsBefore && preempted()) {
+            resolveSeekReplies(SeekResult.Rejected("stop() or close() arrived before the backward step landed"))
+            return
+        }
         if (landed == null && !endOfStreamLanding && !preempted()) {
             resolveSeekReplies(
                 SeekResult.Rejected("the pipeline produced no frame for the seek target within $SEEK_DEADLINE"),
@@ -5608,6 +5696,12 @@ internal class PlaybackCore(
             return
         }
         publishedPositionMicros.value = (landed ?: target).micros
+        // A backward step lands on a frame the clocks never reached, so the picture holds the
+        // position there as it does after a forward step.
+        session.pictureHoldsPosition = landsBefore && landed != null
+        // The landing is the position now. Left set, the mask answers the target until the next
+        // pass, and a caller reads the position as soon as the reply below completes.
+        if (pendingSeek == null) maskedSeekTargetMicros.value = NO_SEEK_MASK
         // A landing that ran off the end of the stream has no frame to show by definition, so it
         // takes the silent form: warning there would fire on every seek to the end of a file.
         if (landed != null) reportFirstFrame(session, "seek") else presentFirstFrame(session)
@@ -5742,6 +5836,10 @@ internal class PlaybackCore(
         val startedAt = clock.nanos()
         val deadline = startedAt + SEEK_DEADLINE.inWholeNanoseconds
         val videoGrace = startedAt + LANDING_GRACE.inWholeNanoseconds
+        // A backward landing is a picture before the target, and the sound only starts at the
+        // target, so the sound can never answer one, however long the decoder takes.
+        val pictureOnly = session.landsBeforeTarget.value
+        fun answer(video: Pts?, audio: Pts?): Pts? = if (pictureOnly) video else video ?: audio
         while (clock.nanos() < deadline) {
             session.firstWorkerOutcome.value?.cause?.let { throw it }
             val video = session.firstVideo.of(epoch)
@@ -5751,16 +5849,18 @@ internal class PlaybackCore(
             // discard filters, so its first frame is the position that was asked for. Waiting for ever on
             // it is not: a stream whose pictures stopped arriving still has a position, and the sound
             // knows it.
-            if (audio != null && (session.videoStream == null || clock.nanos() > videoGrace)) return audio
-            if (session.selectedQueues().all { it.isEndOfStream } && session.decodersDrained()) return video ?: audio
-            if (preempted()) return video ?: audio
+            if (!pictureOnly && audio != null && (session.videoStream == null || clock.nanos() > videoGrace)) {
+                return audio
+            }
+            if (session.selectedQueues().all { it.isEndOfStream } && session.decodersDrained()) return answer(video, audio)
+            if (preempted()) return answer(video, audio)
             // A newer request ends this wait too; whatever landed is the answer.
-            if (seekSuperseded()) return video ?: audio
+            if (seekSuperseded()) return answer(video, audio)
             // Woken by the worker that records the landing; the poll stays only as the bound for
             // every condition above that has no ping of its own.
             withTimeoutOrNull(WORKER_POLL) { session.landingArrived.receive() }
         }
-        return session.firstVideo.of(epoch) ?: session.firstAudio.of(epoch)
+        return answer(session.firstVideo.of(epoch), session.firstAudio.of(epoch))
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -6610,6 +6710,8 @@ internal class PlaybackCore(
 
     private fun currentPosition(): Pts {
         val session = session ?: return Pts(publishedPositionMicros.value)
+        // Paused after a frame step, the clocks still read where playback stopped.
+        if (session.pictureHoldsPosition) session.video?.shownPts()?.let { return it }
         // The same selector scheduling uses decides whose reading IS the position: under
         // VideoMaster the picture carries the timeline, and preferring audio here anyway made
         // position, relative seeks and subtitles follow a clock scheduling ignores.
@@ -6933,81 +7035,95 @@ internal class PlaybackCore(
         var ending = false
         // Set when a late packet was thrown away and cleared by the next keyframe; see skipToKeyframe.
         var skippingToKeyframe = false
-        while (true) {
-            worker.checkpoint()
-            if (worker.releases != restarts) {
-                restarts = worker.releases
-                epoch = worker.epoch
-                // The flush cleared the decoder, so its drain signal has to be sent again.
-                ending = false
-                // A flush re-anchors on a keyframe by construction, so an unfinished skip from
-                // the old epoch must not eat the first packets of the new one.
-                skippingToKeyframe = false
-            }
-            if (drainFrames(session, worker, decoder, video, epoch)) continue
-            if (queue.isEndOfStream && queue.count == 0) {
-                if (!ending) {
-                    // The drain signal travels in band, as a null packet, exactly as libavcodec expects.
-                    // The decoder contract lets send refuse while its output side is full, so the signal
-                    // is only marked delivered when accepted; a refusal loops back through drainFrames
-                    // and retries, otherwise the decoder never drains and end-of-file hangs forever.
-                    if (videoDecoderSend(decoder, null)) ending = true
+        val held = HeldLanding()
+        try {
+            while (true) {
+                worker.checkpoint()
+                if (worker.releases != restarts) {
+                    restarts = worker.releases
+                    epoch = worker.epoch
+                    // The flush cleared the decoder, so its drain signal has to be sent again.
+                    ending = false
+                    // A flush re-anchors on a keyframe by construction, so an unfinished skip from
+                    // the old epoch must not eat the first packets of the new one.
+                    skippingToKeyframe = false
+                    // A frame held for a backward landing belongs to the timeline the flush ended.
+                    held.drop(session)
+                }
+                if (drainFrames(session, worker, decoder, video, epoch, held)) continue
+                if (queue.isEndOfStream && queue.count == 0) {
+                    if (!ending) {
+                        // The drain signal travels in band, as a null packet, exactly as libavcodec expects.
+                        // The decoder contract lets send refuse while its output side is full, so the signal
+                        // is only marked delivered when accepted; a refusal loops back through drainFrames
+                        // and retries, otherwise the decoder never drains and end-of-file hangs forever.
+                        if (videoDecoderSend(decoder, null)) ending = true
+                        continue
+                    }
+                    // The stream ran out before any frame reached a backward target, so the frame held
+                    // for it is the last one there is before it.
+                    if (held.isHolding && decoder.isDrained) {
+                        handOverHeld(session, worker, video, epoch, held)
+                        continue
+                    }
+                    // The last frames still leave the schedule, and each may owe its decoder a release.
+                    worker.napUntil(WORKER_POLL) { video.awaitDeparture() }
                     continue
                 }
-                // The last frames still leave the schedule, and each may owe its decoder a release.
-                worker.napUntil(WORKER_POLL) { video.awaitDeparture() }
-                continue
-            }
-            val packet = queue.poll()
-            if (packet == null) {
-                // Nothing taken, so nothing can be lost: the wait is bounded and the poll above is what
-                // actually takes a packet.
-                worker.napUntil(WORKER_POLL) { awaitPacketOrDeparture(queue, video) }
-                continue
-            }
-            if (session.videoParked.value) {
-                // Discarded before the decoder, and counted as nothing: this is a decision, not a
-                // shortfall. The container keeps being read, so audio and subtitles are untouched
-                // and nothing has to be reopened when the lane comes back.
-                packet.close()
-                continue
-            }
-            if (session.videoWaitingForKeyframe.value) {
-                // Just un-parked. The decoder has been starved and the next packet is mid
-                // group-of-pictures, which decodes to nothing usable; wait for a frame it can
-                // start from.
-                if (!packet.isKeyframe) {
+                val packet = queue.poll()
+                if (packet == null) {
+                    // Nothing taken, so nothing can be lost: the wait is bounded and the poll above is what
+                    // actually takes a packet.
+                    worker.napUntil(WORKER_POLL) { awaitPacketOrDeparture(queue, video) }
+                    continue
+                }
+                if (session.videoParked.value) {
+                    // Discarded before the decoder, and counted as nothing: this is a decision, not a
+                    // shortfall. The container keeps being read, so audio and subtitles are untouched
+                    // and nothing has to be reopened when the lane comes back.
                     packet.close()
                     continue
                 }
-                session.videoWaitingForKeyframe.value = false
-            }
-            if (skipToKeyframe(session, packet, skippingToKeyframe)) {
-                skippingToKeyframe = true
-                session.droppedVideoBeforeDecode.incrementAndGet()
-                packet.close()
-                continue
-            }
-            skippingToKeyframe = false
-            try {
-                while (!videoDecoderSend(decoder, packet)) {
-                    // False means the decoder did NOT take this packet. A synchronous codec usually
-                    // has output immediately, but Android's asynchronous internals can transiently
-                    // expose neither an input slot nor an output frame. Retry in bounded steps so
-                    // that ordinary readiness is not fatal and a seek can still park this worker.
-                    val frame = timedVideoReceive(session, decoder)
-                    if (frame != null) {
-                        session.decodedVideoFrames.incrementAndGet()
-                        session.videoInFlight.incrementAndGet()
-                        if (!handOver(session, worker, video, frame, epoch)) break
-                    } else {
-                        if (worker.quiesceRequested) break
-                        worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
+                if (session.videoWaitingForKeyframe.value) {
+                    // Just un-parked. The decoder has been starved and the next packet is mid
+                    // group-of-pictures, which decodes to nothing usable; wait for a frame it can
+                    // start from.
+                    if (!packet.isKeyframe) {
+                        packet.close()
+                        continue
                     }
+                    session.videoWaitingForKeyframe.value = false
                 }
-            } finally {
-                packet.close()
+                if (skipToKeyframe(session, packet, skippingToKeyframe)) {
+                    skippingToKeyframe = true
+                    session.droppedVideoBeforeDecode.incrementAndGet()
+                    packet.close()
+                    continue
+                }
+                skippingToKeyframe = false
+                try {
+                    while (!videoDecoderSend(decoder, packet)) {
+                        // False means the decoder did NOT take this packet. A synchronous codec usually
+                        // has output immediately, but Android's asynchronous internals can transiently
+                        // expose neither an input slot nor an output frame. Retry in bounded steps so
+                        // that ordinary readiness is not fatal and a seek can still park this worker.
+                        val frame = timedVideoReceive(session, decoder)
+                        if (frame != null) {
+                            session.decodedVideoFrames.incrementAndGet()
+                            session.videoInFlight.incrementAndGet()
+                            if (!handOver(session, worker, video, frame, epoch, held)) break
+                        } else {
+                            if (worker.quiesceRequested) break
+                            worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
+                        }
+                    }
+                } finally {
+                    packet.close()
+                }
             }
+        } finally {
+            // Closed on the worker that owns it, whether the session ends or the lane is torn down.
+            held.drop(session)
         }
     }
 
@@ -7049,11 +7165,12 @@ internal class PlaybackCore(
         decoder: VideoDecoder,
         video: VideoPlayback,
         epoch: Generation,
+        held: HeldLanding,
     ): Boolean {
         val frame = timedVideoReceive(session, decoder) ?: return false
         session.decodedVideoFrames.incrementAndGet()
         session.videoInFlight.incrementAndGet()
-        handOver(session, worker, video, frame, epoch)
+        handOver(session, worker, video, frame, epoch, held)
         return true
     }
 
@@ -7100,6 +7217,7 @@ internal class PlaybackCore(
         video: VideoPlayback,
         frame: VideoFrame,
         epoch: Generation,
+        held: HeldLanding,
     ): Boolean {
         var ownsFrame = true
         try {
@@ -7110,25 +7228,104 @@ internal class PlaybackCore(
             // would call every correct precise seek an overshoot.
             session.firstDecodedVideo.record(epoch, frame.pts)
             session.landingArrived.trySend(Unit)
-            if (frame.pts.micros < session.discardBeforeUs.value) return true
-            session.firstVideo.record(epoch, frame.pts)
-            session.landingArrived.trySend(Unit)
-            while (true) {
-                // The offer itself is atomic. Until it succeeds this function still owns the frame, so
-                // cancellation during the bounded retry closes it in finally instead of orphaning a
-                // hardware output slot.
-                if (video.trySubmit(frame)) {
+            if (frame.pts.micros < session.discardBeforeUs.value) {
+                // A backward step lands on the last frame before its target, so the newest frame
+                // below it is kept in place of the one before instead of being thrown away.
+                if (session.landsBeforeTarget.value) {
+                    held.replace(frame, session)
                     ownsFrame = false
-                    return true
                 }
-                if (worker.quiesceRequested) return false
-                // Woken by the frame that frees the slot, so the release that frame queued is served
-                // on the next decoder call instead of at the end of a poll (#139).
-                worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
+                return true
             }
+            // The first frame at or after a backward target: the held frame is the landing and goes
+            // out first, and this one waits behind it at the head of the queue for a forward step.
+            if (!handOverHeld(session, worker, video, epoch, held)) return false
+            if (offerToSchedule(session, worker, video, frame, epoch)) {
+                ownsFrame = false
+                return true
+            }
+            return false
         } finally {
             if (ownsFrame) frame.close()
             session.videoInFlight.decrementAndGet()
+        }
+    }
+
+    /** Hands the frame a backward landing holds to the schedule. False when quiescence came first. */
+    private suspend fun handOverHeld(
+        session: OpenSession,
+        worker: Worker,
+        video: VideoPlayback,
+        epoch: Generation,
+        held: HeldLanding,
+    ): Boolean {
+        val landing = held.take() ?: return true
+        var ownsLanding = true
+        try {
+            if (!offerToSchedule(session, worker, video, landing, epoch)) return false
+            ownsLanding = false
+            return true
+        } finally {
+            if (ownsLanding) landing.close()
+            // Held frames stay counted in flight, so end of stream cannot be declared under one.
+            session.videoInFlight.decrementAndGet()
+        }
+    }
+
+    /**
+     * Records [frame] as the landing when it is the epoch's first, then offers it to the schedule
+     * until it is taken. False when quiescence was asked for first, and the caller still owns the
+     * frame then.
+     */
+    private suspend fun offerToSchedule(
+        session: OpenSession,
+        worker: Worker,
+        video: VideoPlayback,
+        frame: VideoFrame,
+        epoch: Generation,
+    ): Boolean {
+        session.firstVideo.record(epoch, frame.pts)
+        session.landingArrived.trySend(Unit)
+        while (true) {
+            // The offer itself is atomic. Until it succeeds the caller still owns the frame, so
+            // cancellation during the bounded retry closes it in the caller's finally instead of
+            // orphaning a hardware output slot.
+            if (video.trySubmit(frame)) return true
+            if (worker.quiesceRequested) return false
+            // Woken by the frame that frees the slot, so the release that frame queued is served
+            // on the next decoder call instead of at the end of a poll (#139).
+            worker.napUntil(HANDOVER_RETRY) { video.awaitDeparture() }
+        }
+    }
+
+    /**
+     * The frame a backward landing holds: the newest one decoded below the target so far.
+     *
+     * Only the video decode worker touches it, and every frame it has not handed over is its own,
+     * so this frame is closed or handed over on that worker and nowhere else. It stays counted in
+     * the session's frames in flight while it is held.
+     */
+    private class HeldLanding {
+        private var frame: VideoFrame? = null
+
+        val isHolding: Boolean get() = frame != null
+
+        /** Keeps [next] in place of the frame held so far, which is closed. */
+        fun replace(next: VideoFrame, session: OpenSession) {
+            drop(session)
+            session.videoInFlight.incrementAndGet()
+            frame = next
+        }
+
+        /** Gives the held frame up to the caller, which hands it over or closes it and uncounts it. */
+        fun take(): VideoFrame? = frame.also { frame = null }
+
+        fun drop(session: OpenSession) {
+            frame?.let {
+                it.close()
+                session.videoInFlight.decrementAndGet()
+            }
+            frame = null
         }
     }
 
@@ -7539,6 +7736,12 @@ internal class PlaybackCore(
         val driftUs = atomic(0L)
         val discardBeforeUs = atomic(Long.MIN_VALUE)
         /**
+         * True while a backward step lands: the video lane keeps the newest frame below
+         * [discardBeforeUs] instead of closing it, and shows that frame when the first one at or
+         * after the target arrives. Set and cleared by the seek machine with [discardBeforeUs].
+         */
+        val landsBeforeTarget = atomic(false)
+        /**
          * True while the video lane is parked: packets are discarded before the decoder.
          *
          * Not a drop. The drop counters mean the engine could not keep up, and reporting a
@@ -7570,6 +7773,12 @@ internal class PlaybackCore(
 
         /** A live swap refills the empty ring before restarting the device, without buffering video. */
         var audioDeviceNeedsStart: Boolean = false
+
+        /**
+         * True from a frame step until playback resumes or another seek starts. A step moves the
+         * picture and leaves both clocks where they stopped, so the frame on screen is the position.
+         */
+        var pictureHoldsPosition: Boolean = false
 
         /** Demux-lane-only cadence cursor for inactive compressed-cache pruning. */
         var lastSwitchCachePrunePositionUs: Long = Long.MIN_VALUE
@@ -8129,7 +8338,10 @@ internal sealed class CoreCommand(val name: String, private val deferred: Comple
     class SetMarkers(val markers: List<Marker>, val reply: CompletableDeferred<Unit>) :
         CoreCommand("setMarkers", reply)
 
-    class StepFrame(val reply: CompletableDeferred<Unit>) : CoreCommand("stepFrame", reply)
+    class StepFrame(
+        val direction: StepDirection,
+        val reply: CompletableDeferred<Unit>,
+    ) : CoreCommand("stepFrame", reply)
 
     class CaptureFrame(
         val reply: CompletableDeferred<io.github.yuroyami.kiteplayer.CapturedFrame>,

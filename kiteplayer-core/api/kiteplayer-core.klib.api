@@ -402,6 +402,17 @@ final enum class io.github.yuroyami.kiteplayer/SeekMode : kotlin/Enum<io.github.
     final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/SeekMode> // io.github.yuroyami.kiteplayer/SeekMode.values|values#static(){}[0]
 }
 
+final enum class io.github.yuroyami.kiteplayer/StepDirection : kotlin/Enum<io.github.yuroyami.kiteplayer/StepDirection> { // io.github.yuroyami.kiteplayer/StepDirection|null[0]
+    enum entry Backward // io.github.yuroyami.kiteplayer/StepDirection.Backward|null[0]
+    enum entry Forward // io.github.yuroyami.kiteplayer/StepDirection.Forward|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer/StepDirection.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer/StepDirection> // io.github.yuroyami.kiteplayer/StepDirection.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer/StepDirection // io.github.yuroyami.kiteplayer/StepDirection.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer/StepDirection> // io.github.yuroyami.kiteplayer/StepDirection.values|values#static(){}[0]
+}
+
 final enum class io.github.yuroyami.kiteplayer/SyncMode : kotlin/Enum<io.github.yuroyami.kiteplayer/SyncMode> { // io.github.yuroyami.kiteplayer/SyncMode|null[0]
     enum entry AudioMaster // io.github.yuroyami.kiteplayer/SyncMode.AudioMaster|null[0]
     enum entry Auto // io.github.yuroyami.kiteplayer/SyncMode.Auto|null[0]
@@ -2131,7 +2142,7 @@ final class io.github.yuroyami.kiteplayer/KitePlayer : kotlin/AutoCloseable { //
     final suspend fun seekToChapter(kotlin/Int) // io.github.yuroyami.kiteplayer/KitePlayer.seekToChapter|seekToChapter(kotlin.Int){}[0]
     final suspend fun selectSecondarySubtitle(io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectSecondarySubtitle|selectSecondarySubtitle(io.github.yuroyami.kiteplayer.TrackId?){}[0]
     final suspend fun selectTrack(io.github.yuroyami.kiteplayer/TrackKind, io.github.yuroyami.kiteplayer/TrackId?): io.github.yuroyami.kiteplayer/TrackChange // io.github.yuroyami.kiteplayer/KitePlayer.selectTrack|selectTrack(io.github.yuroyami.kiteplayer.TrackKind;io.github.yuroyami.kiteplayer.TrackId?){}[0]
-    final suspend fun stepFrame() // io.github.yuroyami.kiteplayer/KitePlayer.stepFrame|stepFrame(){}[0]
+    final suspend fun stepFrame(io.github.yuroyami.kiteplayer/StepDirection = ...) // io.github.yuroyami.kiteplayer/KitePlayer.stepFrame|stepFrame(io.github.yuroyami.kiteplayer.StepDirection){}[0]
     final suspend fun stop() // io.github.yuroyami.kiteplayer/KitePlayer.stop|stop(){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer/KitePlayer.Companion|null[0]

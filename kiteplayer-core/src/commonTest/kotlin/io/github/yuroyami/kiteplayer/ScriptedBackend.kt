@@ -122,6 +122,13 @@ internal class MediaScript(
     val audioBufferFrames: Int = 1024,
     /** How far apart the keyframes are. A seek can only land on one of these. */
     val keyframeIntervalUs: Long = 400_000,
+    /**
+     * Explicit video timestamps, in order, for a variable frame rate. Null keeps the constant
+     * [videoFrameDurationUs] grid. Each packet lasts until the next timestamp, or until the end.
+     */
+    val videoTimestampsUs: List<Long>? = null,
+    /** The keyframes among [videoTimestampsUs]. Null keeps the [keyframeIntervalUs] grid. */
+    val videoKeyframesUs: Set<Long>? = null,
     /** True makes the only video stream a still image, which must never carry the timeline. */
     val videoIsCoverArt: Boolean = false,
     val seekable: Boolean = true,
@@ -226,7 +233,32 @@ internal class MediaScript(
     internal val subtitlePackets: List<ScriptedSubtitlePacket> =
         subtitleTracks.firstOrNull { it.index == subtitleIndex }?.packets.orEmpty()
 
+    /** The first video timestamp: zero on the grid, the first listed one otherwise. */
+    val firstVideoPtsUs: Long get() = videoTimestampsUs?.first() ?: 0L
+
+    /** The video timestamp after [pts], or [durationUs] when [pts] is the last one. */
+    fun videoPtsAfter(pts: Long): Long =
+        videoTimestampsUs?.let { list -> list.firstOrNull { it > pts } ?: durationUs }
+            ?: (pts + videoFrameDurationUs)
+
+    fun isVideoKeyframe(pts: Long): Boolean =
+        videoKeyframesUs?.contains(pts) ?: (pts % keyframeIntervalUs == 0L)
+
+    /** Where a keyframe seek aimed at [aimedUs] lands: the last keyframe at or before it. */
+    fun keyframeAtOrBefore(aimedUs: Long): Long =
+        videoKeyframesUs?.let { keys -> keys.filter { it <= aimedUs }.maxOrNull() ?: keys.min() }
+            ?: (aimedUs / keyframeIntervalUs * keyframeIntervalUs)
+
     init {
+        videoTimestampsUs?.let { list ->
+            require(list.isNotEmpty() && list.zipWithNext().all { (a, b) -> a < b } && list.last() < durationUs) {
+                "scripted video timestamps must be strictly increasing and end before the duration, were $list"
+            }
+            val keys = requireNotNull(videoKeyframesUs) { "explicit video timestamps need explicit keyframes" }
+            require(list.first() in keys && list.containsAll(keys)) {
+                "the keyframes $keys must be among the timestamps $list and include the first"
+            }
+        }
         val streamIndices = buildList {
             if (hasVideo) add(videoIndex)
             addAll(audioTracks.map { it.index })
@@ -670,7 +702,7 @@ internal class ScriptedSource(
     override val timestampsMayJump: Boolean = false
 
     private var selected: Set<Int> = emptySet()
-    private var videoCursorUs = 0L
+    private var videoCursorUs = script.firstVideoPtsUs
     private val audioCursorsUs: MutableMap<Int, Long> =
         script.audioTracks.associate { it.index to 0L }.toMutableMap()
     private val subtitleCursors: MutableMap<Int, Int> =
@@ -833,13 +865,13 @@ internal class ScriptedSource(
         return when {
             pickVideo -> {
                 val pts = videoCursorUs
-                videoCursorUs += script.videoFrameDurationUs
+                videoCursorUs = script.videoPtsAfter(pts)
                 packetRead(
                     FakePacket(
                         streamIndex = script.videoIndex,
                         pts = Pts(pts),
-                        duration = Pts(script.videoFrameDurationUs),
-                        isKeyframe = pts % script.keyframeIntervalUs == 0L,
+                        duration = Pts(videoCursorUs - pts),
+                        isKeyframe = script.isVideoKeyframe(pts),
                         ledger = ledger,
                     ),
                 )
@@ -870,7 +902,7 @@ internal class ScriptedSource(
         seekTargets += target.micros
         trace.record("source.seek")
         val aimed = (target.micros + script.seekOvershootUs).coerceIn(0L, script.durationUs)
-        val landing = aimed / script.keyframeIntervalUs * script.keyframeIntervalUs
+        val landing = script.keyframeAtOrBefore(aimed)
         for (track in script.subtitleTracks) {
             subtitleSeekFloorsUs[track.index] = landing
             // Redelivery starts at the landing in FILE order, exactly like a backward
@@ -965,7 +997,7 @@ internal class ScriptedVideoDecoder(
             FakeVideoFrame(
                 pts = pts,
                 generation = generation,
-                duration = Pts(script.videoFrameDurationUs),
+                duration = packet.duration ?: Pts(script.videoFrameDurationUs),
                 ledger = ledger,
             ),
         )

@@ -14,6 +14,7 @@ import kotlin.time.Duration
 internal data class SeekRequest(
     val target: SeekTarget,
     val mode: SeekMode,
+    val landing: SeekLanding = SeekLanding.AtOrAfter,
 ) {
     /**
      * Folds [next] into this pending request.
@@ -27,6 +28,8 @@ internal data class SeekRequest(
      * - A frame step or a factor overwrites, because both are exact requests about a specific place.
      * - The stricter of the two modes wins, so a precise request is never silently downgraded to a
      *   keyframe seek by a later coarse one.
+     * - The landing follows the newer request, because it describes the newer target: a backward
+     *   step's "the frame before this one" means nothing for a target it did not name.
      */
     fun merge(next: SeekRequest): SeekRequest {
         val mergedTarget = when {
@@ -34,7 +37,7 @@ internal data class SeekRequest(
                 SeekTarget.Relative(target.offset + next.target.offset)
             else -> next.target
         }
-        return SeekRequest(mergedTarget, strictest(mode, next.mode))
+        return SeekRequest(mergedTarget, strictest(mode, next.mode), next.landing)
     }
 
     /** Resolves this request against the current position and duration. */
@@ -60,6 +63,18 @@ internal data class SeekRequest(
             else -> SeekMode.Keyframe
         }
     }
+}
+
+/** Which decoded frame a precise seek presents, relative to its target. */
+internal enum class SeekLanding {
+    /** The first frame at or after the target. What every seek promises. */
+    AtOrAfter,
+
+    /**
+     * The last frame before the target, which is what a backward step needs. The frame at or after
+     * the target stays at the head of the queue behind it, so a forward step returns to it.
+     */
+    Before,
 }
 
 internal sealed interface SeekTarget {

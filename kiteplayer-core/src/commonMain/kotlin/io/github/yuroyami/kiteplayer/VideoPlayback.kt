@@ -237,8 +237,17 @@ public class VideoPlayback(
 
     public val queuedFrames: Int get() = queue.size
 
-    /** What media timestamp the last presented frame carried. Null before the first one. */
+    /**
+     * The video clock: the timestamp of the last presented frame, plus the media time since it
+     * was presented while the schedule runs. Null before the first frame.
+     */
     public fun position(): Pts? = videoClock.nowOrNull()
+
+    /**
+     * The timestamp of the frame on screen, exactly. [position] runs on after a frame is presented,
+     * so a frame step reads this instead. Null before the first frame and after a flush.
+     */
+    internal fun shownPts(): Pts? = queue.shown?.pts
 
     /**
      * Hands a decoded frame over, suspending while the queue is full.

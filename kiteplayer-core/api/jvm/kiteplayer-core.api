@@ -471,7 +471,8 @@ public final class io/github/yuroyami/kiteplayer/KitePlayer : java/lang/AutoClos
 	public final fun setVideoScale (Lio/github/yuroyami/kiteplayer/VideoScale;)V
 	public final fun setVideoTransform (Lio/github/yuroyami/kiteplayer/VideoTransform;)V
 	public final fun setVolume (F)V
-	public final fun stepFrame (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun stepFrame (Lio/github/yuroyami/kiteplayer/StepDirection;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun stepFrame$default (Lio/github/yuroyami/kiteplayer/KitePlayer;Lio/github/yuroyami/kiteplayer/StepDirection;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
 	public final fun stop (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public final fun supportBundle ()Ljava/lang/String;
 	public final fun warningHistory ()Ljava/util/List;
@@ -1754,6 +1755,14 @@ public final class io/github/yuroyami/kiteplayer/SleepTimer$EndOfItem : io/githu
 	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/yuroyami/kiteplayer/StepDirection : java/lang/Enum {
+	public static final field Backward Lio/github/yuroyami/kiteplayer/StepDirection;
+	public static final field Forward Lio/github/yuroyami/kiteplayer/StepDirection;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/yuroyami/kiteplayer/StepDirection;
+	public static fun values ()[Lio/github/yuroyami/kiteplayer/StepDirection;
 }
 
 public final class io/github/yuroyami/kiteplayer/SubtitleCompositorKt {

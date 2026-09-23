@@ -25,6 +25,8 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `MediaItem` gains `demux`, which changes the generated data-class methods. Recompile.
 - `PlayerMemento.FORMAT_VERSION` is 3. A build older than this one refuses a memento that this one
   wrote.
+- `KitePlayer.stepFrame` takes a `StepDirection`, which defaults to `Forward`. Calls in source
+  compile unchanged, but the compiled signature changed. Recompile.
 
 ## [0.0.26] - 2026-09-20
 

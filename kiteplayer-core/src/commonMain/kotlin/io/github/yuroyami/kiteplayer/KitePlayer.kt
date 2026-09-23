@@ -646,22 +646,34 @@ public class KitePlayer internal constructor(private val core: PlaybackCore) : A
     }
 
     /**
-     * Steps a PAUSED player forward by exactly one frame and returns with it on screen.
+     * Steps a PAUSED player by exactly one decoded frame and returns with it on screen.
      *
-     * One DECODED frame, and not one nominal frame period: the decoder has already filled the queue
-     * ahead of the paused picture, so the schedule releases the next frame of the media whatever
-     * its timestamp. That is what makes it exact on variable frame rate, on B-frames, on repeated
-     * timestamps and on a container whose declared frame rate is simply wrong, all of which the old
-     * seek-by-average-period step got wrong. It needs no seek, so it works on a
-     * source that cannot seek, and it repeats no decoding, so holding the key down is cheap.
+     * One DECODED frame, and not one nominal frame period, in both directions. That is what makes
+     * it exact on variable frame rate, on B-frames, on repeated timestamps and on a container whose
+     * declared frame rate is simply wrong.
+     *
+     * - [StepDirection.Forward] releases the next frame from the queue the decoder has already
+     *   filled. It needs no seek, so it works on a source that cannot seek, and it repeats no
+     *   decoding, so holding the key down is cheap.
+     * - [StepDirection.Backward] lands on the last frame before the one on screen. The decoder has
+     *   thrown that frame away, so the engine seeks to the keyframe before it and decodes forward.
+     *   In a file with keyframes far apart, one step can decode every frame between two keyframes.
+     *   The frame it stepped back from stays queued, so a forward step afterwards returns to it
+     *   without a seek. Behind a seek that has not run yet, it steps back from that seek's target.
+     *
+     * Await each step before you send the next. Two backward steps sent together merge like two
+     * seeks do, so they move one frame. Until playback resumes, [position] reports the frame on
+     * screen.
      *
      * @throws IllegalStateException when nothing is open, while playing (a playing player is
-     *         already stepping sixty times a second), or when no frame arrived, which at the end of
-     *         the media means there is no next frame.
-     * @throws UnsupportedOperationException with no selected video track.
+     *         already stepping sixty times a second), when no frame arrived going forward, which at
+     *         the end of the media means there is no next frame, at the first frame going backward,
+     *         and when a backward step does not land, for example because stop or close came first.
+     * @throws UnsupportedOperationException with no selected video track, and going backward on a
+     *         source that cannot seek.
      */
-    public suspend fun stepFrame() {
-        core.stepFrame()
+    public suspend fun stepFrame(direction: StepDirection = StepDirection.Forward) {
+        core.stepFrame(direction)
     }
 
     /**

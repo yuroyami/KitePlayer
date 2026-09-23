@@ -11,13 +11,13 @@ import kotlin.test.assertEquals
 class TypedFiltersTest {
 
     @Test
-    fun `a typed chain lands on the item as the string the golden pins`() {
+    fun aTypedChainLandsOnTheItemAsTheStringTheGoldenPins() {
         val item = MediaItem("clip.mp4").withVideoFilter(videoFilters { scale(1280, 720) })
         assertEquals("scale=1280:720", item.videoFilter)
     }
 
     @Test
-    fun `steps join the way the graph builder reads them`() {
+    fun stepsJoinTheWayTheGraphBuilderReadsThem() {
         val item = MediaItem("clip.mp4").withVideoFilter(
             videoFilters {
                 scale(1280, 720)
@@ -28,7 +28,7 @@ class TypedFiltersTest {
     }
 
     @Test
-    fun `everything else on the item is left alone`() {
+    fun everythingElseOnTheItemIsLeftAlone() {
         val original = MediaItem("clip.mp4", headers = mapOf("Authorization" to "Bearer x"), formatHint = "mp4")
         val filtered = original.withVideoFilter(videoFilters { scale(-1, 480) })
         assertEquals(original.copy(videoFilter = "scale=-1:480"), filtered)

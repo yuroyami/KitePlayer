@@ -35,7 +35,7 @@ class RgbCodedVideoMappingTest {
     )
 
     @Test
-    fun `planar GBR is a 4 4 4 frame under the Identity matrix whatever the tag says`() {
+    fun planarGbrIsA444FrameUnderTheIdentityMatrixWhateverTheTagSays() {
         assertEquals(PlayerPixelFormat.Yuv444p, gbrp.toPlayerFormat())
 
         val mapped = color(KiteColorMatrix.Unspecified, fullRange = false, rangeSpecified = false)
@@ -46,7 +46,7 @@ class RgbCodedVideoMappingTest {
     }
 
     @Test
-    fun `planar GBR with no declared range is full range`() {
+    fun planarGbrWithNoDeclaredRangeIsFullRange() {
         // RGB video is full range. Read as studio range, black and white would lose 16 levels each.
         val mapped = color(KiteColorMatrix.Rgb, fullRange = false, rangeSpecified = false)
             .toPlayerColorSpace(gbrp)
@@ -56,7 +56,7 @@ class RgbCodedVideoMappingTest {
     }
 
     @Test
-    fun `planar GBR with a declared studio range keeps it`() {
+    fun planarGbrWithADeclaredStudioRangeKeepsIt() {
         val mapped = color(KiteColorMatrix.Rgb, fullRange = false, rangeSpecified = true)
             .toPlayerColorSpace(gbrp)
 
@@ -65,7 +65,7 @@ class RgbCodedVideoMappingTest {
     }
 
     @Test
-    fun `every other format keeps the colour it declares`() {
+    fun everyOtherFormatKeepsTheColourItDeclares() {
         val mapped = color(KiteColorMatrix.Unspecified, fullRange = false, rangeSpecified = false)
             .toPlayerColorSpace(PixelFormat("yuv444p"))
 

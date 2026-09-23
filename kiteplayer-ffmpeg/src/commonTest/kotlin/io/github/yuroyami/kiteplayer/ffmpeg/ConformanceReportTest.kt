@@ -14,7 +14,7 @@ class ConformanceReportTest {
     )
 
     @Test
-    fun `one row per result plus a header`() {
+    fun oneRowPerResultPlusAHeader() {
         val lines = conformanceReport("macos-arm64", results).trim().lines()
         val rows = lines.filter { it.startsWith("| `") }
         assertEquals(results.size, rows.size, "expected one row per result:\n${lines.joinToString("\n")}")
@@ -26,7 +26,7 @@ class ConformanceReportTest {
     }
 
     @Test
-    fun `a failed row is in the table and says what happened`() {
+    fun aFailedRowIsInTheTableAndSaysWhatHappened() {
         val report = conformanceReport("macos-arm64", results)
         val failing = report.lines().single { it.contains("av1.mkv") }
         assertTrue("FAIL" in failing, failing)
@@ -34,7 +34,7 @@ class ConformanceReportTest {
     }
 
     @Test
-    fun `a pipe in an outcome cannot break the table`() {
+    fun aPipeInAnOutcomeCannotBreakTheTable() {
         // The outcome is a row's own transcript and an exception message can carry anything.
         val report = conformanceReport(
             "macos-arm64",

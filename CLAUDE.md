@@ -121,6 +121,10 @@ Each line is something that bit someone. Delete a line when it stops being true.
 - A test whose name contains a comma compiles on the JVM and breaks every Kotlin/Native target.
   Tier 1 compiles only the JVM half, so the comma ships and the host gate finds it a commit later.
   No commas in test names.
+- A test name with a space stops an Android device test APK at the dex step, because D8 takes a
+  space in a method name only from minimum SDK 30. Every module with a device test puts
+  `commonTest` into it, and the host tests and CI never dex, so nothing else goes red. Name the
+  shared tests of those modules in camel case (#154).
 - A state flow's `first { }` samples the current element before it waits, so a test that seeks and
   then waits for "the position advanced" can match the reading from before the seek and return
   instantly, proving nothing. Wait for a reading that reflects the new position first.

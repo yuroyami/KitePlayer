@@ -35,18 +35,18 @@ class CueWrappingTest {
         wrapWidthFor(wrap, safeWidth) { greedyLines(text, it) }
 
     @Test
-    fun `None hands the safe width straight through`() {
+    fun noneHandsTheSafeWidthStraightThrough() {
         assertEquals(100, widthFor(CueWrap.None, "one two three four five six", 100))
     }
 
     @Test
-    fun `Never asks for a width no subtitle reaches`() {
+    fun neverAsksForAWidthNoSubtitleReaches() {
         assertEquals(NO_WRAP_WIDTH, widthFor(CueWrap.Never, "one two three four five six", 100))
         assertTrue(NO_WRAP_WIDTH > 100_000, "the sentinel must be wider than any real viewport")
     }
 
     @Test
-    fun `Balanced narrows a lopsided break until the lines even out`() {
+    fun balancedNarrowsALopsidedBreakUntilTheLinesEvenOut() {
         // Greedy at 40 fills line one and leaves one word alone on line two.
         val text = "a subtitle that is just long enough to spill"
         assertEquals(2, greedyLines(text, 40))
@@ -61,14 +61,14 @@ class CueWrappingTest {
     }
 
     @Test
-    fun `Balanced leaves a single line alone`() {
+    fun balancedLeavesASingleLineAlone() {
         // A cue that already fits must not be measured into a narrower box: nothing to balance,
         // and shrinking it would move where a centred line sits.
         assertEquals(200, widthFor(CueWrap.Balanced, "short enough", 200))
     }
 
     @Test
-    fun `Balanced never asks for more lines than greedy would take`() {
+    fun balancedNeverAsksForMoreLinesThanGreedyWouldTake() {
         val text = "the quick brown fox jumps over the lazy dog and keeps going for a while yet"
         for (safeWidth in 20..120) {
             val greedy = greedyLines(text, safeWidth)
@@ -83,7 +83,7 @@ class CueWrappingTest {
     }
 
     @Test
-    fun `a zero or negative safe width is handed back untouched`() {
+    fun aZeroOrNegativeSafeWidthIsHandedBackUntouched() {
         // The rasterizers already bail on this; the rule must not invent a width for them.
         for (wrap in CueWrap.entries) {
             assertEquals(0, wrapWidthFor(wrap, 0) { 1 })

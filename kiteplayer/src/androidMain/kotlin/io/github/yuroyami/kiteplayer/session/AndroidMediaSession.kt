@@ -1,19 +1,26 @@
 package io.github.yuroyami.kiteplayer.session
 
+import android.app.PendingIntent
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import io.github.yuroyami.kiteplayer.KitePlayer
+import io.github.yuroyami.kiteplayer.PlayerSnapshot
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -24,19 +31,13 @@ import kotlin.time.Duration.Companion.milliseconds
  * That session is what the lock screen, the headset buttons, the car and the media area of the
  * quick settings panel all read. Building one is what every application was writing by hand.
  *
- * The notification is deliberately not here. Posting one needs a Service the application owns, its
- * own foreground type and its own channel, none of which a library can declare. Give
- * [platformToken] to a `Notification.MediaStyle` and the two lines below are the whole of it:
- *
- * ```kotlin
- * Notification.Builder(context, channelId)
- *     .setStyle(Notification.MediaStyle().setMediaSession(session.platformToken))
- * ```
+ * For the media notification, and for playback that goes on after the app leaves the screen, pass
+ * this session to `KitePlayerPlatform.attachMediaNotification`.
  *
  * Close it with the player.
  */
 public class KitePlayerMediaSession(
-    private val player: KitePlayer,
+    internal val player: KitePlayer,
     context: Context,
     tag: String = "KitePlayer",
 ) : AutoCloseable {
@@ -44,7 +45,16 @@ public class KitePlayerMediaSession(
     private val session = MediaSession(context.applicationContext, tag)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val artwork = MutableStateFlow<Bitmap?>(null)
+    private val artworkLoader = MutableStateFlow<(suspend (PlayerSnapshot) -> Bitmap?)?>(null)
+    private val customActions = MutableStateFlow<List<MediaNotificationAction>>(emptyList())
     private val mirror = MediaSessionMirror<Bitmap>(::pushMetadata, ::pushPlaybackState)
+    private val callback = Callback()
+
+    @Volatile
+    private var customActionHandler: ((String) -> Unit)? = null
+
+    @Volatile
+    private var sessionActivity: PendingIntent? = null
 
     /** The token a `Notification.MediaStyle` needs. */
     public val platformToken: MediaSession.Token get() = session.sessionToken
@@ -52,24 +62,112 @@ public class KitePlayerMediaSession(
     /** Always true here. Other platforms answer false when they have no session, so one check works everywhere. */
     public val isAvailable: Boolean = true
 
+    /** The picture the session shows, for the media notification. */
+    internal val artworkState: StateFlow<Bitmap?> get() = artwork
+
+    /** The activity set with [setSessionActivity], or null. */
+    internal val sessionActivityIntent: PendingIntent? get() = sessionActivity
+
+    /** The same door the system's controllers use, for the media notification's buttons. */
+    internal val controls: MediaSession.Callback get() = callback
+
     init {
-        session.setCallback(Callback(), Handler(Looper.getMainLooper()))
+        session.setCallback(callback, Handler(Looper.getMainLooper()))
         session.isActive = true
         // One collector writes both halves in order, so artwork a caller sets cannot be overwritten
         // by a write that started before it.
         scope.launch {
-            combine(player.state, player.progress, artwork) { snapshot, progress, image ->
-                snapshot.toMediaSessionState(progress) to image
-            }.collect { (state, image) -> mirror.update(state, image) }
+            var publishedActions = customActions.value
+            combine(
+                player.state,
+                player.progress,
+                artwork,
+                customActions,
+            ) { snapshot, progress, image, actions ->
+                Triple(snapshot.toMediaSessionState(progress), image, actions)
+            }.collect { (state, image, actions) ->
+                mirror.update(state, image)
+                // The mirror pushes the playback half only when the transport changes, and the
+                // custom actions are not part of it, so a change there pushes on its own.
+                if (actions != publishedActions) {
+                    publishedActions = actions
+                    pushPlaybackState(state)
+                }
+            }
         }
+        scope.launch { loadArtwork() }
     }
 
     /**
      * The picture the session shows. The application supplies it: the engine reads a file's cover
-     * art but does not decode it, so there is nothing here to hand over on its own.
+     * art but does not decode it, so there is nothing here to hand over on its own. A loader set
+     * with [setArtworkLoader] replaces it when the media item changes.
      */
     public fun setArtwork(image: Bitmap?) {
         artwork.value = image
+    }
+
+    /**
+     * Loads the picture for each media item, so the application does not have to watch the player.
+     *
+     * [loader] runs on a background thread when the item changes, and again when its tags arrive
+     * after the item opens. A newer item cancels an older load, and the picture is cleared while the
+     * new one loads. A loader that throws or returns null shows no picture. Decode at a sensible
+     * size: the platform scales a large picture down but still carries it. Null stops loading and
+     * keeps the picture shown.
+     */
+    public fun setArtworkLoader(loader: (suspend (PlayerSnapshot) -> Bitmap?)?) {
+        artworkLoader.value = loader
+    }
+
+    /**
+     * The activity to open from the system media controls, usually the player screen.
+     * `KitePlayerPlatform.attachMediaNotification` sets its content intent here too.
+     */
+    public fun setSessionActivity(intent: PendingIntent?) {
+        sessionActivity = intent
+        session.setSessionActivity(intent)
+    }
+
+    /**
+     * Buttons of the application's own, such as a like or a shuffle button, in the order given.
+     *
+     * The session publishes them to the system media controls, a watch and the car. A press calls
+     * [onAction] on the main thread with the button's id, and so does a press of the same button
+     * in the media notification. From Android 13 the system media controls take their buttons from
+     * here rather than from the notification.
+     *
+     * @throws IllegalArgumentException when two actions share an id.
+     */
+    public fun setCustomActions(actions: List<MediaNotificationAction>, onAction: (id: String) -> Unit) {
+        require(actions.map { it.id }.distinct().size == actions.size) {
+            "each custom action needs its own id"
+        }
+        customActionHandler = onAction
+        customActions.value = actions.toList()
+    }
+
+    private suspend fun loadArtwork() {
+        var loadedItem: Any? = null
+        combine(artworkLoader, player.state.distinctUntilChangedBy(::artworkKey)) { loader, snapshot ->
+            loader to snapshot
+        }.collectLatest { (loader, snapshot) ->
+            if (loader == null) return@collectLatest
+            val item = snapshot.media to snapshot.queueIndex
+            if (item != loadedItem) {
+                loadedItem = item
+                artwork.value = null
+            }
+            if (snapshot.media == null) return@collectLatest
+            val image = try {
+                loader(snapshot)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            artwork.value = image
+        }
     }
 
     private fun pushMetadata(metadata: MediaSessionMetadata, image: Bitmap?) {
@@ -87,18 +185,15 @@ public class KitePlayerMediaSession(
     }
 
     private fun pushPlaybackState(state: MediaSessionState) {
-        session.setPlaybackState(
-            PlaybackState.Builder()
-                .setActions(actionsFor(state))
-                .setState(
-                    platformStateFor(state.phase),
-                    state.position.inWholeMilliseconds,
-                    // The platform walks the position on at this rate, so anything but playing must
-                    // report zero or the lock screen's position moves while nothing plays.
-                    if (state.playing) state.speed.toFloat() else 0f,
-                )
-                .build(),
-        )
+        val playback = sessionPlaybackFor(state, customActions.value)
+        val builder = PlaybackState.Builder()
+            .setActions(playback.actions)
+            .setState(playback.state, playback.positionMillis, playback.speed)
+        for (action in playback.customActions) {
+            val custom = PlaybackState.CustomAction.Builder(action.id, action.label, action.icon).build()
+            builder.addCustomAction(custom)
+        }
+        session.setPlaybackState(builder.build())
     }
 
     override fun close() {
@@ -127,6 +222,10 @@ public class KitePlayerMediaSession(
         override fun onFastForward() = skipBy(SKIP)
         override fun onRewind() = skipBy(-SKIP)
 
+        override fun onCustomAction(action: String, extras: Bundle?) {
+            customActionHandler?.invoke(action)
+        }
+
         private fun skipBy(by: Duration) {
             scope.launch {
                 val target = (player.position() + by).coerceAtLeast(Duration.ZERO)
@@ -139,6 +238,36 @@ public class KitePlayerMediaSession(
         val SKIP = 15_000.milliseconds
     }
 }
+
+/** A new item, or new tags on the same one, is what makes the artwork loader run again. */
+private fun artworkKey(snapshot: PlayerSnapshot): Any =
+    Triple(snapshot.media, snapshot.queueIndex, snapshot.metadata)
+
+/**
+ * Everything the platform's playback state carries, worked out without the platform so a host
+ * test can read it. [customActions] keep their order, and each one's id is the action name the
+ * platform hands back when it is pressed.
+ */
+internal data class SessionPlayback(
+    val state: Int,
+    val positionMillis: Long,
+    val speed: Float,
+    val actions: Long,
+    val customActions: List<MediaNotificationAction>,
+)
+
+internal fun sessionPlaybackFor(
+    state: MediaSessionState,
+    customActions: List<MediaNotificationAction>,
+): SessionPlayback = SessionPlayback(
+    state = platformStateFor(state.phase),
+    positionMillis = state.position.inWholeMilliseconds,
+    // The platform walks the position on at this rate, so anything but playing must report zero or
+    // the lock screen's position moves while nothing plays.
+    speed = if (state.playing) state.speed.toFloat() else 0f,
+    actions = actionsFor(state),
+    customActions = customActions,
+)
 
 /**
  * The buttons a session should offer for a given state.

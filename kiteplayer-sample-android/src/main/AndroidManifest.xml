@@ -2,8 +2,10 @@
 <!-- The provisional Android sample. extractNativeLibs stays false so the two JNI
      libraries are loaded straight from the Stored, 16 KiB aligned APK entries. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The front screen posts the media notification the lock screen controls come from. -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The library's media service keeps the song playing after the app leaves the screen. A media
+         session's notification needs no notification permission on Android 13 and later. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <application
         android:label="@string/app_name"
         android:extractNativeLibs="false"
@@ -46,5 +48,10 @@
             android:exported="false"
             android:label="@string/demo_compose_swap"
             android:configChanges="orientation|screenSize" />
+        <!-- Started and stopped by KitePlayerPlatform.attachMediaNotification. -->
+        <service
+            android:name="io.github.yuroyami.kiteplayer.session.KitePlayerMediaService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 </manifest>

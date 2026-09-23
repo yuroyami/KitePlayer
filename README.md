@@ -242,6 +242,50 @@ point includes it. You do not build a resolver or a Ktor client.
 - `MediaItem.headers` reach whichever transport is selected.
 - No HTTP client exists until network media is opened, and the reader that created one closes it.
 
+## Background playback
+
+Android stops a process that plays in the background unless a foreground service holds it.
+`kiteplayer` has that service, `KitePlayerMediaService`. Your app declares it in its manifest:
+
+```xml
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+<application>
+    <service
+        android:name="io.github.yuroyami.kiteplayer.session.KitePlayerMediaService"
+        android:exported="false"
+        android:foregroundServiceType="mediaPlayback" />
+</application>
+```
+
+Then attach the media notification to the player's media session. `smallIcon` is your app's
+monochrome notification icon.
+
+```kotlin
+val session = KitePlayerMediaSession(player, context)
+val notification = KitePlayerPlatform.attachMediaNotification(
+    session,
+    context,
+    MediaNotificationOptions(smallIcon = R.drawable.ic_notification),
+)
+```
+
+- The media notification shows the title, the artist, previous, play or pause, next, and your own
+  buttons. `session.setArtworkLoader` supplies the picture.
+- While the player plays, the service holds the app in the foreground. After a pause it stays in
+  the foreground for ten minutes (`pausedForegroundTimeout`). Then the notification can be swiped
+  away, which stops the service and leaves the player paused.
+- From Android 12, Android can refuse a start from the background. `onForegroundRefused` tells
+  you, and the notification still shows.
+- The library adds nothing to your manifest. Android 13 and later need no notification permission
+  for this notification.
+- Close the notification before the session, and the session before the player.
+
+On iOS, declare `UIBackgroundModes` with `audio` in `Info.plist`, and create a
+`KitePlayerMediaSession` for the lock screen. A desktop app keeps playing without help, and a web
+page plays while its tab is open.
+
 ## Audio visualiser
 
 `kiteplayer-audioviz` draws the sound when the media has no picture. Add it next to your KitePlayer

@@ -17,12 +17,10 @@ import io.github.yuroyami.kiteplayer.sample.shared.SONG_TYPES
 import io.github.yuroyami.kiteplayer.sample.shared.SampleTrack
 import io.github.yuroyami.kiteplayer.sample.shared.SampleScreen
 import io.github.yuroyami.kiteplayer.session.KitePlayerMediaSession
+import io.github.yuroyami.kiteplayer.session.MediaNotificationOptions
 import io.github.yuroyami.kiteplayer.session.attachBackgroundHandling
 import io.github.yuroyami.kiteplayer.session.attachInterruptionHandling
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import io.github.yuroyami.kiteplayer.session.attachMediaNotification
 import java.io.File
 
 /**
@@ -30,16 +28,15 @@ import java.io.File
  * conformance clip as video when the song is missing. "Other samples" opens the launcher with the
  * presentation comparisons.
  *
- * It also mirrors the player into the media session, posts the notification the lock screen reads,
- * and attaches the interruption and background handling, so the song behaves like a music app's.
+ * It also mirrors the player into the media session, shows the library's media notification, which
+ * keeps the song playing after the app leaves the screen, and attaches the interruption and
+ * background handling, so the song behaves like a music app's.
  */
 internal class VisualizerActivity : ComponentActivity() {
     private var player: KitePlayer? = null
 
-    /** The session and the two playback guards, closed before the player. */
+    /** The session, the two guards and the notification, closed newest first, before the player. */
     private val handles = mutableListOf<AutoCloseable>()
-    private var notification: SampleMediaNotification? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,7 +49,11 @@ internal class VisualizerActivity : ComponentActivity() {
             handles += session
             handles += KitePlayerPlatform.attachInterruptionHandling(player, this)
             handles += KitePlayerPlatform.attachBackgroundHandling(player, this)
-            notification = SampleMediaNotification(this, session.platformToken).also { it.follow(player, scope) }
+            handles += KitePlayerPlatform.attachMediaNotification(
+                session,
+                this,
+                MediaNotificationOptions(smallIcon = android.R.drawable.ic_media_play),
+            )
         }
         // A scanned song map outlives the process here, so a song played before is mapped at once.
         val songMaps = SongMapStore.inDirectory(File(cacheDir, "songmaps").absolutePath)
@@ -90,9 +91,8 @@ internal class VisualizerActivity : ComponentActivity() {
         try {
             super.onDestroy()
         } finally {
-            scope.cancel()
-            notification?.cancel()
-            handles.forEach { runCatching { it.close() } }
+            // The notification reads the session, so it closes first.
+            handles.asReversed().forEach { runCatching { it.close() } }
             handles.clear()
             player?.close()
         }

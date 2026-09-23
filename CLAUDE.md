@@ -178,12 +178,15 @@ Each line is something that bit someone. Delete a line when it stops being true.
   whole depth: at least 200 ms, and 300 to 600 ms on Android where the audio track buffer sets it.
   Measured at 174 ms of lag on a 171 ms ring. Moving the gain back into the pipeline would be a
   regression that looks like a simplification.
-- **What stops a paused player aging is the freeze at pause, not the re-anchor at resume.** Checked
-  by mutation: deleting the resume re-anchor changes nothing, because the audio ring publishes its
-  own anchor as the device comes back up. Neuter the freeze instead and a one-minute pause moves
-  the position from 1.3 seconds to one minute 1.3. So the ring's anchor is the authority while the
-  device runs, and the frozen clock is the authority when it does not. Do not simplify either on the
-  reasoning that the other covers it.
+- **Three things stop a paused player aging: the freeze at pause, the re-anchor at resume, and
+  the anchor floor at resume.** The ring keeps its last anchor through a pause. Applied after play,
+  that anchor counts the whole pause as played time: on real macOS output a two second pause read
+  two seconds ahead for about 30 ms after play (#153). So `AudioPlayback` ignores every anchor that
+  is not newer than the one the ring held at play, and the re-anchored frozen clock carries the
+  position until the device reports again. Neuter the freeze and a one-minute pause moves the
+  position from 1.3 seconds to one minute 1.3. The ring's anchor is the authority while the device
+  runs, and the frozen clock is the authority when it does not. Do not simplify any of the three on
+  the reasoning that another covers it.
 - All session mutation happens on the actor, in a command execution or a pass handler. Never mutate
   session fields from another coroutine.
 - A decoder belongs to its worker's dispatcher. Park the worker, mutate, release. A refusal to park

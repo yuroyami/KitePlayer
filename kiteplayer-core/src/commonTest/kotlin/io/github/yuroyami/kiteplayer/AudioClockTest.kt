@@ -9,6 +9,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
 
 class AudioClockTest {
@@ -77,6 +78,32 @@ class AudioClockTest {
         assertNotNull(fast.position)
         assertEquals(2.0, fast.rate)
         assertTrue(fast.generation > paused.generation)
+        harness.close()
+    }
+
+    @Test
+    fun `after resume the reading never runs ahead of the paused position plus the time since play`() = runTest {
+        // Until the device reports again, the ring still holds the anchor from before the pause.
+        // Applied after play, that anchor counted the whole pause as played time.
+        val harness = CoreHarness(this, script = MediaScript(durationUs = 8_000_000))
+        val player = KitePlayer(harness.core)
+        harness.openWithRenderer()
+        player.play()
+        harness.run(1.seconds)
+        player.pause()
+        harness.run(350.milliseconds)
+        val paused = player.position()
+
+        player.play()
+        val playedAtNanos = harness.clock.nanos()
+        repeat(10) {
+            harness.run(10.milliseconds)
+            val limit = paused + (harness.clock.nanos() - playedAtNanos).nanoseconds + 5.milliseconds
+            val position = player.position()
+            val audible = assertNotNull(player.audioClock().position).asDuration
+            assertTrue(position <= limit, "the position read $position, above $limit, after a pause at $paused")
+            assertTrue(audible <= limit, "the audible clock read $audible, above $limit, after a pause at $paused")
+        }
         harness.close()
     }
 

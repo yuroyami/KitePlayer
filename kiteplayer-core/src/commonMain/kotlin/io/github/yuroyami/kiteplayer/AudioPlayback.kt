@@ -159,6 +159,15 @@ public class AudioPlayback(
      */
     private var scaledBaseUs: Long? = null
 
+    /**
+     * The instant of the ring's last anchor when [play] ran, until the device publishes a newer one.
+     *
+     * The ring keeps its last anchor through a pause. Applied after [play], that anchor dates the
+     * clock from before the pause, so the reading counts the whole pause as played time. Guarded
+     * by [lock].
+     */
+    private var anchorFloorNanos: Long? = null
+
     /** The format the device accepted. Null before [open]. */
     public val negotiatedFormat: AudioFormat? get() = format
 
@@ -432,6 +441,10 @@ public class AudioPlayback(
 
     private fun anchorLocked() {
         val anchor = ring?.anchor() ?: return
+        anchorFloorNanos?.let { floor ->
+            if (anchor.audibleAtNanos <= floor) return
+            anchorFloorNanos = null
+        }
         // The ring speaks the scaled axis at any epoch rate other than 1.0; multiplying out here
         // is the one place playout time turns back into media time.
         val mediaPts =
@@ -442,14 +455,18 @@ public class AudioPlayback(
 
     /** Starts the device and lets the clock run. Belongs to the session owner. */
     public suspend fun play() {
-        mediaClock.resume()
+        synchronized(lock) {
+            mediaClock.resume()
+            anchorFloorNanos = ring?.anchor()?.audibleAtNanos
+        }
         sink.setPaused(false)
         sink.start()
     }
 
     /** Freezes the clock and holds the device without discarding. Belongs to the session owner. */
     public suspend fun pause() {
-        mediaClock.pause()
+        // Under the lock like play: position and anchorClock move this clock from other threads.
+        synchronized(lock) { mediaClock.pause() }
         if (!sink.setPaused(true)) sink.stop()
     }
 

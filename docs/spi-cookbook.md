@@ -168,6 +168,36 @@ When `create` throws, the engine keeps its own sinc for that stream and reports
 because the web build of the library has no filter graph. An exception from any other member stops
 the session with an error, the same as any other failure in the audio feeder.
 
+## East Asian subtitle text
+
+The engine decides the encoding of an external subtitle file from its bytes: a byte-order mark,
+then UTF-8, then a set of single-byte tables. The multi-byte East Asian encodings need tables that
+take about 110 KB of generated source, so they live above the core, and
+`SubtitleFileParser.decode(bytes, encoding)` is the optional member that reads them. The default
+answers null.
+
+The engine names the encoding from the shape of the byte pairs, spelled as the WHATWG Encoding
+Standard spells it: `Shift_JIS`, `EUC-JP`, `GBK`, `Big5` or `EUC-KR`. It asks `decode` for the
+likeliest name first. When the answer leaves more than one character in fifty as U+FFFD or as a
+private use character, it asks for the other names in a fixed order, and keeps the first reading
+that passes. So a table must turn every byte sequence it cannot read into U+FFFD.
+
+- The likeliest name, read with nothing left over, is certain, and the engine says nothing.
+- Any other reading is kept, and `PlaybackWarning.SubtitleCharsetGuessed` names the encoding used.
+- When every answer is null, or no reading passes, the engine reads the file as windows-1252. The
+  same warning names the encoding that the bytes appear to be in. A `decode` that throws counts as
+  one that answered null.
+
+`EastAsianText` in `kiteplayer-subtitles` is the one implementation, and the FFmpeg backend's
+parser hands `decode` to it. It follows the standard's decoder algorithms, with tables that
+`scripts/generate-east-asian-tables.py` writes from the standard's index files, so a file reads
+the same on every target.
+
+```kotlin
+override fun decode(bytes: ByteArray, encoding: String): String? =
+    EastAsianText.decode(bytes, encoding)
+```
+
 ## Diagnostics
 
 Implement `describeForDiagnostics()` to echo whatever configuration your backend carries; the

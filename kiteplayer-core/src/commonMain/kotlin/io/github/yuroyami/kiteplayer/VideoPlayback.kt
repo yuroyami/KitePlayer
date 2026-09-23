@@ -365,6 +365,25 @@ public class VideoPlayback(
     }
 
     /**
+     * Hands the next frame over now: exactly one frame, never timed and never dropped.
+     *
+     * This is what an open, a seek and a frame step end with. [tick] drops a frame it finds late, and
+     * a step that wakes late finds the next frame late, so a step through [tick] skipped a frame on a
+     * busy machine (#156). The schedule restarts from this frame.
+     */
+    internal suspend fun presentNext(masterClock: Pts?): Duration {
+        val next = queue.peek() ?: return IDLE_WAIT
+        if (next.generation != generation) {
+            queue.discardStale(generation)
+            departures.trySend(Unit)
+            return Duration.ZERO
+        }
+        frameTimerNanos = clock.nanos()
+        started = true
+        return present(frameTimerNanos, masterClock)
+    }
+
+    /**
      * Hands the next frame over, aimed at [targetNanos].
      *
      * [targetNanos] is the schedule's own instant for the frame, never the moment the scheduler woke

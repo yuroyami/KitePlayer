@@ -7579,7 +7579,7 @@ internal class PlaybackCore(
                     // a gate counting successes alone would tick the whole queue away one frame at
                     // a time looking for a success that is never coming.
                     val before = session.framesReleased(video)
-                    val wait = video.tick(masterPosition(session))
+                    val wait = video.presentNext(masterPosition(session))
                     recordVideoClock(session, video)
                     if (session.framesReleased(video) > before) {
                         session.schedulerMode.compareAndSet(SCHEDULER_ONE_FRAME, SCHEDULER_IDLE)

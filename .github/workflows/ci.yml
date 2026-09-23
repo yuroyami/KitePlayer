@@ -239,7 +239,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # The Kotlin/Native host target. :kiteplayer-ffmpeg here is the format conformance matrix
-      # against real clips.
+      # against real clips, and :kiteplayer plays one clip through KitePlayerPlatform.createOrNull().
       #
       # -Pkiteplayer.noAudioHardware=true drops ONE assertion and nothing else. This runner opens
       # CoreAudio fine and passes 94 of the module's 95 macosArm64 tests, the other CoreAudio suites
@@ -259,7 +259,8 @@ jobs:
             :kiteplayer-rt:macosArm64Test \
             :kiteplayer-libass:macosArm64Test \
             :kiteplayer-network:macosArm64Test \
-            :kiteplayer-ffmpeg:macosArm64Test
+            :kiteplayer-ffmpeg:macosArm64Test \
+            :kiteplayer:macosArm64Test
 
       # An isolated external consumer must retain optional registration after Native release
       # optimization. A hosted runner also verifies public HTTPS independently of host firewalls.
@@ -351,7 +352,8 @@ jobs:
             :kiteplayer-network:iosSimulatorArm64Test \
             :kiteplayer-libass:iosSimulatorArm64Test \
             :kiteplayer-output:iosSimulatorArm64Test \
-            :kiteplayer-audioviz:iosSimulatorArm64Test
+            :kiteplayer-audioviz:iosSimulatorArm64Test \
+            :kiteplayer:iosSimulatorArm64Test
 
       # Compiling the device triples is a weaker claim than running them and is still worth making:
       # it is what catches an appleMain change that only breaks on the real target.
@@ -498,7 +500,8 @@ jobs:
             :kiteplayer-io:linuxX64Test \
             :kiteplayer-output:linuxX64Test \
             :kiteplayer-rt:linuxX64Test \
-            :kiteplayer-libass:linuxX64Test
+            :kiteplayer-libass:linuxX64Test \
+            :kiteplayer:linuxX64Test
 
       # The player's FFmpeg backend links its embedded KiteFFmpeg on Linux. This is the step that
       # would catch kiteffmpeg-core shipping a klib whose linuxX64 half does not resolve.
@@ -553,6 +556,7 @@ jobs:
           :kiteplayer-output:mingwX64Test
           :kiteplayer-rt:mingwX64Test
           :kiteplayer-libass:mingwX64Test
+          :kiteplayer:mingwX64Test
 
       - name: Link the FFmpeg backend for mingwX64
         run: ./gradlew --stacktrace :kiteplayer-ffmpeg:linkDebugTestMingwX64

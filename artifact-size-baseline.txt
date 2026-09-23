@@ -37,6 +37,7 @@ kiteplayer-view-bindings android 6535
 kiteplayer-view-bindings iosArm64 13479
 kiteplayer jvm 53219
 kiteplayer android 87568
+kiteplayer macosArm64 51296
 kiteplayer iosArm64 72336
 kiteplayer-compose-interop jvm 12513
 kiteplayer-compose-interop android 10155

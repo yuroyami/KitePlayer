@@ -10,13 +10,18 @@ plugins {
 
 /*
  * :kiteplayer is the standard runtime: the common factory, platform media/output defaults,
- * automatic network transport and the libass subtitle typesetter. Android, iOS, JVM and Wasm have real stacks; JavaScript retains an
- * explicit unavailable facade. Native view adapters live below this assembly in view-bindings,
- * so a UI-only consumer does not inherit a default runtime or its transport.
+ * automatic network transport and the libass subtitle typesetter. Android, iOS, macOS, JVM and
+ * Wasm have real stacks. Linux and Windows native have the FFmpeg backend but no audio output, and
+ * JavaScript has neither, so those answer unavailable. Native view adapters live below this
+ * assembly in view-bindings, so a UI-only consumer does not inherit a default runtime or its
+ * transport.
  */
-// The desktop end-to-end test plays a real file, and a Test task's working directory is the module
-// rather than the repo root, so the location is passed in explicitly like the native tasks do.
+// The desktop end-to-end tests play a real file, and a test's working directory is the module
+// rather than the repo root, so the location is passed in explicitly.
 tasks.withType<Test>().configureEach {
+    environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
+}
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     environment("KITEPLAYER_TESTMEDIA", rootDir.resolve("testmedia").absolutePath)
 }
 
@@ -24,11 +29,20 @@ kotlin {
     explicitApi()
     jvmToolchain(21)
 
+    // Kept explicit because networkMain below adds edges of its own.
+    applyDefaultHierarchyTemplate()
+
     @OptIn(org.jetbrains.kotlin.gradle.dsl.abi.ExperimentalAbiValidation::class)
     abiValidation {}
 
     iosArm64()
     iosSimulatorArm64()
+    // The Kotlin/Native desktops. macOS gets the whole stack; Linux and Windows have no audio
+    // output and no TLS, so their default answers unavailable and a caller brings an output.
+    macosArm64()
+    linuxX64()
+    linuxArm64()
+    mingwX64()
     jvm()
 
     @OptIn(ExperimentalKotlinGradlePluginApi::class)
@@ -54,7 +68,6 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":kiteplayer-core"))
-            api(project(":kiteplayer-network"))
             // The typesetting engine rides the standard runtime the way the network transport does:
             // adding this entry point is what makes ASS tracks render through libass.
             api(project(":kiteplayer-libass"))
@@ -62,14 +75,28 @@ kotlin {
             // a native file path, an Apple file URL.
             api(project(":kiteplayer-io"))
         }
+        // Every target that has HTTP and HTTPS transport, which is every target except Linux and
+        // Windows native. One shared set rather than five edges, so a consumer's common code still
+        // sees the transport's API when all of its targets have it.
+        val networkMain = create("networkMain") {
+            dependsOn(commonMain.get())
+            dependencies { api(project(":kiteplayer-network")) }
+        }
+        listOf("androidMain", "appleMain", "jvmMain", "jsMain", "wasmJsMain").forEach {
+            getByName(it).dependsOn(networkMain)
+        }
         androidMain.dependencies {
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))
             api(project(":kiteplayer-view-bindings"))
         }
-        iosMain.dependencies {
+        // iOS, macOS, Linux and Windows native. Output has no backend on Linux and Windows; it comes
+        // along there for its shared frame layout and subtitle helpers.
+        nativeMain.dependencies {
             api(project(":kiteplayer-ffmpeg"))
             api(project(":kiteplayer-output"))
+        }
+        iosMain.dependencies {
             api(project(":kiteplayer-view-bindings"))
         }
         // The desktop default includes the JNI media backend, audio output and native-view adapter.

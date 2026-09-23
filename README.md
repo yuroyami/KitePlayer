@@ -59,7 +59,7 @@ kiteplayer-compose
 │   ├── kiteplayer-output            audio output, subtitle rasterisers
 │   ├── kiteplayer-view-bindings     adapters for the native views
 │   │   └── kiteplayer-view
-│   ├── kiteplayer-network           HTTP and HTTPS
+│   ├── kiteplayer-network           HTTP and HTTPS, not on Linux and Windows native
 │   ├── kiteplayer-libass            ASS and SSA typesetting
 │   └── kiteplayer-io                input doors for files and streams
 ├── kiteplayer-compose-ui
@@ -281,7 +281,10 @@ if (snapshot.isAudioOnly) {
 | Web | wasmJs plays through the FFmpeg Wasm module with browser audio. Load `KiteFFmpegWeb` before creating a player. This is not broad browser qualification |
 
 Android and iOS are the platforms in daily use. macOS arm64 is the development machine and has the
-deepest automated coverage. Linux plays through Kotlin/Native but has no audio device sink yet.
+deepest automated coverage. A Kotlin/Native app on macOS gets its player from
+`KitePlayerPlatform.createOrNull()` and attaches a renderer from `kiteplayer-output`. Linux and
+Windows native have no audio output and no HTTPS, so there `createOrNull()` returns null. Pass
+`KiteFFmpegMediaBackend()` and your own `OutputBackend` to `KitePlayer.create` instead.
 The desktop JVM works on macOS arm64 only for now: the KiteFFmpeg 0.2.0 JVM artifact bundles only
 that native library, and the player cannot fill that gap.
 

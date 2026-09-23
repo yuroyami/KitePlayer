@@ -21,7 +21,7 @@ esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMAGE="${KITE_LINUX_IMAGE:-debian:bookworm-slim}"
-MODULES=(kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-ffmpeg)
+MODULES=(kiteplayer-core kiteplayer-subtitles kiteplayer-io kiteplayer-ffmpeg kiteplayer)
 
 # Docker Desktop's credential helper blocks on the login keychain in a headless session, which
 # hangs every pull. An empty config skips it; these are public images and need no credentials.

@@ -23,9 +23,12 @@ public sealed interface KitePlayerAvailability {
 /**
  * The default KitePlayer stack for the current target.
  *
- * Android, iOS and the desktop JVM provide real backends. Wasm becomes available after its codec
- * module is loaded; JavaScript retains an explicit unavailable facade. The standard runtime
- * includes automatic HTTP transport without requiring a factory-specific resolver setting.
+ * Android, iOS, macOS native and the desktop JVM provide real backends. Wasm becomes available
+ * after its codec module is loaded. JavaScript retains an explicit unavailable facade. Linux and
+ * Windows native have the FFmpeg backend but no audio output, so they answer unavailable, and a
+ * caller there passes its own output backend to [KitePlayer.create]. Except on Linux and Windows
+ * native, the standard runtime includes automatic HTTP transport without requiring a
+ * factory-specific resolver setting.
  *
  * Custom backends remain independent of this facade: pass them directly to [KitePlayer.create].
  */

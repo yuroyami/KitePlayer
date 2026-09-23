@@ -94,9 +94,12 @@ macos() {
     gradle :kiteplayer-core:macosArm64Test :kiteplayer-subtitles:macosArm64Test :kiteplayer-io:macosArm64Test \
         :kiteplayer-output:macosArm64Test :kiteplayer-rt:macosArm64Test \
         :kiteplayer-libass:macosArm64Test :kiteplayer-network:macosArm64Test \
-        :kiteplayer-ffmpeg:macosArm64Test
+        :kiteplayer-ffmpeg:macosArm64Test :kiteplayer:macosArm64Test
 }
-ios_simulator() { gradle :kiteplayer-view:iosSimulatorArm64Test :kiteplayer-audioviz:iosSimulatorArm64Test; }
+ios_simulator() {
+    gradle :kiteplayer-view:iosSimulatorArm64Test :kiteplayer-audioviz:iosSimulatorArm64Test \
+        :kiteplayer:iosSimulatorArm64Test
+}
 c_sanitizers() {
     # This reuses the plain build from base. When resuming here, that earlier build must exist.
     run kiteplayer-rt/native/scripts/run-c-tests.sh interpose
@@ -128,7 +131,7 @@ windows() {
     # These are link checks on a Mac. Only the Windows CI job executes Windows tests.
     gradle :kiteplayer-core:linkDebugTestMingwX64 :kiteplayer-subtitles:linkDebugTestMingwX64 \
         :kiteplayer-output:linkDebugTestMingwX64 :kiteplayer-rt:linkDebugTestMingwX64 \
-        :kiteplayer-ffmpeg:linkDebugTestMingwX64
+        :kiteplayer-ffmpeg:linkDebugTestMingwX64 :kiteplayer:linkDebugTestMingwX64
 }
 cross_compile() {
     # Device builds are compile evidence only. The simulator view suite executes tests.

@@ -1,0 +1,68 @@
+# Published artifact sizes in bytes, held by scripts/check-artifact-size.sh.
+#
+# A line more than 10 percent above this baseline fails CI. Rewrite the file with
+# ./scripts/check-artifact-size.sh --update in the commit that moved the size, and put the
+# old and new numbers in the commit message.
+#
+# module target bytes
+kiteplayer-core jvm 1367590
+kiteplayer-core android 1249857
+kiteplayer-core macosArm64 1171848
+kiteplayer-core iosArm64 1171834
+kiteplayer-subtitles jvm 43275
+kiteplayer-subtitles android 41325
+kiteplayer-subtitles macosArm64 55832
+kiteplayer-subtitles iosArm64 55819
+kiteplayer-io jvm 12522
+kiteplayer-io android 15182
+kiteplayer-io macosArm64 17284
+kiteplayer-io iosArm64 17271
+kiteplayer-rt macosArm64 4749
+kiteplayer-rt iosArm64 4735
+kiteplayer-rt macosArm64-cinterop-kitert 19929
+kiteplayer-rt iosArm64-cinterop-kitert 19517
+kiteplayer-ffmpeg jvm 245973
+kiteplayer-ffmpeg android 231718
+kiteplayer-ffmpeg macosArm64 248671
+kiteplayer-ffmpeg iosArm64 248657
+kiteplayer-output jvm 71682
+kiteplayer-output android 281460
+kiteplayer-output macosArm64 223423
+kiteplayer-output iosArm64 230629
+kiteplayer-view jvm 17158
+kiteplayer-view android 41436
+kiteplayer-view iosArm64 38660
+kiteplayer-view-bindings jvm 8262
+kiteplayer-view-bindings android 6535
+kiteplayer-view-bindings iosArm64 13479
+kiteplayer jvm 53219
+kiteplayer android 87568
+kiteplayer iosArm64 72336
+kiteplayer-compose-interop jvm 12513
+kiteplayer-compose-interop android 10155
+kiteplayer-compose-interop iosArm64 12970
+kiteplayer-compose-video jvm 87588
+kiteplayer-compose-video android 115889
+kiteplayer-compose-video iosArm64 91054
+kiteplayer-compose-ui jvm 15705
+kiteplayer-compose-ui android 16989
+kiteplayer-compose-ui iosArm64 18601
+kiteplayer-phone jvm 1894
+kiteplayer-phone android 2909
+kiteplayer-phone iosArm64 9683
+kiteplayer-compose jvm 1772
+kiteplayer-compose android 1625
+kiteplayer-compose iosArm64 5709
+kiteplayer-libass jvm 6155978
+kiteplayer-libass android 4102775
+kiteplayer-libass macosArm64 35736
+kiteplayer-libass iosArm64 35723
+kiteplayer-libass macosArm64-cinterop-libass 1780497
+kiteplayer-libass iosArm64-cinterop-libass 1734049
+kiteplayer-network jvm 95755
+kiteplayer-network android 89590
+kiteplayer-network macosArm64 82059
+kiteplayer-network iosArm64 82045
+kiteplayer-audioviz jvm 1451954
+kiteplayer-audioviz android 1377196
+kiteplayer-audioviz iosArm64 1977864

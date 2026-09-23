@@ -254,6 +254,13 @@ jobs:
           ./scripts/verify-network-distribution.sh --stage
           ./scripts/verify-network-distribution.sh --run --target macos --url https://example.com
 
+      # Every published artifact against artifact-size-baseline.txt: the JVM jar, the Android
+      # archive and the macOS and iOS klibs. A line more than ten percent above its baseline fails
+      # and names itself, and the table goes into the run summary. After the tests, so a size
+      # failure never hides a test failure.
+      - name: Artifact sizes
+        run: ./scripts/check-artifact-size.sh
+
       # The conformance table, which is the answer "green" does not carry: which clip played on
       # this platform and what happened when one did not. Written by the matrix run itself, before
       # its assertion, so a FAILING run uploads the table naming the row that failed. always(),

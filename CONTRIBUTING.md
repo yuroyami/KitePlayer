@@ -27,6 +27,10 @@ These are not style preferences. Each one exists because ignoring it cost someon
   the same commit.
 - **Explicit API mode is on in every module.** Any public API change regenerates the ABI dumps in
   the same commit with `./gradlew updateKotlinAbi`.
+- **A published artifact that grows more than ten percent fails CI.** The check is
+  `./scripts/check-artifact-size.sh`, against `artifact-size-baseline.txt`. When the growth is
+  intended, run the script with `--update` and commit the baseline with the change. Put the old
+  and new numbers in the commit message.
 - **When the tree contradicts an issue or a document, stop and say so.** Do not improvise the
   document back into truth. Prose drifting from the tree is this project's measured failure mode.
 - **Size estimates rot the same way claims do.** An estimate made behind a blocker is a guess about

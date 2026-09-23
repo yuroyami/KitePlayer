@@ -402,6 +402,81 @@ jobs:
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------------------------
+  # tvOS and watchOS, on their simulators, for the four modules that declare those targets.
+  # ---------------------------------------------------------------------------------------------
+  tvos-watchos-simulator:
+    name: tvOS and watchOS simulators arm64 (core, subtitles, io, rt)
+    # Pinned on purpose. The Kotlin test task takes its device from `xcrun simctl list devices
+    # available` and refuses to run when the image has no tvOS or watchOS simulator. The software
+    # list of the macos-26 image names both, with 26.5 runtimes that match its default Xcode 26.6.
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-tvos-watchos-sim-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: |
+            konan-tvos-watchos-sim-
+
+      # The runtimes the test tasks choose from, so that a refusal can be read against the image.
+      - name: The simulator runtimes on this image
+        run: xcrun simctl list runtimes
+
+      - name: Warm the Kotlin/Native toolchain
+        run: ./gradlew :kiteplayer-rt:downloadKotlinNativeDistribution --stacktrace
+
+      # No other module declares these two targets. The tvOS and watchOS device targets are not run
+      # here, and kiteplayer-rt has no tvOS or watchOS audio output, so no device audio runs either.
+      - name: tvosSimulatorArm64 and watchosSimulatorArm64 tests
+        run: |
+          ./gradlew --stacktrace \
+            :kiteplayer-core:tvosSimulatorArm64Test \
+            :kiteplayer-subtitles:tvosSimulatorArm64Test \
+            :kiteplayer-io:tvosSimulatorArm64Test \
+            :kiteplayer-rt:tvosSimulatorArm64Test \
+            :kiteplayer-core:watchosSimulatorArm64Test \
+            :kiteplayer-subtitles:watchosSimulatorArm64Test \
+            :kiteplayer-io:watchosSimulatorArm64Test \
+            :kiteplayer-rt:watchosSimulatorArm64Test
+
+      # A green run must say how many tests ran, not only that none failed. A task that wrote no
+      # results, such as one that found no test source, shows "no results".
+      - name: The test counts
+        if: always()
+        run: |
+          python3 - >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import glob, itertools, xml.etree.ElementTree as ET
+          tasks = ("tvosSimulatorArm64Test", "watchosSimulatorArm64Test")
+          modules = ("kiteplayer-core", "kiteplayer-subtitles", "kiteplayer-io", "kiteplayer-rt")
+          print("### tvOS and watchOS simulator tests\n")
+          print("| Test task | Tests | Failed | Skipped |\n|---|---:|---:|---:|")
+          for task, module in itertools.product(tasks, modules):
+              files = glob.glob(f"{module}/build/test-results/{task}/*.xml")
+              roots = [ET.parse(f).getroot() for f in files]
+              total = lambda *keys: sum(int(r.get(k, 0)) for r in roots for k in keys)
+              cells = f"{total('tests')} | {total('failures', 'errors')} | {total('skipped')}"
+              print(f"| :{module}:{task} | {cells if roots else 'no results | |'} |")
+          EOF
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tvos-watchos-simulator-reports
+          path: |
+            **/build/reports/tests/**
+            **/build/test-results/**
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------------------------
   # Linux, JVM and Android host. No Kotlin/Native here at all, which is what makes it fast.
   # ---------------------------------------------------------------------------------------------
   linux-jvm-android:

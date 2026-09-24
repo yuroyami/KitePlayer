@@ -8,6 +8,11 @@ public final class io/github/yuroyami/kiteplayer/subtitle/AssTrackParser {
 	public final fun parseEvent (Ljava/lang/String;JJ)Lio/github/yuroyami/kiteplayer/subtitle/SubtitleCue$Text;
 }
 
+public final class io/github/yuroyami/kiteplayer/subtitle/EastAsianText {
+	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/EastAsianText;
+	public final fun decode ([BLjava/lang/String;)Ljava/lang/String;
+}
+
 public final class io/github/yuroyami/kiteplayer/subtitle/SubRipParser {
 	public static final field INSTANCE Lio/github/yuroyami/kiteplayer/subtitle/SubRipParser;
 	public static final field OPEN_CUE_DEFAULT_MICROS J

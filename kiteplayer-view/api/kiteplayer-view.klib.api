@@ -1,15 +1,13 @@
 // Klib ABI Dump
-// Targets: [iosArm64, iosSimulatorArm64]
+// Targets: [iosArm64, iosSimulatorArm64, macosArm64, wasmJs]
+// Alias: apple => [iosArm64, iosSimulatorArm64, macosArm64]
+// Alias: ios => [iosArm64, iosSimulatorArm64]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
 // - Show declarations: true
 
 // Library unique name: <io.github.yuroyami:kiteplayer-view>
-abstract fun interface io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory { // io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory|null[0]
-    abstract fun create(platform.QuartzCore/CALayer, platform.QuartzCore/CAMetalLayer, kotlin/Boolean): io.github.yuroyami.kiteplayer.view/PlayerViewRenderer // io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory.create|create(platform.QuartzCore.CALayer;platform.QuartzCore.CAMetalLayer;kotlin.Boolean){}[0]
-}
-
 abstract interface io.github.yuroyami.kiteplayer.view/PlayerViewRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer|null[0]
     abstract val failedFrames // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.failedFrames|{}failedFrames[0]
         abstract fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.view/PlayerViewRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
@@ -20,24 +18,51 @@ abstract interface io.github.yuroyami.kiteplayer.view/PlayerViewRenderer : io.gi
 }
 
 final class io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture : kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture|null[0]
+    final val active // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.active|{}active[0]
+        final fun <get-active>(): kotlinx.coroutines.flow/StateFlow<kotlin/Boolean> // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.active.<get-active>|<get-active>(){}[0]
     final val isActive // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isActive|{}isActive[0]
         final fun <get-isActive>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isActive.<get-isActive>|<get-isActive>(){}[0]
     final val isPossible // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isPossible|{}isPossible[0]
         final fun <get-isPossible>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.isPossible.<get-isPossible>|<get-isPossible>(){}[0]
-
-    final var startsAutomatically // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically|{}startsAutomatically[0]
-        final fun <get-startsAutomatically>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically.<get-startsAutomatically>|<get-startsAutomatically>(){}[0]
-        final fun <set-startsAutomatically>(kotlin/Boolean) // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically.<set-startsAutomatically>|<set-startsAutomatically>(kotlin.Boolean){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.close|close(){}[0]
     final fun start() // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.start|start(){}[0]
     final fun stop() // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.stop|stop(){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.Companion|null[0]
+        // Targets: [apple]
         final fun createOrNull(io.github.yuroyami.kiteplayer/KitePlayer, platform.AVFoundation/AVSampleBufferDisplayLayer, kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture? // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.Companion.createOrNull|createOrNull(io.github.yuroyami.kiteplayer.KitePlayer;platform.AVFoundation.AVSampleBufferDisplayLayer;kotlin.time.Duration){}[0]
+
+        // Targets: [wasmJs]
+        final fun createOrNull(kotlin.js/JsAny, io.github.yuroyami.kiteplayer.spi/VideoRenderer, io.github.yuroyami.kiteplayer/KitePlayer): io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture? // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.Companion.createOrNull|createOrNull(kotlin.js.JsAny;io.github.yuroyami.kiteplayer.spi.VideoRenderer;io.github.yuroyami.kiteplayer.KitePlayer){}[0]
     }
+
+    // Targets: [apple]
+    final var onRestoreRequested // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.onRestoreRequested|{}onRestoreRequested[0]
+        final fun <get-onRestoreRequested>(): kotlin/Function1<kotlin/Function1<kotlin/Boolean, kotlin/Unit>, kotlin/Unit>? // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.onRestoreRequested.<get-onRestoreRequested>|<get-onRestoreRequested>(){}[0]
+        final fun <set-onRestoreRequested>(kotlin/Function1<kotlin/Function1<kotlin/Boolean, kotlin/Unit>, kotlin/Unit>?) // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.onRestoreRequested.<set-onRestoreRequested>|<set-onRestoreRequested>(kotlin.Function1<kotlin.Function1<kotlin.Boolean,kotlin.Unit>,kotlin.Unit>?){}[0]
+
+    // Targets: [apple]
+    final var startsAutomatically // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically|{}startsAutomatically[0]
+        final fun <get-startsAutomatically>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically.<get-startsAutomatically>|<get-startsAutomatically>(){}[0]
+        final fun <set-startsAutomatically>(kotlin/Boolean) // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.startsAutomatically.<set-startsAutomatically>|<set-startsAutomatically>(kotlin.Boolean){}[0]
+
+    // Targets: [wasmJs]
+    final var mode // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.mode|{}mode[0]
+        final fun <get-mode>(): io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode? // io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture.mode.<get-mode>|<get-mode>(){}[0]
 }
 
+final const val io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL // io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL|{}DEFAULT_VIDEO_ACCESSIBILITY_LABEL[0]
+    final fun <get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>(): kotlin/String // io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL.<get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>|<get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>(){}[0]
+
+final fun io.github.yuroyami.kiteplayer.view/accessibilityStateText(io.github.yuroyami.kiteplayer/PlaybackStatus, kotlin.time/Duration, kotlin.time/Duration?): kotlin/String // io.github.yuroyami.kiteplayer.view/accessibilityStateText|accessibilityStateText(io.github.yuroyami.kiteplayer.PlaybackStatus;kotlin.time.Duration;kotlin.time.Duration?){}[0]
+
+// Targets: [ios]
+abstract fun interface io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory { // io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory|null[0]
+    abstract fun create(platform.QuartzCore/CALayer, platform.QuartzCore/CAMetalLayer, kotlin/Boolean): io.github.yuroyami.kiteplayer.view/PlayerViewRenderer // io.github.yuroyami.kiteplayer.view/ApplePlayerViewRendererFactory.create|create(platform.QuartzCore.CALayer;platform.QuartzCore.CAMetalLayer;kotlin.Boolean){}[0]
+}
+
+// Targets: [ios]
 final class io.github.yuroyami.kiteplayer.view/KitePlayerUIView : platform.UIKit/UIView { // io.github.yuroyami.kiteplayer.view/KitePlayerUIView|null[0]
     constructor <init>() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.<init>|<init>(){}[0]
 
@@ -66,7 +91,14 @@ final class io.github.yuroyami.kiteplayer.view/KitePlayerUIView : platform.UIKit
     final fun updateAccessibilityState() // io.github.yuroyami.kiteplayer.view/KitePlayerUIView.updateAccessibilityState|updateAccessibilityState(){}[0]
 }
 
-final const val io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL // io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL|{}DEFAULT_VIDEO_ACCESSIBILITY_LABEL[0]
-    final fun <get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>(): kotlin/String // io.github.yuroyami.kiteplayer.view/DEFAULT_VIDEO_ACCESSIBILITY_LABEL.<get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>|<get-DEFAULT_VIDEO_ACCESSIBILITY_LABEL>(){}[0]
+// Targets: [wasmJs]
+final enum class io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode : kotlin/Enum<io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode> { // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode|null[0]
+    enum entry DocumentWindow // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode.DocumentWindow|null[0]
+    enum entry VideoElement // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode.VideoElement|null[0]
 
-final fun io.github.yuroyami.kiteplayer.view/accessibilityStateText(io.github.yuroyami.kiteplayer/PlaybackStatus, kotlin.time/Duration, kotlin.time/Duration?): kotlin/String // io.github.yuroyami.kiteplayer.view/accessibilityStateText|accessibilityStateText(io.github.yuroyami.kiteplayer.PlaybackStatus;kotlin.time.Duration;kotlin.time.Duration?){}[0]
+    final val entries // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode> // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode> // io.github.yuroyami.kiteplayer.view/WebPictureInPictureMode.values|values#static(){}[0]
+}

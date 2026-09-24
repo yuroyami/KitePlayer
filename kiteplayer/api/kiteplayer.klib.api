@@ -185,6 +185,9 @@ final class io.github.yuroyami.kiteplayer.session/KitePlayerMediaSession : kotli
 final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachBackgroundHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/BackgroundPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachBackgroundHandling|attachBackgroundHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.BackgroundPolicy){}[0]
 
 // Targets: [ios]
+final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachBackgroundHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/BackgroundPolicy = ..., io.github.yuroyami.kiteplayer.view/KitePlayerPictureInPicture?): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachBackgroundHandling|attachBackgroundHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.BackgroundPolicy;io.github.yuroyami.kiteplayer.view.KitePlayerPictureInPicture?){}[0]
+
+// Targets: [ios]
 final fun (io.github.yuroyami.kiteplayer/KitePlayerPlatform).io.github.yuroyami.kiteplayer.session/attachInterruptionHandling(io.github.yuroyami.kiteplayer/KitePlayer, io.github.yuroyami.kiteplayer.session/InterruptionPolicy = ...): kotlin/AutoCloseable // io.github.yuroyami.kiteplayer.session/attachInterruptionHandling|attachInterruptionHandling@io.github.yuroyami.kiteplayer.KitePlayerPlatform(io.github.yuroyami.kiteplayer.KitePlayer;io.github.yuroyami.kiteplayer.session.InterruptionPolicy){}[0]
 
 // Targets: [wasmJs]

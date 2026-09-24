@@ -112,6 +112,26 @@ final class io.github.yuroyami.kiteplayer.output/MetalVideoRenderer : io.github.
 }
 
 // Targets: [apple]
+final class io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer|null[0]
+    constructor <init>(platform.AVFoundation/AVSampleBufferDisplayLayer, io.github.yuroyami.kiteplayer.output/MetalPictureResolver) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.<init>|<init>(platform.AVFoundation.AVSampleBufferDisplayLayer;io.github.yuroyami.kiteplayer.output.MetalPictureResolver){}[0]
+
+    final val events // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.events|{}events[0]
+        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.events.<get-events>|<get-events>(){}[0]
+    final val failedFrames // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.failedFrames|{}failedFrames[0]
+        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
+    final val presentedFrames // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.presentedFrames|{}presentedFrames[0]
+        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
+
+    final fun close() // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.close|close(){}[0]
+    final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
+    final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
+    final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
+    final fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
+    final suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
+    final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
+}
+
+// Targets: [apple]
 sealed class io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture|null[0]
     final class CorePixelBuffer : io.github.yuroyami.kiteplayer.output/MetalPicture { // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer|null[0]
         constructor <init>(kotlinx.cinterop/CPointer<out kotlinx.cinterop/CPointed>) // io.github.yuroyami.kiteplayer.output/MetalPicture.CorePixelBuffer.<init>|<init>(kotlinx.cinterop.CPointer<out|kotlinx.cinterop.CPointed>){}[0]
@@ -164,26 +184,6 @@ final object io.github.yuroyami.kiteplayer.output/AppleOutputBackend : io.github
 }
 
 // Targets: [ios]
-final class io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer|null[0]
-    constructor <init>(platform.AVFoundation/AVSampleBufferDisplayLayer, io.github.yuroyami.kiteplayer.output/MetalPictureResolver) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.<init>|<init>(platform.AVFoundation.AVSampleBufferDisplayLayer;io.github.yuroyami.kiteplayer.output.MetalPictureResolver){}[0]
-
-    final val events // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.events|{}events[0]
-        final fun <get-events>(): kotlinx.coroutines.flow/Flow<io.github.yuroyami.kiteplayer.spi/RendererEvent> // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.events.<get-events>|<get-events>(){}[0]
-    final val failedFrames // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.failedFrames|{}failedFrames[0]
-        final fun <get-failedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.failedFrames.<get-failedFrames>|<get-failedFrames>(){}[0]
-    final val presentedFrames // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.presentedFrames|{}presentedFrames[0]
-        final fun <get-presentedFrames>(): kotlin/Long // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.presentedFrames.<get-presentedFrames>|<get-presentedFrames>(){}[0]
-
-    final fun close() // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.close|close(){}[0]
-    final fun setViewport(kotlin/Int, kotlin/Int, kotlin/Float) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.setViewport|setViewport(kotlin.Int;kotlin.Int;kotlin.Float){}[0]
-    final fun supportedHardwareSurfaces(): kotlin.collections/Set<io.github.yuroyami.kiteplayer.spi/HwSurfaceKind> // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.supportedHardwareSurfaces|supportedHardwareSurfaces(){}[0]
-    final fun supports(io.github.yuroyami.kiteplayer.spi/PlayerPixelFormat): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.supports|supports(io.github.yuroyami.kiteplayer.spi.PlayerPixelFormat){}[0]
-    final fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
-    final suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
-    final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/SampleBufferVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
-}
-
-// Targets: [ios]
 final class io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer : io.github.yuroyami.kiteplayer.spi/VideoRenderer { // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer|null[0]
     constructor <init>(platform.QuartzCore/CALayer, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/ByteArray>, kotlin/Function1<io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Boolean> = ...) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.<init>|<init>(platform.QuartzCore.CALayer;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.ByteArray>;kotlin.Function1<io.github.yuroyami.kiteplayer.spi.VideoFrame,kotlin.Boolean>){}[0]
 
@@ -206,6 +206,19 @@ final class io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer : io.github.
     final fun vsyncIntervalNanos(): kotlin/Long? // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.vsyncIntervalNanos|vsyncIntervalNanos(){}[0]
     final suspend fun present(io.github.yuroyami.kiteplayer.spi/VideoFrame, kotlin/Long): kotlin/Boolean // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.present|present(io.github.yuroyami.kiteplayer.spi.VideoFrame;kotlin.Long){}[0]
     final suspend fun setOverlay(io.github.yuroyami.kiteplayer.spi/SubtitleOverlay?) // io.github.yuroyami.kiteplayer.output/UIKitVideoRenderer.setOverlay|setOverlay(io.github.yuroyami.kiteplayer.spi.SubtitleOverlay?){}[0]
+}
+
+// Targets: [macosArm64]
+final enum class io.github.yuroyami.kiteplayer.output/AppKitSurface : kotlin/Enum<io.github.yuroyami.kiteplayer.output/AppKitSurface> { // io.github.yuroyami.kiteplayer.output/AppKitSurface|null[0]
+    enum entry Image // io.github.yuroyami.kiteplayer.output/AppKitSurface.Image|null[0]
+    enum entry Metal // io.github.yuroyami.kiteplayer.output/AppKitSurface.Metal|null[0]
+    enum entry SampleBuffer // io.github.yuroyami.kiteplayer.output/AppKitSurface.SampleBuffer|null[0]
+
+    final val entries // io.github.yuroyami.kiteplayer.output/AppKitSurface.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.yuroyami.kiteplayer.output/AppKitSurface> // io.github.yuroyami.kiteplayer.output/AppKitSurface.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.yuroyami.kiteplayer.output/AppKitSurface // io.github.yuroyami.kiteplayer.output/AppKitSurface.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.yuroyami.kiteplayer.output/AppKitSurface> // io.github.yuroyami.kiteplayer.output/AppKitSurface.values|values#static(){}[0]
 }
 
 // Targets: [macosArm64]
@@ -234,10 +247,13 @@ final class io.github.yuroyami.kiteplayer.output/AppKitVideoRenderer : io.github
 
 // Targets: [macosArm64]
 final class io.github.yuroyami.kiteplayer.output/AppKitWindow { // io.github.yuroyami.kiteplayer.output/AppKitWindow|null[0]
+    constructor <init>(kotlin/String, kotlin/Int, kotlin/Int, io.github.yuroyami.kiteplayer.output/AppKitSurface) // io.github.yuroyami.kiteplayer.output/AppKitWindow.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Int;io.github.yuroyami.kiteplayer.output.AppKitSurface){}[0]
     constructor <init>(kotlin/String, kotlin/Int, kotlin/Int, kotlin/Boolean = ...) // io.github.yuroyami.kiteplayer.output/AppKitWindow.<init>|<init>(kotlin.String;kotlin.Int;kotlin.Int;kotlin.Boolean){}[0]
 
     final val metalLayer // io.github.yuroyami.kiteplayer.output/AppKitWindow.metalLayer|{}metalLayer[0]
         final fun <get-metalLayer>(): platform.QuartzCore/CAMetalLayer? // io.github.yuroyami.kiteplayer.output/AppKitWindow.metalLayer.<get-metalLayer>|<get-metalLayer>(){}[0]
+    final val sampleBufferLayer // io.github.yuroyami.kiteplayer.output/AppKitWindow.sampleBufferLayer|{}sampleBufferLayer[0]
+        final fun <get-sampleBufferLayer>(): platform.AVFoundation/AVSampleBufferDisplayLayer? // io.github.yuroyami.kiteplayer.output/AppKitWindow.sampleBufferLayer.<get-sampleBufferLayer>|<get-sampleBufferLayer>(){}[0]
 
     final var onCloseRequested // io.github.yuroyami.kiteplayer.output/AppKitWindow.onCloseRequested|{}onCloseRequested[0]
         final fun <get-onCloseRequested>(): kotlin/Function0<kotlin/Unit>? // io.github.yuroyami.kiteplayer.output/AppKitWindow.onCloseRequested.<get-onCloseRequested>|<get-onCloseRequested>(){}[0]

@@ -243,6 +243,22 @@ final class io.github.yuroyami.kiteplayer.network.xml/XmlException : kotlin/Exce
         final fun <get-offset>(): kotlin/Int // io.github.yuroyami.kiteplayer.network.xml/XmlException.offset.<get-offset>|<get-offset>(){}[0]
 }
 
+final class io.github.yuroyami.kiteplayer.network/HttpReaderPolicy { // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy|null[0]
+    constructor <init>(kotlin.time/Duration = ..., kotlin.time/Duration = ...) // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.<init>|<init>(kotlin.time.Duration;kotlin.time.Duration){}[0]
+
+    final val connectTimeout // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.connectTimeout|{}connectTimeout[0]
+        final fun <get-connectTimeout>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.connectTimeout.<get-connectTimeout>|<get-connectTimeout>(){}[0]
+    final val readTimeout // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.readTimeout|{}readTimeout[0]
+        final fun <get-readTimeout>(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.readTimeout.<get-readTimeout>|<get-readTimeout>(){}[0]
+
+    final fun component1(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.component1|component1(){}[0]
+    final fun component2(): kotlin.time/Duration // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.component2|component2(){}[0]
+    final fun copy(kotlin.time/Duration = ..., kotlin.time/Duration = ...): io.github.yuroyami.kiteplayer.network/HttpReaderPolicy // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.copy|copy(kotlin.time.Duration;kotlin.time.Duration){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.yuroyami.kiteplayer.network/HttpReaderPolicy.toString|toString(){}[0]
+}
+
 final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroyami.kiteplayer/MediaIo { // io.github.yuroyami.kiteplayer.network/KtorMediaIo|null[0]
     final val seekable // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable|{}seekable[0]
         final fun <get-seekable>(): kotlin/Boolean // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seekable.<get-seekable>|<get-seekable>(){}[0]
@@ -254,7 +270,7 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIo : io.github.yuroya
     final suspend fun seek(kotlin/Long) // io.github.yuroyami.kiteplayer.network/KtorMediaIo.seek|seek(kotlin.Long){}[0]
 
     final object Companion { // io.github.yuroyami.kiteplayer.network/KtorMediaIo.Companion|null[0]
-        final suspend fun open(kotlin/String, io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...): io.github.yuroyami.kiteplayer.network/KtorMediaIo // io.github.yuroyami.kiteplayer.network/KtorMediaIo.Companion.open|open(kotlin.String;io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+        final suspend fun open(kotlin/String, io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.network/HttpReaderPolicy = ...): io.github.yuroyami.kiteplayer.network/KtorMediaIo // io.github.yuroyami.kiteplayer.network/KtorMediaIo.Companion.open|open(kotlin.String;io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.network.HttpReaderPolicy){}[0]
     }
 }
 
@@ -263,7 +279,7 @@ final class io.github.yuroyami.kiteplayer.network/KtorMediaIoException : kotlin/
 }
 
 final class io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver : io.github.yuroyami.kiteplayer/MediaIoResolver, kotlin/AutoCloseable { // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver|null[0]
-    constructor <init>(io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ...) // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.<init>|<init>(io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>){}[0]
+    constructor <init>(io.ktor.client/HttpClient? = ..., kotlin.collections/Map<kotlin/String, kotlin/String> = ..., io.github.yuroyami.kiteplayer.network/HttpReaderPolicy = ...) // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.<init>|<init>(io.ktor.client.HttpClient?;kotlin.collections.Map<kotlin.String,kotlin.String>;io.github.yuroyami.kiteplayer.network.HttpReaderPolicy){}[0]
 
     final fun close() // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.close|close(){}[0]
     final suspend fun resolve(kotlin/String): io.github.yuroyami.kiteplayer/MediaIo? // io.github.yuroyami.kiteplayer.network/KtorMediaIoResolver.resolve|resolve(kotlin.String){}[0]

@@ -15,6 +15,10 @@ final object io.github.yuroyami.kiteplayer.subtitle/AssParser { // io.github.yur
     final fun trackParser(kotlin/String): io.github.yuroyami.kiteplayer.subtitle/AssTrackParser // io.github.yuroyami.kiteplayer.subtitle/AssParser.trackParser|trackParser(kotlin.String){}[0]
 }
 
+final object io.github.yuroyami.kiteplayer.subtitle/EastAsianText { // io.github.yuroyami.kiteplayer.subtitle/EastAsianText|null[0]
+    final fun decode(kotlin/ByteArray, kotlin/String): kotlin/String? // io.github.yuroyami.kiteplayer.subtitle/EastAsianText.decode|decode(kotlin.ByteArray;kotlin.String){}[0]
+}
+
 final object io.github.yuroyami.kiteplayer.subtitle/SubRipParser { // io.github.yuroyami.kiteplayer.subtitle/SubRipParser|null[0]
     final const val OPEN_CUE_DEFAULT_MICROS // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.OPEN_CUE_DEFAULT_MICROS|{}OPEN_CUE_DEFAULT_MICROS[0]
         final fun <get-OPEN_CUE_DEFAULT_MICROS>(): kotlin/Long // io.github.yuroyami.kiteplayer.subtitle/SubRipParser.OPEN_CUE_DEFAULT_MICROS.<get-OPEN_CUE_DEFAULT_MICROS>|<get-OPEN_CUE_DEFAULT_MICROS>(){}[0]

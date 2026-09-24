@@ -353,8 +353,12 @@ internal class PlaybackCore(
         val collected = mutableListOf<ByteArray>()
         var total = 0
         val chunk = ByteArray(SUBTITLE_READ_CHUNK)
+        // The open waits for this file on the actor, so a reader that stops answering would hold
+        // the open for ever. The stall timeout bounds each read, and the file is then skipped.
+        val stallLimit = config.buffer.stallTimeout
         while (true) {
-            val read = io.read(chunk, 0, chunk.size)
+            val read = withTimeoutOrNull(stallLimit) { io.read(chunk, 0, chunk.size) }
+                ?: return@use SubtitleBytes.Refused("no bytes arrived for $stallLimit")
             if (read <= 0) break
             total += read
             if (total > MAX_SUBTITLE_BYTES) {
@@ -2309,15 +2313,19 @@ internal class PlaybackCore(
         // decoder recovery, a loop and a queue returning to the same item all come back through it,
         // and the reader the previous session was given has been closed since.
         val suppliedIo = resolveMediaIo(item, config.network)
-        val cachingIo = if (suppliedIo != null && config.network.ioCache.enabled) {
-            CachingMediaIo(suppliedIo, config.network.ioCache)
+        // Every byte the reader delivers is progress for the stall timeout, so a slow reader that
+        // still delivers is never taken for a stalled one.
+        val stallWatch = StallWatch(clock)
+        val watchedIo = suppliedIo?.let { ProgressReportingMediaIo(it, stallWatch) }
+        val cachingIo = if (watchedIo != null && config.network.ioCache.enabled) {
+            CachingMediaIo(watchedIo, config.network.ioCache)
         } else {
             null
         }
         // What the backend will read through: the cache when there is one, the raw reader
         // otherwise. Handed over as a factory that answers with this one reader, because that is
         // what the item's own field is and the backend must not have two shapes to handle.
-        val sessionIo = cachingIo ?: suppliedIo
+        val sessionIo = cachingIo ?: watchedIo
         val effectiveItem = if (sessionIo == null) item else item.copy(io = { sessionIo })
         val backendSession = try {
             acquireAcrossContext(
@@ -2563,6 +2571,7 @@ internal class PlaybackCore(
         }
     }
 
+                stallWatch = stallWatch,
     private enum class VideoDecoderSelection { Configured, BackendSoftwareOnly }
 
     private enum class VideoDecoderOrigin { Renderer, Backend }
@@ -4149,6 +4158,7 @@ internal class PlaybackCore(
 
     /**
      * Cue timing. Decode work is actor-confined but explicitly budgeted: a dense ASS stream
+        if (endStalledSession(session)) return
      * cannot keep the pass inside this handler while pause, play, seek or a worker failure waits in
      * a mailbox. A hit budget reschedules immediately; a mailbox arrival returns at the next
      * decoder boundary and is drained at the start of the next pass.
@@ -4160,6 +4170,35 @@ internal class PlaybackCore(
     private suspend fun handleSubtitles() {
         val session = this.session ?: return
         val decoder = session.subtitleDecoder
+    /**
+     * Ends the session when the demux lane has waited `BufferPolicy.stallTimeout` for the source
+     * without a packet or a byte, and reports [PlaybackError.SourceStalled].
+     *
+     * The interrupt comes first, because it is what ends the read; the teardown then finds a lane
+     * that can stop. A source that cannot interrupt keeps the old wait, as a container seek on such
+     * a source does: a teardown around a read that never returns would hang the actor instead.
+     *
+     * @return true when the session was ended.
+     */
+    private suspend fun endStalledSession(session: OpenSession): Boolean {
+        val limit = config.buffer.stallTimeout
+        if (limit.isInfinite() || session.stallInterruptRefused) return false
+        val stalledFor = session.stallWatch.stalledFor() ?: return false
+        if (stalledFor < limit) {
+            wakeIn(limit - stalledFor)
+            return false
+        }
+        if (!runCatching { session.source.interrupt() }.getOrDefault(false)) {
+            session.stallInterruptRefused = true
+            return false
+        }
+        val error = PlaybackError.SourceStalled(media?.uri ?: "", stalledFor)
+        teardownSession()
+        fail(error)
+        resolveSeekReplies(SeekResult.Superseded(requestedEpoch))
+        return true
+    }
+
         val queue = session.subtitleQueue
 
         // The drain half needs a container stream; the timing half below does not: an external
@@ -7050,7 +7089,13 @@ internal class PlaybackCore(
                 }
                 continue
             }
-            val packet = session.source.readPacket()
+            // Marked for the stall timeout: the actor measures how long this read waits.
+            session.stallWatch.begin()
+            val packet = try {
+                session.source.readPacket()
+            } finally {
+                session.stallWatch.end()
+            }
             if (packet == null) {
                 session.videoQueue?.signalEndOfStream(epoch)
                 session.audioQueues.values.forEach { it.signalEndOfStream(epoch) }
@@ -7824,7 +7869,14 @@ internal class PlaybackCore(
 
         /**
          * Pinged when a worker records a first timestamp for a new epoch, and when the schedule
+        /** How long the demux lane has waited for the source; see `BufferPolicy.stallTimeout`. */
+        val stallWatch: StallWatch,
          * releases the frame a one-frame request asked for, so the actor's waits wake when the
+        /**
+         * True once the source answered that it cannot interrupt a stalled read. The session then
+         * keeps waiting, because a teardown around a read that never returns would hang. Actor only.
+         */
+        var stallInterruptRefused: Boolean = false
          * thing happens instead of at their next 50 ms sample. Conflated: one token is enough,
          * every waiter re-reads its own conditions.
          */

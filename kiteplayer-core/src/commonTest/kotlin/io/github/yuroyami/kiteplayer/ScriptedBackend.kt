@@ -388,6 +388,12 @@ internal class FaultPlan(
 
     /** False models a source whose interrupt() cannot help. */
     var interruptSupported: Boolean = true
+    /**
+     * How many reader reads one packet costs, when the item carries a reader. More than one models a
+     * packet that arrives in many small pieces over a slow link.
+     */
+    var ioReadsPerPacket: Int = 1
+
 
     /** True makes the sink's drain never finish, which the core must bound rather than wait out. */
     var drainHangs: Boolean = false
@@ -493,6 +499,8 @@ internal class ScriptedBackend(
     private val trace: ScriptTrace = ScriptTrace(),
 ) : MediaBackend {
 
+    /** The harness clock, so a source can say when a wedge began. Null leaves that unrecorded. */
+    private val clock: MonotonicClock? = null,
     /** Mutable decoder truth used to prove that stats do not retain an open-time hardware claim. */
     val videoDecoderStatus: ScriptedVideoDecoderStatus = ScriptedVideoDecoderStatus()
 
@@ -563,7 +571,7 @@ internal class ScriptedBackend(
         // exercised rather than assumed: without this, anything measuring what a source delivered
         // measures a reader nobody ever called.
         val io = media.io?.open()
-        return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus, io)
+        return ScriptedSession(script, ledger, faults, trace, videoDecoderStatus, io, clock)
             .also { sessions += it }
     }
 }
@@ -578,7 +586,7 @@ internal class ScriptedSession(
     private val io: io.github.yuroyami.kiteplayer.MediaIo? = null,
 ) : BackendSession {
 
-    val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace, io)
+    val scriptedSource: ScriptedSource = ScriptedSource(script, ledger, faults, trace, io, clock)
 
     /** The same source with the recording capability, when the script asks for it. */
     val recordingSource: ScriptedRecordingSource? =
@@ -589,6 +597,7 @@ internal class ScriptedSession(
     val videoDecoderPolicies: MutableList<HwdecPolicy> = mutableListOf()
 
     override val videoDecoders: List<VideoDecoderFactory> =
+    clock: MonotonicClock? = null,
         listOf(
             ScriptedVideoDecoderFactory(
                 script,
@@ -659,7 +668,9 @@ internal class ScriptedSource(
     private val faults: FaultPlan,
     private val trace: ScriptTrace = ScriptTrace(),
     /** The engine's byte reader when the item carried one; a real demuxer reads, so this one does too. */
-    private val io: io.github.yuroyami.kiteplayer.MediaIo? = null
+    private val io: io.github.yuroyami.kiteplayer.MediaIo? = null,
+    /** Reads when a wedge began into [wedgedAtNanos]. */
+    private val clock: MonotonicClock? = null,
 ) : PlayerMediaSource {
 
     override val streams: List<PlayerStreamInfo> = buildList {
@@ -767,6 +778,10 @@ internal class ScriptedSource(
         wedgeReleased.complete(Unit)
     }
 
+    /** When the first wedge began, by the harness clock. Null until a call wedges. */
+    var wedgedAtNanos: Long? = null
+        private set
+
     /**
      * Models an uncancellable native call: suspends immune to cancellation until either the
      * interrupt seam fires (the call then fails, a poisoned source) or [releaseWedge] lets it
@@ -787,6 +802,7 @@ internal class ScriptedSource(
     override fun selectStreams(indices: Set<Int>) {
         if (faults.failSelectStreams) error("scripted selectStreams failure")
         check(selectCalls == 0) { "streams must be selected before the first read" }
+        if (wedgedAtNanos == null) wedgedAtNanos = clock?.nanos()
         require(indices.isNotEmpty()) { "no selectable stream among $indices" }
         require(indices.all { wanted -> streams.any { it.index == wanted } }) {
             "unknown scripted stream in $indices"
@@ -856,7 +872,7 @@ internal class ScriptedSource(
         // What a real demuxer does and this one otherwise would not: pull bytes. Without it the
         // engine's byte cache is handed a reader nobody ever calls, and anything measuring what a
         // source delivered measures nothing at all.
-        io?.let { reader -> runCatching { reader.read(ioScratch, 0, ioScratch.size) } }
+        io?.let { reader -> repeat(faults.ioReadsPerPacket) { runCatching { reader.read(ioScratch, 0, ioScratch.size) } } }
         faults.readWedgesAfter?.let { limit ->
             if (reads > limit && !wedgeReleased.isCompleted) wedge("read")
         }

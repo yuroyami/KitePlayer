@@ -156,10 +156,11 @@ public data class IoCachePolicy(
 }
 
 /**
- * How much to read ahead, and when to declare that playback can start.
+ * How much to read ahead, when to declare that playback can start, and how long to wait for a
+ * source that stopped answering.
  *
- * The defaults come from the values ffplay and mpv converged on after a decade of bug reports.
- * Do not retune them without evidence from real content.
+ * The read-ahead defaults come from the values ffplay and mpv converged on after a decade of bug
+ * reports. Do not retune them without evidence from real content.
  */
 public data class BufferPolicy(
     /** A stream is ready when it has this much buffered, or this many packets, or has ended. */
@@ -172,6 +173,17 @@ public data class BufferPolicy(
     val totalDuration: Duration = 30.seconds,
     /** Decoded video frames held ahead of the one on screen. Bounded by the hardware pool. */
     val videoFrameQueue: Int = 4,
+    /**
+     * How long a read may wait without progress before the session ends with
+     * [PlaybackError.SourceStalled]. [Duration.INFINITE] waits for ever.
+     *
+     * The count runs only while the engine waits for the source: a packet read, or the read of an
+     * external subtitle file. A packet from the source or bytes from the item's [MediaIo] start it
+     * again, so a slow source that still delivers never stalls.
+     * An external subtitle file that stalls is skipped with a warning instead. Ending a read needs
+     * a source that can interrupt; the FFmpeg backend can.
+     */
+    val stallTimeout: Duration = 30.seconds,
 ) {
     init {
         // A budget of zero or less never admits a packet and wedges the demuxer before the first
@@ -185,6 +197,8 @@ public data class BufferPolicy(
         // Two, not one: timing a frame needs the NEXT frame's timestamp, which is FrameQueue's
         // own bound. One slot passed here and crashed the first open instead.
         require(videoFrameQueue >= 2) { "videoFrameQueue must hold at least two frames, was $videoFrameQueue" }
+        // Zero would end every session on its first read.
+        require(stallTimeout > Duration.ZERO) { "stallTimeout must be positive, was $stallTimeout" }
     }
 }
 

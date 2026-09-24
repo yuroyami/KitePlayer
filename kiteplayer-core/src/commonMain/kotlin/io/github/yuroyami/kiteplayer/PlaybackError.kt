@@ -22,6 +22,15 @@ public sealed class PlaybackError {
         override val message: String get() = "cannot open $uri" + (detail?.let { ": $it" } ?: "")
     }
 
+    /**
+     * The source stopped answering: a read waited [stalledFor] without a packet or a byte, which is
+     * at least `BufferPolicy.stallTimeout`. The engine interrupted the read and ended the session.
+     * The same media may play when the network recovers.
+     */
+    public data class SourceStalled(val uri: String, val stalledFor: kotlin.time.Duration) : PlaybackError() {
+        override val message: String get() = "no data from $uri for $stalledFor"
+    }
+
     /** The bytes were reached and are not media the demuxer recognises. */
     public data class NotMedia(val uri: String, val detail: String? = null) : PlaybackError() {
         override val message: String get() = "not a recognised media format: $uri"

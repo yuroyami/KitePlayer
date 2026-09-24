@@ -146,9 +146,11 @@ public fun interface MediaIoFactory {
  * Implementations do not need to be thread safe. They may suspend.
  *
  * Implemented by the FFmpeg backend since the custom AVIO bridge, and accepted at both
- * [MediaItem.io] and [SubtitleSource.io]. The demux worker blocks on [read],
- * so a source that never produces a byte and never returns -1 stalls playback; that is the
- * contract, not a defect.
+ * [MediaItem.io] and [SubtitleSource.io]. The demux worker waits on [read]. When no byte arrives
+ * for `BufferPolicy.stallTimeout`, the engine interrupts the source and the session ends with
+ * [PlaybackError.SourceStalled]. A backend interrupts a read by cancelling its coroutine, so
+ * [read] and [seek] must suspend in a way that cancellation can end. A read that blocks its
+ * thread instead cannot be stopped.
  */
 public interface MediaIo : AutoCloseable {
     public companion object {}

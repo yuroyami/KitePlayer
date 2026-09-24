@@ -56,7 +56,7 @@ internal class CoreHarness(
 
     /** One trace shared by the device, the decoders and the cursor, so the seek order is observable. */
     val trace: ScriptTrace = ScriptTrace()
-    val backend: ScriptedBackend = ScriptedBackend(script, ledger, faults, trace)
+    val backend: ScriptedBackend = ScriptedBackend(script, ledger, faults, trace, clock)
     val sink: ScriptedSink = ScriptedSink(
         accepts = sinkAccepts,
         faults = faults,

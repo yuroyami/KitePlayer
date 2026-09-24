@@ -42,6 +42,8 @@ import kotlin.test.Test
  * `VIZ_OUT` is the output directory (`build/stills` by default). One strip per drawing lands
  * there, all its stills side by side with the second and the song's readings printed under each.
  * `VIZ_CLASS` names drawings by fully qualified class, for one that is not in the catalogue yet.
+ * `VIZ_CHANNELS=2` reads the file as interleaved stereo (`ffmpeg ... -ac 2`), so the stereo width,
+ * the left and right traces and everything a drawing does with them are real rather than mono.
  *
  * The analyser runs at sixty frames a second from the start of the file, so every still hears
  * the same history a window would. Only the last frames before each still are drawn, so trails
@@ -60,7 +62,19 @@ class StillsTool {
         val out = File(System.getenv("VIZ_OUT") ?: "build/stills").apply { mkdirs() }
         val paletteName = System.getenv("VIZ_PALETTE")
         val palette = VizPalette.entries.firstOrNull { it.name.equals(paletteName, ignoreCase = true) } ?: VizPalette.Prism
-        val samples = readFloats(File(checkNotNull(pcm)))
+        val channels = System.getenv("VIZ_CHANNELS")?.toIntOrNull() ?: 1
+        val interleaved = readFloats(File(checkNotNull(pcm)))
+        // Left is mono plus side and right is mono minus side, which is how SongPlayer takes a pair.
+        val samples: FloatArray
+        val side: FloatArray?
+        if (channels == 2) {
+            val frames = interleaved.size / 2
+            samples = FloatArray(frames) { (interleaved[2 * it] + interleaved[2 * it + 1]) * 0.5f }
+            side = FloatArray(frames) { (interleaved[2 * it] - interleaved[2 * it + 1]) * 0.5f }
+        } else {
+            samples = interleaved
+            side = null
+        }
         val catalogue = VizCatalog.create()
         val chosen = if (names == listOf("all")) catalogue else names.mapNotNull { wanted ->
             catalogue.firstOrNull { it.name.equals(wanted, ignoreCase = true) }
@@ -76,7 +90,7 @@ class StillsTool {
             val height = if (shader) size[1] / 2 else size[1]
             val warm = (System.getenv("VIZ_WARM")?.toIntOrNull()) ?: if (shader) 24 else 150
             val started = System.nanoTime()
-            val stills = renderStills(drawing, samples, seconds, width, height, warm, palette)
+            val stills = renderStills(drawing, samples, side, seconds, width, height, warm, palette)
             val strip = strip(drawing.name, stills, seconds)
             val file = File(out, drawing.name.replace(Regex("[^A-Za-z0-9]+"), "-") + ".png")
             ImageIO.write(strip, "png", file)
@@ -89,13 +103,14 @@ class StillsTool {
     private fun renderStills(
         drawing: Visualization,
         samples: FloatArray,
+        side: FloatArray?,
         seconds: List<Float>,
         width: Int,
         height: Int,
         warm: Int,
         palette: VizPalette,
     ): List<Still> {
-        val player = SongPlayer(samples, bandCount = 48)
+        val player = SongPlayer(samples, bandCount = 48, side = side)
         val delta = 1f / 60f
         val scale = if (drawing.bloom > 0) SOFT_BUFFER_SCALE else 1f
         val echoWidth = (width * scale).toInt().coerceAtLeast(1)

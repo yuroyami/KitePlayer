@@ -367,25 +367,6 @@ public sealed class PlaybackWarning {
     }
 
     /**
-     * An external subtitle file whose encoding had to be guessed, or could not be decoded properly.
-     *
-     * A byte-order mark or a file that validates as UTF-8 is a fact and says nothing. This fires
-     * when neither held: the text was read with [charset] on the balance of evidence, and it may be
-     * wrong. [detected] names an encoding the file appears to be in that this build cannot decode
-     * (the multi-byte East Asian ones), which is a different answer from "no idea" and worth
-     * telling apart.
-     *
-     * The track still loads. Imperfect subtitles beat absent ones, and an application that shows
-     * this can offer the viewer an override rather than leaving them with mojibake and no reason.
-     */
-    /**
-     * An external subtitle could not be read or parsed, so it was skipped.
-     *
-     * The open never fails over a subtitle: a film that plays without its captions beats a film
-     * that does not play. This says which file and why, in a shape an application can act on,
-     * rather than the free-text deselection it used to arrive as.
-     */
-    /**
      * The container declared one thing about a stream and its decoder produced another.
      *
      * Not an error: the file plays, and the decoded value is the one in force. It is told because
@@ -406,6 +387,13 @@ public sealed class PlaybackWarning {
                 "the decoder produced $decoded"
     }
 
+    /**
+     * An external subtitle could not be read or parsed, so it was skipped.
+     *
+     * The open never fails over a subtitle: a film that plays without its captions beats a film
+     * that does not play. This says which file and why, in a shape an application can act on,
+     * rather than the free-text deselection it used to arrive as.
+     */
     public data class SubtitleSourceUnreadable(
         val uri: String,
         val reason: String,
@@ -413,13 +401,25 @@ public sealed class PlaybackWarning {
         override val message: String get() = "the external subtitle $uri was skipped: $reason"
     }
 
+    /**
+     * An external subtitle file whose encoding had to be guessed, or could not be decoded properly.
+     *
+     * A byte-order mark or a file that validates as UTF-8 is a fact and says nothing. This fires
+     * when neither held: the text was read with [charset] on the balance of evidence, and it may be
+     * wrong. [detected] names a multi-byte East Asian encoding that the file appears to be in and
+     * that could not be read: the backend's parser has no table for it, or no table read the
+     * bytes. That is a different answer from "no idea" and worth telling apart.
+     *
+     * The track still loads. Imperfect subtitles beat absent ones, and an application that shows
+     * this can offer the viewer an override rather than leaving them with mojibake and no reason.
+     */
     public data class SubtitleCharsetGuessed(
         val uri: String,
         val charset: String,
         val detected: String? = null,
     ) : PlaybackWarning() {
         override val message: String get() = if (detected != null) {
-            "$uri looks like $detected, which this build cannot decode; read as $charset instead"
+            "$uri looks like $detected, which could not be decoded; read as $charset instead"
         } else {
             "$uri declares no encoding and is not UTF-8; read as $charset, which may be wrong"
         }

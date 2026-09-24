@@ -11,7 +11,10 @@ internal data class DecodedSubtitleText(
     val text: String,
     val charset: String,
     val confident: Boolean,
-    /** Set when the bytes look like an encoding this build cannot decode yet, so the warning can name it. */
+    /**
+     * Set when the bytes look like a multi-byte East Asian encoding that could not be decoded, so
+     * the warning can name it. Either nothing supplied a table for it, or no table read the bytes.
+     */
     val unsupportedGuess: String? = null,
 )
 
@@ -28,6 +31,24 @@ private const val MIN_COMMON_GAP = 0.1
 
 /** Share of high bytes a multi-byte encoding puts into lead/trail pairs. */
 private const val MIN_PAIRED_SHARE = 0.8
+
+/**
+ * Share of a multi-byte reading that may be characters the table could not read, which is one in
+ * fifty. A wrong table leaves far more: every pair it has no entry for becomes U+FFFD or a private
+ * use character. The right one leaves almost none, and this forgives a stray byte or a character a
+ * vendor added.
+ */
+private const val MAX_UNREADABLE_SHARE = 0.02
+
+/** The names the multi-byte readings go by, spelled as the WHATWG Encoding Standard spells them. */
+private const val SHIFT_JIS = "Shift_JIS"
+private const val EUC_JP = "EUC-JP"
+private const val GBK = "GBK"
+private const val BIG5 = "Big5"
+private const val EUC_KR = "EUC-KR"
+
+/** The order the other multi-byte readings are tried in when the likeliest one does not read. */
+private val EAST_ASIAN_ORDER = listOf(GBK, BIG5, EUC_KR, EUC_JP, SHIFT_JIS)
 
 private class CharsetScore(
     val charset: SubtitleCharset,
@@ -70,8 +91,18 @@ private fun SubtitleCharset.scoreAgainst(
  *
  * [languageHint] is the track's declared language when there is one. It only breaks ties: it can
  * choose between two charsets that scored alike and never overrules the bytes.
+ *
+ * [eastAsian] reads bytes as one of the multi-byte East Asian encodings, given the name the WHATWG
+ * Encoding Standard uses (`Shift_JIS`, `EUC-JP`, `GBK`, `Big5` or `EUC-KR`), and answers null when
+ * it has no table for that name. The engine passes the backend's `SubtitleFileParser.decode`.
+ * Without it, such a file falls back to windows-1252 and the result names the encoding it appears
+ * to be in.
  */
-internal fun decodeSubtitleBytes(bytes: ByteArray, languageHint: String? = null): DecodedSubtitleText {
+internal fun decodeSubtitleBytes(
+    bytes: ByteArray,
+    languageHint: String? = null,
+    eastAsian: ((ByteArray, String) -> String?)? = null,
+): DecodedSubtitleText {
     bom(bytes)?.let { return it }
     if (isValidUtf8(bytes)) {
         return DecodedSubtitleText(bytes.decodeToString(), "UTF-8", confident = true)
@@ -108,10 +139,12 @@ internal fun decodeSubtitleBytes(bytes: ByteArray, languageHint: String? = null)
     // Arabic bytes read as Cyrillic ARE Cyrillic letters, they are just not Cyrillic WORDS.
     val clearOnFrequency = runnerUp == null || best.common >= runnerUp.common + MIN_COMMON_GAP
     if (best.inScript < MIN_SCORE || best.common < MIN_COMMON_SHARE || !clearOnFrequency) {
-        // Nothing single-byte fits. Only now is it worth naming a multi-byte encoding: dense
+        // Nothing single-byte fits. Only now is it worth asking about a multi-byte encoding: dense
         // Cyrillic has exactly the byte-pair shape EUC does, so asking that question first told
         // every Russian subtitle it was Korean.
-        return fallback(multiByteShape(bytes))
+        val candidates = eastAsianCandidates(bytes) ?: return fallback(null)
+        if (eastAsian != null) readEastAsian(bytes, candidates, eastAsian)?.let { return it }
+        return fallback(candidates.first())
     }
     return DecodedSubtitleText(best.charset.decode(bytes), best.charset.label, confident = true)
 }
@@ -174,33 +207,120 @@ private fun isValidUtf8(bytes: ByteArray): Boolean {
 }
 
 /**
- * Names a multi-byte East Asian encoding from its byte-pair shape, without carrying its table.
+ * Names the multi-byte East Asian encodings the bytes could be in, likeliest first, from their
+ * byte-pair shape alone. Null when they do not have that shape.
  *
- * This decodes nothing. It exists so a Japanese subtitle file is told what it appears to be rather
- * than called undetectable, which is the difference between a user who can act and one who cannot.
+ * All five put a character in a lead byte from 0x81 up and a trail byte after it. What tells them
+ * apart is where each language's commonest characters sit:
+ *
+ * - Shift_JIS puts kana and punctuation behind leads 0x81 to 0x9F. The others use those leads only
+ *   for rare characters, or never.
+ * - Big5 puts about two characters in five on a trail byte below 0x7F. EUC never does, and GBK does
+ *   only for characters that simplified Chinese rarely uses.
+ * - EUC-JP puts kana on rows 0xA4 and 0xA5, and Japanese text is mostly kana.
+ * - EUC-KR puts every common Hangul syllable on rows 0xB0 to 0xC8. Chinese text in GBK uses the
+ *   rows above as well, where Korean has only Hanja. Korean also puts a space between words, and
+ *   Chinese almost never puts one between two characters, which settles Korean with some Hanja.
+ *
+ * The other four follow the likeliest, so a table that cannot read the bytes can hand over to the
+ * next. This decodes nothing: the tables live in `kiteplayer-subtitles`, above the core.
  */
-private fun multiByteShape(bytes: ByteArray): String? {
+private fun eastAsianCandidates(bytes: ByteArray): List<String>? {
+    var shiftJisLeads = 0
+    var lowTrails = 0
+    var middleTrails = 0
     var eucPairs = 0
-    var sjisPairs = 0
+    var kanaRows = 0
+    var ideographRows = 0
+    var upperRows = 0
+    var highTrails = 0
     var i = 0
     while (i < bytes.size - 1) {
-        val b = bytes[i].toInt() and 0xFF
-        val next = bytes[i + 1].toInt() and 0xFF
-        when {
-            b in 0xA1..0xFE && next in 0xA1..0xFE -> { eucPairs++; i += 2 }
-            (b in 0x81..0x9F || b in 0xE0..0xEF) && (next in 0x40..0x7E || next in 0x80..0xFC) -> {
-                sjisPairs++; i += 2
-            }
-            else -> i++
+        val lead = bytes[i].toInt() and 0xFF
+        val trail = bytes[i + 1].toInt() and 0xFF
+        if (lead < 0x81 || lead == 0xFF || trail < 0x40 || trail == 0x7F || trail == 0xFF) {
+            i++
+            continue
         }
+        when {
+            lead <= 0xA0 -> shiftJisLeads++
+            trail <= 0x7E -> lowTrails++
+            // A trail from 0x80 to 0xA0 after a high lead: GBK or Shift_JIS, never Big5 or EUC.
+            trail <= 0xA0 -> middleTrails++
+            else -> {
+                eucPairs++
+                if (lead == 0xA4 || lead == 0xA5) kanaRows++
+                if (lead >= 0xB0) ideographRows++
+                if (lead >= 0xC9) upperRows++
+            }
+        }
+        if (trail >= 0x80) highTrails++
+        i += 2
     }
-    val pairs = eucPairs + sjisPairs
+    val pairs = shiftJisLeads + lowTrails + middleTrails + eucPairs
     val highBytes = bytes.count { (it.toInt() and 0xFF) >= 0x80 }
     // A handful of pairs happens by chance in any text; a real CJK file is almost entirely pairs.
     // A PROPORTION rather than an exact count: requiring every high byte to pair made this turn on
     // whether the total happened to be even, which is not a property of the encoding.
     if (pairs < 8 || pairs * 2 < highBytes * MIN_PAIRED_SHARE) return null
-    // EUC covers EUC-KR, GBK and Big5 alike from this distance, so the name stays honest about
-    // being a family rather than claiming to have told them apart.
-    return if (sjisPairs > eucPairs) "Shift-JIS" else "a EUC or Big5 family encoding"
+    // Latin text pairs up too, an accented letter with the letter after it, but its trails are
+    // plain ASCII. The five put well over a third of their trails at 0x80 or above, so a text with
+    // fewer than a quarter there is none of them.
+    if (highTrails * 4 < pairs) return null
+    // In order: Shift_JIS when half the pairs sit behind its leads. Big5 when a third sit on low
+    // trails, none on middle ones and few behind Shift_JIS leads. GBK when a fifth sit on low
+    // trails all the same. EUC-JP when a fifth of the EUC pairs sit on the kana rows. EUC-KR when
+    // no more than one pair in twenty on the ideograph rows sits above the Hangul rows, or one in
+    // four when there is a space between two characters for every six pairs. GBK otherwise.
+    val likeliest = when {
+        shiftJisLeads * 2 >= pairs -> SHIFT_JIS
+        lowTrails * 3 >= pairs && middleTrails == 0 && shiftJisLeads * 10 <= pairs -> BIG5
+        lowTrails * 5 >= pairs -> GBK
+        eucPairs > 0 && kanaRows * 5 >= eucPairs -> EUC_JP
+        ideographRows > 0 && upperRows * 20 <= ideographRows -> EUC_KR
+        ideographRows > 0 && upperRows * 4 <= ideographRows &&
+            spacesBetweenCharacters(bytes) * 6 >= eucPairs -> EUC_KR
+        else -> GBK
+    }
+    return listOf(likeliest) + (EAST_ASIAN_ORDER - likeliest)
+}
+
+/** ASCII spaces with a high byte on both sides: the gaps between words that Korean writes. */
+private fun spacesBetweenCharacters(bytes: ByteArray): Int {
+    var spaces = 0
+    for (i in 1 until bytes.size - 1) {
+        val before = bytes[i - 1].toInt() and 0xFF
+        val after = bytes[i + 1].toInt() and 0xFF
+        if (bytes[i].toInt() == 0x20 && before >= 0xA1 && after >= 0xA1) spaces++
+    }
+    return spaces
+}
+
+/**
+ * The first reading, in [candidates] order, that leaves at most [MAX_UNREADABLE_SHARE] of its
+ * characters unread, or null when none does.
+ *
+ * Only the likeliest encoding read cleanly counts as confident. A reading that forgave anything, or
+ * needed a later candidate, says so through the warning.
+ */
+private fun readEastAsian(
+    bytes: ByteArray,
+    candidates: List<String>,
+    eastAsian: (ByteArray, String) -> String?,
+): DecodedSubtitleText? {
+    candidates.forEachIndexed { rank, name ->
+        // A parser that throws is treated as one without that table: a subtitle never fails an open.
+        val text = runCatching { eastAsian(bytes, name) }.getOrNull() ?: return@forEachIndexed
+        var nonAscii = 0
+        var unreadable = 0
+        for (c in text) {
+            if (c.code < 0x80) continue
+            nonAscii++
+            if (c == '\uFFFD' || c in '\uE000'..'\uF8FF') unreadable++
+        }
+        if (unreadable <= nonAscii * MAX_UNREADABLE_SHARE) {
+            return DecodedSubtitleText(text, name, confident = rank == 0 && unreadable == 0)
+        }
+    }
+    return null
 }

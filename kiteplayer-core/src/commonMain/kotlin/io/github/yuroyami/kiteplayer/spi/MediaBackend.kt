@@ -56,6 +56,19 @@ public interface MediaBackend {
 public fun interface SubtitleFileParser {
     /** [vttHint] is true when the file names or opens itself as WebVTT; SubRip otherwise. */
     public fun parse(text: String, vttHint: Boolean): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue>
+
+    /**
+     * Reads a subtitle file's bytes as [encoding], or answers null when this parser has no table
+     * for it.
+     *
+     * The engine decides the encoding from the bytes, and asks only for the multi-byte East Asian
+     * ones: `Shift_JIS`, `EUC-JP`, `GBK`, `Big5` and `EUC-KR`, as the WHATWG Encoding Standard
+     * names them. It may ask for several of them for one file, and it keeps the first reading with
+     * almost no U+FFFD in it, so a byte sequence the table cannot read must become U+FFFD. With the
+     * default null, such a file is read as windows-1252 and the engine warns. An exception counts as
+     * null.
+     */
+    public fun decode(bytes: ByteArray, encoding: String): String? = null
 }
 
 /**

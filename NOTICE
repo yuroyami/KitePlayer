@@ -44,6 +44,14 @@ same way. Its license text ships beside the others in the JVM artifact. Its
 LGPL terms apply as FriBidi's do; its source is GNU libiconv 1.16 as MSYS2
 packages it, which is where that toolchain comes from.
 
+kiteplayer-subtitles carries decoding tables for Shift_JIS, EUC-JP, GBK, Big5
+and EUC-KR. scripts/generate-east-asian-tables.py generates them from the index
+files of the WHATWG Encoding Standard (https://encoding.spec.whatwg.org/).
+Copyright (c) WHATWG (Apple, Google, Mozilla, Microsoft), under the BSD 3-Clause
+License. The license text heads the generated file, EastAsianTables.kt, and
+ships inside the JVM and Android artifacts under
+META-INF/licenses/kiteplayer-subtitles/.
+
 Sample media
 ------------
 The five songs in kiteplayer-sample-shared/media are by Skullbeatz, from the

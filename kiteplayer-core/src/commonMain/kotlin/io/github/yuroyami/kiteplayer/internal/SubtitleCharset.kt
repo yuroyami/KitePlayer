@@ -21,10 +21,12 @@ package io.github.yuroyami.kiteplayer.internal
  *
  * ### What is NOT here
  *
- * The multi-byte CJK encodings (Shift-JIS, Big5, GBK, EUC-KR). Their tables are about 155 KB
- * together, which is a separate decision rather than a detail of this one. Detection still
- * RECOGNIZES them from their byte-pair structure and names them in the warning, so a Japanese
- * subtitle file gets told what it is instead of being called undetectable.
+ * The multi-byte East Asian encodings (Shift_JIS, EUC-JP, GBK, Big5, EUC-KR). Their tables are
+ * about 110 KB of source, so they live in `kiteplayer-subtitles` as `EastAsianText`, generated from
+ * the WHATWG Encoding Standard's index files by `scripts/generate-east-asian-tables.py`. They reach
+ * the engine through the backend's `SubtitleFileParser.decode`. Detection stays here: it names the
+ * encoding from the byte-pair structure, and a backend without the tables still gets the name in
+ * the warning, so a Japanese subtitle file is told what it is instead of being called undetectable.
  */
 internal enum class Script { Arabic, Cyrillic, Greek, Hebrew, Latin }
 

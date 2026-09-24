@@ -45,16 +45,23 @@ public class KiteFFmpegMediaBackend(
     override fun describeForDiagnostics(): String =
         "KiteFFmpegMediaBackend(decoderOptions=$decoderOptions, lowDelayDecode=$lowDelayDecode)"
 
-    /** External subtitle files, ASS included: the pure parsers this module ships. */
+    /**
+     * External subtitle files, ASS included: the pure parsers this module ships. East Asian files
+     * are read with the tables of kiteplayer-subtitles, the same on every target.
+     */
     override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
-        io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, vttHint ->
-            when {
-                // An ASS document announces itself; the hint flags are SRT/VTT's business.
-                text.trimStart('\uFEFF', ' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true) ->
-                    io.github.yuroyami.kiteplayer.subtitle.AssParser.parse(text)
-                vttHint -> io.github.yuroyami.kiteplayer.subtitle.WebVttParser.parse(text)
-                else -> io.github.yuroyami.kiteplayer.subtitle.SubRipParser.parse(text)
-            }
+        object : io.github.yuroyami.kiteplayer.spi.SubtitleFileParser {
+            override fun parse(text: String, vttHint: Boolean): List<io.github.yuroyami.kiteplayer.subtitle.SubtitleCue> =
+                when {
+                    // An ASS document announces itself; the hint flags are SRT/VTT's business.
+                    text.trimStart('\uFEFF', ' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true) ->
+                        io.github.yuroyami.kiteplayer.subtitle.AssParser.parse(text)
+                    vttHint -> io.github.yuroyami.kiteplayer.subtitle.WebVttParser.parse(text)
+                    else -> io.github.yuroyami.kiteplayer.subtitle.SubRipParser.parse(text)
+                }
+
+            override fun decode(bytes: ByteArray, encoding: String): String? =
+                io.github.yuroyami.kiteplayer.subtitle.EastAsianText.decode(bytes, encoding)
         }
 
     override suspend fun open(media: MediaItem): BackendSession {

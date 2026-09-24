@@ -525,12 +525,18 @@ internal class ScriptedBackend(
     private val openScratch = ByteArray(4096)
 
     /**
+     * What the parser answers when the engine asks it to read East Asian bytes. Null is a parser
+     * with no tables. The real tables live in kiteplayer-subtitles, above this module's arrow.
+     */
+    var textDecoder: ((ByteArray, String) -> String?)? = null
+
+    /**
      * A ten-line SRT-only parser for the external-subtitle tests. The real WebVTT and
      * SubRip parsers live in kiteplayer-subtitles, above this module's dependency arrow; the
      * engine's contract only needs A parser here, and the format goldens live with the real ones.
      */
-    override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser =
-        io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, _ ->
+    override fun subtitleFileParser(): io.github.yuroyami.kiteplayer.spi.SubtitleFileParser {
+        val parse = io.github.yuroyami.kiteplayer.spi.SubtitleFileParser { text, _ ->
             // A two-line ASS branch so the engine's format LABELLING is testable here: real ASS
             // parsing lives in kiteplayer-subtitles, above this module's dependency arrow.
             if (text.trimStart('﻿', ' ', '\r', '\n').startsWith("[Script Info]", ignoreCase = true)) {
@@ -565,6 +571,11 @@ internal class ScriptedBackend(
                 )
             }
         }
+        return object : io.github.yuroyami.kiteplayer.spi.SubtitleFileParser by parse {
+            override fun decode(bytes: ByteArray, encoding: String): String? =
+                textDecoder?.invoke(bytes, encoding)
+        }
+    }
 
     /** The exact item the engine handed over on the LAST open, resolver and cache applied. */
     var lastOpenedItem: MediaItem? = null

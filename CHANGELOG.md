@@ -30,6 +30,10 @@ The entries under a version are drafted by `scripts/release-notes.sh`, which gro
 - `AudioConfig` gains `resampler`, which changes the generated data-class methods. The
   `AudioPlayback` constructor gains the same parameter. Calls in source compile unchanged.
   Recompile.
+- `PlaybackWarning.SubtitleCharsetGuessed.detected` names one encoding, such as `Shift_JIS` or
+  `EUC-KR`, where it used to say `Shift-JIS` or "a EUC or Big5 family encoding". If you match on
+  it, match the new names. A custom backend can read these files by implementing the new
+  `SubtitleFileParser.decode`; the FFmpeg backend already does.
 - `kiteplayer-audioviz` has no categories any more. `VizFamily`, `Visualization.family`,
   `VizCatalog.byFamily()` and the category argument of the drawing constructors are gone. Use
   `VizCatalog.create()`, which returns every drawing in one list. Twenty-six drawings were

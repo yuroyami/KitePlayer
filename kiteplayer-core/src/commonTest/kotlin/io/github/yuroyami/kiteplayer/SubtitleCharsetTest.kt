@@ -2,6 +2,7 @@ package io.github.yuroyami.kiteplayer
 
 import io.github.yuroyami.kiteplayer.internal.decodeSubtitleBytes
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -110,7 +111,7 @@ class SubtitleCharsetTest {
         val bytes = byteArrayOf(-126, -79, -126, -15, -126, -55, -126, -65, -126, -51, -112, -94, -118, 69, -126, -59, -126, -73)
         val decoded = decodeSubtitleBytes(bytes)
         assertFalse(decoded.confident)
-        assertEquals("Shift-JIS", decoded.unsupportedGuess)
+        assertEquals("Shift_JIS", decoded.unsupportedGuess)
         // The track still loads with a fallback reading, because imperfect subtitles beat none.
         assertTrue(decoded.text.isNotEmpty())
     }
@@ -150,5 +151,165 @@ class SubtitleCharsetTest {
         val bytes = byteArrayOf(-49, -16, -24, -30, -27, -14, 32, -20, -24, -16, 32, -22, -32, -22, 32, -14, -30, -18, -24, 32, -28, -27, -21, -32, 32, -15, -27, -29, -18, -28, -19, -1, 10, -52, -5, 32, -30, -20, -27, -15, -14, -27, 32, -15, -20, -18, -14, -16, -24, -20, 32, -3, -14, -18, -14, 32, -12, -24, -21, -4, -20, 10, -50, -19, 32, -18, -9, -27, -19, -4, 32, -24, -19, -14, -27, -16, -27, -15, -19, -5, -23, 32, -24, 32, -22, -16, -32, -15, -24, -30, -5, -23)
         assertEquals("windows-1251", decodeSubtitleBytes(bytes, languageHint = "ru").charset)
         assertEquals("windows-1251", decodeSubtitleBytes(bytes, languageHint = "ar").charset)
+    }
+
+
+    @Test
+    fun eachEastAsianSubRipFileIsNamedForItsOwnEncoding() {
+        // Without tables the file still falls back, and the name is what the warning carries.
+        for ((encoding, bytes) in EAST_ASIAN_FILES) {
+            val decoded = decodeSubtitleBytes(bytes)
+            assertEquals(encoding, decoded.unsupportedGuess, "the $encoding file was named wrongly")
+            assertEquals("windows-1252", decoded.charset)
+            assertFalse(decoded.confident)
+        }
+    }
+
+    @Test
+    fun koreanThatAlsoWritesHanjaIsStillNamedEucKr() {
+        // One pair in eighteen is a Hanja, on the rows above the Hangul, which on its own is what
+        // Chinese in GBK looks like. The spaces between words are what Korean has and Chinese has not.
+        val bytes = subRip(
+            "b4ebc7d1b9ceb1b920c1a4baceb4c220bfc0b4c320bbf5b7cebfee20c1a4c3a5c0bb20b9dfc7a5c7dfbdc0b4cfb4d92e",
+            "bcadbfeff7e5dcace3bcc0c720c0ceb1b8b4c220bee020c3b5b8b820b8edc0d4b4cfb4d92e",
+            "b3bbc0cfc0ba20baf1b0a120bfc320b0cd20b0b0c0b8b4cf20bfecbbeac0bb20c3acb1e2bcbcbfe42e",
+        )
+        assertEquals("EUC-KR", decodeSubtitleBytes(bytes).unsupportedGuess)
+    }
+
+    @Test
+    fun theDetectorsNameIsTheFirstTableAskedAndItsReadingIsKept() {
+        // What a backend's parser does with the tables: read the bytes as the name it is given.
+        for ((encoding, bytes) in EAST_ASIAN_FILES) {
+            val asked = mutableListOf<String>()
+            val decoded = decodeSubtitleBytes(bytes) { _, name ->
+                asked += name
+                if (name == encoding) "read as $name" else null
+            }
+            assertEquals(listOf(encoding), asked, "the $encoding file asked the wrong table first")
+            assertEquals("read as $encoding", decoded.text)
+            assertEquals(encoding, decoded.charset)
+            assertTrue(decoded.confident, "the likeliest table reading cleanly is not a guess")
+            assertNull(decoded.unsupportedGuess)
+        }
+    }
+
+    @Test
+    fun aTableThatCannotReadTheBytesHandsOverToTheNextAndTheResultIsAGuess() {
+        // Korean is likeliest here. A table that leaves one character in three unread is wrong,
+        // so the next name gets its turn, and a reading that needed a second try must say so.
+        val asked = mutableListOf<String>()
+        val decoded = decodeSubtitleBytes(EAST_ASIAN_FILES.getValue("EUC-KR")) { _, name ->
+            asked += name
+            when (name) {
+                "EUC-KR" -> "\uD55C\uFFFD\uAD6D"
+                "GBK" -> "\u97E9\u56FD\u8BED"
+                else -> null
+            }
+        }
+        assertEquals(listOf("EUC-KR", "GBK"), asked)
+        assertEquals("GBK", decoded.charset)
+        assertEquals("\u97E9\u56FD\u8BED", decoded.text)
+        assertFalse(decoded.confident)
+    }
+
+    @Test
+    fun whenNoTableReadsTheBytesTheFallbackStillNamesTheEncoding() {
+        val bytes = EAST_ASIAN_FILES.getValue("Shift_JIS")
+        val asked = mutableListOf<String>()
+        val decoded = decodeSubtitleBytes(bytes) { _, name ->
+            asked += name
+            "\uFFFD\uFFFD"
+        }
+        assertEquals(listOf("Shift_JIS", "GBK", "Big5", "EUC-KR", "EUC-JP"), asked, "every table gets its turn")
+        assertEquals("windows-1252", decoded.charset)
+        assertEquals("Shift_JIS", decoded.unsupportedGuess)
+        assertFalse(decoded.confident)
+    }
+
+    @Test
+    fun aParserThatThrowsCountsAsOneWithoutTheTable() {
+        // A subtitle never fails an open, so a broken backend parser costs the reading and no more.
+        val decoded = decodeSubtitleBytes(EAST_ASIAN_FILES.getValue("Big5")) { _, name ->
+            if (name == "Big5") error("no Big5 table after all") else null
+        }
+        assertEquals("windows-1252", decoded.charset)
+        assertEquals("Big5", decoded.unsupportedGuess)
+        assertFalse(decoded.confident)
+    }
+
+    @Test
+    fun frenchTextWhoseAccentsPairWithLettersIsNotTakenForEastAsian() {
+        // Each accented letter sits in front of an ASCII letter, which is a byte pair in form. The
+        // old shape test called this file Shift_JIS, which was harmless while nothing decoded it
+        // and would now read French as Japanese.
+        val bytes = latin1(
+            "1\n00:00:01,000 --> 00:00:02,000\n\u00C9lise a pr\u00E9f\u00E9r\u00E9 rester \u00E0 la maison ce soir.\n\n" +
+                "2\n00:00:03,000 --> 00:00:04,000\nLe caf\u00E9 \u00E9tait d\u00E9j\u00E0 froid quand il est arriv\u00E9.\n\n" +
+                "3\n00:00:05,000 --> 00:00:06,000\nNous avons visit\u00E9 le mus\u00E9e pr\u00E8s de la cath\u00E9drale.\n\n" +
+                "4\n00:00:07,000 --> 00:00:08,000\nTu as oubli\u00E9 tes cl\u00E9s sur la table de la cuisine.\n\n" +
+                "5\n00:00:09,000 --> 00:00:10,000\nCette id\u00E9e \u00E9tait vraiment g\u00E9niale, f\u00E9licitations !\n\n" +
+                "6\n00:00:11,000 --> 00:00:12,000\nIl a r\u00E9p\u00E9t\u00E9 la m\u00EAme phrase trois fois de suite.\n",
+        )
+        val asked = mutableListOf<String>()
+        val decoded = decodeSubtitleBytes(bytes) { _, name ->
+            asked += name
+            "not French"
+        }
+        assertTrue(asked.isEmpty(), "French text was offered to the East Asian tables as $asked")
+        assertNull(decoded.unsupportedGuess)
+        assertEquals("windows-1252", decoded.charset)
+        assertContentEquals(bytes, latin1(decoded.text), "the windows-1252 reading of this file is the right one")
+    }
+
+    private companion object {
+        fun hex(text: String): ByteArray =
+            ByteArray(text.length / 2) { text.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+
+        fun latin1(text: String): ByteArray = ByteArray(text.length) { text[it].code.toByte() }
+
+        /** A SubRip file of one cue per line, each line the hex of its text in the file's encoding. */
+        fun subRip(vararg lines: String): ByteArray {
+            var file = ByteArray(0)
+            lines.forEachIndexed { index, line ->
+                val n = index + 1
+                file += "$n\n00:00:0$n,000 --> 00:00:0$n,900\n".encodeToByteArray() + hex(line) +
+                    "\n\n".encodeToByteArray()
+            }
+            return file
+        }
+
+        /**
+         * Three short lines of dialogue in each encoding, by the name the detector gives it. The
+         * Japanese lines are the same in both Japanese encodings; the Chinese ones are simplified
+         * in GBK and traditional in Big5.
+         */
+        val EAST_ASIAN_FILES: Map<String, ByteArray> = mapOf(
+            "Shift_JIS" to subRip(
+                "82a882cd82e682a482b282b482a282dc82b781428da193fa82cd82a282a293568b4382c582b782cb8142",
+                "897782cc914f82c591d282c182c482a282e982a982e78141918182ad978882c482ad82be82b382a28142",
+                "82a082e882aa82c682a4814282dc82bd8da1937882e482c182ad82e8986282bb82a482cb8142",
+            ),
+            "EUC-JP" to subRip(
+                "a4aaa4cfa4e8a4a6a4b4a4b6a4a4a4dea4b9a1a3baa3c6fca4cfa4a4a4a4c5b7b5a4a4c7a4b9a4cda1a3",
+                "b1d8a4cec1b0a4c7c2d4a4c3a4c6a4a4a4eba4aba4e9a1a2c1e1a4afcde8a4c6a4afa4c0a4b5a4a4a1a3",
+                "a4a2a4eaa4aca4c8a4a6a1a3a4dea4bfbaa3c5d9a4e6a4c3a4afa4eacfc3a4bda4a6a4cda1a3",
+            ),
+            "GBK" to subRip(
+                "d4e7c9cfbac3a3acbdf1ccecccecc6f8d5e6b2bbb4eda1a3",
+                "ced2d4dab3b5d5bec7b0c3e6b5c8c4e3a3acc7ebbfecb5e3c0b4a1a3",
+                "d0bbd0bbc4e3a3accfc2b4ceced2c3c7d4d9c2fdc2fdc1c4b0c9a1a3",
+            ),
+            "Big5" to subRip(
+                "a6ada677a141a4b5a4d1a4d1aef0af75a4a3bff9a143",
+                "a7daa662a8aeafb8ab65adb1b5a5a741a141bdd0a7d6c249a8d3a143",
+                "c1c2c1c2a741a141a455a6b8a7daadcca641ba43ba43b2e1a761a143",
+            ),
+            "EUC-KR" to subRip(
+                "c1c1c0ba20bec6c4a7c0ccbfa1bfe42e20bfc0b4c320b3afbebeb0a120c1a4b8bb20c1c1b3d7bfe42e",
+                "bfaa20bed5bfa1bcad20b1e2b4d9b8aeb0ed20c0d6c0b8b4cfb1ee20bba1b8ae20bfcd20c1d6bcbcbfe42e",
+                "b0edb8b6bff62e20b4d9c0bdbfa120c3b5c3b5c8f720c0ccbedfb1e2c7cfc0da2e",
+            ),
+        )
     }
 }

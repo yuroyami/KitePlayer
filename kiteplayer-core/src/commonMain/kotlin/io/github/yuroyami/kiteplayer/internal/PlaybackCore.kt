@@ -402,8 +402,8 @@ internal class PlaybackCore(
         }
         // The encoding is decided from the bytes, not assumed. A file that needed a guess says so,
         // because a viewer looking at mojibake can act on "I read this as windows-1252" and cannot
-        // act on silence.
-        val decoded = decodeSubtitleBytes(bytes, sourceFile.language)
+        // act on silence. The East Asian tables are the parser's, because they live above the core.
+        val decoded = decodeSubtitleBytes(bytes, sourceFile.language, eastAsian = parser::decode)
         if (!decoded.confident) {
             warn(
                 PlaybackWarning.SubtitleCharsetGuessed(

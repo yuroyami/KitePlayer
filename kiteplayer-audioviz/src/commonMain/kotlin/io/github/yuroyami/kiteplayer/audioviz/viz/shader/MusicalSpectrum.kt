@@ -285,8 +285,8 @@ uniform float uLight;
 // A negative `ht` is the colour line the page drew between the two bar areas, under the ruler.
 float3 barAt(float column, float ht) {
     float3 colour = uRow.eval(float2(column + 0.5, 0.5)).rgb;
-    float4 packed = uRow.eval(float2(column + 0.5, 1.5));
-    float h = (floor(packed.r * 255.0 + 0.5) * 256.0 + floor(packed.g * 255.0 + 0.5)) / 65535.0 * 16.0;
+    float4 texel = uRow.eval(float2(column + 0.5, 1.5));
+    float h = (floor(texel.r * 255.0 + 0.5) * 256.0 + floor(texel.g * 255.0 + 0.5)) / 65535.0 * 16.0;
     if (ht < 0.0) return colour;
     if (h <= ht) return float3(0.0);
     return colour * ((h - ht) / (h + 0.0001));

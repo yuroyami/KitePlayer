@@ -1,25 +1,31 @@
 package io.github.yuroyami.kiteplayer.audioviz.viz
 
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fluctus
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bars
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Bloom
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Contour
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Gemini
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fireworks
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fluctus
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Fracture
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Glitch
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Honeycomb
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Iris
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Kaleidoscope
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Lines
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Muser
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.OceanMist
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Plasma
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Pulse
-import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Stereogram
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Silk
 import io.github.yuroyami.kiteplayer.audioviz.viz.presets.ThinIce
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.Threads
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.TwinBloom
+import io.github.yuroyami.kiteplayer.audioviz.viz.presets.WavySpiral
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Alchemy
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Marble
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.MusicalSpectrum
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NebulaField
+import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Odyssey
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.Pipe
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.ShaderPreset
 import io.github.yuroyami.kiteplayer.audioviz.viz.shader.runtimeShadersSupported
-import io.github.yuroyami.kiteplayer.audioviz.viz.shader.NeonLoFi
 
 /** Every independent preset this library ships, in one flat catalogue. */
 public object VizCatalog {
@@ -34,15 +40,11 @@ public object VizCatalog {
     public fun create(): List<Visualization> = listOf(
         Bars(),
         OceanMist(),
-        Gemini(),
-        Bloom(),
-        Pulse(),
+        TwinBloom(),
         Contour(),
         Alchemy(),
-        Plasma(),
         NebulaField(),
         Kaleidoscope(),
-        Stereogram(),
         Pipe(),
         ThinIce(),
         Fluctus(),
@@ -50,6 +52,17 @@ public object VizCatalog {
         Odyssey(),
         NeonLoFi(),
         Marble(),
+        // Ported from browser visualisers, credited in each class and in the docs.
+        Silk(),
+        Lines(),
+        Honeycomb(),
+        Fracture(),
+        Threads(),
+        Iris(),
+        Fireworks(),
+        WavySpiral(),
+        MusicalSpectrum(),
+        Muser(),
     ).filter { it.canRunHere() }
 
     /** The former public catalogue name resolves to the single replacement. */

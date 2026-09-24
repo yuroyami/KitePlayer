@@ -31,17 +31,6 @@ internal fun FloatArray.sampleAt(position: Float): Float {
 }
 
 /**
- * Reads the array folded in half, so the first and last points read the same value.
- *
- * Anything drawn round a circle needs this or it has a visible seam where the loud low end meets
- * the quiet high end.
- */
-internal fun FloatArray.foldedAt(position: Float): Float {
-    val wrapped = position.coerceIn(0f, 1f)
-    return sampleAt(if (wrapped <= 0.5f) wrapped * 2f else (1f - wrapped) * 2f)
-}
-
-/**
  * A repeatable random number source, one per drawing.
  *
  * Every drawing that sprays particles needs random numbers, and none of them want the same

@@ -33,7 +33,7 @@ class PostSheetTest {
 
     @Test
     fun renderThePostSheet() {
-        val picks = listOf("Pipe", "Fluctus", "Thin Ice", "Plasma")
+        val picks = listOf("Pipe", "Fluctus", "Thin Ice", "Nebula Field")
         val catalogue = VizCatalog.create()
         val chosen = picks.map { name -> catalogue.first { it.name == name } }
 

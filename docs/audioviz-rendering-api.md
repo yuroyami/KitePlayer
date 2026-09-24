@@ -47,6 +47,27 @@ stepped, so it costs less than a distance-field drawing.
 `AudioVizBrowser` shows that same order as a searchable adaptive preview grid. There are no
 preset categories, category headers or grouped-catalogue entry points.
 
+The catalogue has 24 drawings. The first 14 are the library's own: Bars, Ocean Mist, Twin Bloom,
+Contour, Alchemy, Nebula Field, Kaleidoscope, Pipe, Thin Ice, Fluctus, Glitch, Odyssey, Neon Lo-Fi
+and Marble. The last 10 are ports of browser visualisers, each faithful to its original and credited
+below. Each port's class documentation carries the full credit and a list of every way it differs
+from the original.
+
+| Drawing | Original | Author | Where | Licence as found |
+| --- | --- | --- | --- | --- |
+| Silk | Silk (codevember, day 21) | Matt DesLauriers | [page](http://mattdesl.github.io/codevember/21.html), [code](https://github.com/mattdesl/codevember) | MIT |
+| Lines | Lines | Silvio Paganini (FLUUUID) | [page](https://labs.fluuu.id/lines/), [code](https://github.com/fluuuid/labs) | ISC, declared in `package.json` |
+| Honeycomb | Soundcloud Visualizer | Michael Bromley | [page](https://www.michaelbromley.co.uk/experiments/soundcloud-vis/), [code](https://github.com/michaelbromley/soundcloud-visualizer) | MIT |
+| Fracture | Vissonance: Fracture | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
+| Threads | Vissonance: Silk | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
+| Iris | Vissonance: Iris | Tariq Soliman | [page](https://tariqksoliman.github.io/Vissonance/), [code](https://github.com/tariqksoliman/Vissonance) | MIT |
+| Fireworks | Fireworks with WebGL | Ondřej Žára | [page](http://ondras.github.io/fireworks-webgl/), [code](https://github.com/ondras/fireworks-webgl) | MIT |
+| Wavy Spiral | Audible Visuals: Wavy Spiral and Flower | Sonia Boller | [page](https://soniaboller.github.io/audible-visuals/), [code](https://github.com/soniaboller/soniaboller.github.io) | Apache 2.0 text in the older [audible-visuals](https://github.com/soniaboller/audible-visuals) repository, copyright line left blank |
+| Musical Spectrum | ShowCQTBar | Muhammad Faiz | [page](https://mfcc64.github.io/html5-showcqtbar/), [code](https://github.com/mfcc64/html5-showcqtbar) | None for the page. The transform is written from its formulas; no LGPL engine code is copied. |
+| Muser | Muser | Jon Shamir | [page](https://jonshamir.github.io/muser/), [code](https://github.com/jonshamir/muser) | MIT |
+
+Threads is named Threads because the catalogue's Silk is Matt DesLauriers' piece.
+
 The category contract has been removed: custom `Visualization` implementations no longer declare
 `family`; `VizFamily` and `VizCatalog.byFamily()` are no longer exposed. Clients that used those
 APIs should use `VizCatalog.create()` and the preset's own `name`. This is an intentional source
@@ -62,9 +83,8 @@ geometry and scene weights without crossfading preset pictures.
 | --- | --- |
 | Neon Lo-Fi | Highway, mountain pass, city and coast in one musical night drive |
 
-Plasma also remains independently selectable. The other consumed forms have no separate catalogue
-entries or duplicate implementations. Neon Lo-Fi uses its own `Scene` control, whose default is
-`Auto`. Manual choices still transform continuously.
+The consumed forms have no separate catalogue entries or duplicate implementations. Neon Lo-Fi
+uses its own `Scene` control, whose default is `Auto`. Manual choices still transform continuously.
 
 Pipe has no forms to choose. It is one shader: a tube of lit cells whose rings are past spectra.
 At a section the camera cuts to another lane, and on the same frame the cross section starts to
@@ -142,19 +162,6 @@ the same musical world and foreground mesh remain active. API 26-28 uses eight f
 lanes per shoulder, five depth rows and smaller decoration pools, bounded below 1,500 triangles.
 The portable path omits expensive post. Runtime views retain the existing sample 60 FPS cap and
 browser cap of at most 15 FPS (or a lower configured cap).
-
-Plasma's grid now has 28 cells across the shorter screen dimension by default, instead of broad
-rotated strips based on the canvas diagonal. Its dots bend the field and the grid through the same
-coordinate deformation. Brightness remains tone-mapped with the same palette and exposure in the
-menu and selected view. The CPU fallback shares the field and distortion equations.
-
-`JourneyMotionTest`, `JourneyRenderTest` and `JourneyCatalogTest` cover continuity, welded joints,
-plane geometry, navigation clearance, musical momentum, lookahead, history, pause, reduced motion,
-reset determinism, shader compilation, portrait output, fallback visibility and Plasma interaction.
-`JourneyPlaybackCaptureTest` optionally accepts `JOURNEY_PCM` (48 kHz mono f32le), warms the real
-analyser for three seconds, and makes 512 x 288 offline clips at 12 FPS. These directed demos select
-forms every seven seconds so all forms can be reviewed in one clip; automatic destination choice
-is tested separately. Neither host captures nor an APK build establish phone presentation FPS.
 
 `NeonLoFiHistoryTest`, `NeonLoFiWorldTest`, `NeonLoFiMusicTest`, `NeonLoFiCatalogTest`,
 `NeonLoFiRenderTest`, `NeonLoFiQualificationTest` and `NeonLoFiLightTest` cover the replacement's

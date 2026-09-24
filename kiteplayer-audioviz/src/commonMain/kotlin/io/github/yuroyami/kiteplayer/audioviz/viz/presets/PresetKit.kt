@@ -22,9 +22,6 @@ import kotlin.math.roundToInt
 /** How many of something a choice gene asks for: [base] plus [step] for each option. */
 internal fun ChoiceGene.count(base: Int, step: Int = 1): Int = base + step * value
 
-/** The larger of the old and new count, so the items fading out are still drawn. */
-internal fun ChoiceGene.drawn(base: Int, step: Int = 1): Int = base + step * maxOf(value, previous)
-
 /**
  * How much of item [index] to draw when a choice gene sets how many there are: all of it while it is
  * in both the old and the new count, fading in or out over the bar a change takes.

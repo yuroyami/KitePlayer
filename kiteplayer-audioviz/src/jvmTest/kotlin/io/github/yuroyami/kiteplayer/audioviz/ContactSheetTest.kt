@@ -143,7 +143,7 @@ class ContactSheetTest {
 
     /** Each preset retains its authored inspection palette without a category assignment. */
     private fun paletteFor(visualization: Visualization): VizPalette = when (visualization.name) {
-        "Bars", "Ocean Mist", "Stereogram" -> VizPalette.Classic
+        "Bars", "Ocean Mist" -> VizPalette.Classic
         "Contour", "Fluctus" -> VizPalette.Fire
         else -> VizPalette.Prism
     }
